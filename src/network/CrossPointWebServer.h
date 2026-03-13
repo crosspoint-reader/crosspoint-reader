@@ -15,6 +15,8 @@ struct FileInfo {
   size_t size;
   bool isEpub;
   bool isDirectory;
+  bool isHidden;
+  bool isProtected;
 };
 
 class CrossPointWebServer {
@@ -83,7 +85,7 @@ class CrossPointWebServer {
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
 
   // File scanning
-  void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
+  void scanFiles(const char* path, bool showHidden, const std::function<void(FileInfo)>& callback) const;
   String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
 
