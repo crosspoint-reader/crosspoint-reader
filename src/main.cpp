@@ -1,3 +1,4 @@
+#ifndef RECOVERY
 #include <Arduino.h>
 #include <Epub.h>
 #include <FontCacheManager.h>
@@ -408,3 +409,12 @@ void loop() {
     }
   }
 }
+
+#else  // RECOVERY
+#include "recovery/RecoveryMode.h"
+RecoveryMode recoveryMode;
+
+void setup() { recoveryMode.setup(); }
+
+void loop() { recoveryMode.loop(); }
+#endif  // RECOVERY

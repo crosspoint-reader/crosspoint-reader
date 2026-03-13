@@ -1,6 +1,9 @@
 #!/bin/bash
 
-ELF_FILE=".pio/build/default/firmware.elf"
+# usage: ./script_profile_mem.sh [env_name]
+
+ENV_NAME="${1:-default}"
+ELF_FILE=".pio/build/$ENV_NAME/firmware.elf"
 
 list_top_symbols() {
     local section_pattern="$1"

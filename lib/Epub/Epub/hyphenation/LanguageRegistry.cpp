@@ -4,6 +4,8 @@
 #include <array>
 
 #include "HyphenationCommon.h"
+
+#ifndef RECOVERY
 #include "generated/hyph-de.trie.h"
 #include "generated/hyph-en.trie.h"
 #include "generated/hyph-es.trie.h"
@@ -11,9 +13,13 @@
 #include "generated/hyph-it.trie.h"
 #include "generated/hyph-ru.trie.h"
 #include "generated/hyph-uk.trie.h"
+#endif  // RECOVERY
 
 namespace {
 
+using EntryArray = std::array<LanguageEntry, 7>;
+
+#ifndef RECOVERY
 // English hyphenation patterns (3/3 minimum prefix/suffix length)
 LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 3, 3);
 LanguageHyphenator frenchHyphenator(fr_patterns, isLatinLetter, toLowerLatin);
@@ -22,8 +28,6 @@ LanguageHyphenator russianHyphenator(ru_patterns, isCyrillicLetter, toLowerCyril
 LanguageHyphenator spanishHyphenator(es_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator italianHyphenator(it_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator ukrainianHyphenator(uk_patterns, isCyrillicLetter, toLowerCyrillic);
-
-using EntryArray = std::array<LanguageEntry, 7>;
 
 const EntryArray& entries() {
   static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
@@ -35,6 +39,13 @@ const EntryArray& entries() {
                                        {"ukrainian", "uk", &ukrainianHyphenator}}};
   return kEntries;
 }
+
+#else   // RECOVERY
+const EntryArray& entries() {
+  static const EntryArray kEntries = {};
+  return kEntries;
+}
+#endif  // RECOVERY
 
 }  // namespace
 

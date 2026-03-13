@@ -15,6 +15,7 @@ parser.add_argument("name", action="store", help="name of the font.")
 parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
+parser.add_argument("--no-default-intervals", dest="no_default_intervals", action="store_true", help="Do not include the default set of Unicode code point intervals.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
@@ -125,7 +126,7 @@ intervals = [
     ### Specials
     # Replacement Character
     (0xFFFD, 0xFFFD),
-]
+] if not args.no_default_intervals else []
 
 add_ints = []
 if args.additional_intervals:
