@@ -629,7 +629,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom,
+                              const int pageCount, std::string title, std::string etaText, const int paddingBottom,
                               const int textYOffset) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -687,6 +687,14 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                         showBatteryPercentage);
   }
 
+  int etaTextWidth = 0;
+  const int batterySize = SETTINGS.statusBarBattery ? (showBatteryPercentage ? 50 : 20) : 0;
+  if (!etaText.empty()) {
+    const int etaTextX = metrics.statusBarHorizontalMargin + orientedMarginLeft + batterySize + 8;
+    etaTextWidth = renderer.getTextWidth(SMALL_FONT_ID, etaText.c_str());
+    renderer.drawText(SMALL_FONT_ID, etaTextX, textY, etaText.c_str());
+  }
+
   // Draw Title
   if (!title.empty()) {
     textY -= textYOffset;
@@ -695,8 +703,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     const int rendererableScreenWidth =
         renderer.getScreenWidth() - (metrics.statusBarHorizontalMargin * 2) - orientedMarginLeft - orientedMarginRight;
 
-    const int batterySize = SETTINGS.statusBarBattery ? (showBatteryPercentage ? 50 : 20) : 0;
-    const int titleMarginLeft = batterySize + 30;
+    const int titleMarginLeft = batterySize + etaTextWidth + (etaTextWidth > 0 ? 16 : 0) + 30;
     const int titleMarginRight = progressTextWidth + 30;
 
     // Attempt to center title on the screen, but if title is too wide then later we will center it within the
