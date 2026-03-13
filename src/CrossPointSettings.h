@@ -143,6 +143,8 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Apply information overlay with reading progress on sleep cover
+  uint8_t sleepCoverOverlay = 1;
   // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
   uint8_t statusBarChapterPageCount = 1;
