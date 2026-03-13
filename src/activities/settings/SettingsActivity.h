@@ -28,6 +28,7 @@ struct SettingInfo {
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr = nullptr;
   std::vector<StrId> enumValues;
+  std::vector<std::string> enumStringValues;  // runtime alternative to StrId enumValues (for SD card fonts etc.)
   SettingAction action = SettingAction::None;
 
   struct ValueRange {

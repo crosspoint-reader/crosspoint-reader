@@ -11,6 +11,7 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "SdCardFontGlobals.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -29,7 +30,7 @@ void SettingsActivity::onEnter() {
   controlsSettings.clear();
   systemSettings.clear();
 
-  for (const auto& setting : getSettingsList()) {
+  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
@@ -157,6 +158,12 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+  } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
+    const uint8_t totalValues = setting.enumStringValues.empty()
+                                    ? static_cast<uint8_t>(setting.enumValues.size())
+                                    : static_cast<uint8_t>(setting.enumStringValues.size());
+    const uint8_t cur = setting.valueGetter();
+    setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -240,6 +247,13 @@ void SettingsActivity::render(RenderLock&&) {
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(setting.valuePtr);
           valueText = I18N.get(setting.enumValues[value]);
+        } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
+          const uint8_t value = setting.valueGetter();
+          if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
+            valueText = setting.enumStringValues[value];
+          } else if (value < setting.enumValues.size()) {
+            valueText = I18N.get(setting.enumValues[value]);
+          }
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(setting.valuePtr));
         }

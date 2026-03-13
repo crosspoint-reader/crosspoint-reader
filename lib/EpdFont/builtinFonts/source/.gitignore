@@ -1,0 +1,12 @@
+# Ignore all font directories except those committed to the repo.
+# Fonts like NotoSansCJK are downloaded on demand by generate-sd-fonts.sh.
+*
+!.gitignore
+!Bookerly/
+!Bookerly/**
+!NotoSans/
+!NotoSans/**
+!OpenDyslexic/
+!OpenDyslexic/**
+!Ubuntu/
+!Ubuntu/**
