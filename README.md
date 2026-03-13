@@ -1,4 +1,4 @@
-This fork of Crosspoint Reader replaces Bookerly, Noto Sans, and OpenDyslexic with [ChareInk7](https://www.mobileread.com/forums/showthread.php?t=184056), [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca), and [Atkinson Hyperlegible](https://fonts.google.com/specimen/Atkinson+Hyperlegible). Note that the "Small" font size renders much smaller for all three of these fonts than the stock Crosspoint fonts.
+This fork of Crosspoint Reader replaces Bookerly, Noto Sans, and OpenDyslexic with [ChareInk7](https://www.mobileread.com/forums/showthread.php?t=184056), [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca), and [Atkinson Hyperlegible](https://fonts.google.com/specimen/Atkinson+Hyperlegible).
 
 ChareInk7 is an eReader-optimized font based off of the [Charis](https://software.sil.org/charis/) font.
 
