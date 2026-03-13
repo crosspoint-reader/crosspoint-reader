@@ -206,9 +206,17 @@
       cursor: pointer;
       color: var(--label-color);
       line-height: 1;
+      transition: opacity 0.15s;
     }
     .modal-close:hover {
       color: var(--title-color);
+    }
+    .modal-close.disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .modal-close.disabled:hover {
+      color: var(--label-color);
     }
     .file-table {
       width: 100%;
@@ -321,6 +329,7 @@
       border-radius: 4px;
       padding: 8px 12px;
       margin-top: 8px;
+      margin-bottom: 12px;
       line-height: 1.4;
       text-align: center;
     }
@@ -393,12 +402,19 @@
     .advanced-setting-row {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-      margin-top: 14px;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
     }
     .advanced-setting-row:first-child {
-      margin-top: 12px;
+      margin-top: 10px;
+    }
+    .quality-row {
+      flex-wrap: wrap;
+    }
+    .quality-row .setting-title {
+      flex: 1;
+      min-width: 100px;
     }
     .setting-label {
       flex-shrink: 0;
@@ -580,74 +596,7 @@
       margin-top: 4px;
       line-height: 1.3;
     }
-    /* Rotate & Crop Mode Selector */
-    .rotate-crop-row {
-      flex-direction: column;
-      align-items: stretch !important;
-      gap: 8px !important;
-    }
-    .rotate-crop-controls {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
-    }
-    .rotate-crop-selector {
-      display: flex;
-      gap: 0;
-      background: var(--border-color);
-      border-radius: 6px;
-      padding: 3px;
-    }
-    .rotate-crop-option {
-      position: relative;
-      display: flex;
-    }
-    .rotate-crop-option input {
-      opacity: 0;
-      position: absolute;
-      width: 0;
-      height: 0;
-    }
-    .rotate-crop-option label {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 6px 12px;
-      font-size: 0.75em;
-      font-weight: 500;
-      color: var(--label-color);
-      border-radius: 4px;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.2s;
-      user-select: none;
-      white-space: nowrap;
-    }
-    .rotate-crop-option input:disabled + label {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .rotate-crop-option input:checked + label {
-      background: var(--accent-color);
-      color: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-    .rotate-crop-option input:not(:checked):not(:disabled) + label:hover {
-      background: var(--accent-color-10);
-      color: var(--accent-color);
-    }
-    /* Rotation Buttons Row */
-    .rotation-buttons-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .rotation-info {
-      font-size: 0.7em;
-      color: var(--label-color);
-      font-style: italic;
-    }
+    /* Rotation Buttons */
     .rotation-buttons {
       display: flex;
       gap: 0;
@@ -681,6 +630,35 @@
     }
     .rotation-btn .rot-icon {
       font-size: 1.1em;
+    }
+    /* Overlap Selector */
+    .overlap-selector {
+      display: flex;
+      gap: 0;
+      background: var(--border-color);
+      border-radius: 6px;
+      padding: 3px;
+    }
+    .overlap-btn {
+      padding: 6px 14px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.75em;
+      font-weight: 500;
+      color: var(--label-color);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .overlap-btn:hover {
+      background: var(--accent-color-10);
+      color: var(--accent-color);
+    }
+    .overlap-btn.active {
+      background: var(--accent-color);
+      color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
     /* Image Picker Grid Styles */
     .image-picker-section {
@@ -735,6 +713,10 @@
       border-color: #e74c3c;
       background: rgba(231, 76, 60, 0.1);
     }
+    .image-item.state-3 {
+      border-color: #9b59b6;
+      background: rgba(155, 89, 182, 0.1);
+    }
     .image-item.cover-locked {
       border-color: #e67e22;
       background: rgba(230, 126, 34, 0.1);
@@ -747,6 +729,22 @@
     }
     .image-item.cover-locked .image-state-badge {
       background: #e67e22;
+    }
+    .image-item.separator-locked {
+      border-color: #1abc9c;
+      background: rgba(26, 188, 156, 0.1);
+      cursor: default;
+      opacity: 0.85;
+    }
+    .image-item.separator-locked:hover {
+      transform: none;
+      border-color: #1abc9c;
+    }
+    .image-item.separator-locked .image-state-badge {
+      background: #1abc9c;
+    }
+    .image-item.fits-screen {
+      border-style: dashed;
     }
     .image-item img {
       width: 100%;
@@ -773,6 +771,63 @@
     }
     .state-2 .image-state-badge {
       background: #e74c3c;
+    }
+    .state-3 .image-state-badge {
+      background: #9b59b6;
+    }
+    /* Preview Overlay (shown on hover) */
+    .image-preview-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 20px; /* Above the filename */
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .image-item:hover .image-preview-overlay {
+      opacity: 1;
+    }
+    /* Split lines - thick colored stripes */
+    .split-lines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .split-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      transform: translateX(-50%);
+      border-radius: 2px;
+    }
+    .split-line.split-h {
+      background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 2px rgba(52, 152, 219, 0.8);
+    }
+    .split-line.split-v {
+      background: linear-gradient(180deg, #e74c3c 0%, #c0392b 100%);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 2px rgba(231, 76, 60, 0.8);
+    }
+    /* Rotate image on hover for rotation states */
+    .image-item.rotate-cw:hover img {
+      transform: rotate(90deg) scale(0.75);
+      transition: transform 0.2s ease;
+    }
+    .image-item.rotate-ccw:hover img {
+      transform: rotate(-90deg) scale(0.75);
+      transition: transform 0.2s ease;
+    }
+    .image-item img {
+      transition: transform 0.2s ease;
     }
     .image-name {
       font-size: 0.65em;
@@ -1443,7 +1498,7 @@
 <!-- Upload Modal -->
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+    <button class="modal-close" id="uploadModalClose" onclick="closeUploadModal()">&times;</button>
     <h3>📤 Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
@@ -1474,25 +1529,19 @@
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
           <!-- JPEG Quality -->
-          <div class="advanced-setting-row">
-            <div class="setting-label">
-              <div class="setting-title">📦 JPEG Quality</div>
+          <div class="advanced-setting-row quality-row">
+            <div class="setting-title">📦 JPEG Quality</div>
+            <div class="quality-presets">
+              <button class="quality-preset" data-value="30" onclick="setQualityPreset(30)" title="Minimum quality">30%</button>
+              <button class="quality-preset" data-value="45" onclick="setQualityPreset(45)" title="Low quality">45%</button>
+              <button class="quality-preset" data-value="60" onclick="setQualityPreset(60)" title="Medium-low quality">60%</button>
+              <button class="quality-preset" data-value="75" onclick="setQualityPreset(75)" title="Medium quality">75%</button>
+              <button class="quality-preset active" data-value="85" onclick="setQualityPreset(85)" title="High quality">85%</button>
+              <button class="quality-preset" data-value="95" onclick="setQualityPreset(95)" title="Maximum quality">95%</button>
             </div>
-            <div class="setting-controls">
-              <div class="quality-slider-container-inline">
-                <input type="range" class="quality-slider" id="qualitySlider" min="1" max="95" value="85">
-                <div class="quality-input-wrapper">
-                  <input type="number" class="quality-input" id="qualityInput" min="1" max="95" value="85">
-                  <span class="quality-unit">%</span>
-                </div>
-              </div>
-              <div class="quality-presets">
-                <button class="quality-preset" data-value="60" onclick="setQualityPreset(60)" title="Low quality">60%</button>
-                <button class="quality-preset" data-value="75" onclick="setQualityPreset(75)" title="Medium quality">75%</button>
-                <button class="quality-preset active" data-value="85" onclick="setQualityPreset(85)" title="High quality">85%</button>
-                <button class="quality-preset" data-value="95" onclick="setQualityPreset(95)" title="Maximum quality">95%</button>
-              </div>
-            </div>
+            <!-- Hidden inputs to maintain compatibility -->
+            <input type="hidden" id="qualitySlider" value="85">
+            <input type="hidden" id="qualityInput" value="85">
           </div>
           <!-- Grayscale Toggle (commented for e-ink optimization, kept for compatibility with other devices/web apps)
           <div class="advanced-setting-row" style="display:none;">
@@ -1508,34 +1557,28 @@
             </div>
           </div>
           -->
-          <!-- Rotate & Crop Mode -->
-          <div class="advanced-setting-row rotate-crop-row">
-            <div class="setting-title">📐 Rotate & Crop</div>
-            <div class="rotate-crop-controls">
-              <div class="rotate-crop-selector">
-                <div class="rotate-crop-option">
-                  <input type="radio" name="rotateCropMode" id="rotateCropOff" value="off" onchange="setRotateCropMode('off')" checked>
-                  <label for="rotateCropOff">OFF</label>
-                </div>
-                <div class="rotate-crop-option">
-                  <input type="radio" name="rotateCropMode" id="rotateCropLightNovel" value="light_novel" onchange="setRotateCropMode('light_novel')">
-                  <label for="rotateCropLightNovel">Auto</label>
-                </div>
-                <div class="rotate-crop-option">
-                  <input type="radio" name="rotateCropMode" id="rotateCropManualPicker" value="manual_picker" onchange="setRotateCropMode('manual_picker')">
-                  <label for="rotateCropManualPicker">Manual</label>
-                </div>
+          <!-- Rotation Direction -->
+          <div class="advanced-setting-row">
+            <div class="setting-title">↻ Rotation Direction</div>
+            <div class="setting-controls">
+              <div class="rotation-buttons">
+                <button class="rotation-btn" id="rotationCCW" onclick="setHandedness('left')">
+                  <span class="rot-icon">↺</span> CCW
+                </button>
+                <button class="rotation-btn active" id="rotationCW" onclick="setHandedness('right')">
+                  <span class="rot-icon">↻</span> CW
+                </button>
               </div>
-              <div class="rotation-buttons-row" id="rotationRow" style="display:none;">
-                <span class="rotation-info">5% min overlap</span>
-                <div class="rotation-buttons">
-                  <button class="rotation-btn" id="rotationCCW" onclick="setHandedness('left')">
-                    <span class="rot-icon">↺</span> CCW
-                  </button>
-                  <button class="rotation-btn active" id="rotationCW" onclick="setHandedness('right')">
-                    <span class="rot-icon">↻</span> CW
-                  </button>
-                </div>
+            </div>
+          </div>
+          <!-- Overlap Settings -->
+          <div class="advanced-setting-row">
+            <div class="setting-title">📐 Min Overlap</div>
+            <div class="setting-controls">
+              <div class="overlap-selector">
+                <button class="overlap-btn active" data-value="5" onclick="setOverlap(5)">5%</button>
+                <button class="overlap-btn" data-value="10" onclick="setOverlap(10)">10%</button>
+                <button class="overlap-btn" data-value="15" onclick="setOverlap(15)">15%</button>
               </div>
             </div>
           </div>
@@ -1562,8 +1605,12 @@
         </div>
         <div class="state-legend">
           <div class="legend-item">
-            <div class="legend-color" style="background:#e67e22"></div>
-            <span>Cover (locked)</span>
+            <span>🔒</span>
+            <span>Cover</span>
+          </div>
+          <div class="legend-item">
+            <span style="color:#1abc9c">✦</span>
+            <span>Separator</span>
           </div>
           <div class="legend-item">
             <div class="legend-color" style="background:var(--label-color)"></div>
@@ -1576,6 +1623,10 @@
           <div class="legend-item">
             <div class="legend-color" style="background:#e74c3c"></div>
             <span>V-Split</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#9b59b6"></div>
+            <span>Rotate</span>
           </div>
         </div>
         <div class="image-grid" id="imageGrid"></div>
@@ -1873,11 +1924,11 @@
   // Modal functions
   function openUploadModal() {
     // Reset converter variables to defaults
-    ROTATE_CROP_MODE = 'off';
-    ENABLE_LIGHT_NOVEL_MODE = false;
     ENABLE_GRAYSCALE = true;
     JPEG_QUALITY = 85;
     HANDEDNESS = 'right';
+    OVERLAP_PERCENT = 5;
+    imageStates = {};
 
     // Hide convert options when opening modal (no files selected initially)
     const convertOptions = document.getElementById('convertOptions');
@@ -1885,11 +1936,10 @@
       convertOptions.style.display = 'none';
     }
 
-    // Reset Rotate & Crop selector
-    document.getElementById('rotateCropOff').checked = true;
-    document.getElementById('rotationRow').style.display = 'none';
+    // Reset rotation and overlap UI
     setHandedness('right');
-    updateRotateCropOptions();
+    setOverlap(5);
+    
     // Hide log section from previous session
     const logSection = document.getElementById('log-section');
     if (logSection) logSection.classList.remove('visible');
@@ -1901,6 +1951,10 @@
   }
 
   function closeUploadModal() {
+    // Prevent closing during upload/conversion
+    if (isUploadInProgress) {
+      return;
+    }
     document.getElementById('uploadModal').classList.remove('open');
     document.getElementById('fileInput').value = '';
     document.getElementById('uploadBtn').disabled = true;
@@ -1911,8 +1965,12 @@
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
-    // Hide image picker and reset two-column layout
+    // Clear image picker cache and reset layout
+    epubImagesCache = [];
+    imageStates = {};
     document.getElementById('imagePickerSection').style.display = 'none';
+    const imageGrid = document.getElementById('imageGrid');
+    if (imageGrid) imageGrid.innerHTML = '';
     document.querySelector('#uploadModal .modal').classList.remove('picker-mode');
     document.getElementById('pickerColumns').classList.remove('picker-active');
     // Hide log section
@@ -1924,13 +1982,8 @@
     // Reset to defaults
     document.getElementById('qualitySlider').value = 85;
     document.getElementById('qualityInput').value = 85;
-    // grayscaleToggle may not be present in the DOM (commented out)
-    const grayscaleToggle = document.getElementById('grayscaleToggle');
-    if (grayscaleToggle) grayscaleToggle.checked = true; // Always grayscale for e-ink
-    // Reset Light Novel Mode
-    document.getElementById('lightNovelToggle').checked = false;
-    document.getElementById('rotationRow').style.display = 'none';
     setHandedness('right');
+    setOverlap(5);
     // Update converter variables
     updateQualitySettings();
   }
@@ -1971,8 +2024,26 @@
 
     const content = document.getElementById('advancedSettingsContent');
     const arrow = document.getElementById('advancedOptionsArrow');
+    const isExpanding = !content.classList.contains('visible');
+    
     content.classList.toggle('visible');
     arrow.classList.toggle('expanded');
+    
+    // When expanding, show image picker if an EPUB is selected
+    if (isExpanding) {
+      const fileInput = document.getElementById('fileInput');
+      const files = fileInput.files;
+      if (files.length === 1 && files[0].name.toLowerCase().endsWith('.epub')) {
+        showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
+      }
+    } else {
+      // When collapsing, hide the picker
+      document.getElementById('imagePickerSection').style.display = 'none';
+      document.getElementById('uploadBtn').style.display = 'block';
+      document.getElementById('uploadBtn').disabled = false;
+      document.querySelector('#uploadModal .modal').classList.remove('picker-mode');
+      document.getElementById('pickerColumns').classList.remove('picker-active');
+    }
   }
 
   function setQualityPreset(value) {
@@ -2011,52 +2082,18 @@
     document.getElementById('rotationCW').classList.remove('active');
     document.getElementById('rotationCCW').classList.remove('active');
     document.getElementById(value === 'right' ? 'rotationCW' : 'rotationCCW').classList.add('active');
-  }
-
-  function setRotateCropMode(mode) {
-    ROTATE_CROP_MODE = mode;
-    ENABLE_LIGHT_NOVEL_MODE = (mode === 'light_novel');
-
-    // Show/hide rotation row (hidden when OFF, visible for Light Novel and Manual Picker)
-    const showOptions = (mode !== 'off');
-    document.getElementById('rotationRow').style.display = showOptions ? 'flex' : 'none';
-
-    // If switching to/from Manual Picker, handle image picker visibility
-    const fileInput = document.getElementById('fileInput');
-    const files = fileInput.files;
-
-    if (files.length === 1 && mode === 'manual_picker' && files[0].name.toLowerCase().endsWith('.epub')) {
-      const convertEnabled = document.getElementById('convertBeforeUpload').checked;
-      if (convertEnabled) {
-        showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
-      }
-    } else if (mode !== 'manual_picker') {
-      // Hide picker if switching away from Manual Picker
-      document.getElementById('imagePickerSection').style.display = 'none';
-      document.getElementById('uploadBtn').style.display = 'block';
-      document.getElementById('uploadBtn').disabled = false;
-      // Remove two-column layout
-      document.querySelector('#uploadModal .modal').classList.remove('picker-mode');
-      document.getElementById('pickerColumns').classList.remove('picker-active');
+    // Re-render grid to update rotation arrows
+    if (document.getElementById('imagePickerSection').style.display !== 'none') {
+      renderImageGrid();
     }
   }
 
-  function updateRotateCropOptions() {
-    const fileInput = document.getElementById('fileInput');
-    const files = fileInput.files;
-    const manualPickerOption = document.getElementById('rotateCropManualPicker');
-
-    // Disable Manual Picker option if multiple files selected
-    if (files.length > 1) {
-      manualPickerOption.disabled = true;
-      // If currently in Manual Picker mode, switch to OFF
-      if (ROTATE_CROP_MODE === 'manual_picker') {
-        document.getElementById('rotateCropOff').checked = true;
-        setRotateCropMode('off');
-      }
-    } else {
-      manualPickerOption.disabled = false;
-    }
+  function setOverlap(value) {
+    OVERLAP_PERCENT = value;
+    // Update UI
+    document.querySelectorAll('.overlap-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.value) === value);
+    });
   }
 
   // ============================================================================
@@ -2203,14 +2240,33 @@
       // Check if this is the cover image
       const isCover = (path === coverImagePath) || 
                       path.toLowerCase().includes('cover') && images.length === 0;
+      
+      // Check if this is a separator/ornament (skip cover check)
+      const filename = path.split('/').pop();
+      let isSeparator = false;
+      if (!isCover) {
+        try {
+          isSeparator = await isSeparatorImage(dataUrl, dims.width, dims.height, filename);
+        } catch (e) {
+          console.warn('Separator check failed for', filename, e);
+        }
+      }
+      
+      // Tiny images (<200x200) are locked like separators
+      const isTiny = (dims.width < 200 && dims.height < 200);
+      
+      // Images that fit screen can only rotate, not split
+      const fitsScreen = (dims.width <= 480 && dims.height <= 800);
 
       images.push({
         path: path,
-        name: path.split('/').pop(),
+        name: filename,
         dataUrl: dataUrl,
         width: dims.width,
         height: dims.height,
-        isCover: isCover
+        isCover: isCover,
+        isSeparator: isSeparator || isTiny,
+        fitsScreen: fitsScreen
       });
     }
 
@@ -2233,6 +2289,92 @@
         resolve({ width: 0, height: 0 });
       };
       img.src = url;
+    });
+  }
+
+  /**
+   * Check if image is a separator/ornament
+   * Criteria: small size AND (filename match OR symmetric OR extreme aspect ratio)
+   */
+  async function isSeparatorImage(dataUrl, width, height, filename) {
+    const MAX_DIMENSION = 150;
+    const SYMMETRY_THRESHOLD = 0.85;
+    
+    // First check: must be small in at least one dimension
+    const isSmall = (height < MAX_DIMENSION || width < MAX_DIMENSION);
+    if (!isSmall) return false;
+    
+    // Filename hints (instant match if small + named correctly)
+    const separatorNames = ['separator', 'divider', 'ornament', 'break', 'flourish', 'scene', 'divid', 'decor'];
+    const lowerName = filename.toLowerCase();
+    if (separatorNames.some(n => lowerName.includes(n))) return true;
+    
+    // Extreme aspect ratio check (>10:1 or <1:10) - these are definitely separators/lines
+    const aspectRatio = width / height;
+    if (aspectRatio > 10 || aspectRatio < 0.1) return true;
+    
+    // Symmetry check (skip for very thin images - too few pixels)
+    if (width < 10 || height < 10) return true; // Very small = separator
+    
+    try {
+      const isSymmetric = await checkHorizontalSymmetry(dataUrl, width, height, SYMMETRY_THRESHOLD);
+      return isSymmetric;
+    } catch (e) {
+      console.warn('Symmetry check failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Check horizontal symmetry by comparing left and right halves
+   */
+  function checkHorizontalSymmetry(dataUrl, width, height, threshold) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        // Use small canvas for performance (max 100px wide)
+        const scale = Math.min(1, 100 / width);
+        const w = Math.max(2, Math.floor(width * scale));  // Minimum 2px
+        const h = Math.max(1, Math.floor(height * scale)); // Minimum 1px
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw scaled image
+        ctx.drawImage(img, 0, 0, w, h);
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const pixels = imageData.data;
+        
+        // Compare left half with flipped right half
+        const halfW = Math.floor(w / 2);
+        let matchingPixels = 0;
+        let totalPixels = 0;
+        
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < halfW; x++) {
+            const leftIdx = (y * w + x) * 4;
+            const rightIdx = (y * w + (w - 1 - x)) * 4;
+            
+            // Compare RGB (ignore alpha)
+            const rDiff = Math.abs(pixels[leftIdx] - pixels[rightIdx]);
+            const gDiff = Math.abs(pixels[leftIdx + 1] - pixels[rightIdx + 1]);
+            const bDiff = Math.abs(pixels[leftIdx + 2] - pixels[rightIdx + 2]);
+            
+            // Allow some tolerance for JPEG artifacts (threshold of 30)
+            if (rDiff < 30 && gDiff < 30 && bDiff < 30) {
+              matchingPixels++;
+            }
+            totalPixels++;
+          }
+        }
+        
+        const symmetryScore = matchingPixels / totalPixels;
+        resolve(symmetryScore >= threshold);
+      };
+      img.onerror = () => resolve(false);
+      img.src = dataUrl;
     });
   }
 
@@ -2268,11 +2410,11 @@
       });
 
       // Pre-select images based on Auto mode logic (landscape images that exceed screen get H-Split)
+      // Skip covers, separators, and images that fit screen
       images.forEach(img => {
-        if (!img.isCover) {
+        if (!img.isCover && !img.isSeparator && !img.fitsScreen) {
           const isLandscape = img.width > img.height;
-          const exceedsScreen = img.width > 480 || img.height > 800;
-          if (isLandscape && exceedsScreen) {
+          if (isLandscape) {
             imageStates[img.path] = 1; // H-Split
           }
         }
@@ -2281,12 +2423,17 @@
       // Build UI
       renderImageGrid();
 
-      // Count images - only cover is locked
+      // Count images - covers and separators are locked
       const coverCount = images.filter(img => img.isCover).length;
-      const selectableCount = images.length - coverCount;
+      const separatorCount = images.filter(img => img.isSeparator).length;
+      const lockedCount = coverCount + separatorCount;
+      const selectableCount = images.length - lockedCount;
       
-      if (coverCount > 0) {
-        countDisplay.textContent = `${images.length} images (${selectableCount} selectable, ${coverCount} cover)`;
+      if (lockedCount > 0) {
+        const lockedParts = [];
+        if (coverCount > 0) lockedParts.push(`${coverCount} cover`);
+        if (separatorCount > 0) lockedParts.push(`${separatorCount} separator${separatorCount !== 1 ? 's' : ''}`);
+        countDisplay.textContent = `${images.length} images (${selectableCount} selectable, ${lockedParts.join(', ')})`;
       } else {
         countDisplay.textContent = `${images.length} image${images.length !== 1 ? 's' : ''} (all selectable)`;
       }
@@ -2313,12 +2460,13 @@
     const imageGrid = document.getElementById('imageGrid');
     imageGrid.innerHTML = '';
 
-    const stateLabels = ['', 'H-Split', 'V-Split'];
-    const stateClasses = ['state-0', 'state-1', 'state-2'];
+    const stateLabels = ['', 'H-Split', 'V-Split', 'Rotate'];
+    const stateClasses = ['state-0', 'state-1', 'state-2', 'state-3'];
 
     epubImagesCache.forEach(img => {
-      // Cover images are always locked (no splitting/rotation)
+      // Cover images and separators are always locked (no splitting/rotation)
       const isCover = img.isCover;
+      const isSeparator = img.isSeparator;
       const state = imageStates[img.path] || 0;
 
       const item = document.createElement('div');
@@ -2328,17 +2476,73 @@
         item.className = 'image-item cover-locked';
         item.title = `${img.width}×${img.height} - Cover image (locked)`;
         item.innerHTML = `
-          <span class="image-state-badge cover-badge">📕</span>
+          <span class="image-state-badge cover-badge">🔒</span>
+          <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
+          <div class="image-name">${img.name}</div>
+        `;
+      } else if (isSeparator) {
+        // Separator/ornament - locked, cannot be split
+        item.className = 'image-item separator-locked';
+        item.title = `${img.width}×${img.height} - Separator (locked)`;
+        item.innerHTML = `
+          <span class="image-state-badge separator-badge">✦</span>
           <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
       } else {
         // All other images are selectable
-        item.className = `image-item ${stateClasses[state]}`;
+        const fitsScreen = img.fitsScreen;
+        
+        // Determine which overlay to show based on state
+        const showRotation = (state === 1 || state === 3); // H-Split or Rotate
+        const showSplitLines = !fitsScreen && (state === 1 || state === 2); // H-Split or V-Split (not for fitsScreen)
+        const rotateClass = showRotation ? (HANDEDNESS === 'right' ? 'rotate-cw' : 'rotate-ccw') : '';
+        
+        // Calculate actual number of parts for split preview
+        let numParts = 1;
+        if (showSplitLines) {
+          let finalWidth;
+          if (state === 1) {
+            // H-Split: scale width to 800, rotate, then check width
+            const scaledH = Math.round(img.height * (800 / img.width));
+            finalWidth = scaledH; // After rotation, height becomes width
+          } else {
+            // V-Split: scale height to 800, then check width
+            finalWidth = Math.round(img.width * (800 / img.height));
+          }
+          if (finalWidth > 480) {
+            const minOverlapPx = Math.round(480 * (OVERLAP_PERCENT / 100));
+            const maxStep = 480 - minOverlapPx;
+            numParts = Math.ceil((finalWidth - minOverlapPx) / maxStep);
+            if (numParts < 2) numParts = 2;
+          }
+        }
+        
+        // Generate split line elements (numParts - 1 lines at evenly distributed positions)
+        let splitLinesHtml = '';
+        if (showSplitLines && numParts > 1) {
+          const lines = [];
+          const splitClass = state === 1 ? 'split-h' : 'split-v';
+          for (let i = 1; i < numParts; i++) {
+            const pos = (i / numParts) * 100;
+            lines.push(`<div class="split-line ${splitClass}" style="left:${pos}%"></div>`);
+          }
+          splitLinesHtml = `<div class="split-lines">${lines.join('')}</div>`;
+        }
+        
+        // Build tooltip
+        const stateText = stateLabels[state] || 'Normal';
+        const partsText = numParts > 1 ? ` (${numParts} parts)` : '';
+        const modeText = fitsScreen ? ' [rotate only]' : '';
+        
+        item.className = `image-item ${stateClasses[state]} ${rotateClass}${fitsScreen ? ' fits-screen' : ''}`.trim();
         item.onclick = () => cycleImageState(img.path);
-        item.title = `${img.width}×${img.height} - Click to cycle: ${stateLabels[state] || 'Normal'}`;
+        item.title = `${img.width}×${img.height} - ${stateText}${partsText}${modeText}`;
         item.innerHTML = `
           <span class="image-state-badge">${stateLabels[state] || '•'}</span>
+          <div class="image-preview-overlay">
+            ${splitLinesHtml}
+          </div>
           <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
@@ -2349,11 +2553,24 @@
   }
 
   /**
-   * Cycle state for a single image: 0 -> 1 -> 2 -> 0
+   * Cycle state for a single image
+   * Normal images: 0 -> 1 -> 2 -> 3 -> 0
+   * FitsScreen images: 0 -> 3 -> 0 (rotate only, no split)
    */
   function cycleImageState(imagePath) {
     const currentState = imageStates[imagePath] || 0;
-    imageStates[imagePath] = (currentState + 1) % 3;
+    
+    // Find image to check if it fits screen
+    const img = epubImagesCache.find(i => i.path === imagePath);
+    const fitsScreen = img && img.fitsScreen;
+    
+    if (fitsScreen) {
+      // Only allow Normal (0) and Rotate (3)
+      imageStates[imagePath] = currentState === 0 ? 3 : 0;
+    } else {
+      // Full cycle: 0 -> 1 -> 2 -> 3 -> 0
+      imageStates[imagePath] = (currentState + 1) % 4;
+    }
     renderImageGrid();
   }
 
@@ -2387,7 +2604,7 @@
 
   /**
    * Get processing state for an image path
-   * Returns 0 (Normal), 1 (H-Split), or 2 (V-Split)
+   * Returns 0 (Normal), 1 (H-Split), 2 (V-Split), or 3 (Rotate)
    */
   function getImageState(imagePath) {
     return imageStates[imagePath] || 0;
@@ -2397,7 +2614,7 @@
    * Get state label for logging
    */
   function getStateLabel(state) {
-    const labels = ['Normal', 'H-Split', 'V-Split'];
+    const labels = ['Normal', 'H-Split', 'V-Split', 'Rotate'];
     return labels[state] || 'Normal';
   }
 
@@ -2540,6 +2757,37 @@
     });
   }
 
+  // Helper to clear image picker state
+  function clearImagePicker() {
+    epubImagesCache = [];
+    imageStates = {};
+    const imageGrid = document.getElementById('imageGrid');
+    if (imageGrid) imageGrid.innerHTML = '';
+    const pickerSection = document.getElementById('imagePickerSection');
+    if (pickerSection) pickerSection.style.display = 'none';
+    const convertOptions = document.getElementById('convertOptions');
+    if (convertOptions) convertOptions.style.display = 'none';
+    // Reset two-column layout
+    document.querySelector('#uploadModal .modal')?.classList.remove('picker-mode');
+    document.getElementById('pickerColumns')?.classList.remove('picker-active');
+  }
+
+  // Set up file input click listener once
+  (function setupFileInputListener() {
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput) return;
+    
+    fileInput.addEventListener('click', function() {
+      // Small delay to allow browser to process click before checking files
+      setTimeout(() => {
+        if (fileInput.files.length === 0) {
+          clearImagePicker();
+          document.getElementById('uploadBtn').disabled = true;
+        }
+      }, 10);
+    });
+  })();
+
   function validateFile() {
     const fileInput = document.getElementById('fileInput');
     const uploadBtn = document.getElementById('uploadBtn');
@@ -2550,44 +2798,22 @@
     if (files.length > 0) {
       convertOptions.style.display = 'block';
     } else {
-      convertOptions.style.display = 'none';
+      clearImagePicker();
     }
 
-    // Update Rotate & Crop options based on file count
-    updateRotateCropOptions();
-
-    // Add click listener to detect when user clicks on file input (to deselect files)
-    fileInput.addEventListener('click', function() {
-      // Small delay to allow browser to process click before checking files
-      setTimeout(() => {
-        const currentFiles = fileInput.files;
-        const convertOptions = document.getElementById('convertOptions');
-
-        // Hide convert options if no files are selected (user clicked to deselect)
-        if (currentFiles.length === 0 && convertOptions) {
-          convertOptions.style.display = 'none';
-        }
-      }, 10);
-    });
-
     if (files.length > 0) {
+      // If advanced settings is expanded and single EPUB, show image picker
+      const advancedContent = document.getElementById('advancedSettingsContent');
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
-
-      // Check if single EPUB with conversion enabled AND Manual Picker mode - show image picker
-      if (files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub') && ROTATE_CROP_MODE === 'manual_picker') {
-        // Show picker (async - don't wait for completion)
-        showImagePicker(files[0]).catch(err => {
-          console.error('Image picker error:', err);
-        });
-        uploadBtn.disabled = true;
-        return;
+      if (advancedContent.classList.contains('visible') && files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
+        showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
       }
 
       // If multiple files with conversion, inform user about batch mode
       if (files.length > 1 && convertEnabled) {
         const epubCount = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.epub')).length;
         if (epubCount > 0) {
-          console.log(`Batch mode: ${epubCount} EPUB(s) will use Auto mode (Light Novel Mode)`);
+          console.log(`Batch mode: ${epubCount} EPUB(s) will use auto settings`);
         }
       }
 
@@ -2599,6 +2825,7 @@
 
 let failedUploadsGlobal = [];
 let wsConnection = null;
+let isUploadInProgress = false; // Prevent modal close during upload/conversion
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 
@@ -2618,15 +2845,14 @@ let MAX_WIDTH = DEFAULT_MAX_WIDTH;
 let MAX_HEIGHT = DEFAULT_MAX_HEIGHT;
 let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
 let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
-let ROTATE_CROP_MODE = 'off'; // 'off', 'light_novel', 'manual_picker'
-let ENABLE_LIGHT_NOVEL_MODE = false;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
+let OVERLAP_PERCENT = 5; // Minimum overlap percentage for splits (5%, 10%, 15%)
 
 // ============================================================================
 // Image Picker State Management
 // ============================================================================
 
-let imageStates = {};        // Map: imagePath -> state (0=Normal, 1=H-Split, 2=V-Split)
+let imageStates = {};        // Map: imagePath -> state (0=Normal, 1=H-Split, 2=V-Split, 3=Rotate)
 let epubImagesCache = [];    // Cache of extracted images for preview
 let pendingConversionFile = null;  // File awaiting conversion after image selection
 
@@ -2717,8 +2943,8 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
   const newDims = `${newW}×${newH}`;
 
   // Get state label and color
-  const stateLabels = ['', 'H-Split', 'V-Split'];
-  const stateColors = ['', '#3498db', '#e74c3c'];
+  const stateLabels = ['', 'H-Split', 'V-Split', 'Rotate'];
+  const stateColors = ['', '#3498db', '#e74c3c', '#9b59b6'];
   const stateLabel = stateLabels[imageState] || '';
   const stateColor = stateColors[imageState] || '';
 
@@ -3230,7 +3456,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
       URL.revokeObjectURL(url);
       const origW = img.width, origH = img.height;
 
-      // imageState: 0=Normal, 1=H-Split (CW/CCW), 2=V-Split
+      // imageState: 0=Normal, 1=H-Split (CW/CCW), 2=V-Split, 3=Rotate & Fit
       // ========================================================================
       // STATE 1: H-Split (Rotate + Split) - EXACT COPY FROM index.html
       // Step 1: Scale WIDTH to 800px (keep aspect ratio)
@@ -3293,14 +3519,14 @@ async function processImage(data, imageState = 0, imagePath = '') {
           
           // Centered distribution: calculate numParts first, then distribute evenly
           let overlapPx, step, numParts;
-          const minOverlapPx = Math.round(maxW * 0.05);  // Minimum 5% overlap
+          const minOverlapPx = Math.round(maxW * (OVERLAP_PERCENT / 100));  // Configurable overlap
           const maxStep = maxW - minOverlapPx;
           numParts = Math.ceil((rotW - minOverlapPx) / maxStep);
           if (numParts < 2) numParts = 2;
           // Now calculate step to distribute evenly
           step = Math.round((rotW - maxW) / (numParts - 1));
           overlapPx = maxW - step;
-          // Ensure minimum 5% overlap
+          // Ensure minimum overlap
           if (overlapPx < minOverlapPx) {
             overlapPx = minOverlapPx;
             step = maxW - overlapPx;
@@ -3394,14 +3620,14 @@ async function processImage(data, imageState = 0, imagePath = '') {
           
           // Centered distribution: calculate numParts first, then distribute evenly
           let overlapPx, step, numParts;
-          const minOverlapPx = Math.round(maxW * 0.05);  // Minimum 5% overlap
+          const minOverlapPx = Math.round(maxW * (OVERLAP_PERCENT / 100));  // Configurable overlap
           const maxStep = maxW - minOverlapPx;
           numParts = Math.ceil((scaledW - minOverlapPx) / maxStep);
           if (numParts < 2) numParts = 2;
           // Now calculate step to distribute evenly
           step = Math.round((scaledW - maxW) / (numParts - 1));
           overlapPx = maxW - step;
-          // Ensure minimum 5% overlap
+          // Ensure minimum overlap
           if (overlapPx < minOverlapPx) {
             overlapPx = minOverlapPx;
             step = maxW - overlapPx;
@@ -3446,170 +3672,115 @@ async function processImage(data, imageState = 0, imagePath = '') {
         }
       }
       // ========================================================================
-      // STATE 0: Normal processing (scale to fit, no split)
-      // Also handles Light Novel Mode auto-rotation
+      // STATE 3: Rotate & Fit (Rotate 90°, then scale to fit 480x800, no split)
       // ========================================================================
-      else {
-        // Check if Light Novel Mode should apply (only for auto mode)
-        const isHorizontal = origW > origH;
-        const exceedsScreen = origW > MAX_WIDTH || origH > MAX_HEIGHT;
-        const needsRotation = isHorizontal && exceedsScreen && ENABLE_LIGHT_NOVEL_MODE && ROTATE_CROP_MODE !== 'manual_picker';
+      else if (imageState === 3) {
+        // Step 1: Rotate 90° based on handedness
+        const rotW = origH;
+        const rotH = origW;
 
-        if (needsRotation) {
-          // Light Novel Mode auto-rotation - use EXACT same logic as STATE 1
-          // Scale WIDTH to 800 (same as H-Split)
-          const scale = MAX_HEIGHT / origW;  // 800 / origW
-          const scaledW = MAX_HEIGHT;  // 800
-          const scaledH = Math.round(origH * scale);
+        const rotCanvas = document.createElement('canvas');
+        rotCanvas.width = rotW;
+        rotCanvas.height = rotH;
+        const rotCtx = rotCanvas.getContext('2d');
+        rotCtx.fillStyle = '#FFF';
+        rotCtx.fillRect(0, 0, rotW, rotH);
+
+        const isClockwise = HANDEDNESS === 'right';
+        if (isClockwise) {
+          rotCtx.translate(rotW, 0);
+          rotCtx.rotate(Math.PI / 2);
+        } else {
+          rotCtx.translate(0, rotH);
+          rotCtx.rotate(-Math.PI / 2);
+        }
+        rotCtx.drawImage(img, 0, 0);
+        rotCtx.setTransform(1, 0, 0, 1, 0, 0);
+
+        // Step 2: Scale to fit 480x800 (if needed)
+        const fitsInScreen = rotW <= MAX_WIDTH && rotH <= MAX_HEIGHT;
+        
+        if (fitsInScreen) {
+          // Already fits after rotation - just apply grayscale
+          applyGrayscale(rotCtx, rotW, rotH);
+          const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 3 }
+          });
+        } else {
+          // Scale to fit 480x800
+          const scale = Math.min(MAX_WIDTH / rotW, MAX_HEIGHT / rotH);
+          const newW = Math.round(rotW * scale);
+          const newH = Math.round(rotH * scale);
 
           const scaledCanvas = document.createElement('canvas');
-          scaledCanvas.width = scaledW;
-          scaledCanvas.height = scaledH;
+          scaledCanvas.width = newW;
+          scaledCanvas.height = newH;
           const scaledCtx = scaledCanvas.getContext('2d');
           scaledCtx.imageSmoothingEnabled = true;
           scaledCtx.imageSmoothingQuality = 'high';
           scaledCtx.fillStyle = '#FFF';
-          scaledCtx.fillRect(0, 0, scaledW, scaledH);
-          scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
+          scaledCtx.fillRect(0, 0, newW, newH);
+          scaledCtx.drawImage(rotCanvas, 0, 0, newW, newH);
+          applyGrayscale(scaledCtx, newW, newH);
 
-          // Rotate 90 based on handedness
-          const rotW = scaledH;
-          const rotH = scaledW;  // 800
+          const blob = await new Promise(res => scaledCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength, imageState: 3 }
+          });
+        }
+      }
+      // ========================================================================
+      // STATE 0: Normal processing (scale to fit, no split/rotation)
+      // ========================================================================
+      else {
+        // Normal processing: check if scaling is needed
+        const fitsInScreen = origW <= MAX_WIDTH && origH <= MAX_HEIGHT;
 
-          const rotCanvas = document.createElement('canvas');
-          rotCanvas.width = rotW;
-          rotCanvas.height = rotH;
-          const rotCtx = rotCanvas.getContext('2d');
-          rotCtx.fillStyle = '#FFF';
-          rotCtx.fillRect(0, 0, rotW, rotH);
+        if (fitsInScreen) {
+          // Image already fits - just convert to JPEG with grayscale
+          const c = document.createElement('canvas');
+          c.width = origW;
+          c.height = origH;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#FFF';
+          ctx.fillRect(0, 0, origW, origH);
+          ctx.drawImage(img, 0, 0);
+          applyGrayscale(ctx, origW, origH);
 
-          const isClockwise = HANDEDNESS === 'right';
-          if (isClockwise) {
-            rotCtx.translate(rotW, 0);
-            rotCtx.rotate(Math.PI / 2);
-          } else {
-            rotCtx.translate(0, rotH);
-            rotCtx.rotate(-Math.PI / 2);
-          }
-          rotCtx.drawImage(scaledCanvas, 0, 0);
-          rotCtx.setTransform(1, 0, 0, 1, 0, 0);
-          applyGrayscale(rotCtx, rotW, rotH);
-
-          if (rotW <= MAX_WIDTH) {
-            const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-            const arrBuf = await blob.arrayBuffer();
-            resolve({
-              parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
-              meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 0 }
-            });
-          } else {
-            // Split by WIDTH (vertical cuts)
-            const parts = [];
-            const maxW = MAX_WIDTH;
-            
-            // Centered distribution: calculate numParts first, then distribute evenly
-            let overlapPx, step, numParts;
-            const minOverlapPx = Math.round(maxW * 0.05);  // Minimum 5% overlap
-            const maxStep = maxW - minOverlapPx;
-            numParts = Math.ceil((rotW - minOverlapPx) / maxStep);
-            if (numParts < 2) numParts = 2;
-            // Now calculate step to distribute evenly
-            step = Math.round((rotW - maxW) / (numParts - 1));
-            overlapPx = maxW - step;
-            // Ensure minimum 5% overlap
-            if (overlapPx < minOverlapPx) {
-              overlapPx = minOverlapPx;
-              step = maxW - overlapPx;
-            }
-
-            const positions = [];
-            for (let i = 0; i < numParts; i++) {
-              let x;
-              if (isClockwise) {
-                x = rotW - maxW - (i * step);
-              } else {
-                x = i * step;
-              }
-              x = Math.max(0, Math.min(x, rotW - maxW));
-              positions.push(x);
-            }
-
-            if (isClockwise) {
-              positions[0] = rotW - maxW;
-              positions[numParts - 1] = 0;
-            } else {
-              positions[0] = 0;
-              positions[numParts - 1] = rotW - maxW;
-            }
-
-            for (let i = 0; i < numParts; i++) {
-              const x = positions[i];
-              const partW = maxW;
-
-              const partCanvas = document.createElement('canvas');
-              partCanvas.width = partW;
-              partCanvas.height = rotH;
-              const partCtx = partCanvas.getContext('2d');
-              partCtx.fillStyle = '#FFFFFF';
-              partCtx.fillRect(0, 0, partW, rotH);
-              partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
-
-              const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-              const arrBuf = await blob.arrayBuffer();
-              parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
-            }
-
-            const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
-            resolve({
-              parts,
-              meta: { origW, origH, origSize, wasSplit: true, splitCount: numParts, rotated: true, finalW: parts[0].width, finalH: parts[0].height, finalSize: totalSize, imageState: 0 }
-            });
-          }
+          const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: origW, height: origH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: origW, finalH: origH, finalSize: arrBuf.byteLength, imageState: 0 }
+          });
         } else {
-          // Normal processing: check if scaling is needed
-          const fitsInScreen = origW <= MAX_WIDTH && origH <= MAX_HEIGHT;
+          // Scale to fit 480x800
+          const scale = Math.min(MAX_WIDTH / origW, MAX_HEIGHT / origH);
+          const newW = Math.round(origW * scale);
+          const newH = Math.round(origH * scale);
 
-          if (fitsInScreen) {
-            // Image already fits - just convert to JPEG with grayscale
-            const c = document.createElement('canvas');
-            c.width = origW;
-            c.height = origH;
-            const ctx = c.getContext('2d');
-            ctx.fillStyle = '#FFF';
-            ctx.fillRect(0, 0, origW, origH);
-            ctx.drawImage(img, 0, 0);
-            applyGrayscale(ctx, origW, origH);
+          const c = document.createElement('canvas');
+          c.width = newW;
+          c.height = newH;
+          const ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#FFF';
+          ctx.fillRect(0, 0, newW, newH);
+          ctx.drawImage(img, 0, 0, newW, newH);
+          applyGrayscale(ctx, newW, newH);
 
-            const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-            const arrBuf = await blob.arrayBuffer();
-            resolve({
-              parts: [{ data: arrBuf, suffix: '', width: origW, height: origH, size: arrBuf.byteLength }],
-              meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: origW, finalH: origH, finalSize: arrBuf.byteLength, imageState: 0 }
-            });
-          } else {
-            // Scale to fit 480x800
-            const scale = Math.min(MAX_WIDTH / origW, MAX_HEIGHT / origH);
-            const newW = Math.round(origW * scale);
-            const newH = Math.round(origH * scale);
-
-            const c = document.createElement('canvas');
-            c.width = newW;
-            c.height = newH;
-            const ctx = c.getContext('2d');
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.fillStyle = '#FFF';
-            ctx.fillRect(0, 0, newW, newH);
-            ctx.drawImage(img, 0, 0, newW, newH);
-            applyGrayscale(ctx, newW, newH);
-
-            const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-            const arrBuf = await blob.arrayBuffer();
-            resolve({
-              parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
-              meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength, imageState: 0 }
-            });
-          }
+          const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+          const arrBuf = await blob.arrayBuffer();
+          resolve({
+            parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength, imageState: 0 }
+          });
         }
       }
     };
@@ -3633,7 +3804,7 @@ async function convertEpubFile(file, progressCallback) {
   clearLog();
   showLog();
   log(`<strong>${file.name}</strong> <span class="log-detail">(${formatBytes(originalSize)})</span>`, '', 'INFO');
-  log(`Quality: ${JPEG_QUALITY}% | Light Novel: ${ENABLE_LIGHT_NOVEL_MODE ? 'ON' : 'OFF'} | Overlap: Centered | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
+  log(`Quality: ${JPEG_QUALITY}% | Overlap: ${OVERLAP_PERCENT}% | Rotation: ${HANDEDNESS === 'right' ? 'CW' : 'CCW'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
 
   const zip = await JSZip.loadAsync(file);
   const renamed = {};
@@ -4234,6 +4405,10 @@ function uploadFile() {
     return;
   }
 
+  // Prevent modal close during upload
+  isUploadInProgress = true;
+  document.getElementById('uploadModalClose').classList.add('disabled');
+
   const progressContainer = document.getElementById('progress-container');
   const progressFill = document.getElementById('progress-fill');
   const progressText = document.getElementById('progress-text');
@@ -4292,7 +4467,9 @@ function uploadFile() {
         if (failedFiles.length > 0) {
           // Accumulate failed uploads to global (don't replace)
           failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
-          // Close upload modal and show banner with retry options
+          // Clear flag and close modal, then show banner with retry options
+          isUploadInProgress = false;
+          document.getElementById('uploadModalClose').classList.remove('disabled');
           closeUploadModal();
           showFailedUploadsBanner();
         }
@@ -4365,6 +4542,8 @@ function uploadFile() {
 
         // Show retry banner immediately with all failed files
         failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
+        isUploadInProgress = false;
+        document.getElementById('uploadModalClose').classList.remove('disabled');
         closeUploadModal();
         showFailedUploadsBanner();
         return; // Stop processing
