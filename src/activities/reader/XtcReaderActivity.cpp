@@ -40,7 +40,7 @@ void XtcReaderActivity::onEnter() {
   // Save current XTC as last opened book and add to recent books
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
+  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), "", xtc->getThumbBmpPath());
 
   // Trigger first update
   requestUpdate();

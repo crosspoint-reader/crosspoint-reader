@@ -77,6 +77,9 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
+  bookMetadata.series = opfParser.series;
+  bookMetadata.seriesIndex = opfParser.seriesIndex;
+  bookMetadata.description = opfParser.description;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -514,6 +517,30 @@ const std::string& Epub::getLanguage() const {
   }
 
   return bookMetadataCache->coreMetadata.language;
+}
+
+const std::string& Epub::getSeries() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+  return bookMetadataCache->coreMetadata.series;
+}
+
+const std::string& Epub::getSeriesIndex() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+  return bookMetadataCache->coreMetadata.seriesIndex;
+}
+
+const std::string& Epub::getDescription() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+  return bookMetadataCache->coreMetadata.description;
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {

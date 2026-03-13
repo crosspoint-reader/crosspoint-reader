@@ -235,8 +235,12 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
 
     if (rowSubtitle != nullptr) {
-      // Draw subtitle
+      // Draw subtitle; if the text is newline-separated (author\nseries), join with • for single-line display
       std::string subtitleText = rowSubtitle(i);
+      const auto nl = subtitleText.find('\n');
+      if (nl != std::string::npos) {
+        subtitleText = subtitleText.substr(0, nl) + " \u2022 " + subtitleText.substr(nl + 1);
+      }
       auto subtitle = renderer.truncatedText(UI_10_FONT_ID, subtitleText.c_str(), textWidth);
       renderer.drawText(UI_10_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 30, subtitle.c_str(),
                         i != selectedIndex);
@@ -482,6 +486,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   if (hasContinueReading) {
     const std::string& lastBookTitle = recentBooks[0].title;
     const std::string& lastBookAuthor = recentBooks[0].author;
+    const std::string& lastBookSeries = recentBooks[0].series;
 
     // Invert text colors based on selection state:
     // - With cover: selected = white text on black box, unselected = black text on white box
@@ -494,6 +499,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (!lastBookAuthor.empty()) {
       totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
     }
+    if (!lastBookSeries.empty()) {
+      totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID);
+    }
 
     // Vertically center the title block within the card
     int titleYStart = bookY + (bookHeight - totalTextHeight) / 2;
@@ -501,8 +509,11 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const auto truncatedAuthor = lastBookAuthor.empty()
                                      ? std::string{}
                                      : renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40);
+    const auto truncatedSeries = lastBookSeries.empty()
+                                     ? std::string{}
+                                     : renderer.truncatedText(UI_10_FONT_ID, lastBookSeries.c_str(), bookWidth - 40);
 
-    // If cover image was rendered, draw box behind title and author
+    // If cover image was rendered, draw box behind title, author, and series
     if (coverRendered) {
       constexpr int boxPadding = 8;
       // Calculate the max text width for the box
@@ -517,6 +528,12 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
         if (authorWidth > maxTextWidth) {
           maxTextWidth = authorWidth;
+        }
+      }
+      if (!truncatedSeries.empty()) {
+        const int seriesWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedSeries.c_str());
+        if (seriesWidth > maxTextWidth) {
+          maxTextWidth = seriesWidth;
         }
       }
 
@@ -539,6 +556,11 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (!truncatedAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
+      titleYStart += renderer.getLineHeight(UI_10_FONT_ID);
+    }
+
+    if (!truncatedSeries.empty()) {
+      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedSeries.c_str(), !bookSelected);
     }
 
     // "Continue Reading" label at the bottom

@@ -84,7 +84,9 @@ void EpubReaderActivity::onEnter() {
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  std::string series = epub->getSeries();
+  if (!series.empty() && !epub->getSeriesIndex().empty()) series += " #" + epub->getSeriesIndex();
+  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), series, epub->getThumbBmpPath());
 
   // Trigger first update
   requestUpdate();
