@@ -139,13 +139,20 @@ void OpdsBookBrowserActivity::loop() {
 void OpdsBookBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
+  const int midY = contentRect.y + contentRect.height / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  // Centers text within contentRect rather than the full screen width.
+  auto drawTextCentered = [&](int fontId, int y, const char* text, bool invert = true,
+                              EpdFontFamily::Style style = EpdFontFamily::REGULAR) {
+    const int x = contentRect.x + (contentRect.width - renderer.getTextWidth(fontId, text, style)) / 2;
+    renderer.drawText(fontId, x, y, text, invert, style);
+  };
+
+  drawTextCentered(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
 
   if (state == BrowserState::CHECK_WIFI) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
+    drawTextCentered(UI_10_FONT_ID, midY, statusMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -153,7 +160,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   }
 
   if (state == BrowserState::LOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
+    drawTextCentered(UI_10_FONT_ID, midY, statusMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -161,8 +168,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   }
 
   if (state == BrowserState::ERROR) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_ERROR_MSG));
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
+    drawTextCentered(UI_10_FONT_ID, midY - 20, tr(STR_ERROR_MSG));
+    drawTextCentered(UI_10_FONT_ID, midY + 10, errorMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -170,16 +177,15 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   }
 
   if (state == BrowserState::DOWNLOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
-    const auto maxWidth = pageWidth - 40;
-    // Trim long titles to keep them within the screen bounds.
-    auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), maxWidth);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
+    drawTextCentered(UI_10_FONT_ID, midY - 40, tr(STR_DOWNLOADING));
+    // Trim long titles to keep them within the content bounds.
+    auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), contentRect.width - 40);
+    drawTextCentered(UI_10_FONT_ID, midY - 10, title.c_str());
     if (downloadTotal > 0) {
-      const int barWidth = pageWidth - 100;
+      const int barWidth = contentRect.width - 100;
       constexpr int barHeight = 20;
-      constexpr int barX = 50;
-      const int barY = pageHeight / 2 + 20;
+      const int barX = contentRect.x + 50;
+      const int barY = midY + 20;
       GUI.drawProgressBar(renderer, Rect{barX, barY, barWidth, barHeight}, downloadProgress, downloadTotal);
     }
     renderer.displayBuffer();
@@ -196,13 +202,13 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (entries.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
+    drawTextCentered(UI_10_FONT_ID, midY, tr(STR_NO_ENTRIES));
     renderer.displayBuffer();
     return;
   }
 
   const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-  renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(contentRect.x, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, contentRect.width - 1, 30);
 
   for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
     const auto& entry = entries[i];
@@ -219,8 +225,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       }
     }
 
-    auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), renderer.getScreenWidth() - 40);
-    renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
+    auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), contentRect.width - 40);
+    renderer.drawText(UI_10_FONT_ID, contentRect.x + 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
                       i != static_cast<size_t>(selectorIndex));
   }
 

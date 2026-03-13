@@ -192,11 +192,11 @@ void KeyboardEntryActivity::loop() {
 void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS | ContentHints::SIDE_HINTS);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
+  GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
+                 title.c_str());
 
   // Draw input field
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
@@ -221,11 +221,13 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   while (true) {
     std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
     textWidth = renderer.getTextWidth(UI_12_FONT_ID, lineText.c_str());
-    if (textWidth <= pageWidth - 2 * metrics.contentSidePadding) {
+    if (textWidth <= contentRect.width - 2 * metrics.contentSidePadding) {
       if (metrics.keyboardCenteredText) {
-        renderer.drawCenteredText(UI_12_FONT_ID, inputStartY + inputHeight, lineText.c_str());
+        const int centeredX = contentRect.x + (contentRect.width - textWidth) / 2;
+        renderer.drawText(UI_12_FONT_ID, centeredX, inputStartY + inputHeight, lineText.c_str());
       } else {
-        renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, inputStartY + inputHeight, lineText.c_str());
+        renderer.drawText(UI_12_FONT_ID, contentRect.x + metrics.contentSidePadding, inputStartY + inputHeight,
+                          lineText.c_str());
       }
       if (lineEndIdx == displayText.length()) {
         break;
@@ -239,11 +241,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   }
 
-  GUI.drawTextField(renderer, Rect{0, inputStartY, pageWidth, inputHeight}, textWidth);
+  GUI.drawTextField(renderer, Rect{contentRect.x, inputStartY, contentRect.width, inputHeight}, textWidth);
 
   // Draw keyboard - use compact spacing to fit 5 rows on screen
   const int keyboardStartY = metrics.keyboardBottomAligned
-                                 ? pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
+                                 ? contentRect.y + contentRect.height - metrics.verticalSpacing -
                                        (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * NUM_ROWS
                                  : inputStartY + inputHeight + metrics.verticalSpacing * 4;
   const int keyWidth = metrics.keyboardKeyWidth;
@@ -252,9 +254,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const char* const* layout = shiftState ? keyboardShift : keyboard;
 
-  // Calculate left margin to center the longest row (13 keys)
+  // Calculate left margin to center the longest row (13 keys) within the content area
   const int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
-  const int leftMargin = (pageWidth - maxRowWidth) / 2;
+  const int leftMargin = contentRect.x + (contentRect.width - maxRowWidth) / 2;
 
   for (int row = 0; row < NUM_ROWS; row++) {
     const int rowY = keyboardStartY + row * (keyHeight + keySpacing);

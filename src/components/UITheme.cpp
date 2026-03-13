@@ -51,6 +51,7 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const Rect contentRect = getContentRect(renderer, hasButtonHints ? ContentHints::BOTTOM_HINTS : ContentHints::NONE);
   int reservedHeight = metrics.topPadding;
   if (hasHeader) {
     reservedHeight += metrics.headerHeight + metrics.verticalSpacing;
@@ -59,11 +60,41 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
     reservedHeight += metrics.tabBarHeight;
   }
   if (hasButtonHints) {
-    reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
+    reservedHeight += metrics.verticalSpacing;
   }
-  const int availableHeight = renderer.getScreenHeight() - reservedHeight;
+  const int availableHeight = contentRect.height - reservedHeight;
   int rowHeight = hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
   return availableHeight / rowHeight;
+}
+
+Rect UITheme::getContentRect(const GfxRenderer& renderer, ContentHints hints) {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const int bh = (hints & ContentHints::BOTTOM_HINTS) != ContentHints::NONE ? metrics.buttonHintsHeight : 0;
+  const int sw = (hints & ContentHints::SIDE_HINTS) != ContentHints::NONE ? metrics.sideButtonHintsWidth : 0;
+
+  int top = 0, right = 0, bottom = 0, left = 0;
+  switch (renderer.getOrientation()) {
+    case GfxRenderer::Portrait:
+      bottom = bh;
+      right = sw;
+      break;
+    case GfxRenderer::PortraitInverted:
+      top = bh;
+      left = sw;
+      break;
+    case GfxRenderer::LandscapeClockwise:
+      left = bh;
+      bottom = sw;
+      break;
+    case GfxRenderer::LandscapeCounterClockwise:
+      right = bh;
+      top = sw;
+      break;
+  }
+
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  return Rect{left, top, w - left - right, h - top - bottom};
 }
 
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {

@@ -25,17 +25,17 @@ void QrDisplayActivity::loop() {
 
 void QrDisplayActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  auto metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DISPLAY_QR), nullptr);
+  GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
+                 tr(STR_DISPLAY_QR), nullptr);
 
-  const int availableWidth = pageWidth - 40;
-  const int availableHeight = pageHeight - metrics.topPadding - metrics.headerHeight - metrics.verticalSpacing * 2 - 40;
   const int startY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int availableHeight = contentRect.height - startY - metrics.verticalSpacing;
 
-  const Rect qrBounds(20, startY, availableWidth, availableHeight);
+  const Rect qrBounds(contentRect.x + metrics.contentSidePadding, startY,
+                      contentRect.width - metrics.contentSidePadding * 2, availableHeight);
   QrUtils::drawQrCode(renderer, qrBounds, textPayload);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");

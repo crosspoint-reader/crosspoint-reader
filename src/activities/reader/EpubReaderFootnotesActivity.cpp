@@ -64,19 +64,19 @@ void EpubReaderFootnotesActivity::render(RenderLock&&) {
 
   constexpr int startY = 50;
   constexpr int lineHeight = 36;
-  const int screenWidth = renderer.getScreenWidth();
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   constexpr int marginLeft = 20;
 
-  const int visibleCount = std::max(1, (renderer.getScreenHeight() - startY) / lineHeight);
+  const int visibleCount = std::max(1, (contentRect.height - startY) / lineHeight);
   if (selectedIndex < scrollOffset) scrollOffset = selectedIndex;
   if (selectedIndex >= scrollOffset + visibleCount) scrollOffset = selectedIndex - visibleCount + 1;
 
   for (int i = scrollOffset; i < static_cast<int>(footnotes.size()) && i < scrollOffset + visibleCount; i++) {
-    const int y = startY + (i - scrollOffset) * lineHeight;
+    const int y = contentRect.y + startY + (i - scrollOffset) * lineHeight;
     const bool isSelected = (i == selectedIndex);
 
     if (isSelected) {
-      renderer.fillRect(0, y, screenWidth, lineHeight, true);
+      renderer.fillRect(contentRect.x, y, contentRect.width, lineHeight, true);
     }
 
     // Show footnote number and abbreviated href
@@ -84,7 +84,7 @@ void EpubReaderFootnotesActivity::render(RenderLock&&) {
     if (label.empty()) {
       label = tr(STR_LINK);
     }
-    renderer.drawText(UI_10_FONT_ID, marginLeft, y + 4, label.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, contentRect.x + marginLeft, y + 4, label.c_str(), !isSelected);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");

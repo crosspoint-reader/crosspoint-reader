@@ -65,10 +65,10 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_12_FONT_ID, 90, percentText.c_str(), true, EpdFontFamily::BOLD);
 
   // Draw slider track.
-  const int screenWidth = renderer.getScreenWidth();
+  const Rect contentRect = UITheme::getContentRect(renderer, ContentHints::BOTTOM_HINTS);
   constexpr int barWidth = 360;
   constexpr int barHeight = 16;
-  const int barX = (screenWidth - barWidth) / 2;
+  const int barX = contentRect.x + (contentRect.width - barWidth) / 2;
   const int barY = 140;
 
   renderer.drawRect(barX, barY, barWidth, barHeight);
