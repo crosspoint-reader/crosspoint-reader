@@ -61,7 +61,8 @@ for size in ${UI_FONT_SIZES[@]}; do
   done
 done
 
-"$PYTHON_BIN" fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h
+"$PYTHON_BIN" fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
+  "$ARABIC_FALLBACK_FONT" --arabic > ../builtinFonts/notosans_8_regular.h
 
 echo ""
 echo "Running compression verification..."
