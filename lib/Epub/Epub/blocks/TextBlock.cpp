@@ -67,6 +67,7 @@ bool TextBlock::serialize(FsFile& file) const {
   serialization::writePod(file, blockStyle.paddingRight);
   serialization::writePod(file, blockStyle.textIndent);
   serialization::writePod(file, blockStyle.textIndentDefined);
+  serialization::writePod(file, isRtl);
 
   return true;
 }
@@ -77,6 +78,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
+  bool isRtl = false;
 
   // Word count
   serialization::readPod(file, wc);
@@ -108,7 +110,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   serialization::readPod(file, blockStyle.paddingRight);
   serialization::readPod(file, blockStyle.textIndent);
   serialization::readPod(file, blockStyle.textIndentDefined);
+  serialization::readPod(file, isRtl);
 
   return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
+      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle, isRtl));
 }

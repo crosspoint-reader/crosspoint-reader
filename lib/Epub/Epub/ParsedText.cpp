@@ -74,6 +74,13 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
+bool usesLeadingIndent(const BlockStyle& blockStyle, const bool isRtl) {
+  if (blockStyle.alignment == CssTextAlign::Justify) {
+    return true;
+  }
+  return isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left;
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -147,8 +154,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
   // it is structural (positions the bullet/marker), not decorative.
   const int firstLineIndent =
-      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
-              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) && usesLeadingIndent(blockStyle, isRtl)
           ? blockStyle.textIndent
           : 0;
 
@@ -279,8 +285,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
   // it is structural (positions the bullet/marker), not decorative.
   const int firstLineIndent =
-      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
-              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) && usesLeadingIndent(blockStyle, isRtl)
           ? blockStyle.textIndent
           : 0;
 
@@ -443,89 +448,110 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
-  // Calculate first line indent (only for left/justified text).
-  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
-  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
-  // it is structural (positions the bullet/marker), not decorative.
+  // Calculate first line indent using the paragraph's leading edge.
+  // Positive text-indent is suppressed when extraParagraphSpacing is on.
+  // Negative text-indent (hanging indent) always applies because it is structural.
   const bool isFirstLine = breakIndex == 0;
   const int firstLineIndent =
       isFirstLine && blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
-              (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
+              usesLeadingIndent(blockStyle, isRtl)
           ? blockStyle.textIndent
           : 0;
 
-  // Calculate total word width for this line, count actual word gaps,
-  // and accumulate total natural gap widths (including space kerning adjustments).
   int lineWordWidthSum = 0;
   size_t actualGapCount = 0;
   int totalNaturalGaps = 0;
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
     lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
-    // Count gaps: each word after the first creates a gap, unless it's a continuation
     if (wordIdx > 0 && !continuesVec[lastBreakAt + wordIdx]) {
       actualGapCount++;
       totalNaturalGaps +=
           renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
                                    firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
     } else if (wordIdx > 0 && continuesVec[lastBreakAt + wordIdx]) {
-      // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
       totalNaturalGaps +=
           renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
                               firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
     }
   }
 
-  // Calculate spacing (account for indent reducing effective page width on first line)
   const int effectivePageWidth = pageWidth - firstLineIndent;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
-
-  // For justified text, compute per-gap extra to distribute remaining space evenly
   const int spareSpace = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
   const int justifyExtra = (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
                                ? spareSpace / static_cast<int>(actualGapCount)
                                : 0;
+  const int renderedLineWidth = lineWordWidthSum + totalNaturalGaps + justifyExtra * static_cast<int>(actualGapCount);
 
-  // Calculate initial x position (first line starts at indent for left/justified text;
-  // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
-  auto xpos = static_cast<int16_t>(firstLineIndent);
-  if (blockStyle.alignment == CssTextAlign::Right) {
-    xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-  } else if (blockStyle.alignment == CssTextAlign::Center) {
-    xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
-  }
-
-  // Pre-calculate X positions for words
-  // Continuation words attach to the previous word with no space before them
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
 
-  for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    lineXPos.push_back(xpos);
+  if (isRtl) {
+    int currentRight = effectivePageWidth;
+    if (blockStyle.alignment == CssTextAlign::Left) {
+      currentRight = renderedLineWidth;
+    } else if (blockStyle.alignment == CssTextAlign::Center) {
+      currentRight = (effectivePageWidth - renderedLineWidth) / 2 + renderedLineWidth;
+    }
 
-    const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
-    if (nextIsContinuation) {
-      int advance = wordWidths[lastBreakAt + wordIdx];
-      // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-      advance +=
-          renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                              firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
-      xpos += advance;
-    } else {
-      int gap = 0;
-      if (wordIdx + 1 < lineWordCount) {
-        gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+    for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+      const int wordWidth = wordWidths[lastBreakAt + wordIdx];
+      lineXPos.push_back(static_cast<int16_t>(currentRight - wordWidth));
+
+      const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
+      if (nextIsContinuation) {
+        int advance = wordWidth;
+        advance += renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
                                        firstCodepoint(words[lastBreakAt + wordIdx + 1]),
                                        wordStyles[lastBreakAt + wordIdx]);
+        currentRight -= advance;
+      } else {
+        int gap = 0;
+        if (wordIdx + 1 < lineWordCount) {
+          gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                         firstCodepoint(words[lastBreakAt + wordIdx + 1]),
+                                         wordStyles[lastBreakAt + wordIdx]);
+        }
+        if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
+          gap += justifyExtra;
+        }
+        currentRight -= wordWidth + gap;
       }
-      if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
-        gap += justifyExtra;
+    }
+  } else {
+    int xpos = firstLineIndent;
+    if (blockStyle.alignment == CssTextAlign::Right) {
+      xpos = effectivePageWidth - renderedLineWidth;
+    } else if (blockStyle.alignment == CssTextAlign::Center) {
+      xpos = (effectivePageWidth - renderedLineWidth) / 2;
+    }
+
+    for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+      lineXPos.push_back(static_cast<int16_t>(xpos));
+
+      const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
+      if (nextIsContinuation) {
+        int advance = wordWidths[lastBreakAt + wordIdx];
+        advance += renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                       firstCodepoint(words[lastBreakAt + wordIdx + 1]),
+                                       wordStyles[lastBreakAt + wordIdx]);
+        xpos += advance;
+      } else {
+        int gap = 0;
+        if (wordIdx + 1 < lineWordCount) {
+          gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                         firstCodepoint(words[lastBreakAt + wordIdx + 1]),
+                                         wordStyles[lastBreakAt + wordIdx]);
+        }
+        if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
+          gap += justifyExtra;
+        }
+        xpos += wordWidths[lastBreakAt + wordIdx] + gap;
       }
-      xpos += wordWidths[lastBreakAt + wordIdx] + gap;
     }
   }
 
-  // Build line data by moving from the original vectors using index range
   std::vector<std::string> lineWords(std::make_move_iterator(words.begin() + lastBreakAt),
                                      std::make_move_iterator(words.begin() + lineBreak));
   std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
@@ -536,6 +562,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(
-      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle));
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
+                                          blockStyle, isRtl));
 }
