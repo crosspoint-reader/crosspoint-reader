@@ -64,15 +64,32 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
 // --- Manifest fetching ---
 
 bool FontDownloadActivity::fetchAndParseManifest() {
-  std::string json;
-  if (!HttpDownloader::fetchUrl(FONT_MANIFEST_URL, json)) {
+  // Download manifest to a temp file on SD card to avoid holding both
+  // TLS buffers and the full JSON string in RAM simultaneously.
+  static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
+
+  auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+  if (result != HttpDownloader::OK) {
     LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
     errorMessage_ = "Failed to fetch font list";
+    Storage.remove(MANIFEST_TMP);
+    return false;
+  }
+
+  // HTTP client is now closed — TLS buffers freed. Parse JSON from file.
+  FsFile manifestFile;
+  if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
+    LOG_ERR("FONT", "Failed to open temp manifest");
+    Storage.remove(MANIFEST_TMP);
+    errorMessage_ = "Failed to read font list";
     return false;
   }
 
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, json);
+  DeserializationError err = deserializeJson(doc, manifestFile);
+  manifestFile.close();
+  Storage.remove(MANIFEST_TMP);
+
   if (err) {
     LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
     errorMessage_ = "Invalid font manifest";
@@ -120,10 +137,32 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
 // --- Download ---
 
+void FontDownloadActivity::downloadAll() {
+  for (size_t i = 0; i < families_.size(); i++) {
+    if (families_[i].installed) continue;
+    downloadFamily(families_[i]);
+    if (state_ == ERROR) return;
+  }
+
+  {
+    RenderLock lock(*this);
+    state_ = COMPLETE;
+  }
+}
+
+size_t FontDownloadActivity::totalUninstalledSize() const {
+  size_t total = 0;
+  for (const auto& f : families_) {
+    if (!f.installed) total += f.totalSize;
+  }
+  return total;
+}
+
 void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   {
     RenderLock lock(*this);
     state_ = DOWNLOADING;
+    downloadingFamilyIndex_ = static_cast<int>(&family - families_.data());
     currentFileIndex_ = 0;
     currentFileTotal_ = family.files.size();
     fileProgress_ = 0;
@@ -196,19 +235,19 @@ void FontDownloadActivity::loop() {
       return;
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      if (selectedIndex_ < static_cast<int>(families_.size()) - 1) {
+    buttonNavigator_.onNextRelease([this] {
+      if (selectedIndex_ < listItemCount() - 1) {
         selectedIndex_++;
         requestUpdate();
       }
-    }
+    });
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    buttonNavigator_.onPreviousRelease([this] {
       if (selectedIndex_ > 0) {
         selectedIndex_--;
         requestUpdate();
       }
-    }
+    });
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (!families_.empty()) {
@@ -224,7 +263,11 @@ void FontDownloadActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      downloadFamily(families_[selectedIndex_]);
+      if (isDownloadAllSelected()) {
+        downloadAll();
+      } else {
+        downloadFamily(families_[familyIndexFromList(selectedIndex_)]);
+      }
       requestUpdate();
     }
   } else if (state_ == COMPLETE) {
@@ -280,38 +323,63 @@ void FontDownloadActivity::render(RenderLock&&) {
       GUI.drawList(
           renderer,
           Rect{0, contentTop, pageWidth, pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing},
-          static_cast<int>(families_.size()), selectedIndex_,
+          listItemCount(), selectedIndex_,
           [this](int index) -> std::string {
-            const auto& f = families_[index];
-            std::string label = f.name;
-            if (f.installed) {
-              label += " [" + std::string(tr(STR_INSTALLED)) + "]";
+            if (index == 0) {
+              return std::string(tr(STR_DOWNLOAD_ALL)) + " (" + formatSize(totalUninstalledSize()) + ")";
             }
-            return label;
+            return families_[familyIndexFromList(index)].name;
           },
-          nullptr, nullptr, [this](int index) -> std::string { return families_[index].description; }, true);
+          nullptr, nullptr,
+          [this](int index) -> std::string {
+            if (index == 0) return "";
+            const auto& f = families_[familyIndexFromList(index)];
+            if (f.installed) return tr(STR_INSTALLED);
+            return f.description;
+          },
+          true,
+          [this](int index) -> bool {
+            if (index == 0) return false;
+            return families_[familyIndexFromList(index)].installed;
+          });
 
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else if (state_ == CONFIRM_DOWNLOAD) {
-    const auto& family = families_[selectedIndex_];
-
     int y = contentTop;
-    std::string confirmText =
-        (family.installed ? std::string(tr(STR_REDOWNLOAD)) : std::string(tr(STR_DOWNLOAD))) + " " + family.name + "?";
-    renderer.drawCenteredText(UI_10_FONT_ID, y, confirmText.c_str());
-    y += lineHeight + metrics.verticalSpacing;
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
-                      (std::string(tr(STR_FILES_LABEL)) + std::to_string(family.files.size())).c_str());
-    y += lineHeight + metrics.verticalSpacing;
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
-                      (std::string(tr(STR_SIZE_LABEL)) + formatSize(family.totalSize)).c_str());
+
+    if (isDownloadAllSelected()) {
+      std::string confirmText = std::string(tr(STR_DOWNLOAD_ALL)) + "?";
+      renderer.drawCenteredText(UI_10_FONT_ID, y, confirmText.c_str());
+      y += lineHeight + metrics.verticalSpacing;
+
+      size_t totalFiles = 0;
+      for (const auto& f : families_) {
+        if (!f.installed) totalFiles += f.files.size();
+      }
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
+                        (std::string(tr(STR_FILES_LABEL)) + std::to_string(totalFiles)).c_str());
+      y += lineHeight + metrics.verticalSpacing;
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
+                        (std::string(tr(STR_SIZE_LABEL)) + formatSize(totalUninstalledSize())).c_str());
+    } else {
+      const auto& family = families_[familyIndexFromList(selectedIndex_)];
+      std::string confirmText =
+          (family.installed ? std::string(tr(STR_REDOWNLOAD)) : std::string(tr(STR_DOWNLOAD))) + " " + family.name + "?";
+      renderer.drawCenteredText(UI_10_FONT_ID, y, confirmText.c_str());
+      y += lineHeight + metrics.verticalSpacing;
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
+                        (std::string(tr(STR_FILES_LABEL)) + std::to_string(family.files.size())).c_str());
+      y += lineHeight + metrics.verticalSpacing;
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
+                        (std::string(tr(STR_SIZE_LABEL)) + formatSize(family.totalSize)).c_str());
+    }
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CONFIRM), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == DOWNLOADING) {
-    const auto& family = families_[selectedIndex_];
+    const auto& family = families_[downloadingFamilyIndex_];
 
     std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + family.name + " (" +
                              std::to_string(currentFileIndex_ + 1) + "/" + std::to_string(currentFileTotal_) + ")";
