@@ -1,0 +1,62 @@
+name: Build & Publish SD Card Fonts
+
+# Fonts change rarely — run manually when font sources or the conversion
+# pipeline are updated.  Publishes .cpfont files + fonts.json manifest as
+# GitHub Release assets under the fixed "sd-fonts" tag so the device
+# firmware can fetch them from a stable URL.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci-font-packaging   # TEMPORARY: remove before merging
+
+jobs:
+  build-fonts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # needed to create/update the release
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install font tools
+        run: pip install freetype-py fonttools pyyaml
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfreetype6-dev
+
+      - name: Build SD card fonts
+        run: python3 lib/EpdFont/scripts/build-sd-fonts.py --clean
+
+      - name: Flatten output for release assets
+        run: |
+          mkdir -p dist
+          find lib/EpdFont/scripts/output -name '*.cpfont' -exec cp {} dist/ \;
+
+      - name: Generate manifest
+        run: >
+          python3 scripts/generate-font-manifest.py
+          --input dist
+          --base-url "https://github.com/${{ github.repository }}/releases/download/sd-fonts/"
+          --output dist/fonts.json
+          --descriptions-from lib/EpdFont/scripts/sd-fonts.yaml
+
+      - name: Publish to sd-fonts release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: sd-fonts
+          name: SD Card Fonts
+          body: |
+            Pre-built `.cpfont` font files for CrossPoint Reader.
+
+            Download individual files or use **Settings > System > Download Fonts** on the device.
+
+            See [SD Card Fonts documentation](docs/sd-card-fonts.md) for details.
+          files: dist/*
+          make_latest: false    # don't override the latest firmware release

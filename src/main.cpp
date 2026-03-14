@@ -20,6 +20,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
@@ -33,7 +34,8 @@ MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
-FontCacheManager fontCacheManager(renderer.getFontMap());
+SdCardFontSystem sdFontSystem;
+FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -195,6 +197,8 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
+void ensureSdFontLoaded() { sdFontSystem.ensureLoaded(renderer); }
+
 void setupDisplayAndFonts() {
   display.begin();
   renderer.begin();
@@ -225,6 +229,10 @@ void setupDisplayAndFonts() {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+
+  // Discover and load SD card fonts
+  sdFontSystem.begin(renderer);
+
   LOG_DBG("MAIN", "Fonts setup");
 }
 
