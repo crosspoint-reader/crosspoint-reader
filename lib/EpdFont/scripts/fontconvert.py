@@ -15,6 +15,7 @@ parser.add_argument("name", action="store", help="name of the font.")
 parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
+parser.add_argument("--arabic", dest="include_arabic", action="store_true", help="include Arabic glyph intervals.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
@@ -43,16 +44,16 @@ intervals = [
     # Eastern European and Baltic languages
     (0x0100, 0x017F),
     ### Latin Extended-B (Vietnamese subset only) ###
-    # Only Ơ/ơ (U+01A0-01A1), Ư/ư (U+01AF-01B0) for Vietnamese
+    # Only Æ /Æ¡ (U+01A0-01A1), Æ¯/Æ° (U+01AF-01B0) for Vietnamese
     (0x01A0, 0x01A1),
     (0x01AF, 0x01B0),
     ### Latin Extended-B (European subset only) ###
-    # Croatian digraphs (DŽ/Lj/Nj), Pinyin caron variants,
-    # European diacritical variants, Romanian (Ș/ș/Ț/ț)
+    # Croatian digraphs (DÅ½/Lj/Nj), Pinyin caron variants,
+    # European diacritical variants, Romanian (È˜/È™/Èš/È›)
     (0x01C4, 0x021F),
     ### Vietnamese Extended ###
     # All precomposed Vietnamese characters with tone marks
-    # Ả Ấ Ầ Ẩ Ẫ Ậ Ắ Ằ Ẳ Ẵ Ặ Ẹ Ẻ Ẽ Ế Ề Ể Ễ Ệ Ỉ Ị Ọ Ỏ Ố Ồ Ổ Ỗ Ộ Ớ Ờ Ở Ỡ Ợ Ụ Ủ Ứ Ừ Ử Ữ Ự Ỳ Ỵ Ỷ Ỹ
+    # áº¢ áº¤ áº¦ áº¨ áºª áº¬ áº® áº° áº² áº´ áº¶ áº¸ áºº áº¼ áº¾ á»€ á»‚ á»„ á»† á»ˆ á»Š á»Œ á»Ž á» á»’ á»” á»– á»˜ á»š á»œ á»ž á»  á»¢ á»¤ á»¦ á»¨ á»ª á»¬ á»® á»° á»² á»´ á»¶ á»¸
     (0x1EA0, 0x1EF9),
     ### General Punctuation (core subset) ###
     # Smart quotes, en dash, em dash, ellipsis, NO-BREAK SPACE
@@ -87,7 +88,7 @@ intervals = [
     # (0x3400, 0x4DBF),
     # # Extension B
     # (0x20000, 0x2A6DF),
-    # # Extension C–F
+    # # Extension Câ€“F
     # (0x2A700, 0x2EBEF),
     # # Extension G
     # (0x30000, 0x3134F),
@@ -126,6 +127,16 @@ intervals = [
     # Replacement Character
     (0xFFFD, 0xFFFD),
 ]
+
+if args.include_arabic:
+    intervals.extend([
+        ### Arabic ###
+        # Core Arabic, supplementary Arabic, and Arabic presentation forms used
+        # by the shaping pipeline planned for later phases.
+        (0x0600, 0x06FF),
+        (0x0750, 0x077F),
+        (0xFE70, 0xFEFF),
+    ])
 
 add_ints = []
 if args.additional_intervals:
