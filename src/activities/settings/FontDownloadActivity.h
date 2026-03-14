@@ -45,6 +45,7 @@ class FontDownloadActivity : public Activity {
     std::vector<ManifestFile> files;
     size_t totalSize = 0;
     bool installed = false;
+    bool hasUpdate = false;
   };
 
   State state_ = WIFI_SELECTION;

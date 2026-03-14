@@ -128,6 +128,29 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     }
 
     family.installed = fontInstaller_.isFamilyInstalled(family.name.c_str());
+
+    // Detect updates by comparing manifest file sizes with files on disk.
+    // Not a checksum, but a size mismatch reliably indicates a rebuild in practice.
+    if (family.installed) {
+      for (const auto& file : family.files) {
+        char path[128];
+        FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), path, sizeof(path));
+        FsFile f;
+        if (Storage.openFileForRead("FONT", path, f)) {
+          size_t actual = f.fileSize();
+          f.close();
+          if (actual != file.size) {
+            family.hasUpdate = true;
+            break;
+          }
+        } else {
+          // File missing on disk but family dir exists — treat as update
+          family.hasUpdate = true;
+          break;
+        }
+      }
+    }
+
     families_.push_back(std::move(family));
   }
 
@@ -139,7 +162,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
 void FontDownloadActivity::downloadAll() {
   for (size_t i = 0; i < families_.size(); i++) {
-    if (families_[i].installed) continue;
+    if (families_[i].installed && !families_[i].hasUpdate) continue;
     downloadFamily(families_[i]);
     if (state_ == ERROR) return;
   }
@@ -153,7 +176,7 @@ void FontDownloadActivity::downloadAll() {
 size_t FontDownloadActivity::totalUninstalledSize() const {
   size_t total = 0;
   for (const auto& f : families_) {
-    if (!f.installed) total += f.totalSize;
+    if (!f.installed || f.hasUpdate) total += f.totalSize;
   }
   return total;
 }
@@ -334,13 +357,16 @@ void FontDownloadActivity::render(RenderLock&&) {
           [this](int index) -> std::string {
             if (index == 0) return "";
             const auto& f = families_[familyIndexFromList(index)];
+            if (f.hasUpdate) return tr(STR_UPDATE_AVAILABLE);
             if (f.installed) return tr(STR_INSTALLED);
             return f.description;
           },
           true,
           [this](int index) -> bool {
             if (index == 0) return false;
-            return families_[familyIndexFromList(index)].installed;
+            const auto& f = families_[familyIndexFromList(index)];
+            // Dim installed fonts, but not those with updates available
+            return f.installed && !f.hasUpdate;
           });
 
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
