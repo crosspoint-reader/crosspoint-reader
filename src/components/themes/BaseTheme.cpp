@@ -10,6 +10,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/BookReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -339,7 +340,8 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
 // TODO: Refactor method to make it cleaner, split into smaller methods
 void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
-                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer,
+                                    const BookReadingStats* stats) const {
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 
@@ -539,6 +541,23 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (!truncatedAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
+    }
+
+    // Reading stats (anchored just above "Continue Reading")
+    if (stats != nullptr && stats->sessionCount > 0) {
+      const int statsLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+      const int statsBottomY = bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2 - 6;
+      char buf[48];
+      BookReadingStats::formatDuration(stats->totalReadingSeconds, buf, sizeof(buf));
+      char line1[64];
+      snprintf(line1, sizeof(line1), "%s%s", tr(STR_STATS_TOTAL_TIME), buf);
+      renderer.drawCenteredText(SMALL_FONT_ID, statsBottomY - statsLineHeight * 2, line1, !bookSelected);
+      if (stats->sessionCount > 0) {
+        BookReadingStats::formatDuration(stats->totalReadingSeconds / stats->sessionCount, buf, sizeof(buf));
+        char line2[64];
+        snprintf(line2, sizeof(line2), "%s%s", tr(STR_STATS_AVG_SESSION), buf);
+        renderer.drawCenteredText(SMALL_FONT_ID, statsBottomY - statsLineHeight, line2, !bookSelected);
+      }
     }
 
     // "Continue Reading" label at the bottom

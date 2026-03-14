@@ -10,6 +10,7 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include "BookStatsActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -81,6 +82,13 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
+  // Load reading stats, increment session count, and record session start time.
+  // Stats are saved immediately so the session is counted even if the device crashes.
+  stats = BookReadingStats::load(epub->getCachePath());
+  stats.sessionCount++;
+  sessionStartMs = millis();
+  stats.save(epub->getCachePath());
+
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
@@ -98,6 +106,12 @@ void EpubReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+
+  // Accumulate this session's reading time and persist final stats.
+  const unsigned long elapsedMs = millis() - sessionStartMs;
+  stats.totalReadingSeconds += static_cast<uint32_t>(elapsedMs / 1000UL);
+  stats.save(epub->getCachePath());
+
   section.reset();
   epub.reset();
 }
@@ -380,6 +394,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::READING_STATS: {
+      // Include elapsed time from the current session in the display stats.
+      BookReadingStats displayStats = stats;
+      displayStats.totalReadingSeconds += static_cast<uint32_t>((millis() - sessionStartMs) / 1000UL);
+      startActivityForResult(
+          std::make_unique<BookStatsActivity>(renderer, mappedInput, epub->getTitle(), displayStats),
+          [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
@@ -482,6 +505,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
       }
     }
   }
+  stats.totalPagesTurned++;
   lastPageTurnTime = millis();
   requestUpdate();
 }

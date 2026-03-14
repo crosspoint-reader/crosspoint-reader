@@ -1,6 +1,30 @@
-This fork of Crosspoint Reader replaces Bookerly, Noto Sans, and OpenDyslexic with [ChareInk7](https://www.mobileread.com/forums/showthread.php?t=184056), [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca), and [Atkinson Hyperlegible](https://fonts.google.com/specimen/Atkinson+Hyperlegible).
+> **This is a personal fork of CrossPoint Reader** with two additions: a font swap and per-book reading stats.
 
-ChareInk7 is an eReader-optimized font based off of the [Charis](https://software.sil.org/charis/) font.
+## What's different in this fork
+
+### Fonts
+
+The default fonts (Bookerly, Noto Sans, OpenDyslexic) have been replaced with:
+
+- [ChareInk7](https://www.mobileread.com/forums/showthread.php?t=184056) — an e-reader-optimised serif font based on [Charis SIL](https://software.sil.org/charis/)
+- [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) — a sans-serif designed to improve reading fluency
+- [Atkinson Hyperlegible](https://fonts.google.com/specimen/Atkinson+Hyperlegible) — designed for low-vision readers
+
+### Reading stats
+
+Per-book reading stats are tracked automatically and displayed in two places:
+
+**In-book menu → Reading Stats:**
+- Total reading time
+- Number of sessions
+- Pages turned
+- Average session time
+
+**Home screen book card:**
+- Total reading time
+- Average session time
+
+---
 
 # CrossPoint Reader
 
@@ -16,7 +40,7 @@ Xteink firmware. It aims to match or improve upon the standard EPUB reading expe
 
 E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited
 customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
-CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truely unlock the device's
+CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truly unlock the device's
 potential.
 
 CrossPoint Reader aims to:
@@ -143,6 +167,7 @@ cache. This cache directory exists at `.crosspoint` on the SD card. The structur
 .crosspoint/
 ├── epub_12471232/       # Each EPUB is cached to a subdirectory named `epub_<hash>`
 │   ├── progress.bin     # Stores reading progress (chapter, page, etc.)
+│   ├── stats.bin        # Per-book reading statistics (time, sessions, pages turned)
 │   ├── cover.bmp        # Book cover image (once generated)
 │   ├── book.bin         # Book metadata (title, author, spine, table of contents, etc.)
 │   └── sections/        # All chapter data is stored in the sections subdirectory
@@ -169,7 +194,7 @@ If you are new to the codebase, start with the [contributing docs](./docs/contri
 If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
 
-Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community
+Everyone here is a volunteer, so please be respectful and patient. For more details on our governance and community
 principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 
 ### To submit a contribution:
