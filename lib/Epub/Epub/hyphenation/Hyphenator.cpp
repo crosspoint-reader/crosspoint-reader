@@ -99,6 +99,31 @@ void appendSegmentPatternBreaks(const std::vector<CodepointInfo>& cps, const Lan
   }
 }
 
+// Checks if the codepoints after the apostrophe form a common English contraction suffix.
+// These should NOT be line-broken (e.g., "you're", "what's", "don't").
+// Common suffixes: 's, 're, 've, 'll, 'd, 't, 'm
+bool isEnglishContractionSuffix(const std::vector<CodepointInfo>& cps, size_t apostropheIdx) {
+  if (apostropheIdx + 1 >= cps.size()) {
+    return false;
+  }
+
+  // Collect the alphabetic characters after the apostrophe
+  std::string suffix;
+  for (size_t j = apostropheIdx + 1; j < cps.size() && !isSegmentSeparator(cps[j].value); ++j) {
+    if (isAlphabetic(cps[j].value)) {
+      // Convert to lowercase for comparison
+      const uint32_t lower = (cps[j].value >= 'A' && cps[j].value <= 'Z') ? cps[j].value - 'A' + 'a' : cps[j].value;
+      if (lower <= 0x7F) {
+        suffix.push_back(static_cast<char>(lower));
+      }
+    }
+  }
+
+  // Common English contraction suffixes that should not trigger line breaks
+  return suffix == "s" || suffix == "re" || suffix == "ve" || suffix == "ll" ||
+         suffix == "d" || suffix == "t" || suffix == "m";
+}
+
 void appendApostropheContractionBreaks(const std::vector<CodepointInfo>& cps,
                                        std::vector<Hyphenator::BreakInfo>& outBreaks) {
   constexpr size_t kMinLeftSegmentLen = 3;
@@ -124,7 +149,10 @@ void appendApostropheContractionBreaks(const std::vector<CodepointInfo>& cps,
         }
 
         // Avoid stranding short clitics like "l'"/"d'" or tiny suffixes like "'t".
-        if (leftPrefixLen >= kMinLeftSegmentLen && rightSuffixLen >= kMinRightSegmentLen) {
+        // Also skip English contractions (e.g., "you're", "what's") - these should
+        // remain on one line and not be broken at the apostrophe.
+        if (leftPrefixLen >= kMinLeftSegmentLen && rightSuffixLen >= kMinRightSegmentLen &&
+            !isEnglishContractionSuffix(cps, i)) {
           outBreaks.push_back({cps[i + 1].byteOffset, false});
         }
       }
