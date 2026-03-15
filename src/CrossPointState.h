@@ -15,6 +15,8 @@ class CrossPointState {
   // Written by WiFi/USB handler tasks, read and cleared by main loop.
   // volatile guarantees the main loop re-reads after a task switch.
   volatile int8_t pendingPageTurn = 0;
+  // Remote screenshot trigger. Written by WiFi handler task, read and cleared by main loop.
+  volatile bool pendingScreenshot = false;
   uint8_t lastSleepImage = 0;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;

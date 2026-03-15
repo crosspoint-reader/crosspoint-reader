@@ -314,6 +314,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/open-book", HTTP_POST, [this] { handleOpenBook(); });
   server->on("/api/settings/raw", HTTP_GET, [this] { handleGetSettingsRaw(); });
   server->on("/api/remote/button", HTTP_POST, [this] { handleRemoteButton(); });
+  server->on("/api/screenshot", HTTP_POST, [this] { handleScreenshot(); });
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
@@ -2165,6 +2166,11 @@ void CrossPointWebServer::handleRemoteButton() {
     return;
   }
   APP_STATE.pendingPageTurn = pageTurn;
+  server->send(202, "application/json", "{\"status\":\"ok\"}");
+}
+
+void CrossPointWebServer::handleScreenshot() {
+  APP_STATE.pendingScreenshot = true;
   server->send(202, "application/json", "{\"status\":\"ok\"}");
 }
 

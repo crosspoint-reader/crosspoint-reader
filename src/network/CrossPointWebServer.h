@@ -135,5 +135,6 @@ class CrossPointWebServer {
   // Remote control
   void handleOpenBook();
   void handleRemoteButton();
+  void handleScreenshot();
   void handleGetSettingsRaw() const;
 };

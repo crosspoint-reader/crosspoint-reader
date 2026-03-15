@@ -564,6 +564,12 @@ void loop() {
   }
   screenshotButtonsReleased = true;
 
+  if (APP_STATE.pendingScreenshot) {
+    APP_STATE.pendingScreenshot = false;
+    RenderLock lock;
+    ScreenshotUtil::takeScreenshot(renderer);
+  }
+
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
