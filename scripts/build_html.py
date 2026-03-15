@@ -41,9 +41,10 @@ def sanitize_identifier(name: str) -> str:
     """
     # Replace non-alphanumeric characters (including hyphens) with underscores
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-    # Prefix with asset_ if starts with a digit (avoids C reserved identifiers)
-    if sanitized and sanitized[0].isdigit():
-        sanitized = f"asset_{sanitized}"
+    # Prefix with asset_ if first character is not an ASCII letter
+    # This avoids leading underscores (reserved in C) and ensures valid identifiers
+    if not sanitized or not sanitized[0].isalpha():
+        sanitized = f"asset_{sanitized}" if sanitized else "asset_"
     return sanitized
 
 # Track seen identifiers to detect collisions
@@ -96,7 +97,8 @@ for root, _, files in os.walk(SRC_DIR):
 
                 h.write(f"}};\n\n")
                 h.write(f"constexpr size_t {base_name}CompressedSize = {len(compressed)};\n")
-                h.write(f"constexpr size_t {base_name}OriginalSize = {len(processed)};\n")
+                h.write(f"constexpr size_t {base_name}ProcessedSize = {len(processed)};\n")
+                h.write(f"constexpr size_t {base_name}OriginalSize = {base_name}ProcessedSize;\n")
 
             print(f"Generated: {header_path}")
             print(f"  Original: {len(content)} bytes")
