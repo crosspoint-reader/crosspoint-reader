@@ -207,8 +207,6 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
-        break;
-      }
       case SettingAction::Dictionary:
         startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput), resultHandler);
         break;

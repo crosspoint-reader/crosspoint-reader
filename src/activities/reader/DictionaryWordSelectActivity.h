@@ -64,6 +64,11 @@ class DictionaryWordSelectActivity final : public Activity {
   bool isAskingSynonymSearch = false;
   std::string synSearchWord;
 
+  // State for inline suggestions list shown when no direct/stem/synonym match found
+  bool isShowingSuggestions = false;
+  std::vector<std::string> suggestionWords;
+  int suggestionIndex = 0;
+
   void extractWords();
   void mergeHyphenatedWords();
   void handleNotFound(const std::string& word);
