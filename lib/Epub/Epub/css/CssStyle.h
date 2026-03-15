@@ -4,6 +4,7 @@
 
 // Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
 enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
+enum class CssDirection : uint8_t { Ltr = 0, Rtl = 1 };
 enum class CssUnit : uint8_t { Pixels = 0, Em = 1, Rem = 2, Points = 3, Percent = 4 };
 
 // Represents a CSS length value with its unit, allowing deferred resolution to pixels
@@ -57,6 +58,7 @@ enum class CssTextDecoration : uint8_t { None = 0, Underline = 1 };
 // Bitmask for tracking which properties have been explicitly set
 struct CssPropertyFlags {
   uint16_t textAlign : 1;
+  uint16_t direction : 1;
   uint16_t fontStyle : 1;
   uint16_t fontWeight : 1;
   uint16_t textDecoration : 1;
@@ -74,6 +76,7 @@ struct CssPropertyFlags {
 
   CssPropertyFlags()
       : textAlign(0),
+        direction(0),
         fontStyle(0),
         fontWeight(0),
         textDecoration(0),
@@ -90,13 +93,13 @@ struct CssPropertyFlags {
         imageWidth(0) {}
 
   [[nodiscard]] bool anySet() const {
-    return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
-           marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
-           imageWidth;
+    return textAlign || direction || fontStyle || fontWeight || textDecoration || textIndent || marginTop ||
+           marginBottom || marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight ||
+           imageHeight || imageWidth;
   }
 
   void clearAll() {
-    textAlign = fontStyle = fontWeight = textDecoration = textIndent = 0;
+    textAlign = direction = fontStyle = fontWeight = textDecoration = textIndent = 0;
     marginTop = marginBottom = marginLeft = marginRight = 0;
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
     imageHeight = imageWidth = 0;
@@ -108,6 +111,7 @@ struct CssPropertyFlags {
 // Length values are stored as CssLength (value + unit) for deferred resolution
 struct CssStyle {
   CssTextAlign textAlign = CssTextAlign::Left;
+  CssDirection direction = CssDirection::Ltr;
   CssFontStyle fontStyle = CssFontStyle::Normal;
   CssFontWeight fontWeight = CssFontWeight::Normal;
   CssTextDecoration textDecoration = CssTextDecoration::None;
@@ -121,7 +125,7 @@ struct CssStyle {
   CssLength paddingBottom;  // Padding after
   CssLength paddingLeft;    // Padding left
   CssLength paddingRight;   // Padding right
-  CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
+  CssLength imageHeight;    // Height for img (e.g. 2em) - width derived from aspect ratio when only height set
   CssLength imageWidth;     // Width for img when both or only width set
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
@@ -132,6 +136,10 @@ struct CssStyle {
     if (base.hasTextAlign()) {
       textAlign = base.textAlign;
       defined.textAlign = 1;
+    }
+    if (base.hasDirection()) {
+      direction = base.direction;
+      defined.direction = 1;
     }
     if (base.hasFontStyle()) {
       fontStyle = base.fontStyle;
@@ -192,6 +200,7 @@ struct CssStyle {
   }
 
   [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
+  [[nodiscard]] bool hasDirection() const { return defined.direction; }
   [[nodiscard]] bool hasFontStyle() const { return defined.fontStyle; }
   [[nodiscard]] bool hasFontWeight() const { return defined.fontWeight; }
   [[nodiscard]] bool hasTextDecoration() const { return defined.textDecoration; }
@@ -209,6 +218,7 @@ struct CssStyle {
 
   void reset() {
     textAlign = CssTextAlign::Left;
+    direction = CssDirection::Ltr;
     fontStyle = CssFontStyle::Normal;
     fontWeight = CssFontWeight::Normal;
     textDecoration = CssTextDecoration::None;

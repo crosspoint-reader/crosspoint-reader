@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <ScriptDetector.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
@@ -16,11 +17,64 @@
 #include "fontIds.h"
 
 namespace {
-constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
+constexpr size_t CHUNK_SIZE = 8 * 1024;             // 8KB chunk for reading
+constexpr size_t DIRECTION_SAMPLE_SIZE = 8 * 1024;  // Sample size per probe for document direction detection
+constexpr size_t DIRECTION_SAMPLE_COUNT = 3;        // Beginning, middle, and end probes
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
 }  // namespace
+
+void TxtReaderActivity::detectDocumentDirection() {
+  documentIsRtl = false;
+
+  const size_t fileSize = txt->getFileSize();
+  if (fileSize == 0) {
+    return;
+  }
+
+  auto* buffer = static_cast<uint8_t*>(malloc(DIRECTION_SAMPLE_SIZE + 1));
+  if (!buffer) {
+    LOG_ERR("TRS", "Failed to allocate direction sample buffer");
+    return;
+  }
+
+  size_t offsets[DIRECTION_SAMPLE_COUNT] = {0, 0, 0};
+  offsets[0] = 0;
+  offsets[1] = (fileSize > DIRECTION_SAMPLE_SIZE) ? (fileSize - DIRECTION_SAMPLE_SIZE) / 2 : 0;
+  offsets[2] = (fileSize > DIRECTION_SAMPLE_SIZE) ? (fileSize - DIRECTION_SAMPLE_SIZE) : 0;
+
+  for (size_t i = 0; i < DIRECTION_SAMPLE_COUNT; ++i) {
+    const size_t offset = offsets[i];
+    bool duplicate = false;
+    for (size_t j = 0; j < i; ++j) {
+      if (offsets[j] == offset) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
+      continue;
+    }
+
+    const size_t chunkSize = std::min(DIRECTION_SAMPLE_SIZE, fileSize - offset);
+    if (chunkSize == 0) {
+      continue;
+    }
+    if (!txt->readContent(buffer, offset, chunkSize)) {
+      continue;
+    }
+
+    buffer[chunkSize] = '\0';
+    if (ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer))) {
+      documentIsRtl = true;
+      break;
+    }
+  }
+
+  free(buffer);
+  LOG_DBG("TRS", "Document direction detected: %s", documentIsRtl ? "RTL" : "LTR");
+}
 
 void TxtReaderActivity::onEnter() {
   Activity::onEnter();
@@ -112,6 +166,8 @@ void TxtReaderActivity::initializeReader() {
   if (linesPerPage < 1) linesPerPage = 1;
 
   LOG_DBG("TRS", "Viewport: %dx%d, lines per page: %d", viewportWidth, viewportHeight, linesPerPage);
+
+  detectDocumentDirection();
 
   // Try to load cached page index first
   if (!loadPageIndexCache()) {
@@ -337,12 +393,8 @@ void TxtReaderActivity::renderPage() {
       if (!line.empty()) {
         int x = cachedOrientedMarginLeft;
 
-        // Apply text alignment
+        // Apply text alignment. RTL TXT documents use the right edge as the paragraph-leading side.
         switch (cachedParagraphAlignment) {
-          case CrossPointSettings::LEFT_ALIGN:
-          default:
-            // x already set to left margin
-            break;
           case CrossPointSettings::CENTER_ALIGN: {
             int textWidth = renderer.getTextWidth(cachedFontId, line.c_str());
             x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
@@ -354,8 +406,12 @@ void TxtReaderActivity::renderPage() {
             break;
           }
           case CrossPointSettings::JUSTIFIED:
-            // For plain text, justified is treated as left-aligned
-            // (true justification would require word spacing adjustments)
+          case CrossPointSettings::LEFT_ALIGN:
+          default:
+            if (documentIsRtl) {
+              int textWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+              x = cachedOrientedMarginLeft + contentWidth - textWidth;
+            }
             break;
         }
 

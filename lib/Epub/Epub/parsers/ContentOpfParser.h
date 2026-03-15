@@ -25,11 +25,13 @@ class ContentOpfParser final : public Print {
   const std::string& cachePath;
   const std::string& baseContentPath;
   size_t remainingSize;
+  size_t xmlSize;
   XML_Parser parser = nullptr;
   ParserState state = START;
   BookMetadataCache* cache;
   FsFile tempItemStore;
   std::string coverItemId;
+  bool parseFailed = false;
 
   // Index for fast idref→href lookup (used only for large EPUBs)
   struct ItemIndexEntry {
@@ -55,6 +57,7 @@ class ContentOpfParser final : public Print {
   static void startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void characterData(void* userData, const XML_Char* s, int len);
   static void endElement(void* userData, const XML_Char* name);
+  void failParse(const char* reason);
 
  public:
   std::string title;
@@ -69,7 +72,11 @@ class ContentOpfParser final : public Print {
 
   explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
                             BookMetadataCache* cache)
-      : cachePath(cachePath), baseContentPath(baseContentPath), remainingSize(xmlSize), cache(cache) {}
+      : cachePath(cachePath),
+        baseContentPath(baseContentPath),
+        remainingSize(xmlSize),
+        xmlSize(xmlSize),
+        cache(cache) {}
   ~ContentOpfParser() override;
 
   bool setup();

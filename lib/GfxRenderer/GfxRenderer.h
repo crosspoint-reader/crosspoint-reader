@@ -23,7 +23,7 @@ class GfxRenderer {
   // Logical screen orientation from the perspective of callers
   enum Orientation {
     Portrait,                  // 480x800 logical coordinates (current default)
-    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap top/bottom)
+    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180 degrees (swap top/bottom)
     PortraitInverted,          // 480x800 logical coordinates, inverted
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
@@ -49,6 +49,8 @@ class GfxRenderer {
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
+  int getArabicTextWidth(int fontId, const char* text, EpdFontFamily::Style style) const;
+  void drawArabicText(int fontId, int x, int y, const char* text, bool black, EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
   template <Color color>
   void drawPixelDither(int x, int y) const;

@@ -62,6 +62,7 @@ class ChapterHtmlSlimParser {
     bool hasUnderline = false, underline = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
+  std::vector<bool> rtlStack = {false};
   CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;
@@ -85,7 +86,7 @@ class ChapterHtmlSlimParser {
   int wordsExtractedInBlock = 0;
 
   void updateEffectiveInlineStyle();
-  void startNewTextBlock(const BlockStyle& blockStyle);
+  void startNewTextBlock(const BlockStyle& blockStyle, bool isRtl);
   void flushPartWordBuffer();
   void makePages();
   // XML callbacks

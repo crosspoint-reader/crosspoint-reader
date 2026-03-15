@@ -1,7 +1,9 @@
 #include "GfxRenderer.h"
 
+#include <ArabicShaper.h>
 #include <FontDecompressor.h>
 #include <Logging.h>
+#include <ScriptDetector.h>
 #include <Utf8.h>
 
 #include "FontCacheManager.h"
@@ -15,7 +17,7 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     }
     uint32_t glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
     // For page-buffer hits the pointer is stable for the page lifetime.
-    // For hot-group hits it is valid only until the next getBitmap() call — callers
+    // For hot-group hits it is valid only until the next getBitmap() call - callers
     // must consume it (draw the glyph) before requesting another bitmap.
     return fd->getBitmap(fontData, glyph, glyphIndex);
   }
@@ -38,7 +40,7 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
                                      int* phyY) {
   switch (orientation) {
     case GfxRenderer::Portrait: {
-      // Logical portrait (480x800) → panel (800x480)
+      // Logical portrait (480x800) -> panel (800x480)
       // Rotation: 90 degrees clockwise
       *phyX = y;
       *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
@@ -51,7 +53,7 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
       break;
     }
     case GfxRenderer::PortraitInverted: {
-      // Logical portrait (480x800) → panel (800x480)
+      // Logical portrait (480x800) -> panel (800x480)
       // Rotation: 90 degrees counter-clockwise
       *phyX = HalDisplay::DISPLAY_WIDTH - 1 - y;
       *phyY = x;
@@ -68,6 +70,12 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
 
 enum class TextRotation { None, Rotated90CW };
 
+bool isArabicTransparentMark(const uint32_t cp) {
+  return (cp >= 0x0610 && cp <= 0x061A) || (cp >= 0x064B && cp <= 0x065F) || cp == 0x0670 ||
+         (cp >= 0x06D6 && cp <= 0x06DC) || (cp >= 0x06DF && cp <= 0x06E8) || (cp >= 0x06EA && cp <= 0x06ED);
+}
+
+bool isNonAdvancingCodepoint(const uint32_t cp) { return utf8IsCombiningMark(cp) || isArabicTransparentMark(cp); }
 // Shared glyph rendering logic for normal and rotated text.
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
 template <TextRotation rotation>
@@ -188,6 +196,13 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') {
+    return 0;
+  }
+  if (ScriptDetector::containsArabic(text)) {
+    return getArabicTextWidth(fontId, text, style);
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -207,12 +222,6 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
-  const int yPos = y + getFontAscenderSize(fontId);
-  int32_t xPosFP = fp4::fromPixel(x);  // 12.4 fixed-point accumulator
-  int lastBaseX = x;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
-  int lastBaseTop = 0;
-
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -222,6 +231,17 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     fontCacheManager_->recordText(text, fontId, style);
     return;
   }
+
+  if (ScriptDetector::containsArabic(text)) {
+    drawArabicText(fontId, x, y, text, black, style);
+    return;
+  }
+
+  const int yPos = y + getFontAscenderSize(fontId);
+  int32_t xPosFP = fp4::fromPixel(x);  // 12.4 fixed-point accumulator
+  int lastBaseX = x;
+  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int lastBaseTop = 0;
 
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
@@ -285,7 +305,7 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
       drawPixel(x, y1, state);
     }
   } else {
-    // Bresenham's line algorithm — integer arithmetic only
+    // Bresenham's line algorithm - integer arithmetic only
     int dx = x2 - x1;
     int dy = y2 - y1;
     int sx = (dx > 0) ? 1 : -1;
@@ -891,7 +911,7 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
       if (!currentLine.empty()) {
         lines.push_back(currentLine);
         // If the carried-over word itself exceeds maxWidth, truncate it and
-        // push it as a complete line immediately — storing it in currentLine
+        // push it as a complete line immediately - storing it in currentLine
         // would allow a subsequent short word to be appended after the ellipsis.
         if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
           lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
@@ -980,6 +1000,13 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') {
+    return 0;
+  }
+  if (ScriptDetector::containsArabic(text)) {
+    return getArabicTextWidth(fontId, text, style);
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -1005,6 +1032,89 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   return fp4::toPixel(widthFP);  // snap 12.4 fixed-point to nearest pixel
 }
 
+int GfxRenderer::getArabicTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return 0;
+  }
+
+  std::vector<uint32_t> shapedCodepoints;
+  ArabicShaper::shape(text, shapedCodepoints);
+
+  int32_t widthFP = 0;
+  uint32_t prevCp = 0;
+  const auto& font = fontIt->second;
+  for (const uint32_t cp : shapedCodepoints) {
+    if (isNonAdvancingCodepoint(cp)) {
+      continue;
+    }
+    if (prevCp != 0) {
+      widthFP += font.getKerning(prevCp, cp, style);
+    }
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (glyph) {
+      widthFP += glyph->advanceX;
+    }
+    prevCp = cp;
+  }
+
+  return fp4::toPixel(widthFP);
+}
+
+void GfxRenderer::drawArabicText(const int fontId, const int x, const int y, const char* text, const bool black,
+                                 const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return;
+  }
+
+  std::vector<uint32_t> shapedCodepoints;
+  ArabicShaper::shape(text, shapedCodepoints);
+
+  const int yPos = y + getFontAscenderSize(fontId);
+  int32_t xPosFP = fp4::fromPixel(x);
+  int lastBaseX = x;
+  int lastBaseAdvanceFP = 0;
+  int lastBaseTop = 0;
+  uint32_t prevCp = 0;
+  constexpr int MIN_COMBINING_GAP_PX = 1;
+  const auto& font = fontIt->second;
+
+  for (const uint32_t cp : shapedCodepoints) {
+    if (isNonAdvancingCodepoint(cp)) {
+      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
+      int raiseBy = 0;
+      if (combiningGlyph) {
+        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
+        if (currentGap < MIN_COMBINING_GAP_PX) {
+          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
+        }
+      }
+
+      const int combiningX = lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2);
+      const int combiningY = yPos - raiseBy;
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      continue;
+    }
+
+    if (prevCp != 0) {
+      xPosFP += font.getKerning(prevCp, cp, style);
+    }
+
+    lastBaseX = fp4::toPixel(xPosFP);
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    lastBaseTop = glyph ? glyph->top : 0;
+
+    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    if (glyph) {
+      xPosFP += glyph->advanceX;
+    }
+    prevCp = cp;
+  }
+}
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {

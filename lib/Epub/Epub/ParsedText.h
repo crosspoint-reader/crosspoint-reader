@@ -19,6 +19,7 @@ class ParsedText {
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
+  bool isRtl;
 
   void applyParagraphIndent();
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
@@ -35,11 +36,16 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const BlockStyle& blockStyle = BlockStyle())
-      : blockStyle(blockStyle), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
+                      const BlockStyle& blockStyle = BlockStyle(), const bool isRtl = false)
+      : blockStyle(blockStyle),
+        extraParagraphSpacing(extraParagraphSpacing),
+        hyphenationEnabled(hyphenationEnabled),
+        isRtl(isRtl) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);
+  void setRtl(const bool rtl) { isRtl = rtl; }
+  bool getIsRtl() const { return isRtl; }
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }

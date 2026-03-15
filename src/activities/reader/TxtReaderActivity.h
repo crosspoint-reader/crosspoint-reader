@@ -20,6 +20,7 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  bool documentIsRtl = false;
 
   // Cached settings for cache validation (different fonts/margins require re-indexing)
   int cachedFontId = 0;
@@ -34,6 +35,7 @@ class TxtReaderActivity final : public Activity {
   void renderStatusBar() const;
 
   void initializeReader();
+  void detectDocumentDirection();
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
   void buildPageIndex();
   bool loadPageIndexCache();

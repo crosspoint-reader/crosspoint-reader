@@ -31,7 +31,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 3;
+  static constexpr uint8_t CSS_CACHE_VERSION = 4;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -117,6 +117,7 @@ class CssParser {
 
   // Individual property value parsers
   static CssTextAlign interpretAlignment(const std::string& val);
+  static CssDirection interpretDirection(const std::string& val);
   static CssFontStyle interpretFontStyle(const std::string& val);
   static CssFontWeight interpretFontWeight(const std::string& val);
   static CssTextDecoration interpretDecoration(const std::string& val);
