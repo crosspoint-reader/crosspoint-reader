@@ -261,14 +261,8 @@ void setup() {
   SETTINGS.loadFromFile();
   I18N.loadSettings();
   // Restore the active dictionary from settings, validating the path still exists on the SD card.
-  if (SETTINGS.dictionaryPath[0] != '\0') {
-    if (Dictionary::isValidDictionary(SETTINGS.dictionaryPath)) {
-      Dictionary::setActivePath(SETTINGS.dictionaryPath);
-    } else {
-      LOG_DBG("MAIN", "Dictionary path no longer valid on boot, resetting");
-      SETTINGS.dictionaryPath[0] = '\0';
-      SETTINGS.saveToFile();
-    }
+  if (SETTINGS.dictionaryPath[0] != '\0' && Dictionary::isValidDictionary()) {
+    Dictionary::setActivePath(SETTINGS.dictionaryPath);
   }
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();

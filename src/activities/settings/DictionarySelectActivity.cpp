@@ -25,14 +25,8 @@ void DictionarySelectActivity::onEnter() {
 
   scanDictionaries();
 
-  // Validate the currently stored path — reset to empty if it no longer exists.
-  const char* storedPath = SETTINGS.dictionaryPath;
-  if (storedPath[0] != '\0' && !Dictionary::isValidDictionary(storedPath)) {
-    LOG_DBG("DSEL", "Previously selected dictionary no longer valid, resetting");
-    SETTINGS.dictionaryPath[0] = '\0';
-    Dictionary::setActivePath("");
-    SETTINGS.saveToFile();
-  }
+  // Validate the currently stored path — resets and saves automatically if no longer valid.
+  Dictionary::isValidDictionary();
 
   // Find which index corresponds to the current setting.
   selectedIndex = 0;  // default: None

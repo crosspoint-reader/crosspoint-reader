@@ -33,9 +33,10 @@ class Dictionary {
   // Returns the active folder path (empty string if none configured).
   static const char* getActivePath();
 
-  // Returns true if the given folder contains a valid, usable StarDict dictionary
-  // (.ifo + .idx + .dict all present). Used by the dictionary picker to scan.
-  static bool isValidDictionary(const char* folderPath);
+  // Validates the stored dictionary path in SETTINGS against the SD card.
+  // If the path is missing or the required files are gone, resets SETTINGS.dictionaryPath
+  // to empty, clears the active path, and saves settings. Returns true if valid.
+  static bool isValidDictionary();
 
   // Parse the .ifo file in folderPath and return metadata.
   // Also checks for .syn and .dict.dz presence.

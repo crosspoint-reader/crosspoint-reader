@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "CrossPointSettings.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -53,15 +55,23 @@ bool Dictionary::exists() {
   return Storage.exists(idxPath) && Storage.exists(dictPath);
 }
 
-bool Dictionary::isValidDictionary(const char* folderPath) {
-  if (folderPath == nullptr || folderPath[0] == '\0') return false;
+bool Dictionary::isValidDictionary() {
+  const char* folderPath = SETTINGS.dictionaryPath;
+  if (folderPath[0] == '\0') return false;
   char ifoPath[520];
   char idxPath[520];
   char dictPath[520];
   snprintf(ifoPath, sizeof(ifoPath), "%s/dict-data.ifo", folderPath);
   snprintf(idxPath, sizeof(idxPath), "%s/dict-data.idx", folderPath);
   snprintf(dictPath, sizeof(dictPath), "%s/dict-data.dict", folderPath);
-  return Storage.exists(ifoPath) && Storage.exists(idxPath) && Storage.exists(dictPath);
+  const bool valid = Storage.exists(ifoPath) && Storage.exists(idxPath) && Storage.exists(dictPath);
+  if (!valid) {
+    LOG_DBG("DICT", "Stored dictionary path no longer valid, resetting");
+    SETTINGS.dictionaryPath[0] = '\0';
+    setActivePath("");
+    SETTINGS.saveToFile();
+  }
+  return valid;
 }
 
 // ---------------------------------------------------------------------------
