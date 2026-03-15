@@ -72,7 +72,11 @@ class ContentOpfParser final : public Print {
 
   explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
                             BookMetadataCache* cache)
-      : cachePath(cachePath), baseContentPath(baseContentPath), remainingSize(xmlSize), xmlSize(xmlSize), cache(cache) {}
+      : cachePath(cachePath),
+        baseContentPath(baseContentPath),
+        remainingSize(xmlSize),
+        xmlSize(xmlSize),
+        cache(cache) {}
   ~ContentOpfParser() override;
 
   bool setup();

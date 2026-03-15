@@ -82,9 +82,7 @@ bool usesLeadingIndent(const BlockStyle& blockStyle, const bool isRtl) {
   return isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left;
 }
 
-bool isAsciiWhitespaceCodepoint(const uint32_t cp) {
-  return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r';
-}
+bool isAsciiWhitespaceCodepoint(const uint32_t cp) { return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r'; }
 
 bool wordIsLtrRunCandidate(const std::string& word) {
   if (ScriptDetector::containsArabic(word.c_str())) {
@@ -228,10 +226,10 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
   // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
   // it is structural (positions the bullet/marker), not decorative.
-  const int firstLineIndent =
-      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) && usesLeadingIndent(blockStyle, isRtl)
-          ? blockStyle.textIndent
-          : 0;
+  const int firstLineIndent = blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+                                      usesLeadingIndent(blockStyle, isRtl)
+                                  ? blockStyle.textIndent
+                                  : 0;
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -359,10 +357,10 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
   // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
   // it is structural (positions the bullet/marker), not decorative.
-  const int firstLineIndent =
-      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) && usesLeadingIndent(blockStyle, isRtl)
-          ? blockStyle.textIndent
-          : 0;
+  const int firstLineIndent = blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+                                      usesLeadingIndent(blockStyle, isRtl)
+                                  ? blockStyle.textIndent
+                                  : 0;
 
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
@@ -527,11 +525,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Positive text-indent is suppressed when extraParagraphSpacing is on.
   // Negative text-indent (hanging indent) always applies because it is structural.
   const bool isFirstLine = breakIndex == 0;
-  const int firstLineIndent =
-      isFirstLine && blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
-              usesLeadingIndent(blockStyle, isRtl)
-          ? blockStyle.textIndent
-          : 0;
+  const int firstLineIndent = isFirstLine && blockStyle.textIndentDefined &&
+                                      (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+                                      usesLeadingIndent(blockStyle, isRtl)
+                                  ? blockStyle.textIndent
+                                  : 0;
 
   int lineWordWidthSum = 0;
   size_t actualGapCount = 0;
@@ -569,9 +567,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     if (!wordIsLtrNeutralToken(words[lastBreakAt + wordIdx])) {
       return false;
     }
-    return wordIdx + 1 < lineWordCount &&
-           (wordIsLtrRunCandidate(words[lastBreakAt + wordIdx + 1]) ||
-            wordIsLtrNeutralToken(words[lastBreakAt + wordIdx + 1]));
+    return wordIdx + 1 < lineWordCount && (wordIsLtrRunCandidate(words[lastBreakAt + wordIdx + 1]) ||
+                                           wordIsLtrNeutralToken(words[lastBreakAt + wordIdx + 1]));
   };
 
   auto lineWordBelongsToLtrRun = [&](const size_t wordIdx) {
@@ -590,8 +587,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
       if (nextIsContinuation) {
         return renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                   firstCodepoint(words[lastBreakAt + wordIdx + 1]),
-                                   wordStyles[lastBreakAt + wordIdx]);
+                                   firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
       }
 
       int gap = 0;
@@ -641,9 +637,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
       if (nextIsContinuation) {
         int advance = wordWidth;
-        advance += renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                       firstCodepoint(words[lastBreakAt + wordIdx + 1]),
-                                       wordStyles[lastBreakAt + wordIdx]);
+        advance +=
+            renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
         currentRight -= advance;
       } else {
         int gap = 0;
@@ -673,9 +669,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
       if (nextIsContinuation) {
         int advance = wordWidths[lastBreakAt + wordIdx];
-        advance += renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                       firstCodepoint(words[lastBreakAt + wordIdx + 1]),
-                                       wordStyles[lastBreakAt + wordIdx]);
+        advance +=
+            renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
         xpos += advance;
       } else {
         int gap = 0;

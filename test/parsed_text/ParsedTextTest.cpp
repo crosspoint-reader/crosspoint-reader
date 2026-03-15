@@ -5,9 +5,9 @@
 #include <memory>
 #include <vector>
 
-#include "GfxRenderer.h"
 #include "../../lib/Epub/Epub/ParsedText.h"
 #include "../../lib/Epub/Epub/blocks/BlockStyle.h"
+#include "GfxRenderer.h"
 
 namespace {
 

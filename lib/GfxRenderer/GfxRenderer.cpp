@@ -1032,7 +1032,6 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   return fp4::toPixel(widthFP);  // snap 12.4 fixed-point to nearest pixel
 }
 
-
 int GfxRenderer::getArabicTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
@@ -1115,7 +1114,8 @@ void GfxRenderer::drawArabicText(const int fontId, const int x, const int y, con
     }
     prevCp = cp;
   }
-}int GfxRenderer::getFontAscenderSize(const int fontId) const {
+}
+int GfxRenderer::getFontAscenderSize(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);

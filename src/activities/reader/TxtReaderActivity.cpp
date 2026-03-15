@@ -4,8 +4,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <Serialization.h>
 #include <ScriptDetector.h>
+#include <Serialization.h>
 #include <Utf8.h>
 
 #include "CrossPointSettings.h"
@@ -17,9 +17,9 @@
 #include "fontIds.h"
 
 namespace {
-constexpr size_t CHUNK_SIZE = 8 * 1024;               // 8KB chunk for reading
-constexpr size_t DIRECTION_SAMPLE_SIZE = 8 * 1024;    // Sample size per probe for document direction detection
-constexpr size_t DIRECTION_SAMPLE_COUNT = 3;          // Beginning, middle, and end probes
+constexpr size_t CHUNK_SIZE = 8 * 1024;             // 8KB chunk for reading
+constexpr size_t DIRECTION_SAMPLE_SIZE = 8 * 1024;  // Sample size per probe for document direction detection
+constexpr size_t DIRECTION_SAMPLE_COUNT = 3;        // Beginning, middle, and end probes
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes

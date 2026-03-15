@@ -37,48 +37,27 @@ struct Cluster {
 };
 
 constexpr ArabicShapeEntry kShapeTable[] = {
-    {0x0621, 0xFE80, 0xFE80, 0xFE80, 0xFE80, false, false},
-    {0x0622, 0xFE81, 0xFE82, 0xFE81, 0xFE82, true, false},
-    {0x0623, 0xFE83, 0xFE84, 0xFE83, 0xFE84, true, false},
-    {0x0624, 0xFE85, 0xFE86, 0xFE85, 0xFE86, true, false},
-    {0x0625, 0xFE87, 0xFE88, 0xFE87, 0xFE88, true, false},
-    {0x0626, 0xFE89, 0xFE8A, 0xFE8B, 0xFE8C, true, true},
-    {0x0627, 0xFE8D, 0xFE8E, 0xFE8D, 0xFE8E, true, false},
-    {0x0628, 0xFE8F, 0xFE90, 0xFE91, 0xFE92, true, true},
-    {0x0629, 0xFE93, 0xFE94, 0xFE93, 0xFE94, true, false},
-    {0x062A, 0xFE95, 0xFE96, 0xFE97, 0xFE98, true, true},
-    {0x062B, 0xFE99, 0xFE9A, 0xFE9B, 0xFE9C, true, true},
-    {0x062C, 0xFE9D, 0xFE9E, 0xFE9F, 0xFEA0, true, true},
-    {0x062D, 0xFEA1, 0xFEA2, 0xFEA3, 0xFEA4, true, true},
-    {0x062E, 0xFEA5, 0xFEA6, 0xFEA7, 0xFEA8, true, true},
-    {0x062F, 0xFEA9, 0xFEAA, 0xFEA9, 0xFEAA, true, false},
-    {0x0630, 0xFEAB, 0xFEAC, 0xFEAB, 0xFEAC, true, false},
-    {0x0631, 0xFEAD, 0xFEAE, 0xFEAD, 0xFEAE, true, false},
-    {0x0632, 0xFEAF, 0xFEB0, 0xFEAF, 0xFEB0, true, false},
-    {0x0633, 0xFEB1, 0xFEB2, 0xFEB3, 0xFEB4, true, true},
-    {0x0634, 0xFEB5, 0xFEB6, 0xFEB7, 0xFEB8, true, true},
-    {0x0635, 0xFEB9, 0xFEBA, 0xFEBB, 0xFEBC, true, true},
-    {0x0636, 0xFEBD, 0xFEBE, 0xFEBF, 0xFEC0, true, true},
-    {0x0637, 0xFEC1, 0xFEC2, 0xFEC3, 0xFEC4, true, true},
-    {0x0638, 0xFEC5, 0xFEC6, 0xFEC7, 0xFEC8, true, true},
-    {0x0639, 0xFEC9, 0xFECA, 0xFECB, 0xFECC, true, true},
-    {0x063A, 0xFECD, 0xFECE, 0xFECF, 0xFED0, true, true},
-    {0x0640, 0x0640, 0x0640, 0x0640, 0x0640, true, true},
-    {0x0641, 0xFED1, 0xFED2, 0xFED3, 0xFED4, true, true},
-    {0x0642, 0xFED5, 0xFED6, 0xFED7, 0xFED8, true, true},
-    {0x0643, 0xFED9, 0xFEDA, 0xFEDB, 0xFEDC, true, true},
-    {0x0644, 0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0, true, true},
-    {0x0645, 0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4, true, true},
-    {0x0646, 0xFEE5, 0xFEE6, 0xFEE7, 0xFEE8, true, true},
-    {0x0647, 0xFEE9, 0xFEEA, 0xFEEB, 0xFEEC, true, true},
-    {0x0648, 0xFEED, 0xFEEE, 0xFEED, 0xFEEE, true, false},
-    {0x0649, 0xFEEF, 0xFEF0, 0xFEEF, 0xFEF0, true, false},
-    {0x064A, 0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4, true, true},
-    {0x067E, 0xFB56, 0xFB57, 0xFB58, 0xFB59, true, true},
-    {0x0686, 0xFB7A, 0xFB7B, 0xFB7C, 0xFB7D, true, true},
-    {0x0698, 0xFB8A, 0xFB8B, 0xFB8A, 0xFB8B, true, false},
-    {0x06A9, 0xFB8E, 0xFB8F, 0xFB90, 0xFB91, true, true},
-    {0x06AF, 0xFB92, 0xFB93, 0xFB94, 0xFB95, true, true},
+    {0x0621, 0xFE80, 0xFE80, 0xFE80, 0xFE80, false, false}, {0x0622, 0xFE81, 0xFE82, 0xFE81, 0xFE82, true, false},
+    {0x0623, 0xFE83, 0xFE84, 0xFE83, 0xFE84, true, false},  {0x0624, 0xFE85, 0xFE86, 0xFE85, 0xFE86, true, false},
+    {0x0625, 0xFE87, 0xFE88, 0xFE87, 0xFE88, true, false},  {0x0626, 0xFE89, 0xFE8A, 0xFE8B, 0xFE8C, true, true},
+    {0x0627, 0xFE8D, 0xFE8E, 0xFE8D, 0xFE8E, true, false},  {0x0628, 0xFE8F, 0xFE90, 0xFE91, 0xFE92, true, true},
+    {0x0629, 0xFE93, 0xFE94, 0xFE93, 0xFE94, true, false},  {0x062A, 0xFE95, 0xFE96, 0xFE97, 0xFE98, true, true},
+    {0x062B, 0xFE99, 0xFE9A, 0xFE9B, 0xFE9C, true, true},   {0x062C, 0xFE9D, 0xFE9E, 0xFE9F, 0xFEA0, true, true},
+    {0x062D, 0xFEA1, 0xFEA2, 0xFEA3, 0xFEA4, true, true},   {0x062E, 0xFEA5, 0xFEA6, 0xFEA7, 0xFEA8, true, true},
+    {0x062F, 0xFEA9, 0xFEAA, 0xFEA9, 0xFEAA, true, false},  {0x0630, 0xFEAB, 0xFEAC, 0xFEAB, 0xFEAC, true, false},
+    {0x0631, 0xFEAD, 0xFEAE, 0xFEAD, 0xFEAE, true, false},  {0x0632, 0xFEAF, 0xFEB0, 0xFEAF, 0xFEB0, true, false},
+    {0x0633, 0xFEB1, 0xFEB2, 0xFEB3, 0xFEB4, true, true},   {0x0634, 0xFEB5, 0xFEB6, 0xFEB7, 0xFEB8, true, true},
+    {0x0635, 0xFEB9, 0xFEBA, 0xFEBB, 0xFEBC, true, true},   {0x0636, 0xFEBD, 0xFEBE, 0xFEBF, 0xFEC0, true, true},
+    {0x0637, 0xFEC1, 0xFEC2, 0xFEC3, 0xFEC4, true, true},   {0x0638, 0xFEC5, 0xFEC6, 0xFEC7, 0xFEC8, true, true},
+    {0x0639, 0xFEC9, 0xFECA, 0xFECB, 0xFECC, true, true},   {0x063A, 0xFECD, 0xFECE, 0xFECF, 0xFED0, true, true},
+    {0x0640, 0x0640, 0x0640, 0x0640, 0x0640, true, true},   {0x0641, 0xFED1, 0xFED2, 0xFED3, 0xFED4, true, true},
+    {0x0642, 0xFED5, 0xFED6, 0xFED7, 0xFED8, true, true},   {0x0643, 0xFED9, 0xFEDA, 0xFEDB, 0xFEDC, true, true},
+    {0x0644, 0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0, true, true},   {0x0645, 0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4, true, true},
+    {0x0646, 0xFEE5, 0xFEE6, 0xFEE7, 0xFEE8, true, true},   {0x0647, 0xFEE9, 0xFEEA, 0xFEEB, 0xFEEC, true, true},
+    {0x0648, 0xFEED, 0xFEEE, 0xFEED, 0xFEEE, true, false},  {0x0649, 0xFEEF, 0xFEF0, 0xFEEF, 0xFEF0, true, false},
+    {0x064A, 0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4, true, true},   {0x067E, 0xFB56, 0xFB57, 0xFB58, 0xFB59, true, true},
+    {0x0686, 0xFB7A, 0xFB7B, 0xFB7C, 0xFB7D, true, true},   {0x0698, 0xFB8A, 0xFB8B, 0xFB8A, 0xFB8B, true, false},
+    {0x06A9, 0xFB8E, 0xFB8F, 0xFB90, 0xFB91, true, true},   {0x06AF, 0xFB92, 0xFB93, 0xFB94, 0xFB95, true, true},
     {0x06CC, 0xFBFC, 0xFBFD, 0xFBFE, 0xFBFF, true, true},
 };
 
@@ -103,7 +82,9 @@ bool isAsciiAlpha(const uint32_t codepoint) {
   return (codepoint >= 'A' && codepoint <= 'Z') || (codepoint >= 'a' && codepoint <= 'z');
 }
 
-bool isWhitespace(const uint32_t codepoint) { return codepoint == ' ' || codepoint == '\t' || codepoint == '\n' || codepoint == '\r'; }
+bool isWhitespace(const uint32_t codepoint) {
+  return codepoint == ' ' || codepoint == '\t' || codepoint == '\n' || codepoint == '\r';
+}
 
 bool isOpeningBracket(const uint32_t codepoint) {
   return codepoint == '(' || codepoint == '[' || codepoint == '{' || codepoint == '<';
@@ -134,7 +115,9 @@ bool isDoubleAngleCloseAt(const std::vector<Cluster>& logical, const size_t inde
 
 bool isArabicStrong(const Cluster& cluster) { return cluster.type == ClusterClass::Arabic; }
 
-bool isLtrStrong(const Cluster& cluster) { return cluster.type == ClusterClass::LatinOrDigit && !isAsciiDigit(cluster.base); }
+bool isLtrStrong(const Cluster& cluster) {
+  return cluster.type == ClusterClass::LatinOrDigit && !isAsciiDigit(cluster.base);
+}
 
 bool isLtrSpanCluster(const Cluster& cluster) { return cluster.type == ClusterClass::LatinOrDigit; }
 
@@ -272,10 +255,10 @@ std::vector<Cluster> shapeLogicalClusters(const std::vector<Cluster>& decoded) {
     const bool nextArabic = i + 1 < shaped.size() && ScriptDetector::isArabicCodepoint(shaped[i + 1].sourceBase);
 
     const ArabicShapeEntry* entry = findShapeEntry(cluster.sourceBase);
-    const bool connectPrev = prevArabic && entry != nullptr && clusterCanConnectNext(shaped[i - 1]) &&
-                             clusterCanConnectPrev(cluster);
-    const bool connectNext = nextArabic && entry != nullptr && clusterCanConnectNext(cluster) &&
-                             clusterCanConnectPrev(shaped[i + 1]);
+    const bool connectPrev =
+        prevArabic && entry != nullptr && clusterCanConnectNext(shaped[i - 1]) && clusterCanConnectPrev(cluster);
+    const bool connectNext =
+        nextArabic && entry != nullptr && clusterCanConnectNext(cluster) && clusterCanConnectPrev(shaped[i + 1]);
 
     if (cluster.lamAlefAlef != 0) {
       cluster.base = lamAlefLigature(cluster.lamAlefAlef, connectPrev);
@@ -367,7 +350,8 @@ std::vector<Cluster> reorderVisual(const std::vector<Cluster>& logical) {
     }
 
     size_t neutralStart = arabicEnd;
-    while (neutralStart < logical.size() && !isArabicStrong(logical[neutralStart]) && !isLtrStrong(logical[neutralStart])) {
+    while (neutralStart < logical.size() && !isArabicStrong(logical[neutralStart]) &&
+           !isLtrStrong(logical[neutralStart])) {
       ++neutralStart;
     }
 
@@ -383,9 +367,9 @@ std::vector<Cluster> reorderVisual(const std::vector<Cluster>& logical) {
     }
 
     if (baseRtl && neutralStart > arabicEnd && ltrEnd > neutralStart) {
-      const bool wrappedDoubleAngleLtr =
-          neutralStart > arabicEnd + 1 && logical[neutralStart - 2].base == '<' && logical[neutralStart - 1].base == '<' &&
-          trailingNeutralEnd > ltrEnd + 1 && logical[ltrEnd].base == '>' && logical[ltrEnd + 1].base == '>';
+      const bool wrappedDoubleAngleLtr = neutralStart > arabicEnd + 1 && logical[neutralStart - 2].base == '<' &&
+                                         logical[neutralStart - 1].base == '<' && trailingNeutralEnd > ltrEnd + 1 &&
+                                         logical[ltrEnd].base == '>' && logical[ltrEnd + 1].base == '>';
       if (wrappedDoubleAngleLtr) {
         visual.push_back(logical[neutralStart - 2]);
         visual.push_back(logical[neutralStart - 1]);

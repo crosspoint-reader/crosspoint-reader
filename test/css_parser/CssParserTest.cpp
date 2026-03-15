@@ -1,9 +1,9 @@
-#include "../../lib/Epub/Epub/css/CssParser.h"
-
 #include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <string>
+
+#include "../../lib/Epub/Epub/css/CssParser.h"
 
 namespace {
 

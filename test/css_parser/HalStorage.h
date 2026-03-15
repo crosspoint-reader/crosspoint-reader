@@ -37,9 +37,7 @@ class FsFile {
     return static_cast<size_t>(stream_.gcount());
   }
 
-  size_t write(const uint8_t value) {
-    return write(&value, 1);
-  }
+  size_t write(const uint8_t value) { return write(&value, 1); }
 
   size_t write(const void* buffer, const size_t size) {
     if (!stream_.is_open()) {

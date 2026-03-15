@@ -39,15 +39,13 @@ int main() {
   const std::vector<uint32_t> rtlParens = ArabicShaper::shape("(\xD8\xA7\xD9\x84\xD9\x86\xD8\xB5)");
   expectEqual(rtlParens, {'(', 0xFEBA, 0xFEE8, 0xFEDF, 0xFE8D, ')'});
 
-  const std::vector<uint32_t> rtlMixedParens =
-      ArabicShaper::shape("\xD8\xA7\xD9\x84\xD9\x86\xD8\xB5 (test)");
+  const std::vector<uint32_t> rtlMixedParens = ArabicShaper::shape("\xD8\xA7\xD9\x84\xD9\x86\xD8\xB5 (test)");
   expectEqual(rtlMixedParens, {'(', 't', 'e', 's', 't', ')', ' ', 0xFEBA, 0xFEE8, 0xFEDF, 0xFE8D});
 
   const std::vector<uint32_t> rtlDoubleAngles = ArabicShaper::shape("<<\xD8\xA7\xD9\x84\xD9\x86\xD8\xB5>>");
   expectEqual(rtlDoubleAngles, {'<', '<', 0xFEBA, 0xFEE8, 0xFEDF, 0xFE8D, '>', '>'});
 
-  const std::vector<uint32_t> rtlMixedDoubleAngles =
-      ArabicShaper::shape("\xD8\xA7\xD9\x84\xD9\x86\xD8\xB5 <<test>>");
+  const std::vector<uint32_t> rtlMixedDoubleAngles = ArabicShaper::shape("\xD8\xA7\xD9\x84\xD9\x86\xD8\xB5 <<test>>");
   expectEqual(rtlMixedDoubleAngles, {'<', '<', 't', 'e', 's', 't', '>', '>', ' ', 0xFEBA, 0xFEE8, 0xFEDF, 0xFE8D});
 
   return 0;

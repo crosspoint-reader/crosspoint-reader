@@ -1,11 +1,11 @@
 #include "ContentOpfParser.h"
 
-#include <exception>
-#include <new>
-
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
+
+#include <exception>
+#include <new>
 
 #include "../BookMetadataCache.h"
 
