@@ -27,6 +27,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
+constexpr unsigned long bookmarkHoldMs = 1000;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
 
@@ -179,6 +180,14 @@ void EpubReaderActivity::loop() {
                            });
   }
 
+  // Long press CONFIRM (1s+): bookmark
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= bookmarkHoldMs) {
+    addBookmark();
+    // Wait for button release before processing further input
+    skipNextButtonCheck = true;
+    return;
+  }
+
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
@@ -208,6 +217,12 @@ void EpubReaderActivity::loop() {
                                     mappedInput.wasPressed(MappedInputManager::Button::Right))
                                  : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
                                     mappedInput.wasReleased(MappedInputManager::Button::Right));
+
+  // Clear any status bar override on page turn
+  if (prevTriggered || nextTriggered) {
+    RenderLock lock(*this);
+    statusBarOverride.clear();
+  }
 
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -754,6 +769,17 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::renderStatusBar() const {
+  if (!statusBarOverride.empty()) {
+    int top, right, bottom, left;
+    renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+    const auto screenHeight = renderer.getScreenHeight();
+    const auto textY = screenHeight - bottom - 4;
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, statusBarOverride.c_str());
+    return;
+  }
+
   // Calculate progress in book
   const int currentPage = section->currentPage + 1;
   const float pageCount = section->pageCount;
@@ -845,6 +871,37 @@ void EpubReaderActivity::restoreSavedPosition() {
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
     section.reset();
+  }
+  requestUpdate();
+}
+
+void EpubReaderActivity::addBookmark() {
+  if (!section || !epub) {
+    return;
+  }
+  float chapterProgress;
+  int currentPage;
+  {
+    RenderLock lock(*this);
+    currentPage = section->currentPage;
+    chapterProgress =
+        (section->pageCount > 0) ? static_cast<float>(currentPage) / static_cast<float>(section->pageCount) : 0.0f;
+  }
+
+  const int bookPercent =
+      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+
+  BookmarkEntry entry;
+  entry.bookPercent = static_cast<uint8_t>(bookPercent);
+  entry.chapterPercent = static_cast<uint8_t>(chapterPercent);
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+  entry.pageIndex = static_cast<uint16_t>(currentPage);
+
+  const bool ok = BookmarkStore::addBookmark(epub->getPath(), entry);
+  {
+    RenderLock lock(*this);
+    statusBarOverride = ok ? "Bookmarked" : "Bookmark failed";
   }
   requestUpdate();
 }

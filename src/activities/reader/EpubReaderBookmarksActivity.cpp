@@ -7,6 +7,10 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+constexpr int SKIP_PAGE_MS = 700;
+} 
+
 // Layout constants used in renderScreen
 const int LINE_HEIGHT = 60;
 
@@ -30,8 +34,8 @@ void EpubReaderBookmarksActivity::onEnter() {
     return;
   }
 
-  LOG_DBG("EPB", "Load %d bookmarks", getPageItems());
-  bookmarkUtil.load(getPageItems());
+  bookmarks = BookmarkStore::loadBookmarks(epubPath);
+  LOG_DBG("EPB", "Loaded %d bookmarks for book: %s", static_cast<int>(bookmarks.size()), epubPath.c_str());
 
   // Trigger first update
   requestUpdate();
@@ -42,10 +46,34 @@ void EpubReaderBookmarksActivity::onExit() { Activity::onExit(); }
 void EpubReaderBookmarksActivity::loop() {
   const int pageItems = getPageItems();
 
+
+  // Delete confirmation mode
+  if (confirmingDelete) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      if (!BookmarkStore::deleteBookmark(epubPath, selectorIndex)) {
+        LOG_DBG("EPB", "Failed to delete bookmark at index %d", selectorIndex);
+      } else {
+        bookmarks.erase(bookmarks.begin() + selectorIndex);
+        // Move selector up if we deleted the last item
+        if (selectorIndex >= bookmarks.size() && selectorIndex > 0) {
+          selectorIndex--;
+        }
+      }
+      requestUpdate();
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      requestUpdate();
+    }
+    confirmingDelete = false;
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
-    if (bookmarkUtil.doesBookmarkExist(selectorIndex)) {
-      auto bookmark = *bookmarkUtil.getBookmark(selectorIndex);
-      setResult(ProgressChangeResult{bookmark.currentSpineIndex, bookmark.currentPage});
+    if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
+      confirmingDelete = true;
+      requestUpdate();
+    } else {
+      auto bookmark = bookmarks.at(selectorIndex);
+      setResult(ProgressChangeResult{bookmark.spineIndex, bookmark.pageIndex});
       finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -53,14 +81,6 @@ void EpubReaderBookmarksActivity::loop() {
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {  // Delete
-    bookmarkUtil.deleteBookmark(selectorIndex);
-    requestUpdate();
-    return;                                                                 // return to not process navigator input
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {  // Set
-    bookmarkUtil.saveBookmark(selectorIndex, currentSpineIndex, currentPage, pageCount, pageText);
-    requestUpdate();
-    return;  // return to not process navigator input
   }
 
   buttonNavigator.onNextRelease([this, pageItems] {
@@ -90,7 +110,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   const int contentWidth = pageWidth - hintGutterWidth;
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
   const int contentY = hintGutterHeight;
-  const int numBookmarks = getPageItems();
+  const int numBookmarks = bookmarks.size();
 
   // Manual centering to honor content gutters.
   const int titleX =
@@ -100,34 +120,18 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   GUI.drawList(
       renderer, Rect{0, LINE_HEIGHT + contentY, pageWidth, LINE_HEIGHT * numBookmarks}, numBookmarks, selectorIndex,
       [this](int index) {
-        if (bookmarkUtil.doesBookmarkExist(index)) {
-          auto bookmark = bookmarkUtil.getBookmark(index).value();
-          return bookmark.summary;
-        } else {
-          return std::string();
-        }
+        return std::to_string(bookmarks.at(index).bookPercent) + "%";
       },
       [this](int index) {
-        if (bookmarkUtil.doesBookmarkExist(index)) {
-          auto bookmark = bookmarkUtil.getBookmark(index).value();
-          const float chapterProgress =
-              static_cast<float>(bookmark.currentPage) / static_cast<float>(bookmark.pageCount);
-          float bookProgress = epub->calculateProgress(bookmark.currentSpineIndex, chapterProgress) * 100.0f;
-          auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.currentSpineIndex);
-          auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-          return std::to_string(static_cast<int>(bookProgress)) + "% - " + std::to_string(bookmark.currentPage + 1) +
-                 "/" + std::to_string(bookmark.pageCount) + " - " + tocTitle;
-        } else {
-          return std::string();
-        }
+        auto bookmark = bookmarks.at(index);
+        auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
+        auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
+        return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterPercent) +
+               "% - " + tocTitle;
       },
-      [this](int index) { return bookmarkUtil.doesBookmarkExist(index) ? UIIcon::BookmarkFilled : UIIcon::Bookmark; });
+      [this](int index) { return UIIcon::BookmarkFilled; });
 
-  const bool doesSelectedBookmarkExist = bookmarkUtil.doesBookmarkExist(selectorIndex);
-  const auto openLabel = doesSelectedBookmarkExist ? tr(STR_OPEN) : "-";
-  const auto deleteLabel = doesSelectedBookmarkExist ? tr(STR_DELETE) : "-";
-  const auto saveLabel = doesSelectedBookmarkExist ? tr(STR_OVERWRITE) : tr(STR_NEW);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), openLabel, deleteLabel, saveLabel);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_DOWN), tr(STR_DIR_UP));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

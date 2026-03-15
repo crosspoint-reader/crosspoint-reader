@@ -1,0 +1,140 @@
+#include "BookmarkStore.h"
+
+#include <HalStorage.h>
+#include <Logging.h>
+
+#include <algorithm>
+
+std::string BookmarkStore::getBookmarkPath(const std::string& bookPath) {
+  // use string hash of the book to save bookmarks, same as is done for epub cache dirs
+  const std::string epubKey = std::to_string(std::hash<std::string>{}(bookPath));
+  return std::string(BOOKMARKS_DIR) + "/" + epubKey + ".bookmarks";
+}
+
+std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookPath) {
+  std::vector<BookmarkEntry> entries;
+  const std::string path = getBookmarkPath(bookPath);
+
+  FsFile file;
+  if (!Storage.openFileForRead(TAG, path, file)) {
+    LOG_DBG(TAG, "No bookmark file found");
+    return entries;
+  }
+
+  uint8_t header[2];
+  const int bytesRead = file.read(header, 2);
+  if (bytesRead != 2) {
+    file.close();
+    return entries;
+  }
+  if (header[0] != FORMAT_VERSION) {
+    LOG_DBG(TAG, "Skipping bookmark file with version %d (expected %d): %s", header[0],
+                  FORMAT_VERSION, path.c_str());
+    file.close();
+    return entries;
+  }
+
+  const uint8_t count = header[1];
+  for (uint8_t i = 0; i < count; i++) {
+    uint8_t data[6];
+    if (file.read(data, 6) != 6) {
+      break;
+    }
+    BookmarkEntry entry;
+    entry.bookPercent = data[0];
+    entry.chapterPercent = data[1];
+    entry.spineIndex = data[2] | (data[3] << 8);
+    entry.pageIndex = data[4] | (data[5] << 8);
+    entries.push_back(entry);
+  }
+
+  file.close();
+  return entries;
+}
+
+bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<BookmarkEntry>& entries) {
+  if (entries.size() > 255) {
+    LOG_DBG(TAG, "Cannot write bookmarks: too many entries (%d)", static_cast<int>(entries.size()));
+    return false;
+  }
+  FsFile file;
+  if (!Storage.openFileForWrite(TAG, path, file)) {
+    LOG_DBG(TAG, "Cannot open bookmark file for writing: %s", path.c_str());
+    return false;
+  }
+  uint8_t header[2] = {FORMAT_VERSION, static_cast<uint8_t>(entries.size())};
+  if (file.write(header, 2) != 2) {
+    file.close();
+    return false;
+  }
+
+  for (const auto& entry : entries) {
+    uint8_t data[6];
+    data[0] = entry.bookPercent;
+    data[1] = entry.chapterPercent;
+    data[2] = entry.spineIndex & 0xFF;
+    data[3] = (entry.spineIndex >> 8) & 0xFF;
+    data[4] = entry.pageIndex & 0xFF;
+    data[5] = (entry.pageIndex >> 8) & 0xFF;
+    if (file.write(data, 6) != 6) {
+      file.close();
+      return false;
+    }
+  }
+
+  file.close();
+  return true;
+}
+
+bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry& entry) {
+  Storage.mkdir(BOOKMARKS_DIR);
+  const std::string path = getBookmarkPath(bookPath);
+
+  auto entries = loadBookmarks(bookPath);
+
+  // Skip duplicate (same exact position)
+  if (std::any_of(entries.begin(), entries.end(), [&entry](const BookmarkEntry& existing) {
+        return existing.spineIndex == entry.spineIndex && existing.pageIndex == entry.pageIndex;
+      })) {
+    LOG_DBG(TAG, "Bookmark already exists at spine %d page %d", entry.spineIndex,
+                  entry.pageIndex);
+    return true;
+  }
+
+  // Reject if at capacity (uint8_t count field supports max 255)
+  if (entries.size() >= 255) {
+    LOG_DBG(TAG, "Bookmark limit reached (255)");
+    return false;
+  }
+
+  entries.push_back(entry);
+
+  // Sort by bookPercent ascending
+  std::sort(entries.begin(), entries.end(),
+            [](const BookmarkEntry& a, const BookmarkEntry& b) { return a.bookPercent < b.bookPercent; });
+
+  const bool ok = writeBookmarks(path, entries);
+  if (ok) {
+    LOG_DBG(TAG, "Bookmark added at %d%% (total: %d)", entry.bookPercent,
+                  static_cast<int>(entries.size()));
+  }
+  return ok;
+}
+
+bool BookmarkStore::deleteBookmark(const std::string& bookPath, int index) {
+  const std::string path = getBookmarkPath(bookPath);
+  auto entries = loadBookmarks(bookPath);
+
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return false;
+  }
+
+  const int bookPercent = entries[index].bookPercent;
+  entries.erase(entries.begin() + index);
+  const bool ok = writeBookmarks(path, entries);
+  if (ok) {
+    LOG_DBG(TAG, "Bookmark deleted at %d%% (remaining: %d)", bookPercent,
+                  static_cast<int>(entries.size()));
+  }
+  return ok;
+}

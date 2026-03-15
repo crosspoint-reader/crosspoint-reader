@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "../../util/BookmarkUtil.h"
+#include "../../BookmarkStore.h"
 #include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -11,12 +11,13 @@ class EpubReaderBookmarksActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::string epubPath;
   ButtonNavigator buttonNavigator;
-  BookmarkUtil bookmarkUtil;
   int currentSpineIndex = 0;
   int currentPage = 0;
   int pageCount = 0;
   int selectorIndex = 0;
   std::string pageText;
+  std::vector<BookmarkEntry> bookmarks;
+  bool confirmingDelete = false;
 
   // Number of items that fit on a page, derived from logical screen height.
   // This adapts automatically when switching between portrait and landscape.
@@ -33,8 +34,7 @@ class EpubReaderBookmarksActivity final : public Activity {
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
         pageCount(pageCount),
-        pageText(pageText),
-        bookmarkUtil(BookmarkUtil(epub, epubPath)) {}
+        pageText(pageText) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
