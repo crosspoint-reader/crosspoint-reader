@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrossPoint Remote Keyboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3f1eb;
+        --panel: #ffffff;
+        --ink: #171717;
+        --muted: #666666;
+        --line: #d7d3c7;
+        --accent: #111111;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+        background: radial-gradient(circle at top, #ffffff 0%, var(--bg) 58%);
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .shell {
+        width: min(100%, 520px);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      h1 {
+        margin: 10px 0 8px;
+        font-size: 28px;
+        line-height: 1.1;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .status {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #f7f6f2;
+        border: 1px solid var(--line);
+        font-size: 14px;
+      }
+
+      label {
+        display: block;
+        margin-top: 18px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 16px;
+        resize: vertical;
+        background: #fffefb;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      button {
+        flex: 1;
+        min-height: 48px;
+        border-radius: 999px;
+        border: 1px solid var(--accent);
+        cursor: pointer;
+        transition: opacity 0.15s ease;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: #ffffff;
+      }
+
+      button.secondary {
+        background: transparent;
+        color: var(--accent);
+      }
+
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .hint {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .closed {
+        display: none;
+        margin-top: 18px;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px dashed var(--line);
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="eyebrow">CrossPoint</div>
+      <h1 id="title">Remote Keyboard</h1>
+      <p id="subtitle">Type on your phone and send the result back to the device.</p>
+      <div class="status" id="status">Connecting to the device...</div>
+      <label for="draft">Text</label>
+      <textarea id="draft" autocapitalize="sentences" autocomplete="off" spellcheck="false"></textarea>
+      <div class="actions">
+        <button class="secondary" id="cancel-btn" type="button">Cancel</button>
+        <button class="primary" id="send-btn" type="button">Send to Device</button>
+      </div>
+      <div class="hint" id="hint">This page stays in sync while the on-device keyboard remains open.</div>
+      <div class="closed" id="closed-state">This keyboard session has ended. You can close this tab.</div>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      let activeSessionId = Number(params.get("session") || 0);
+      let lastSyncedText = "";
+      let draftDirty = false;
+
+      const titleEl = document.getElementById("title");
+      const subtitleEl = document.getElementById("subtitle");
+      const statusEl = document.getElementById("status");
+      const draftEl = document.getElementById("draft");
+      const hintEl = document.getElementById("hint");
+      const closedEl = document.getElementById("closed-state");
+      const sendBtn = document.getElementById("send-btn");
+      const cancelBtn = document.getElementById("cancel-btn");
+
+      function setClosed(message) {
+        closedEl.style.display = "block";
+        closedEl.textContent = message || "This keyboard session has ended. You can close this tab.";
+        draftEl.disabled = true;
+        sendBtn.disabled = true;
+        cancelBtn.disabled = true;
+      }
+
+      async function postUpdate(payload) {
+        const response = await fetch("/api/keyboard/session?client=web", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: activeSessionId,
+            text: draftEl.value,
+            complete: false,
+            cancel: false,
+            ...payload,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await response.text() || "Request failed");
+        }
+      }
+
+      async function syncSession() {
+        const response = await fetch("/api/keyboard/session?client=web");
+        if (!response.ok) {
+          statusEl.textContent = "Device is unreachable.";
+          return;
+        }
+
+        const session = await response.json();
+        if (!session.active) {
+          setClosed("The device is no longer waiting for remote text input.");
+          return;
+        }
+
+        activeSessionId = Number(session.sessionId || activeSessionId || 0);
+        titleEl.textContent = session.title || "Remote Keyboard";
+        subtitleEl.textContent = session.isPassword
+          ? "Password entry is active on the device."
+          : "Type on your phone and send the result back to the device.";
+        draftEl.maxLength = session.maxLength > 0 ? session.maxLength : 0;
+        draftEl.type = session.isPassword ? "password" : "text";
+        statusEl.textContent = session.androidConnected
+          ? "Android app heartbeat detected. Browser input still works as a fallback."
+          : "Connected to the device.";
+        hintEl.textContent = session.maxLength > 0
+          ? `Maximum length: ${session.maxLength} characters.`
+          : "No length limit reported by the device.";
+
+        if (!draftDirty || draftEl.value === lastSyncedText) {
+          draftEl.value = session.text || "";
+          lastSyncedText = draftEl.value;
+          draftDirty = false;
+        }
+      }
+
+      let syncTimer = null;
+      let draftTimer = null;
+
+      draftEl.addEventListener("input", function() {
+        draftDirty = true;
+        clearTimeout(draftTimer);
+        draftTimer = setTimeout(async function() {
+          try {
+            await postUpdate({});
+            lastSyncedText = draftEl.value;
+            draftDirty = false;
+          } catch (error) {
+            statusEl.textContent = error.message || "Failed to sync text.";
+          }
+        }, 180);
+      });
+
+      sendBtn.addEventListener("click", async function() {
+        sendBtn.disabled = true;
+        try {
+          await postUpdate({ complete: true });
+          statusEl.textContent = "Sent. The device will close the keyboard.";
+        } catch (error) {
+          statusEl.textContent = error.message || "Failed to send text.";
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
+
+      cancelBtn.addEventListener("click", async function() {
+        cancelBtn.disabled = true;
+        try {
+          await postUpdate({ cancel: true });
+          setClosed("Cancelled on the device.");
+        } catch (error) {
+          statusEl.textContent = error.message || "Failed to cancel session.";
+        } finally {
+          cancelBtn.disabled = false;
+        }
+      });
+
+      syncSession();
+      syncTimer = setInterval(syncSession, 1000);
+      draftEl.focus();
+    </script>
+  </body>
+</html>

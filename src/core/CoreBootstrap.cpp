@@ -13,6 +13,7 @@
 #include "features/markdown/Registration.h"
 #include "features/ota_updates/Registration.h"
 #include "features/pokemon_party/Registration.h"
+#include "features/remote_keyboard_input/Registration.h"
 #include "features/todo_planner/Registration.h"
 #include "features/trmnl_switch/Registration.h"
 #include "features/txt/Registration.h"
@@ -49,6 +50,7 @@ void registerFeatureModules() {
   features::ota_updates::registerFeature();
   features::todo_planner::registerFeature();
   features::pokemon_party::registerFeature();
+  features::remote_keyboard_input::registerFeature();
   features::web_pokedex::registerFeature();
   features::web_wallpaper::registerFeature();
   features::web_wifi_setup::registerFeature();

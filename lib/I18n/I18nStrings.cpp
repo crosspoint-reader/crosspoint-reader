@@ -172,7 +172,7 @@ const char* const CHARACTER_SETS[] = {
     "\x80"
     "\xA6"
     "",  // Deutsch
-    " !%()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUVWXYZ[\\]abcdefghijklmnoprstuvwxyz|\xC2"
+    " !%()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]abcdefghijklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
     "\x81"
@@ -252,7 +252,7 @@ const char* const CHARACTER_SETS[] = {
     "\x80"
     "\x91"
     "",  // Português (Brasil)
-    " !%()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUWX[]abcdefghiklmnoprstuvwxyz|\xC2"
+    " !%()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUWX[]abcdefghiklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC2"
     "\xBB"
@@ -440,7 +440,7 @@ const char* const CHARACTER_SETS[] = {
     "\xC3"
     "\xBC"
     "",  // Català
-    " !\"%'()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUWX[\\]abcdefghiklmnoprstuvwxyz|\xC2"
+    " !\"%'()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUWX[\\]abcdefghiklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xD0"
     "\x86"
@@ -561,7 +561,7 @@ const char* const CHARACTER_SETS[] = {
     "\xD1"
     "\x97"
     "",  // Українська
-    " !%()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUWX[]abcdefghiklmnoprstuvwxyz|\xC2"
+    " !%()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUWX[]abcdefghiklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC2"
     "\xBB"
@@ -728,7 +728,7 @@ const char* const CHARACTER_SETS[] = {
     "\xC5"
     "\xBC"
     "",  // Polski
-    " !\"%'()*+,-./012345:=?ABCDEFHIJKLMNOPQRSTUVWXY[\\]abcdefghijklmnoprstuvwxyz|\xC2"
+    " !\"%'()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWXY[\\]abcdefghijklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
     "\x84"
@@ -1168,6 +1168,12 @@ const char* const STRINGS_EN[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_ES[] = {
@@ -1822,6 +1828,12 @@ const char* const STRINGS_ES[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_FR[] = {
@@ -2680,6 +2692,12 @@ const char* const STRINGS_FR[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_DE[] = {
@@ -3234,6 +3252,12 @@ const char* const STRINGS_DE[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_CS[] = {
@@ -4950,6 +4974,12 @@ const char* const STRINGS_CS[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_PO[] = {
@@ -5661,6 +5691,12 @@ const char* const STRINGS_PO[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_RU[] = {
@@ -14475,6 +14511,12 @@ const char* const STRINGS_RU[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_SV[] = {
@@ -15381,6 +15423,12 @@ const char* const STRINGS_SV[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_RO[] = {
@@ -16455,6 +16503,12 @@ const char* const STRINGS_RO[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_CA[] = {
@@ -17161,6 +17215,12 @@ const char* const STRINGS_CA[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_UK[] = {
@@ -27327,6 +27387,12 @@ const char* const STRINGS_UK[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_BE[] = {
@@ -36229,6 +36295,12 @@ const char* const STRINGS_BE[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_IT[] = {
@@ -36648,6 +36720,12 @@ const char* const STRINGS_IT[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_PL[] = {
@@ -37750,6 +37828,12 @@ const char* const STRINGS_PL[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_FI[] = {
@@ -38618,6 +38702,12 @@ const char* const STRINGS_FI[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_DA[] = {
@@ -39240,6 +39330,12 @@ const char* const STRINGS_DA[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_NL[] = {
@@ -39624,6 +39720,12 @@ const char* const STRINGS_NL[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 const char* const STRINGS_TR[] = {
@@ -41062,6 +41164,12 @@ const char* const STRINGS_TR[] = {
     "Source: %s",
     "Saved!",
     "Press OK to save card",
+    "Global Status Bar",
+    "Status Bar Position",
+    "Top",
+    "Bottom",
+    "No WiFi",
+    "Hotspot",
 };
 
 }  // namespace i18n_strings

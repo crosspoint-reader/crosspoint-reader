@@ -50,6 +50,7 @@ enum class Capability {
   MarkdownSupport,
   OtaUpdates,
   PokemonParty,
+  RemoteKeyboardInput,
   RemoteOpenBook,
   RemotePageTurn,
   TodoPlanner,

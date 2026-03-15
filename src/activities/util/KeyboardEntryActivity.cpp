@@ -1,8 +1,14 @@
 #include "KeyboardEntryActivity.h"
 
+#include <cstring>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "core/features/FeatureModules.h"
 #include "fontIds.h"
+#include "network/RemoteKeyboardNetworkSession.h"
+#include "network/RemoteKeyboardSession.h"
+#include "util/QrUtils.h"
 
 // Keyboard layouts - lowercase
 const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
@@ -17,11 +23,31 @@ const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()
 void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
 
+  if (core::FeatureModules::hasCapability(core::Capability::RemoteKeyboardInput)) {
+    inputMode = InputMode::Remote;
+    remoteSessionId = REMOTE_KEYBOARD_SESSION.begin(title, text, maxLength, isPassword);
+    remoteNetworkSession = std::make_unique<RemoteKeyboardNetworkSession>();
+    remoteNetworkSession->begin();
+    lastRemoteRefreshAt = 0;
+  } else {
+    inputMode = InputMode::Local;
+  }
+
   // Trigger first update
   requestUpdate();
 }
 
-void KeyboardEntryActivity::onExit() { Activity::onExit(); }
+void KeyboardEntryActivity::onExit() {
+  if (remoteSessionId != 0) {
+    REMOTE_KEYBOARD_SESSION.cancel(remoteSessionId);
+    remoteSessionId = 0;
+  }
+  if (remoteNetworkSession) {
+    remoteNetworkSession->end();
+    remoteNetworkSession.reset();
+  }
+  Activity::onExit();
+}
 
 int KeyboardEntryActivity::getRowLength(const int row) const {
   if (row < 0 || row >= NUM_ROWS) return 0;
@@ -102,6 +128,47 @@ bool KeyboardEntryActivity::handleKeyPress() {
 }
 
 void KeyboardEntryActivity::loop() {
+  if (inputMode == InputMode::Remote) {
+    if (remoteNetworkSession) {
+      remoteNetworkSession->loop();
+    }
+
+    std::string submittedText;
+    if (remoteSessionId != 0 && REMOTE_KEYBOARD_SESSION.takeSubmitted(remoteSessionId, submittedText)) {
+      remoteSessionId = 0;
+      if (remoteNetworkSession) {
+        remoteNetworkSession->end();
+        remoteNetworkSession.reset();
+      }
+      onComplete(std::move(submittedText));
+      return;
+    }
+
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      switchToLocalInput();
+      return;
+    }
+
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (remoteSessionId != 0) {
+        REMOTE_KEYBOARD_SESSION.cancel(remoteSessionId);
+        remoteSessionId = 0;
+      }
+      if (remoteNetworkSession) {
+        remoteNetworkSession->end();
+        remoteNetworkSession.reset();
+      }
+      onCancel();
+      return;
+    }
+
+    if (millis() - lastRemoteRefreshAt >= 750) {
+      lastRemoteRefreshAt = millis();
+      requestUpdate();
+    }
+    return;
+  }
+
   // Navigation
   if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     if (selectedRow > 0) {
@@ -210,7 +277,12 @@ void KeyboardEntryActivity::loop() {
   }
 }
 
-void KeyboardEntryActivity::render(RenderLock&&) {
+void KeyboardEntryActivity::render(RenderLock&& lock) {
+  if (inputMode == InputMode::Remote) {
+    renderRemoteMode(std::move(lock));
+    return;
+  }
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -325,6 +397,14 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
+bool KeyboardEntryActivity::skipLoopDelay() { return inputMode == InputMode::Remote; }
+
+bool KeyboardEntryActivity::preventAutoSleep() { return inputMode == InputMode::Remote; }
+
+bool KeyboardEntryActivity::blocksBackgroundServer() {
+  return inputMode == InputMode::Remote && remoteNetworkSession && remoteNetworkSession->ownsServer();
+}
+
 void KeyboardEntryActivity::renderItemWithSelector(const int x, const int y, const char* item,
                                                    const bool isSelected) const {
   if (isSelected) {
@@ -345,4 +425,83 @@ void KeyboardEntryActivity::onCancel() {
   result.isCancelled = true;
   setResult(std::move(result));
   finish();
+}
+
+void KeyboardEntryActivity::switchToLocalInput() {
+  if (remoteSessionId != 0) {
+    REMOTE_KEYBOARD_SESSION.cancel(remoteSessionId);
+    remoteSessionId = 0;
+  }
+  if (remoteNetworkSession) {
+    remoteNetworkSession->end();
+    remoteNetworkSession.reset();
+  }
+  inputMode = InputMode::Local;
+  requestUpdate();
+}
+
+void KeyboardEntryActivity::renderRemoteMode(RenderLock&&) {
+  renderer.clearScreen();
+
+  const auto snapshot = REMOTE_KEYBOARD_SESSION.snapshot();
+  const auto network = remoteNetworkSession ? remoteNetworkSession->snapshot() : RemoteKeyboardNetworkSession::State{};
+  const int pageWidth = renderer.getScreenWidth();
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+
+  renderer.drawCenteredText(UI_12_FONT_ID, 16, title.c_str(), true, EpdFontFamily::BOLD);
+
+  std::string statusLine = "Type in the Android app or a browser";
+  if (!snapshot.claimedBy.empty()) {
+    statusLine = "Connected: " + snapshot.claimedBy;
+  } else if (!network.ready) {
+    statusLine = "Waiting for Android app or local fallback";
+  } else if (network.apMode) {
+    statusLine = "Hotspot ready for remote text input";
+  } else {
+    statusLine = "Scan the QR code or use the Android app";
+  }
+  renderer.drawCenteredText(UI_10_FONT_ID, 48, statusLine.c_str());
+
+  std::string preview = snapshot.text;
+  if (isPassword) {
+    preview = std::string(preview.length(), '*');
+  }
+  if (preview.empty()) {
+    preview = "(empty)";
+  }
+  if (preview.length() > 42) {
+    preview.replace(39, preview.length() - 39, "...");
+  }
+  renderer.drawCenteredText(UI_10_FONT_ID, 48 + lineHeight + 8, preview.c_str());
+
+  int y = 120;
+  if (network.ready) {
+    if (network.apMode) {
+      renderer.drawCenteredText(UI_10_FONT_ID, y, "1. Join this hotspot", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(UI_10_FONT_ID, y + lineHeight, network.ssid.c_str());
+      QrUtils::drawQrCode(renderer, Rect{120, y + lineHeight + 18, 240, 180}, "WIFI:S:" + network.ssid + ";;");
+
+      y += 230;
+      renderer.drawCenteredText(UI_10_FONT_ID, y, "2. Open remote input", true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(SMALL_FONT_ID, y + lineHeight, network.url.c_str());
+      QrUtils::drawQrCode(renderer, Rect{100, y + lineHeight + 18, 280, 220}, network.url);
+      y += 280;
+    } else {
+      renderer.drawCenteredText(UI_10_FONT_ID, y, network.url.c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawCenteredText(SMALL_FONT_ID, y + lineHeight, "Scan to open the remote text field");
+      QrUtils::drawQrCode(renderer, Rect{100, y + lineHeight + 24, 280, 280}, network.url);
+      y += 330;
+    }
+  } else {
+    renderer.drawCenteredText(UI_10_FONT_ID, y, "No network page available right now.");
+    renderer.drawCenteredText(SMALL_FONT_ID, y + lineHeight + 8, "If the Android app is connected over USB or WiFi,");
+    renderer.drawCenteredText(SMALL_FONT_ID, y + lineHeight * 2 + 8, "it can still pick up this input session.");
+    y += 120;
+  }
+
+  renderer.drawCenteredText(SMALL_FONT_ID, y, "Press Select to use the on-device keyboard instead.");
+
+  const auto labels = mappedInput.mapLabels("« Back", "Local", "", "");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer();
 }

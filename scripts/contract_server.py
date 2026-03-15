@@ -85,6 +85,7 @@ def _default_plugins():
     return {
         "web_wifi_setup": False,
         "ota_updates": False,
+        "remote_keyboard_input": False,
         "remote_open_book": True,
         "remote_page_turn": True,
         "user_fonts": False,
@@ -134,6 +135,7 @@ def _default_state():
         "wifiNetworks": [],
         "todoToday": _default_todo_today(),
         "otaStatus": _default_ota(),
+        "remoteKeyboardSession": None,
         # path → base64-encoded bytes (for cover/download endpoints)
         "binaryFiles": {},
         # paths that respond with HTTP 500 (simulated errors)
@@ -151,6 +153,8 @@ def _default_mutations():
         "wifiForgets": [],         # list[str]
         "openBookRequests": [],    # list[str]
         "remoteButtonRequests": [],# list[str]
+        "remoteKeyboardClaims": [],# list[str]
+        "remoteKeyboardSubmissions": [], # list[str]
         "deletedPaths": [],        # list[list[str]]
         "renames": [],             # list[[from_path, new_name]]
         "moves": [],               # list[[from_path, dest_path]]
@@ -358,6 +362,9 @@ class ContractHandler(BaseHTTPRequestHandler):
                         }
                     )
 
+            elif base == "/api/remote-keyboard/session":
+                self._json_response(_state["remoteKeyboardSession"] or {"active": False})
+
             elif base == "/api/ota/check":
                 response = dict(_state["otaStatus"])
                 response.setdefault("currentVersion", _state["status"].get("version", "1.0.0"))
@@ -470,6 +477,23 @@ class ContractHandler(BaseHTTPRequestHandler):
                 body = self._parse_json(raw)
                 _mutations["remoteButtonRequests"].append(body.get("button", ""))
                 self._json_response({"status": "ok"}, 202)
+
+            elif base == "/api/remote-keyboard/claim":
+                body = self._parse_json(raw)
+                session = _state["remoteKeyboardSession"]
+                if not session:
+                    self._text("Remote keyboard session not found", 404)
+                    return
+                client = body.get("client", "")
+                _mutations["remoteKeyboardClaims"].append(client)
+                session["claimedBy"] = client
+                self._json_response(session)
+
+            elif base == "/api/remote-keyboard/submit":
+                body = self._parse_json(raw)
+                _mutations["remoteKeyboardSubmissions"].append(body.get("text", ""))
+                _state["remoteKeyboardSession"] = None
+                self._json_response({"ok": True})
 
             elif base == "/api/wifi/connect":
                 body = self._parse_json(raw)

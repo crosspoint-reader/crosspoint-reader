@@ -17,6 +17,7 @@
 #include "WifiCredentialStore.h"
 #include "activities/todo/TodoPlannerStorage.h"
 #include "core/features/FeatureModules.h"
+#include "network/RemoteKeyboardSession.h"
 #include "esp_ota_ops.h"
 #include "util/BookProgressDataStore.h"
 #include "util/DateUtils.h"
@@ -231,6 +232,62 @@ static void handleRemoteButton(const char* btn) {
   }
   APP_STATE.pendingPageTurn = pageTurn;
   sendOk();
+}
+
+static void handleRemoteKeyboardSessionGet() {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemoteKeyboardInput)) {
+    sendError("remote_keyboard_input disabled");
+    return;
+  }
+
+  const auto snapshot = REMOTE_KEYBOARD_SESSION.snapshot();
+  JsonDocument resp;
+  resp["ok"] = true;
+  resp["active"] = snapshot.active;
+  if (snapshot.active) {
+    resp["id"] = snapshot.id;
+    resp["title"] = snapshot.title.c_str();
+    resp["text"] = snapshot.text.c_str();
+    resp["maxLength"] = snapshot.maxLength;
+    resp["isPassword"] = snapshot.isPassword;
+    if (!snapshot.claimedBy.empty()) {
+      resp["claimedBy"] = snapshot.claimedBy.c_str();
+      resp["lastClaimAt"] = snapshot.lastClaimAt;
+    }
+  }
+  serializeJson(resp, logSerial);
+  logSerial.write('\n');
+}
+
+static void handleRemoteKeyboardClaim(const uint32_t id, const char* client) {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemoteKeyboardInput)) {
+    sendError("remote_keyboard_input disabled");
+    return;
+  }
+  if (id == 0 || !REMOTE_KEYBOARD_SESSION.claim(id, client ? client : "android")) {
+    sendError("remote keyboard session not found");
+    return;
+  }
+  handleRemoteKeyboardSessionGet();
+}
+
+static void handleRemoteKeyboardSubmit(const uint32_t id, const char* text) {
+  if (!core::FeatureModules::hasCapability(core::Capability::RemoteKeyboardInput)) {
+    sendError("remote_keyboard_input disabled");
+    return;
+  }
+  switch (REMOTE_KEYBOARD_SESSION.submit(id, text ? text : "")) {
+    case RemoteKeyboardSession::SubmitResult::Submitted:
+      sendOk();
+      return;
+    case RemoteKeyboardSession::SubmitResult::TextTooLong:
+      sendError("text exceeds session length limit");
+      return;
+    case RemoteKeyboardSession::SubmitResult::InvalidSession:
+    default:
+      sendError("remote keyboard session not found");
+      return;
+  }
 }
 
 // Android expects: {"ok":true,"files":[{"name":"...","path":"...","dir":false,"size":...,"modified":0}]}
@@ -961,6 +1018,14 @@ static void processCommand(const char* line) {
     handleOpenBook(cmd["arg"] | "");
   } else if (strcmp(name, "remote_button") == 0) {
     handleRemoteButton(cmd["arg"] | "");
+  } else if (strcmp(name, "remote_keyboard_session_get") == 0) {
+    handleRemoteKeyboardSessionGet();
+  } else if (strcmp(name, "remote_keyboard_claim") == 0) {
+    const JsonObjectConst arg = cmd["arg"].as<JsonObjectConst>();
+    handleRemoteKeyboardClaim(arg["id"] | (uint32_t)0, arg["client"] | "android");
+  } else if (strcmp(name, "remote_keyboard_submit") == 0) {
+    const JsonObjectConst arg = cmd["arg"].as<JsonObjectConst>();
+    handleRemoteKeyboardSubmit(arg["id"] | (uint32_t)0, arg["text"] | "");
   } else if (strcmp(name, "wifi_connect") == 0) {
     const JsonObjectConst arg = cmd["arg"].as<JsonObjectConst>();
     handleWifiConnect(arg["ssid"] | "", arg["password"] | "");

@@ -5,6 +5,8 @@
 #include <string>
 #include <utility>
 
+#include "network/RemoteKeyboardNetworkSession.h"
+
 #include "../Activity.h"
 
 /**
@@ -38,13 +40,22 @@ class KeyboardEntryActivity : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool skipLoopDelay() override;
+  bool preventAutoSleep() override;
+  bool blocksBackgroundServer() override;
 
  private:
+  enum class InputMode { Remote, Local };
+
   std::string title;
   std::string text;
   size_t maxLength;
   bool isPassword;
   int startY;
+  InputMode inputMode = InputMode::Local;
+  uint32_t remoteSessionId = 0;
+  std::unique_ptr<RemoteKeyboardNetworkSession> remoteNetworkSession;
+  unsigned long lastRemoteRefreshAt = 0;
 
   // Keyboard state
   int selectedRow = 0;
@@ -72,4 +83,6 @@ class KeyboardEntryActivity : public Activity {
   bool handleKeyPress();  // false if onComplete was triggered
   int getRowLength(int row) const;
   void renderItemWithSelector(int x, int y, const char* item, bool isSelected) const;
+  void switchToLocalInput();
+  void renderRemoteMode(RenderLock&&);
 };

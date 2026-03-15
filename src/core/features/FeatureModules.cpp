@@ -116,6 +116,8 @@ bool FeatureModules::hasCapability(const Capability capability) {
       return isEnabled("ota_updates");
     case Capability::PokemonParty:
       return isEnabled("pokemon_party");
+    case Capability::RemoteKeyboardInput:
+      return isEnabled("remote_keyboard_input");
     case Capability::RemoteOpenBook:
       return true;
     case Capability::RemotePageTurn:
@@ -148,6 +150,7 @@ String FeatureModules::getBuildString() { return FeatureCatalog::buildString(); 
 String FeatureModules::getFeatureMapJson() {
   JsonDocument doc;
   deserializeJson(doc, FeatureCatalog::toJson());
+  doc["remote_keyboard_input"] = hasCapability(Capability::RemoteKeyboardInput);
   doc["remote_open_book"] = hasCapability(Capability::RemoteOpenBook);
   doc["remote_page_turn"] = hasCapability(Capability::RemotePageTurn);
 

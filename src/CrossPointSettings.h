@@ -141,7 +141,7 @@ class CrossPointSettings {
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_EXTENDED = 2, FORK_DRIFT = 3 };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_EXTENDED = 2, FORK_DRIFT = 3, POKEMON_PARTY = 4 };
 
   // Time mode options
   enum TIME_MODE { TIME_MODE_UTC = 0, TIME_MODE_LOCAL = 1, TIME_MODE_MANUAL = 2 };
