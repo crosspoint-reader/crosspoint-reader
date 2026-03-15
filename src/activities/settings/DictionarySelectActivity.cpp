@@ -16,12 +16,17 @@
 // SD card root directory for dictionaries.
 static constexpr const char* DICT_ROOT = "/dictionary";
 
+// Long press threshold for viewing dictionary metadata.
+static constexpr unsigned long VIEW_INFO_MS = 1000;
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 void DictionarySelectActivity::onEnter() {
   Activity::onEnter();
+
+  ignoreNextConfirmRelease = true;
 
   scanDictionaries();
 
@@ -136,18 +141,25 @@ void DictionarySelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    applySelection();
-    finish();
-    return;
-  }
-
-  // Left button: show .ifo info for the highlighted dictionary (not "None")
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left) && selectedIndex > 0) {
+  // Long press Confirm: show dictionary metadata (only when a real dictionary is highlighted).
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= VIEW_INFO_MS && selectedIndex > 0) {
     std::string folder = folderForIndex(selectedIndex);
     currentInfo = Dictionary::readInfo(folder.c_str());
     showingInfo = true;
     requestUpdate();
+    return;
+  }
+
+  // Short press Confirm: apply selection and exit.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() < VIEW_INFO_MS) {
+    if (ignoreNextConfirmRelease) {
+      ignoreNextConfirmRelease = false;
+      return;
+    }
+    applySelection();
+    finish();
     return;
   }
 
@@ -187,10 +199,42 @@ void DictionarySelectActivity::render(RenderLock&&) {
       if (value == nullptr || value[0] == '\0') return;
       char buf[320];
       snprintf(buf, sizeof(buf), "%s: %s", label, value);
-      // Truncate to fit screen width
       std::string line = renderer.truncatedText(UI_10_FONT_ID, buf, maxWidth);
       renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
       y += lineHeight;
+    };
+
+    // Character-level line breaking for values with no spaces (e.g. URLs).
+    // Matches the pattern used in KeyboardEntryActivity for long input text.
+    // Truncates only the final line if the cap is reached.
+    auto drawCharWrapped = [&](const char* label, const char* value, int maxLines) {
+      if (value == nullptr || value[0] == '\0') return;
+      char buf[320];
+      snprintf(buf, sizeof(buf), "%s: %s", label, value);
+      const std::string text(buf);
+      int startIdx = 0;
+      int linesDrawn = 0;
+      while (startIdx < static_cast<int>(text.size()) && linesDrawn < maxLines) {
+        if (linesDrawn == maxLines - 1) {
+          // Last allowed line: truncate remainder with ellipsis.
+          std::string remaining = text.substr(startIdx);
+          std::string truncated = renderer.truncatedText(UI_10_FONT_ID, remaining.c_str(), maxWidth);
+          renderer.drawText(UI_10_FONT_ID, x, y, truncated.c_str());
+          y += lineHeight;
+          break;
+        }
+        // Find the longest prefix of the remaining text that fits on one line.
+        int endIdx = static_cast<int>(text.size());
+        while (endIdx > startIdx) {
+          std::string segment = text.substr(startIdx, endIdx - startIdx);
+          if (renderer.getTextWidth(UI_10_FONT_ID, segment.c_str()) <= maxWidth) break;
+          endIdx--;
+        }
+        renderer.drawText(UI_10_FONT_ID, x, y, text.substr(startIdx, endIdx - startIdx).c_str());
+        y += lineHeight;
+        linesDrawn++;
+        startIdx = endIdx;
+      }
     };
 
     char wordcountBuf[24];
@@ -202,14 +246,14 @@ void DictionarySelectActivity::render(RenderLock&&) {
     drawLine("Words", wordcountBuf);
     if (currentInfo.hasSyn) drawLine("Synonyms", synBuf);
     drawLine("Date", currentInfo.date);
-    drawLine("Website", currentInfo.website);
+    drawCharWrapped("Website", currentInfo.website, 5);
     drawLine("Description", currentInfo.description);
     drawLine("Type", currentInfo.sametypesequence);
     if (currentInfo.isCompressed) {
       drawLine("Status", "Compressed (.dict.dz) — extract before use");
     }
 
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_BACK), "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -244,13 +288,6 @@ void DictionarySelectActivity::render(RenderLock&&) {
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  // Show View Info hint as a small note when a real dictionary is highlighted.
-  if (selectedIndex > 0) {
-    const int hintY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
-                      renderer.getLineHeight(UI_10_FONT_ID);
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, hintY, tr(STR_DICT_VIEW_INFO));
-  }
 
   renderer.displayBuffer();
 }

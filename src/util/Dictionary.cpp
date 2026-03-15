@@ -113,11 +113,14 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
     const char* key = line;
     const char* val = eq + 1;
 
-    // Strip trailing \r from value if present
+    // Strip trailing \r and \n from value, saving both so the outer loop's
+    // strchr(line, '\n') can still find the next line's newline.
     char* cr = const_cast<char*>(strchr(val, '\r'));
-    if (cr) *cr = '\0';
+    char savedCr = '\0';
+    if (cr) { savedCr = *cr; *cr = '\0'; }
     char* nl = const_cast<char*>(strchr(val, '\n'));
-    if (nl) *nl = '\0';
+    char savedNl = '\0';
+    if (nl) { savedNl = *nl; *nl = '\0'; }
 
     if (strcmp(key, "bookname") == 0) {
       strncpy(info.bookname, val, sizeof(info.bookname) - 1);
@@ -138,6 +141,9 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
       strncpy(info.description, val, sizeof(info.description) - 1);
     }
 
+    // Restore all modified characters so the outer loop can continue correctly.
+    if (nl) *nl = savedNl;
+    if (cr) *cr = savedCr;
     *eq = '=';  // restore for next iteration
   }
 

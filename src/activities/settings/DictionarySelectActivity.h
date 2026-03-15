@@ -30,6 +30,9 @@ class DictionarySelectActivity final : public Activity {
   bool showingInfo = false;
   DictInfo currentInfo;
 
+  // Suppresses the Confirm release that bleeds through from the parent activity launch.
+  bool ignoreNextConfirmRelease = false;
+
   ButtonNavigator buttonNavigator;
 
   // Scans /dictionary/ on the SD card and populates dictFolders.
