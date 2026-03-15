@@ -16,7 +16,7 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
-#include "html/js/jszip_minHtml.generated.h"
+#include "html/js/jszip_minJs.generated.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -313,7 +313,7 @@ void CrossPointWebServer::handleRoot() const {
 
 void CrossPointWebServer::handleJszip() const {
   server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "application/javascript", jszip_minHtml, jszip_minHtmlCompressedSize);
+  server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
