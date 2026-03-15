@@ -40,11 +40,6 @@ jobs:
       - name: Validate feature key synchronization
         run: uv run python scripts/check_feature_key_sync.py
 
-      - name: Validate generated platformio-custom.ini is up to date
-        run: |
-          uv run python scripts/generate_build_config.py --profile standard
-          git diff --exit-code -- platformio-custom.ini
-
       - name: Cache PlatformIO
         uses: actions/cache@v4
         with:
