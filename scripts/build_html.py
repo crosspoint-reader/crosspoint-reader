@@ -52,13 +52,14 @@ seen_identifiers = {}
 
 for root, _, files in os.walk(SRC_DIR):
     for file in files:
-        if file.endswith(".html") or file.endswith(".js"):
+        file_lower = file.lower()
+        if file_lower.endswith(".html") or file_lower.endswith(".js"):
             file_path = os.path.join(root, file)
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Only minify HTML files; JS files are typically pre-minified (e.g., jszip.min.js)
-            if file.endswith(".html"):
+            if file_lower.endswith(".html"):
                 processed = minify_html(content)
             else:
                 processed = content
@@ -69,7 +70,7 @@ for root, _, files in os.walk(SRC_DIR):
 
             # Create valid C identifier from filename
             # Use appropriate suffix based on file type
-            suffix = "Html" if file.endswith(".html") else "Js"
+            suffix = "Html" if file_lower.endswith(".html") else "Js"
             base_name = sanitize_identifier(f"{os.path.splitext(file)[0]}{suffix}")
             header_path = os.path.join(root, f"{base_name}.generated.h")
 
