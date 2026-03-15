@@ -1,0 +1,41 @@
+#!/bin/bash
+# Pre-push hook to replicate GitHub Actions CI checks using uv
+# Steps:
+# 1. uv run pio check (cppcheck)
+# 2. uv run pio run (build)
+#
+# Install: git config core.hooksPath scripts/hooks
+# (or copy to .git/hooks/ manually)
+#
+# Note: Code formatting is handled by pre-commit hook (auto-formats on commit)
+
+set -e
+
+# ANSI color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${YELLOW}Running pre-push checks with uv...${NC}"
+
+# Ensure we are at the project root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+# Check for uv
+if ! command -v uv &> /dev/null; then
+    echo -e "${RED}Error: 'uv' not found in PATH.${NC}"
+    exit 1
+fi
+
+# 1. Static Analysis (cppcheck)
+echo -e "${YELLOW}Step 1/2: Running static analysis (cppcheck)...${NC}"
+uv run pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
+
+# 2. Build Firmware
+echo -e "${YELLOW}Step 2/2: Building firmware...${NC}"
+uv run pio run
+
+echo -e "${GREEN}All checks passed! Ready to push.${NC}"
+exit 0

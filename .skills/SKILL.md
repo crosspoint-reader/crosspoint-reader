@@ -610,6 +610,30 @@ upstream    https://github.com/crosspoint-reader/crosspoint-reader.git (fetch/pu
    git push <remote> <branch>
    ```
 
+### Git Hooks
+
+Hooks live in `scripts/hooks/` (committed) so new contributors get them automatically.
+
+**Install** (run once after cloning):
+```bash
+git config core.hooksPath scripts/hooks
+```
+
+**Hooks provided**:
+
+| Hook | Purpose |
+|------|---------|
+| `pre-commit` | Guards `I18nStrings.cpp` (see below), auto-runs `clang-format`, regenerates HTML headers |
+| `pre-push` | Runs `pio check` (cppcheck) + `pio run` (firmware build) via `uv` |
+
+**`I18nStrings.cpp` guard** (in `pre-commit`):
+- Blocks the commit if `lib/I18n/I18nStrings.cpp` is staged **without** any `lib/I18n/translations/*.yaml` also staged.
+- `I18nStrings.cpp` is generated — staging it as a side-effect of unrelated work bakes a stale snapshot into history.
+- To unstage it: `git restore --staged lib/I18n/I18nStrings.cpp`
+- To commit deliberately (intentional translation update): stage the YAML source alongside it.
+
+---
+
 ### Branch Naming Convention
 
 **For feature/fix branches**:
@@ -684,6 +708,7 @@ Tested in all 4 orientations with 5MB+ files.
    - **Source**: YAML translation files in `lib/I18n/translations/` (one per language)
    - **To modify**: Edit source YAML files, then run `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
    - **Commit**: Source YAML files + `I18nKeys.h` and `I18nStrings.h` (needed for IDE symbol resolution), but NOT `I18nStrings.cpp`
+   - **Enforced by hook**: The `pre-commit` hook blocks staging `I18nStrings.cpp` without a corresponding YAML change (see [Git Hooks](#git-hooks))
 
 3. **Build Artifacts** (in `.gitignore`):
    - `.pio/` - PlatformIO build output
@@ -705,7 +730,7 @@ Tested in all 4 orientations with 5MB+ files.
    - English (`english.yaml`) is the reference; missing keys in other languages fall back to English
 2. Run generator: `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
 3. Generated files update: `I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`
-4. **Commit** source YAML files + `I18nKeys.h` and `I18nStrings.h` (IDE needs these for symbol resolution), but NOT `I18nStrings.cpp`
+4. **Commit** source YAML files + `I18nKeys.h` and `I18nStrings.h` (IDE needs these for symbol resolution), but NOT `I18nStrings.cpp` (the `pre-commit` hook enforces this)
 
 **To use translated strings in code**:
 ```cpp

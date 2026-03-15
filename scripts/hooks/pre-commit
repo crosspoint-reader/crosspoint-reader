@@ -1,0 +1,64 @@
+#!/bin/bash
+# Pre-commit hook to auto-format C/C++ files with clang-format
+# This runs BEFORE the commit is created, so changes are included in the commit
+#
+# Install: git config core.hooksPath scripts/hooks
+# (or copy to .git/hooks/ manually)
+
+set -e
+
+# Guard: block staging I18nStrings.cpp without a matching translation YAML change.
+# I18nStrings.cpp is generated from YAML — committing it as a side-effect of
+# unrelated work embeds a stale or accidental snapshot. Always commit the YAML
+# source alongside it when translations are intentionally updated.
+STAGED_STRINGS=$(git diff --cached --name-only --diff-filter=ACM | grep -F 'lib/I18n/I18nStrings.cpp' || true)
+if [ -n "$STAGED_STRINGS" ]; then
+    STAGED_YAML=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^lib/I18n/translations/.*\.yaml$' || true)
+    if [ -z "$STAGED_YAML" ]; then
+        echo "Error: lib/I18n/I18nStrings.cpp is staged without any translation YAML changes."
+        echo "I18nStrings.cpp is generated — do not commit it as a side-effect of unrelated work."
+        echo ""
+        echo "  To unstage:            git restore --staged lib/I18n/I18nStrings.cpp"
+        echo "  To commit deliberately: also stage the YAML in lib/I18n/translations/"
+        exit 1
+    fi
+fi
+
+# Regenerate HTML headers when source HTML is staged.
+STAGED_HTML=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src/.*\.html$' || true)
+if [ -n "$STAGED_HTML" ]; then
+    if command -v python3 &> /dev/null; then
+        python3 scripts/build_html.py
+        GEN_HEADERS=()
+        while IFS= read -r HTML_FILE; do
+            BASE_PATH="${HTML_FILE%.html}"
+            GEN_HEADERS+=("${BASE_PATH}Html.generated.h")
+        done <<< "$STAGED_HTML"
+        # Generated headers are gitignored (built at compile time); skip staging them.
+    else
+        echo "Warning: python3 not found, skipping HTML header generation"
+    fi
+fi
+
+# Get staged C/C++ files (excluding lib/EpdFont/builtinFonts/ which are generated)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|h|hpp)$' | grep -v -E '^lib/EpdFont/builtinFonts/' | grep -v -E '\.generated\.h$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# Check if clang-format is available
+if ! command -v clang-format &> /dev/null; then
+    echo "Warning: clang-format not found, skipping auto-format"
+    exit 0
+fi
+
+# Format each staged file and re-stage it
+for FILE in $STAGED_FILES; do
+    if [ -f "$FILE" ]; then
+        clang-format -style=file -i "$FILE"
+        git add "$FILE"
+    fi
+done
+
+echo "Auto-formatted $(echo "$STAGED_FILES" | wc -w) file(s) with clang-format"
