@@ -63,7 +63,7 @@ bool CrossPointState::loadFromBinaryFile() {
   if (version >= 2) {
     serialization::readPod(inputFile, lastSleepImage);
   } else {
-    lastSleepImage = 0;
+    lastSleepImage = UINT8_MAX;
   }
 
   if (version >= 3) {

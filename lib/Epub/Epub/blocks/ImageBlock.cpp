@@ -1,15 +1,13 @@
 #include "ImageBlock.h"
 
-#include <Bitmap.h>
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <Logging.h>
 #include <Serialization.h>
 
 #include "../converters/DitherUtils.h"
 #include "../converters/ImageDecoderFactory.h"
 
-// Cache file format (pxc - used on X4):
+// Cache file format:
 // - uint16_t width
 // - uint16_t height
 // - uint8_t pixels[...] - 2 bits per pixel, packed (4 pixels per byte), row-major order
@@ -28,47 +26,6 @@ std::string getCachePath(const std::string& imagePath) {
     return imagePath.substr(0, dotPos) + ".pxc";
   }
   return imagePath + ".pxc";
-}
-
-std::string getBmpCachePath(const std::string& imagePath) {
-  size_t dotPos = imagePath.rfind('.');
-  if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".bmp";
-  }
-  return imagePath + ".bmp";
-}
-
-bool renderFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int x, int y, int maxWidth, int maxHeight) {
-  FsFile bmpFile;
-  if (!Storage.openFileForRead("IMG", bmpPath, bmpFile)) {
-    return false;
-  }
-
-  Bitmap bitmap(bmpFile);
-  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-    bmpFile.close();
-    LOG_ERR("IMG", "Failed to parse BMP headers: %s", bmpPath.c_str());
-    return false;
-  }
-
-  LOG_DBG("IMG", "Rendering from BMP: %s (%dx%d)", bmpPath.c_str(), bitmap.getWidth(), bitmap.getHeight());
-  renderer.drawBitmap(bitmap, x, y, maxWidth, maxHeight);
-  bmpFile.close();
-  return true;
-}
-
-RenderConfig makeRenderConfig(int x, int y, int width, int height, const std::string& cachePath) {
-  RenderConfig config;
-  config.x = x;
-  config.y = y;
-  config.maxWidth = width;
-  config.maxHeight = height;
-  config.useGrayscale = true;
-  config.useDithering = true;
-  config.performanceMode = false;
-  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
-  config.cachePath = cachePath;      // Enable caching during decode
-  return config;
 }
 
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
@@ -148,22 +105,14 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
 
-  // X3: Use pre-converted BMP (Atkinson dithered during indexing, matches sleep cover rendering)
-  if (gpio.deviceIsX3()) {
-    std::string bmpPath = getBmpCachePath(imagePath);
-    if (renderFromBmp(renderer, bmpPath, x, y, width, height)) {
-      return;
-    }
-    // BMP not found — fall through to decoder pipeline
-  }
-
-  // X4 (and X3 fallback): Use direct decoder pipeline with pxc cache
+  // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
     return;  // Successfully rendered from cache
   }
 
   // No cache - need to decode the image
+  // Check if image file exists
   FsFile file;
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
     LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
@@ -179,7 +128,16 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
 
-  RenderConfig config = makeRenderConfig(x, y, width, height, cachePath);
+  RenderConfig config;
+  config.x = x;
+  config.y = y;
+  config.maxWidth = width;
+  config.maxHeight = height;
+  config.useGrayscale = true;
+  config.useDithering = true;
+  config.performanceMode = false;
+  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
+  config.cachePath = cachePath;      // Enable caching during decode
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {

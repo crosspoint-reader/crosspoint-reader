@@ -1,11 +1,13 @@
 #include <Arduino.h>
 #include <Epub.h>
+#include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
+#include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
@@ -30,6 +32,7 @@ MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
+FontCacheManager fontCacheManager(renderer.getFontMap());
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -199,7 +202,8 @@ void setupDisplayAndFonts() {
   if (!fontDecompressor.init()) {
     LOG_ERR("MAIN", "Font decompressor init failed");
   }
-  renderer.setFontDecompressor(&fontDecompressor);
+  fontCacheManager.setFontDecompressor(&fontDecompressor);
+  renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
@@ -222,6 +226,9 @@ void setupDisplayAndFonts() {
 }
 
 void setup() {
+  t1 = millis();
+
+  HalSystem::begin();
   gpio.begin();
   powerManager.begin();
 
@@ -245,6 +252,9 @@ void setup() {
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
+
+  HalSystem::checkPanic();
+  HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
   I18N.loadSettings();

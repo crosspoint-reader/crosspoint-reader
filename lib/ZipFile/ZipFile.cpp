@@ -71,10 +71,15 @@ bool ZipFile::loadAllFileStatSlims() {
     file.read(&k, 2);
     file.seekCur(8);
     file.read(&fileStat.localHeaderOffset, 4);
-    file.read(itemName, nameLen);
-    itemName[nameLen] = '\0';
 
-    fileStatSlimCache.emplace(itemName, fileStat);
+    if (nameLen < sizeof(itemName)) {
+      file.read(itemName, nameLen);
+      itemName[nameLen] = '\0';
+      fileStatSlimCache.emplace(itemName, fileStat);
+    } else {
+      // Skip over oversized entry names to avoid writing past fixed buffer.
+      file.seekCur(nameLen);
+    }
 
     // Skip the rest of this entry (extra field + comment)
     file.seekCur(m + k);
@@ -327,6 +332,7 @@ int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector
   file.seek(zipDetails.centralDirOffset);
 
   int matched = 0;
+  const int targetCount = static_cast<int>(targets.size());
   uint32_t sig;
   char itemName[256];
 
@@ -366,6 +372,10 @@ int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector
           matched++;
         }
         ++it;
+      }
+
+      if (matched >= targetCount) {
+        break;
       }
     } else {
       file.seekCur(nameLen);
