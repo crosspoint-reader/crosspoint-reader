@@ -25,6 +25,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
 #include "util/ScreenshotUtil.h"
 
 HalDisplay display;
@@ -259,6 +260,10 @@ void setup() {
 
   SETTINGS.loadFromFile();
   I18N.loadSettings();
+  // Restore the active dictionary from settings, validating the path still exists on the SD card.
+  if (SETTINGS.dictionaryPath[0] != '\0' && Dictionary::isValidDictionary()) {
+    Dictionary::setActivePath(SETTINGS.dictionaryPath);
+  }
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
