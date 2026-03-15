@@ -601,7 +601,12 @@ void HomeActivity::render(RenderLock&&) {
 
     const int bookCountRender = static_cast<int>(recentBooks.size());
     const int singleRowH = metrics.homeCoverTileHeight / 2;
-    const int coverTileH = forkDrift ? ((bookCountRender > 3 ? 2 : 1) * singleRowH) : metrics.homeCoverTileHeight;
+    const int coverTileH_raw = forkDrift ? ((bookCountRender > 3 ? 2 : 1) * singleRowH) : metrics.homeCoverTileHeight;
+    // Clamp cover height so the button menu always has room for at least one row.
+    // Without this, landscape orientation (480px) with 2 cover rows (436px) yields
+    // a negative menu rect height: 480 − (436 + verticalSpacing×2 + buttonHintsHeight) = −28.
+    const int menuMinH = metrics.verticalSpacing * 2 + metrics.buttonHintsHeight + metrics.menuRowHeight;
+    const int coverTileH = forkDrift ? std::min(coverTileH_raw, pageHeight - menuMinH) : coverTileH_raw;
 
     GUI.drawRecentBookCover(renderer, Rect(0, 0, pageWidth, coverTileH), recentBooks, coverSelector, coverRendered,
                             coverBufferStored, bufferRestored, [this]() { return storeCoverBuffer(); });
