@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "CrossPointSettings.h"
-#include "DictDecompressActivity.h"
+#include "DictPrepareActivity.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -73,7 +73,8 @@ void DictionarySelectActivity::scanDictionaries() {
 
   root.rewindDirectory();
 
-  char name[500];
+  // FAT32 long filenames are max 255 chars; 256 is sufficient for bare names (not full paths).
+  char name[256];
   for (auto entry = root.openNextFile(); entry; entry = root.openNextFile()) {
     entry.getName(name, sizeof(name));
 
@@ -94,8 +95,8 @@ void DictionarySelectActivity::scanDictionaries() {
     }
 
     subDir.rewindDirectory();
-    char subName[500];
-    char foundStem[500] = "";
+    char subName[256];  // bare filename, not full path — 256 is sufficient for FAT32
+    char foundStem[256] = "";
     bool multipleIfo = false;
     for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
       subEntry.getName(subName, sizeof(subName));
@@ -193,22 +194,41 @@ void DictionarySelectActivity::loop() {
       return;
     }
 
-    // For a real dictionary entry, check whether the .dict file is missing but
-    // a .dict.dz exists — i.e. the dictionary is compressed and needs extraction.
+    // For a real dictionary entry, check whether any preparation steps are required
+    // (extraction of compressed files, generation of .oft index files).
     if (selectedIndex > 0) {
       std::string folder = folderForIndex(selectedIndex);
-      char dictPath[520];
-      char dzPath[520];
-      snprintf(dictPath, sizeof(dictPath), "%s.dict", folder.c_str());
-      snprintf(dzPath, sizeof(dzPath), "%s.dict.dz", folder.c_str());
 
-      if (!Storage.exists(dictPath) && Storage.exists(dzPath)) {
-        // Compressed dictionary — launch decompressor instead of applying directly.
+      // Reuse a single path buffer for all existence checks — 7 x char[520] simultaneously
+      // would overflow the loopTask stack (3640 bytes of locals in one frame).
+      char pathBuf[520];
+
+      snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folder.c_str());
+      const bool dictExists = Storage.exists(pathBuf);
+      snprintf(pathBuf, sizeof(pathBuf), "%s.dict.dz", folder.c_str());
+      const bool dictDzExists = Storage.exists(pathBuf);
+      snprintf(pathBuf, sizeof(pathBuf), "%s.idx", folder.c_str());
+      const bool idxExists = Storage.exists(pathBuf);
+      snprintf(pathBuf, sizeof(pathBuf), "%s.idx.oft", folder.c_str());
+      const bool idxOftExists = Storage.exists(pathBuf);
+      snprintf(pathBuf, sizeof(pathBuf), "%s.syn", folder.c_str());
+      const bool synExists = Storage.exists(pathBuf);
+      snprintf(pathBuf, sizeof(pathBuf), "%s.syn.dz", folder.c_str());
+      const bool synDzExists = Storage.exists(pathBuf);
+      snprintf(pathBuf, sizeof(pathBuf), "%s.syn.oft", folder.c_str());
+      const bool synOftExists = Storage.exists(pathBuf);
+
+      const bool needsExtractDict = !dictExists && dictDzExists;
+      const bool needsExtractSyn  = !synExists && synDzExists;
+      const bool needsGenIdx      = idxExists && !idxOftExists;
+      const bool synWillExist     = synExists || synDzExists;
+      const bool needsGenSyn      = synWillExist && !synOftExists;
+
+      if (needsExtractDict || needsExtractSyn || needsGenIdx || needsGenSyn) {
         startActivityForResult(
-            std::make_unique<DictDecompressActivity>(renderer, mappedInput, folder),
+            std::make_unique<DictPrepareActivity>(renderer, mappedInput, folder),
             [this](const ActivityResult& result) {
               if (!result.isCancelled) {
-                // Extraction succeeded — .dict now exists; apply the selection.
                 applySelection();
                 finish();
               }
