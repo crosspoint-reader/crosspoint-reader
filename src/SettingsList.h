@@ -91,16 +91,35 @@ inline std::vector<SettingInfo> getSettingsList() {
           StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-      SettingInfo::DynamicEnum(
-          StrId::STR_UI_THEME,
-          [] {
-            if (core::FeatureModules::hasCapability(core::Capability::LyraTheme)) {
-              return std::vector<StrId>{StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                                        StrId::STR_THEME_FORK_DRIFT};
-            }
-            return std::vector<StrId>{StrId::STR_THEME_CLASSIC};
-          }(),
-          [] { return SETTINGS.uiTheme; }, [](uint8_t v) { SETTINGS.uiTheme = v; }, "uiTheme", StrId::STR_CAT_DISPLAY),
+      // Build options with explicit enum-value mapping so position != value assumptions
+      // don't break when individual themes are optionally included or excluded.
+      [] {
+        std::vector<StrId> ids = {StrId::STR_THEME_CLASSIC};
+        std::vector<uint8_t> vals = {CrossPointSettings::UI_THEME::CLASSIC};
+        if (core::FeatureModules::hasCapability(core::Capability::LyraTheme)) {
+          ids.insert(ids.end(),
+                     {StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED, StrId::STR_THEME_FORK_DRIFT});
+          vals.insert(vals.end(), {CrossPointSettings::UI_THEME::LYRA, CrossPointSettings::UI_THEME::LYRA_EXTENDED,
+                                   CrossPointSettings::UI_THEME::FORK_DRIFT});
+        }
+        if (core::FeatureModules::hasCapability(core::Capability::PokemonParty)) {
+          ids.push_back(StrId::STR_THEME_POKEMON_PARTY);
+          vals.push_back(CrossPointSettings::UI_THEME::POKEMON_PARTY);
+        }
+        return SettingInfo::DynamicEnum(
+            StrId::STR_UI_THEME, std::move(ids),
+            [vals] {
+              const uint8_t cur = SETTINGS.uiTheme;
+              for (size_t i = 0; i < vals.size(); i++) {
+                if (vals[i] == cur) return static_cast<uint8_t>(i);
+              }
+              return uint8_t{0};
+            },
+            [vals](uint8_t idx) {
+              if (idx < vals.size()) SETTINGS.uiTheme = vals[idx];
+            },
+            "uiTheme", StrId::STR_CAT_DISPLAY);
+      }(),
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                           StrId::STR_CAT_DISPLAY),
 

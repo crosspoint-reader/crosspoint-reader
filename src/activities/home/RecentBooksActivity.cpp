@@ -10,17 +10,28 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
-#include "core/features/FeatureModules.h"
 #include "fontIds.h"
 #include "util/PokemonBookDataStore.h"
 #include "util/StringUtils.h"
 
 namespace {
 constexpr int kPartyMaxBooks = 6;
+
+// Fallback names shown when a book has no Pokémon assigned via web UI.
+// Selected deterministically from the book path so the same book always gets the same name.
+constexpr const char* kDefaultPokemonNames[] = {
+    "Bulbasaur", "Charmander", "Squirtle",  "Pikachu",   "Eevee",
+    "Gengar",    "Snorlax",    "Mewtwo",    "Jigglypuff","Psyduck",
+    "Machamp",   "Alakazam",   "Haunter",   "Magikarp",  "Gyarados",
+    "Lapras",    "Ditto",      "Vaporeon",  "Jolteon",   "Flareon",
+};
+constexpr size_t kDefaultPokemonNameCount = sizeof(kDefaultPokemonNames) / sizeof(kDefaultPokemonNames[0]);
 
 std::string fallbackTitleFromPath(const std::string& path) {
   auto title = path;
@@ -69,7 +80,7 @@ std::string summarizePokemonLabel(JsonObjectConst pokemon) {
 
 void RecentBooksActivity::loadRecentBooks() {
   recentBooks.clear();
-  partyMode = core::FeatureModules::hasCapability(core::Capability::PokemonParty);
+  partyMode = (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::POKEMON_PARTY);
   const auto& books = RECENT_BOOKS.getBooks();
   const size_t limit = partyMode ? std::min(static_cast<size_t>(kPartyMaxBooks), books.size()) : books.size();
   recentBooks.reserve(limit);
@@ -115,7 +126,8 @@ void RecentBooksActivity::loadRecentBooks() {
           }
         }
       } else {
-        entry.pokemonLabel = "No Pokemon assigned";
+        const size_t idx = std::hash<std::string>{}(entry.book.path) % kDefaultPokemonNameCount;
+        entry.pokemonLabel = kDefaultPokemonNames[idx];
       }
     }
 
