@@ -522,7 +522,7 @@ void CrossPointWebServer::handleDownload() const {
       client.write(buffer, bytesRead);
     }
   }
-  client.flush();
+  client.clear();
   file.close();
 }
 
