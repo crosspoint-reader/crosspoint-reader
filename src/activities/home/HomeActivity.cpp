@@ -487,33 +487,19 @@ void HomeActivity::loop() {
       const int coverRows = bookCount > 3 ? 2 : 1;
 
       if (inButtonGrid) {
-        constexpr int btnCols = 2;
-        constexpr int btnRows = 2;
-        if (!pokemonPartyHomeMode && (leftPressed || rightPressed)) {
-          int col = selectedMenuIndex % btnCols;
-          int row = selectedMenuIndex / btnCols;
-          if (leftPressed)
-            col = (col + btnCols - 1) % btnCols;
-          else
-            col = (col + 1) % btnCols;
-          selectedMenuIndex = row * btnCols + col;
-          requestUpdate();
-        }
         if (upPressed) {
-          const int row = selectedMenuIndex / 2;
-          if (row == 0 && bookCount > 0) {
+          if (selectedMenuIndex == 0 && bookCount > 0) {
             inButtonGrid = false;
             selectedBookIndex = std::min(selectedBookIndex, bookCount - 1);
             selectedBookIndex = std::max(0, selectedBookIndex);
             requestUpdate();
-          } else if (!pokemonPartyHomeMode && row > 0) {
-            selectedMenuIndex -= 2;
+          } else if (!pokemonPartyHomeMode && selectedMenuIndex > 0) {
+            selectedMenuIndex--;
             requestUpdate();
           }
         } else if (!pokemonPartyHomeMode && downPressed) {
-          int row = selectedMenuIndex / 2;
-          if (row < btnRows - 1) {
-            selectedMenuIndex += 2;
+          if (selectedMenuIndex < menuItemCount - 1) {
+            selectedMenuIndex++;
             requestUpdate();
           }
         }
