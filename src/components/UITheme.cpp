@@ -55,6 +55,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentTheme = std::make_unique<ForkDriftTheme>();
       currentMetrics = &ForkDriftMetrics::values;
       break;
+    case CrossPointSettings::UI_THEME::POKEMON_PARTY:
+      LOG_DBG("UI", "Using Pokemon Party theme");
+      currentTheme = std::make_unique<ForkDriftTheme>();
+      currentMetrics = &ForkDriftMetrics::values;
+      break;
   }
 }
 
