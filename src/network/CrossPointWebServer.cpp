@@ -16,6 +16,7 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/js/jszip_minJs.generated.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -131,6 +132,7 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
+  server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -307,6 +309,12 @@ static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
 void CrossPointWebServer::handleRoot() const {
   sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
   LOG_DBG("WEB", "Served root page");
+}
+
+void CrossPointWebServer::handleJszip() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
+  LOG_DBG("WEB", "Served jszip.min.js");
 }
 
 void CrossPointWebServer::handleNotFound() const {
@@ -505,7 +513,31 @@ void CrossPointWebServer::handleDownload() const {
   server->send(200, contentType.c_str(), "");
 
   NetworkClient client = server->client();
-  client.write(file);
+  const size_t chunkSize = 4096;
+  uint8_t buffer[chunkSize];
+
+  while (file.available()) {
+    const int bytesRead = file.read(buffer, chunkSize);
+    if (bytesRead <= 0) {
+      if (bytesRead < 0) {
+        LOG_DBG("WEB", "File read error during download: %d", bytesRead);
+      }
+      break;
+    }
+
+    size_t totalWritten = 0;
+    while (totalWritten < static_cast<size_t>(bytesRead)) {
+      const int written = client.write(buffer + totalWritten, bytesRead - totalWritten);
+      if (written <= 0) {
+        LOG_DBG("WEB", "Client write error during download: %d", written);
+        client.clear();
+        file.close();
+        return;
+      }
+      totalWritten += written;
+    }
+  }
+  client.clear();
   file.close();
 }
 
