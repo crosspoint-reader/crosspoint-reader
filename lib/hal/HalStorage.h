@@ -45,6 +45,9 @@ class HalStorage {
   bool openFileForWrite(const char* moduleName, const String& path, HalFile& file);
   bool removeDir(const char* path);
 
+  uint64_t sdTotalBytes() const;
+  uint64_t sdUsedBytes() const;
+
   static HalStorage& getInstance() { return instance; }
 
   class StorageLock;  // private class, used internally
