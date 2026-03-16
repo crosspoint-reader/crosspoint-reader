@@ -1,10 +1,10 @@
 #pragma once
 
-#include <cstddef>
-#include <string>
-
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#include <cstddef>
+#include <string>
 
 #include "activities/Activity.h"
 
@@ -30,7 +30,7 @@ class DictPrepareActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  enum class State { CONFIRM, PROCESSING, SUCCESS, FAILED };
+  enum class State { CONFIRM, PROCESSING, SUCCESS, FAILED, CANCELLED };
 
   enum class StepType { EXTRACT_DICT, EXTRACT_SYN, GEN_IDX, GEN_SYN };
 
@@ -46,6 +46,11 @@ class DictPrepareActivity final : public Activity {
 
   State state = State::CONFIRM;
   std::string folderPath;
+  char dictName[64] = {};
+
+  // Set by loop() when the user presses Cancel during PROCESSING.
+  // Checked by the FreeRTOS task at each vTaskDelay(1) yield point.
+  volatile bool cancelRequested = false;
 
   Step steps[4];
   int stepCount = 0;

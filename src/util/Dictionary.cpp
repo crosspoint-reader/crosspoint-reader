@@ -3,11 +3,11 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
-#include "CrossPointSettings.h"
-
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+
+#include "CrossPointSettings.h"
 
 // Static member definition
 char Dictionary::activeFolderPath[500] = "";
@@ -16,7 +16,7 @@ char Dictionary::activeFolderPath[500] = "";
 // Header: 30-byte text + 8-byte fixed magic = 38 bytes total.
 // Each entry: LE uint32 = byte offset of word (K+1)*32 in the source file.
 static constexpr uint32_t OFT_HEADER_SIZE = 38;
-static constexpr uint32_t OFT_STRIDE      = 32;  // words per page
+static constexpr uint32_t OFT_STRIDE = 32;  // words per page
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -127,10 +127,16 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
     // strchr(line, '\n') can still find the next line's newline.
     char* cr = const_cast<char*>(strchr(val, '\r'));
     char savedCr = '\0';
-    if (cr) { savedCr = *cr; *cr = '\0'; }
+    if (cr) {
+      savedCr = *cr;
+      *cr = '\0';
+    }
     char* nl = const_cast<char*>(strchr(val, '\n'));
     char savedNl = '\0';
-    if (nl) { savedNl = *nl; *nl = '\0'; }
+    if (nl) {
+      savedNl = *nl;
+      *nl = '\0';
+    }
 
     if (strcmp(key, "bookname") == 0) {
       strncpy(info.bookname, val, sizeof(info.bookname) - 1);
@@ -187,8 +193,7 @@ std::string Dictionary::cleanWord(const std::string& word) {
   if (start >= end) return "";
 
   std::string result = word.substr(start, end - start);
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
+  std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
   return result;
 }
 
@@ -210,7 +215,9 @@ int Dictionary::readWordInto(FsFile& file, char* buf, size_t bufSize) {
   // Word too long for buffer — consume remaining bytes to stay in sync
   buf[bufSize - 1] = '\0';
   int ch;
-  do { ch = file.read(); } while (ch > 0);
+  do {
+    ch = file.read();
+  } while (ch > 0);
   return static_cast<int>(bufSize - 1);
 }
 
@@ -218,17 +225,16 @@ int Dictionary::readWordInto(FsFile& file, char* buf, size_t bufSize) {
 // OFT binary search helper
 // ---------------------------------------------------------------------------
 
-void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize,
-                                const char* target, uint32_t* startByte, uint32_t* endByte) {
+void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
+                                uint32_t* endByte) {
   const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());
-  const uint32_t numEntries =
-      (oftFileSize > OFT_HEADER_SIZE) ? (oftFileSize - OFT_HEADER_SIZE) / 4 : 0;
+  const uint32_t numEntries = (oftFileSize > OFT_HEADER_SIZE) ? (oftFileSize - OFT_HEADER_SIZE) / 4 : 0;
   const uint32_t numPages = numEntries + 1;  // page 0 is implicit (starts at byte 0 in src)
 
   if (numEntries == 0) {
     // No OFT entries — entire source file is one page
     *startByte = 0;
-    *endByte   = srcFileSize;
+    *endByte = srcFileSize;
     return;
   }
 
@@ -261,7 +267,7 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize,
   }
 
   *startByte = pageStart(lo);
-  *endByte   = (lo + 1 < numPages) ? pageStart(lo + 1) : srcFileSize;
+  *endByte = (lo + 1 < numPages) ? pageStart(lo + 1) : srcFileSize;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,8 +298,7 @@ std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
 // Lookup (zero persistent RAM — no static index)
 // ---------------------------------------------------------------------------
 
-std::string Dictionary::lookup(const std::string& word,
-                               const std::function<void(int percent)>& onProgress,
+std::string Dictionary::lookup(const std::string& word, const std::function<void(int percent)>& onProgress,
                                const std::function<bool()>& shouldCancel) {
   if (!exists()) return "";
 
@@ -306,7 +311,7 @@ std::string Dictionary::lookup(const std::string& word,
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t startByte = 0;
-  uint32_t endByte   = idxFileSize;
+  uint32_t endByte = idxFileSize;
 
   buildPath(pathBuf, sizeof(pathBuf), "idx.oft");
   FsFile oft;
@@ -336,14 +341,10 @@ std::string Dictionary::lookup(const std::string& word,
     int cmp = strcmp(wordBuf, word.c_str());
     if (cmp == 0) {
       // Big-endian offset and size in .idx
-      uint32_t dictOffset = (static_cast<uint32_t>(suffix[0]) << 24) |
-                            (static_cast<uint32_t>(suffix[1]) << 16) |
-                            (static_cast<uint32_t>(suffix[2]) << 8)  |
-                            static_cast<uint32_t>(suffix[3]);
-      uint32_t dictSize   = (static_cast<uint32_t>(suffix[4]) << 24) |
-                            (static_cast<uint32_t>(suffix[5]) << 16) |
-                            (static_cast<uint32_t>(suffix[6]) << 8)  |
-                            static_cast<uint32_t>(suffix[7]);
+      uint32_t dictOffset = (static_cast<uint32_t>(suffix[0]) << 24) | (static_cast<uint32_t>(suffix[1]) << 16) |
+                            (static_cast<uint32_t>(suffix[2]) << 8) | static_cast<uint32_t>(suffix[3]);
+      uint32_t dictSize = (static_cast<uint32_t>(suffix[4]) << 24) | (static_cast<uint32_t>(suffix[5]) << 16) |
+                          (static_cast<uint32_t>(suffix[6]) << 8) | static_cast<uint32_t>(suffix[7]);
       idx.close();
       if (onProgress) onProgress(100);
       return readDefinition(dictOffset, dictSize);
@@ -370,8 +371,8 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
   FsFile idx;
   if (!Storage.openFileForRead("DICT", pathBuf, idx)) return "";
 
-  const uint32_t pageNum     = ordinal / OFT_STRIDE;
-  const uint32_t withinPage  = ordinal % OFT_STRIDE;
+  const uint32_t pageNum = ordinal / OFT_STRIDE;
+  const uint32_t withinPage = ordinal % OFT_STRIDE;
   uint32_t pageStartByte = 0;
 
   if (pageNum > 0) {
@@ -391,9 +392,15 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
 
   // Skip `withinPage` entries to reach the target
   for (uint32_t i = 0; i < withinPage; i++) {
-    if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0) { idx.close(); return ""; }
+    if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0) {
+      idx.close();
+      return "";
+    }
     uint8_t skip[8];
-    if (idx.read(skip, 8) != 8) { idx.close(); return ""; }
+    if (idx.read(skip, 8) != 8) {
+      idx.close();
+      return "";
+    }
   }
 
   int len = readWordInto(idx, wordBuf, sizeof(wordBuf));
@@ -414,7 +421,7 @@ std::string Dictionary::lookupSynonym(const std::string& word) {
 
   const uint32_t synFileSize = static_cast<uint32_t>(syn.fileSize());
   uint32_t startByte = 0;
-  uint32_t endByte   = synFileSize;
+  uint32_t endByte = synFileSize;
 
   buildPath(pathBuf, sizeof(pathBuf), "syn.oft");
   FsFile oft;
@@ -436,10 +443,8 @@ std::string Dictionary::lookupSynonym(const std::string& word) {
     int cmp = strcmp(wordBuf, word.c_str());
     if (cmp == 0) {
       // Big-endian original word index in .idx
-      uint32_t originalIdx = (static_cast<uint32_t>(idxBuf[0]) << 24) |
-                             (static_cast<uint32_t>(idxBuf[1]) << 16) |
-                             (static_cast<uint32_t>(idxBuf[2]) << 8)  |
-                             static_cast<uint32_t>(idxBuf[3]);
+      uint32_t originalIdx = (static_cast<uint32_t>(idxBuf[0]) << 24) | (static_cast<uint32_t>(idxBuf[1]) << 16) |
+                             (static_cast<uint32_t>(idxBuf[2]) << 8) | static_cast<uint32_t>(idxBuf[3]);
       syn.close();
       return wordAtOrdinal(originalIdx);
     }
@@ -670,7 +675,7 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t centerStart = 0;
-  uint32_t centerEnd   = idxFileSize;
+  uint32_t centerEnd = idxFileSize;
 
   buildPath(pathBuf, sizeof(pathBuf), "idx.oft");
   FsFile oft;
@@ -684,10 +689,8 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
   // Each page is approximately (centerEnd - centerStart) bytes.
   const uint32_t pageSize = (centerEnd > centerStart) ? (centerEnd - centerStart) : 1;
   static constexpr uint32_t PAGE_RADIUS = 7;
-  const uint32_t scanStart =
-      (centerStart > PAGE_RADIUS * pageSize) ? (centerStart - PAGE_RADIUS * pageSize) : 0;
-  const uint32_t scanEnd =
-      std::min(idxFileSize, centerEnd + PAGE_RADIUS * pageSize);
+  const uint32_t scanStart = (centerStart > PAGE_RADIUS * pageSize) ? (centerStart - PAGE_RADIUS * pageSize) : 0;
+  const uint32_t scanEnd = std::min(idxFileSize, centerEnd + PAGE_RADIUS * pageSize);
 
   if (hasOft) {
     // Snap scanStart back to the true page boundary containing it via binary search.
@@ -695,8 +698,7 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
     // instead just clamp to a page-aligned position by seeking to the OFT entry.
     // For simplicity, snap to the nearest OFT page boundary at or before scanStart.
     const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());
-    const uint32_t numEntries =
-        (oftFileSize > OFT_HEADER_SIZE) ? (oftFileSize - OFT_HEADER_SIZE) / 4 : 0;
+    const uint32_t numEntries = (oftFileSize > OFT_HEADER_SIZE) ? (oftFileSize - OFT_HEADER_SIZE) / 4 : 0;
 
     // Walk backward through OFT entries to find the largest entry <= scanStart
     uint32_t snappedStart = 0;

@@ -101,8 +101,7 @@ void DictionarySelectActivity::scanDictionaries() {
     for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
       subEntry.getName(subName, sizeof(subName));
       const size_t subLen = strlen(subName);
-      const bool isIfo = !subEntry.isDirectory() && subLen > 4 &&
-                         strcmp(subName + subLen - 4, ".ifo") == 0;
+      const bool isIfo = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".ifo") == 0;
       subEntry.close();
 
       if (isIfo) {
@@ -177,8 +176,8 @@ void DictionarySelectActivity::loop() {
   }
 
   // Long press Confirm: show dictionary metadata (only when a real dictionary is highlighted).
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() >= VIEW_INFO_MS && selectedIndex > 0) {
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= VIEW_INFO_MS &&
+      selectedIndex > 0) {
     std::string folder = folderForIndex(selectedIndex);
     currentInfo = Dictionary::readInfo(folder.c_str());
     showingInfo = true;
@@ -187,8 +186,7 @@ void DictionarySelectActivity::loop() {
   }
 
   // Short press Confirm: apply selection (or decompress if compressed) and exit.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() < VIEW_INFO_MS) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < VIEW_INFO_MS) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
       return;
@@ -219,21 +217,20 @@ void DictionarySelectActivity::loop() {
       const bool synOftExists = Storage.exists(pathBuf);
 
       const bool needsExtractDict = !dictExists && dictDzExists;
-      const bool needsExtractSyn  = !synExists && synDzExists;
-      const bool needsGenIdx      = idxExists && !idxOftExists;
-      const bool synWillExist     = synExists || synDzExists;
-      const bool needsGenSyn      = synWillExist && !synOftExists;
+      const bool needsExtractSyn = !synExists && synDzExists;
+      const bool needsGenIdx = idxExists && !idxOftExists;
+      const bool synWillExist = synExists || synDzExists;
+      const bool needsGenSyn = synWillExist && !synOftExists;
 
       if (needsExtractDict || needsExtractSyn || needsGenIdx || needsGenSyn) {
-        startActivityForResult(
-            std::make_unique<DictPrepareActivity>(renderer, mappedInput, folder),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                applySelection();
-                finish();
-              }
-              // Cancelled/failed: stay in picker with the same highlighted index.
-            });
+        startActivityForResult(std::make_unique<DictPrepareActivity>(renderer, mappedInput, folder),
+                               [this](const ActivityResult& result) {
+                                 if (!result.isCancelled) {
+                                   applySelection();
+                                   finish();
+                                 }
+                                 // Cancelled/failed: stay in picker with the same highlighted index.
+                               });
         return;
       }
     }
@@ -267,8 +264,7 @@ void DictionarySelectActivity::render(RenderLock&&) {
 
   if (showingInfo) {
     // --- Info screen: display raw .ifo fields ---
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                   tr(STR_DICT_INFO));
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DICT_INFO));
 
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
@@ -340,8 +336,7 @@ void DictionarySelectActivity::render(RenderLock&&) {
   }
 
   // --- Picker screen ---
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 tr(STR_DICTIONARY));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DICTIONARY));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;

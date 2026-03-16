@@ -46,8 +46,7 @@ class Dictionary {
   static DictInfo readInfo(const char* folderPath);
 
   // Look up word in .idx (via .idx.oft if present). Returns definition or empty string.
-  static std::string lookup(const std::string& word,
-                            const std::function<void(int percent)>& onProgress = nullptr,
+  static std::string lookup(const std::string& word, const std::function<void(int percent)>& onProgress = nullptr,
                             const std::function<bool()>& shouldCancel = nullptr);
 
   // Look up word in .syn (via .syn.oft if present).
@@ -80,8 +79,8 @@ class Dictionary {
   // Binary search .oft to find the page boundary bytes in src containing target.
   // On return, *startByte and *endByte delimit the 32-word page to scan linearly.
   // srcFileSize is used as the upper bound when the page is the last one.
-  static void findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize,
-                             const char* target, uint32_t* startByte, uint32_t* endByte);
+  static void findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
+                             uint32_t* endByte);
 
   static int editDistance(const std::string& a, const std::string& b, int maxDist);
 };

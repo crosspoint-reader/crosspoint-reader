@@ -116,10 +116,9 @@ void DictionaryDefinitionActivity::loop() {
       if (!canonical.empty()) {
         std::string synDef = Dictionary::lookup(canonical);
         if (!synDef.empty()) {
-          startActivityForResult(
-              std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, canonical, synDef,
-                                                            readerFontId, false),
-              [this](const ActivityResult&) { requestUpdate(); });
+          startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, canonical,
+                                                                                synDef, readerFontId, false),
+                                 [this](const ActivityResult&) { requestUpdate(); });
           return;
         }
       }

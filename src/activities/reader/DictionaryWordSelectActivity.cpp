@@ -9,12 +9,10 @@
 #include <climits>
 
 #include "DictionaryDefinitionActivity.h"
-#include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
-#include "util/LookupHistory.h"
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
@@ -180,16 +178,10 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords() {
 void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   auto similar = Dictionary::findSimilar(word, 6);
   if (!similar.empty()) {
-    startActivityForResult(
-        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, word, similar, fontId, cachePath),
-        [this](const ActivityResult& result) {
-          if (!result.isCancelled) {
-            setResult(ActivityResult{});
-            finish();
-          } else {
-            requestUpdate();
-          }
-        });
+    suggestionWords = std::move(similar);
+    suggestionIndex = 0;
+    isShowingSuggestions = true;
+    requestUpdate();
     return;
   }
   GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
@@ -240,6 +232,48 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
     return;  // Consume all other input while on the synonym prompt
+  }
+
+  // Inline suggestions list
+  if (isShowingSuggestions) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      isShowingSuggestions = false;
+      const std::string selected = suggestionWords[suggestionIndex];
+      std::string def = Dictionary::lookup(selected);
+      if (!def.empty()) {
+        startActivityForResult(
+            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, selected, def, fontId, true),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                setResult(ActivityResult{});
+                finish();
+              } else {
+                requestUpdate();
+              }
+            });
+      } else {
+        GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      isShowingSuggestions = false;
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up) && suggestionIndex > 0) {
+      suggestionIndex--;
+      requestUpdate();
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Down) &&
+        suggestionIndex < static_cast<int>(suggestionWords.size()) - 1) {
+      suggestionIndex++;
+      requestUpdate();
+    }
+    return;
   }
 
   bool changed = false;
@@ -367,8 +401,6 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
 
-    LookupHistory::addWord(cachePath, cleaned);
-
     if (!definition.empty()) {
       startActivityForResult(
           std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, cleaned, definition, fontId, true),
@@ -430,14 +462,31 @@ void DictionaryWordSelectActivity::loop() {
 void DictionaryWordSelectActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
+  // Inline suggestions list
+  if (isShowingSuggestions) {
+    const int pageWidth = renderer.getScreenWidth();
+    const int pageHeight = renderer.getScreenHeight();
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DID_YOU_MEAN));
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(suggestionWords.size()),
+        suggestionIndex, [this](int i) { return suggestionWords[i]; }, nullptr, nullptr, nullptr, true);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    return;
+  }
+
   // "Search synonyms?" prompt
   if (isAskingSynonymSearch) {
     const int pageWidth = renderer.getScreenWidth();
     const auto& metrics = UITheme::getInstance().getMetrics();
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                    tr(STR_DICT_SEARCH_SYNONYMS));
-    const int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
-                  renderer.getLineHeight(UI_10_FONT_ID);
+    const int y =
+        metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + renderer.getLineHeight(UI_10_FONT_ID);
     renderer.drawCenteredText(UI_10_FONT_ID, y, synSearchWord.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

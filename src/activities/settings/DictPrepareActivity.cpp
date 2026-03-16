@@ -40,10 +40,9 @@ static int dictPrepReadCallback(struct uzlib_uncomp* u) {
 // .idx.oft header constant (verified against real StarDict .oft files)
 // "StarDict's Cache, Version: 0.2" (30 bytes) + fixed 8-byte magic
 // ---------------------------------------------------------------------------
-static constexpr uint8_t OFT_HEADER[38] = {
-    'S', 't', 'a', 'r', 'D', 'i', 'c', 't', '\'', 's', ' ', 'C', 'a', 'c', 'h', 'e',
-    ',', ' ', 'V', 'e', 'r', 's', 'i', 'o', 'n', ':', ' ', '0', '.', '2',
-    0xc1, 0xd1, 0xa4, 0x51, 0x00, 0x00, 0x00, 0x00};
+static constexpr uint8_t OFT_HEADER[38] = {'S', 't', 'a', 'r', 'D',  'i',  'c',  't',  '\'', 's',  ' ',  'C', 'a',
+                                           'c', 'h', 'e', ',', ' ',  'V',  'e',  'r',  's',  'i',  'o',  'n', ':',
+                                           ' ', '0', '.', '2', 0xc1, 0xd1, 0xa4, 0x51, 0x00, 0x00, 0x00, 0x00};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,10 +50,14 @@ static constexpr uint8_t OFT_HEADER[38] = {
 
 const char* DictPrepareActivity::stepLabel(StepType type) {
   switch (type) {
-    case StepType::EXTRACT_DICT: return tr(STR_DICT_STEP_EXTRACT_DICT);
-    case StepType::EXTRACT_SYN:  return tr(STR_DICT_STEP_EXTRACT_SYN);
-    case StepType::GEN_IDX:      return tr(STR_DICT_STEP_GEN_IDX);
-    case StepType::GEN_SYN:      return tr(STR_DICT_STEP_GEN_SYN);
+    case StepType::EXTRACT_DICT:
+      return tr(STR_DICT_STEP_EXTRACT_DICT);
+    case StepType::EXTRACT_SYN:
+      return tr(STR_DICT_STEP_EXTRACT_SYN);
+    case StepType::GEN_IDX:
+      return tr(STR_DICT_STEP_GEN_IDX);
+    case StepType::GEN_SYN:
+      return tr(STR_DICT_STEP_GEN_SYN);
   }
   return "";
 }
@@ -68,8 +71,25 @@ void DictPrepareActivity::onEnter() {
   state = State::CONFIRM;
   prepareDone = false;
   prepareSucceeded = false;
+  cancelRequested = false;
   taskHandle = nullptr;
   currentStep = 0;
+
+  // Extract the folder name from folderPath for display.
+  // folderPath is e.g. "/dictionary/pr-857/dictionary"; we want "pr-857"
+  // (the parent directory's last component, one level up from the base name).
+  {
+    const char* path = folderPath.c_str();
+    const char* lastSlash = strrchr(path, '/');
+    const char* end = lastSlash ? lastSlash : path + strlen(path);
+    const char* prevSlash = nullptr;
+    for (const char* p = path; p < end; p++) {
+      if (*p == '/') prevSlash = p;
+    }
+    const char* nameStart = prevSlash ? prevSlash + 1 : path;
+    snprintf(dictName, sizeof(dictName), "%.*s", (int)(end - nameStart), nameStart);
+  }
+
   detectSteps();
   requestUpdate();
 }
@@ -95,9 +115,9 @@ void DictPrepareActivity::detectSteps() {
   snprintf(pathBuf, sizeof(pathBuf), "%s.syn.oft", folderPath.c_str());
   const bool synOftExists = Storage.exists(pathBuf);
 
-  if (!dictExists && dzExists)   steps[stepCount++] = {StepType::EXTRACT_DICT};
-  if (!synExists  && synDzExists) steps[stepCount++] = {StepType::EXTRACT_SYN};
-  if (idxExists   && !idxOftExists) steps[stepCount++] = {StepType::GEN_IDX};
+  if (!dictExists && dzExists) steps[stepCount++] = {StepType::EXTRACT_DICT};
+  if (!synExists && synDzExists) steps[stepCount++] = {StepType::EXTRACT_SYN};
+  if (idxExists && !idxOftExists) steps[stepCount++] = {StepType::GEN_IDX};
   const bool synWillExist = synExists || synDzExists;
   if (synWillExist && !synOftExists) steps[stepCount++] = {StepType::GEN_SYN};
 }
@@ -153,15 +173,18 @@ void DictPrepareActivity::loop() {
 
   if (state == State::PROCESSING) {
     if (prepareDone) {
-      state = prepareSucceeded ? State::SUCCESS : State::FAILED;
+      state = cancelRequested ? State::CANCELLED : (prepareSucceeded ? State::SUCCESS : State::FAILED);
       requestUpdate();
+    } else if (!cancelRequested && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested = true;
+      requestUpdate();  // re-render immediately to remove the Cancel button hint
     }
     return;
   }
 
-  if (state == State::SUCCESS || state == State::FAILED) {
+  if (state == State::SUCCESS || state == State::FAILED || state == State::CANCELLED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      if (state == State::FAILED) {
+      if (state == State::FAILED || state == State::CANCELLED) {
         ActivityResult r;
         r.isCancelled = true;
         setResult(std::move(r));
@@ -179,6 +202,8 @@ void DictPrepareActivity::loop() {
 
 void DictPrepareActivity::runSteps() {
   for (int i = 0; i < stepCount; i++) {
+    if (cancelRequested) break;
+
     currentStep = i;
     steps[i].status = StepStatus::IN_PROGRESS;
     requestUpdate(true);
@@ -189,27 +214,27 @@ void DictPrepareActivity::runSteps() {
     switch (steps[i].type) {
       case StepType::EXTRACT_DICT:
         snprintf(srcPath, sizeof(srcPath), "%s.dict.dz", folderPath.c_str());
-        snprintf(dstPath, sizeof(dstPath), "%s.dict",    folderPath.c_str());
+        snprintf(dstPath, sizeof(dstPath), "%s.dict", folderPath.c_str());
         ok = extractFile(srcPath, dstPath, steps[i]);
         if (!ok) Storage.remove(dstPath);
         break;
 
       case StepType::EXTRACT_SYN:
         snprintf(srcPath, sizeof(srcPath), "%s.syn.dz", folderPath.c_str());
-        snprintf(dstPath, sizeof(dstPath), "%s.syn",    folderPath.c_str());
+        snprintf(dstPath, sizeof(dstPath), "%s.syn", folderPath.c_str());
         ok = extractFile(srcPath, dstPath, steps[i]);
         if (!ok) Storage.remove(dstPath);
         break;
 
       case StepType::GEN_IDX:
-        snprintf(srcPath, sizeof(srcPath), "%s.idx",     folderPath.c_str());
+        snprintf(srcPath, sizeof(srcPath), "%s.idx", folderPath.c_str());
         snprintf(dstPath, sizeof(dstPath), "%s.idx.oft", folderPath.c_str());
         ok = generateOft(srcPath, dstPath, 8, steps[i]);  // .idx: 4-byte offset + 4-byte size
         if (!ok) Storage.remove(dstPath);
         break;
 
       case StepType::GEN_SYN:
-        snprintf(srcPath, sizeof(srcPath), "%s.syn",     folderPath.c_str());
+        snprintf(srcPath, sizeof(srcPath), "%s.syn", folderPath.c_str());
         snprintf(dstPath, sizeof(dstPath), "%s.syn.oft", folderPath.c_str());
         ok = generateOft(srcPath, dstPath, 4, steps[i]);  // .syn: 4-byte original_word_index
         if (!ok) Storage.remove(dstPath);
@@ -228,7 +253,8 @@ void DictPrepareActivity::runSteps() {
     }
   }
 
-  prepareSucceeded = true;
+  // Reached here either all steps succeeded or cancelRequested broke the loop.
+  prepareSucceeded = !cancelRequested;
   prepareDone = true;
   requestUpdate(true);
 }
@@ -311,6 +337,10 @@ bool DictPrepareActivity::extractFile(const char* dzPath, const char* outPath, S
       step.progress = pos;
       requestUpdate(true);
       vTaskDelay(1);
+      if (cancelRequested) {
+        writeError = true;
+        break;
+      }
     }
   } while (status == InflateStatus::Ok);
 
@@ -330,8 +360,7 @@ bool DictPrepareActivity::extractFile(const char* dzPath, const char* outPath, S
 // .oft index generation
 // ---------------------------------------------------------------------------
 
-bool DictPrepareActivity::generateOft(const char* srcPath, const char* oftPath, uint8_t skipPerEntry,
-                                       Step& step) {
+bool DictPrepareActivity::generateOft(const char* srcPath, const char* oftPath, uint8_t skipPerEntry, Step& step) {
   HalFile src;
   if (!Storage.openFileForRead("DICT_PREP", srcPath, src)) {
     LOG_ERR("DICT_PREP", "Failed to open: %s", srcPath);
@@ -383,8 +412,13 @@ bool DictPrepareActivity::generateOft(const char* srcPath, const char* oftPath, 
     bool foundNull = false;
     for (int b = 0; b < 4096; b++) {
       int ch = src.read();
-      if (ch < 0) { goto done; }
-      if (ch == 0) { foundNull = true; break; }
+      if (ch < 0) {
+        goto done;
+      }
+      if (ch == 0) {
+        foundNull = true;
+        break;
+      }
     }
     if (!foundNull) {
       LOG_ERR("DICT_PREP", "Word too long or read error in %s", srcPath);
@@ -404,6 +438,10 @@ bool DictPrepareActivity::generateOft(const char* srcPath, const char* oftPath, 
       step.progress = pos;
       requestUpdate(true);
       vTaskDelay(1);
+      if (cancelRequested) {
+        error = true;
+        break;
+      }
     }
   }
 
@@ -431,8 +469,7 @@ void DictPrepareActivity::render(RenderLock&&) {
   const int pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 tr(STR_DICT_PREPARE_TITLE));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DICT_PREPARE_TITLE));
 
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
@@ -442,6 +479,9 @@ void DictPrepareActivity::render(RenderLock&&) {
 
   if (state == State::CONFIRM) {
     int y = contentTop;
+
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, dictName);
+    y += lineHeight + STEP_SPACING;
 
     // List required steps
     for (int i = 0; i < stepCount; i++) {
@@ -460,14 +500,18 @@ void DictPrepareActivity::render(RenderLock&&) {
     return;
   }
 
-  // PROCESSING / SUCCESS / FAILED — show per-step status with always-visible indicators.
+  // PROCESSING / SUCCESS / FAILED / CANCELLED — show per-step status with always-visible indicators.
   // Status prefix column: 5 chars wide so step labels align.
   // Bold: current (IN_PROGRESS) and failed steps only. Completed steps use regular weight.
   int y = contentTop;
+
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, dictName);
+  y += lineHeight + STEP_SPACING;
+
   for (int i = 0; i < stepCount; i++) {
     const auto& step = steps[i];
-    const bool complete   = step.status == StepStatus::COMPLETE;
-    const bool failed     = step.status == StepStatus::FAILED;
+    const bool complete = step.status == StepStatus::COMPLETE;
+    const bool failed = step.status == StepStatus::FAILED;
     const bool inProgress = step.status == StepStatus::IN_PROGRESS;
 
     const char* prefix = complete ? "[OK] " : (failed ? "[!!] " : (inProgress ? "[ > ] " : "[   ] "));
@@ -484,7 +528,7 @@ void DictPrepareActivity::render(RenderLock&&) {
       char pctBuf[8];
       snprintf(pctBuf, sizeof(pctBuf), "%d%%", percent);
       const int pctWidth = renderer.getTextWidth(UI_10_FONT_ID, pctBuf);
-      const int pctX     = pageWidth - BAR_MARGIN - pctWidth;
+      const int pctX = pageWidth - BAR_MARGIN - pctWidth;
       const int barRight = pctX - 4;
       const int barWidth = barRight - BAR_MARGIN;
       if (barWidth > 4) {
@@ -500,9 +544,20 @@ void DictPrepareActivity::render(RenderLock&&) {
     }
   }
 
-  if (state == State::SUCCESS || state == State::FAILED) {
+  if (state == State::PROCESSING && !cancelRequested) {
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
+
+  if (state == State::SUCCESS || state == State::FAILED || state == State::CANCELLED) {
     y += metrics.verticalSpacing;
-    const char* msg = (state == State::SUCCESS) ? tr(STR_DICT_PREPARE_SUCCESS) : tr(STR_DICT_PREPARE_FAILED);
+    const char* msg;
+    if (state == State::SUCCESS)
+      msg = tr(STR_DICT_PREPARE_SUCCESS);
+    else if (state == State::CANCELLED)
+      msg = tr(STR_DICT_PREPARE_CANCELLED);
+    else
+      msg = tr(STR_DICT_PREPARE_FAILED);
     renderer.drawCenteredText(UI_10_FONT_ID, y, msg, true, EpdFontFamily::BOLD);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");

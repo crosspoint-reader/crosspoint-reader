@@ -62,19 +62,21 @@ Open Settings -> Dictionary for every test below.</p>
 <li>Confirm multi-ifo is absent from the list.</li>
 </ul>
 
-<h2>Test D: Valid dictionaries appear in picker</h2>
+<h2>Test D: All test dictionaries appear in picker</h2>
 <p>All of the following must be visible in the picker. Do not select any yet.</p>
 <ul>
+<li>all-prep</li>
 <li>basic</li>
 <li>en-es</li>
+<li>extract-dict</li>
+<li>extract-syn-gen-syn</li>
 <li>fail-decompress</li>
 <li>full</li>
+<li>gen-idx</li>
+<li>gen-syn</li>
 <li>phrase</li>
 <li>phrase-syn</li>
 </ul>
-<p>Pre-processing dictionaries (gen-idx, gen-syn, extract-dict,
-extract-syn-gen-syn, all-prep) are also valid and appear here.
-They are exercised in Chapter 2.</p>
 
 <h2>Test E: Failed decompression -- error shown, prior selection unchanged</h2>
 <p><strong>Dictionary:</strong> fail-decompress</p>
@@ -109,11 +111,17 @@ No word lookups are needed in this chapter.</p>
 
 <p><strong>Expected processing screen:</strong></p>
 <ul>
-<li>Each step visible with a status prefix throughout:
-    [ &gt; ] in-progress (bold),
-    [OK] complete (regular),
-    [&#160;&#160;&#160;] pending (regular).</li>
+<li>Every step is visible at all times with a status prefix.</li>
+<li>Status prefixes:
+  <ul>
+    <li>[ &gt; ] -- the step currently running (text is bold)</li>
+    <li>[OK] -- the step completed successfully (text is regular weight)</li>
+    <li>[!!] -- the step failed (text is bold)</li>
+    <li>[&#160;&#160;&#160;] -- the step has not started yet (text is regular weight)</li>
+  </ul>
+</li>
 <li>On success: Preparation complete appears below the step list.</li>
+<li>On failure: Preparation failed appears below the step list.</li>
 </ul>
 
 <h2>Test A: Generate dictionary offset file only</h2>
@@ -172,6 +180,9 @@ on completion. Preparation complete must appear after both finish.</p>
 <p>Confirmation screen must list exactly four steps in order.
 Each step must complete with [OK] before the next begins.
 Preparation complete must appear after all four finish.</p>
+<p><strong>Note:</strong> Set the sleep timeout to 1 minute (preferred) or 5 minutes
+before starting this test. The all-prep dictionary takes several minutes to process
+and the device must not sleep during preparation or the test will be interrupted.</p>
 <ul>
 <li>Select all-prep in the picker.</li>
 <li>Confirmation screen lists in order:</li>
