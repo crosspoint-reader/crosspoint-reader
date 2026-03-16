@@ -735,14 +735,27 @@ def _print_language_table(
         _safe_print(fmt.format(*row))
     used = total - len(unused_keys)
     total_size = sum(data_sizes)
-    offset_table_size = len(rows) * len(string_keys) * 2
+    n_lang = len(rows)
+    n_keys = len(string_keys)
+    # Current layout: uint16_t offset table (2 B per string per language)
+    offset_table_size = n_lang * n_keys * 2
+    current_total = total_size + offset_table_size
+    # Previous layout: const char* pointer array (4 B per string per language)
+    old_pointer_table_size = n_lang * n_keys * 4
+    old_total = total_size + old_pointer_table_size
+    saved = old_total - current_total
     print(
         f"\n  Total: {total}  |  Used in code: {used}  |  Never used: {len(unused_keys)}"
     )
     print(
-        f"  Flash: {total_size:,} B string data  +  {offset_table_size:,} B offset tables"
-        f"  =  {total_size + offset_table_size:,} B total"
+        f"  Flash (now):    {total_size:>7,} B strings  +  {offset_table_size:>6,} B offset tables (uint16_t)"
+        f"  =  {current_total:>7,} B"
     )
+    print(
+        f"  Flash (before): {total_size:>7,} B strings  +  {old_pointer_table_size:>6,} B pointer tables (ptr32)"
+        f"  =  {old_total:>7,} B"
+    )
+    print(f"  Saved by offset tables: {saved:,} B")
 
 
 def _append_string_data_entry(lines: List[str], text: str) -> None:
