@@ -23,6 +23,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [3.6.5 KOReader Sync Quick Setup](#365-koreader-sync-quick-setup)
     - [3.7 Sleep Screen](#37-sleep-screen)
       - [3.7.1 Pinning a Sleep Cover Image](#371-pinning-a-sleep-cover-image)
+    - [3.8 Remote Keyboard Input](#38-remote-keyboard-input)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
@@ -355,6 +356,26 @@ You can choose to pin a specific image or book cover to always be shown when the
 - **Clearing the Pin:** Click the **Clear** button on the pinned image card to revert to the default behavior (random rotation from the `/sleep/` folder).
 - **Book Cover Pinning:** When you pin a book cover, the device automatically copies it to a file named `/sleep/.pinned-cover.bmp`.
 - **Note:** If the pinned image file is deleted from the SD card, the device will automatically fall back to the random rotation behavior without crashing.
+
+---
+
+### 3.8 Remote Keyboard Input
+
+Whenever a text input field appears (such as for entering a WiFi password or search query), you can use a remote device (phone or computer) for faster typing if the **Remote Keyboard** feature is enabled.
+
+### How it works:
+1. **Focus a text field**: When the on-device keyboard appears, the device will check for a remote connection.
+2. **Priority**:
+   - **Android App**: If the Android companion app is connected (via WiFi or USB), it will immediately take control of the input.
+   - **Browser Fallback**: If no app is connected, the device will display a **QR code** on the screen.
+3. **Typing**:
+   - Scan the QR code with your phone (or enter the URL shown on-device in your computer's browser).
+   - A real-time typing page will open.
+   - Type your text and click **Done** or **Submit** on the remote device.
+4. **Completion**: The text will be sent to the CrossPoint Reader, the input screen will close, and your action will continue.
+
+### Automatic Hotspot
+If your device is not connected to WiFi and you don't have an Android app connected via USB, the CrossPoint Reader will automatically start its own WiFi hotspot when the keyboard opens. Connect your phone to this hotspot to access the remote typing page.
 
 ---
 

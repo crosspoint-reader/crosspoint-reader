@@ -178,6 +178,12 @@ FEATURES = {
         size_kb=5,
         description='Manage WiFi networks directly from the web interface'
     ),
+    'remote_keyboard_input': Feature(
+        name='Remote Keyboard Input',
+        flag='ENABLE_REMOTE_KEYBOARD_INPUT',
+        size_kb=12,
+        description='Android-first remote text entry with browser QR and hotspot fallback'
+    ),
     'usb_mass_storage': Feature(
         name='USB Mass Storage',
         flag='ENABLE_USB_MASS_STORAGE',
@@ -383,6 +389,13 @@ FEATURE_METADATA = {
         conflicts=[],
         recommends=[]
     ),
+    'remote_keyboard_input': FeatureMetadata(
+        implemented=True,
+        stable=True,
+        requires=[],
+        conflicts=[],
+        recommends=['background_server']
+    ),
     'usb_mass_storage': FeatureMetadata(
         implemented=True,
         stable=True,
@@ -496,6 +509,7 @@ PROFILES = {
             'background_server': True,
             'background_server_on_charge': True,
             'web_wifi_setup': True,
+            'remote_keyboard_input': True,
             'home_media_picker': True,
             'dark_mode': True,
             'ble_wifi_provisioning': True,
@@ -526,6 +540,7 @@ PROFILES = {
             'home_media_picker': True,
             'web_pokedex_plugin': True,
             'pokemon_party': True,
+            'remote_keyboard_input': True,
             'dark_mode': True,
             'visual_cover_picker': True,
             'ble_wifi_provisioning': True,

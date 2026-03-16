@@ -10,6 +10,7 @@ CrossPoint Reader includes a built-in web server that allows you to:
 - Browse and manage files on your device's SD card
 - Create folders to organize your library
 - Delete files and folders
+- **Use a remote keyboard** on your phone or computer for faster text entry on-device (see [Remote Control](./remote-control.md))
 
 ## Prerequisites
 
@@ -178,6 +179,19 @@ This is useful for organizing your library by genre, author, series or file type
 1. Click the **✏️** (pencil) icon next to any file
 2. Enter a file name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
 3. Click **Rename** to permanently rename the file
+
+### Remote Keyboard Input Page
+
+When the CrossPoint reader shows a keyboard for text input (e.g., for a Wi-Fi password or search), you can use your computer or phone's browser for faster typing.
+
+1.  On your computer or phone, open a web browser.
+2.  Navigate to `http://<device-ip>/remote-input`.
+3.  The page will connect to your device and show a text box.
+4.  Type in the browser, and the text will appear on your CrossPoint.
+
+**QR Code:** To make this easier, the device will display a **QR code** when the keyboard is open. Scan it with your phone to open the remote input page directly.
+
+**Automatic Hotspot:** If your device is not connected to Wi-Fi and the Android app is not connected via USB, CrossPoint Reader will **automatically start its own Wi-Fi hotspot** when a text field is focused. Connect your phone to this hotspot (the SSID and password will be shown on the device) to access the `/remote-input` page.
 
 ---
 

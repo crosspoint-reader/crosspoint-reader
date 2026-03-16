@@ -25,7 +25,7 @@ gcc -c "$ROOT_DIR/lib/md4c/md4c.c" -I"$ROOT_DIR/lib/md4c" -o "$BUILD_DIR/md4c.o"
 gcc -c "$ROOT_DIR/lib/md4c/entity.c" -I"$ROOT_DIR/lib/md4c" -o "$BUILD_DIR/entity.o"
 
 # Enable the web pokedex/pokemon party routes so host tests compile and exercise them.
-g++ -std=c++20 -O2 \
+g++ -std=c++20 -O2 -Wno-narrowing \
   -DENABLE_WEB_POKEDEX_PLUGIN=1 \
   -DENABLE_POKEMON_PARTY=1 \
   -I"$ROOT_DIR" \
@@ -42,6 +42,8 @@ g++ -std=c++20 -O2 \
   "$ROOT_DIR/lib/Markdown/MarkdownParser.cpp" \
   "$ROOT_DIR/src/core/features/FeatureCatalog.cpp" \
   "$ROOT_DIR/src/features/pokemon_party/Registration.cpp" \
+  "$ROOT_DIR/src/features/remote_keyboard_input/Registration.cpp" \
+  "$ROOT_DIR/src/network/RemoteKeyboardSession.cpp" \
   "$ROOT_DIR/src/network/RecentBookJson.cpp" \
   "$ROOT_DIR/src/util/ForkDriftNavigation.cpp" \
   "$ROOT_DIR/src/util/BookProgressDataStore.cpp" \

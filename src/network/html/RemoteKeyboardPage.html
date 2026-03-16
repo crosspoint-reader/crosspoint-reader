@@ -7,12 +7,12 @@
     <style>
       :root {
         color-scheme: light;
-        --bg: #f3f1eb;
-        --panel: #ffffff;
-        --ink: #171717;
-        --muted: #666666;
-        --line: #d7d3c7;
-        --accent: #111111;
+        --ink: #111111;
+        --paper: #f4f1e8;
+        --panel: #fffdf7;
+        --line: #2f2a24;
+        --muted: #6d6458;
+        --accent: #274c77;
       }
 
       * {
@@ -22,61 +22,52 @@
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-        background: radial-gradient(circle at top, #ffffff 0%, var(--bg) 58%);
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        background:
+          radial-gradient(circle at top, rgba(39, 76, 119, 0.08), transparent 38%),
+          linear-gradient(180deg, #f8f5ee 0%, var(--paper) 100%);
         color: var(--ink);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
+        display: grid;
+        place-items: center;
+        padding: 24px;
       }
 
       .shell {
-        width: min(100%, 520px);
+        width: min(100%, 640px);
         background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 20px;
+        border: 2px solid var(--line);
+        box-shadow: 8px 8px 0 rgba(17, 17, 17, 0.12);
         padding: 24px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
       }
 
       .eyebrow {
         font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.14em;
+        letter-spacing: 0.24em;
         text-transform: uppercase;
         color: var(--muted);
+        margin-bottom: 8px;
       }
 
       h1 {
-        margin: 10px 0 8px;
-        font-size: 28px;
-        line-height: 1.1;
-      }
-
-      p {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.55;
+        margin: 0 0 16px;
+        font-size: clamp(28px, 5vw, 40px);
+        line-height: 1;
       }
 
       .status {
-        margin-top: 18px;
-        padding: 12px 14px;
-        border-radius: 14px;
-        background: #f7f6f2;
-        border: 1px solid var(--line);
+        min-height: 20px;
+        margin-bottom: 16px;
+        color: var(--muted);
         font-size: 14px;
       }
 
-      label {
+      .field-label {
         display: block;
-        margin-top: 18px;
         font-size: 13px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        margin-bottom: 8px;
         color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
       }
 
       input,
@@ -85,196 +76,234 @@
         font: inherit;
       }
 
+      input,
       textarea {
         width: 100%;
-        min-height: 180px;
-        margin-top: 10px;
-        border: 1px solid var(--line);
-        border-radius: 16px;
         padding: 16px;
+        border: 2px solid var(--line);
+        border-radius: 0;
+        background: #ffffff;
+        color: var(--ink);
+      }
+
+      input[hidden],
+      textarea[hidden] {
+        display: none;
+      }
+
+      input {
+        height: 56px;
+      }
+
+      textarea {
         resize: vertical;
-        background: #fffefb;
+        min-height: 180px;
       }
 
       .actions {
         display: flex;
         gap: 12px;
         margin-top: 16px;
+        flex-wrap: wrap;
       }
 
       button {
-        flex: 1;
-        min-height: 48px;
-        border-radius: 999px;
-        border: 1px solid var(--accent);
-        cursor: pointer;
-        transition: opacity 0.15s ease;
-      }
-
-      button.primary {
+        border: 2px solid var(--line);
         background: var(--accent);
         color: #ffffff;
+        padding: 14px 18px;
+        cursor: pointer;
+        min-width: 160px;
       }
 
       button.secondary {
         background: transparent;
-        color: var(--accent);
+        color: var(--ink);
       }
 
       button:disabled {
-        opacity: 0.45;
-        cursor: default;
+        cursor: not-allowed;
+        opacity: 0.55;
       }
 
-      .hint {
-        margin-top: 12px;
+      .small {
+        margin-top: 16px;
         font-size: 13px;
         color: var(--muted);
-      }
-
-      .closed {
-        display: none;
-        margin-top: 18px;
-        padding: 14px;
-        border-radius: 14px;
-        border: 1px dashed var(--line);
-        text-align: center;
+        line-height: 1.5;
       }
     </style>
   </head>
   <body>
     <main class="shell">
-      <div class="eyebrow">CrossPoint</div>
-      <h1 id="title">Remote Keyboard</h1>
-      <p id="subtitle">Type on your phone and send the result back to the device.</p>
-      <div class="status" id="status">Connecting to the device...</div>
-      <label for="draft">Text</label>
-      <textarea id="draft" autocapitalize="sentences" autocomplete="off" spellcheck="false"></textarea>
+      <div class="eyebrow">CrossPoint Remote Keyboard</div>
+      <h1 id="title">Waiting for device input</h1>
+      <div class="status" id="status">Connecting...</div>
+      <label class="field-label" for="textInput">Text</label>
+      <input id="textInput" hidden disabled />
+      <textarea id="textArea" placeholder="Waiting for an active text session..." disabled></textarea>
       <div class="actions">
-        <button class="secondary" id="cancel-btn" type="button">Cancel</button>
-        <button class="primary" id="send-btn" type="button">Send to Device</button>
+        <button id="submitBtn" disabled>Send To Device</button>
+        <button id="refreshBtn" class="secondary" type="button">Refresh</button>
       </div>
-      <div class="hint" id="hint">This page stays in sync while the on-device keyboard remains open.</div>
-      <div class="closed" id="closed-state">This keyboard session has ended. You can close this tab.</div>
+      <div class="small" id="meta">Keep this page open while the device waits for text.</div>
     </main>
     <script>
-      const params = new URLSearchParams(window.location.search);
-      let activeSessionId = Number(params.get("session") || 0);
-      let lastSyncedText = "";
-      let draftDirty = false;
+      let activeSession = null;
+      let activeField = null;
 
-      const titleEl = document.getElementById("title");
-      const subtitleEl = document.getElementById("subtitle");
-      const statusEl = document.getElementById("status");
-      const draftEl = document.getElementById("draft");
-      const hintEl = document.getElementById("hint");
-      const closedEl = document.getElementById("closed-state");
-      const sendBtn = document.getElementById("send-btn");
-      const cancelBtn = document.getElementById("cancel-btn");
+      const titleNode = document.getElementById("title");
+      const statusNode = document.getElementById("status");
+      const textInput = document.getElementById("textInput");
+      const textArea = document.getElementById("textArea");
+      const submitBtn = document.getElementById("submitBtn");
+      const refreshBtn = document.getElementById("refreshBtn");
+      const metaNode = document.getElementById("meta");
 
-      function setClosed(message) {
-        closedEl.style.display = "block";
-        closedEl.textContent = message || "This keyboard session has ended. You can close this tab.";
-        draftEl.disabled = true;
-        sendBtn.disabled = true;
-        cancelBtn.disabled = true;
+      function sessionLabel(session) {
+        if (!session) return "No active text session";
+        return session.title || "Remote text input";
       }
 
-      async function postUpdate(payload) {
-        const response = await fetch("/api/keyboard/session?client=web", {
+      function setStatus(message) {
+        statusNode.textContent = message;
+      }
+
+      function fieldValue() {
+        return activeField ? activeField.value : "";
+      }
+
+      function setFieldValue(value) {
+        textInput.value = value;
+        textArea.value = value;
+      }
+
+      function setFieldMode(session) {
+        const useSingleLine = !!session && (session.isPassword || (session.maxLength > 0 && session.maxLength <= 120));
+        textInput.hidden = !useSingleLine;
+        textArea.hidden = useSingleLine;
+        activeField = useSingleLine ? textInput : textArea;
+        textInput.type = session && session.isPassword ? "password" : "text";
+        textInput.disabled = !session;
+        textArea.disabled = !session;
+
+        if (session && session.maxLength > 0) {
+          textInput.maxLength = session.maxLength;
+          textArea.maxLength = session.maxLength;
+        } else {
+          textInput.removeAttribute("maxLength");
+          textArea.removeAttribute("maxLength");
+        }
+      }
+
+      async function fetchSession() {
+        const response = await fetch("/api/remote-keyboard/session", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Session lookup failed");
+        }
+        return await response.json();
+      }
+
+      async function claimSession(session) {
+        const response = await fetch("/api/remote-keyboard/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: activeSessionId,
-            text: draftEl.value,
-            complete: false,
-            cancel: false,
-            ...payload,
-          }),
+          body: JSON.stringify({ id: session.id, client: "browser" }),
         });
         if (!response.ok) {
-          throw new Error(await response.text() || "Request failed");
+          throw new Error("Claim failed");
         }
+        return await response.json();
       }
 
-      async function syncSession() {
-        const response = await fetch("/api/keyboard/session?client=web");
+      async function submitSession() {
+        if (!activeSession) return;
+        submitBtn.disabled = true;
+        setStatus("Sending text to device...");
+        const response = await fetch("/api/remote-keyboard/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: activeSession.id, text: fieldValue() }),
+        });
         if (!response.ok) {
-          statusEl.textContent = "Device is unreachable.";
+          const message = await response.text();
+          throw new Error(message || "Submit failed");
+        }
+        setStatus("Text sent. The device should continue immediately.");
+      }
+
+      function applySession(session) {
+        activeSession = session && session.active ? session : null;
+        titleNode.textContent = sessionLabel(activeSession);
+
+        if (!activeSession) {
+          setFieldMode(null);
+          setFieldValue("");
+          submitBtn.disabled = true;
+          metaNode.textContent = "Open a text field on the device, then refresh this page.";
+          setStatus("No active text session.");
           return;
         }
 
-        const session = await response.json();
-        if (!session.active) {
-          setClosed("The device is no longer waiting for remote text input.");
-          return;
+        setFieldMode(activeSession);
+        if (document.activeElement !== activeField) {
+          setFieldValue(activeSession.text || "");
         }
 
-        activeSessionId = Number(session.sessionId || activeSessionId || 0);
-        titleEl.textContent = session.title || "Remote Keyboard";
-        subtitleEl.textContent = session.isPassword
-          ? "Password entry is active on the device."
-          : "Type on your phone and send the result back to the device.";
-        draftEl.maxLength = session.maxLength > 0 ? session.maxLength : 0;
-        draftEl.type = session.isPassword ? "password" : "text";
-        statusEl.textContent = session.androidConnected
-          ? "Android app heartbeat detected. Browser input still works as a fallback."
-          : "Connected to the device.";
-        hintEl.textContent = session.maxLength > 0
-          ? `Maximum length: ${session.maxLength} characters.`
-          : "No length limit reported by the device.";
+        submitBtn.disabled = false;
+        metaNode.textContent = activeSession.maxLength > 0
+          ? "Maximum length: " + activeSession.maxLength + " characters."
+          : "No input length limit.";
+        setStatus(activeSession.claimedBy === "browser"
+          ? "Connected. Use this field and send the result."
+          : "Connected. This page is now controlling the device input.");
+        activeField.focus({ preventScroll: true });
+      }
 
-        if (!draftDirty || draftEl.value === lastSyncedText) {
-          draftEl.value = session.text || "";
-          lastSyncedText = draftEl.value;
-          draftDirty = false;
+      async function refreshSession() {
+        try {
+          const session = await fetchSession();
+          applySession(session);
+          if (activeSession) {
+            const claimed = await claimSession(activeSession);
+            applySession(claimed);
+          }
+        } catch (error) {
+          setStatus(error.message || "Connection failed");
         }
       }
 
-      let syncTimer = null;
-      let draftTimer = null;
-
-      draftEl.addEventListener("input", function() {
-        draftDirty = true;
-        clearTimeout(draftTimer);
-        draftTimer = setTimeout(async function() {
-          try {
-            await postUpdate({});
-            lastSyncedText = draftEl.value;
-            draftDirty = false;
-          } catch (error) {
-            statusEl.textContent = error.message || "Failed to sync text.";
+      function bindSubmitShortcut(field) {
+        field.addEventListener("keydown", (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            submitBtn.click();
+            return;
           }
-        }, 180);
-      });
 
-      sendBtn.addEventListener("click", async function() {
-        sendBtn.disabled = true;
+          if (field === textInput && event.key === "Enter") {
+            event.preventDefault();
+            submitBtn.click();
+          }
+        });
+      }
+
+      bindSubmitShortcut(textInput);
+      bindSubmitShortcut(textArea);
+
+      submitBtn.addEventListener("click", async () => {
         try {
-          await postUpdate({ complete: true });
-          statusEl.textContent = "Sent. The device will close the keyboard.";
+          await submitSession();
         } catch (error) {
-          statusEl.textContent = error.message || "Failed to send text.";
-        } finally {
-          sendBtn.disabled = false;
+          setStatus(error.message || "Submit failed");
+          submitBtn.disabled = false;
         }
       });
 
-      cancelBtn.addEventListener("click", async function() {
-        cancelBtn.disabled = true;
-        try {
-          await postUpdate({ cancel: true });
-          setClosed("Cancelled on the device.");
-        } catch (error) {
-          statusEl.textContent = error.message || "Failed to cancel session.";
-        } finally {
-          cancelBtn.disabled = false;
-        }
-      });
+      refreshBtn.addEventListener("click", () => { refreshSession(); });
 
-      syncSession();
-      syncTimer = setInterval(syncSession, 1000);
-      draftEl.focus();
+      window.setInterval(refreshSession, 1000);
+      refreshSession();
     </script>
   </body>
 </html>

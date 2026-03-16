@@ -7,8 +7,12 @@ This document describes all HTTP and WebSocket endpoints available on the CrossP
   - [HTTP Endpoints](#http-endpoints)
     - [GET `/` - Home Page](#get----home-page)
     - [GET `/files` - File Browser Page](#get-files---file-browser-page)
+    - [GET `/remote-input` - Remote Keyboard Page](#get-remote-input---remote-keyboard-page)
     - [GET `/api/status` - Device Status](#get-apistatus---device-status)
     - [GET `/api/plugins` - Compile-Time Feature Manifest](#get-apiplugins---compile-time-feature-manifest)
+    - [GET `/api/remote-keyboard/session` - Active Remote Keyboard Session](#get-apiremote-keyboardsession---active-remote-keyboard-session)
+    - [POST `/api/remote-keyboard/claim` - Claim Remote Keyboard Session](#post-apiremote-keyboardclaim---claim-remote-keyboard-session)
+    - [POST `/api/remote-keyboard/submit` - Submit Remote Keyboard Text](#post-apiremote-keyboardsubmit---submit-remote-keyboard-text)
     - [GET `/api/files` - List Files](#get-apifiles---list-files)
     - [GET `/api/recent` - Recent Books](#get-apirecent---recent-books)
     - [GET `/api/book-progress` - Book Progress](#get-apibook-progress---book-progress)
@@ -71,6 +75,25 @@ curl http://crosspoint.local/files
 
 ---
 
+### GET `/remote-input` - Remote Keyboard Page
+
+Serves the browser fallback page for remote text entry.
+
+**Request:**
+```bash
+curl http://crosspoint.local/remote-input
+```
+
+**Response:** HTML page (200 OK)
+
+**Notes:**
+- Only registered when `remote_keyboard_input` is enabled.
+- Intended for phone and desktop browsers after scanning the QR code shown on-device.
+- The page polls and claims the active remote keyboard session via the JSON APIs below.
+- If no Wi-Fi is available, the device will start a temporary hotspot to serve this page.
+
+---
+
 ### GET `/api/status` - Device Status
 
 Returns JSON with device status information.
@@ -120,12 +143,111 @@ curl http://crosspoint.local/api/plugins
 ```json
 {
   "markdown": true,
+  "remote_keyboard_input": true,
   "remote_open_book": true,
   "remote_page_turn": true,
   "todo_planner": true,
   "web_pokedex_plugin": false
 }
 ```
+
+---
+
+### GET `/api/remote-keyboard/session` - Active Remote Keyboard Session
+
+Returns the currently active remote keyboard session, if any.
+
+**Request:**
+```bash
+curl http://crosspoint.local/api/remote-keyboard/session
+```
+
+**Response (200 OK, no active session):**
+```json
+{
+  "active": false
+}
+```
+
+**Response (200 OK, active session):**
+```json
+{
+  "active": true,
+  "id": 42,
+  "title": "WiFi Password",
+  "text": "draft",
+  "maxLength": 64,
+  "isPassword": true,
+  "claimedBy": "android",
+  "lastClaimAt": 123456
+}
+```
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `active` | boolean | Whether the device is currently waiting for remote text input |
+| `id` | number | Active session ID when `active` is `true` |
+| `title` | string | On-device prompt title |
+| `text` | string | Current draft text |
+| `maxLength` | number | Maximum allowed length, or `0` for unlimited |
+| `isPassword` | boolean | Whether the session represents password-style input |
+| `claimedBy` | string | Optional last client ID that claimed the session |
+| `lastClaimAt` | number | Optional timestamp of the most recent claim |
+
+---
+
+### POST `/api/remote-keyboard/claim` - Claim Remote Keyboard Session
+
+Marks the current session as owned by a client and returns the updated snapshot.
+
+**Request:**
+```bash
+curl -X POST http://crosspoint.local/api/remote-keyboard/claim \
+  -H "Content-Type: application/json" \
+  -d '{"id":42,"client":"android"}'
+```
+
+**Response (200 OK):**
+```json
+{
+  "active": true,
+  "id": 42,
+  "title": "WiFi Password",
+  "text": "draft",
+  "maxLength": 64,
+  "isPassword": true,
+  "claimedBy": "android",
+  "lastClaimAt": 123456
+}
+```
+
+**Error responses:**
+- `400` for missing or invalid JSON
+- `404` when the session ID is missing or no longer active
+
+---
+
+### POST `/api/remote-keyboard/submit` - Submit Remote Keyboard Text
+
+Completes the active remote keyboard session and returns the text to the device UI.
+
+**Request:**
+```bash
+curl -X POST http://crosspoint.local/api/remote-keyboard/submit \
+  -H "Content-Type: application/json" \
+  -d '{"id":42,"text":"hunter2"}'
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+**Error responses:**
+- `400` for missing/invalid JSON or text that exceeds the session length limit
+- `404` when the session ID is missing or no longer active
 
 ---
 

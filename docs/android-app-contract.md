@@ -271,6 +271,7 @@ Clears Pokemon metadata for a book.
 {
   "web_wifi_setup": false,
   "ota_updates":    false,
+  "remote_keyboard_input": true,
   "remote_open_book": true,
   "remote_page_turn": true,
   "user_fonts":     false,
@@ -280,10 +281,10 @@ Clears Pokemon metadata for a book.
 
 **Current firmware response** (`handlePlugins()` → `FeatureModules::getFeatureMapJson()`):
 Returns the full feature catalog as a flat JSON object with snake_case keys.
-The four keys above are included when the corresponding feature is enabled.
+The keys above are included when the corresponding feature is enabled.
 
 **Current status:** ✅ Matches as long as firmware uses the exact key names above.
-Verify: `web_wifi_setup`, `ota_updates`, `remote_open_book`, `remote_page_turn`, `user_fonts`, `todo_planner`.
+Verify: `web_wifi_setup`, `ota_updates`, `remote_keyboard_input`, `remote_open_book`, `remote_page_turn`, `user_fonts`, `todo_planner`.
 
 `GET /api/features` is a supported alias for `GET /api/plugins` and returns the
 same JSON object.
@@ -655,6 +656,9 @@ terminated by `\n`.
 | `wifi_status` | — | `{"ok":true,"connected":bool,"ssid":"...","ip":"...","rssi":-60}` (when connected) or `{"ok":true,"connected":false,"status":"disconnected\|failed\|no_ssid\|connecting"}` |
 | `open_book` | `"/path/file.epub"` | `{"ok":true}` |
 | `remote_button` | `"page_forward"\|"page_back"` | `{"ok":true}` |
+| `remote_keyboard_session_get` | — | `{"ok":true,"active":false}` or `{"ok":true,"active":true,"id":42,"title":"...","text":"...","maxLength":64,"isPassword":true,"claimedBy":"android"}` |
+| `remote_keyboard_claim` | `{"id":42,"client":"android"}` | same payload shape as `remote_keyboard_session_get` for the claimed session |
+| `remote_keyboard_submit` | `{"id":42,"text":"..."}` | `{"ok":true}` |
 | `todo_add` | `{"text":"...","type":"todo"\|"agenda"}` | `{"ok":true}` |
 
 **Error response** (for any command): `{"ok":false,"error":"<message>"}\n`
@@ -668,6 +672,43 @@ terminated by `\n`.
 
 **Current status:** ✅ Implemented on fork-drift. Full protocol implemented in
 `src/UsbSerialProtocol.cpp` covering all commands in the table above.
+
+---
+
+## 20. Remote Keyboard Input
+
+The Android app now supports a global remote keyboard handoff for any on-device text prompt.
+
+**Capability discovery:**
+- HTTP/WiFi transports read `remote_keyboard_input` from `GET /api/plugins`.
+- USB serial transports read `remote_keyboard_input` from the `plugins` command response.
+
+**HTTP endpoints:**
+- `GET /api/remote-keyboard/session` returns the active session snapshot or `{"active":false}`.
+- `POST /api/remote-keyboard/claim` accepts `{"id":<sessionId>,"client":"android"}` and returns the updated snapshot.
+- `POST /api/remote-keyboard/submit` accepts `{"id":<sessionId>,"text":"..."}` and completes the session.
+
+**Session fields used by Android:**
+- `id`
+- `title`
+- `text`
+- `maxLength`
+- `isPassword`
+- `claimedBy`
+
+**USB serial commands:**
+- `remote_keyboard_session_get`
+- `remote_keyboard_claim`
+- `remote_keyboard_submit`
+
+**Runtime behavior on firmware:**
+1. Opening the device keyboard starts a remote keyboard session when `remote_keyboard_input` is compiled in.
+2. If the Android app is already connected, it can claim and answer the session immediately.
+3. When the remote network session is ready, the device renders QR/browser fallback information and serves `/remote-input`.
+4. If WiFi is unavailable, the device starts a hotspot automatically and exposes the same browser flow there; Android can still answer over USB in parallel.
+5. Pressing on-device confirm switches back to the local keyboard; pressing back cancels the keyboard as usual.
+
+**Current status:** ✅ Implemented on both WiFi and USB transports, including contract-test coverage via `WifiContractTransportTest`.
 
 ---
 

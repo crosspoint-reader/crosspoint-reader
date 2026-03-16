@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <cstddef>
 #include <map>
 #include <string>
 #include <utility>
@@ -18,6 +19,7 @@ class WebServer {
     int statusCode = -1;
     String contentType;
     String body;
+    std::map<std::string, String> headers;
   };
 
   void on(const char* uri, HTTPMethod method, THandlerFunction handler) {
@@ -82,6 +84,19 @@ class WebServer {
 
   void send(const int statusCode, const String& contentType, const String& body) {
     send(statusCode, contentType.c_str(), body);
+  }
+
+  void sendHeader(const char* name, const char* value) {
+    response_.headers[name ? name : ""] = String(value ? value : "");
+  }
+
+  void send_P(const int statusCode, const char* contentType, const char* body, const size_t length) {
+    response_.statusCode = statusCode;
+    response_.contentType = String(contentType);
+    response_.body = String();
+    if (body != nullptr && length > 0) {
+      response_.body.write(reinterpret_cast<const uint8_t*>(body), length);
+    }
   }
 
   const Response& response() const { return response_; }

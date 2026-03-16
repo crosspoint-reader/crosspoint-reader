@@ -224,6 +224,28 @@ Keeps the WiFi file management server running in the background while reading.
 
 ---
 
+### Remote Keyboard Input
+
+**Flag:** `ENABLE_REMOTE_KEYBOARD_INPUT`
+**Size Impact:** ~12KB
+**Default:** Enabled
+
+Adds a modular remote text-entry path for any on-device keyboard prompt:
+
+- Prefers the Android companion app when it is already connected over USB serial or WiFi
+- Falls back to a browser page at `/remote-input` with a QR code shown on-device
+- Starts a temporary hotspot automatically when WiFi is unavailable so the browser fallback remains reachable
+- Exposes the `remote_keyboard_input` capability in `/api/plugins`, `/api/features`, and the USB `plugins` command
+
+**When disabled:**
+- Keyboard entry always stays on-device
+- `/remote-input` and `/api/remote-keyboard/*` routes are not registered
+- Android and browser clients will not discover remote keyboard support
+
+**Use case:** Keep enabled if you want faster password/search/text entry from the Android app or a nearby browser.
+
+---
+
 ### Home Media Picker
 
 **Flag:** `ENABLE_HOME_MEDIA_PICKER`
@@ -315,6 +337,7 @@ uv run python scripts/generate_build_config.py --profile lean
 - ✗ PNG/JPEG Sleep
 - ✗ Markdown/Obsidian
 - ✗ Background Server
+- ✗ Remote Keyboard Input
 - ✗ Home Media Picker
 - ✗ Web Pokedex Plugin
 - ✗ Pokemon Party
@@ -342,6 +365,7 @@ uv run python scripts/generate_build_config.py --profile standard
 - ✗ KOReader Sync
 - ✗ Calibre Sync
 - ✓ Background Server
+- ✓ Remote Keyboard Input
 - ✓ Home Media Picker
 - ✗ Web Pokedex Plugin
 - ✗ Pokemon Party
@@ -369,13 +393,10 @@ uv run python scripts/generate_build_config.py --profile full
 - ✓ KOReader Sync
 - ✓ Calibre Sync
 - ✓ Background Server
+- ✓ Remote Keyboard Input
 - ✓ Home Media Picker
 - ✓ Web Pokedex Plugin
-- ✗ Pokemon Party
-
-**Note:** `Pokemon Party` is available for custom builds but is not enabled in
-the stock `full` profile. Enable it explicitly if you want the recent-books
-party flow.
+- ✓ Pokemon Party
 
 **Best for:**
 - Users who want most built-in features

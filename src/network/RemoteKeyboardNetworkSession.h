@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-class CrossPointWebServer;
+#include "network/CrossPointWebServer.h"
 
 class RemoteKeyboardNetworkSession {
  public:

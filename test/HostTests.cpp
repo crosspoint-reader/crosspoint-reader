@@ -15,6 +15,8 @@
 #include "src/core/registries/WebRouteRegistry.h"
 #include "src/fontIds.h"
 #include "src/features/pokemon_party/Registration.h"
+#include "src/features/remote_keyboard_input/Registration.h"
+#include "src/network/RemoteKeyboardSession.h"
 #include "src/network/RecentBookJson.h"
 #include "src/util/BookProgressDataStore.h"
 #include "src/util/ForkDriftNavigation.h"
@@ -142,6 +144,7 @@ void testFeatureCatalogApi() {
   assert(core::FeatureCatalog::isEnabled("epub_support") == (ENABLE_EPUB_SUPPORT != 0));
   assert(core::FeatureCatalog::isEnabled("home_media_picker") == (ENABLE_HOME_MEDIA_PICKER != 0));
   assert(core::FeatureCatalog::isEnabled("pokemon_party") == (ENABLE_POKEMON_PARTY != 0));
+  assert(core::FeatureCatalog::isEnabled("remote_keyboard_input") == (ENABLE_REMOTE_KEYBOARD_INPUT != 0));
   assert(core::FeatureCatalog::isEnabled("missing_feature") == false);
   assert(core::FeatureCatalog::find("missing_feature") == nullptr);
   const core::FeatureDescriptor* backgroundServerOnCharge = core::FeatureCatalog::find("background_server_on_charge");
@@ -157,6 +160,7 @@ void testFeatureCatalogApi() {
   assert(!json.isEmpty());
   assert(json.indexOf("\"epub_support\":") != -1);
   assert(json.indexOf("\"pokemon_party\":") != -1);
+  assert(json.indexOf("\"remote_keyboard_input\":") != -1);
   assert(json.indexOf("\"todo_planner\":") != -1);
 
   const String buildString = core::FeatureCatalog::buildString();
@@ -319,6 +323,67 @@ void testPokemonPartyApiRoutes() {
   assert(clearedResponse["pokemon"].isNull());
 
   std::cout << "Pokemon party API route tests passed!" << std::endl;
+}
+
+void testRemoteKeyboardSessionAndRoutes() {
+  std::cout << "Testing remote keyboard session routes..." << std::endl;
+
+  features::remote_keyboard_input::registerFeature();
+  assert(core::WebRouteRegistry::shouldRegister("remote_keyboard_input_api"));
+
+  WebServer server;
+  core::WebRouteRegistry::mountAll(&server);
+  assert(server.hasRoute("/remote-input", HTTP_GET));
+  assert(server.hasRoute("/api/remote-keyboard/session", HTTP_GET));
+  assert(server.hasRoute("/api/remote-keyboard/claim", HTTP_POST));
+  assert(server.hasRoute("/api/remote-keyboard/submit", HTTP_POST));
+
+  server.setRequest(HTTP_GET, "/api/remote-keyboard/session");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+  assert(server.response().body.indexOf("\"active\":false") != -1);
+
+  const uint32_t sessionId = REMOTE_KEYBOARD_SESSION.begin("WiFi Password", "draft", 64, true);
+
+  server.setRequest(HTTP_GET, "/api/remote-keyboard/session");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+  assert(server.response().body.indexOf("\"active\":true") != -1);
+  assert(server.response().body.indexOf("\"title\":\"WiFi Password\"") != -1);
+
+  server.setRequest(HTTP_POST, "/api/remote-keyboard/claim");
+  server.setBody(String("{\"id\":") + String(static_cast<int>(sessionId)) + ",\"client\":\"android\"}");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+  assert(server.response().body.indexOf("\"claimedBy\":\"android\"") != -1);
+
+  server.setRequest(HTTP_POST, "/api/remote-keyboard/submit");
+  server.setBody(String("{\"id\":") + String(static_cast<int>(sessionId)) + ",\"text\":\"secret\"}");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+  assert(server.response().body.indexOf("\"ok\":true") != -1);
+
+  std::string submittedText;
+  assert(REMOTE_KEYBOARD_SESSION.takeSubmitted(sessionId, submittedText));
+  assert(submittedText == "secret");
+
+  const uint32_t limitedSessionId = REMOTE_KEYBOARD_SESSION.begin("PIN", "", 4, false);
+  server.setRequest(HTTP_POST, "/api/remote-keyboard/submit");
+  server.setBody(String("{\"id\":") + String(static_cast<int>(limitedSessionId)) + ",\"text\":\"12345\"}");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 400);
+  assert(server.response().body == "Text exceeds session length limit");
+  REMOTE_KEYBOARD_SESSION.cancel(limitedSessionId);
+
+  server.setRequest(HTTP_GET, "/remote-input");
+  assert(server.dispatch());
+  assert(server.response().statusCode == 200);
+  assert(server.response().contentType == "text/html; charset=utf-8");
+  const auto encodingHeader = server.response().headers.find("Content-Encoding");
+  assert(encodingHeader != server.response().headers.end());
+  assert(encodingHeader->second == "gzip");
+
+  std::cout << "Remote keyboard session route tests passed!" << std::endl;
 }
 
 namespace {
@@ -1039,6 +1104,7 @@ int main() {
   testFeatureCatalogApi();
   testPokemonBookDataStore();
   testPokemonPartyApiRoutes();
+  testRemoteKeyboardSessionAndRoutes();
   testBookProgressDataStore();
   testRecentBookJsonIncludesPokemon();
   testSettingsRoundTrip();

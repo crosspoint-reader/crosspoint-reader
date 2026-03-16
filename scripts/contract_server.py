@@ -481,7 +481,7 @@ class ContractHandler(BaseHTTPRequestHandler):
             elif base == "/api/remote-keyboard/claim":
                 body = self._parse_json(raw)
                 session = _state["remoteKeyboardSession"]
-                if not session:
+                if not session or body.get("id") != session.get("id"):
                     self._text("Remote keyboard session not found", 404)
                     return
                 client = body.get("client", "")
@@ -491,6 +491,10 @@ class ContractHandler(BaseHTTPRequestHandler):
 
             elif base == "/api/remote-keyboard/submit":
                 body = self._parse_json(raw)
+                session = _state["remoteKeyboardSession"]
+                if not session or body.get("id") != session.get("id"):
+                    self._text("Remote keyboard session not found", 404)
+                    return
                 _mutations["remoteKeyboardSubmissions"].append(body.get("text", ""))
                 _state["remoteKeyboardSession"] = None
                 self._json_response({"ok": True})

@@ -830,6 +830,84 @@ paths:
           $ref: '#/components/responses/NotFoundText'
         '500':
           $ref: '#/components/responses/InternalServerErrorText'
+  /api/remote-keyboard/session:
+    get:
+      tags: [control]
+      operationId: getRemoteKeyboardSession
+      summary: Get active remote keyboard session
+      description: Returns the currently active remote keyboard session, or `{"active":false}` if no keyboard is open.
+      x-crosspoint-feature-gates: [remote_keyboard_input]
+      responses:
+        '200':
+          description: Session snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteKeyboardSessionSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+  /api/remote-keyboard/claim:
+    post:
+      tags: [control]
+      operationId: claimRemoteKeyboardSession
+      summary: Claim an active remote keyboard session
+      x-crosspoint-feature-gates: [remote_keyboard_input]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteKeyboardClaimRequest'
+      responses:
+        '200':
+          description: Session claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteKeyboardSessionSnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+  /api/remote-keyboard/submit:
+    post:
+      tags: [control]
+      operationId: submitRemoteKeyboardText
+      summary: Submit text for the active remote keyboard session
+      x-crosspoint-feature-gates: [remote_keyboard_input]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteKeyboardSubmitRequest'
+      responses:
+        '200':
+          description: Text submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestText'
+        '404':
+          $ref: '#/components/responses/NotFoundText'
+  /remote-input:
+    get:
+      tags: [control]
+      operationId: getRemoteInputPage
+      summary: Get the remote keyboard browser fallback page
+      description: Serves the HTML page used for remote text entry when no Android app is connected.
+      x-crosspoint-feature-gates: [remote_keyboard_input]
+      responses:
+        '200':
+          description: Remote keyboard HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFoundText'
   /api/open-book:
     post:
       tags: [control]
@@ -1084,6 +1162,8 @@ components:
         user_fonts:
           type: boolean
         todo_planner:
+          type: boolean
+        remote_keyboard_input:
           type: boolean
         pokemon_party:
           type: boolean
@@ -1525,3 +1605,39 @@ components:
           minimum: 0
         activeLoaded:
           type: boolean
+    RemoteKeyboardSessionSnapshot:
+      type: object
+      required: [active]
+      properties:
+        active:
+          type: boolean
+        id:
+          type: integer
+        title:
+          type: string
+        text:
+          type: string
+        maxLength:
+          type: integer
+        isPassword:
+          type: boolean
+        claimedBy:
+          type: string
+        lastClaimAt:
+          type: integer
+    RemoteKeyboardClaimRequest:
+      type: object
+      required: [id, client]
+      properties:
+        id:
+          type: integer
+        client:
+          type: string
+    RemoteKeyboardSubmitRequest:
+      type: object
+      required: [id, text]
+      properties:
+        id:
+          type: integer
+        text:
+          type: string

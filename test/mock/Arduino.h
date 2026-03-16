@@ -5,6 +5,10 @@
 
 #include "String.h"
 
+#ifndef PROGMEM
+#define PROGMEM
+#endif
+
 struct MockESP {
   size_t getFreeHeap() { return 1024 * 1024; }
 };

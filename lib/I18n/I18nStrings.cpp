@@ -1078,6 +1078,7 @@ const char* const STRINGS_EN[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Sunlight Fading Fix",
     "Remap Front Buttons",
     "OPDS Browser",
@@ -1666,6 +1667,7 @@ const char* const STRINGS_ES[] = {
     "Lyra",
     "Lyra Extendido",
     "Fork Drift",
+    "Pokemon Party",
     "Correcci\xC3"
     "\xB3"
     "n de desvanecimiento",
@@ -2514,6 +2516,7 @@ const char* const STRINGS_FR[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Am\xC3"
     "\xA9"
     "lioration de la lisibilit\xC3"
@@ -3124,6 +3127,7 @@ const char* const STRINGS_DE[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Anti-Verblassen",
     "Vordere Tasten belegen",
     "OPDS-Browser",
@@ -4584,6 +4588,7 @@ const char* const STRINGS_CS[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Oprava blednut\xC3"
     "\xAD"
     " na slunci",
@@ -5525,6 +5530,7 @@ const char* const STRINGS_PO[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Ajuste desbotamento ao sol",
     "Remapear bot\xC3"
     "\xB5"
@@ -12507,6 +12513,7 @@ const char* const STRINGS_RU[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "\xD0"
     "\x9A"
     "\xD0"
@@ -15227,6 +15234,7 @@ const char* const STRINGS_SV[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Fix f\xC3"
     "\xB6"
     "r solskensmattning",
@@ -16271,6 +16279,7 @@ const char* const STRINGS_RO[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Corec\xC5"
     "\xA3"
     "ie estompare lumin\xC4"
@@ -17039,6 +17048,7 @@ const char* const STRINGS_CA[] = {
     "Lyra",
     "Lyra Ampliat",
     "Fork Drift",
+    "Pokemon Party",
     "Correcci\xC3"
     "\xB3"
     " de l'esva\xC3"
@@ -24953,6 +24963,7 @@ const char* const STRINGS_UK[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "\xD0"
     "\x92"
     "\xD0"
@@ -34255,6 +34266,7 @@ const char* const STRINGS_BE[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "\xD0"
     "\x9A"
     "\xD0"
@@ -36614,6 +36626,7 @@ const char* const STRINGS_IT[] = {
     "Lyra",
     "Lyra Esteso",
     "Fork Drift",
+    "Pokemon Party",
     "Fix Sbiadimento da Luce Solare",
     "Rimappa Pulsanti Frontali",
     "Browser OPDS",
@@ -37588,6 +37601,7 @@ const char* const STRINGS_PL[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Przeciwdzia\xC5"
     "\x82"
     "anie blakni\xC4"
@@ -38496,6 +38510,7 @@ const char* const STRINGS_FI[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Auringonvalon haalistumiskorjaus",
     "Uudelleenm\xC3"
     "\xA4"
@@ -39206,6 +39221,7 @@ const char* const STRINGS_DA[] = {
     "Lyra",
     "Lyra Extended",
     "Fork Drift",
+    "Pokemon Party",
     "Sollysfading-rettelse",
     "Omtildel frontknapper",
     "OPDS Browser",
@@ -39628,6 +39644,7 @@ const char* const STRINGS_NL[] = {
     "Lyra",
     "Lyra Uitgebreid",
     "Fork Drift",
+    "Pokemon Party",
     "Zonlicht vervaging fix",
     "Knoppen voorzijde wijzigen",
     "OPDS-browser",
@@ -40880,6 +40897,7 @@ const char* const STRINGS_TR[] = {
     "\x9F"
     "",
     "Fork Drift",
+    "Pokemon Party",
     "G\xC3"
     "\xBC"
     "ne\xC5"
