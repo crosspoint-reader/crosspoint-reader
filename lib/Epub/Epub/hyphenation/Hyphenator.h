@@ -26,8 +26,8 @@ class Hyphenator {
   //   2. Apostrophe contractions between letters (e.g. all'improvviso).
   //      Liang patterns are run per alphabetic segment around apostrophes.
   //      A direct break at the apostrophe boundary is allowed only when the left
-  //      segment has at least 3 letters and the right segment has at least 2 letters,
-  //      avoiding short clitics (e.g. l', d') and short contraction tails (e.g. can't).
+  //      segment has at least 3 letters and the right segment has at least 3 letters,
+  //      avoiding short clitics (e.g. l', d') and contraction tails (e.g. 've, 're, 'll).
   //   3. Language-specific Liang patterns (e.g. German de_patterns).
   //      Example: "Quadratkilometer" -> Qua|drat|ki|lo|me|ter.
   //   4. Fallback every-N-chars splitting (only when includeFallback is true AND no
