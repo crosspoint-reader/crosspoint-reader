@@ -25,7 +25,7 @@ jobs:
           python-version: '3.14'
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -47,7 +47,7 @@ jobs:
           python-version: '3.14'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Validate feature key synchronization
         run: uv run python scripts/check_feature_key_sync.py
