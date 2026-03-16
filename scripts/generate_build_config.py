@@ -139,7 +139,7 @@ FEATURES = {
     'ota_updates': Feature(
         name='OTA Updates',
         flag='ENABLE_OTA_UPDATES',
-        size_kb=5,
+        size_kb=4,
         description='Over-the-air firmware updates via WiFi'
     ),
     'todo_planner': Feature(
@@ -187,7 +187,7 @@ FEATURES = {
     'usb_mass_storage': Feature(
         name='USB Mass Storage',
         flag='ENABLE_USB_MASS_STORAGE',
-        size_kb=20,
+        size_kb=21,
         description='On-device prompt for USB SD card access as mass storage'
     ),
 }
@@ -569,7 +569,7 @@ def resolve_profile_name(profile_name: str) -> str:
 
 def calculate_size(enabled_features: Dict[str, bool]) -> float:
     """Calculate estimated firmware size in MB."""
-    base_size_mb = 2.56  # Lean profile size baseline (measured)
+    base_size_mb = 2.57  # Lean profile size baseline (measured)
 
     for feature_key, enabled in enabled_features.items():
         if enabled:
