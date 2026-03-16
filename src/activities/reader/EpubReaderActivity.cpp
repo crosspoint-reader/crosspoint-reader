@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+#include "../settings/DictionarySelectActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
@@ -75,6 +76,21 @@ void EpubReaderActivity::onEnter() {
     }
     f.close();
   }
+  // Load per-book dictionary override if one has been saved.
+  {
+    FsFile dictFile;
+    if (Storage.openFileForRead("ERS", epub->getCachePath() + "/dictionary.bin", dictFile)) {
+      char buf[500];
+      int n = dictFile.read(buf, sizeof(buf) - 1);
+      if (n > 0) {
+        buf[n] = '\0';
+        Dictionary::setActivePath(buf);
+        LOG_DBG("ERS", "Per-book dictionary: %s", buf);
+      }
+      dictFile.close();
+    }
+  }
+
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
   if (currentSpineIndex == 0) {
@@ -99,6 +115,9 @@ void EpubReaderActivity::onExit() {
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  // Restore global dictionary (undo any per-book override).
+  Dictionary::setActivePath(SETTINGS.dictionaryPath);
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -438,6 +457,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
                                  renderer, mappedInput, std::move(pageForLookup), readerFontId, orientedMarginLeft,
                                  orientedMarginTop, bookCachePath, nextPageFirstWord),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::SET_BOOK_DICTIONARY: {
+      startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput, epub->getCachePath()),
                              [this](const ActivityResult&) { requestUpdate(); });
       break;
     }

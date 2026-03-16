@@ -10,8 +10,9 @@
 
 class DictionarySelectActivity final : public Activity {
  public:
-  explicit DictionarySelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("DictionarySelect", renderer, mappedInput) {}
+  explicit DictionarySelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                    std::string bookCachePath = "")
+      : Activity("DictionarySelect", renderer, mappedInput), bookCachePath(std::move(bookCachePath)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -35,6 +36,11 @@ class DictionarySelectActivity final : public Activity {
 
   // Suppresses the Confirm release that bleeds through from the parent activity launch.
   bool ignoreNextConfirmRelease = false;
+
+  // Non-empty when launched from reader menu (per-book override mode).
+  std::string bookCachePath;
+  // Active per-book dictionary path loaded on enter; empty = "Use Global".
+  std::string currentBookDictPath;
 
   ButtonNavigator buttonNavigator;
 

@@ -2,16 +2,17 @@
 """
 Generate test/epubs/test_dictionary.epub
 
-Dictionary usage (3 switches after initial setup):
+Dictionary usage (4 switches after initial setup):
   Ch 1   Document Conventions
   Ch 2   Scanner validation  : no-ifo, only-dict, multi-ifo, fail-decompress
   Ch 3   Pre-processing      : gen-idx, gen-syn, extract-dict,
                                extract-syn-gen-syn, all-prep  ->  cleanup: select full
-  Ch 4-11  full block        : full  (26 words + 22 synonyms, English)
-  Ch 12  No-syn              : basic                (switch #1)
-  Ch 13  Bilingual edge case : en-es                (switch #2)
-  Ch 14  Phrase [Draft]     : phrase / phrase-syn  (switch #3, final)
-  Ch 15  ExpAT [Draft]
+  Ch 4   Per-book override   : gen-idx (set A/B), Use Global (C), mini-prep (D), long-prep (E cancel)
+  Ch 5-12  full block        : full  (26 words + 22 synonyms, English)
+  Ch 13  No-syn              : basic                (switch #1)
+  Ch 14  Bilingual edge case : en-es                (switch #2)
+  Ch 15  Phrase [Draft]     : phrase / phrase-syn  (switch #3, final)
+  Ch 16  ExpAT [Draft]
 
 Non-ASCII / entity audit:
   &gt;    required XML escape for '>' (kept)
@@ -151,9 +152,14 @@ Open Settings -> Dictionary for every test below.</p>
 <li><em>full</em></li>
 <li><em>gen-idx</em></li>
 <li><em>gen-syn</em></li>
+<li><em>long-prep</em></li>
+<li><em>mini-prep</em></li>
 <li><em>phrase</em></li>
 <li><em>phrase-syn</em></li>
 </ul>
+<h3>Note</h3>
+<p><em>long-prep</em> and <em>mini-prep</em> are for Ch 4 per-book prepare tests only.
+Do not select them from Settings.</p>
 
 <h2>Test E: Failed decompression -- error shown, prior selection unchanged</h2>
 <p>The preparation must fail with an error. The picker must remain open
@@ -272,10 +278,116 @@ device must not sleep during preparation or the test will be interrupted.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 4 -- Direct Lookup
+# Ch 4 -- Per-Book Dictionary Override
 # ---------------------------------------------------------------------------
-ch("4. Direct Lookup", """
-<h1>4. Direct Lookup</h1>
+ch("4. Per-Book Dictionary Override", """
+<h1>4. Per-Book Dictionary Override</h1>
+
+<p>The reader menu includes a <em>Book Dictionary</em> option that lets you set a
+dictionary for the current book independently of the global setting in
+Settings -> Dictionary. The per-book choice is saved and restored each time
+the book is opened. Selecting <em>Use Global</em> clears the override and reverts
+to the global setting.</p>
+
+<h2>Test A: Set per-book dictionary from reader menu</h2>
+<p>This test verifies that selecting a dictionary via the book menu overrides
+the global setting and enables word lookup for this book.</p>
+<h3>Dictionary</h3>
+<p><em>gen-idx</em> (already prepared in Ch 3)</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu (press <em>Confirm</em>).</li>
+<li>Select <em>Book Dictionary</em>.</li>
+<li>The dictionary picker opens. <em>Use Global</em> is highlighted (no per-book override set yet).</li>
+<li>Select <em>gen-idx</em>. The picker closes.</li>
+<li>Open the reader menu again. Verify <em>Look Up Word</em> is now visible.</li>
+</ol>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>bridge</li>
+<li>cloud</li>
+</ul>
+
+<h2>Test B: Per-book override persists after closing and reopening</h2>
+<p>Closing the book and reopening it must restore the per-book dictionary
+setting automatically.</p>
+<h3>Steps</h3>
+<ol>
+<li>Press <em>&#171; Back</em> (long press) to return to the home screen.</li>
+<li>Reopen this book.</li>
+<li>Open the reader menu. Verify <em>Look Up Word</em> is still visible.</li>
+<li>Select <em>Book Dictionary</em>. Verify <em>gen-idx</em> is marked as selected.</li>
+</ol>
+
+<h2>Test C: Clear per-book override with Use Global</h2>
+<p>Selecting <em>Use Global</em> must clear the per-book override and revert lookup
+availability to whatever the global setting provides.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu -> <em>Book Dictionary</em>.</li>
+<li>Select <em>Use Global</em>. The picker closes.</li>
+<li>Open the reader menu. <em>Look Up Word</em> visibility now reflects the global dictionary setting.</li>
+</ol>
+<h3>Note</h3>
+<p>If no global dictionary is set in Settings -> Dictionary, <em>Look Up Word</em>
+will disappear from the menu after selecting <em>Use Global</em>.</p>
+
+<h2>Test D: Per-book prepare -- mini-prep (all four steps, quick)</h2>
+<p>Selecting an unprepared dictionary from the book menu must trigger the
+same prepare workflow as selecting from Settings. All four steps must
+complete and the book dictionary must be set to <em>mini-prep</em>.</p>
+<h3>Dictionary</h3>
+<p><em>mini-prep</em> (must not be pre-processed -- verify no .idx.oft or .syn.oft files exist)</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu -> <em>Book Dictionary</em>.</li>
+<li>Select <em>mini-prep</em>.</li>
+<li>Confirmation screen lists in order:
+  <ul>
+    <li><em>Extract dictionary</em></li>
+    <li><em>Extract synonyms</em></li>
+    <li><em>Generate dictionary offset file</em></li>
+    <li><em>Generate synonym offset file</em></li>
+  </ul>
+</li>
+<li>Press <em>Confirm</em>.</li>
+<li>All four steps complete with [OK]. <em>Preparation complete</em>.</li>
+<li>Picker closes. Open the reader menu. <em>Look Up Word</em> is visible.</li>
+</ol>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>cloud</li>
+<li>zenith</li>
+</ul>
+
+<h2>Test E: Per-book cancel prepare -- long-prep</h2>
+<p>Pressing <em>&#171; Back</em> during preparation must cancel without changing the
+current per-book dictionary. The picker must return with the previous
+selection still shown as active.</p>
+<h3>Dictionary</h3>
+<p><em>long-prep</em> (must not be pre-processed -- verify no .idx.oft or .syn.oft files exist)</p>
+<h3>Note</h3>
+<p>The current per-book dictionary at the start of this test is <em>mini-prep</em>
+(set in Test D). Do not change it before starting.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu -> <em>Book Dictionary</em>.</li>
+<li>Select <em>long-prep</em>.</li>
+<li>Confirmation screen appears listing four steps. Press <em>Confirm</em> to start.</li>
+<li>Processing begins. Press <em>&#171; Back</em> to cancel during any step.</li>
+<li>Screen shows: <em>User cancelled</em></li>
+<li>The dictionary picker returns. <em>mini-prep</em> is still shown as selected.</li>
+<li>Press <em>&#171; Back</em> to close the picker without changing the book dictionary.</li>
+</ol>
+""")
+
+# ---------------------------------------------------------------------------
+# Ch 5 -- Direct Lookup
+# ---------------------------------------------------------------------------
+ch("5. Direct Lookup", """
+<h1>5. Direct Lookup</h1>
 
 <p>These tests cover the basic lookup path: a headword found directly in the
 index returns a definition immediately. No stemming, synonym prompt, or
@@ -320,10 +432,10 @@ is set correctly for direct hits.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 5 -- Case Normalization
+# Ch 6 -- Case Normalization
 # ---------------------------------------------------------------------------
-ch("5. Case Normalization", """
-<h1>5. Case Normalization</h1>
+ch("6. Case Normalization", """
+<h1>6. Case Normalization</h1>
 
 <p>The lookup must normalise to lowercase before searching the index.
 Each capitalised word must resolve to a definition with no not-found
@@ -355,10 +467,10 @@ Willow branches trail softly in the stream.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 6 -- Index Boundaries
+# Ch 7 -- Index Boundaries
 # ---------------------------------------------------------------------------
-ch("6. Index Boundaries", """
-<h1>6. Index Boundaries</h1>
+ch("7. Index Boundaries", """
+<h1>7. Index Boundaries</h1>
 
 <p>These words sit at the very start and end of the <em>full</em> index,
 exercising the binary search at its boundaries. Each must return
@@ -386,10 +498,10 @@ a definition without errors.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 7 -- Stem Variants
+# Ch 8 -- Stem Variants
 # ---------------------------------------------------------------------------
-ch("7. Stem Variants", """
-<h1>7. Stem Variants</h1>
+ch("8. Stem Variants", """
+<h1>8. Stem Variants</h1>
 
 <p>These are inflected forms whose base form is a headword in <em>full</em>.
 A direct lookup fails. The stemmer must find the base form automatically.
@@ -431,10 +543,10 @@ word in the right column to appear.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 8 -- Synonym Search
+# Ch 9 -- Synonym Search
 # ---------------------------------------------------------------------------
-ch("8. Synonym Search", """
-<h1>8. Synonym Search</h1>
+ch("9. Synonym Search", """
+<h1>9. Synonym Search</h1>
 
 <p>The words below are in the <em>full</em> synonym file but are not headwords
 and cannot be reached by the stemmer. They are unrelated words, not
@@ -478,10 +590,10 @@ through to fuzzy suggestions or not-found.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 9 -- Fuzzy Suggestions
+# Ch 10 -- Fuzzy Suggestions
 # ---------------------------------------------------------------------------
-ch("9. Fuzzy Suggestions", """
-<h1>9. Fuzzy Suggestions</h1>
+ch("10. Fuzzy Suggestions", """
+<h1>10. Fuzzy Suggestions</h1>
 
 <p>These are misspelled words. Because <em>full</em> has a .syn file, the synonym
 prompt appears first -- press <em>Confirm</em> each time. The words are not in
@@ -530,10 +642,10 @@ synonym definition or show not-found if none exists for that headword.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 10 -- No Matches
+# Ch 11 -- No Matches
 # ---------------------------------------------------------------------------
-ch("10. No Matches", """
-<h1>10. No Matches</h1>
+ch("11. No Matches", """
+<h1>11. No Matches</h1>
 
 <p>These strings have no dictionary entry and no close neighbours in the
 index. The full failure sequence must complete without a crash and end
@@ -573,10 +685,10 @@ not-found popup -- the <em>&#171; Back</em> path must not skip the fuzzy search.
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 11 -- Edge Cases
+# Ch 12 -- Edge Cases
 # ---------------------------------------------------------------------------
-ch("11. Edge Cases", """
-<h1>11. Edge Cases</h1>
+ch("12. Edge Cases", """
+<h1>12. Edge Cases</h1>
 
 <p>These tests cover back navigation, SD card state changes, and disabling
 the dictionary.</p>
@@ -624,7 +736,7 @@ hidden, or an automatic reset to None.</p>
 
 <h2>Test C: None selection disables dictionary UI</h2>
 <p>After selecting None, the dictionary word-select UI must no longer
-be accessible from the reader. Selecting <em>basic</em> prepares for Chapter 12.</p>
+be accessible from the reader. Selecting <em>basic</em> prepares for Chapter 13.</p>
 <h3>Steps</h3>
 <ol>
 <li>Navigate to Settings -> Dictionary. Select None.</li>
@@ -635,10 +747,10 @@ be accessible from the reader. Selecting <em>basic</em> prepares for Chapter 12.
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 12 -- No-Syn Dictionary
+# Ch 13 -- No-Syn Dictionary
 # ---------------------------------------------------------------------------
-ch("12. No-Syn Dictionary", """
-<h1>12. No-Syn Dictionary</h1>
+ch("13. No-Syn Dictionary", """
+<h1>13. No-Syn Dictionary</h1>
 
 <p><em>basic</em> has no .syn file. These tests verify the synonym prompt does
 not appear when no synonym file is present.</p>
@@ -678,10 +790,10 @@ synAvailable is false when no .syn file is present.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 13 -- English to Spanish (bilingual edge case)
+# Ch 14 -- English to Spanish (bilingual edge case)
 # ---------------------------------------------------------------------------
-ch("13. English to Spanish Dictionary", """
-<h1>13. English to Spanish Dictionary</h1>
+ch("14. English to Spanish Dictionary", """
+<h1>14. English to Spanish Dictionary</h1>
 
 <p>This is a bilingual English to Spanish dictionary. Definitions are
 Spanish translations, not English explanations.</p>
@@ -735,10 +847,10 @@ must open the Spanish translation of the canonical headword.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 14 -- Phrase Lookup [Draft]
+# Ch 15 -- Phrase Lookup [Draft]
 # ---------------------------------------------------------------------------
-ch("14. Phrase Lookup [Draft]", """
-<h1>14. Phrase Lookup [Draft]</h1>
+ch("15. Phrase Lookup [Draft]", """
+<h1>15. Phrase Lookup [Draft]</h1>
 
 <p><strong>Not implemented:</strong> The firmware code supporting this chapter does not exist yet. These tests cannot be performed.</p>
 
@@ -803,10 +915,10 @@ They burned the midnight oil trying to reinvent the wheel.</p>
 """)
 
 # ---------------------------------------------------------------------------
-# Ch 15 -- ExpAT HTML Renderer Tests [Draft]
+# Ch 16 -- ExpAT HTML Renderer Tests [Draft]
 # ---------------------------------------------------------------------------
-ch("15. ExpAT HTML Renderer Tests [Draft]", """
-<h1>15. ExpAT HTML Renderer Tests [Draft]</h1>
+ch("16. ExpAT HTML Renderer Tests [Draft]", """
+<h1>16. ExpAT HTML Renderer Tests [Draft]</h1>
 
 <p><strong>Not implemented:</strong> The firmware code supporting this chapter does not exist yet. These tests cannot be performed.</p>
 

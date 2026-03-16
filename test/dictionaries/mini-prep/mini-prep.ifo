@@ -1,0 +1,9 @@
+StarDict's dict ifo file
+version=stardict-2.4.2
+wordcount=26
+idxfilesize=364
+synwordcount=26
+bookname=Mini Prep Test
+sametypesequence=m
+author=CrossPoint Test Suite
+description=Small synthetic dictionary for per-book pre-processing tests. All 4 steps required.

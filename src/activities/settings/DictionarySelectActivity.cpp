@@ -32,23 +32,46 @@ void DictionarySelectActivity::onEnter() {
 
   scanDictionaries();
 
-  // Validate the currently stored path — resets and saves automatically if no longer valid.
-  Dictionary::isValidDictionary();
+  if (bookCachePath.empty()) {
+    // Settings mode: validate global path, pre-select from SETTINGS.
+    Dictionary::isValidDictionary();
 
-  // Find which index corresponds to the current setting.
-  selectedIndex = 0;  // default: None
-  const char* activePath = SETTINGS.dictionaryPath;
-  if (activePath[0] != '\0') {
-    // activePath is a full base path like /dictionary/dict-en-en/dict-data.
-    for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
-      if (folderForIndex(i + 1) == activePath) {
-        selectedIndex = i + 1;  // +1 because index 0 is "None"
-        break;
+    selectedIndex = 0;  // default: None
+    const char* activePath = SETTINGS.dictionaryPath;
+    if (activePath[0] != '\0') {
+      for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
+        if (folderForIndex(i + 1) == activePath) {
+          selectedIndex = i + 1;
+          break;
+        }
+      }
+    }
+  } else {
+    // Per-book mode: read saved per-book path, pre-select it.
+    currentBookDictPath = "";
+    FsFile f;
+    if (Storage.openFileForRead("DSEL", bookCachePath + "/dictionary.bin", f)) {
+      char buf[500];
+      int n = f.read(buf, sizeof(buf) - 1);
+      if (n > 0) {
+        buf[n] = '\0';
+        currentBookDictPath = std::string(buf);
+      }
+      f.close();
+    }
+
+    selectedIndex = 0;  // default: Use Global
+    if (!currentBookDictPath.empty()) {
+      for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
+        if (folderForIndex(i + 1) == currentBookDictPath) {
+          selectedIndex = i + 1;
+          break;
+        }
       }
     }
   }
 
-  totalItems = 1 + static_cast<int>(dictFolders.size());  // None + found dicts
+  totalItems = 1 + static_cast<int>(dictFolders.size());
   showingInfo = false;
 
   requestUpdate();
@@ -142,17 +165,33 @@ std::string DictionarySelectActivity::folderForIndex(int index) const {
 }
 
 const char* DictionarySelectActivity::nameForIndex(int index) const {
-  if (index == 0) return tr(STR_DICT_NONE);
+  if (index == 0) return bookCachePath.empty() ? tr(STR_DICT_NONE) : tr(STR_DICT_USE_GLOBAL);
   if (index <= static_cast<int>(dictFolders.size())) return dictFolders[index - 1].c_str();
   return "";
 }
 
 void DictionarySelectActivity::applySelection() {
   std::string folder = folderForIndex(selectedIndex);
-  strncpy(SETTINGS.dictionaryPath, folder.c_str(), sizeof(SETTINGS.dictionaryPath) - 1);
-  SETTINGS.dictionaryPath[sizeof(SETTINGS.dictionaryPath) - 1] = '\0';
-  Dictionary::setActivePath(folder.empty() ? "" : folder.c_str());
-  SETTINGS.saveToFile();
+
+  if (bookCachePath.empty()) {
+    // Settings mode: update global settings.
+    strncpy(SETTINGS.dictionaryPath, folder.c_str(), sizeof(SETTINGS.dictionaryPath) - 1);
+    SETTINGS.dictionaryPath[sizeof(SETTINGS.dictionaryPath) - 1] = '\0';
+    Dictionary::setActivePath(folder.empty() ? "" : folder.c_str());
+    SETTINGS.saveToFile();
+  } else {
+    // Per-book mode: save to book cache, update active path.
+    FsFile f;
+    if (Storage.openFileForWrite("DSEL", bookCachePath + "/dictionary.bin", f)) {
+      f.write(reinterpret_cast<const uint8_t*>(folder.c_str()), folder.size());
+      f.close();
+    } else {
+      LOG_ERR("DSEL", "Could not save per-book dictionary");
+    }
+    // If "Use Global" selected, restore global active path; otherwise use selected.
+    Dictionary::setActivePath(folder.empty() ? SETTINGS.dictionaryPath : folder.c_str());
+    currentBookDictPath = folder;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -351,10 +390,12 @@ void DictionarySelectActivity::render(RenderLock&&) {
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
       [this](int index) { return std::string(nameForIndex(index)); }, nullptr, nullptr,
       [this](int index) -> std::string {
-        // Show "Selected" marker for current active dictionary
+        // Show "Selected" marker for the currently active dictionary.
+        // In per-book mode compare against currentBookDictPath; in settings mode against SETTINGS.
         std::string folder = folderForIndex(index);
-        const char* activePath = SETTINGS.dictionaryPath;
-        if (folder.empty() && activePath[0] == '\0') return tr(STR_SELECTED);
+        const std::string& activePath =
+            bookCachePath.empty() ? std::string(SETTINGS.dictionaryPath) : currentBookDictPath;
+        if (folder.empty() && activePath.empty()) return tr(STR_SELECTED);
         if (!folder.empty() && folder == activePath) return tr(STR_SELECTED);
         return "";
       },
