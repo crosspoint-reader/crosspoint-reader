@@ -239,7 +239,7 @@ def find_used_string_keys(
     if skip_filenames is None:
         skip_filenames = _GENERATED_FILENAMES
 
-    pattern = re.compile(r"\bSTR_[A-Z0-9_]+\b")
+    pattern = re.compile(r"\bSTR_[A-Za-z0-9_]+\b")
     used: Set[str] = set()
 
     for src_dir in src_dirs:
