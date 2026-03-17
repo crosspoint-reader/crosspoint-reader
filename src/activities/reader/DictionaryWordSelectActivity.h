@@ -1,5 +1,7 @@
 #pragma once
 #include <Epub/Page.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <memory>
 #include <string>
@@ -56,9 +58,15 @@ class DictionaryWordSelectActivity final : public Activity {
   int currentRow = 0;
   int currentWordInRow = 0;
 
-  // State for blocking lookup popup
+  // State for background lookup task
   bool isLookingUp = false;
-  int lookupProgress = 0;
+  volatile int lookupProgress = 0;
+  volatile bool lookupDone = false;
+  volatile bool lookupCancelled = false;
+  volatile bool lookupCancelRequested = false;
+  std::string lookupWord;
+  std::string lookupDefinition;
+  TaskHandle_t lookupTaskHandle = nullptr;
 
   // State for "Search synonyms?" prompt shown when direct lookup fails
   bool isAskingSynonymSearch = false;
@@ -69,7 +77,11 @@ class DictionaryWordSelectActivity final : public Activity {
   std::vector<std::string> suggestionWords;
   int suggestionIndex = 0;
 
+  bool skipLoopDelay() override { return isLookingUp; }
+
   void extractWords();
   void mergeHyphenatedWords();
   void handleNotFound(const std::string& word);
+  void runLookup();
+  static void lookupTaskEntry(void* param);
 };

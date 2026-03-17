@@ -25,7 +25,13 @@ void DictionaryWordSelectActivity::onEnter() {
   requestUpdate();
 }
 
-void DictionaryWordSelectActivity::onExit() { Activity::onExit(); }
+void DictionaryWordSelectActivity::onExit() {
+  if (lookupTaskHandle != nullptr) {
+    vTaskDelete(lookupTaskHandle);
+    lookupTaskHandle = nullptr;
+  }
+  Activity::onExit();
+}
 
 void DictionaryWordSelectActivity::extractWords() {
   words.clear();
@@ -191,6 +197,70 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
 }
 
 void DictionaryWordSelectActivity::loop() {
+  // Handle in-progress background lookup task
+  if (isLookingUp) {
+    if (lookupDone) {
+      isLookingUp = false;
+      lookupTaskHandle = nullptr;
+
+      if (lookupCancelled) {
+        requestUpdate();
+        return;
+      }
+
+      if (!lookupDefinition.empty()) {
+        startActivityForResult(
+            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, lookupWord, lookupDefinition, fontId,
+                                                           true),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                setResult(ActivityResult{});
+                finish();
+              } else {
+                requestUpdate();
+              }
+            });
+        return;
+      }
+
+      // Try stem variants
+      auto stems = Dictionary::getStemVariants(lookupWord);
+      for (const auto& stem : stems) {
+        std::string stemDef = Dictionary::lookup(stem);
+        if (!stemDef.empty()) {
+          startActivityForResult(
+              std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, stem, stemDef, fontId, true),
+              [this](const ActivityResult& result) {
+                if (!result.isCancelled) {
+                  setResult(ActivityResult{});
+                  finish();
+                } else {
+                  requestUpdate();
+                }
+              });
+          return;
+        }
+      }
+
+      if (Dictionary::hasSyn()) {
+        synSearchWord = lookupWord;
+        isAskingSynonymSearch = true;
+        requestUpdate();
+        return;
+      }
+
+      handleNotFound(lookupWord);
+      return;
+    }
+
+    // Still running — check for cancel
+    if (!lookupCancelRequested && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      lookupCancelRequested = true;
+      requestUpdate();
+    }
+    return;
+  }
+
   if (words.empty()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult r;
@@ -227,8 +297,9 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      // Back cancels the synonym search and returns to word-select mode.
       isAskingSynonymSearch = false;
-      handleNotFound(synSearchWord);
+      requestUpdate();
       return;
     }
     return;  // Consume all other input while on the synonym prompt
@@ -373,76 +444,16 @@ void DictionaryWordSelectActivity::loop() {
       return;
     }
 
-    // Show "Looking up..." popup via render task, then do blocking lookup
-    isLookingUp = true;
+    // Show "Looking up..." popup once, then run lookup on a background task.
+    lookupWord = cleaned;
+    lookupDefinition.clear();
     lookupProgress = 0;
+    lookupDone = false;
+    lookupCancelled = false;
+    lookupCancelRequested = false;
+    isLookingUp = true;
     requestUpdateAndWait();
-
-    bool cancelled = false;
-    std::string definition = Dictionary::lookup(
-        cleaned,
-        [this](int percent) {
-          lookupProgress = percent;
-          requestUpdateAndWait();
-        },
-        [this, &cancelled]() -> bool {
-          mappedInput.update();
-          if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-            cancelled = true;
-            return true;
-          }
-          return false;
-        });
-
-    isLookingUp = false;
-
-    if (cancelled) {
-      requestUpdate();
-      return;
-    }
-
-    if (!definition.empty()) {
-      startActivityForResult(
-          std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, cleaned, definition, fontId, true),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              setResult(ActivityResult{});
-              finish();
-            } else {
-              requestUpdate();
-            }
-          });
-      return;
-    }
-
-    // Try stem variants
-    auto stems = Dictionary::getStemVariants(cleaned);
-    for (const auto& stem : stems) {
-      std::string stemDef = Dictionary::lookup(stem);
-      if (!stemDef.empty()) {
-        startActivityForResult(
-            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, stem, stemDef, fontId, true),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                setResult(ActivityResult{});
-                finish();
-              } else {
-                requestUpdate();
-              }
-            });
-        return;
-      }
-    }
-
-    // Offer synonym search before falling back to fuzzy suggestions
-    if (Dictionary::hasSyn()) {
-      synSearchWord = cleaned;
-      isAskingSynonymSearch = true;
-      requestUpdate();
-      return;
-    }
-
-    handleNotFound(cleaned);
+    xTaskCreate(lookupTaskEntry, "DictLookup", 4096, this, 1, &lookupTaskHandle);
     return;
   }
 
@@ -457,6 +468,27 @@ void DictionaryWordSelectActivity::loop() {
   if (changed) {
     requestUpdate();
   }
+}
+
+void DictionaryWordSelectActivity::lookupTaskEntry(void* param) {
+  DictionaryWordSelectActivity* self = static_cast<DictionaryWordSelectActivity*>(param);
+  self->runLookup();
+  self->lookupTaskHandle = nullptr;
+  vTaskDelete(nullptr);
+}
+
+void DictionaryWordSelectActivity::runLookup() {
+  lookupDefinition = Dictionary::lookup(
+      lookupWord,
+      [this](int percent) {
+        lookupProgress = percent;
+        requestUpdate(true);
+      },
+      [this]() -> bool { return lookupCancelRequested; });
+
+  lookupCancelled = lookupCancelRequested;
+  lookupDone = true;
+  requestUpdate(true);
 }
 
 void DictionaryWordSelectActivity::render(RenderLock&&) {

@@ -29,7 +29,10 @@ static constexpr unsigned long VIEW_INFO_MS = 1000;
 void DictionarySelectActivity::onEnter() {
   Activity::onEnter();
 
-  ignoreNextConfirmRelease = true;
+  // Suppress Confirm bleed-through only in settings mode: when launched from a list,
+  // the Confirm release that opened the picker fires again in the picker's first loop.
+  // In per-book mode (launched via reader menu) the menu already consumed the event.
+  ignoreNextConfirmRelease = bookCachePath.empty();
 
   scanDictionaries();
 
@@ -234,13 +237,13 @@ void DictionarySelectActivity::loop() {
   if (showingInfo) {
     if (showingRaw) {
       // Raw view: Back returns to parsed metadata view.
-      if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
         showingRaw = false;
         requestUpdate();
       }
     } else {
       // Parsed metadata view: Back exits to picker; Confirm switches to raw view.
-      if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
         showingInfo = false;
         requestUpdate();
       } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
@@ -251,7 +254,7 @@ void DictionarySelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return;
   }
