@@ -77,7 +77,7 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
-                         const bool attachToPrevious) {
+                         const bool attachToPrevious, const std::string& linkHref) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
@@ -87,6 +87,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
   wordStyles.push_back(combinedStyle);
   wordContinues.push_back(attachToPrevious);
+  wordLinkHrefs.push_back(linkHref);
 }
 
 // Consumes data to minimize memory usage
@@ -122,6 +123,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     words.erase(words.begin(), words.begin() + consumed);
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
+    wordLinkHrefs.erase(wordLinkHrefs.begin(), wordLinkHrefs.begin() + consumed);
   }
 }
 
@@ -402,9 +404,11 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     words[wordIndex].push_back('-');
   }
 
-  // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
+  // Insert the remainder word (with matching style, link href, and continuation flag) directly after the prefix.
+  std::string linkHref = wordLinkHrefs[wordIndex];  // copy before potential realloc
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
+  wordLinkHrefs.insert(wordLinkHrefs.begin() + wordIndex + 1, std::move(linkHref));
 
   // Continuation flag handling after splitting a word into prefix + remainder.
   //
@@ -529,6 +533,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   std::vector<std::string> lineWords(std::make_move_iterator(words.begin() + lastBreakAt),
                                      std::make_move_iterator(words.begin() + lineBreak));
   std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
+  std::vector<std::string> lineLinkHrefs(std::make_move_iterator(wordLinkHrefs.begin() + lastBreakAt),
+                                         std::make_move_iterator(wordLinkHrefs.begin() + lineBreak));
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
@@ -536,6 +542,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(
-      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle));
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
+                                          blockStyle, std::move(lineLinkHrefs)));
 }

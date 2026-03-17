@@ -1,5 +1,7 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <cassert>
+
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -119,7 +121,11 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  if (insideFootnoteLink && currentFootnoteLinkHref[0] != '\0') {
+    currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, currentFootnoteLinkHref);
+  } else {
+    currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  }
   partWordBufferIndex = 0;
   nextWordContinues = false;
 }
@@ -135,20 +141,20 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // div's margin should be preserved, even though it has no direct text content.
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
 
-      if (!pendingAnchorId.empty()) {
-        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-        pendingAnchorId.clear();
+      for (auto& id : pendingAnchorIds) {
+        anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
       }
+      pendingAnchorIds.clear();
       return;
     }
 
     makePages();
   }
-  // Record deferred anchor after previous block is flushed
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
+  // Record deferred anchors after previous block is flushed
+  for (auto& id : pendingAnchorIds) {
+    anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
   }
+  pendingAnchorIds.clear();
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
@@ -173,7 +179,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
         // Defer recording until startNewTextBlock, after previous block is flushed to pages
-        self->pendingAnchorId = atts[i + 1];
+        self->pendingAnchorIds.emplace_back(atts[i + 1]);
       }
     }
   }
@@ -1030,10 +1036,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
-    if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-      pendingAnchorId.clear();
+    for (auto& id : pendingAnchorIds) {
+      anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
     }
+    pendingAnchorIds.clear();
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset();
@@ -1069,6 +1075,34 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
+
+  // Compute link bounding rects from per-word link hrefs
+  const auto& linkHrefs = line->getWordLinkHrefs();
+  if (!linkHrefs.empty()) {
+    const auto& words = line->getWords();
+    const auto& xpos = line->getWordXpos();
+    const auto& styles = line->getWordStyles();
+    assert(linkHrefs.size() == words.size() && words.size() == xpos.size() && xpos.size() == styles.size());
+    size_t i = 0;
+    while (i < linkHrefs.size()) {
+      if (linkHrefs[i].empty()) {
+        ++i;
+        continue;
+      }
+      // Start of a link group: merge consecutive words with the same href
+      const std::string& href = linkHrefs[i];
+      size_t last = i;
+      while (last + 1 < linkHrefs.size() && linkHrefs[last + 1] == href) {
+        ++last;
+      }
+      const int16_t linkX = xpos[i] + xOffset;
+      const int16_t lastWordW = renderer.getTextWidth(fontId, words[last].c_str(), styles[last]);
+      const int16_t linkW = (xpos[last] + xOffset + lastWordW) - linkX;
+      currentPage->addLink(href.c_str(), linkX, currentPageNextY, linkW, static_cast<int16_t>(lineHeight));
+      i = last + 1;
+    }
+  }
+
   currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
   currentPageNextY += lineHeight;
 }
