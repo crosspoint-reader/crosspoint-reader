@@ -12,6 +12,9 @@
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+#include <I18n.h>
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
@@ -115,6 +118,10 @@ void ReaderActivity::onEnter() {
   if (isBmpFile(initialBookPath)) {
     onGoToBmpViewer(initialBookPath);
   } else if (isXtcFile(initialBookPath)) {
+    renderer.clearScreen();
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_LOADING), true, EpdFontFamily::BOLD);
+    renderer.displayBuffer();
+
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {
       onGoBack();
