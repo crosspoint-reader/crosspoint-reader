@@ -62,9 +62,12 @@ class Dictionary {
 
  private:
   static char activeFolderPath[500];
+  // Shared path construction buffer. Dictionary functions are always called
+  // sequentially; this avoids putting a 520-byte array on the stack in every caller.
+  static char pathBuf[520];
 
   // Build full file paths from the active base path.
-  static void buildPath(char* buf, size_t len, const char* ext);
+  static void buildPath(const char* ext);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1 chars).
   // Returns the number of characters read (excluding null), or -1 on error.

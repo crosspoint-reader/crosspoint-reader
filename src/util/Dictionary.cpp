@@ -9,8 +9,9 @@
 
 #include "CrossPointSettings.h"
 
-// Static member definition
+// Static member definitions
 char Dictionary::activeFolderPath[500] = "";
+char Dictionary::pathBuf[520] = "";
 
 // OFT file constants (StarDict Cache format, verified against real files).
 // Header: 30-byte text + 8-byte fixed magic = 38 bytes total.
@@ -22,10 +23,11 @@ static constexpr uint32_t OFT_STRIDE = 32;  // words per page
 // Path helpers
 // ---------------------------------------------------------------------------
 
-void Dictionary::buildPath(char* buf, size_t len, const char* ext) {
+void Dictionary::buildPath(const char* ext) {
   // activeFolderPath is the full base path (e.g. /dictionary/dict-en-en/dict-data).
   // Callers pass just the extension (e.g. "idx"), giving /dictionary/.../dict-data.idx.
-  snprintf(buf, len, "%s.%s", activeFolderPath, ext);
+  // Result written into the shared static pathBuf.
+  snprintf(pathBuf, sizeof(pathBuf), "%s.%s", activeFolderPath, ext);
 }
 
 // ---------------------------------------------------------------------------
@@ -49,26 +51,22 @@ const char* Dictionary::getActivePath() { return activeFolderPath; }
 
 bool Dictionary::exists() {
   if (activeFolderPath[0] == '\0') return false;
-  char idxPath[520];
-  char dictPath[520];
-  buildPath(idxPath, sizeof(idxPath), "idx");
-  buildPath(dictPath, sizeof(dictPath), "dict");
-  return Storage.exists(idxPath) && Storage.exists(dictPath);
+  buildPath("idx");
+  if (!Storage.exists(pathBuf)) return false;
+  buildPath("dict");
+  return Storage.exists(pathBuf);
 }
 
 bool Dictionary::hasSyn() {
   if (activeFolderPath[0] == '\0') return false;
-  char synPath[520];
-  buildPath(synPath, sizeof(synPath), "syn");
-  return Storage.exists(synPath);
+  buildPath("syn");
+  return Storage.exists(pathBuf);
 }
 
 bool Dictionary::isValidDictionary() {
   const char* folderPath = SETTINGS.dictionaryPath;
   if (folderPath[0] == '\0') return false;
-  // Single buffer reused for each path check — 2 x char[520] simultaneously would waste 520 bytes.
   // .ifo is not required; a dictionary without metadata is still usable.
-  char pathBuf[520];
   snprintf(pathBuf, sizeof(pathBuf), "%s.idx", folderPath);
   const bool idxExists = Storage.exists(pathBuf);
   snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath);
@@ -90,8 +88,6 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
   DictInfo info;
   if (folderPath == nullptr || folderPath[0] == '\0') return info;
 
-  // Single path buffer reused for all three path checks — saves 1040 bytes vs 3 x char[520].
-  char pathBuf[520];
   snprintf(pathBuf, sizeof(pathBuf), "%s.ifo", folderPath);
 
   FsFile file;
@@ -276,11 +272,9 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, 
 std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
   if (!exists()) return "";
 
-  char dictPath[520];
-  buildPath(dictPath, sizeof(dictPath), "dict");
-
+  buildPath("dict");
   FsFile dict;
-  if (!Storage.openFileForRead("DICT", dictPath, dict)) return "";
+  if (!Storage.openFileForRead("DICT", pathBuf, dict)) return "";
 
   dict.seekSet(offset);
 
@@ -301,10 +295,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
                                const std::function<bool()>& shouldCancel) {
   if (!exists()) return "";
 
-  // Single buffer reused for both path lookups — saves 520 bytes vs 2 x char[520].
-  char pathBuf[520];
-  buildPath(pathBuf, sizeof(pathBuf), "idx");
-
+  buildPath("idx");
   FsFile idx;
   if (!Storage.openFileForRead("DICT", pathBuf, idx)) return "";
 
@@ -312,7 +303,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  buildPath(pathBuf, sizeof(pathBuf), "idx.oft");
+  buildPath("idx.oft");
   FsFile oft;
   if (Storage.openFileForRead("DICT", pathBuf, oft)) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
@@ -363,10 +354,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
 
 // Resolve the word at 0-based ordinal in .idx using .idx.oft for fast page seek.
 std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
-  // Single buffer reused for both path lookups — saves 520 bytes vs 2 x char[520].
-  char pathBuf[520];
-  buildPath(pathBuf, sizeof(pathBuf), "idx");
-
+  buildPath("idx");
   FsFile idx;
   if (!Storage.openFileForRead("DICT", pathBuf, idx)) return "";
 
@@ -375,7 +363,7 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
   uint32_t pageStartByte = 0;
 
   if (pageNum > 0) {
-    buildPath(pathBuf, sizeof(pathBuf), "idx.oft");
+    buildPath("idx.oft");
     FsFile oft;
     if (Storage.openFileForRead("DICT", pathBuf, oft)) {
       oft.seekSet(OFT_HEADER_SIZE + (pageNum - 1) * 4);
@@ -411,10 +399,7 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
 std::string Dictionary::lookupSynonym(const std::string& word) {
   if (!hasSyn()) return "";
 
-  // Single buffer reused for both path lookups — saves 520 bytes vs 2 x char[520].
-  char pathBuf[520];
-  buildPath(pathBuf, sizeof(pathBuf), "syn");
-
+  buildPath("syn");
   FsFile syn;
   if (!Storage.openFileForRead("DICT", pathBuf, syn)) return "";
 
@@ -422,7 +407,7 @@ std::string Dictionary::lookupSynonym(const std::string& word) {
   uint32_t startByte = 0;
   uint32_t endByte = synFileSize;
 
-  buildPath(pathBuf, sizeof(pathBuf), "syn.oft");
+  buildPath("syn.oft");
   FsFile oft;
   if (Storage.openFileForRead("DICT", pathBuf, oft)) {
     findPageBounds(oft, syn, synFileSize, word.c_str(), &startByte, &endByte);
@@ -665,10 +650,7 @@ int Dictionary::editDistance(const std::string& a, const std::string& b, int max
 std::vector<std::string> Dictionary::findSimilar(const std::string& word, int maxResults) {
   if (!exists()) return {};
 
-  // Single buffer reused for both path lookups — saves 520 bytes vs 2 x char[520].
-  char pathBuf[520];
-  buildPath(pathBuf, sizeof(pathBuf), "idx");
-
+  buildPath("idx");
   FsFile idx;
   if (!Storage.openFileForRead("DICT", pathBuf, idx)) return {};
 
@@ -676,7 +658,7 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
   uint32_t centerStart = 0;
   uint32_t centerEnd = idxFileSize;
 
-  buildPath(pathBuf, sizeof(pathBuf), "idx.oft");
+  buildPath("idx.oft");
   FsFile oft;
   const bool hasOft = Storage.openFileForRead("DICT", pathBuf, oft);
 
