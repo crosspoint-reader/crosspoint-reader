@@ -26,7 +26,6 @@ class DictionaryDefinitionActivity final : public Activity {
   std::string definition;
   int readerFontId;
   bool showDoneButton;
-  bool synAvailable = false;
 
   std::vector<std::string> wrappedLines;
   int currentPage = 0;

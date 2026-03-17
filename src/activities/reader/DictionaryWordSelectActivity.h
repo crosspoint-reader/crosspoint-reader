@@ -68,9 +68,9 @@ class DictionaryWordSelectActivity final : public Activity {
   std::string lookupDefinition;
   TaskHandle_t lookupTaskHandle = nullptr;
 
-  // State for "Search synonyms?" prompt shown when direct lookup fails
-  bool isAskingSynonymSearch = false;
-  std::string synSearchWord;
+  // State for "Search alternate forms?" prompt shown when direct lookup fails
+  bool isAskingAltFormSearch = false;
+  std::string altFormSearchWord;
 
   // State for inline suggestions list shown when no direct/stem/synonym match found
   bool isShowingSuggestions = false;

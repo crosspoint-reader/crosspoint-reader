@@ -10,7 +10,6 @@
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
-  synAvailable = Dictionary::hasSyn();
   wrapText();
   requestUpdate();
 }
@@ -105,35 +104,9 @@ void DictionaryDefinitionActivity::loop() {
     requestUpdate();
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (showDoneButton) {
-      // Done: go back to reader (not cancelled)
-      setResult(ActivityResult{});
-      finish();
-    } else if (synAvailable) {
-      // Synonyms button: look up the headword in the synonym file
-      std::string canonical = Dictionary::lookupSynonym(headword);
-      if (!canonical.empty()) {
-        std::string synDef = Dictionary::lookup(canonical);
-        if (!synDef.empty()) {
-          startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, canonical,
-                                                                                synDef, readerFontId, false),
-                                 [this](const ActivityResult&) { requestUpdate(); });
-          return;
-        }
-      }
-      // Synonym not found — return to caller as cancelled
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
-    } else {
-      // Same as back: return to caller
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
-    }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && showDoneButton) {
+    setResult(ActivityResult{});
+    finish();
     return;
   }
 
@@ -176,7 +149,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   }
 
   // Button hints
-  const char* btn2 = showDoneButton ? tr(STR_DONE) : (synAvailable ? tr(STR_SYNONYMS) : "");
+  const char* btn2 = showDoneButton ? tr(STR_DONE) : "";
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, tr(STR_PREV_NEXT), tr(STR_NEXT_PREV));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

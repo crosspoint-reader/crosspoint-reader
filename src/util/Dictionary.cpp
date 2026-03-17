@@ -57,7 +57,7 @@ bool Dictionary::exists() {
   return Storage.exists(pathBuf);
 }
 
-bool Dictionary::hasSyn() {
+bool Dictionary::hasAltForms() {
   if (activeFolderPath[0] == '\0') return false;
   buildPath("syn");
   return Storage.exists(pathBuf);
@@ -138,8 +138,8 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
     } else if (strcmp(key, "wordcount") == 0) {
       info.wordcount = static_cast<uint32_t>(atol(val));
     } else if (strcmp(key, "synwordcount") == 0) {
-      info.synwordcount = static_cast<uint32_t>(atol(val));
-      info.hasSyn = true;
+      info.altFormCount = static_cast<uint32_t>(atol(val));
+      info.hasAltForms = true;
     } else if (strcmp(key, "idxfilesize") == 0) {
       info.idxfilesize = static_cast<uint32_t>(atol(val));
     } else if (strcmp(key, "sametypesequence") == 0) {
@@ -349,7 +349,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
 }
 
 // ---------------------------------------------------------------------------
-// Synonym lookup
+// Alternate-form lookup (.syn)
 // ---------------------------------------------------------------------------
 
 // Resolve the word at 0-based ordinal in .idx using .idx.oft for fast page seek.
@@ -396,8 +396,8 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
   return std::string(wordBuf, static_cast<size_t>(len));
 }
 
-std::string Dictionary::lookupSynonym(const std::string& word) {
-  if (!hasSyn()) return "";
+std::string Dictionary::resolveAltForm(const std::string& word) {
+  if (!hasAltForms()) return "";
 
   buildPath("syn");
   FsFile syn;

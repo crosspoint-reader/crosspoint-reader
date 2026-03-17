@@ -14,9 +14,9 @@ struct DictInfo {
   char description[256] = "";
   char sametypesequence[16] = "";
   uint32_t wordcount = 0;
-  uint32_t synwordcount = 0;
+  uint32_t altFormCount = 0;
   uint32_t idxfilesize = 0;
-  bool hasSyn = false;
+  bool hasAltForms = false;
   bool isCompressed = false;  // .dict.dz present but no .dict
   bool valid = false;
 };
@@ -27,8 +27,8 @@ class Dictionary {
   static bool exists();
 
   // Returns true if a .syn file exists for the active dictionary.
-  // Gates all synonym UI — checked at runtime against the physical file.
-  static bool hasSyn();
+  // Gates all alternate-form UI — checked at runtime against the physical file.
+  static bool hasAltForms();
 
   // Set the active dictionary base path (e.g. "/dictionary/dict-en-en/dict-data").
   static void setActivePath(const char* folderPath);
@@ -51,7 +51,7 @@ class Dictionary {
 
   // Look up word in .syn (via .syn.oft if present).
   // Returns the canonical headword from .idx, or empty string if not found.
-  static std::string lookupSynonym(const std::string& word);
+  static std::string resolveAltForm(const std::string& word);
 
   static std::string cleanWord(const std::string& word);
   static std::vector<std::string> getStemVariants(const std::string& word);

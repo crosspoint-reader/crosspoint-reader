@@ -209,17 +209,16 @@ void DictionaryWordSelectActivity::loop() {
       }
 
       if (!lookupDefinition.empty()) {
-        startActivityForResult(
-            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, lookupWord, lookupDefinition, fontId,
-                                                           true),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                setResult(ActivityResult{});
-                finish();
-              } else {
-                requestUpdate();
-              }
-            });
+        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, lookupWord,
+                                                                              lookupDefinition, fontId, true),
+                               [this](const ActivityResult& result) {
+                                 if (!result.isCancelled) {
+                                   setResult(ActivityResult{});
+                                   finish();
+                                 } else {
+                                   requestUpdate();
+                                 }
+                               });
         return;
       }
 
@@ -242,9 +241,9 @@ void DictionaryWordSelectActivity::loop() {
         }
       }
 
-      if (Dictionary::hasSyn()) {
-        synSearchWord = lookupWord;
-        isAskingSynonymSearch = true;
+      if (Dictionary::hasAltForms()) {
+        altFormSearchWord = lookupWord;
+        isAskingAltFormSearch = true;
         requestUpdate();
         return;
       }
@@ -271,11 +270,11 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  // "Search synonyms?" prompt shown after all direct lookups fail
-  if (isAskingSynonymSearch) {
+  // "Search alternate forms?" prompt shown after all direct lookups fail
+  if (isAskingAltFormSearch) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      isAskingSynonymSearch = false;
-      std::string canonical = Dictionary::lookupSynonym(synSearchWord);
+      isAskingAltFormSearch = false;
+      std::string canonical = Dictionary::resolveAltForm(altFormSearchWord);
       if (!canonical.empty()) {
         std::string synDef = Dictionary::lookup(canonical);
         if (!synDef.empty()) {
@@ -292,17 +291,17 @@ void DictionaryWordSelectActivity::loop() {
           return;
         }
       }
-      // Synonym not found — fall through to findSimilar
-      handleNotFound(synSearchWord);
+      // Alt form not found — fall through to findSimilar
+      handleNotFound(altFormSearchWord);
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      // Back cancels the synonym search and returns to word-select mode.
-      isAskingSynonymSearch = false;
+      // Back cancels the alt-form search and returns to word-select mode.
+      isAskingAltFormSearch = false;
       requestUpdate();
       return;
     }
-    return;  // Consume all other input while on the synonym prompt
+    return;  // Consume all other input while on the alt-form prompt
   }
 
   // Inline suggestions list
@@ -335,12 +334,15 @@ void DictionaryWordSelectActivity::loop() {
       requestUpdate();
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Up) && suggestionIndex > 0) {
+    const bool prevItem = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+                          mappedInput.wasReleased(MappedInputManager::Button::Left);
+    const bool nextItem = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+                          mappedInput.wasReleased(MappedInputManager::Button::Right);
+    if (prevItem && suggestionIndex > 0) {
       suggestionIndex--;
       requestUpdate();
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Down) &&
-        suggestionIndex < static_cast<int>(suggestionWords.size()) - 1) {
+    if (nextItem && suggestionIndex < static_cast<int>(suggestionWords.size()) - 1) {
       suggestionIndex++;
       requestUpdate();
     }
@@ -511,15 +513,15 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     return;
   }
 
-  // "Search synonyms?" prompt
-  if (isAskingSynonymSearch) {
+  // "Search alternate forms?" prompt
+  if (isAskingAltFormSearch) {
     const int pageWidth = renderer.getScreenWidth();
     const auto& metrics = UITheme::getInstance().getMetrics();
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                   tr(STR_DICT_SEARCH_SYNONYMS));
+                   tr(STR_DICT_SEARCH_ALT_FORMS));
     const int y =
         metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + renderer.getLineHeight(UI_10_FONT_ID);
-    renderer.drawCenteredText(UI_10_FONT_ID, y, synSearchWord.c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, y, altFormSearchWord.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);

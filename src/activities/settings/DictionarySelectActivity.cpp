@@ -466,14 +466,14 @@ void DictionarySelectActivity::render(RenderLock&&) {
       char wordcountBuf[24];
       char synBuf[24];
       snprintf(wordcountBuf, sizeof(wordcountBuf), "%lu", static_cast<unsigned long>(currentInfo.wordcount));
-      snprintf(synBuf, sizeof(synBuf), "%lu", static_cast<unsigned long>(currentInfo.synwordcount));
+      snprintf(synBuf, sizeof(synBuf), "%lu", static_cast<unsigned long>(currentInfo.altFormCount));
 
       if (!currentInfo.valid) {
         renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_DICT_NO_METADATA));
       } else {
         drawWrapped("Name", currentInfo.bookname);
         drawLine("Words", wordcountBuf);
-        if (currentInfo.hasSyn) drawLine("Synonyms", synBuf);
+        if (currentInfo.hasAltForms) drawLine("Alt Forms", synBuf);
         drawLine("Date", currentInfo.date);
         drawWrapped("Website", currentInfo.website);
         drawWrapped("Description", currentInfo.description);
@@ -483,8 +483,7 @@ void DictionarySelectActivity::render(RenderLock&&) {
         }
       }
 
-      const auto labels =
-          mappedInput.mapLabels(tr(STR_BACK), tr(STR_DICT_VIEW_RAW), "", "");
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DICT_VIEW_RAW), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
 
