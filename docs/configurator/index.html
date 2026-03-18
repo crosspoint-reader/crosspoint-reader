@@ -1197,13 +1197,13 @@
       /* ── Pre-built download cards ── */
       .preset-dl-grid {
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, 1fr);
         gap: 10px;
         margin-top: 10px;
       }
 
-
       .preset-dl-card {
+        aspect-ratio: 9 / 16;
         border: var(--px) solid var(--blk);
         background: var(--fog);
         padding: 12px 14px;
@@ -1214,6 +1214,7 @@
           inset var(--px) var(--px) 0 var(--bevel-hi),
           inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--bevel-lo);
         position: relative;
+        overflow: hidden;
       }
 
       .preset-dl-card.active-preset {
@@ -1433,16 +1434,65 @@
         margin-top: 4px;
       }
 
-      /* ── Paper folder tab system ── */
-      .sidebar-folder {
-        display: flex;
-        align-items: stretch;
+      /* ── Paper folder system ── */
+
+      /* Wrapper: spans both sidebar-screen-body grid cols
+         Row 1: prebuilt (col 1) + drawer (col 2)
+         Row 2: folder pane (spans both) */
+      .sidebar-main {
+        grid-column: span 2;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
       }
 
-      .folder-content-area {
-        flex: 1;
-        min-width: 0;
+      /* Active folder pane: row 2, spans both grid columns */
+      .sidebar-folder {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Dark titlebar: section name + × close */
+      .folder-titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+        background: var(--blk);
+        color: var(--white);
+        font-family: 'Silkscreen', monospace;
+        font-size: 8px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
         border: var(--px) solid var(--blk);
+        box-shadow:
+          inset var(--px) var(--px) 0 var(--dk),
+          inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 #000;
+      }
+
+      .folder-close {
+        background: none;
+        border: 1px solid rgba(255,255,255,0.2);
+        color: var(--pale);
+        cursor: pointer;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        line-height: 1;
+        padding: 1px 4px 2px;
+        transition: color 0.05s steps(2), border-color 0.05s steps(2);
+      }
+
+      .folder-close:hover {
+        color: var(--white);
+        border-color: rgba(255,255,255,0.5);
+      }
+
+      /* Content area directly below titlebar (no top border — titlebar closes it) */
+      .folder-content-area {
+        border: var(--px) solid var(--blk);
+        border-top: none;
         background: var(--white);
         box-shadow:
           inset var(--px) var(--px) 0 var(--bevel-hi),
@@ -1456,7 +1506,6 @@
 
       .folder-pane.active { display: block; }
 
-      /* Strip panel chrome inside folder panes */
       .folder-pane .panel {
         border: none;
         box-shadow: none;
@@ -1464,54 +1513,47 @@
         padding: 0;
       }
 
-      .folder-tab-rail {
+      /* Right column: drawer navigation */
+      .sidebar-drawer {
+        min-width: 200px;
         display: flex;
         flex-direction: column;
-        flex-shrink: 0;
-        width: 40px;
-        /* Overlap the content area's right border by 1 border-width */
-        margin-left: calc(-1 * var(--px));
+        align-items: stretch;
+        gap: 4px;
+        border: var(--px) solid var(--blk);
+        background: var(--white);
+        box-shadow:
+          inset var(--px) var(--px) 0 var(--bevel-hi),
+          inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--bevel-lo);
       }
 
-      .folder-tab {
-        flex: 1;
-        min-height: 38px;
-        padding: 8px 0;
-        writing-mode: vertical-rl;
+      .drawer-item {
+        display: block;
+        width: 100%;
+        padding: 10px 14px;
         font-family: 'Silkscreen', monospace;
-        font-size: 7px;
+        font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
         cursor: pointer;
-        background: var(--bone);
-        border: var(--px) solid var(--blk);
-        border-left: var(--px) solid var(--pale);
+        background: var(--fog);
         color: var(--md);
-        position: relative;
-        z-index: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        border: none;
+        border-bottom: 1px solid var(--bone);
+        text-align: left;
         transition: background 0.05s steps(2), color 0.05s steps(2);
       }
 
-      .folder-tab:not(:first-child) {
-        margin-top: calc(-1 * var(--px));
-      }
+      .drawer-item:last-child { border-bottom: none; }
+      .drawer-item:hover { background: var(--bone); color: var(--dk); }
 
-      .folder-tab:hover {
-        background: var(--fog);
-        color: var(--dk);
-        z-index: 2;
-      }
-
-      /* Active tab: white bg + white left border = merges with content area */
-      .folder-tab.active {
+      .drawer-item.active {
         background: var(--white);
         color: var(--blk);
-        border-left: var(--px) solid var(--white);
-        z-index: 3;
+        padding-left: 7px;
+        border-left: 3px solid var(--blk);
       }
 
       /* ── Widescreen two-column layout ── */
@@ -1607,6 +1649,16 @@
         /* Single column for outputs sub-grid */
         .sidebar-screen .outputs-grid {
           grid-template-columns: 1fr;
+        }
+
+        /* Taller textareas inside the sidebar */
+        .sidebar-screen .output textarea {
+          min-height: 120px;
+        }
+
+        /* Give the content area a minimum floor so it never collapses */
+        .folder-content-area {
+          min-height: 300px;
         }
       }
     </style>
@@ -2107,6 +2159,9 @@
         </div>
       </div>
 
+      <!-- Sidebar main: row 1 = prebuilt + drawer, row 2 = folder pane (full width) -->
+      <div class="sidebar-main">
+
       <!-- Pre-built Downloads -->
       <div class="panel prebuilt-panel">
         <div class="panel-heading">Pre-built Downloads</div>
@@ -2182,310 +2237,312 @@
         </div><!-- /.prebuilt-body -->
       </div><!-- /.prebuilt-panel -->
 
-      <!-- Folder tab system: content left, tab rail right -->
-      <div class="sidebar-folder">
-        <div class="sidebar-folder-tabs" id="sidebar-folder-tabs">
-          <button class="folder-tab active" data-tab="output">Output</button>
-          <button class="folder-tab" data-tab="build">Build</button>
-          <button class="folder-tab" data-tab="device">Device</button>
-          <button class="folder-tab" data-tab="fonts">Fonts</button>
-          <button class="folder-tab" data-tab="studio">Studio</button>
-          <button class="folder-tab" data-tab="preview">Preview</button>
-        </div>
-        <div class="sidebar-folder-content">
+      <!-- Right drawer: navigation column (row 1, col 2) -->
+      <div class="sidebar-drawer" id="sidebar-drawer">
+        <button class="drawer-item active" data-tab="output">Output</button>
+        <button class="drawer-item" data-tab="build">Build</button>
+        <button class="drawer-item" data-tab="device">Device</button>
+        <button class="drawer-item" data-tab="fonts">Fonts</button>
+        <button class="drawer-item" data-tab="studio">Studio</button>
+        <button class="drawer-item" data-tab="preview">Preview</button>
+      </div><!-- /.sidebar-drawer -->
 
-      <!-- tab: output -->
-      <div class="folder-pane active" id="tab-output">
-      <div class="panel">
-        <div class="panel-heading">Build Output</div>
-        <div class="outputs-grid">
-          <div class="output">
-            <div class="output-label">Build flags</div>
-            <textarea id="flags-output" readonly></textarea>
-          </div>
-          <div class="output">
-            <div class="output-label">Generate command</div>
-            <textarea id="command-output" readonly></textarea>
-          </div>
-          <div class="output">
-            <div class="output-label">platformio-custom.ini</div>
-            <textarea id="ini-output" readonly></textarea>
-          </div>
-          <div class="output">
-            <div class="output-label">Share URL</div>
-            <textarea id="share-output" readonly></textarea>
-          </div>
-        </div>
-        <div class="actions">
-          <button class="btn btn-outline" id="copy-command">Copy Cmd</button>
-          <button class="btn btn-outline" id="copy-flags">Copy Flags</button>
-          <button class="btn btn-outline" id="copy-share">Copy URL</button>
-          <button class="btn btn-outline" id="download-ini">Download .ini</button>
-          <a class="btn btn-solid" id="build-link" href="#" target="_blank" rel="noopener">Build on GitHub</a>
-        </div>
-        <div class="info-bar">
-          Compile-time dependencies are enforced automatically. Static hierarchy cards and notes are informational and do not affect builds.
-        </div>
-      </div>
+      <!-- Active folder pane (row 2, full width) -->
+      <div class="sidebar-folder" id="sidebar-folder">
 
-      </div><!-- /.folder-pane#tab-output -->
-
-      <!-- tab: build -->
-      <div class="folder-pane" id="tab-build">
-      <div class="panel">
-        <div class="panel-heading">Build &amp; Download</div>
-        <div class="companion-desc" style="line-height: 1.6">
-          Trigger a GitHub Actions build with your current configuration and track it here.
-          Requires a <strong>fine-grained PAT</strong> with <code>Actions: Read and write</code>
-          permission, or a classic PAT with <code>workflow</code> scope. Your token is held
-          in memory only and never stored.
+        <!-- Dark titlebar: current tab name + close button -->
+        <div class="folder-titlebar">
+          <span class="folder-titlebar-name" id="folder-titlebar-name">Output</span>
+          <button class="folder-close" id="folder-close" title="Close">&#xD7;</button>
         </div>
-        <div class="gh-token-row">
-          <input
-            id="gh-token"
-            type="password"
-            class="device-input"
-            placeholder="github_pat_... or ghp_..."
-            style="flex: 1; min-width: 220px;"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button class="btn btn-solid" id="gh-trigger-btn">Trigger Build</button>
-        </div>
-        <div id="gh-build-status" class="info-bar" style="display: none; margin-top: 10px; line-height: 1.8;"></div>
-      </div>
 
-      </div><!-- /.folder-pane#tab-build -->
+        <!-- Content area below titlebar (no top border — titlebar closes it) -->
+        <div class="folder-content-area">
 
-      <!-- tab: device -->
-      <div class="folder-pane" id="tab-device">
-      <div class="panel">
-        <div class="panel-heading">Device Access (Optional)</div>
-        <div class="companion-row">
-          <div style="flex: 1">
-            <div class="companion-title">USB Serial Tools (Fork)</div>
-            <div class="companion-desc">
-              Safer path: use the forked web tools for flashing and debug over USB serial.
+          <!-- tab: output -->
+          <div class="folder-pane active" id="tab-output">
+          <div class="panel">
+            <div class="panel-heading">Build Output</div>
+            <div class="outputs-grid">
+              <div class="output">
+                <div class="output-label">Build flags</div>
+                <textarea id="flags-output" readonly></textarea>
+              </div>
+              <div class="output">
+                <div class="output-label">Generate command</div>
+                <textarea id="command-output" readonly></textarea>
+              </div>
+              <div class="output">
+                <div class="output-label">platformio-custom.ini</div>
+                <textarea id="ini-output" readonly></textarea>
+              </div>
+              <div class="output">
+                <div class="output-label">Share URL</div>
+                <textarea id="share-output" readonly></textarea>
+              </div>
             </div>
             <div class="actions">
-              <a class="btn btn-solid" href="https://unintendedsideeffects.github.io/xteink-flasher/" target="_blank" rel="noopener">Open Xteink Flash</a>
-              <a class="btn btn-outline" href="https://unintendedsideeffects.github.io/xteink-flasher/debug/" target="_blank" rel="noopener">Open Xteink Debug</a>
+              <button class="btn btn-outline" id="copy-command">Copy Cmd</button>
+              <button class="btn btn-outline" id="copy-flags">Copy Flags</button>
+              <button class="btn btn-outline" id="copy-share">Copy URL</button>
+              <button class="btn btn-outline" id="download-ini">Download .ini</button>
+              <a class="btn btn-solid" id="build-link" href="#" target="_blank" rel="noopener">Build on GitHub</a>
+            </div>
+            <div class="info-bar">
+              Compile-time dependencies are enforced automatically. Static hierarchy cards and notes are informational and do not affect builds.
             </div>
           </div>
-        </div>
+          </div><!-- /.folder-pane#tab-output -->
 
-        <div class="companion-row" style="margin-top: 14px;">
-          <div style="flex: 1">
-            <div class="companion-title">Detect File Manager on Local Network</div>
-            <div class="companion-desc">
-              Best-effort probe for a running CrossPoint web server, then jump straight to <code>/files</code>.
+          <!-- tab: build -->
+          <div class="folder-pane" id="tab-build">
+          <div class="panel">
+            <div class="panel-heading">Build &amp; Download</div>
+            <div class="companion-desc" style="line-height: 1.6">
+              Trigger a GitHub Actions build with your current configuration and track it here.
+              Requires a <strong>fine-grained PAT</strong> with <code>Actions: Read and write</code>
+              permission, or a classic PAT with <code>workflow</code> scope. Your token is held
+              in memory only and never stored.
             </div>
-            <div class="device-inline">
+            <div class="gh-token-row">
               <input
-                id="file-manager-host"
+                id="gh-token"
+                type="password"
                 class="device-input"
-                type="text"
-                placeholder="crosspoint.local or 192.168.1.123"
-                aria-label="CrossPoint host"
+                placeholder="github_pat_... or ghp_..."
+                style="flex: 1; min-width: 220px;"
+                autocomplete="off"
+                spellcheck="false"
               />
-              <button class="btn btn-outline" id="detect-file-manager">Detect</button>
-              <a class="btn btn-outline" id="open-detected-file-manager" data-file-manager-link="files" href="http://crosspoint.local/files" target="_blank" rel="noopener">
-                Open /files
-              </a>
+              <button class="btn btn-solid" id="gh-trigger-btn">Trigger Build</button>
             </div>
-            <div id="file-manager-status" class="info-bar">Not checked yet.</div>
+            <div id="gh-build-status" class="info-bar" style="display: none; margin-top: 10px; line-height: 1.8;"></div>
           </div>
-        </div>
-      </div>
+          </div><!-- /.folder-pane#tab-build -->
 
-      <!-- Companion -->
-      <div class="panel">
-        <div class="panel-heading">Font Converter</div>
-        <div class="companion-row">
-          <div style="flex: 1">
-            <div class="companion-title">Pre-convert TTF/OTF for User Fonts</div>
-            <div class="companion-desc">
-              Select a font file to convert it to the <code>.cpf</code> format and save to <code>/fonts</code> on SD card.
-              Canonical names are <code>&lt;Family&gt;-Regular.cpf</code>, optional
-              <code>&lt;Family&gt;-Bold.cpf</code>/<code>-Italic.cpf</code>/<code>-BoldItalic.cpf</code>, with
-              legacy fallback <code>&lt;Family&gt;.cpf</code>.
-            </div>
-            <div class="actions" style="margin-top: 15px; align-items: center; gap: 12px;">
-              <input type="file" id="font-upload" accept=".ttf,.otf" style="display:none" />
-              <button class="btn btn-outline" onclick="document.getElementById('font-upload').click()">Select Font</button>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="output-label" style="margin:0">Family:</span>
-                <input type="text" id="font-family" value="" placeholder="Bookerly" style="width: 110px; background: var(--fog); border: 1px solid var(--bone); padding: 2px 4px; font-family: inherit; font-size: 10px;" />
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="output-label" style="margin:0">Style:</span>
-                <select id="font-style" style="width: 98px; background: var(--fog); border: 1px solid var(--bone); padding: 2px 4px; font-family: inherit; font-size: 10px;">
-                  <option value="Regular">Regular</option>
-                  <option value="Bold">Bold</option>
-                  <option value="Italic">Italic</option>
-                  <option value="BoldItalic">BoldItalic</option>
-                  <option value="Fallback">Fallback (&lt;Family&gt;.cpf)</option>
-                </select>
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="output-label" style="margin:0">Size:</span>
-                <input type="number" id="font-size" value="14" min="6" max="48" style="width: 50px; background: var(--fog); border: 1px solid var(--bone); padding: 2px 4px; font-family: inherit; font-size: 10px;" />
-              </div>
-              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                <input type="checkbox" id="font-2bit" checked style="cursor: pointer" />
-                <span class="output-label" style="margin:0">2-bit grayscale</span>
-              </label>
-              <button class="btn btn-solid" id="convert-font-btn" disabled>Convert & Download</button>
-            </div>
-            <div id="font-status" class="info-bar" style="display:none; margin-top: 12px;"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Companion -->
-      <div class="panel">
-        <div class="panel-heading">Wallpaper Studio</div>
-        <div class="wallpaper-layout">
-          <div class="wallpaper-preview-stack">
-            <div class="wallpaper-dropzone" id="wallpaper-dropzone">
-              <div class="companion-title">X4 Sleep Wallpaper</div>
-              <div class="companion-desc">
-                Import any image — or generate one from the Pokédex — preview the <code>480 x 800</code> X4
-                output, then export a <code>.bmp</code> ready for sleep-image folders.
-              </div>
-              <div class="actions" style="margin-top: 12px; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <input type="file" id="wallpaper-upload" accept="image/*" style="display:none" />
-                <button class="btn btn-outline" type="button" id="wallpaper-select-btn">Select Image</button>
-                <button class="btn btn-outline" type="button" id="wallpaper-clear-btn" disabled>Clear</button>
-                <button class="btn btn-solid" type="button" id="wallpaper-download-btn" disabled>Download BMP</button>
-              </div>
-            </div>
-            <div class="wallpaper-stage">
-              <canvas id="wallpaper-preview-canvas" width="480" height="800" aria-label="Wallpaper preview"></canvas>
-              <div class="wallpaper-empty" id="wallpaper-empty">
-                Drop an image here or select one above. Output stays fixed to the X4 sleep-image frame.
-              </div>
-            </div>
-            <div class="wallpaper-meta" id="wallpaper-meta">Output: 480 x 800 BMP, grayscale-ready for the X4.</div>
-          </div>
-          <div class="wallpaper-controls">
-            <div class="wallpaper-control-group">
-              <div class="wallpaper-group-label">Placement</div>
-              <div class="wallpaper-chip-row" id="wallpaper-fit-options">
-                <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-fit="fill">Fill</button>
-                <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-fit="fit">Fit</button>
-                <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-fit="stretch">Stretch</button>
-              </div>
-              <div class="wallpaper-helper">
-                Fill crops edge-to-edge, Fit preserves the whole image, Stretch forces a full-frame remap.
-              </div>
-            </div>
-
-            <div class="wallpaper-control-group">
-              <div class="wallpaper-group-label">Anchor</div>
-              <div class="wallpaper-align-grid" id="wallpaper-align-options">
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="top-left" title="Top left">↖</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="top-center" title="Top center">↑</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="top-right" title="Top right">↗</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="center-left" title="Center left">←</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="center-center" title="Center">•</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="center-right" title="Center right">→</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="bottom-left" title="Bottom left">↙</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="bottom-center" title="Bottom center">↓</button>
-                <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="bottom-right" title="Bottom right">↘</button>
-              </div>
-              <div class="wallpaper-helper">
-                Anchor controls crop bias in Fill mode and padding placement in Fit mode.
-              </div>
-            </div>
-
-            <div class="wallpaper-control-group">
-              <div class="wallpaper-group-label">Output</div>
-              <div class="wallpaper-field-row">
-                <div class="wallpaper-chip-row" id="wallpaper-depth-options">
-                  <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-depth="4">4-bit grayscale</button>
-                  <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-depth="1">1-bit mono</button>
+          <!-- tab: device -->
+          <div class="folder-pane" id="tab-device">
+          <div class="panel">
+            <div class="panel-heading">Device Access (Optional)</div>
+            <div class="companion-row">
+              <div style="flex: 1">
+                <div class="companion-title">USB Serial Tools (Fork)</div>
+                <div class="companion-desc">
+                  Safer path: use the forked web tools for flashing and debug over USB serial.
                 </div>
-                <div class="wallpaper-field-row">
-                  <span class="output-label" style="margin:0">Background</span>
-                  <input class="wallpaper-color" type="color" id="wallpaper-bg" value="#ffffff" aria-label="Wallpaper background color" />
+                <div class="actions">
+                  <a class="btn btn-solid" href="https://unintendedsideeffects.github.io/xteink-flasher/" target="_blank" rel="noopener">Open Xteink Flash</a>
+                  <a class="btn btn-outline" href="https://unintendedsideeffects.github.io/xteink-flasher/debug/" target="_blank" rel="noopener">Open Xteink Debug</a>
                 </div>
               </div>
-              <div class="wallpaper-helper">
-                4-bit keeps gradients cleaner. 1-bit produces a smaller, higher-contrast bitmap.
-              </div>
             </div>
-
-            <div class="wallpaper-control-group">
-              <div class="wallpaper-group-label">Adjust</div>
-              <div class="wallpaper-chip-row">
-                <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-rotate-ccw">Rotate -90</button>
-                <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-rotate-cw">Rotate +90</button>
-                <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-rotate-reset">Reset</button>
-                <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-invert-toggle">Invert</button>
-              </div>
-              <div class="wallpaper-rotation" id="wallpaper-rotation-label">Rotation: 0°</div>
-              <div class="wallpaper-helper">
-                Export stays fixed to <code>480 x 800</code> even when the source image is rotated.
-              </div>
-            </div>
-
-            <div class="wallpaper-control-group">
-              <div class="wallpaper-group-label">Pokédex</div>
-              <div class="companion-desc">
-                Generate a Pokémon wallpaper in the browser, download the PNG, then import it above to apply
-                placement, depth, and rotation before exporting the final BMP. For the full party flow
-                (per-book assignments, levels, evolution), enable <code>pokemon_party</code> in the feature grid.
-              </div>
-              <div class="actions" style="margin-top: 10px;">
-                <a class="btn btn-outline" href="../plugins/x4-pokedex-grayscale/" target="_blank" rel="noopener">
-                  Open Generator
-                </a>
-                <a
-                  class="btn btn-outline"
-                  id="open-pokedex-plugin"
-                  data-device-link-path="/plugins/pokedex"
-                  href="http://crosspoint.local/plugins/pokedex"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Open on Device
-                </a>
-              </div>
-            </div>
-
-            <div class="wallpaper-control-group">
-              <div class="wallpaper-group-label">Device Handoff</div>
-              <div class="companion-desc">
-                Put the exported BMP in <code>/sleep</code> for Custom source mode. For Pokédex wallpapers,
-                use <code>/sleep/pokedex</code>. If managing the SD card directly, <code>/.sleep</code> takes
-                priority over <code>/sleep</code>.
-              </div>
-              <div class="actions" style="margin-top: 12px;">
-                <a class="btn btn-outline" id="open-wallpaper-file-manager" data-file-manager-link="files" href="http://crosspoint.local/files" target="_blank" rel="noopener">
-                  Open /files
-                </a>
+            <div class="companion-row" style="margin-top: 14px;">
+              <div style="flex: 1">
+                <div class="companion-title">Detect File Manager on Local Network</div>
+                <div class="companion-desc">
+                  Best-effort probe for a running CrossPoint web server, then jump straight to <code>/files</code>.
+                </div>
+                <div class="device-inline">
+                  <input
+                    id="file-manager-host"
+                    class="device-input"
+                    type="text"
+                    placeholder="crosspoint.local or 192.168.1.123"
+                    aria-label="CrossPoint host"
+                  />
+                  <button class="btn btn-outline" id="detect-file-manager">Detect</button>
+                  <a class="btn btn-outline" id="open-detected-file-manager" data-file-manager-link="files" href="http://crosspoint.local/files" target="_blank" rel="noopener">
+                    Open /files
+                  </a>
+                </div>
+                <div id="file-manager-status" class="info-bar">Not checked yet.</div>
               </div>
             </div>
           </div>
-        </div>
-        <div id="wallpaper-status" class="info-bar">
-          No image selected. This tool runs entirely in your browser and exports an X4-ready BMP.
-        </div>
-      </div>
+          </div><!-- /.folder-pane#tab-device -->
 
-      <!-- Preview -->
-      <div class="panel">
-        <div class="preview-top">
-          <div>
-            <div class="panel-heading" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0">Screen Previews</div>
-            <div class="preview-sub">Auto-generated from the latest firmware UI harness.</div>
+          <!-- tab: fonts -->
+          <div class="folder-pane" id="tab-fonts">
+          <div class="panel">
+            <div class="panel-heading">Font Converter</div>
+            <div class="companion-row">
+              <div style="flex: 1">
+                <div class="companion-title">Pre-convert TTF/OTF for User Fonts</div>
+                <div class="companion-desc">
+                  Select a font file to convert it to the <code>.cpf</code> format and save to <code>/fonts</code> on SD card.
+                  Canonical names are <code>&lt;Family&gt;-Regular.cpf</code>, optional
+                  <code>&lt;Family&gt;-Bold.cpf</code>/<code>-Italic.cpf</code>/<code>-BoldItalic.cpf</code>, with
+                  legacy fallback <code>&lt;Family&gt;.cpf</code>.
+                </div>
+                <div class="actions" style="margin-top: 15px; align-items: center; gap: 12px;">
+                  <input type="file" id="font-upload" accept=".ttf,.otf" style="display:none" />
+                  <button class="btn btn-outline" onclick="document.getElementById('font-upload').click()">Select Font</button>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="output-label" style="margin:0">Family:</span>
+                    <input type="text" id="font-family" value="" placeholder="Bookerly" style="width: 110px; background: var(--fog); border: 1px solid var(--bone); padding: 2px 4px; font-family: inherit; font-size: 10px;" />
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="output-label" style="margin:0">Style:</span>
+                    <select id="font-style" style="width: 98px; background: var(--fog); border: 1px solid var(--bone); padding: 2px 4px; font-family: inherit; font-size: 10px;">
+                      <option value="Regular">Regular</option>
+                      <option value="Bold">Bold</option>
+                      <option value="Italic">Italic</option>
+                      <option value="BoldItalic">BoldItalic</option>
+                      <option value="Fallback">Fallback (&lt;Family&gt;.cpf)</option>
+                    </select>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="output-label" style="margin:0">Size:</span>
+                    <input type="number" id="font-size" value="14" min="6" max="48" style="width: 50px; background: var(--fog); border: 1px solid var(--bone); padding: 2px 4px; font-family: inherit; font-size: 10px;" />
+                  </div>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="font-2bit" checked style="cursor: pointer" />
+                    <span class="output-label" style="margin:0">2-bit grayscale</span>
+                  </label>
+                  <button class="btn btn-solid" id="convert-font-btn" disabled>Convert & Download</button>
+                </div>
+                <div id="font-status" class="info-bar" style="display:none; margin-top: 12px;"></div>
+              </div>
+            </div>
           </div>
-          <a class="btn btn-outline" href="./screen-previews/" target="_blank" rel="noopener">Open</a>
-        </div>
-        <div class="preview-grid" id="preview-grid"></div>
-        <div class="preview-meta" id="preview-meta"></div>
-      </div>
+          </div><!-- /.folder-pane#tab-fonts -->
+
+          <!-- tab: studio -->
+          <div class="folder-pane" id="tab-studio">
+          <div class="panel">
+            <div class="panel-heading">Wallpaper Studio</div>
+            <div class="wallpaper-layout">
+              <div class="wallpaper-preview-stack">
+                <div class="wallpaper-dropzone" id="wallpaper-dropzone">
+                  <div class="companion-title">X4 Sleep Wallpaper</div>
+                  <div class="companion-desc">
+                    Import any image — or generate one from the Pokédex — preview the <code>480 x 800</code> X4
+                    output, then export a <code>.bmp</code> ready for sleep-image folders.
+                  </div>
+                  <div class="actions" style="margin-top: 12px; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <input type="file" id="wallpaper-upload" accept="image/*" style="display:none" />
+                    <button class="btn btn-outline" type="button" id="wallpaper-select-btn">Select Image</button>
+                    <button class="btn btn-outline" type="button" id="wallpaper-clear-btn" disabled>Clear</button>
+                    <button class="btn btn-solid" type="button" id="wallpaper-download-btn" disabled>Download BMP</button>
+                  </div>
+                </div>
+                <div class="wallpaper-stage">
+                  <canvas id="wallpaper-preview-canvas" width="480" height="800" aria-label="Wallpaper preview"></canvas>
+                  <div class="wallpaper-empty" id="wallpaper-empty">
+                    Drop an image here or select one above. Output stays fixed to the X4 sleep-image frame.
+                  </div>
+                </div>
+                <div class="wallpaper-meta" id="wallpaper-meta">Output: 480 x 800 BMP, grayscale-ready for the X4.</div>
+              </div>
+              <div class="wallpaper-controls">
+                <div class="wallpaper-control-group">
+                  <div class="wallpaper-group-label">Placement</div>
+                  <div class="wallpaper-chip-row" id="wallpaper-fit-options">
+                    <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-fit="fill">Fill</button>
+                    <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-fit="fit">Fit</button>
+                    <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-fit="stretch">Stretch</button>
+                  </div>
+                  <div class="wallpaper-helper">
+                    Fill crops edge-to-edge, Fit preserves the whole image, Stretch forces a full-frame remap.
+                  </div>
+                </div>
+                <div class="wallpaper-control-group">
+                  <div class="wallpaper-group-label">Anchor</div>
+                  <div class="wallpaper-align-grid" id="wallpaper-align-options">
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="top-left" title="Top left">↖</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="top-center" title="Top center">↑</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="top-right" title="Top right">↗</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="center-left" title="Center left">←</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="center-center" title="Center">•</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="center-right" title="Center right">→</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="bottom-left" title="Bottom left">↙</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="bottom-center" title="Bottom center">↓</button>
+                    <button class="btn btn-outline wallpaper-chip wallpaper-align-btn" type="button" data-wallpaper-align="bottom-right" title="Bottom right">↘</button>
+                  </div>
+                  <div class="wallpaper-helper">
+                    Anchor controls crop bias in Fill mode and padding placement in Fit mode.
+                  </div>
+                </div>
+                <div class="wallpaper-control-group">
+                  <div class="wallpaper-group-label">Output</div>
+                  <div class="wallpaper-field-row">
+                    <div class="wallpaper-chip-row" id="wallpaper-depth-options">
+                      <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-depth="4">4-bit grayscale</button>
+                      <button class="btn btn-outline wallpaper-chip" type="button" data-wallpaper-depth="1">1-bit mono</button>
+                    </div>
+                    <div class="wallpaper-field-row">
+                      <span class="output-label" style="margin:0">Background</span>
+                      <input class="wallpaper-color" type="color" id="wallpaper-bg" value="#ffffff" aria-label="Wallpaper background color" />
+                    </div>
+                  </div>
+                  <div class="wallpaper-helper">
+                    4-bit keeps gradients cleaner. 1-bit produces a smaller, higher-contrast bitmap.
+                  </div>
+                </div>
+                <div class="wallpaper-control-group">
+                  <div class="wallpaper-group-label">Adjust</div>
+                  <div class="wallpaper-chip-row">
+                    <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-rotate-ccw">Rotate -90</button>
+                    <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-rotate-cw">Rotate +90</button>
+                    <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-rotate-reset">Reset</button>
+                    <button class="btn btn-outline wallpaper-chip" type="button" id="wallpaper-invert-toggle">Invert</button>
+                  </div>
+                  <div class="wallpaper-rotation" id="wallpaper-rotation-label">Rotation: 0°</div>
+                  <div class="wallpaper-helper">
+                    Export stays fixed to <code>480 x 800</code> even when the source image is rotated.
+                  </div>
+                </div>
+                <div class="wallpaper-control-group">
+                  <div class="wallpaper-group-label">Pokédex</div>
+                  <div class="companion-desc">
+                    Generate a Pokémon wallpaper in the browser, download the PNG, then import it above to apply
+                    placement, depth, and rotation before exporting the final BMP. For the full party flow
+                    (per-book assignments, levels, evolution), enable <code>pokemon_party</code> in the feature grid.
+                  </div>
+                  <div class="actions" style="margin-top: 10px;">
+                    <a class="btn btn-outline" href="../plugins/x4-pokedex-grayscale/" target="_blank" rel="noopener">Open Generator</a>
+                    <a class="btn btn-outline" id="open-pokedex-plugin" data-device-link-path="/plugins/pokedex" href="http://crosspoint.local/plugins/pokedex" target="_blank" rel="noopener">Open on Device</a>
+                  </div>
+                </div>
+                <div class="wallpaper-control-group">
+                  <div class="wallpaper-group-label">Device Handoff</div>
+                  <div class="companion-desc">
+                    Put the exported BMP in <code>/sleep</code> for Custom source mode. For Pokédex wallpapers,
+                    use <code>/sleep/pokedex</code>. If managing the SD card directly, <code>/.sleep</code> takes
+                    priority over <code>/sleep</code>.
+                  </div>
+                  <div class="actions" style="margin-top: 12px;">
+                    <a class="btn btn-outline" id="open-wallpaper-file-manager" data-file-manager-link="files" href="http://crosspoint.local/files" target="_blank" rel="noopener">Open /files</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="wallpaper-status" class="info-bar">
+              No image selected. This tool runs entirely in your browser and exports an X4-ready BMP.
+            </div>
+          </div>
+          </div><!-- /.folder-pane#tab-studio -->
+
+          <!-- tab: preview -->
+          <div class="folder-pane" id="tab-preview">
+          <div class="panel">
+            <div class="preview-top">
+              <div>
+                <div class="panel-heading" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0">Screen Previews</div>
+                <div class="preview-sub">Auto-generated from the latest firmware UI harness.</div>
+              </div>
+              <a class="btn btn-outline" href="./screen-previews/" target="_blank" rel="noopener">Open</a>
+            </div>
+            <div class="preview-grid" id="preview-grid"></div>
+            <div class="preview-meta" id="preview-meta"></div>
+          </div>
+          </div><!-- /.folder-pane#tab-preview -->
+
+        </div><!-- /.folder-content-area -->
+
+      </div><!-- /.sidebar-folder -->
+
+      </div><!-- /.sidebar-main -->
 
         </div><!-- /.sidebar-screen-body -->
       </div><!-- /.sidebar-screen -->
@@ -3301,8 +3358,10 @@
         Object.entries(map).forEach(([profile, filename]) => {
           const dlBtn = document.getElementById("dl-btn-" + profile);
           const relBtn = document.getElementById("dl-releases-" + profile);
+          const compactBtn = document.getElementById("dl-compact-" + profile);
           if (dlBtn) dlBtn.href = `${base}/${filename}`;
           if (relBtn) relBtn.href = releasesUrl;
+          if (compactBtn) compactBtn.href = `${base}/${filename}`;
         });
       }
 
@@ -4191,23 +4250,48 @@
         });
       }
 
-      function setupCollapsiblePanels() {
-        const sidebar = document.querySelector('.page-sidebar');
-        if (!sidebar) return;
-        const panels = Array.from(sidebar.querySelectorAll('.panel'));
-
-        panels.forEach((panel, i) => {
-          panel.classList.add('collapsible');
-          if (i !== 0) panel.classList.add('collapsed');
-          const heading = panel.querySelector('.panel-heading');
-          if (!heading) return;
-          heading.addEventListener('click', () => {
-            const isOpen = !panel.classList.contains('collapsed');
-            // Collapse all panels, then open the clicked one if it was closed
-            panels.forEach(p => p.classList.add('collapsed'));
-            if (!isOpen) panel.classList.remove('collapsed');
-          });
+      function setupPrebuiltToggle() {
+        const panel = document.querySelector('.prebuilt-panel');
+        if (!panel) return;
+        const heading = panel.querySelector('.panel-heading');
+        if (!heading) return;
+        heading.addEventListener('click', () => {
+          panel.classList.toggle('collapsed');
         });
+      }
+
+      function setupSidebarTabs() {
+        const folder = document.getElementById('sidebar-folder');
+        const titlebarName = document.getElementById('folder-titlebar-name');
+        const closeBtn = document.getElementById('folder-close');
+
+        function switchTab(target) {
+          // Update drawer highlight
+          document.querySelectorAll('.drawer-item').forEach(t =>
+            t.classList.toggle('active', t.dataset.tab === target));
+          // Update pane visibility
+          document.querySelectorAll('.folder-pane').forEach(p =>
+            p.classList.toggle('active', p.id === 'tab-' + target));
+          // Update titlebar name
+          if (titlebarName) {
+            const active = document.querySelector(`.drawer-item[data-tab="${target}"]`);
+            titlebarName.textContent = active ? active.textContent : target;
+          }
+          // Open folder if it was hidden
+          if (folder) folder.style.display = '';
+        }
+
+        document.querySelectorAll('.drawer-item').forEach(btn => {
+          btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Close button: hide the active folder pane
+        if (closeBtn && folder) {
+          closeBtn.addEventListener('click', () => {
+            folder.style.display = 'none';
+            document.querySelectorAll('.drawer-item').forEach(t => t.classList.remove('active'));
+          });
+        }
       }
 
       function setupHoverDocs() {
@@ -4312,7 +4396,8 @@
         lucide.createIcons();
       }
 
-      setupCollapsiblePanels();
+      setupPrebuiltToggle();
+      setupSidebarTabs();
       setupHoverDocs();
       setupCardIcons();
       setupEvents();
