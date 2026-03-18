@@ -30,3 +30,4 @@ src/network/html/PokedexPluginPage.cache.json
 # Crash dumps
 core.*
 *.core
+docs/configurator/node_modules/
