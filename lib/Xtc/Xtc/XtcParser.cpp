@@ -13,8 +13,13 @@
 #include <esp_heap_caps.h>
 
 #include <cstring>
+#include <limits>
 
 namespace xtc {
+
+namespace {
+constexpr size_t MAX_CHAPTERS = 4096;
+}
 
 void XtcParser::safeDeserializeHeader(const uint8_t* buf, PageTableCacheHeader& header) {
   memcpy(&header.magic, buf + 0, 4);
@@ -424,7 +429,11 @@ XtcError XtcParser::buildPageTableCache() {
 
   uint8_t headerBuf[sizeof(PageTableCacheHeader)];
   safeSerializeHeader(headerBuf, header);
-  cacheFile.write(headerBuf, sizeof(headerBuf));
+  if (cacheFile.write(headerBuf, sizeof(headerBuf)) != sizeof(headerBuf)) {
+    cacheFile.close();
+    originalFile.close();
+    return XtcError::WRITE_ERROR;
+  }
 
   if (!originalFile.seek(m_pageTableOffset)) {
     cacheFile.close();
@@ -450,7 +459,11 @@ XtcError XtcParser::buildPageTableCache() {
     info.bitDepth = m_bitDepth;
     info.padding = 0;
 
-    cacheFile.write(reinterpret_cast<const uint8_t*>(&info), sizeof(info));
+    if (cacheFile.write(reinterpret_cast<const uint8_t*>(&info), sizeof(info)) != sizeof(info)) {
+      cacheFile.close();
+      originalFile.close();
+      return XtcError::WRITE_ERROR;
+    }
   }
 
   cacheFile.close();
@@ -583,7 +596,13 @@ XtcError XtcParser::readChapters() {
   }
 
   const uint64_t fileSize = m_file.size();
-  if (chapterOffset < sizeof(XtcHeader) || chapterOffset >= fileSize || chapterOffset + 96 > fileSize) {
+  constexpr size_t chapterSize = 96;
+
+  if (chapterOffset < sizeof(XtcHeader) || chapterOffset >= fileSize) {
+    return XtcError::OK;
+  }
+
+  if (fileSize - chapterOffset < chapterSize) {
     return XtcError::OK;
   }
 
@@ -600,9 +619,19 @@ XtcError XtcParser::readChapters() {
     return XtcError::OK;
   }
 
-  constexpr size_t chapterSize = 96;
   const uint64_t available = maxOffset - chapterOffset;
-  const size_t chapterCount = static_cast<size_t>(available / chapterSize);
+  const uint64_t chapterCount64 = available / chapterSize;
+  if (chapterCount64 == 0) {
+    return XtcError::OK;
+  }
+
+  if (chapterCount64 > MAX_CHAPTERS || chapterCount64 > std::numeric_limits<size_t>::max()) {
+    LOG_ERR("XTC", "Chapter table too large: available=%llu chapterCount=%llu",
+            static_cast<unsigned long long>(available), static_cast<unsigned long long>(chapterCount64));
+    return XtcError::CORRUPTED_HEADER;
+  }
+
+  const size_t chapterCount = static_cast<size_t>(chapterCount64);
   if (chapterCount == 0) {
     return XtcError::OK;
   }

@@ -13,6 +13,9 @@
 bool Xtc::load() {
   LOG_DBG("XTC", "Loading XTC: %s", filepath.c_str());
 
+  // Ensure the per-book cache exists before the parser tries to create page_table.bin.
+  setupCacheDir();
+
   // Initialize parser
   parser.reset(new xtc::XtcParser());
 
