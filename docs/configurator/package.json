@@ -1,0 +1,10 @@
+{
+  "name": "crosspoint-configurator",
+  "private": true,
+  "scripts": {
+    "dev": "browser-sync start --server . --files 'index.html' --no-notify"
+  },
+  "devDependencies": {
+    "browser-sync": "^3.0.3"
+  }
+}

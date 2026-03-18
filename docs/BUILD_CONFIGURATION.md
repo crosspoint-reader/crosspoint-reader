@@ -215,12 +215,17 @@ Keeps the WiFi file management server running in the background while reading.
 - File uploads possible while reading a book
 - WiFi stays connected in reading mode (if USB plugged in)
 
+**Sub-features:**
+
+- **On Charge (`ENABLE_BACKGROUND_SERVER_ON_CHARGE`):** Automatically starts the background server whenever USB power is connected, even if it was manually stopped.
+- **Always On (`ENABLE_BACKGROUND_SERVER_ALWAYS`):** Auto-connects to WiFi on wake even when not charging. This ensures the server is always reachable but increases battery drain during active use.
+
 **When disabled:**
 - Web server only runs in Home/Library views
 - Reading automatically stops the web server
 - Minimal power/memory impact
 
-**Use case:** Disable for slightly lower memory usage if you never upload files while reading.
+**Use case:** Disable for slightly lower memory usage if you never upload files while reading. Enable "Always On" if you want seamless remote access without needing to plug in.
 
 ---
 
