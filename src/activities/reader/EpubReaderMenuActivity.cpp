@@ -10,14 +10,16 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const bool hasDictionary)
+                                               const bool hasFootnotes, const bool hasDictionary,
+                                               std::string activeDictName)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasDictionary)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      activeDictName(std::move(activeDictName)) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasDictionary) {
@@ -151,6 +153,13 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       const auto value = pageTurnLabels[selectedPageTurnOption];
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    }
+
+    if (menuItems[i].action == MenuAction::SET_BOOK_DICTIONARY && !activeDictName.empty()) {
+      // Render currently active dictionary name on the right edge of the content area.
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, activeDictName.c_str());
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, activeDictName.c_str(),
+                        !isSelected);
     }
   }
 

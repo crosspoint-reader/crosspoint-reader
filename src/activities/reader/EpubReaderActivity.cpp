@@ -293,9 +293,29 @@ void EpubReaderActivity::openReaderMenu() {
     bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
   }
   const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+
+  // Extract the folder name from the active dictionary path for display in the menu.
+  // Path format: /dictionary/<folder>/<stem> — we want <folder>.
+  std::string activeDictName;
+  const char* rawDictPath = Dictionary::getActivePath();
+  if (rawDictPath == nullptr || rawDictPath[0] == '\0') {
+    activeDictName = tr(STR_DICT_NONE);
+  } else {
+    std::string p(rawDictPath);
+    const size_t lastSlash = p.rfind('/');
+    if (lastSlash != std::string::npos && lastSlash > 0) {
+      const size_t prevSlash = p.rfind('/', lastSlash - 1);
+      activeDictName = (prevSlash != std::string::npos) ? p.substr(prevSlash + 1, lastSlash - prevSlash - 1)
+                                                        : p.substr(0, lastSlash);
+    } else {
+      activeDictName = p;
+    }
+  }
+
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage,
                                                                   totalPages, bookProgressPercent, SETTINGS.orientation,
-                                                                  !currentPageFootnotes.empty(), Dictionary::exists()),
+                                                                  !currentPageFootnotes.empty(), Dictionary::exists(),
+                                                                  std::move(activeDictName)),
                          [this](const ActivityResult& result) {
                            // Always apply orientation change even if the menu was cancelled
                            const auto& menu = std::get<MenuResult>(result.data);
