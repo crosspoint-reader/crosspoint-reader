@@ -24,8 +24,8 @@ const char* I18n::get(StrId id) const {
   }
 
   // Use generated helper function - no hardcoded switch needed!
-  const char* const* strings = getStringArray(_language);
-  return strings[index];
+  const LangStrings lang = getLanguageStrings(_language);
+  return lang.data + lang.offsets[index];
 }
 
 void I18n::setLanguage(Language lang) {
