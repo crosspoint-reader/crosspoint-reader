@@ -26,6 +26,7 @@ class CrossPointState {
   // Reset both to 0 when a successful API call is observed.
   uint8_t wifiAutoConnectSkipCount = 0;
   uint8_t wifiAutoConnectBackoffLevel = 0;
+  bool wifiAutoConnectWaitingForNewCredential = false;
   ~CrossPointState() = default;
 
   // Get singleton instance

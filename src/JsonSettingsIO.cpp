@@ -23,6 +23,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
   doc["wifiAutoConnectSkipCount"] = s.wifiAutoConnectSkipCount;
   doc["wifiAutoConnectBackoffLevel"] = s.wifiAutoConnectBackoffLevel;
+  doc["wifiAutoConnectWaitingForNewCredential"] = s.wifiAutoConnectWaitingForNewCredential;
 
   String json;
   serializeJson(doc, json);
@@ -43,6 +44,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
   s.wifiAutoConnectSkipCount = doc["wifiAutoConnectSkipCount"] | (uint8_t)0;
   s.wifiAutoConnectBackoffLevel = doc["wifiAutoConnectBackoffLevel"] | (uint8_t)0;
+  s.wifiAutoConnectWaitingForNewCredential = doc["wifiAutoConnectWaitingForNewCredential"] | false;
   return true;
 }
 

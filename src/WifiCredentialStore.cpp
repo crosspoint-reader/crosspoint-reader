@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include "CrossPointState.h"
 #include "network/BackgroundWebServer.h"
 
 // Initialize the static instance
@@ -135,6 +136,10 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
     LOG_INF("WCS", "Updated credentials for: %s", ssid.c_str());
     const bool saved = saveToFile();
     if (saved) {
+      if (APP_STATE.wifiAutoConnectWaitingForNewCredential) {
+        APP_STATE.wifiAutoConnectWaitingForNewCredential = false;
+        APP_STATE.saveToFile();
+      }
       BackgroundWebServer::getInstance().invalidateCredentialsCache();
     }
     return saved;
@@ -151,6 +156,10 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
   LOG_INF("WCS", "Added credentials for: %s", ssid.c_str());
   const bool saved = saveToFile();
   if (saved) {
+    if (APP_STATE.wifiAutoConnectWaitingForNewCredential) {
+      APP_STATE.wifiAutoConnectWaitingForNewCredential = false;
+      APP_STATE.saveToFile();
+    }
     BackgroundWebServer::getInstance().invalidateCredentialsCache();
   }
   return saved;

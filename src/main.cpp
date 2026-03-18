@@ -411,7 +411,9 @@ void setup() {
 
   // WiFi auto-connect on wake from sleep (background, silent)
   if (wokeFromSleep && SETTINGS.keepsBackgroundServerOnWifiWhileAwake()) {
-    if (APP_STATE.wifiAutoConnectSkipCount > 0) {
+    if (APP_STATE.wifiAutoConnectWaitingForNewCredential) {
+      LOG_DBG("MAIN", "WiFi auto-connect disabled until a new credential is added");
+    } else if (APP_STATE.wifiAutoConnectSkipCount > 0) {
       // Still in backoff — consume one skip cycle
       APP_STATE.wifiAutoConnectSkipCount--;
       APP_STATE.saveToFile();
@@ -425,6 +427,12 @@ void setup() {
           LOG_DBG("MAIN", "Starting background WiFi auto-connect to: %s", lastSsid.c_str());
           BG_WIFI.start(cred->ssid.c_str(), cred->password.c_str());
           wifiAutoConnectAttempted = true;
+        } else {
+          APP_STATE.wifiAutoConnectWaitingForNewCredential = true;
+          APP_STATE.wifiAutoConnectSkipCount = 0;
+          APP_STATE.wifiAutoConnectBackoffLevel = 0;
+          APP_STATE.saveToFile();
+          LOG_DBG("MAIN", "Saved WiFi credentials missing for last SSID; auto-connect disabled until a new credential is added");
         }
       }
     }
@@ -554,20 +562,24 @@ void loop() {
     powerManager.setPowerSaving(false);
   }
 
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+  const bool screenshotChordPressed = gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN);
+  if (screenshotChordPressed) {
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
-      RenderLock lock;
-      ScreenshotUtil::takeScreenshot(renderer);
+      APP_STATE.pendingScreenshot = true;
     }
-    return;
+  } else {
+    screenshotButtonsReleased = true;
   }
-  screenshotButtonsReleased = true;
 
   if (APP_STATE.pendingScreenshot) {
     APP_STATE.pendingScreenshot = false;
     RenderLock lock;
     ScreenshotUtil::takeScreenshot(renderer);
+  }
+
+  if (screenshotChordPressed) {
+    return;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
