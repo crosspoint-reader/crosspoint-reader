@@ -306,7 +306,8 @@ std::string SleepActivity::getBookOverlayText(const std::string& bookPath) const
       if (Storage.openFileForRead("SLP", xtc.getCachePath() + "/progress.bin", f)) {
         uint8_t data[4];
         if (f.read(data, 4) == 4) {
-          uint32_t currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+          uint32_t currentPage = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+                                 (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
           uint32_t totalPages = xtc.getPageCount();
           float progress = xtc.calculateProgress(currentPage) * 100.0f;
           char progressStr[32];
@@ -485,19 +486,23 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     line1 = renderer.truncatedText(UI_10_FONT_ID, line1.c_str(), pageWidth - 20);
     line2 = renderer.truncatedText(UI_10_FONT_ID, line2.c_str(), pageWidth - 20);
 
-    // Draw white background rectangle at the bottom (taller for two lines)
-    const int overlayHeight = 50;
-    const int overlayY = pageHeight - overlayHeight - 20;             // Position 20 pixels higher from bottom
+    // Compute overlay height to exactly fit the text lines with equal top/bottom padding
+    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    constexpr int lineSpacing = 4;
+    constexpr int overlayPadding = 10;
+    const int numLines = line2.empty() ? 1 : 2;
+    const int textBlockHeight = numLines * lineHeight + (numLines - 1) * lineSpacing;
+    const int overlayHeight = textBlockHeight + overlayPadding * 2;
+    const int overlayY = pageHeight - overlayHeight - 20;
     renderer.fillRect(0, overlayY, pageWidth, overlayHeight, false);  // White background
 
-    // First line - positioned higher in the overlay
-    const int line1Y = overlayY + 18;  // Position higher up
+    // Center text block vertically in the overlay rectangle
+    const int textStartY = overlayY + (overlayHeight - textBlockHeight) / 2;
     const int textX1 = (pageWidth - renderer.getTextWidth(UI_10_FONT_ID, line1.c_str())) / 2;
-    renderer.drawText(UI_10_FONT_ID, textX1, line1Y, line1.c_str(), true);  // Black text
+    renderer.drawText(UI_10_FONT_ID, textX1, textStartY, line1.c_str(), true);  // Black text
 
-    // Second line - positioned lower in the overlay
     if (!line2.empty()) {
-      const int line2Y = overlayY + 38;  // Position lower down with more space
+      const int line2Y = textStartY + lineHeight + lineSpacing;
       const int textX2 = (pageWidth - renderer.getTextWidth(UI_10_FONT_ID, line2.c_str())) / 2;
       renderer.drawText(UI_10_FONT_ID, textX2, line2Y, line2.c_str(), true);  // Black text
     }
