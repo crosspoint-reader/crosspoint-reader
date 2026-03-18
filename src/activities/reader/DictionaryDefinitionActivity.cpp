@@ -150,7 +150,9 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // Button hints
   const char* btn2 = showDoneButton ? tr(STR_DONE) : "";
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, tr(STR_PREV_NEXT), tr(STR_NEXT_PREV));
+  const char* btn3 = totalPages > 1 ? tr(STR_PREV_NEXT) : "";
+  const char* btn4 = totalPages > 1 ? tr(STR_NEXT_PREV) : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), btn2, btn3, btn4);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
