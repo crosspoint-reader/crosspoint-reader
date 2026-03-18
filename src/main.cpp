@@ -347,6 +347,11 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
+  // Refresh the battery icon immediately when USB is plugged or unplugged
+  if (gpio.wasUsbStateChanged()) {
+    activityManager.requestUpdate();
+  }
+
   static bool screenshotButtonsReleased = true;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     if (screenshotButtonsReleased) {
