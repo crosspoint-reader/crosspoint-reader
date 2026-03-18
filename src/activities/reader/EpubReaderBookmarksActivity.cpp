@@ -60,11 +60,13 @@ void EpubReaderBookmarksActivity::loop() {
         }
       }
       requestUpdate();
+      confirmingDelete = false;
+      return;
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       requestUpdate();
+      confirmingDelete = false;
+      return;
     }
-    confirmingDelete = false;
-    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
@@ -83,13 +85,13 @@ void EpubReaderBookmarksActivity::loop() {
     finish();
   }
 
-  buttonNavigator.onNextRelease([this, pageItems] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, pageItems);
+  buttonNavigator.onNextRelease([this] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, bookmarks.size());
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, pageItems] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, pageItems);
+  buttonNavigator.onPreviousRelease([this] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, bookmarks.size());
     requestUpdate();
   });
 }
@@ -111,14 +113,22 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
   const int contentY = hintGutterHeight;
   const int numBookmarks = bookmarks.size();
+  const int pageItems = getPageItems();
 
   // Manual centering to honor content gutters.
   const int titleX =
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_BOOKMARKS), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_BOOKMARKS), true, EpdFontFamily::BOLD);
 
+  if (confirmingDelete) {
+    GUI.drawPopup(renderer, tr(STR_CONFIRM_DELETE_BOOKMARK));
+  }
+
+  LOG_DBG("EPB", "Rendering bookmarks: total=%d, selectorIndex=%d, pageItems=%d", numBookmarks, selectorIndex,
+          pageItems);
+
   GUI.drawList(
-      renderer, Rect{0, LINE_HEIGHT + contentY, pageWidth, LINE_HEIGHT * numBookmarks}, numBookmarks, selectorIndex,
+      renderer, Rect{0, LINE_HEIGHT + contentY, pageWidth, LINE_HEIGHT * pageItems}, numBookmarks, selectorIndex,
       [this](int index) {
         return std::to_string(bookmarks.at(index).bookPercent) + "%";
       },
@@ -131,7 +141,9 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       },
       [this](int index) { return UIIcon::BookmarkFilled; });
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_DOWN), tr(STR_DIR_UP));
+  const auto backLabel = confirmingDelete ? tr(STR_CANCEL) : tr(STR_BACK);
+  const auto confirmLabel = confirmingDelete ? tr(STR_DELETE) : tr(STR_OPEN);
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_DOWN), tr(STR_DIR_UP));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

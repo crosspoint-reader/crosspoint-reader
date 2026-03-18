@@ -27,7 +27,7 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
-  std::string statusBarOverride;
+  bool showBookmarkMessage = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
