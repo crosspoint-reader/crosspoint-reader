@@ -367,6 +367,41 @@ jobs:
             gh api -X DELETE "repos/${{ github.repository }}/releases/assets/${asset_id}" || true
           done
 
+      - name: Remove existing latest assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          asset_ids="$(gh api repos/${{ github.repository }}/releases/tags/latest \
+            --jq '.assets[] | .id' \
+            2>/dev/null || true)"
+          if [ -z "$asset_ids" ]; then
+            echo "No existing latest assets to remove."
+            exit 0
+          fi
+          for asset_id in $asset_ids; do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/${asset_id}" || true
+          done
+
+      # Every tag push advances latest — 'stable' only moves on clean version tags.
+      - name: Update latest channel
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: ${{ steps.version.outputs.ver }}
+          prerelease: true
+          draft: false
+          generate_release_notes: false
+          make_latest: false
+          files: |
+            firmware.bin
+            crosspoint-standard.bin
+            crosspoint-partitions.bin
+            crosspoint-lean.bin
+            crosspoint-full.bin
+            crosspoint-lean-reset.bin
+            crosspoint-full-reset.bin
+
       - name: Publish stable channel
         if: ${{ !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
