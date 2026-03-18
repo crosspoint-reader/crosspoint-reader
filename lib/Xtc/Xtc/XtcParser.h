@@ -9,12 +9,12 @@
 
 #include <HalStorage.h>
 
+#include <array>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
-#include <array>
-#include <cstring>
 
 #include "XtcTypes.h"
 
@@ -52,8 +52,8 @@ class XtcParser {
   // Load page bitmap (unchanged)
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
   XtcError loadPageStreaming(uint32_t pageIndex,
-                              std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
-                              size_t chunkSize = 1024);
+                             std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
+                             size_t chunkSize = 1024);
 
   // Get title/author from metadata
   std::string getTitle() const { return m_title; }

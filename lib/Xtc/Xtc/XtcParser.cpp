@@ -10,9 +10,9 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <esp_heap_caps.h>
 
 #include <cstring>
-#include <esp_heap_caps.h>
 
 namespace xtc {
 
@@ -114,12 +114,12 @@ XtcError XtcParser::open(const char* filepath, const char* cacheDir) {
     }
     const size_t heapBefore = ESP.getMaxAllocHeap();
     LOG_DBG("XTC", "Cache built, heap before defrag: free=%zu, maxAlloc=%zu", ESP.getFreeHeap(), heapBefore);
-    
+
     // Defragment heap: small delay allows heap coalescing after file handles are closed
     // This typically improves MaxAlloc by 10-20KB, enabling 96KB page buffer for grayscale
     LOG_DBG("XTC", "Defragmenting heap (waiting 50ms)...");
     vTaskDelay(pdMS_TO_TICKS(50));
-    
+
     const size_t heapAfter = ESP.getMaxAllocHeap();
     const size_t heapGain = heapAfter > heapBefore ? (heapAfter - heapBefore) : 0;
     if (heapGain > 0) {
@@ -137,12 +137,11 @@ XtcError XtcParser::open(const char* filepath, const char* cacheDir) {
 
   // Prime the sliding L2 window with the first chunk of page metadata.
   loadL2Window(0);
-  
+
   LOG_DBG("XTC", "File opened, heap: free=%zu, maxAlloc=%zu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   m_isOpen = true;
-  LOG_DBG("XTC", "Opened file: %s (%u pages, cache: %s)",
-          filepath, m_header.pageCount, m_cacheFilePath.c_str());
+  LOG_DBG("XTC", "Opened file: %s (%u pages, cache: %s)", filepath, m_header.pageCount, m_cacheFilePath.c_str());
   return XtcError::OK;
 }
 
@@ -231,8 +230,7 @@ void XtcParser::prefetchWindow(uint32_t pageIndex) {
   }
 
   // Avoid reloading the same window when the requested page is already covered.
-  if (m_l2Valid && pageIndex >= m_l2WindowStart &&
-      pageIndex < m_l2WindowStart + m_l2WindowCount) {
+  if (m_l2Valid && pageIndex >= m_l2WindowStart && pageIndex < m_l2WindowStart + m_l2WindowCount) {
     return;
   }
 
@@ -284,8 +282,7 @@ bool XtcParser::lookupL2(uint32_t pageIndex, PageInfo& info) {
     return false;
   }
 
-  if (pageIndex >= m_l2WindowStart &&
-      pageIndex < m_l2WindowStart + m_l2WindowCount) {
+  if (pageIndex >= m_l2WindowStart && pageIndex < m_l2WindowStart + m_l2WindowCount) {
     size_t idx = pageIndex - m_l2WindowStart;
     info = m_l2Window[idx];
     return true;
@@ -341,8 +338,7 @@ void XtcParser::loadL2Window(uint32_t centerPage) {
   m_l2WindowCount = readCount;
   m_l2Valid = (readCount > 0);
 
-  LOG_DBG("XTC", "L2 window loaded: [%u, %u] (%zu pages)",
-          windowStart, windowStart + readCount - 1, readCount);
+  LOG_DBG("XTC", "L2 window loaded: [%u, %u] (%zu pages)", windowStart, windowStart + readCount - 1, readCount);
 }
 
 bool XtcParser::isPageTableCacheValid() const {
@@ -364,8 +360,7 @@ bool XtcParser::isPageTableCacheValid() const {
   PageTableCacheHeader header;
   safeDeserializeHeader(headerBuf, header);
 
-  if (header.magic != PAGE_TABLE_CACHE_MAGIC ||
-      header.version != PAGE_TABLE_CACHE_VERSION) {
+  if (header.magic != PAGE_TABLE_CACHE_MAGIC || header.version != PAGE_TABLE_CACHE_VERSION) {
     cacheFile.close();
     return false;
   }
@@ -440,8 +435,7 @@ XtcError XtcParser::buildPageTableCache() {
   // Convert the source page table entries into the cached PageInfo layout.
   for (uint16_t i = 0; i < m_header.pageCount; i++) {
     PageTableEntry entry;
-    if (originalFile.read(reinterpret_cast<uint8_t*>(&entry), sizeof(PageTableEntry)) !=
-        sizeof(PageTableEntry)) {
+    if (originalFile.read(reinterpret_cast<uint8_t*>(&entry), sizeof(PageTableEntry)) != sizeof(PageTableEntry)) {
       LOG_ERR("XTC", "Failed to read page table entry %u", i);
       cacheFile.close();
       originalFile.close();
@@ -677,8 +671,7 @@ XtcError XtcParser::readChapters() {
   const size_t maxAllocAfter = ESP.getMaxAllocHeap();
   const int heapDelta = static_cast<int>(freeHeapBefore) - static_cast<int>(freeHeapAfter);
   const int maxAllocDelta = static_cast<int>(maxAllocBefore) - static_cast<int>(maxAllocAfter);
-  LOG_INF("XTC",
-          "Chapter metadata: count=%u, vector~=%zu, names~=%zu, total~=%zu, heapDelta=%d, maxAllocDelta=%d",
+  LOG_INF("XTC", "Chapter metadata: count=%u, vector~=%zu, names~=%zu, total~=%zu, heapDelta=%d, maxAllocDelta=%d",
           static_cast<unsigned int>(m_chapters.size()), chapterVectorBytes, chapterNameBytes, totalChapterBytes,
           heapDelta, maxAllocDelta);
   return XtcError::OK;
