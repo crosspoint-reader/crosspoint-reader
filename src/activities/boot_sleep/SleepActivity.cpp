@@ -10,13 +10,22 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+
+  // Show popup with reader orientation only when going to sleep from reader
+  if (APP_STATE.lastSleepFromReader) {
+    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  } else {
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  }
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
