@@ -2,7 +2,7 @@
   "name": "crosspoint-configurator",
   "private": true,
   "scripts": {
-    "dev": "browser-sync start --server . --files 'index.html' --no-notify"
+    "dev": "browser-sync start --server .. --startPath '/configurator/' --files '../configurator/index.html' --no-notify"
   },
   "devDependencies": {
     "browser-sync": "^3.0.3"

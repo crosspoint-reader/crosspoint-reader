@@ -116,7 +116,7 @@ void SettingsActivity::loop() {
     if (!SETTINGS.saveToFile()) {
       LOG_WRN("SETTINGS", "Failed to persist settings to SD card");
     }
-    onGoHome();
+    activityManager.goHome();
     return;
   }
 

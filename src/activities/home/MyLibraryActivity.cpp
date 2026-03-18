@@ -218,14 +218,14 @@ void MyLibraryActivity::loop() {
     // Confirm button - open selected item
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
-        onSelectBook(recentBooks[selectorIndex].path);
+        activityManager.goToReader(recentBooks[selectorIndex].path);
       }
       return;
     }
 
     // Back button - go home
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      onGoHome();
+      activityManager.goHome();
       return;
     }
 
@@ -284,7 +284,7 @@ void MyLibraryActivity::loop() {
           selectorIndex = 0;
           requestUpdate();
         } else {
-          onSelectBook(basepath + entry);
+          activityManager.goToReader(basepath + entry);
         }
       }
       return;
@@ -307,7 +307,7 @@ void MyLibraryActivity::loop() {
 
           requestUpdate();
         } else {
-          onGoHome();
+          activityManager.goHome();
         }
       }
       return;

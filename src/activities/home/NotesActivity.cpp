@@ -109,7 +109,7 @@ void NotesActivity::deleteSelectedNote() {
 
 void NotesActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onGoHome();
+    activityManager.goHome();
     return;
   }
 

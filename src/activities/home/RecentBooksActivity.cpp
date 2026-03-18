@@ -176,13 +176,13 @@ void RecentBooksActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && selectorIndex < recentBooks.size()) {
       LOG_DBG("RBA", "Selected recent book: %s", recentBooks[selectorIndex].book.path.c_str());
-      onSelectBook(recentBooks[selectorIndex].book.path);
+      activityManager.goToReader(recentBooks[selectorIndex].book.path);
       return;
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoHome();
+    activityManager.goHome();
   }
 
   int listSize = static_cast<int>(recentBooks.size());

@@ -25,6 +25,8 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;
   bool automaticPageTurnActive = false;
+  int pageLoadRetrySpineIndex = -1;
+  uint8_t pageLoadRetryCount = 0;
 
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
@@ -44,6 +46,8 @@ class EpubReaderActivity final : public Activity {
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
+  void resetPageLoadRetryState();
+  void renderReaderError(StrId messageId);
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 

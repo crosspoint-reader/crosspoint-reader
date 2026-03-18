@@ -71,7 +71,7 @@ void OpdsBookBrowserActivity::loop() {
 
   if (state == BrowserState::CHECK_WIFI) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      onGoHome();
+      activityManager.goHome();
     }
     return;
   }
@@ -261,7 +261,7 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
 
 void OpdsBookBrowserActivity::navigateBack() {
   if (navigationHistory.empty()) {
-    onGoHome();
+    activityManager.goHome();
     return;
   }
 

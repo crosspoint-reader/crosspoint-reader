@@ -92,7 +92,7 @@ void TxtReaderActivity::loop() {
 
   // Short press BACK goes directly to home
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    onGoHome();
+    activityManager.goHome();
     return;
   }
 

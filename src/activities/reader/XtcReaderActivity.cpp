@@ -75,7 +75,7 @@ void XtcReaderActivity::loop() {
 
   // Short press BACK goes to home
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    onGoHome();
+    activityManager.goHome();
     return;
   }
 

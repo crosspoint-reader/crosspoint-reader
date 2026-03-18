@@ -30,6 +30,7 @@ constexpr unsigned long skipChapterMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+constexpr uint8_t maxPageLoadRetryCount = 1;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -63,6 +64,18 @@ void applyReaderOrientation(GfxRenderer& renderer, const uint8_t orientation) {
 }
 
 }  // namespace
+
+void EpubReaderActivity::resetPageLoadRetryState() {
+  pageLoadRetrySpineIndex = -1;
+  pageLoadRetryCount = 0;
+}
+
+void EpubReaderActivity::renderReaderError(StrId messageId) {
+  renderer.clearScreen();
+  renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(messageId), true, EpdFontFamily::BOLD);
+  renderer.displayBuffer();
+  automaticPageTurnActive = false;
+}
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
@@ -192,7 +205,7 @@ void EpubReaderActivity::loop() {
       restoreSavedPosition();
       return;
     }
-    onGoHome();
+    activityManager.goHome();
     return;
   }
 
@@ -419,7 +432,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-      onGoHome();
+      activityManager.goHome();
       return;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
@@ -435,7 +448,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           saveProgress(backupSpine, backupPage, backupPageCount);
         }
       }
-      onGoHome();
+      activityManager.goHome();
       return;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
@@ -554,7 +567,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   requestUpdate();
 }
 
-// TODO: Failure handling
 void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     renderer.clearScreen();
@@ -633,6 +645,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                       SETTINGS.imageRendering, popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
+        resetPageLoadRetryState();
+        renderReaderError(STR_LOAD_EPUB_FAILED);
         return;
       }
     } else {
@@ -704,14 +718,31 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       p = section->loadPageFromSectionFile();
     }
     if (!p) {
-      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+      if (pageLoadRetrySpineIndex != currentSpineIndex) {
+        pageLoadRetrySpineIndex = currentSpineIndex;
+        pageLoadRetryCount = 0;
+      }
+
+      if (pageLoadRetryCount < maxPageLoadRetryCount) {
+        pageLoadRetryCount++;
+        LOG_ERR("ERS", "Failed to load page from SD - clearing section cache and retrying (%u/%u)",
+                static_cast<unsigned>(pageLoadRetryCount), static_cast<unsigned>(maxPageLoadRetryCount));
+        section->clearCache();
+        section.reset();
+        requestUpdate();
+        automaticPageTurnActive = false;
+        return;
+      }
+
+      LOG_ERR("ERS", "Failed to load page from SD after retry; showing error");
       section->clearCache();
       section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
+      resetPageLoadRetryState();
+      renderReaderError(STR_PAGE_LOAD_ERROR);
       automaticPageTurnActive = false;
       return;
     }
+    resetPageLoadRetryState();
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);

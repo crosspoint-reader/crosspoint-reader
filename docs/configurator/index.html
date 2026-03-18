@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CrossPoint Reader — Build Configurator</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
@@ -227,8 +228,8 @@
       .categories {
         display: flex;
         flex-direction: column;
-        gap: 32px;
-        margin-bottom: 32px;
+        gap: 16px;
+        margin-bottom: 24px;
       }
 
       .category {
@@ -299,8 +300,15 @@
 
       .skill-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 8px;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 10px;
+      }
+
+      @media (min-width: 1300px) {
+        .page-main .skill-grid {
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          gap: 12px;
+        }
       }
 
       /* ── Dependency groups — parent + children visually linked ── */
@@ -458,6 +466,16 @@
         transition: background 0.05s steps(2), color 0.05s steps(2);
       }
 
+      .card-icon svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        fill: none;
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+      }
+
       .card-body {
         flex: 1;
         padding: 8px 10px;
@@ -466,7 +484,7 @@
 
       .card-name {
         font-family: 'Silkscreen', monospace;
-        font-size: 9px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -476,21 +494,21 @@
       }
 
       .card-size {
-        font-size: 9px;
+        font-size: 10px;
         color: var(--lt);
         margin-top: 2px;
         transition: color 0.05s steps(2);
       }
 
       .card-dep {
-        font-size: 8px;
+        font-size: 9px;
         color: var(--lt);
         margin-top: 2px;
         font-style: italic;
       }
 
       .card-desc {
-        font-size: 9px;
+        font-size: 10px;
         color: var(--md);
         margin-top: 2px;
         line-height: 1.4;
@@ -713,6 +731,85 @@
         margin-bottom: 10px;
         padding-bottom: 6px;
         border-bottom: 1px solid var(--bone);
+      }
+
+      /* ── Hover docs card ── */
+      .docs-card {
+        grid-column: span 2;
+      }
+
+      .docs-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 20px 0;
+        font-family: 'Silkscreen', monospace;
+        font-size: 8px;
+        color: var(--pale);
+        letter-spacing: 0.1em;
+      }
+
+      .docs-content { display: none; }
+
+      .docs-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .docs-name {
+        font-family: 'Silkscreen', monospace;
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--blk);
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+      }
+
+      .docs-status {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 8px;
+        font-weight: 500;
+        padding: 1px 5px;
+        border: 1px solid;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .docs-status.status-on     { color: var(--blk);  border-color: var(--blk); }
+      .docs-status.status-off    { color: var(--pale);  border-color: var(--bone); }
+      .docs-status.status-always { color: var(--md);    border-color: var(--bone); }
+
+      .docs-desc {
+        font-size: 10px;
+        color: var(--dk);
+        line-height: 1.5;
+        margin-bottom: 8px;
+      }
+
+      .docs-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .docs-flag {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 8px;
+        color: var(--md);
+        background: var(--fog);
+        padding: 1px 5px;
+        border: 1px solid var(--bone);
+      }
+
+      .docs-size {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 8px;
+        color: var(--lt);
       }
 
       .outputs-grid {
@@ -1100,14 +1197,11 @@
       /* ── Pre-built download cards ── */
       .preset-dl-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr;
         gap: 10px;
         margin-top: 10px;
       }
 
-      @media (max-width: 600px) {
-        .preset-dl-grid { grid-template-columns: 1fr; }
-      }
 
       .preset-dl-card {
         border: var(--px) solid var(--blk);
@@ -1243,51 +1337,276 @@
         cursor: pointer;
         -webkit-user-select: none;
         user-select: none;
-        position: relative;
-        padding-right: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--bone);
       }
 
+      .panel.collapsible .panel-heading:hover {
+        color: var(--dk);
+      }
+
+      /* Chevron badge */
       .panel.collapsible .panel-heading::after {
-        content: '\2212'; /* − */
-        position: absolute;
-        right: 0;
-        top: 0;
+        content: '▾';
         font-family: 'IBM Plex Mono', monospace;
         font-size: 11px;
-        font-weight: 400;
-        color: var(--lt);
-        letter-spacing: 0;
+        font-weight: 600;
+        color: var(--md);
+        background: var(--fog);
+        border: 1px solid var(--bone);
+        line-height: 1;
+        padding: 1px 4px 2px;
+        flex-shrink: 0;
+        transition: background 0.05s steps(2), color 0.05s steps(2);
       }
 
       .panel.collapsible.collapsed .panel-heading::after {
-        content: '\002B'; /* + */
+        content: '▸';
+        color: var(--blk);
+        background: var(--bone);
+        border-color: var(--pale);
+      }
+
+      /* Collapsed panel heading gets a nudge to draw attention */
+      .panel.collapsible.collapsed .panel-heading {
+        color: var(--dk);
+        margin-bottom: 0;
+        border-bottom-color: transparent;
       }
 
       .panel.collapsible.collapsed > :not(.panel-heading) {
         display: none;
       }
 
+      /* ── Pre-built Downloads collapsible toggle ── */
+      .prebuilt-panel .panel-heading {
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--bone);
+      }
+
+      .prebuilt-panel .panel-heading::after {
+        content: '▾';
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--md);
+        background: var(--fog);
+        border: 1px solid var(--bone);
+        line-height: 1;
+        padding: 1px 4px 2px;
+        flex-shrink: 0;
+        transition: background 0.05s steps(2), color 0.05s steps(2);
+      }
+
+      .prebuilt-panel.collapsed .panel-heading::after {
+        content: '▸';
+        color: var(--blk);
+        background: var(--bone);
+        border-color: var(--pale);
+      }
+
+      .prebuilt-panel.collapsed .panel-heading {
+        margin-bottom: 0;
+        border-bottom-color: transparent;
+      }
+
+      .prebuilt-body { display: block; }
+      .prebuilt-compact { display: none; }
+
+      .prebuilt-panel.collapsed .prebuilt-body { display: none; }
+      .prebuilt-panel.collapsed .prebuilt-compact {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 4px;
+      }
+
+      /* ── Paper folder tab system ── */
+      .sidebar-folder {
+        display: flex;
+        align-items: stretch;
+      }
+
+      .folder-content-area {
+        flex: 1;
+        min-width: 0;
+        border: var(--px) solid var(--blk);
+        background: var(--white);
+        box-shadow:
+          inset var(--px) var(--px) 0 var(--bevel-hi),
+          inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--bevel-lo);
+      }
+
+      .folder-pane {
+        display: none;
+        padding: 14px 16px;
+      }
+
+      .folder-pane.active { display: block; }
+
+      /* Strip panel chrome inside folder panes */
+      .folder-pane .panel {
+        border: none;
+        box-shadow: none;
+        margin-bottom: 0;
+        padding: 0;
+      }
+
+      .folder-tab-rail {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        width: 40px;
+        /* Overlap the content area's right border by 1 border-width */
+        margin-left: calc(-1 * var(--px));
+      }
+
+      .folder-tab {
+        flex: 1;
+        min-height: 38px;
+        padding: 8px 0;
+        writing-mode: vertical-rl;
+        font-family: 'Silkscreen', monospace;
+        font-size: 7px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        cursor: pointer;
+        background: var(--bone);
+        border: var(--px) solid var(--blk);
+        border-left: var(--px) solid var(--pale);
+        color: var(--md);
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.05s steps(2), color 0.05s steps(2);
+      }
+
+      .folder-tab:not(:first-child) {
+        margin-top: calc(-1 * var(--px));
+      }
+
+      .folder-tab:hover {
+        background: var(--fog);
+        color: var(--dk);
+        z-index: 2;
+      }
+
+      /* Active tab: white bg + white left border = merges with content area */
+      .folder-tab.active {
+        background: var(--white);
+        color: var(--blk);
+        border-left: var(--px) solid var(--white);
+        z-index: 3;
+      }
+
       /* ── Widescreen two-column layout ── */
       @media (min-width: 1300px) {
         .page {
-          max-width: 1560px;
+          max-width: none;
+          margin-left: 0;
+          margin-right: auto;
+          padding-left: 32px;
+          padding-right: 32px;
         }
 
         .page-layout {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 420px;
-          gap: 24px;
+          grid-template-columns: minmax(0, 800px) 1fr;
+          gap: 32px;
           align-items: start;
         }
 
+        /* Sticky sidebar so the screen stays visible while scrolling */
         .page-sidebar {
+          position: sticky;
+          top: 16px;
+        }
+
+        /* ── Pixel device casing ── */
+        .sidebar-screen {
+          background: var(--bone);
+          border: var(--px) solid var(--blk);
+          box-shadow:
+            inset var(--px) var(--px) 0 var(--bevel-hi),
+            inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--bevel-lo);
+          padding: 10px;
+        }
+
+        .sidebar-screen-header {
+          font-family: 'Silkscreen', monospace;
+          font-size: 8px;
+          color: var(--md);
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid var(--pale);
           display: flex;
-          flex-direction: column;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .sidebar-screen-header::before {
+          content: '▓';
+          color: var(--pale);
+          font-size: 10px;
+        }
+
+        /* Screen inset — sunken panel area with CRT scanlines */
+        .sidebar-screen-body {
+          position: relative;
+          background: var(--fog);
+          border: var(--px) solid var(--blk);
+          box-shadow:
+            inset var(--px) var(--px) 0 var(--bevel-lo),
+            inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--bevel-hi);
+          padding: 8px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          align-items: start;
           gap: 8px;
         }
 
-        .page-sidebar .panel {
+        /* CRT scanline overlay — pointer-events: none so it doesn't block clicks */
+        .sidebar-screen-body::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 3px,
+            rgba(0, 0, 0, 0.045) 3px,
+            rgba(0, 0, 0, 0.045) 4px
+          );
+          pointer-events: none;
+          z-index: 100;
+        }
+
+        .sidebar-screen-body .panel {
           margin-bottom: 0;
+          /* panels expand vertically in their cell */
+          align-self: start;
+        }
+
+        /* Single column for outputs sub-grid */
+        .sidebar-screen .outputs-grid {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -1589,7 +1908,7 @@
                   <div class="card-body">
                     <div class="card-name">Background Server</div>
                     <div class="card-size"></div>
-                    <div class="card-desc">Background web server for file management</div>
+                    <div class="card-desc">Background web server for file management and remote access</div>
                   </div>
                   <div class="card-toggle"><span class="toggle-box"></span></div>
                 </label>
@@ -1598,9 +1917,9 @@
                     <input type="checkbox" id="background_server_on_charge" data-feature="background_server_on_charge" />
                     <div class="card-icon"><span>&#x26A1;</span></div>
                     <div class="card-body">
-                      <div class="card-name">On Charge</div>
+                      <div class="card-name">Auto-start: On Charge</div>
                       <div class="card-size"></div>
-                      <div class="card-desc">Start server automatically when USB power is connected</div>
+                      <div class="card-desc">Connect to WiFi automatically when USB power is detected</div>
                     </div>
                     <div class="card-toggle"><span class="toggle-box"></span></div>
                   </label>
@@ -1608,9 +1927,9 @@
                     <input type="checkbox" id="background_server_always" data-feature="background_server_always" />
                     <div class="card-icon"><span>&#x221E;</span></div>
                     <div class="card-body">
-                      <div class="card-name">Always On</div>
+                      <div class="card-name">Auto-start: Always</div>
                       <div class="card-size"></div>
-                      <div class="card-desc">Auto-connect to WiFi on wake even when not charging</div>
+                      <div class="card-desc">Connect to WiFi on every wake, even off charger (with backoff)</div>
                     </div>
                     <div class="card-toggle"><span class="toggle-box"></span></div>
                   </label>
@@ -1653,16 +1972,47 @@
                 <div class="card-toggle"><span class="toggle-box"></span></div>
               </label>
 
-              <label class="skill-card" data-feature="remote_keyboard_input" data-node-id="remote_keyboard_input">
-                <input type="checkbox" id="remote_keyboard_input" data-feature="remote_keyboard_input" />
-                <div class="card-icon"><span>&#x2328;</span></div>
-                <div class="card-body">
-                  <div class="card-name">Remote Keyboard</div>
-                  <div class="card-size"></div>
-                  <div class="card-desc">Use the Android keyboard first, then fall back to QR/browser input with automatic hotspot startup</div>
+              <div class="dep-group">
+                <div class="skill-card dep-parent static-card always-enabled" data-node-id="remote_control">
+                  <div class="card-icon"><span>&#x25CF;</span></div>
+                  <div class="card-body">
+                    <div class="card-name">Remote Control</div>
+                    <div class="card-size">Always enabled</div>
+                    <div class="card-desc">Android app discovers capabilities via plugin flags at runtime</div>
+                  </div>
+                  <div class="card-toggle"><span class="toggle-box"></span></div>
                 </div>
-                <div class="card-toggle"><span class="toggle-box"></span></div>
-              </label>
+                <div class="dep-children">
+                  <div class="skill-card dep-child static-card always-enabled" data-node-id="remote_open_book">
+                    <div class="card-icon"><span>&#x25A3;</span></div>
+                    <div class="card-body">
+                      <div class="card-name">Open Book</div>
+                      <div class="card-size">Always enabled</div>
+                      <div class="card-desc">App can open books on the device remotely</div>
+                    </div>
+                    <div class="card-toggle"><span class="toggle-box"></span></div>
+                  </div>
+                  <div class="skill-card dep-child static-card always-enabled" data-node-id="remote_page_turn">
+                    <div class="card-icon"><span>&#x21D2;</span></div>
+                    <div class="card-body">
+                      <div class="card-name">Page Turn</div>
+                      <div class="card-size">Always enabled</div>
+                      <div class="card-desc">App can turn pages on the device remotely</div>
+                    </div>
+                    <div class="card-toggle"><span class="toggle-box"></span></div>
+                  </div>
+                  <label class="skill-card dep-child" data-feature="remote_keyboard_input" data-node-id="remote_keyboard_input">
+                    <input type="checkbox" id="remote_keyboard_input" data-feature="remote_keyboard_input" />
+                    <div class="card-icon"><span>&#x2328;</span></div>
+                    <div class="card-body">
+                      <div class="card-name">Keyboard Input</div>
+                      <div class="card-size"></div>
+                      <div class="card-desc">Android keyboard first; falls back to QR/browser with optional hotspot</div>
+                    </div>
+                    <div class="card-toggle"><span class="toggle-box"></span></div>
+                  </label>
+                </div>
+              </div>
 
               <div class="dep-group" data-dep-parent="integrations">
                 <label class="skill-card dep-parent" data-feature="integrations" data-node-id="integrations">
@@ -1701,9 +2051,6 @@
 
             </div>
 
-            <div class="info-bar" style="margin-top: 12px;">
-              Android/app clients discover remote open-book, remote page-turn, and remote keyboard support from the plugin flags <code>remote_open_book</code>, <code>remote_page_turn</code>, and <code>remote_keyboard_input</code>. Remote keyboard sessions prefer the Android app, then expose a QR/browser input page, and can start a hotspot automatically when needed.
-            </div>
           </div>
         </section>
 
@@ -1743,13 +2090,37 @@
       </div><!-- /.page-main -->
 
       <div class="page-sidebar">
+      <div class="sidebar-screen">
+        <div class="sidebar-screen-header">CrossPoint Tools</div>
+        <div class="sidebar-screen-body">
+
+      <!-- Hover docs card -->
+      <div class="panel docs-card" id="docs-card">
+        <div class="docs-placeholder" id="docs-placeholder">◈ hover a feature</div>
+        <div class="docs-content" id="docs-content">
+          <div class="docs-header">
+            <div class="docs-name" id="docs-name"></div>
+            <div class="docs-status" id="docs-status"></div>
+          </div>
+          <div class="docs-desc" id="docs-desc"></div>
+          <div class="docs-meta" id="docs-meta"></div>
+        </div>
+      </div>
 
       <!-- Pre-built Downloads -->
-      <div class="panel">
+      <div class="panel prebuilt-panel">
         <div class="panel-heading">Pre-built Downloads</div>
+        <!-- Compact: visible only when collapsed -->
+        <div class="prebuilt-compact">
+          <a class="btn btn-outline" id="dl-compact-lean" href="#" download>&#x2193; Lean</a>
+          <a class="btn btn-solid" id="dl-compact-standard" href="#" download>&#x2193; Standard</a>
+          <a class="btn btn-outline" id="dl-compact-full" href="#" download>&#x2193; Full</a>
+        </div>
+        <!-- Expanded body -->
+        <div class="prebuilt-body">
         <div class="companion-desc" style="line-height: 1.6; margin-bottom: 4px;">
           Ready-to-flash binaries built from the <code>fork-drift</code> branch on every push.
-          Grab a preset, or use the <strong>Build &amp; Download</strong> panel below for a custom configuration.
+          Grab a preset, or use the <strong>Build &amp; Download</strong> tab for a custom configuration.
         </div>
         <div class="preset-dl-grid">
           <!-- Lean -->
@@ -1808,9 +2179,23 @@
           Flash with <a href="https://unintendedsideeffects.github.io/xteink-flasher/" target="_blank" rel="noopener" style="color:inherit">Xteink Flasher</a>
           or via <code>esptool.py</code>.
         </div>
-      </div>
+        </div><!-- /.prebuilt-body -->
+      </div><!-- /.prebuilt-panel -->
 
-      <!-- Build Outputs -->
+      <!-- Folder tab system: content left, tab rail right -->
+      <div class="sidebar-folder">
+        <div class="sidebar-folder-tabs" id="sidebar-folder-tabs">
+          <button class="folder-tab active" data-tab="output">Output</button>
+          <button class="folder-tab" data-tab="build">Build</button>
+          <button class="folder-tab" data-tab="device">Device</button>
+          <button class="folder-tab" data-tab="fonts">Fonts</button>
+          <button class="folder-tab" data-tab="studio">Studio</button>
+          <button class="folder-tab" data-tab="preview">Preview</button>
+        </div>
+        <div class="sidebar-folder-content">
+
+      <!-- tab: output -->
+      <div class="folder-pane active" id="tab-output">
       <div class="panel">
         <div class="panel-heading">Build Output</div>
         <div class="outputs-grid">
@@ -1843,7 +2228,10 @@
         </div>
       </div>
 
-      <!-- Cloud Build Trigger -->
+      </div><!-- /.folder-pane#tab-output -->
+
+      <!-- tab: build -->
+      <div class="folder-pane" id="tab-build">
       <div class="panel">
         <div class="panel-heading">Build &amp; Download</div>
         <div class="companion-desc" style="line-height: 1.6">
@@ -1867,7 +2255,10 @@
         <div id="gh-build-status" class="info-bar" style="display: none; margin-top: 10px; line-height: 1.8;"></div>
       </div>
 
-      <!-- Device Access -->
+      </div><!-- /.folder-pane#tab-build -->
+
+      <!-- tab: device -->
+      <div class="folder-pane" id="tab-device">
       <div class="panel">
         <div class="panel-heading">Device Access (Optional)</div>
         <div class="companion-row">
@@ -1959,10 +2350,10 @@
             <div class="wallpaper-dropzone" id="wallpaper-dropzone">
               <div class="companion-title">X4 Sleep Wallpaper</div>
               <div class="companion-desc">
-                Import any image, preview the final <code>480 x 800</code> X4 output, then export a grayscale
-                <code>.bmp</code> ready for sleep-image folders.
+                Import any image — or generate one from the Pokédex — preview the <code>480 x 800</code> X4
+                output, then export a <code>.bmp</code> ready for sleep-image folders.
               </div>
-              <div class="actions" style="margin-top: 12px; align-items: center;">
+              <div class="actions" style="margin-top: 12px; align-items: center; flex-wrap: wrap; gap: 6px;">
                 <input type="file" id="wallpaper-upload" accept="image/*" style="display:none" />
                 <button class="btn btn-outline" type="button" id="wallpaper-select-btn">Select Image</button>
                 <button class="btn btn-outline" type="button" id="wallpaper-clear-btn" disabled>Clear</button>
@@ -2040,11 +2431,35 @@
             </div>
 
             <div class="wallpaper-control-group">
+              <div class="wallpaper-group-label">Pokédex</div>
+              <div class="companion-desc">
+                Generate a Pokémon wallpaper in the browser, download the PNG, then import it above to apply
+                placement, depth, and rotation before exporting the final BMP. For the full party flow
+                (per-book assignments, levels, evolution), enable <code>pokemon_party</code> in the feature grid.
+              </div>
+              <div class="actions" style="margin-top: 10px;">
+                <a class="btn btn-outline" href="../plugins/x4-pokedex-grayscale/" target="_blank" rel="noopener">
+                  Open Generator
+                </a>
+                <a
+                  class="btn btn-outline"
+                  id="open-pokedex-plugin"
+                  data-device-link-path="/plugins/pokedex"
+                  href="http://crosspoint.local/plugins/pokedex"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Open on Device
+                </a>
+              </div>
+            </div>
+
+            <div class="wallpaper-control-group">
               <div class="wallpaper-group-label">Device Handoff</div>
               <div class="companion-desc">
-                Put the exported BMP in <code>/sleep</code> for Custom source mode. If you manage the SD card
-                directly, <code>/.sleep</code> also works and takes priority. A root-level <code>sleep.bmp</code> is
-                only the legacy fallback.
+                Put the exported BMP in <code>/sleep</code> for Custom source mode. For Pokédex wallpapers,
+                use <code>/sleep/pokedex</code>. If managing the SD card directly, <code>/.sleep</code> takes
+                priority over <code>/sleep</code>.
               </div>
               <div class="actions" style="margin-top: 12px;">
                 <a class="btn btn-outline" id="open-wallpaper-file-manager" data-file-manager-link="files" href="http://crosspoint.local/files" target="_blank" rel="noopener">
@@ -2056,38 +2471,6 @@
         </div>
         <div id="wallpaper-status" class="info-bar">
           No image selected. This tool runs entirely in your browser and exports an X4-ready BMP.
-        </div>
-      </div>
-
-      <!-- Companion -->
-      <div class="panel">
-        <div class="panel-heading">Companion Plugins</div>
-        <div class="companion-row">
-          <div>
-            <div class="companion-title">Pokedex and Party Tools</div>
-            <div class="companion-desc">
-              Generate wallpapers from Pokemon data in the browser, download them, and copy them into
-              <code>/sleep/pokedex</code>. The device-hosted page at <code>/plugins/pokedex</code> is optional when you
-              want direct upload from a running CrossPoint web server. For the wallpaper generator only, enable
-              <code>web_pokedex_plugin</code>. For the full party flow, also enable <code>pokemon_party</code> so the
-              first six recent books become a Pokemon party with per-book assignments, levels, and evolution state.
-            </div>
-          </div>
-          <div class="actions">
-            <a class="btn btn-outline" href="../plugins/x4-pokedex-grayscale/" target="_blank" rel="noopener">
-              Open Web Generator
-            </a>
-            <a
-              class="btn btn-outline"
-              id="open-pokedex-plugin"
-              data-device-link-path="/plugins/pokedex"
-              href="http://crosspoint.local/plugins/pokedex"
-              target="_blank"
-              rel="noopener"
-            >
-              Open on Device
-            </a>
-          </div>
         </div>
       </div>
 
@@ -2104,6 +2487,8 @@
         <div class="preview-meta" id="preview-meta"></div>
       </div>
 
+        </div><!-- /.sidebar-screen-body -->
+      </div><!-- /.sidebar-screen -->
       <div class="footer">Future: this picker will live inside the OTA update menu.</div>
       </div><!-- /.page-sidebar -->
       </div><!-- /.page-layout -->
@@ -2252,6 +2637,40 @@
           flag: "ENABLE_USB_MASS_STORAGE",
           default: true,
         },
+      };
+
+      const FEATURE_DOCS = {
+        bookerly_fonts: "Amazon's Bookerly typeface, designed from scratch for digital reading on small screens. Carefully tuned spacing and letterforms for sustained legibility at body-text sizes. Includes regular, bold, italic and bold-italic at four sizes (12–18pt).",
+        notosans_fonts: "Google's Noto Sans — a universal typeface covering the full Unicode range. A clean, modern alternative to Bookerly that works well in landscape mode or for readers who prefer a sans-serif. Four styles × four sizes.",
+        opendyslexic_fonts: "A free font designed to increase legibility for readers with dyslexia. Weighted bottoms and unique letter shapes reduce confusion between similar glyphs (b/d, p/q). Four sizes at reduced weights. Large binary — enable only if needed.",
+        image_sleep: "Displays a custom image (BMP on the SD card) when the device sleeps instead of a blank screen. Useful for dust-cover art, decorative illustrations, or always-on status displays on the e-ink panel.",
+        book_images: "Renders inline images embedded inside EPUB books. Decodes JPEG and PNG figures, scales them to fit the page width, and dithers to 1-bit for the e-ink display. Disabled in minimal builds to save RAM during parsing.",
+        markdown: "Adds a lightweight Markdown renderer so plain .md files can be opened and read as if they were books. Supports headings, bold/italic, lists, blockquotes, and code spans. Adds ~296 KB to the binary.",
+        integrations: "Shared runtime layer that enables cloud-service plugins. Required by KOReader Sync and Calibre Wireless — it handles HTTP connections, JSON serialisation, and retry logic. No UI of its own; other features depend on it.",
+        koreader_sync: "Syncs reading position with a KOReader Companion server (e.g. Kavita or a self-hosted KOSync instance). On book open, fetches the last-synced position; on exit, pushes the current page. Requires Integrations.",
+        calibre_sync: "Connects to a Calibre Wireless Library server running on the same network. Browse your Calibre catalogue directly from the device and download books over WiFi. Requires Integrations.",
+        background_server: "A lightweight HTTP server that runs alongside the reader over WiFi. Powers file transfer, remote control APIs, and the web UI. Launching it takes a few seconds; auto-start modes avoid that delay.",
+        background_server_on_charge: "Automatically starts the Background Server whenever the device is connected to a charger. Lets the device act as a wireless book-drop station with no manual steps while it sits on your desk.",
+        background_server_always: "Keeps the Background Server running continuously — on battery or on charge. Maximises availability for remote control and file transfer at the cost of increased WiFi radio power draw.",
+        home_media_picker: "Replaces the plain text file list on the Home screen with a visual grid of cover thumbnails. Covers are cached to the SD card on first render; subsequent loads are instant.",
+        web_pokedex_plugin: "Installs the X4 Pokédex web plugin. Browsable via the Background Server's web UI. Demonstrates the plugin architecture and doubles as a reference for building custom web tools. Requires Image Sleep.",
+        pokemon_party: "Displays your Pokémon party as a sleep-screen overlay sourced from the Pokédex plugin. A cosmetic feature; purely for fun. Requires Web Pokédex Plugin.",
+        epub_support: "The core EPUB 2/3 parser and renderer. Handles ZIP extraction, NCX/OPF navigation, CSS-subset styling, and multi-section layout with an aggressive on-disk cache (.crosspoint/). Disabling this removes book reading entirely.",
+        hyphenation: "Automatic hyphenation using a compressed Knuth–Liang dictionary. Reduces excessive whitespace in justified text, particularly noticeable in narrow columns or landscape mode. Adds ~545 KB for the dictionary data.",
+        xtc_support: "Reads .xtc (CrossPoint Theme Config) sidecar files placed alongside books on the SD card. Overrides per-book font, margins, and theme without changing global settings. Lightweight but niche.",
+        lyra_theme: "The Lyra visual theme — refined typography scale, softer borders, and consistent iconography. Disabling it falls back to the base pixel-art UI. Recommended on for all builds.",
+        ota_updates: "Over-the-air firmware updates via the Background Server's web UI. Streams the binary directly to flash without a USB cable. Includes a verification step before commit; safe to enable in all builds.",
+        remote_keyboard_input: "Turns the Android companion app or any phone browser into a keyboard for device text-entry prompts (WiFi passwords, search fields). Prefers the Android app; falls back to a QR-code web page; can start a local hotspot if no WiFi is available.",
+        todo_planner: "A minimal to-do list accessible from the nav bar. Items persist to the SD card. Useful for reading notes, wish lists, or errand reminders without leaving the device. Adds ~10 KB.",
+        dark_mode: "Inverts the display for night reading — white-on-black instead of black-on-paper. Toggle from the settings menu. Negligible binary cost; the flag controls whether the option is exposed at all.",
+        visual_cover_picker: "Lets you choose cover art for books that lack an embedded thumbnail. Opens a scrollable image browser pointed at a configurable folder on the SD card. Requires Home Media Picker.",
+        ble_wifi_provisioning: "Configure WiFi credentials by scanning a QR code or using the companion app over Bluetooth LE — no need to type a password on the device keyboard. Large binary cost (~673 KB) due to the BLE stack.",
+        user_fonts: "Load custom TTF/OTF fonts from a /fonts folder on the SD card. The companion web tool (Font Converter panel) pre-converts fonts to the device's binary format. Fonts appear in the font picker alongside built-ins.",
+        web_wifi_setup: "A captive-portal style WiFi setup wizard served from the Background Server. Scan a QR code, enter credentials, and the device connects — no app required. Small footprint (~5 KB).",
+        usb_mass_storage: "Exposes the SD card as a USB mass-storage device when connected to a computer. Lets you drag-and-drop books without a network. The SD card is unmounted from the firmware while in this mode.",
+        remote_control: "The Android companion app discovers available remote-control capabilities at runtime by reading plugin flags from the device. No compile-time flag — always advertised. Open Book and Page Turn are always enabled; Keyboard Input is optional.",
+        remote_open_book: "Lets the Android app send a 'open this book' command to the device over WiFi or USB. The device finds the book on the SD card by filename and opens it immediately. Always compiled in.",
+        remote_page_turn: "Lets the Android app send forward/back page commands to the device. Implemented via virtual button injection so it's fully orientation-aware. Always compiled in.",
       };
 
       const BASE_SIZE_MB = 2.57;
@@ -3776,17 +4195,126 @@
         const sidebar = document.querySelector('.page-sidebar');
         if (!sidebar) return;
         const panels = Array.from(sidebar.querySelectorAll('.panel'));
-        // Pre-built Downloads and Build Output open by default; rest collapsed.
+
         panels.forEach((panel, i) => {
           panel.classList.add('collapsible');
-          if (i >= 2) panel.classList.add('collapsed');
+          if (i !== 0) panel.classList.add('collapsed');
           const heading = panel.querySelector('.panel-heading');
           if (!heading) return;
-          heading.addEventListener('click', () => panel.classList.toggle('collapsed'));
+          heading.addEventListener('click', () => {
+            const isOpen = !panel.classList.contains('collapsed');
+            // Collapse all panels, then open the clicked one if it was closed
+            panels.forEach(p => p.classList.add('collapsed'));
+            if (!isOpen) panel.classList.remove('collapsed');
+          });
         });
       }
 
+      function setupHoverDocs() {
+        const docsPlaceholder = document.getElementById('docs-placeholder');
+        const docsContent = document.getElementById('docs-content');
+        const docsName = document.getElementById('docs-name');
+        const docsDesc = document.getElementById('docs-desc');
+        const docsStatus = document.getElementById('docs-status');
+        const docsMeta = document.getElementById('docs-meta');
+        if (!docsPlaceholder) return;
+
+        document.querySelectorAll('.skill-card[data-node-id]').forEach(card => {
+          card.addEventListener('mouseenter', () => {
+            const nodeId = card.dataset.nodeId;
+            const name = card.querySelector('.card-name')?.textContent?.trim() || nodeId;
+            const desc = card.querySelector('.card-desc')?.textContent?.trim() || '';
+            const feature = FEATURES[nodeId];
+            const isAlways = card.classList.contains('always-enabled');
+            const checkbox = document.getElementById(nodeId);
+            const isEnabled = checkbox?.checked ?? false;
+
+            docsName.textContent = name;
+            docsDesc.textContent = FEATURE_DOCS[nodeId] || desc;
+
+            if (isAlways) {
+              docsStatus.textContent = 'always on';
+              docsStatus.className = 'docs-status status-always';
+            } else if (isEnabled) {
+              docsStatus.textContent = 'enabled';
+              docsStatus.className = 'docs-status status-on';
+            } else {
+              docsStatus.textContent = 'off';
+              docsStatus.className = 'docs-status status-off';
+            }
+
+            let metaHtml = '';
+            if (feature?.flag) {
+              metaHtml += `<code class="docs-flag">${feature.flag}</code>`;
+            }
+            if (feature?.sizeKb > 0) {
+              metaHtml += `<span class="docs-size">+${feature.sizeKb} KB flash</span>`;
+            }
+            docsMeta.innerHTML = metaHtml;
+
+            docsPlaceholder.style.display = 'none';
+            docsContent.style.display = 'block';
+          });
+        });
+      }
+
+      function setupCardIcons() {
+        const ICON_MAP = {
+          // Reading
+          epub_support:                    'book-open',
+          hyphenation:                     'align-justify',
+          book_images:                     'image',
+          markdown:                        'hash',
+          todo_planner:                    'square-check',
+          xtc_support:                     'file-text',
+          // Interface — fonts
+          system_fonts:                    'type',
+          opendyslexic_fonts:              'type',
+          notosans_fonts:                  'type',
+          bookerly_fonts:                  'type',
+          // Interface — UI
+          home_media_picker:               'layout-grid',
+          lyra_theme:                      'sparkles',
+          visual_cover_picker:             'grid-2x2',
+          fork_drift_note:                 'git-fork',
+          image_sleep:                     'moon',
+          web_pokedex_plugin:              'zap',
+          pokemon_party:                   'gamepad-2',
+          dark_mode:                       'contrast',
+          user_fonts:                      'folder-open',
+          // Network
+          background_server:               'server',
+          background_server_on_charge:     'battery-charging',
+          background_server_always:        'infinity',
+          web_wifi_setup:                  'wifi',
+          ble_wifi_provisioning:           'bluetooth',
+          ota_updates:                     'cloud-download',
+          remote_control:                  'smartphone',
+          remote_open_book:                'book-marked',
+          remote_page_turn:                'arrow-right',
+          remote_keyboard_input:           'keyboard',
+          integrations:                    'plug',
+          koreader_sync:                   'refresh-cw',
+          calibre_sync:                    'library',
+          // Storage
+          usb_mass_storage:                'hard-drive',
+          serial_access_with_android_note: 'cable',
+        };
+
+        document.querySelectorAll('.skill-card[data-node-id]').forEach(card => {
+          const iconName = ICON_MAP[card.dataset.nodeId];
+          if (!iconName) return;
+          const iconEl = card.querySelector('.card-icon');
+          if (!iconEl) return;
+          iconEl.innerHTML = `<i data-lucide="${iconName}"></i>`;
+        });
+
+        lucide.createIcons();
+      }
+
       setupCollapsiblePanels();
+      setupHoverDocs();
+      setupCardIcons();
       setupEvents();
       setupFontConverter();
       setupWallpaperStudio();

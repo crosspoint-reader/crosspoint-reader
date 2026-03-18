@@ -11,10 +11,6 @@ void Activity::requestUpdate(bool immediate) { (void)immediate; }
 
 void Activity::requestUpdateAndWait() {}
 
-void Activity::onGoHome() {}
-
-void Activity::onSelectBook(const std::string& path) { (void)path; }
-
 void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler) {
   (void)activity;
   this->resultHandler = std::move(resultHandler);
@@ -27,10 +23,6 @@ void Activity::finish() {}
 void Activity::requestUpdate(bool immediate) { activityManager.requestUpdate(immediate); }
 
 void Activity::requestUpdateAndWait() { activityManager.requestUpdateAndWait(); }
-
-void Activity::onGoHome() { activityManager.goHome(); }
-
-void Activity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler) {
   this->resultHandler = std::move(resultHandler);
