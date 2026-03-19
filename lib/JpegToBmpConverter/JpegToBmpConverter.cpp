@@ -311,20 +311,20 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   if (oneBit) {
     // For 1-bit output, use Atkinson dithering for better quality
     atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(outWidth);
-    if (!atkinson1BitDitherer) {
+    if (!atkinson1BitDitherer || !atkinson1BitDitherer->isValid()) {
       LOG_ERR("JPG", "OOM Atkinson1BitDitherer");
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
       atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-      if (!atkinsonDitherer) {
+      if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
         LOG_ERR("JPG", "OOM AtkinsonDitherer");
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
       fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
-      if (!fsDitherer) {
+      if (!fsDitherer || !fsDitherer->isValid()) {
         LOG_ERR("JPG", "OOM FloydSteinbergDitherer");
         return false;
       }

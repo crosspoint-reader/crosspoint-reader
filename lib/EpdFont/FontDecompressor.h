@@ -2,6 +2,7 @@
 
 #include <InflateReader.h>
 
+#include <memory>
 #include <vector>
 
 #include "EpdFontData.h"
@@ -54,9 +55,9 @@ class FontDecompressor {
     uint32_t bufferOffset;
     uint32_t alignedOffset;  // byte-aligned offset within its decompressed group (set during prewarm pre-scan)
   };
-  uint8_t* pageBuffer = nullptr;
+  std::unique_ptr<uint8_t[]> pageBuffer;
   const EpdFontData* pageFont = nullptr;
-  PageGlyphEntry* pageGlyphs = nullptr;
+  std::unique_ptr<PageGlyphEntry[]> pageGlyphs;
   uint16_t pageGlyphCount = 0;
 
   // Hot group: last decompressed group (byte-aligned) for non-prewarmed fallback path.

@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <InflateReader.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 
@@ -240,9 +241,9 @@ bool ZipFile::loadZipDetails() {
   // We scan the last 1KB (or the whole file if smaller) for the EOCD signature
   // 0x06054b50 is stored as 0x50, 0x4b, 0x05, 0x06 in little-endian
   const int scanRange = fileSize > 1024 ? 1024 : fileSize;
-  const auto buffer = static_cast<uint8_t*>(malloc(scanRange));
+  const auto buffer = makeUniqueNoThrow<uint8_t[]>(scanRange);
   if (!buffer) {
-    LOG_ERR("ZIP", "Failed to allocate memory for EOCD scan buffer");
+    LOG_ERR("ZIP", "OOM EOCD scan buffer %d", scanRange);
     if (!wasOpen) {
       close();
     }
@@ -250,7 +251,7 @@ bool ZipFile::loadZipDetails() {
   }
 
   file.seek(fileSize - scanRange);
-  file.read(buffer, scanRange);
+  file.read(buffer.get(), scanRange);
 
   // Scan backwards for the signature
   int foundOffset = -1;
@@ -264,7 +265,6 @@ bool ZipFile::loadZipDetails() {
 
   if (foundOffset == -1) {
     LOG_ERR("ZIP", "EOCD signature not found in zip file");
-    free(buffer);
     if (!wasOpen) {
       close();
     }
@@ -279,7 +279,6 @@ bool ZipFile::loadZipDetails() {
   zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
   zipDetails.isSet = true;
 
-  free(buffer);
   if (!wasOpen) {
     close();
   }
@@ -391,7 +390,7 @@ int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector
   return matched;
 }
 
-uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) {
+std::unique_ptr<uint8_t[]> ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) {
   const bool wasOpen = isOpen();
   if (!wasOpen && !open()) {
     return nullptr;
@@ -418,9 +417,9 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
   const auto deflatedDataSize = fileStat.compressedSize;
   const auto inflatedDataSize = fileStat.uncompressedSize;
   const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
-  const auto data = static_cast<uint8_t*>(malloc(dataSize));
-  if (data == nullptr) {
-    LOG_ERR("ZIP", "Failed to allocate memory for output buffer (%zu bytes)", dataSize);
+  auto data = makeUniqueNoThrow<uint8_t[]>(dataSize);
+  if (!data) {
+    LOG_ERR("ZIP", "OOM output buffer (%zu bytes)", dataSize);
     if (!wasOpen) {
       close();
     }
@@ -429,38 +428,35 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
   if (fileStat.method == ZIP_METHOD_STORED) {
     // no deflation, just read content
-    const size_t dataRead = file.read(data, inflatedDataSize);
+    const size_t dataRead = file.read(data.get(), inflatedDataSize);
     if (!wasOpen) {
       close();
     }
 
     if (dataRead != inflatedDataSize) {
       LOG_ERR("ZIP", "Failed to read data");
-      free(data);
       return nullptr;
     }
 
     // Continue out of block with data set
   } else if (fileStat.method == ZIP_METHOD_DEFLATED) {
     // Read out deflated content from file
-    const auto deflatedData = static_cast<uint8_t*>(malloc(deflatedDataSize));
-    if (deflatedData == nullptr) {
-      LOG_ERR("ZIP", "Failed to allocate memory for decompression buffer");
+    const auto deflatedData = makeUniqueNoThrow<uint8_t[]>(deflatedDataSize);
+    if (!deflatedData) {
+      LOG_ERR("ZIP", "OOM decompression buffer %d", deflatedDataSize);
       if (!wasOpen) {
         close();
       }
       return nullptr;
     }
 
-    const size_t dataRead = file.read(deflatedData, deflatedDataSize);
+    const size_t dataRead = file.read(deflatedData.get(), deflatedDataSize);
     if (!wasOpen) {
       close();
     }
 
     if (dataRead != deflatedDataSize) {
       LOG_ERR("ZIP", "Failed to read data, expected %d got %d", deflatedDataSize, dataRead);
-      free(deflatedData);
-      free(data);
       return nullptr;
     }
 
@@ -468,14 +464,12 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     {
       InflateReader r;
       r.init(false);
-      r.setSource(deflatedData, deflatedDataSize);
-      success = r.read(data, inflatedDataSize);
+      r.setSource(deflatedData.get(), deflatedDataSize);
+      success = r.read(data.get(), inflatedDataSize);
     }
-    free(deflatedData);
 
     if (!success) {
       LOG_ERR("ZIP", "Failed to inflate file");
-      free(data);
       return nullptr;
     }
 
@@ -515,9 +509,9 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
   if (fileStat.method == ZIP_METHOD_STORED) {
     // no deflation, just read content
-    const auto buffer = static_cast<uint8_t*>(malloc(chunkSize));
+    const auto buffer = makeUniqueNoThrow<uint8_t[]>(chunkSize);
     if (!buffer) {
-      LOG_ERR("ZIP", "Failed to allocate memory for buffer");
+      LOG_ERR("ZIP", "OOM buffer %d", chunkSize);
       if (!wasOpen) {
         close();
       }
@@ -526,41 +520,38 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
     size_t remaining = inflatedDataSize;
     while (remaining > 0) {
-      const size_t dataRead = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
+      const size_t dataRead = file.read(buffer.get(), remaining < chunkSize ? remaining : chunkSize);
       if (dataRead == 0) {
         LOG_ERR("ZIP", "Could not read more bytes");
-        free(buffer);
         if (!wasOpen) {
           close();
         }
         return false;
       }
 
-      out.write(buffer, dataRead);
+      out.write(buffer.get(), dataRead);
       remaining -= dataRead;
     }
 
     if (!wasOpen) {
       close();
     }
-    free(buffer);
     return true;
   }
 
   if (fileStat.method == ZIP_METHOD_DEFLATED) {
-    auto* fileReadBuffer = static_cast<uint8_t*>(malloc(chunkSize));
+    const auto fileReadBuffer = makeUniqueNoThrow<uint8_t[]>(chunkSize);
     if (!fileReadBuffer) {
-      LOG_ERR("ZIP", "Failed to allocate memory for zip file read buffer");
+      LOG_ERR("ZIP", "OOM file read buffer %d", chunkSize);
       if (!wasOpen) {
         close();
       }
       return false;
     }
 
-    auto* outputBuffer = static_cast<uint8_t*>(malloc(chunkSize));
+    const auto outputBuffer = makeUniqueNoThrow<uint8_t[]>(chunkSize);
     if (!outputBuffer) {
-      LOG_ERR("ZIP", "Failed to allocate memory for output buffer");
-      free(fileReadBuffer);
+      LOG_ERR("ZIP", "OOM output buffer %d", chunkSize);
       if (!wasOpen) {
         close();
       }
@@ -570,13 +561,11 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     ZipInflateCtx ctx;
     ctx.file = &file;
     ctx.fileRemaining = deflatedDataSize;
-    ctx.readBuf = fileReadBuffer;
+    ctx.readBuf = fileReadBuffer.get();
     ctx.readBufSize = chunkSize;
 
     if (!ctx.reader.init(true)) {
       LOG_ERR("ZIP", "Failed to init inflate reader");
-      free(outputBuffer);
-      free(fileReadBuffer);
       if (!wasOpen) {
         close();
       }
@@ -589,7 +578,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
     while (true) {
       size_t produced;
-      const InflateStatus status = ctx.reader.readAtMost(outputBuffer, chunkSize, &produced);
+      const InflateStatus status = ctx.reader.readAtMost(outputBuffer.get(), chunkSize, &produced);
 
       totalProduced += produced;
       if (totalProduced > static_cast<size_t>(inflatedDataSize)) {
@@ -599,7 +588,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       }
 
       if (produced > 0) {
-        if (out.write(outputBuffer, produced) != produced) {
+        if (out.write(outputBuffer.get(), produced) != produced) {
           LOG_ERR("ZIP", "Failed to write all output bytes to stream");
           break;
         }
@@ -626,8 +615,6 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     if (!wasOpen) {
       close();
     }
-    free(outputBuffer);
-    free(fileReadBuffer);
     return success;  // ctx.reader destructor frees the ring buffer
   }
 

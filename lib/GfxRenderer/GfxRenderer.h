@@ -39,7 +39,7 @@ class GfxRenderer {
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
-  uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
+  std::unique_ptr<uint8_t[]> bwBufferChunks[BW_BUFFER_NUM_CHUNKS];
   std::map<int, EpdFontFamily> fontMap;
 
   // Mutable because drawText() is const but needs to delegate scan-mode

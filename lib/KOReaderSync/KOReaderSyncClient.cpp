@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -42,7 +43,11 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   WiFiClient plainClient;
 
   if (isHttpsUrl(url)) {
-    secureClient.reset(new WiFiClientSecure);
+    secureClient = makeUniqueNoThrow<WiFiClientSecure>();
+    if (!secureClient) {
+      LOG_ERR("KOSync", "OOM WiFiClientSecure");
+      return NETWORK_ERROR;
+    }
     secureClient->setInsecure();
     http.begin(*secureClient, url.c_str());
   } else {
@@ -80,7 +85,11 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   WiFiClient plainClient;
 
   if (isHttpsUrl(url)) {
-    secureClient.reset(new WiFiClientSecure);
+    secureClient = makeUniqueNoThrow<WiFiClientSecure>();
+    if (!secureClient) {
+      LOG_ERR("KOSync", "OOM WiFiClientSecure");
+      return NETWORK_ERROR;
+    }
     secureClient->setInsecure();
     http.begin(*secureClient, url.c_str());
   } else {
@@ -142,7 +151,11 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   WiFiClient plainClient;
 
   if (isHttpsUrl(url)) {
-    secureClient.reset(new WiFiClientSecure);
+    secureClient = makeUniqueNoThrow<WiFiClientSecure>();
+    if (!secureClient) {
+      LOG_ERR("KOSync", "OOM WiFiClientSecure");
+      return NETWORK_ERROR;
+    }
     secureClient->setInsecure();
     http.begin(*secureClient, url.c_str());
   } else {

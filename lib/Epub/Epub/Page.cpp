@@ -1,6 +1,7 @@
 #include "Page.h"
 
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
@@ -22,7 +23,11 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
   serialization::readPod(file, yPos);
 
   auto tb = TextBlock::deserialize(file);
-  return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
+  auto pageLine = makeUniqueNoThrow<PageLine>(std::move(tb), xPos, yPos);
+  if (!pageLine) {
+    LOG_ERR("PGE", "OOM page line %d %d", xPos, yPos);
+  }
+  return pageLine;
 }
 
 void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
@@ -45,7 +50,11 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
   serialization::readPod(file, yPos);
 
   auto ib = ImageBlock::deserialize(file);
-  return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
+  auto pageImage = makeUniqueNoThrow<PageImage>(std::move(ib), xPos, yPos);
+  if (!pageImage) {
+    LOG_ERR("PGE", "OOM page image %d %d", xPos, yPos);
+  }
+  return pageImage;
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
@@ -83,7 +92,11 @@ bool Page::serialize(FsFile& file) const {
 }
 
 std::unique_ptr<Page> Page::deserialize(FsFile& file) {
-  auto page = std::unique_ptr<Page>(new Page());
+  auto page = makeUniqueNoThrow<Page>();
+  if (!page) {
+    LOG_ERR("PGE", "OOM page");
+    return nullptr;
+  }
 
   uint16_t count;
   serialization::readPod(file, count);

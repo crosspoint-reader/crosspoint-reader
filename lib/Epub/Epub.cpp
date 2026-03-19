@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PngToBmpConverter.h>
 #include <ZipFile.h>
 
@@ -83,10 +84,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
     LOG_DBG("EBP", "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
     size_t coverPageSize;
-    uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
+    auto coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
     if (coverPageData) {
-      const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData), coverPageSize);
-      free(coverPageData);
+      const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData.get()), coverPageSize);
+      coverPageData.reset();
 
       // Determine base path of the cover page for resolving relative image references
       std::string coverPageBase;
@@ -169,27 +170,25 @@ bool Epub::parseTocNcxFile() const {
     return false;
   }
 
-  const auto ncxBuffer = static_cast<uint8_t*>(malloc(1024));
+  const auto ncxBuffer = makeUniqueNoThrow<uint8_t[]>(1024);
   if (!ncxBuffer) {
-    LOG_ERR("EBP", "Could not allocate memory for toc ncx parser");
+    LOG_ERR("EBP", "OOM toc ncx parser");
     tempNcxFile.close();
     return false;
   }
 
   while (tempNcxFile.available()) {
-    const auto readSize = tempNcxFile.read(ncxBuffer, 1024);
+    const auto readSize = tempNcxFile.read(ncxBuffer.get(), 1024);
     if (readSize == 0) break;
-    const auto processedSize = ncxParser.write(ncxBuffer, readSize);
+    const auto processedSize = ncxParser.write(ncxBuffer.get(), readSize);
 
     if (processedSize != readSize) {
       LOG_ERR("EBP", "Could not process all toc ncx data");
-      free(ncxBuffer);
       tempNcxFile.close();
       return false;
     }
   }
 
-  free(ncxBuffer);
   tempNcxFile.close();
   Storage.remove(tmpNcxPath.c_str());
 
@@ -228,25 +227,23 @@ bool Epub::parseTocNavFile() const {
     return false;
   }
 
-  const auto navBuffer = static_cast<uint8_t*>(malloc(1024));
+  const auto navBuffer = makeUniqueNoThrow<uint8_t[]>(1024);
   if (!navBuffer) {
-    LOG_ERR("EBP", "Could not allocate memory for toc nav parser");
+    LOG_ERR("EBP", "OOM toc nav parser");
     return false;
   }
 
   while (tempNavFile.available()) {
-    const auto readSize = tempNavFile.read(navBuffer, 1024);
-    const auto processedSize = navParser.write(navBuffer, readSize);
+    const auto readSize = tempNavFile.read(navBuffer.get(), 1024);
+    const auto processedSize = navParser.write(navBuffer.get(), readSize);
 
     if (processedSize != readSize) {
       LOG_ERR("EBP", "Could not process all toc nav data");
-      free(navBuffer);
       tempNavFile.close();
       return false;
     }
   }
 
-  free(navBuffer);
   tempNavFile.close();
   Storage.remove(tmpNavPath.c_str());
 
@@ -335,9 +332,18 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
   // Initialize spine/TOC cache
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!bookMetadataCache) {
+    LOG_ERR("EBP", "OOM book metadata cache");
+    return false;
+  }
+
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser(cachePath));
+  cssParser = makeUniqueNoThrow<CssParser>(cachePath);
+  if (!cssParser) {
+    LOG_ERR("EBP", "OOM css parser");
+    return false;
+  }
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
@@ -446,7 +452,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
 
   // Reload the cache from disk so it's in the correct state
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!bookMetadataCache) {
+    LOG_ERR("EBP", "OOM book metadata cache");
+    return false;
+  }
   if (!bookMetadataCache->load()) {
     LOG_ERR("EBP", "Failed to reload cache after writing");
     return false;
@@ -706,7 +716,8 @@ bool Epub::generateThumbBmp(int height) const {
   return false;
 }
 
-uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
+std::unique_ptr<uint8_t[]> Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size,
+                                                         const bool trailingNullByte) const {
   if (itemHref.empty()) {
     LOG_DBG("EBP", "Failed to read item, empty href");
     return nullptr;
@@ -714,12 +725,10 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
   const std::string path = FsHelpers::normalisePath(itemHref);
 
-  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+  auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
     LOG_DBG("EBP", "Failed to read item %s", path.c_str());
-    return nullptr;
   }
-
   return content;
 }
 

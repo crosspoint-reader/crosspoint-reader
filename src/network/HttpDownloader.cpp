@@ -2,6 +2,7 @@
 
 #include <HTTPClient.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <NetworkClient.h>
 #include <NetworkClientSecure.h>
 #include <StreamString.h>
@@ -56,11 +57,19 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
+    auto secureClient = makeUniqueNoThrow<NetworkClientSecure>();
+    if (!secureClient) {
+      LOG_ERR("HTTP", "OOM NetworkClientSecure");
+      return false;
+    }
     secureClient->setInsecure();
-    client.reset(secureClient);
+    client = std::move(secureClient);
   } else {
-    client.reset(new NetworkClient());
+    client = makeUniqueNoThrow<NetworkClient>();
+    if (!client) {
+      LOG_ERR("HTTP", "OOM NetworkClient");
+      return false;
+    }
   }
   HTTPClient http;
 
@@ -106,11 +115,19 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
+    auto secureClient = makeUniqueNoThrow<NetworkClientSecure>();
+    if (!secureClient) {
+      LOG_ERR("HTTP", "OOM NetworkClientSecure");
+      return HTTP_ERROR;
+    }
     secureClient->setInsecure();
-    client.reset(secureClient);
+    client = std::move(secureClient);
   } else {
-    client.reset(new NetworkClient());
+    client = makeUniqueNoThrow<NetworkClient>();
+    if (!client) {
+      LOG_ERR("HTTP", "OOM NetworkClient");
+      return HTTP_ERROR;
+    }
   }
   HTTPClient http;
 

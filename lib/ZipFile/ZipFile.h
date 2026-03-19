@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -67,6 +68,7 @@ class ZipFile {
   int fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector<uint32_t>& sizes);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
-  uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
+  std::unique_ptr<uint8_t[]> readFileToMemory(const char* filename, size_t* size = nullptr,
+                                              bool trailingNullByte = false);
   bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
 };

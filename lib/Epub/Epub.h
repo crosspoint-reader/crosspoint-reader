@@ -56,8 +56,8 @@ class Epub {
   std::string getThumbBmpPath() const;
   std::string getThumbBmpPath(int height) const;
   bool generateThumbBmp(int height) const;
-  uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
-                                   bool trailingNullByte = false) const;
+  std::unique_ptr<uint8_t[]> readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
+                                                     bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;

@@ -1,8 +1,8 @@
 #include "ImageDecoderFactory.h"
 
 #include <Logging.h>
+#include <Memory.h>
 
-#include <memory>
 #include <string>
 
 #include "JpegToFramebufferConverter.h"
@@ -25,12 +25,18 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
 
   if (JpegToFramebufferConverter::supportsFormat(ext)) {
     if (!jpegDecoder) {
-      jpegDecoder.reset(new JpegToFramebufferConverter());
+      jpegDecoder = makeUniqueNoThrow<JpegToFramebufferConverter>();
+      if (!jpegDecoder) {
+        LOG_ERR("DEC", "OOM JpegToFramebufferConverter");
+      }
     }
     return jpegDecoder.get();
   } else if (PngToFramebufferConverter::supportsFormat(ext)) {
     if (!pngDecoder) {
-      pngDecoder.reset(new PngToFramebufferConverter());
+      pngDecoder = makeUniqueNoThrow<PngToFramebufferConverter>();
+      if (!pngDecoder) {
+        LOG_ERR("DEC", "OOM PngToFramebufferConverter");
+      }
     }
     return pngDecoder.get();
   }

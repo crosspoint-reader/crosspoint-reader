@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -139,12 +140,13 @@ bool HomeActivity::storeCoverBuffer() {
   freeCoverBuffer();
 
   const size_t bufferSize = GfxRenderer::getBufferSize();
-  coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
+  coverBuffer = makeUniqueNoThrow<uint8_t[]>(bufferSize);
   if (!coverBuffer) {
+    LOG_ERR("HME", "OOM cover buffer %d", bufferSize);
     return false;
   }
 
-  memcpy(coverBuffer, frameBuffer, bufferSize);
+  memcpy(coverBuffer.get(), frameBuffer, bufferSize);
   return true;
 }
 
@@ -159,15 +161,12 @@ bool HomeActivity::restoreCoverBuffer() {
   }
 
   const size_t bufferSize = GfxRenderer::getBufferSize();
-  memcpy(frameBuffer, coverBuffer, bufferSize);
+  memcpy(frameBuffer, coverBuffer.get(), bufferSize);
   return true;
 }
 
 void HomeActivity::freeCoverBuffer() {
-  if (coverBuffer) {
-    free(coverBuffer);
-    coverBuffer = nullptr;
-  }
+  coverBuffer.reset();
   coverBufferStored = false;
 }
 

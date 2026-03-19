@@ -1,5 +1,8 @@
 #include "InflateReader.h"
 
+#include <Logging.h>
+#include <Memory.h>
+
 #include <cstring>
 #include <type_traits>
 
@@ -17,20 +20,20 @@ bool InflateReader::init(const bool streaming) {
   deinit();  // free any previously allocated ring buffer and reset state
 
   if (streaming) {
-    ringBuffer = static_cast<uint8_t*>(malloc(INFLATE_DICT_SIZE));
-    if (!ringBuffer) return false;
-    memset(ringBuffer, 0, INFLATE_DICT_SIZE);
+    ringBuffer = makeUniqueNoThrow<uint8_t[]>(INFLATE_DICT_SIZE);
+    if (!ringBuffer) {
+      LOG_ERR("IFR", "OOM");
+      return false;
+    }
+    memset(ringBuffer.get(), 0, INFLATE_DICT_SIZE);
   }
 
-  uzlib_uncompress_init(&decomp, ringBuffer, ringBuffer ? INFLATE_DICT_SIZE : 0);
+  uzlib_uncompress_init(&decomp, ringBuffer.get(), ringBuffer ? INFLATE_DICT_SIZE : 0);
   return true;
 }
 
 void InflateReader::deinit() {
-  if (ringBuffer) {
-    free(ringBuffer);
-    ringBuffer = nullptr;
-  }
+  ringBuffer.reset();
   memset(&decomp, 0, sizeof(decomp));
 }
 

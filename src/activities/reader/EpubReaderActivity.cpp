@@ -8,6 +8,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <esp_system.h>
 
 #include "CrossPointSettings.h"
@@ -533,7 +534,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
-    section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
+    section = makeUniqueNoThrow<Section>(epub, currentSpineIndex, renderer);
+    if (!section) {
+      LOG_ERR("ERS", "OOM epub reader new section");
+      return;
+    }
 
     const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
     const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;

@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
@@ -109,6 +110,10 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   serialization::readPod(file, blockStyle.textIndent);
   serialization::readPod(file, blockStyle.textIndentDefined);
 
-  return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
+  auto textBlock =
+      makeUniqueNoThrow<TextBlock>(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle);
+  if (!textBlock) {
+    LOG_ERR("TXB", "OOM text block");
+  }
+  return textBlock;
 }
