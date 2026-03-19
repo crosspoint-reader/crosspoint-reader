@@ -25,7 +25,7 @@ constexpr const char* AP_SSID = "CrossPoint-Reader";
 constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
 constexpr uint8_t AP_CHANNEL = 1;
-constexpr uint8_t AP_MAX_CONNECTIONS = 4;
+constexpr uint8_t AP_MAX_CONNECTIONS = 2;  // Reduced from 4 to reduce memory contention and improve stability
 constexpr int QR_CODE_WIDTH = 198;
 constexpr int QR_CODE_HEIGHT = 198;
 
