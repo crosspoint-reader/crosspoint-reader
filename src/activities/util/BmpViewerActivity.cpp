@@ -86,7 +86,7 @@ void BmpViewerActivity::onEnter() {
 void BmpViewerActivity::onExit() {
   Activity::onExit();
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
 void BmpViewerActivity::loop() {
