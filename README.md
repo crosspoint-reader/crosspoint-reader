@@ -12,6 +12,23 @@ Because I believe in open source and want to give back to the project that made 
 
 ---
 
+## Quick Start — Install Latest Release
+
+**Latest Release**: v1.1.2-claw (2026-03-19)
+
+[Download firmware.bin](https://github.com/laird/crosspoint-claw/releases/download/v1.1.2-claw/firmware.bin) | [Release Notes](https://github.com/laird/crosspoint-claw/releases/tag/v1.1.2-claw)
+
+### Install in 2 Minutes (Web Installer)
+
+1. **Enable Danger Zone** on your reader (Settings → System → Danger Zone → ON)
+2. **Open** `http://<reader-ip>/` in your browser
+3. **Upload** `firmware.bin` file
+4. **Reboot** — device auto-flashes
+
+📖 **[Full Installation Guide](#installation)** with alternatives (SD Card, USB)
+
+---
+
 ## What's Different in This Fork
 
 ### PULSR Theme (PR [#1331](https://github.com/crosspoint-reader/crosspoint-reader/pull/1331))
@@ -97,6 +114,149 @@ The following libraries are staged and delivered automatically:
 - **AI-generated stories** — saved to `Books/chip/YYYY-MM/` monthly subdirs
 - **Thought leadership articles** — EPUB versions of published articles
 - **WhatsNew.epub** — navigable index of recently added content, updated automatically
+
+---
+
+## Installation
+
+### Option 1: Web Installer (Easiest - No USB Required)
+
+This method uses the reader's built-in web interface to install firmware over WiFi.
+
+#### Prerequisites
+- Reader connected to WiFi
+- Firmware file (`firmware.bin`) accessible on your local network
+- Reader's IP address (e.g., 192.168.0.234)
+
+#### Steps
+
+**1. Enable Danger Zone (One-time setup)**
+
+On your reader:
+- Go to **Settings → System → Danger Zone**
+- Toggle **ON** to enable web-based device management
+- Note the password (default: `1814`)
+
+**2. Upload Firmware via Web UI**
+
+Using any browser on your network:
+
+```
+http://<reader-ip>/
+```
+
+Example: `http://192.168.0.234/`
+
+Navigate to:
+- **Settings** → **Firmware Upload** 
+- Select your `firmware.bin` file
+- Click **Upload**
+- Device will show upload progress
+- When complete, device will automatically reboot and flash
+
+**3. Verify Installation**
+
+After reboot (1-2 minutes):
+```bash
+curl http://192.168.0.234/api/status | jq '.version'
+```
+
+Expected output: `"1.1.2-claw-dev+feature/cover-browser"` (or current version)
+
+---
+
+#### Automated Upload Script
+
+For scripted/automated deployments:
+
+```bash
+#!/bin/bash
+READER_IP="192.168.0.234"
+DZ_PASSWORD="1814"
+FIRMWARE="firmware.bin"
+
+# Enable Danger Zone (if not already enabled)
+# curl -X POST "http://${READER_IP}/api/danger-zone/enable?password=${DZ_PASSWORD}"
+
+# Upload firmware
+echo "Uploading firmware..."
+curl -X POST "http://${READER_IP}/upload?path=/" \
+  -F "file=@${FIRMWARE};filename=firmware.bin"
+
+# Verify upload completed
+sleep 2
+echo "Verifying upload..."
+curl -s "http://${READER_IP}/api/files?path=/" | \
+  jq -r '.[] | select(.name=="firmware.bin") | .size'
+
+# Reboot to trigger flash
+echo "Rebooting reader..."
+curl -X POST "http://${READER_IP}/api/reboot?password=${DZ_PASSWORD}"
+
+echo "Firmware flashing in progress. Device will reboot shortly..."
+sleep 30
+
+# Verify new version
+echo "Verifying installation..."
+curl -s "http://${READER_IP}/api/status" | jq '.version'
+```
+
+---
+
+### Option 2: SD Card (Most Reliable)
+
+If the web interface is unavailable or you prefer a failsafe method.
+
+#### Steps
+
+1. **Copy firmware to SD card**
+   ```bash
+   cp firmware.bin /path/to/sd-card/
+   ```
+   
+2. **Insert SD card into reader**
+   - Power off the reader
+   - Insert SD card with `firmware.bin` at root
+   - Power on
+
+3. **Device auto-flashes**
+   - Bootloader detects `firmware.bin` on startup
+   - Flashing progress displays on screen (~30 seconds)
+   - Device reboots with new firmware
+   - `firmware.bin` is consumed/deleted after successful flash
+
+---
+
+### Option 3: USB (Developer/Fallback)
+
+For development or if WiFi/SD methods fail.
+
+#### Prerequisites
+- USB cable (micro-USB to your computer)
+- `esptool.py` installed: `pip install esptool`
+- `firmware.bin` on your computer
+
+#### Steps
+
+```bash
+esptool.py --chip esp32c3 \
+  --port /dev/ttyACM0 \
+  write_flash -z -fm dio -ff 40m \
+  0x0 firmware.bin
+```
+
+**macOS:**
+```bash
+esptool.py --chip esp32c3 \
+  --port /dev/cu.usbmodem* \
+  write_flash -z -fm dio -ff 40m \
+  0x0 firmware.bin
+```
+
+**Windows (PowerShell):**
+```powershell
+esptool.py --chip esp32c3 --port COM3 write_flash -z -fm dio -ff 40m 0x0 firmware.bin
+```
 
 ---
 
