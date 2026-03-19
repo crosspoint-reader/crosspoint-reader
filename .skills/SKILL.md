@@ -258,49 +258,49 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 **Rules**: NO exceptions, NO abort(), ALWAYS log before error return
 
-### Acceptable malloc/free Patterns
+### Heap Buffer Allocation
 
-**Source**: [src/activities/home/HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp), [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+**Prefer `makeUniqueNoThrow` over `malloc`.** Both are nothrow (return `nullptr` on OOM rather than calling `abort()`), but `malloc` requires a manual `free` on every return path — a common source of leaks. `makeUniqueNoThrow<uint8_t[]>(size)` from `lib/Memory/Memory.h` frees automatically when it goes out of scope.
 
-Despite "prefer stack allocation," malloc is acceptable for:
-1. **Large temporary buffers** (> 256 bytes, won't fit on stack)
-2. **One-time allocations** during activity initialization
-3. **Bitmap rendering buffers** (variable size, used briefly)
-
-**Pattern**:
+**Preferred pattern**:
 ```cpp
-// Allocate
-auto* buffer = static_cast<uint8_t*>(malloc(bufferSize));
+#include <Memory.h>
+
+auto buffer = makeUniqueNoThrow<uint8_t[]>(bufferSize);
 if (!buffer) {
-  LOG_ERR("MODULE", "malloc failed: %d bytes", bufferSize);
-  return false;  // Handle allocation failure
+  LOG_ERR("MODULE", "OOM: %d bytes", bufferSize);
+  return false;
 }
 
-// Use buffer
-processData(buffer, bufferSize);
+processData(buffer.get(), bufferSize);
+// freed automatically — no manual free needed, no leak on early return
+```
 
-// Free immediately after use
-free(buffer);
-buffer = nullptr;
+**`malloc` or `new (std::nothrow)` are still acceptable** when the buffer must be passed to a C API that takes ownership and frees it itself (e.g., certain SDK callbacks). In that case follow the manual pattern:
+```cpp
+auto* buffer = static_cast<uint8_t*>(malloc(bufferSize));  // or new (std::nothrow) uint8_t[bufferSize]
+if (!buffer) {
+  LOG_ERR("MODULE", "OOM: %d bytes", bufferSize);
+  return false;
+}
+sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 ```
 
 **Rules**:
-- **ALWAYS check for nullptr** after malloc
-- **Free immediately** after use (don't hold across multiple operations)
-- **Set to nullptr** after free (avoid use-after-free)
-- **Document size**: Comment why stack allocation was rejected
+- **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
+- **ALWAYS check for nullptr** after any allocation and `LOG_ERR` before returning false
+- **Raw allocation only** when a C API takes ownership; document why in a comment
 
 **Examples in codebase**:
+- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
 - Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
-- Text chunk buffers: [TxtReaderActivity.cpp:259](../src/activities/reader/TxtReaderActivity.cpp)
 - Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
-- OTA update buffer: [OtaUpdater.cpp:40](../src/network/OtaUpdater.cpp)
 
-### Heap Allocation with `new`: Always Use `std::nothrow`
+### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
-**CRITICAL**: With `-fno-exceptions`, bare `new` on OOM calls `abort()` — it does NOT return `nullptr`. Always use `new (std::nothrow)` and null-check, or prefer `makeUniqueNoThrow` from `lib/Memory/Memory.h`. `malloc` is already nothrow by definition (returns `nullptr` on failure) and remains acceptable per the pattern above.
+**CRITICAL**: With `-fno-exceptions`, bare `new` on OOM calls `abort()` — it does NOT return `nullptr`. Always use `makeUniqueNoThrow` from `lib/Memory/Memory.h`, which wraps `new (std::nothrow)` and returns a `std::unique_ptr` that is null on OOM and automatically frees on scope exit.
 
-**Pattern — RAII single object (preferred)**:
+**Preferred pattern**:
 ```cpp
 #include <Memory.h>
 
@@ -309,44 +309,27 @@ if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
 
 auto buf = makeUniqueNoThrow<uint8_t[]>(size);
 if (!buf) { LOG_ERR("MOD", "OOM: %d bytes", size); return false; }
+
+// Pass to C APIs via .get(); unique_ptr frees automatically on return
+someApi(buf.get(), size);
 ```
 
-**Pattern — raw pointer with `new (std::nothrow)`**:
+**`new (std::nothrow)` directly is acceptable** when the object must be passed to a C API that takes ownership and calls `delete` itself:
 ```cpp
 auto* obj = new (std::nothrow) MyClass(args);
 if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
-```
-
-**Pattern — multiple raw allocations with early returns (use `ScopedCleanup`)**:
-When a function holds several raw resources (`malloc` + `new`) across multiple return paths, declare a `ScopedCleanup` immediately after initialising all pointers to `nullptr`. It runs on every exit — success and failure alike:
-```cpp
-#include <Memory.h>
-
-uint8_t* buf = nullptr;
-MyClass* obj = nullptr;
-const ScopedCleanup cleanup{[&]{
-  free(buf);
-  delete obj;
-}};
-
-buf = static_cast<uint8_t*>(malloc(size));
-if (!buf) { LOG_ERR("MOD", "OOM"); return false; }
-
-obj = new (std::nothrow) MyClass(args);
-if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
-
-return doWork(buf, obj);  // cleanup runs automatically
+sdkApiThatTakesOwnership(obj);  // SDK calls delete
 ```
 
 **Rules**:
-- **NEVER use bare `new`** — always `new (std::nothrow)` or `makeUniqueNoThrow`
-- **ALWAYS `LOG_ERR` before returning false** on OOM (same as malloc pattern)
-- **Prefer `makeUniqueNoThrow`** for single-owner objects — no manual `delete` needed
-- **Use `ScopedCleanup`** when a function mixes `malloc` + `new` and has multiple return paths
+- **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
+- **NEVER use bare `new`** — always `makeUniqueNoThrow` or `new (std::nothrow)`
+- **ALWAYS `LOG_ERR` before returning false** on OOM
+- **Use `.get()`** to pass the raw pointer to C-style APIs; ownership stays with the `unique_ptr`
+- **`new (std::nothrow)` directly only** when a C API takes ownership; document why in a comment
 
 **Examples in codebase**:
-- JPEG converter: [JpegToBmpConverter.cpp](../lib/JpegToBmpConverter/JpegToBmpConverter.cpp) (`ScopedCleanup` + `new (std::nothrow)`)
-- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`, `ScopedCleanup`)
+- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
 
 ---
 
@@ -717,7 +700,7 @@ Tested in all 4 orientations with 5MB+ files.
    - `lib/I18n/I18nKeys.h`, `lib/I18n/I18nStrings.h`, `lib/I18n/I18nStrings.cpp`
    - **Source**: YAML translation files in `lib/I18n/translations/` (one per language)
    - **To modify**: Edit source YAML files, then run `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
-   - **Commit**: Source YAML files + `I18nKeys.h` and `I18nStrings.h` (needed for IDE symbol resolution), but NOT `I18nStrings.cpp`
+   - **Commit**: Source YAML files only. All three generated files (`I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`) are in `.gitignore` and regenerated at build time.
 
 3. **Build Artifacts** (in `.gitignore`):
    - `.pio/` - PlatformIO build output
@@ -739,7 +722,7 @@ Tested in all 4 orientations with 5MB+ files.
    - English (`english.yaml`) is the reference; missing keys in other languages fall back to English
 2. Run generator: `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
 3. Generated files update: `I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`
-4. **Commit** source YAML files + `I18nKeys.h` and `I18nStrings.h` (IDE needs these for symbol resolution), but NOT `I18nStrings.cpp`
+4. **Commit** source YAML files only. All three generated files are in `.gitignore` and regenerated at build time.
 
 **To use translated strings in code**:
 ```cpp
