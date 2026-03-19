@@ -335,13 +335,13 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // We need to track which source Y maps to which output Y
   // Using fixed-point: srcY_fp = outY * scaleY_fp (gives source Y in 16.16 format)
   std::unique_ptr<uint32_t[]> rowAccum;  // Accumulator for each output X (32-bit for larger sums)
-  std::unique_ptr<uint32_t[]> rowCount;  // Count of source pixels accumulated per output X
+  std::unique_ptr<uint16_t[]> rowCount;  // Count of source pixels accumulated per output X
   int currentOutY = 0;                   // Current output row being accumulated
   uint32_t nextOutY_srcStart = 0;        // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
     rowAccum = makeUniqueNoThrow<uint32_t[]>(outWidth);
-    rowCount = makeUniqueNoThrow<uint32_t[]>(outWidth);
+    rowCount = makeUniqueNoThrow<uint16_t[]>(outWidth);
     nextOutY_srcStart = scaleY_fp;  // First boundary is at scaleY_fp (source Y for outY=1)
     if (!rowAccum || !rowCount) {
       LOG_ERR("JPG", "OOM row accumulators (%d bytes)", outWidth);
@@ -540,7 +540,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           }
           // Moving to next source row - reset accumulators
           memset(rowAccum.get(), 0, outWidth * sizeof(uint32_t));
-          memset(rowCount.get(), 0, outWidth * sizeof(uint32_t));
+          memset(rowCount.get(), 0, outWidth * sizeof(uint16_t));
         }
       }
     }
