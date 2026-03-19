@@ -140,11 +140,15 @@ bool UITheme::isWifiAutoConnecting() { return s_wifiAutoConnecting.load(std::mem
 
 static std::vector<std::string> s_receivedFiles;
 static SemaphoreHandle_t s_receivedFilesMutex = nullptr;
+static std::atomic<bool> s_receivedFilesInitialized{false};
 
 static void ensureReceivedFilesMutex() {
-  if (!s_receivedFilesMutex) {
-    s_receivedFilesMutex = xSemaphoreCreateMutex();
-    assert(s_receivedFilesMutex);
+  // Meyer's singleton pattern for thread-safe lazy initialization
+  if (!s_receivedFilesInitialized.load(std::memory_order_acquire)) {
+    SemaphoreHandle_t newMutex = xSemaphoreCreateMutex();
+    assert(newMutex);
+    s_receivedFilesMutex = newMutex;
+    s_receivedFilesInitialized.store(true, std::memory_order_release);
   }
 }
 
