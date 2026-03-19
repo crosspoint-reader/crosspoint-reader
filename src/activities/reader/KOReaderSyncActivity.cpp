@@ -204,7 +204,25 @@ void KOReaderSyncActivity::onEnter() {
   // Check if already connected (e.g. from settings page auth)
   if (WiFi.status() == WL_CONNECTED) {
     LOG_DBG("KOSync", "Already connected to WiFi");
-    onWifiSelectionComplete(true);
+    state = SYNCING;
+    statusMessage = tr(STR_SYNCING_TIME);
+    requestUpdate(true);
+
+    // Perform sync directly (will be handled in loop)
+    xTaskCreate(
+        [](void* param) {
+          auto* self = static_cast<KOReaderSyncActivity*>(param);
+          // Sync time first
+          syncTimeWithNTP();
+          {
+            RenderLock lock(*self);
+            self->statusMessage = tr(STR_CALC_HASH);
+          }
+          self->requestUpdate(true);
+          self->performSync();
+          vTaskDelete(nullptr);
+        },
+        "SyncTask", 8192, this, 1, nullptr);
     return;
   }
 
