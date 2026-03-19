@@ -1008,8 +1008,8 @@ void loop() {
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  // Suppress auto-sleep when USB is connected, or when Danger Zone is active (web server must stay reachable)
-  const bool suppressSleep = gpio.isUsbConnected() || SETTINGS.dangerZoneEnabled;
+  // Suppress auto-sleep only when BOTH USB is connected AND Danger Zone is active (web server must stay reachable)
+  const bool suppressSleep = gpio.isUsbConnected() && SETTINGS.dangerZoneEnabled;
   if (millis() - lastActivityTime >= sleepTimeoutMs && !suppressSleep) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     teardownDangerZone("inactivity-timeout");
