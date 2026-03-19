@@ -49,9 +49,9 @@ class CrossPointWebServer {
     String error = "";
 
     // Upload write buffer - batches small writes into larger SD card operations
-    // 4KB is a good balance: large enough to reduce syscall overhead, small enough
-    // to keep individual write times short and avoid watchdog issues
-    static constexpr size_t UPLOAD_BUFFER_SIZE = 4096;  // 4KB buffer
+    // 2KB buffer reduces memory fragmentation on devices with limited heap
+    // Still large enough for SD card efficiency while keeping memory usage minimal
+    static constexpr size_t UPLOAD_BUFFER_SIZE = 2048;  // 2KB buffer (reduced from 4KB for stability)
     std::vector<uint8_t> buffer;
     size_t bufferPos = 0;
 
