@@ -554,11 +554,21 @@ void SleepActivity::renderOverlaySleepScreen() const {
     return rc == PNG_SUCCESS;
   };
 
-  // Try /sleep/ directory first (random selection, same as renderCustomSleepScreen).
+  // Try /.sleep/ (preferred) or /sleep/ directory (random selection, same as renderCustomSleepScreen).
   // Accepts both .bmp and .png files; .bmp headers are validated during the scan.
   bool overlayDrawn = false;
-  auto dir = Storage.open("/sleep");
+  const char* sleepDir = nullptr;
+  auto dir = Storage.open("/.sleep");
   if (dir && dir.isDirectory()) {
+    sleepDir = "/.sleep";
+  } else {
+    if (dir) dir.close();
+    dir = Storage.open("/sleep");
+    if (dir && dir.isDirectory()) {
+      sleepDir = "/sleep";
+    }
+  }
+  if (sleepDir) {
     std::vector<std::string> files;
     char name[500];
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
@@ -596,7 +606,7 @@ void SleepActivity::renderOverlaySleepScreen() const {
       }
       APP_STATE.lastSleepImage = randomFileIndex;
       APP_STATE.saveToFile();
-      const std::string selected = "/sleep/" + files[randomFileIndex];
+      const std::string selected = std::string(sleepDir) + "/" + files[randomFileIndex];
       if (FsHelpers::checkFileExtension(selected, ".png")) {
         overlayDrawn = tryDrawPngOverlay(selected);
       } else {
