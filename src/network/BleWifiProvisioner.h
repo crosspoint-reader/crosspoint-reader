@@ -35,6 +35,7 @@ class BleWifiProvisioner final {
 
  private:
   class CredentialCharacteristicCallbacks;
+  class ServerDisconnectCallbacks;
 
   void handleIncomingPayload(const std::string& payload);
   void setStatusMessage(const std::string& message);
@@ -55,6 +56,7 @@ class BleWifiProvisioner final {
   BLEService* service = nullptr;
   BLECharacteristic* characteristic = nullptr;
   CredentialCharacteristicCallbacks* callbacks = nullptr;
+  ServerDisconnectCallbacks* serverCallbacks = nullptr;
 };
 #else
 class BleWifiProvisioner final {

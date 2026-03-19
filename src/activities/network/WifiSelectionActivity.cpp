@@ -245,13 +245,8 @@ void WifiSelectionActivity::checkBleProvisioning() {
   selectedSSID = bleSsid;
   enteredPassword = blePassword;
   selectedRequiresPassword = !enteredPassword.empty();
-  usedSavedPassword = true;
+  usedSavedPassword = false;
   autoConnecting = false;
-
-  if (!enteredPassword.empty()) {
-    WIFI_STORE.addCredential(selectedSSID, enteredPassword);
-  }
-  WIFI_STORE.setLastConnectedSsid(selectedSSID);
 
   LOG_DBG("WIFI", "Received BLE credentials for %s", selectedSSID.c_str());
   attemptConnection();

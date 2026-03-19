@@ -17,6 +17,15 @@ constexpr const char* kCharacteristicUuid = "41cb0002-b8f4-4e4a-9f49-ecb9d6fd4b9
 constexpr size_t kMaxPayloadSize = 320;
 }  // namespace
 
+class BleWifiProvisioner::ServerDisconnectCallbacks : public BLEServerCallbacks {
+ public:
+  void onDisconnect(BLEServer* pServer) override {
+    (void)pServer;
+    BLEDevice::startAdvertising();
+    LOG_DBG("BLE", "Client disconnected — restarted advertising");
+  }
+};
+
 class BleWifiProvisioner::CredentialCharacteristicCallbacks : public BLECharacteristicCallbacks {
  public:
   explicit CredentialCharacteristicCallbacks(BleWifiProvisioner* owner) : owner(owner) {}
@@ -67,6 +76,9 @@ bool BleWifiProvisioner::start(const std::string& deviceName) {
     return false;
   }
 
+  serverCallbacks = new ServerDisconnectCallbacks();
+  server->setCallbacks(serverCallbacks);
+
   service = server->createService(kServiceUuid);
   if (!service) {
     setStatusMessage("BLE service create failed");
@@ -112,6 +124,10 @@ void BleWifiProvisioner::stop() {
   if (callbacks) {
     delete callbacks;
     callbacks = nullptr;
+  }
+  if (serverCallbacks) {
+    delete serverCallbacks;
+    serverCallbacks = nullptr;
   }
   server = nullptr;
   service = nullptr;
