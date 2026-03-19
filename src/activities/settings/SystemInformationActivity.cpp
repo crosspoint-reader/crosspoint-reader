@@ -24,6 +24,7 @@ static std::string formatBytes(uint64_t bytes) {
 
 void SystemInformationActivity::onEnter() {
   Activity::onEnter();
+  status_.reset();
   requestUpdate();
 }
 
@@ -32,6 +33,13 @@ void SystemInformationActivity::onExit() { Activity::onExit(); }
 void SystemInformationActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
+    return;
+  }
+  // Collect status (includes the potentially slow SD FAT walk) outside of render()
+  // so the screen is shown with a "Reading..." placeholder first.
+  if (!status_.has_value()) {
+    status_ = SystemStatus::collect();
+    requestUpdate();
   }
 }
 
@@ -45,8 +53,6 @@ void SystemInformationActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SYSTEM_INFO),
                  CROSSPOINT_VERSION);
 
-  const auto status = SystemStatus::collect();
-
   // Layout: label on the left, value right of the midpoint
   const int leftX = metrics.verticalSpacing * 3;
   const int valueX = pageWidth / 2;
@@ -58,6 +64,16 @@ void SystemInformationActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, leftX, y, label, true, EpdFontFamily::BOLD);
     renderer.drawText(UI_10_FONT_ID, valueX, y, value.c_str());
   };
+
+  if (!status_.has_value()) {
+    // Stats not yet collected — show a placeholder so the screen updates immediately
+    drawRow(0, "Version", CROSSPOINT_VERSION);
+    drawRow(3, "SD card", "Reading...");
+    renderer.displayBuffer();
+    return;
+  }
+
+  const auto& status = *status_;
 
   // Device
   drawRow(0, "Version", status.version);

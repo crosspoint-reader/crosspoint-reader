@@ -1,5 +1,8 @@
 #pragma once
 
+#include <optional>
+
+#include "SystemStatus.h"
 #include "activities/Activity.h"
 
 class SystemInformationActivity final : public Activity {
@@ -11,4 +14,7 @@ class SystemInformationActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+
+ private:
+  std::optional<SystemStatus> status_;
 };
