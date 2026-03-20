@@ -945,6 +945,7 @@ const char* const STRINGS_EN[] = {
     "Check serial output for details",
     "Dark",
     "Light",
+    "Follow Theme",
     "Custom",
     "Image Source",
     "Pokedex",
@@ -1468,6 +1469,7 @@ const char* const STRINGS_ES[] = {
     "Consulte los registros del puerto serie",
     "Oscuro",
     "Claro",
+    "Follow Theme",
     "Personalizado",
     "Image Source",
     "Pokedex",
@@ -2265,6 +2267,7 @@ const char* const STRINGS_FR[] = {
     "tails",
     "Sombre",
     "Clair",
+    "Follow Theme",
     "Custom",
     "Source d'images",
     "Pokedex",
@@ -2941,6 +2944,7 @@ const char* const STRINGS_DE[] = {
     "fen",
     "Dunkel",
     "Hell",
+    "Follow Theme",
     "Eigenes",
     "Bildquelle",
     "Pokedex",
@@ -4138,6 +4142,7 @@ const char* const STRINGS_CS[] = {
     "tl\xC3"
     "\xBD"
     "",
+    "Follow Theme",
     "Vlastn\xC3"
     "\xAD"
     "",
@@ -5312,6 +5317,7 @@ const char* const STRINGS_PO[] = {
     "da serial",
     "Escuro",
     "Claro",
+    "Follow Theme",
     "Personalizado",
     "Fonte de imagens",
     "Pokedex",
@@ -10122,6 +10128,7 @@ const char* const STRINGS_RU[] = {
     "\xD0"
     "\xB9"
     "",
+    "Follow Theme",
     "\xD0"
     "\xA1"
     "\xD0"
@@ -14984,6 +14991,7 @@ const char* const STRINGS_SV[] = {
     "\xB6"
     "rk",
     "Ljus",
+    "Follow Theme",
     "Valfri",
     "Bildk\xC3"
     "\xA4"
@@ -15988,6 +15996,7 @@ const char* const STRINGS_RO[] = {
     "\x8E"
     "ntunecat",
     "Luminos",
+    "Follow Theme",
     "Personalizat",
     "Surs\xC4"
     "\x83"
@@ -16841,6 +16850,7 @@ const char* const STRINGS_CA[] = {
     "rie per obtenir detalls",
     "Fosc",
     "Clar",
+    "Follow Theme",
     "Personalitzat",
     "Font d'imatges",
     "Pokedex",
@@ -22304,6 +22314,7 @@ const char* const STRINGS_UK[] = {
     "\xD0"
     "\xB9"
     "",
+    "Follow Theme",
     "\xD0"
     "\x9A"
     "\xD0"
@@ -31895,6 +31906,7 @@ const char* const STRINGS_BE[] = {
     "\xD1"
     "\x8B"
     "",
+    "Follow Theme",
     "\xD0"
     "\xA1"
     "\xD0"
@@ -36513,6 +36525,7 @@ const char* const STRINGS_IT[] = {
     "Controlla l'output seriale per i dettagli",
     "Scuro",
     "Chiaro",
+    "Follow Theme",
     "Personalizzato",
     "Sorgente immagini",
     "Pokedex",
@@ -37314,6 +37327,7 @@ const char* const STRINGS_PL[] = {
     "ciu szeregowym",
     "Ciemny",
     "Jasny",
+    "Follow Theme",
     "W\xC5"
     "\x82"
     "asny",
@@ -38265,6 +38279,7 @@ const char* const STRINGS_FI[] = {
     "tiedoista",
     "Tumma",
     "Vaalea",
+    "Follow Theme",
     "Mukautettu",
     "Kuval\xC3"
     "\xA4"
@@ -39070,6 +39085,7 @@ const char* const STRINGS_DA[] = {
     "\xB8"
     "rk",
     "Lys",
+    "Follow Theme",
     "Brugerdefineret",
     "Billedkilde",
     "Pokedex",
@@ -39547,6 +39563,7 @@ const char* const STRINGS_NL[] = {
     "le output voor details",
     "Donker",
     "Licht",
+    "Follow Theme",
     "Aangepast",
     "Image Source",
     "Pokedex",
@@ -40502,6 +40519,7 @@ const char* const STRINGS_TR[] = {
     "\xC4"
     "\xB1"
     "k",
+    "Follow Theme",
     "\xC3"
     "\x96"
     "zel",

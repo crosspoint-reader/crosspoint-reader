@@ -352,10 +352,10 @@ void CrossPointSettings::enforceButtonLayoutConstraints() {
 
 void CrossPointSettings::validateAndClamp() {
   // Migrate legacy raw values (enum constants moved; use integer literals to be safe).
-  if (sleepScreen == 3 /* old COVER */ || sleepScreen == 5 /* old COVER_CUSTOM */) {
+  // Note: 3 (old COVER) and 4 (old BLANK) are now TRANSPARENT and FOLLOW_THEME.
+  // We stop migrating them to avoid clobbering new settings.
+  if (sleepScreen == 5 /* old COVER_CUSTOM */) {
     sleepScreen = CUSTOM;
-  } else if (sleepScreen == 4 /* old BLANK */) {
-    sleepScreen = DARK;
   } else if (sleepScreen == 6 /* old TRANSPARENT */) {
     sleepScreen = TRANSPARENT;  // = 3
   } else if (sleepScreen >= SLEEP_SCREEN_MODE_COUNT) {

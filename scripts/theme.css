@@ -1,0 +1,22 @@
+/* Canonical device theme tokens — single source of truth.
+   Injected into device HTML pages and configurator buildPreviewDoc()
+   at build time by scripts/build_html.py.
+   Edit here; never edit the :root blocks in HTML files directly. */
+
+:root {
+  --black: #000;
+  --white: #fff;
+  --paper: #f7f4ed;
+  --gray-1: #111;
+  --gray-2: #222;
+  --gray-3: #444;
+  --gray-4: #666;
+  --gray-5: #888;
+  --gray-6: #aaa;
+  --gray-7: #ccc;
+  --gray-8: #ddd;
+  --gray-9: #eee;
+  --gray-10: #f5f5f5;
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-display: Georgia, 'Times New Roman', Times, serif;
+}

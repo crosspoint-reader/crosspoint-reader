@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CrossPoint Reader — Build Configurator</title>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- Live theme token source (resolves var(--paper) etc. when served via HTTP) -->
+    <link rel="stylesheet" href="../../scripts/theme.css">
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
@@ -1273,6 +1275,21 @@
         flex-direction: column;
         gap: 0;
       }
+      .settings-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+        margin-top: 14px;
+      }
+      .settings-form-pane {
+        min-width: 0;
+      }
+      .settings-preview-pane {
+        min-width: 0;
+        position: sticky;
+        top: 16px;
+      }
       .settings-section {
         border-bottom: 1px solid var(--bone);
         padding: 10px 0;
@@ -1298,37 +1315,99 @@
       .eink-preview-wrap {
         display: flex;
         justify-content: center;
-        margin: 14px 0 6px;
+        margin: 0 0 6px;
+      }
+      .eink-front {
+        flex: 1;
+      }
+      .eink-shell {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: min(100%, 420px);
+        margin: 0 auto;
       }
       .eink-device {
+        flex: 1;
+        background: linear-gradient(180deg, #252525 0%, #111 100%);
+        border: 2px solid #2f2f2f;
+        border-radius: 24px;
+        padding: 18px 16px 16px;
         position: relative;
-        width: 180px;
-        background: var(--bone);
-        border: 2px solid var(--blk);
-        padding: 8px 8px 14px;
         box-shadow:
-          inset var(--px) var(--px) 0 var(--bevel-hi),
-          inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 var(--bevel-lo);
+          inset 2px 2px 0 rgba(255,255,255,0.12),
+          inset -2px -2px 0 rgba(0,0,0,0.35),
+          0 8px 18px rgba(0,0,0,0.18);
       }
-      .eink-screen {
+      .eink-side-buttons {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 18px;
+        padding-top: 40px;
+      }
+      .eink-side-control {
+        display: flex;
+      }
+      .eink-side-action {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: none;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+      }
+      .eink-side-label {
+        min-width: 66px;
+        text-align: left;
+        font-size: 11px;
+        color: #2a2a2a;
+        font-family: 'IBM Plex Mono', monospace;
+        line-height: 1.1;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .eink-side-button {
+        width: 8px;
+        background: #2d2d2d;
+        border: 1px solid #111;
+        border-radius: 8px;
+        box-shadow:
+          inset 1px 1px 0 rgba(255,255,255,0.18),
+          inset -1px -1px 0 rgba(0,0,0,0.35);
+        cursor: pointer;
+      }
+      .eink-side-action:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+      }
+      .eink-side-button.power { height: 40px; }
+      .eink-side-button.vol-up,
+      .eink-side-button.vol-down { height: 28px; }
+      .eink-side-control.power-control {
+        margin-bottom: 70px;
+      }
+      .eink-screen,
+      .eink-screen-image,
+      .eink-screen-frame {
         display: block;
         width: 100%;
         aspect-ratio: 3 / 5;
-        border: 1px solid var(--dk);
+        border: 1px solid #7a7a7a;
+        border-radius: 12px;
         background: #f4f0e8;
         image-rendering: pixelated;
       }
-      .eink-buttons {
-        display: flex;
-        justify-content: space-around;
-        margin-top: 6px;
+      .eink-screen-frame {
+        height: auto;
       }
-      .eink-btn-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--dk);
-        border: 1px solid var(--blk);
+      .eink-device-bottom {
+        margin-top: 10px;
+        min-height: 74px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
       }
       .eink-preview-caption {
         text-align: center;
@@ -1336,6 +1415,65 @@
         color: var(--lt);
         margin-top: 4px;
         font-family: 'IBM Plex Mono', monospace;
+      }
+      .device-hint-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-top: 8px;
+        padding: 0 4px;
+      }
+      .device-hint {
+        font-size: 9px;
+        color: rgba(255,255,255,0.82);
+        font-family: 'IBM Plex Mono', monospace;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .device-hint-button {
+        border: none;
+        background: transparent;
+        padding: 0;
+        text-align: center;
+        cursor: pointer;
+      }
+      .device-hint-button[disabled] {
+        cursor: default;
+      }
+      .device-hint-button:focus-visible {
+        outline: 2px solid rgba(255,255,255,0.8);
+        outline-offset: 3px;
+      }
+      .eink-front-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 12px;
+        padding: 0 8px;
+      }
+      .eink-front-button {
+        height: 10px;
+        border-radius: 999px;
+        background: #111;
+        border: 1px solid #444;
+        box-shadow:
+          inset 1px 1px 0 rgba(255,255,255,0.14),
+          inset -1px -1px 0 rgba(0,0,0,0.45);
+      }
+      .eink-front-button.left {
+        border-bottom-left-radius: 14px;
+      }
+      .eink-front-button.right {
+        border-bottom-right-radius: 14px;
+      }
+      @media (max-width: 900px) {
+        .settings-layout {
+          grid-template-columns: 1fr;
+        }
+        .settings-preview-pane {
+          position: static;
+          order: -1;
+        }
       }
 
       /* ── Pre-built download cards ── */
@@ -2740,40 +2878,26 @@
           <div class="panel">
             <div class="panel-heading">Baked Settings</div>
             <div class="companion-desc" style="line-height: 1.6; margin-bottom: 4px;">
-              Pre-configure device settings. Download <code>settings.json</code> and place it at
+              Pre-configure device-side settings. Download <code>settings.json</code> and place it at
               <code>/.crosspoint/settings.json</code> on the SD card. The device loads these on first
-              boot. Feature-gated options (greyed) depend on your current feature selection above.
+              boot. Reader and device settings below are feature-gated and follow your current
+              configurator selection above.
             </div>
+            <div class="settings-layout">
+              <div class="settings-form-pane">
+                <div class="settings-sections">
 
-            <!-- Live e-ink preview -->
-            <div class="eink-preview-wrap">
-              <div>
-                <div class="eink-device">
-                  <canvas class="eink-screen" id="eink-canvas" width="180" height="300"></canvas>
-                  <div class="eink-buttons">
-                    <div class="eink-btn-dot"></div>
-                    <div class="eink-btn-dot"></div>
-                    <div class="eink-btn-dot"></div>
-                    <div class="eink-btn-dot"></div>
-                  </div>
-                </div>
-                <div class="eink-preview-caption">live preview</div>
-              </div>
-            </div>
-
-            <div class="settings-sections">
-
-              <!-- Typography -->
+              <!-- Reader -->
               <div class="settings-section">
-                <div class="settings-section-title">Typography</div>
+                <div class="settings-section-title">Reader</div>
                 <div class="settings-grid">
                   <div class="form-group">
                     <label class="form-label" for="s-fontFamily">Font Family</label>
                     <select class="form-select" id="s-fontFamily">
-                      <option value="0">Bookerly</option>
-                      <option value="1">NotoSans</option>
+                      <option value="0" selected>Bookerly</option>
+                      <option value="1">Noto Sans</option>
                       <option value="2">OpenDyslexic</option>
-                      <option value="3" id="opt-user-font">User SD Font</option>
+                      <option value="3">External Font</option>
                     </select>
                   </div>
                   <div class="form-group">
@@ -2782,7 +2906,7 @@
                       <option value="0">Small</option>
                       <option value="1" selected>Medium</option>
                       <option value="2">Large</option>
-                      <option value="3">Extra Large</option>
+                      <option value="3">X-Large</option>
                     </select>
                   </div>
                   <div class="form-group">
@@ -2794,40 +2918,43 @@
                     </select>
                   </div>
                   <div class="form-group">
-                    <label class="form-label" for="s-paragraphAlignment">Alignment</label>
-                    <select class="form-select" id="s-paragraphAlignment">
-                      <option value="0" selected>Justified</option>
-                      <option value="1">Left</option>
-                      <option value="2">Center</option>
-                      <option value="3">Right</option>
-                      <option value="4">Book Style</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label" for="s-screenMargin">Margin (px)</label>
+                    <label class="form-label" for="s-screenMargin">Screen Margin</label>
                     <select class="form-select" id="s-screenMargin">
-                      <option value="0">None (0)</option>
-                      <option value="3">Thin (3)</option>
-                      <option value="5" selected>Normal (5)</option>
-                      <option value="8">Wide (8)</option>
-                      <option value="12">Extra Wide (12)</option>
+                      <option value="5" selected>Narrow</option>
+                      <option value="10">Balanced</option>
+                      <option value="15">Comfort</option>
+                      <option value="20">Wide</option>
+                      <option value="30">XL</option>
+                      <option value="40">XXL</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label class="form-label" for="s-extraParagraphSpacing">Para Spacing</label>
-                    <select class="form-select" id="s-extraParagraphSpacing">
+                    <label class="form-label" for="s-paragraphAlignment">Paragraph Alignment</label>
+                    <select class="form-select" id="s-paragraphAlignment">
+                      <option value="0" selected>Justify</option>
+                      <option value="1">Align Left</option>
+                      <option value="2">Center</option>
+                      <option value="3">Align Right</option>
+                      <option value="4">Book's Style</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="s-orientation">Orientation</label>
+                    <select class="form-select" id="s-orientation">
+                      <option value="0" selected>Portrait</option>
+                      <option value="1">Landscape CW</option>
+                      <option value="2">Inverted</option>
+                      <option value="3">Landscape CCW</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="s-embeddedStyle">Embedded Style</label>
+                    <select class="form-select" id="s-embeddedStyle">
                       <option value="0">Off</option>
                       <option value="1" selected>On</option>
                     </select>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label" for="s-textAntiAliasing">Anti-aliasing</label>
-                    <select class="form-select" id="s-textAntiAliasing">
-                      <option value="0">Off</option>
-                      <option value="1" selected>On</option>
-                    </select>
-                  </div>
-                  <div class="form-group" id="row-hyphenation">
+                  <div class="form-group" id="row-hyphenationEnabled">
                     <label class="form-label" for="s-hyphenationEnabled">Hyphenation</label>
                     <select class="form-select" id="s-hyphenationEnabled">
                       <option value="0" selected>Off</option>
@@ -2835,10 +2962,25 @@
                     </select>
                   </div>
                   <div class="form-group">
-                    <label class="form-label" for="s-embeddedStyle">Book CSS</label>
-                    <select class="form-select" id="s-embeddedStyle">
-                      <option value="0">Ignore</option>
-                      <option value="1" selected>Use Book's</option>
+                    <label class="form-label" for="s-extraParagraphSpacing">Extra Paragraph Spacing</label>
+                    <select class="form-select" id="s-extraParagraphSpacing">
+                      <option value="0">Off</option>
+                      <option value="1" selected>On</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="s-textAntiAliasing">Text Anti-Aliasing</label>
+                    <select class="form-select" id="s-textAntiAliasing">
+                      <option value="0">Off</option>
+                      <option value="1" selected>On</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="row-imageRendering">
+                    <label class="form-label" for="s-imageRendering">Images</label>
+                    <select class="form-select" id="s-imageRendering">
+                      <option value="0" selected>Display</option>
+                      <option value="1">Placeholder</option>
+                      <option value="2">Suppress</option>
                     </select>
                   </div>
                 </div>
@@ -2849,12 +2991,36 @@
                 <div class="settings-section-title">Display</div>
                 <div class="settings-grid">
                   <div class="form-group">
-                    <label class="form-label" for="s-orientation">Orientation</label>
-                    <select class="form-select" id="s-orientation">
-                      <option value="0" selected>Portrait</option>
-                      <option value="1">Landscape CW</option>
+                    <label class="form-label" for="s-sleepScreen">Sleep Screen</label>
+                    <select class="form-select" id="s-sleepScreen">
+                      <option value="0" selected>Dark</option>
+                      <option value="1">Light</option>
+                      <option value="4">Follow Theme</option>
+                      <option value="2" id="opt-sleep-custom">Custom Image</option>
+                      <option value="3">Transparent</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="row-sleepScreenSource">
+                    <label class="form-label" for="s-sleepScreenSource">Sleep Image Source</label>
+                    <select class="form-select" id="s-sleepScreenSource">
+                      <option value="0" selected>Sleep Folder</option>
+                      <option value="1" id="opt-sleep-source-pokedex">Pokédex</option>
+                      <option value="2" id="opt-sleep-source-all">Sleep + Pokédex</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="row-sleepScreenCoverMode">
+                    <label class="form-label" for="s-sleepScreenCoverMode">Sleep Image Fit</label>
+                    <select class="form-select" id="s-sleepScreenCoverMode">
+                      <option value="0" selected>Fit</option>
+                      <option value="1">Crop</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="row-sleepScreenCoverFilter">
+                    <label class="form-label" for="s-sleepScreenCoverFilter">Sleep Image Filter</label>
+                    <select class="form-select" id="s-sleepScreenCoverFilter">
+                      <option value="0" selected>None</option>
+                      <option value="1">Contrast</option>
                       <option value="2">Inverted</option>
-                      <option value="3">Landscape CCW</option>
                     </select>
                   </div>
                   <div class="form-group" id="row-darkMode">
@@ -2865,11 +3031,19 @@
                     </select>
                   </div>
                   <div class="form-group">
+                    <label class="form-label" for="s-hideBatteryPercentage">Hide Battery %</label>
+                    <select class="form-select" id="s-hideBatteryPercentage">
+                      <option value="0" selected>Never</option>
+                      <option value="1">In Reader</option>
+                      <option value="2">Always</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
                     <label class="form-label" for="s-uiTheme">UI Theme</label>
                     <select class="form-select" id="s-uiTheme">
                       <option value="0">Classic</option>
                       <option value="1" selected>Lyra</option>
-                      <option value="2">Lyra Extended</option>
+                      <option value="2">Visual Covers</option>
                       <option value="3">ForkDrift</option>
                       <option value="4">Pokémon Party</option>
                     </select>
@@ -2884,56 +3058,44 @@
                       <option value="4">Every 30 pages</option>
                     </select>
                   </div>
-                </div>
-              </div>
-
-              <!-- Status Bar -->
-              <div class="settings-section">
-                <div class="settings-section-title">Status Bar</div>
-                <div class="settings-grid">
                   <div class="form-group">
-                    <label class="form-label" for="s-statusBar">Mode</label>
-                    <select class="form-select" id="s-statusBar">
-                      <option value="0">None</option>
-                      <option value="1">No Progress</option>
-                      <option value="2" selected>Full</option>
-                      <option value="3">Book Progress Bar</option>
-                      <option value="4">Only Bar</option>
-                      <option value="5">Chapter Bar</option>
+                    <label class="form-label" for="s-fadingFix">Sunlight Fading Fix</label>
+                    <select class="form-select" id="s-fadingFix">
+                      <option value="0" selected>Off</option>
+                      <option value="1">On</option>
                     </select>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label" for="s-statusBarTitle">Title</label>
-                    <select class="form-select" id="s-statusBarTitle">
-                      <option value="0">Book Title</option>
-                      <option value="1" selected>Chapter Title</option>
-                      <option value="2">Hide</option>
+                  <div class="form-group" id="row-globalStatusBar">
+                    <label class="form-label" for="s-globalStatusBar">Global Status Bar</label>
+                    <select class="form-select" id="s-globalStatusBar">
+                      <option value="0" selected>Off</option>
+                      <option value="1">On</option>
                     </select>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label" for="s-statusBarBattery">Battery</label>
-                    <select class="form-select" id="s-statusBarBattery">
-                      <option value="0">Hide</option>
-                      <option value="1" selected>Show</option>
+                  <div class="form-group" id="row-globalStatusBarPosition">
+                    <label class="form-label" for="s-globalStatusBarPosition">Global Bar Position</label>
+                    <select class="form-select" id="s-globalStatusBarPosition">
+                      <option value="0" selected>Top</option>
+                      <option value="1">Bottom</option>
                     </select>
+                  </div>
+                  <div class="form-group" id="row-sleepPinnedPath" style="grid-column: span 2;">
+                    <label class="form-label" for="s-sleepPinnedPath">Pinned Sleep Image Path</label>
+                    <input class="form-input" id="s-sleepPinnedPath" type="text"
+                      maxlength="255" placeholder="/sleep/custom/my-cover.bmp"
+                      autocomplete="off" spellcheck="false" />
+                  </div>
+                  <div class="form-group" id="row-sleepStudioAction" style="grid-column: span 2;">
+                    <label class="form-label">Wallpaper Studio</label>
+                    <button class="btn btn-outline" type="button" id="open-sleep-wallpaper-studio">Open Wallpaper Studio</button>
                   </div>
                 </div>
               </div>
 
-              <!-- Behaviour -->
+              <!-- Controls -->
               <div class="settings-section">
-                <div class="settings-section-title">Behaviour</div>
+                <div class="settings-section-title">Controls</div>
                 <div class="settings-grid">
-                  <div class="form-group">
-                    <label class="form-label" for="s-sleepTimeout">Sleep After</label>
-                    <select class="form-select" id="s-sleepTimeout">
-                      <option value="0">1 minute</option>
-                      <option value="1">5 minutes</option>
-                      <option value="2" selected>10 minutes</option>
-                      <option value="3">15 minutes</option>
-                      <option value="4">30 minutes</option>
-                    </select>
-                  </div>
                   <div class="form-group">
                     <label class="form-label" for="s-sideButtonLayout">Side Buttons</label>
                     <select class="form-select" id="s-sideButtonLayout">
@@ -2957,15 +3119,52 @@
                       <option value="1" selected>On</option>
                     </select>
                   </div>
+                  <div class="form-group" style="grid-column: span 2;">
+                    <label class="form-label">Remap Front Buttons</label>
+                    <button class="btn btn-outline" type="button" id="start-front-button-remap">Use Device Buttons</button>
+                    <div class="companion-desc" id="front-button-remap-status" style="margin-top:8px; font-size:12px;">
+                      Hardware order: Back, Confirm, Left, Right.
+                    </div>
+                    <input id="s-frontButtonLayout" type="hidden" value="0" />
+                    <input id="s-frontButtonBack" type="hidden" value="0" />
+                    <input id="s-frontButtonConfirm" type="hidden" value="1" />
+                    <input id="s-frontButtonLeft" type="hidden" value="2" />
+                    <input id="s-frontButtonRight" type="hidden" value="3" />
+                  </div>
                 </div>
               </div>
 
-              <!-- Network (feature-gated) -->
-              <div class="settings-section" id="row-deviceName">
-                <div class="settings-section-title">Network Identity</div>
+              <!-- System -->
+              <div class="settings-section">
+                <div class="settings-section-title">System</div>
                 <div class="settings-grid">
+                  <div class="form-group">
+                    <label class="form-label" for="s-sleepTimeout">Sleep After</label>
+                    <select class="form-select" id="s-sleepTimeout">
+                      <option value="0">1 minute</option>
+                      <option value="1">5 minutes</option>
+                      <option value="2" selected>10 minutes</option>
+                      <option value="3">15 minutes</option>
+                      <option value="4">30 minutes</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="row-usbMscPromptOnConnect">
+                    <label class="form-label" for="s-usbMscPromptOnConnect">USB File Transfer Prompt</label>
+                    <select class="form-select" id="s-usbMscPromptOnConnect">
+                      <option value="0">Off</option>
+                      <option value="1" selected>On</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="row-backgroundServerMode">
+                    <label class="form-label" for="s-backgroundServerMode">Background Server</label>
+                    <select class="form-select" id="s-backgroundServerMode">
+                      <option value="0">Never</option>
+                      <option value="1" selected>On Charge</option>
+                      <option value="2">Always</option>
+                    </select>
+                  </div>
                   <div class="form-group" style="grid-column: span 2;">
-                    <label class="form-label" for="s-deviceName">Device Name (mDNS hostname)</label>
+                    <label class="form-label" for="s-deviceName">Device Name</label>
                     <input class="form-input" id="s-deviceName" type="text"
                       maxlength="24" placeholder="e.g. my-reader (a-z, 0-9, hyphens)"
                       pattern="[a-z0-9\-]*" autocomplete="off" spellcheck="false" />
@@ -2973,7 +3172,71 @@
                 </div>
               </div>
 
-            </div><!-- /.settings-sections -->
+                </div><!-- /.settings-sections -->
+              </div>
+              <div class="settings-preview-pane">
+                <div class="eink-preview-wrap">
+                  <div>
+                    <div class="eink-shell">
+                      <div class="eink-front">
+                        <div class="eink-device">
+                          <iframe
+                            class="eink-screen-frame"
+                            id="settings-preview-frame"
+                            title="Interactive settings preview"
+                          ></iframe>
+                          <div class="eink-device-bottom" aria-hidden="true">
+                            <div class="device-hint-strip">
+                              <button class="device-hint-button" type="button" data-preview-front="0">
+                                <span class="device-hint" id="preview-front-0-label">Back</span>
+                              </button>
+                              <button class="device-hint-button" type="button" data-preview-front="1">
+                                <span class="device-hint" id="preview-front-1-label">Confirm</span>
+                              </button>
+                              <button class="device-hint-button" type="button" data-preview-front="2">
+                                <span class="device-hint" id="preview-front-2-label">Left</span>
+                              </button>
+                              <button class="device-hint-button" type="button" data-preview-front="3">
+                                <span class="device-hint" id="preview-front-3-label">Right</span>
+                              </button>
+                            </div>
+                            <div class="eink-front-buttons">
+                              <div class="eink-front-button left"></div>
+                              <div class="eink-front-button right"></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="eink-side-buttons" aria-hidden="true">
+                        <div class="eink-side-control power-control">
+                          <button class="eink-side-action" type="button" data-preview-action="power-cycle" aria-label="Cycle power button action">
+                            <span class="eink-side-button power" aria-hidden="true"></span>
+                            <span class="eink-side-label" id="preview-power-label">Power</span>
+                          </button>
+                        </div>
+                        <div class="eink-side-control">
+                          <button class="eink-side-action" type="button" data-preview-action="side-toggle" aria-label="Toggle volume up action">
+                            <span class="eink-side-button vol-up" aria-hidden="true"></span>
+                            <span class="eink-side-label" id="preview-vol-up-label">Vol+</span>
+                          </button>
+                        </div>
+                        <div class="eink-side-control">
+                          <button class="eink-side-action" type="button" data-preview-action="side-toggle" aria-label="Toggle volume down action">
+                            <span class="eink-side-button vol-down" aria-hidden="true"></span>
+                            <span class="eink-side-label" id="preview-vol-down-label">Vol-</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="eink-preview-caption">interactive webui preview</div>
+                  </div>
+                </div>
+                <div class="info-bar">
+                  Illustrative only. This in-browser mock responds to your setting choices, but the baked
+                  <code>settings.json</code> below is what follows the current feature selection.
+                </div>
+              </div>
+            </div>
 
             <div class="actions" style="margin-top: 14px;">
               <button class="btn btn-solid" id="settings-download-btn">&#x2193; settings.json</button>
@@ -4170,6 +4433,55 @@
           bgColor: "#ffffff",
         };
 
+        function getRenderState(overrides = {}) {
+          return {
+            file: state.file,
+            image: state.image,
+            fitMode: overrides.fitMode ?? state.fitMode,
+            alignment: overrides.alignment ?? state.alignment,
+            depth: overrides.depth ?? state.depth,
+            rotation: overrides.rotation ?? state.rotation,
+            invert: overrides.invert ?? state.invert,
+            bgColor: overrides.bgColor ?? state.bgColor,
+            filterMode: overrides.filterMode ?? (state.invert ? 2 : 0),
+          };
+        }
+
+        function publishWallpaperSelection() {
+          const selection = state.image
+            ? {
+                previewUrl: canvas.toDataURL("image/png"),
+                fileName: state.file?.name || "sleep.bmp",
+                sourceImageUrl: state.image.currentSrc || state.image.src || "",
+              }
+            : {
+                previewUrl: null,
+                fileName: "",
+                sourceImageUrl: "",
+              };
+          window._wallpaperStudioSelection = selection;
+          window._renderWallpaperStudioSelection = (overrides = {}) => {
+            if (!state.image) return "";
+            const offscreen = document.createElement("canvas");
+            offscreen.width = TARGET_WIDTH;
+            offscreen.height = TARGET_HEIGHT;
+            const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
+            if (!offscreenCtx) return selection.previewUrl || "";
+            renderWallpaperToContext(offscreenCtx, getRenderState(overrides));
+            return offscreen.toDataURL("image/png");
+          };
+          window._applySleepSettingsToWallpaperStudio = (overrides = {}) => {
+            if (overrides.fitMode) state.fitMode = overrides.fitMode;
+            if (typeof overrides.filterMode === "number") {
+              state.invert = overrides.filterMode === 2;
+            }
+            renderWallpaperPreview();
+          };
+          if (typeof window._refreshSettingsPreview === "function") {
+            window._refreshSettingsPreview();
+          }
+        }
+
         function setStatus(message, isError = false) {
           status.textContent = message;
           status.style.borderLeftColor = isError ? "var(--md)" : "var(--blk)";
@@ -4220,11 +4532,12 @@
           ctx.fillStyle = state.bgColor;
           ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
           updateButtonStates();
+          publishWallpaperSelection();
           setStatus("No image selected. This tool runs entirely in your browser and exports an X4-ready BMP.");
         }
 
-        function getAlignmentOffset(drawWidth, drawHeight, canvasWidth, canvasHeight) {
-          const [vertical, horizontal] = state.alignment.split("-");
+        function getAlignmentOffset(drawWidth, drawHeight, canvasWidth, canvasHeight, alignment) {
+          const [vertical, horizontal] = alignment.split("-");
           let x = 0;
           let y = 0;
 
@@ -4237,24 +4550,28 @@
           return { x, y };
         }
 
-        function drawRotatedImage(image, rotation, destX, destY, destWidth, destHeight, sourceX, sourceY, sourceWidth, sourceHeight) {
-          ctx.save();
-          ctx.translate(destX + destWidth / 2, destY + destHeight / 2);
-          ctx.rotate(rotation * Math.PI / 180);
+        function drawRotatedImage(targetCtx, image, rotation, destX, destY, destWidth, destHeight, sourceX, sourceY, sourceWidth, sourceHeight) {
+          targetCtx.save();
+          targetCtx.translate(destX + destWidth / 2, destY + destHeight / 2);
+          targetCtx.rotate(rotation * Math.PI / 180);
           if (rotation === 90 || rotation === 270) {
-            ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, -destHeight / 2, -destWidth / 2, destHeight, destWidth);
+            targetCtx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, -destHeight / 2, -destWidth / 2, destHeight, destWidth);
           } else {
-            ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, -destWidth / 2, -destHeight / 2, destWidth, destHeight);
+            targetCtx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, -destWidth / 2, -destHeight / 2, destWidth, destHeight);
           }
-          ctx.restore();
+          targetCtx.restore();
         }
 
-        function applyEffects(imageData) {
+        function applyEffects(imageData, renderState) {
           const data = imageData.data;
           for (let i = 0; i < data.length; i += 4) {
             let gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            if (state.invert) gray = 255 - gray;
-            if (state.depth === 1) {
+            if (renderState.filterMode === 1) {
+              gray = Math.max(0, Math.min(255, (gray - 128) * 1.35 + 128));
+            } else if (renderState.filterMode === 2) {
+              gray = 255 - gray;
+            }
+            if (renderState.depth === 1) {
               gray = gray > 127 ? 255 : 0;
             } else {
               gray = Math.round(gray / 255 * 15) * (255 / 15);
@@ -4266,22 +4583,18 @@
           return imageData;
         }
 
-        function renderWallpaperPreview() {
-          ctx.fillStyle = state.bgColor;
-          ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+        function renderWallpaperToContext(targetCtx, renderState) {
+          targetCtx.fillStyle = renderState.bgColor;
+          targetCtx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
 
-          if (!state.image) {
-            updateButtonStates();
-            return;
-          }
+          if (!renderState.image) return;
 
-          const rotation = normalizedRotation();
+          const rotation = ((renderState.rotation % 360) + 360) % 360;
           const isQuarterTurn = rotation === 90 || rotation === 270;
-          const sourceImage = state.image;
+          const sourceImage = renderState.image;
           const effectiveWidth = isQuarterTurn ? sourceImage.naturalHeight : sourceImage.naturalWidth;
           const effectiveHeight = isQuarterTurn ? sourceImage.naturalWidth : sourceImage.naturalHeight;
           const imageRatio = effectiveWidth / effectiveHeight;
-          const canvasRatio = TARGET_WIDTH / TARGET_HEIGHT;
 
           let sourceX = 0;
           let sourceY = 0;
@@ -4292,16 +4605,16 @@
           let destX = 0;
           let destY = 0;
 
-          if (state.fitMode === "stretch") {
+          if (renderState.fitMode === "stretch") {
             drawWidth = TARGET_WIDTH;
             drawHeight = TARGET_HEIGHT;
-          } else if (state.fitMode === "fill") {
+          } else if (renderState.fitMode === "fill") {
             const scaleFactor = Math.max(TARGET_WIDTH / effectiveWidth, TARGET_HEIGHT / effectiveHeight);
             const croppedWidth = TARGET_WIDTH / scaleFactor;
             const croppedHeight = TARGET_HEIGHT / scaleFactor;
             let cropOffsetX = (effectiveWidth - croppedWidth) / 2;
             let cropOffsetY = (effectiveHeight - croppedHeight) / 2;
-            const [vertical, horizontal] = state.alignment.split("-");
+            const [vertical, horizontal] = renderState.alignment.split("-");
 
             if (effectiveWidth > croppedWidth) {
               if (horizontal === "left") cropOffsetX = 0;
@@ -4331,20 +4644,30 @@
               drawHeight = TARGET_HEIGHT;
               drawWidth = TARGET_HEIGHT * imageRatio;
             }
-            const offset = getAlignmentOffset(drawWidth, drawHeight, TARGET_WIDTH, TARGET_HEIGHT);
+            const offset = getAlignmentOffset(drawWidth, drawHeight, TARGET_WIDTH, TARGET_HEIGHT, renderState.alignment);
             destX = offset.x;
             destY = offset.y;
           }
 
           if (rotation === 0) {
-            ctx.drawImage(sourceImage, sourceX, sourceY, sourceWidth, sourceHeight, destX, destY, drawWidth, drawHeight);
+            targetCtx.drawImage(sourceImage, sourceX, sourceY, sourceWidth, sourceHeight, destX, destY, drawWidth, drawHeight);
           } else {
-            drawRotatedImage(sourceImage, rotation, destX, destY, drawWidth, drawHeight, sourceX, sourceY, sourceWidth, sourceHeight);
+            drawRotatedImage(targetCtx, sourceImage, rotation, destX, destY, drawWidth, drawHeight, sourceX, sourceY, sourceWidth, sourceHeight);
           }
 
-          const processed = applyEffects(ctx.getImageData(0, 0, TARGET_WIDTH, TARGET_HEIGHT));
-          ctx.putImageData(processed, 0, 0);
+          const processed = applyEffects(targetCtx.getImageData(0, 0, TARGET_WIDTH, TARGET_HEIGHT), renderState);
+          targetCtx.putImageData(processed, 0, 0);
+        }
+
+        function renderWallpaperPreview() {
+          const renderState = getRenderState();
+          renderWallpaperToContext(ctx, renderState);
+          if (!state.image) {
+            updateButtonStates();
+            return;
+          }
           updateButtonStates();
+          publishWallpaperSelection();
         }
 
         function createBmp(imageData, width, height) {
@@ -4740,6 +5063,8 @@
             document.querySelectorAll('.drawer-item').forEach(t => t.classList.remove('active'));
           });
         }
+
+        window._switchSidebarTab = switchTab;
       }
 
       function setupHoverDocs() {
@@ -4934,17 +5259,50 @@
       function setupSettingsTab() {
         // Default values matching CrossPointSettings defaults
         const DEFAULTS = {
-          fontFamily: 0, fontSize: 1, lineSpacing: 1, paragraphAlignment: 0,
-          screenMargin: 5, extraParagraphSpacing: 1, textAntiAliasing: 1,
-          embeddedStyle: 1, hyphenationEnabled: 0,
-          orientation: 0, darkMode: 0, uiTheme: 1, refreshFrequency: 3,
-          statusBar: 2, statusBarTitle: 1, statusBarBattery: 1,
+          fontFamily: 0, fontSize: 1, lineSpacing: 1, screenMargin: 5, paragraphAlignment: 0,
+          embeddedStyle: 1, hyphenationEnabled: 0, orientation: 0, extraParagraphSpacing: 1,
+          textAntiAliasing: 1, imageRendering: 0,
+          frontButtonLayout: 0, frontButtonBack: 0, frontButtonConfirm: 1, frontButtonLeft: 2, frontButtonRight: 3,
+          sleepScreen: 0, sleepScreenSource: 0, sleepScreenCoverMode: 0, sleepScreenCoverFilter: 0,
+          sleepPinnedPath: '',
+          darkMode: 0, hideBatteryPercentage: 0, uiTheme: 1, refreshFrequency: 3,
+          fadingFix: 0, globalStatusBar: 0, globalStatusBarPosition: 0,
           sleepTimeout: 2, sideButtonLayout: 0, shortPwrBtn: 0, longPressChapterSkip: 1,
+          usbMscPromptOnConnect: 0, backgroundServerMode: 1,
           deviceName: '',
         };
 
+        let currentSelections = null;
+        let sleepPreviewFlashActive = false;
+        let frontButtonRemapState = null;
+        const FRONT_BUTTON_ROLE_KEYS = ['frontButtonBack', 'frontButtonConfirm', 'frontButtonLeft', 'frontButtonRight'];
+        const FRONT_BUTTON_ROLE_NAMES = ['Back', 'Confirm', 'Left', 'Right'];
+
+        const openSleepWallpaperStudioBtn = document.getElementById('open-sleep-wallpaper-studio');
+        if (openSleepWallpaperStudioBtn) {
+          openSleepWallpaperStudioBtn.addEventListener('click', () => {
+            if (typeof window._applySleepSettingsToWallpaperStudio === 'function') {
+              window._applySleepSettingsToWallpaperStudio({
+                fitMode: document.getElementById('s-sleepScreenCoverMode')?.value === '1' ? 'fill' : 'fit',
+                filterMode: parseInt(document.getElementById('s-sleepScreenCoverFilter')?.value || '0', 10),
+              });
+            }
+            if (typeof window._switchSidebarTab === 'function') {
+              window._switchSidebarTab('studio');
+            }
+          });
+        }
+
+        const startFrontButtonRemapBtn = document.getElementById('start-front-button-remap');
+        if (startFrontButtonRemapBtn) {
+          startFrontButtonRemapBtn.addEventListener('click', () => {
+            if (frontButtonRemapState) cancelFrontButtonRemap();
+            else beginFrontButtonRemap();
+          });
+        }
+
         // Map settings ids to their values (read from DOM)
-        function readSettings() {
+        function readRawSettings() {
           const s = {};
           Object.keys(DEFAULTS).forEach(key => {
             const el = document.getElementById('s-' + key);
@@ -4956,164 +5314,1042 @@
           return s;
         }
 
+        function writeSettings(settings) {
+          Object.keys(settings).forEach(key => {
+            const el = document.getElementById('s-' + key);
+            if (!el) return;
+            const value = typeof DEFAULTS[key] === 'number' ? String(settings[key]) : settings[key];
+            if (el.value !== value) el.value = value;
+          });
+        }
+
+        function getFrontButtonLabels(settings = readSettings()) {
+          const labels = new Array(4).fill('-');
+          FRONT_BUTTON_ROLE_KEYS.forEach((key, roleIndex) => {
+            const hardwareIndex = settings[key];
+            if (hardwareIndex >= 0 && hardwareIndex < labels.length) {
+              labels[hardwareIndex] = FRONT_BUTTON_ROLE_NAMES[roleIndex];
+            }
+          });
+          return labels;
+        }
+
+        function updateFrontButtonRemapStatus() {
+          const status = document.getElementById('front-button-remap-status');
+          const trigger = document.getElementById('start-front-button-remap');
+          if (!status || !trigger) return;
+
+          if (frontButtonRemapState) {
+            status.textContent = `Press a front button for ${FRONT_BUTTON_ROLE_NAMES[frontButtonRemapState.step]}.`;
+            trigger.textContent = 'Cancel Remap';
+            return;
+          }
+
+          const labels = getFrontButtonLabels();
+          status.textContent = `Hardware order: ${labels.join(', ')}.`;
+          trigger.textContent = 'Use Device Buttons';
+        }
+
+        function beginFrontButtonRemap() {
+          frontButtonRemapState = {
+            step: 0,
+            assigned: [null, null, null, null],
+          };
+          updateFrontButtonRemapStatus();
+          drawPreview();
+        }
+
+        function cancelFrontButtonRemap() {
+          frontButtonRemapState = null;
+          updateFrontButtonRemapStatus();
+          drawPreview();
+        }
+
+        function assignFrontButtonHardware(hardwareIndex) {
+          if (!frontButtonRemapState) return false;
+          if (frontButtonRemapState.assigned.includes(hardwareIndex)) return true;
+
+          const roleKey = FRONT_BUTTON_ROLE_KEYS[frontButtonRemapState.step];
+          const input = document.getElementById('s-' + roleKey);
+          const layoutInput = document.getElementById('s-frontButtonLayout');
+          if (input) input.value = String(hardwareIndex);
+          if (layoutInput) layoutInput.value = '0';
+          frontButtonRemapState.assigned[frontButtonRemapState.step] = hardwareIndex;
+          frontButtonRemapState.step += 1;
+
+          if (frontButtonRemapState.step >= FRONT_BUTTON_ROLE_KEYS.length) {
+            frontButtonRemapState = null;
+          }
+
+          updateFrontButtonRemapStatus();
+          drawPreview();
+          return true;
+        }
+
+        function updateOption(selectId, value, enabled, enabledLabel, disabledLabel) {
+          const select = document.getElementById(selectId);
+          if (!select) return;
+          const option = select.querySelector(`option[value="${value}"]`);
+          if (!option) return;
+          option.disabled = !enabled;
+          option.textContent = enabled ? enabledLabel : disabledLabel;
+        }
+
+        function sanitizeSettingsForSelections(settings, selections) {
+          const normalized = { ...settings };
+          const active = selections || {};
+
+          const allowedFonts = [];
+          if (active.bookerly_fonts) allowedFonts.push(0);
+          if (active.notosans_fonts) allowedFonts.push(1);
+          if (active.opendyslexic_fonts) allowedFonts.push(2);
+          if (active.user_fonts) allowedFonts.push(3);
+          const fallbackFont = allowedFonts[0] ?? DEFAULTS.fontFamily;
+          if (!allowedFonts.includes(normalized.fontFamily)) normalized.fontFamily = fallbackFont;
+
+          if (!active.hyphenation) normalized.hyphenationEnabled = DEFAULTS.hyphenationEnabled;
+          if (!active.book_images) normalized.imageRendering = DEFAULTS.imageRendering;
+
+          const allowedThemes = [0];
+          if (active.lyra_theme) allowedThemes.push(1, 2, 3);
+          if (active.pokemon_party) allowedThemes.push(4);
+          const fallbackTheme = active.lyra_theme ? 1 : 0;
+          if (!allowedThemes.includes(normalized.uiTheme)) normalized.uiTheme = fallbackTheme;
+
+          if (!active.dark_mode) normalized.darkMode = DEFAULTS.darkMode;
+          if (!active.global_status_bar) {
+            normalized.globalStatusBar = DEFAULTS.globalStatusBar;
+            normalized.globalStatusBarPosition = DEFAULTS.globalStatusBarPosition;
+          }
+
+          const supportsCustomSleep = active.image_sleep;
+          if (!supportsCustomSleep && normalized.sleepScreen === 2) normalized.sleepScreen = DEFAULTS.sleepScreen;
+          const customSleepActive = normalized.sleepScreen === 2;
+          const supportsPokemonSleep = active.pokemon_party;
+          if (!supportsPokemonSleep && normalized.sleepScreenSource !== 0) normalized.sleepScreenSource = DEFAULTS.sleepScreenSource;
+          if (!customSleepActive) {
+            normalized.sleepScreenSource = DEFAULTS.sleepScreenSource;
+            normalized.sleepScreenCoverMode = DEFAULTS.sleepScreenCoverMode;
+            normalized.sleepScreenCoverFilter = DEFAULTS.sleepScreenCoverFilter;
+            normalized.sleepPinnedPath = DEFAULTS.sleepPinnedPath;
+          }
+
+          if (!active.usb_mass_storage) normalized.usbMscPromptOnConnect = DEFAULTS.usbMscPromptOnConnect;
+          const supportsBackgroundServerMode = active.background_server_on_charge || active.background_server_always;
+          if (!supportsBackgroundServerMode) {
+            normalized.backgroundServerMode = 0;
+          } else if (!active.background_server_always && normalized.backgroundServerMode === 2) {
+            normalized.backgroundServerMode = 1;
+          }
+
+          return normalized;
+        }
+
+        function getEffectiveDefaults(selections) {
+          const active = selections || {};
+          const defaults = { ...DEFAULTS };
+          defaults.uiTheme = active.lyra_theme ? 1 : 0;
+          defaults.backgroundServerMode = active.background_server_always ? 2
+            : active.background_server_on_charge ? 1
+            : 0;
+          return sanitizeSettingsForSelections(defaults, active);
+        }
+
+        function buildSettingsPayload(settings, selections) {
+          const out = {};
+          const defaults = getEffectiveDefaults(selections);
+
+          Object.keys(settings).forEach(key => {
+            if (key === 'backgroundServerMode') return;
+            const val = settings[key];
+            const def = defaults[key];
+            if (val === undefined) return;
+            if (typeof val === 'number' && val === def) return;
+            if (typeof val === 'string' && val === def) return;
+            out[key] = val;
+          });
+
+          const backgroundServerMode = settings.backgroundServerMode;
+          if (backgroundServerMode !== defaults.backgroundServerMode) {
+            out.backgroundServerOnCharge = backgroundServerMode >= 1 ? 1 : 0;
+            out.wifiAutoConnect = backgroundServerMode === 2 ? 1 : 0;
+          }
+
+          return out;
+        }
+
+        function readSettings() {
+          if (!currentSelections) return readRawSettings();
+          return sanitizeSettingsForSelections(readRawSettings(), currentSelections);
+        }
+
+        function handleSettingsInteraction(key, showSleepPreview = false) {
+          if (frontButtonRemapState && !FRONT_BUTTON_ROLE_KEYS.includes(key)) {
+            frontButtonRemapState = null;
+            updateFrontButtonRemapStatus();
+          }
+          sleepPreviewFlashActive = showSleepPreview;
+          drawPreview();
+        }
+
         // Attach change listeners to redraw preview
         Object.keys(DEFAULTS).forEach(key => {
           const el = document.getElementById('s-' + key);
-          if (el) el.addEventListener('change', drawPreview);
-          if (el && el.tagName === 'INPUT') el.addEventListener('input', drawPreview);
+          if (!el) return;
+          el.addEventListener('change', () => {
+            const shouldFlashSleepPreview = key === 'sleepScreen' || (
+              key === 'sleepScreenSource' &&
+              document.getElementById('s-sleepScreen')?.value === '2'
+            );
+            handleSettingsInteraction(key, shouldFlashSleepPreview);
+          });
+          if (el.tagName === 'INPUT') {
+            el.addEventListener('input', () => handleSettingsInteraction(key, false));
+          }
+        });
+        ['s-sleepScreen', 's-globalStatusBar'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('change', () => {
+            if (currentSelections) updateSettingsVisibility(currentSelections);
+          });
         });
 
         // Feature-gate visibility: react to global selections
         function updateSettingsVisibility(selections) {
+          currentSelections = selections || null;
+          const customSleepActive = document.getElementById('s-sleepScreen')?.value === '2';
+
           // Dark mode setting only if feature compiled in
           const rowDark = document.getElementById('row-darkMode');
           if (rowDark) rowDark.classList.toggle('settings-row-hidden', !selections.dark_mode);
 
-          // Device name only if any network feature is on
-          const rowDev = document.getElementById('row-deviceName');
-          if (rowDev) {
-            const hasNet = selections.background_server || selections.web_wifi_setup ||
-                           selections.ble_wifi_provisioning || selections.ota_updates;
-            rowDev.classList.toggle('settings-row-hidden', !hasNet);
+          updateOption('s-fontFamily', 0, selections.bookerly_fonts, 'Bookerly', 'Bookerly (needs feature)');
+          updateOption('s-fontFamily', 1, selections.notosans_fonts, 'Noto Sans', 'Noto Sans (needs feature)');
+          updateOption('s-fontFamily', 2, selections.opendyslexic_fonts, 'OpenDyslexic', 'OpenDyslexic (needs feature)');
+          updateOption('s-fontFamily', 3, selections.user_fonts, 'External Font', 'External Font (needs feature)');
+
+          const rowHyphenation = document.getElementById('row-hyphenationEnabled');
+          if (rowHyphenation) rowHyphenation.classList.toggle('settings-row-hidden', !selections.hyphenation);
+
+          const rowImageRendering = document.getElementById('row-imageRendering');
+          if (rowImageRendering) rowImageRendering.classList.toggle('settings-row-hidden', !selections.book_images);
+
+          const rowGlobalStatusBar = document.getElementById('row-globalStatusBar');
+          if (rowGlobalStatusBar) rowGlobalStatusBar.classList.toggle('settings-row-hidden', !selections.global_status_bar);
+          const rowGlobalStatusBarPosition = document.getElementById('row-globalStatusBarPosition');
+          if (rowGlobalStatusBarPosition) {
+            rowGlobalStatusBarPosition.classList.toggle(
+              'settings-row-hidden',
+              !selections.global_status_bar || document.getElementById('s-globalStatusBar')?.value !== '1'
+            );
           }
 
-          // User SD font option only if user_fonts feature is on
-          const optUser = document.getElementById('opt-user-font');
-          if (optUser) {
-            optUser.disabled = !selections.user_fonts;
-            optUser.textContent = selections.user_fonts ? 'User SD Font' : 'User SD Font (needs feature)';
+          const optSleepCustom = document.getElementById('opt-sleep-custom');
+          if (optSleepCustom) {
+            optSleepCustom.disabled = !selections.image_sleep;
+            optSleepCustom.textContent = selections.image_sleep ? 'Custom Image' : 'Custom Image (needs feature)';
           }
+          updateOption(
+            's-sleepScreenSource',
+            1,
+            selections.pokemon_party,
+            'Pokédex',
+            'Pokédex (needs feature)'
+          );
+          updateOption(
+            's-sleepScreenSource',
+            2,
+            selections.pokemon_party,
+            'Sleep + Pokédex',
+            'Sleep + Pokédex (needs feature)'
+          );
 
-          // Hyphenation setting only if hyphenation feature is on
-          const rowHyph = document.getElementById('row-hyphenation');
-          if (rowHyph) rowHyph.classList.toggle('settings-row-hidden', !selections.hyphenation);
+          updateOption('s-uiTheme', 1, selections.lyra_theme, 'Lyra', 'Lyra (needs feature)');
+          updateOption('s-uiTheme', 2, selections.lyra_theme, 'Visual Covers', 'Visual Covers (needs feature)');
+          updateOption('s-uiTheme', 3, selections.lyra_theme, 'ForkDrift', 'ForkDrift (needs feature)');
+          updateOption('s-uiTheme', 4, selections.pokemon_party, 'Pokémon Party', 'Pokémon Party (needs feature)');
 
+          const rowSleepSource = document.getElementById('row-sleepScreenSource');
+          if (rowSleepSource) rowSleepSource.classList.toggle('settings-row-hidden', !customSleepActive);
+          const rowSleepCoverMode = document.getElementById('row-sleepScreenCoverMode');
+          if (rowSleepCoverMode) rowSleepCoverMode.classList.toggle('settings-row-hidden', !customSleepActive);
+          const rowSleepCoverFilter = document.getElementById('row-sleepScreenCoverFilter');
+          if (rowSleepCoverFilter) rowSleepCoverFilter.classList.toggle('settings-row-hidden', !customSleepActive);
+          const rowSleepPinnedPath = document.getElementById('row-sleepPinnedPath');
+          if (rowSleepPinnedPath) rowSleepPinnedPath.classList.toggle('settings-row-hidden', !customSleepActive);
+          const rowSleepStudioAction = document.getElementById('row-sleepStudioAction');
+          if (rowSleepStudioAction) rowSleepStudioAction.classList.toggle('settings-row-hidden', !customSleepActive);
+
+          const rowUsbMscPrompt = document.getElementById('row-usbMscPromptOnConnect');
+          if (rowUsbMscPrompt) rowUsbMscPrompt.classList.toggle('settings-row-hidden', !selections.usb_mass_storage);
+
+          const rowBackgroundServerMode = document.getElementById('row-backgroundServerMode');
+          if (rowBackgroundServerMode) {
+            rowBackgroundServerMode.classList.toggle(
+              'settings-row-hidden',
+              !(selections.background_server_on_charge || selections.background_server_always)
+            );
+          }
+          updateOption(
+            's-backgroundServerMode',
+            2,
+            selections.background_server_always,
+            'Always',
+            'Always (needs feature)'
+          );
+
+          writeSettings(sanitizeSettingsForSelections(readRawSettings(), selections));
           drawPreview();
         }
 
-        // ── Canvas preview ──────────────────────────────────────────
-        const canvas = document.getElementById('eink-canvas');
-        const ctx = canvas ? canvas.getContext('2d') : null;
-        const W = 180, H = 300;
+        // ── Interactive preview ─────────────────────────────────────
+        const previewFrame = document.getElementById('settings-preview-frame');
 
-        const FONT_NAMES = ['Bookerly', 'Noto Sans', 'OpenDyslexic', 'User Font'];
-        const STATUS_MODES = [0,1,2,3,4,5]; // mirrors firmware enum
+        const HARDWARE_CONTROLLED_PREVIEW_KEYS = new Set(['sideButtonLayout', 'shortPwrBtn']);
+
+        function previewSectionsFromDom() {
+          return Array.from(document.querySelectorAll('#tab-settings .settings-section'))
+            .filter(section => !section.classList.contains('settings-row-hidden'))
+            .map(section => {
+              const title = section.querySelector('.settings-section-title')?.textContent?.trim() || 'Settings';
+              const items = Array.from(section.querySelectorAll('.form-group'))
+                .filter(group => !group.classList.contains('settings-row-hidden'))
+                .map(group => {
+                  const label = group.querySelector('.form-label');
+                  const control = group.querySelector('select, input');
+                  if (!label || !control || !control.id) return null;
+                  const key = control.id.replace(/^s-/, '');
+                  if (HARDWARE_CONTROLLED_PREVIEW_KEYS.has(key)) return null;
+                  return {
+                    key,
+                    label: label.textContent.trim(),
+                    type: control.tagName === 'SELECT' ? 'enum' : 'string',
+                    value: control.value,
+                    options: control.tagName === 'SELECT'
+                      ? Array.from(control.options)
+                          .filter(option => !option.disabled)
+                          .map(option => ({ value: option.value, label: option.textContent.trim() }))
+                      : [],
+                    placeholder: control.getAttribute('placeholder') || '',
+                  };
+                })
+                .filter(Boolean);
+              return items.length ? { title, items } : null;
+            })
+            .filter(Boolean);
+        }
+
+        function getPreviewState() {
+          const currentSettings = readSettings();
+          const darkMode = currentSettings.darkMode === 1;
+          const fontLabels = ['Bookerly', 'Noto Sans', 'OpenDyslexic', 'External Font'];
+          const fontFamilies = [
+            'Iowan Old Style, Georgia, "Times New Roman", serif',
+            '"Noto Sans", "Helvetica Neue", Arial, sans-serif',
+            '"OpenDyslexic", "Trebuchet MS", Verdana, sans-serif',
+            '"Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif',
+          ];
+          const fontSizes = [17, 19, 22, 25];
+          const lineHeights = [1.28, 1.45, 1.68];
+          const alignments = ['justify', 'left', 'center', 'right', 'justify'];
+          const orientationModes = ['portrait', 'landscape-cw', 'inverted', 'landscape-ccw'];
+          const imageModes = ['display', 'placeholder', 'suppress'];
+          const pokedexPreviewSvg = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 800">
+              <rect width="480" height="800" fill="#f3efe6"/>
+              <rect x="24" y="24" width="432" height="752" fill="#fff" stroke="#111" stroke-width="4"/>
+              <rect x="48" y="48" width="384" height="224" fill="#e8e2d3" stroke="#111" stroke-width="3"/>
+              <circle cx="240" cy="160" r="72" fill="#d4d4d4" stroke="#111" stroke-width="3"/>
+              <ellipse cx="216" cy="146" rx="18" ry="28" fill="#8d8d8d" stroke="#111" stroke-width="2"/>
+              <ellipse cx="264" cy="146" rx="18" ry="28" fill="#8d8d8d" stroke="#111" stroke-width="2"/>
+              <ellipse cx="188" cy="122" rx="28" ry="54" fill="#b7b7b7" stroke="#111" stroke-width="2"/>
+              <ellipse cx="292" cy="122" rx="28" ry="54" fill="#b7b7b7" stroke="#111" stroke-width="2"/>
+              <rect x="48" y="296" width="384" height="92" fill="#111"/>
+              <text x="240" y="344" text-anchor="middle" font-family="Courier New, monospace" font-size="30" font-weight="700" fill="#fff">#001 BULBASAUR</text>
+              <rect x="48" y="412" width="384" height="124" fill="#f7f4ed" stroke="#111" stroke-width="3"/>
+              <text x="240" y="462" text-anchor="middle" font-family="Courier New, monospace" font-size="20" font-weight="700" fill="#111">Seed Pokémon</text>
+              <text x="240" y="496" text-anchor="middle" font-family="Courier New, monospace" font-size="18" fill="#444">Grass · Poison</text>
+              <text x="240" y="568" text-anchor="middle" font-family="Courier New, monospace" font-size="18" fill="#111">Default Pokédex sleep preview</text>
+              <rect x="48" y="592" width="384" height="136" fill="#ece6d9" stroke="#111" stroke-width="3"/>
+              <text x="240" y="648" text-anchor="middle" font-family="Courier New, monospace" font-size="18" fill="#111">Generate from the Pokédex plugin</text>
+              <text x="240" y="680" text-anchor="middle" font-family="Courier New, monospace" font-size="18" fill="#111">or assign a party image on-device</text>
+            </svg>`;
+          const pokedexPreviewPath = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(pokedexPreviewSvg)}`;
+          const themePalettes = {
+            0: darkMode
+              ? { accent: '#ddd6c9', track: '#171717', thumb: '#c3bbaf', thumbHover: '#f2ede3', border: '#f2ede3' }
+              : { accent: '#2f2f2f', track: '#ece7de', thumb: '#6a6a6a', thumbHover: '#000', border: '#000' },
+            1: darkMode
+              ? { accent: '#e7d9bd', track: '#191612', thumb: '#b99663', thumbHover: '#e7d9bd', border: '#f2ede3' }
+              : { accent: '#8c6842', track: '#efe6d7', thumb: '#ab8458', thumbHover: '#785633', border: '#3d2b1f' },
+            2: darkMode
+              ? { accent: '#d7d0c2', track: '#16120f', thumb: '#968269', thumbHover: '#d7d0c2', border: '#f2ede3' }
+              : { accent: '#756247', track: '#ede4d6', thumb: '#8a7356', thumbHover: '#5f4b34', border: '#35281b' },
+            3: darkMode
+              ? { accent: '#d9ddd8', track: '#111614', thumb: '#7b8b80', thumbHover: '#d9ddd8', border: '#f2ede3' }
+              : { accent: '#51655b', track: '#e3ebe5', thumb: '#6f857a', thumbHover: '#3b4c43', border: '#243129' },
+            4: darkMode
+              ? { accent: '#f1dfab', track: '#1a1510', thumb: '#d0a84d', thumbHover: '#f1dfab', border: '#f2ede3' }
+              : { accent: '#b58719', track: '#f6edcf', thumb: '#d1a43f', thumbHover: '#8f6710', border: '#543c05' },
+          };
+          const palette = themePalettes[currentSettings.uiTheme] || themePalettes[0];
+          const powerActions = ['Ignore', 'Sleep', 'Page', 'Select'];
+          const sleepModeLabels = ['Dark', 'Light', 'Custom', 'Transparent', 'Follow Theme'];
+          const sleepSourceLabels = ['Sleep Folder', 'Pokédex', 'Sleep + Pokédex'];          const sleepFilterLabels = ['None', 'Contrast', 'Inverted'];
+          const studioSelection = window._wallpaperStudioSelection || {};
+          const wallpaperFitMode = currentSettings.sleepScreenCoverMode === 1 ? 'fill' : 'fit';
+          const wallpaperFilterMode = currentSettings.sleepScreenCoverFilter;
+          const renderedStudioImage = typeof window._renderWallpaperStudioSelection === 'function'
+            ? window._renderWallpaperStudioSelection({
+                fitMode: wallpaperFitMode,
+                filterMode: wallpaperFilterMode,
+              })
+            : '';
+          return {
+            sections: previewSectionsFromDom(),
+            hints: {
+              left: 'Back',
+              center: 'Edit',
+              rightA: currentSettings.sideButtonLayout === 1 ? 'Next' : 'Prev',
+              rightB: currentSettings.sideButtonLayout === 1 ? 'Prev' : 'Next',
+              power: powerActions[currentSettings.shortPwrBtn] || 'Ignore',
+            },
+            theme: {
+              black: darkMode ? '#f2ede3' : '#000',
+              white: darkMode ? '#121212' : '#fff',
+              'gray-4': darkMode ? '#c2bcb2' : '#666',
+              'gray-7': darkMode ? '#4e4e4e' : '#ccc',
+              paper: darkMode ? '#111' : '#f7f4ed',
+              accent: palette.accent,
+              'scroll-track': palette.track,
+              'scroll-thumb': palette.thumb,
+              'scroll-thumb-hover': palette.thumbHover,
+              'scroll-border': palette.border,
+            },
+            sleepPreview: {
+              visible: sleepPreviewFlashActive,
+              mode: currentSettings.sleepScreen,
+              modeLabel: sleepModeLabels[currentSettings.sleepScreen] || 'Dark',
+              sourceLabel: sleepSourceLabels[currentSettings.sleepScreenSource] || 'Sleep Folder',
+              filterLabel: sleepFilterLabels[currentSettings.sleepScreenCoverFilter] || 'None',
+              coverMode: currentSettings.sleepScreenCoverMode,
+              pinnedPath: currentSettings.sleepPinnedPath || '',
+              logoPath: new URL('../../src/images/Logo120.png', document.baseURI).href,
+              coverPath: new URL('../images/cover.jpg', document.baseURI).href,
+              pokedexPreviewPath,
+              studioImagePath: renderedStudioImage || studioSelection.previewUrl || '',
+              studioFileName: studioSelection.fileName || '',
+            },
+            reader: {
+              fontLabel: fontLabels[currentSettings.fontFamily] || fontLabels[0],
+              fontFamily: fontFamilies[currentSettings.fontFamily] || fontFamilies[0],
+              fontSize: fontSizes[currentSettings.fontSize] || fontSizes[1],
+              lineHeight: lineHeights[currentSettings.lineSpacing] || lineHeights[1],
+              margin: Math.max(12, Math.round((currentSettings.screenMargin || 5) * 1.85)),
+              textAlign: alignments[currentSettings.paragraphAlignment] || 'justify',
+              orientation: orientationModes[currentSettings.orientation] || 'portrait',
+              imageMode: imageModes[currentSettings.imageRendering] || 'display',
+              globalStatusBar: currentSettings.globalStatusBar === 1,
+              globalStatusBarPosition: currentSettings.globalStatusBarPosition === 1 ? 'bottom' : 'top',
+              batteryLabel: currentSettings.hideBatteryPercentage === 2 ? '' : '82%',
+              chapterTitle: 'Chapter 8',
+              progressLabel: '143/251  57%',
+              bodyClass: [
+                currentSettings.paragraphAlignment === 2 ? 'align-center' : '',
+                currentSettings.paragraphAlignment === 3 ? 'align-right' : '',
+                currentSettings.paragraphAlignment === 1 ? 'align-left' : '',
+                currentSettings.extraParagraphSpacing === 1 ? 'spacious' : '',
+                currentSettings.hyphenationEnabled === 1 ? 'hyphenate' : '',
+                currentSettings.textAntiAliasing === 1 ? 'aa-on' : 'aa-off',
+                currentSettings.embeddedStyle === 1 ? 'book-style-on' : 'book-style-off',
+              ].filter(Boolean).join(' '),
+            },
+          };
+        }
+
+        function buildPreviewDoc() {
+          const previewState = getPreviewState();
+          const themePayload = JSON.stringify(previewState.theme).replace(/</g, '\\u003c');
+          const sleepPreviewPayload = JSON.stringify(previewState.sleepPreview).replace(/</g, '\\u003c');
+          const readerPayload = JSON.stringify(previewState.reader).replace(/</g, '\\u003c');
+          return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      /* THEME_TOKENS_START */
+  --black: #000;
+  --white: #fff;
+  --paper: #f7f4ed;
+  --gray-1: #111;
+  --gray-2: #222;
+  --gray-3: #444;
+  --gray-4: #666;
+  --gray-5: #888;
+  --gray-6: #aaa;
+  --gray-7: #ccc;
+  --gray-8: #ddd;
+  --gray-9: #eee;
+  --gray-10: #f5f5f5;
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-display: Georgia, 'Times New Roman', Times, serif;
+    /* THEME_TOKENS_END */
+      --accent: #2f2f2f;
+      --scroll-track: #ece7de;
+      --scroll-thumb: #6a6a6a;
+      --scroll-thumb-hover: #000;
+      --scroll-border: #000;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-mono);
+      background-color: var(--paper);
+      color: var(--black);
+      height: 100vh;
+      overflow: hidden;
+    }
+    .screen {
+      position: relative;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .sleep-preview-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--paper);
+      z-index: 8;
+      display: none;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    .sleep-preview-overlay.visible {
+      display: flex;
+    }
+    .sleep-preview-shell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .sleep-preview-frame {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .sleep-preview-frame.dark {
+      background: #101010;
+      color: #f2ede3;
+    }
+    .sleep-preview-frame.light {
+      background: #f3efe6;
+      color: #111;
+    }
+    .sleep-preview-frame.custom {
+      background:
+        linear-gradient(135deg, rgba(0,0,0,0.05) 25%, transparent 25%) -8px 0/16px 16px,
+        linear-gradient(225deg, rgba(0,0,0,0.05) 25%, transparent 25%) -8px 0/16px 16px,
+        linear-gradient(315deg, rgba(0,0,0,0.05) 25%, transparent 25%) 0 0/16px 16px,
+        linear-gradient(45deg, rgba(0,0,0,0.05) 25%, transparent 25%) 0 0/16px 16px,
+        linear-gradient(180deg, color-mix(in srgb, var(--accent) 20%, var(--paper) 80%), var(--paper));
+      color: var(--black);
+    }
+    .sleep-preview-frame.transparent {
+      background:
+        linear-gradient(45deg, rgba(0,0,0,0.06) 25%, transparent 25%) 0 0/14px 14px,
+        linear-gradient(-45deg, rgba(0,0,0,0.06) 25%, transparent 25%) 0 0/14px 14px,
+        linear-gradient(45deg, transparent 75%, rgba(0,0,0,0.06) 75%) 0 0/14px 14px,
+        linear-gradient(-45deg, transparent 75%, rgba(0,0,0,0.06) 75%) 0 0/14px 14px,
+        var(--paper);
+      color: var(--gray-4);
+    }
+    .sleep-preview-frame.transparent::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      width: 18px;
+      height: 12px;
+      transform: translateX(-50%);
+      border: 2px solid currentColor;
+      border-radius: 2px;
+      box-sizing: border-box;
+    }
+    .sleep-preview-frame.transparent::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: 28px;
+      width: 12px;
+      height: 10px;
+      transform: translateX(-50%);
+      border: 2px solid currentColor;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      box-sizing: border-box;
+      z-index: 1;
+    }
+    .sleep-preview-art {
+      text-align: center;
+      padding: 0 12px;
+    }
+    .sleep-preview-default {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .sleep-preview-logo {
+      width: 120px;
+      height: 120px;
+      image-rendering: pixelated;
+    }
+    .sleep-preview-title {
+      font-size: 1.12em;
+      font-weight: 700;
+    }
+    .sleep-preview-meta {
+      font-size: 0.82em;
+      line-height: 1.35;
+    }
+    .sleep-preview-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: grayscale(1);
+    }
+    .sleep-preview-image.fit-contain {
+      object-fit: contain;
+    }
+    .sleep-preview-image.filter-contrast {
+      filter: grayscale(1) contrast(1.35);
+    }
+    .sleep-preview-image.filter-inverted {
+      filter: grayscale(1) invert(1);
+    }
+    .button-hints {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 10px 16px 14px;
+      background: linear-gradient(to bottom, rgba(247,244,237,0), var(--paper) 24%);
+      z-index: 5;
+    }
+    .button-hints button {
+      border: none;
+      background: transparent;
+      font: inherit;
+      color: inherit;
+      text-align: center;
+      padding: 0;
+    }
+    .reader-stage {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: var(--paper);
+    }
+    .reader-page {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      transform-origin: center center;
+      color: var(--black);
+    }
+    .reader-page.orientation-inverted {
+      transform: rotate(180deg);
+    }
+    .reader-page.orientation-landscape-cw,
+    .reader-page.orientation-landscape-ccw {
+      inset: 8% -18%;
+      transform: rotate(90deg) scale(0.78);
+    }
+    .reader-page.orientation-landscape-ccw {
+      transform: rotate(-90deg) scale(0.78);
+    }
+    .reader-global-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 5px 14px;
+      min-height: 18px;
+      font-size: 0.7em;
+      font-weight: 700;
+      border-bottom: 1px solid var(--accent);
+    }
+    .reader-global-bar.visible {
+      display: flex;
+    }
+    .reader-global-bar.bottom {
+      margin-top: auto;
+      border-bottom: none;
+      border-top: 1px solid var(--accent);
+      order: 5;
+    }
+    .reader-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding-bottom: 54px;
+    }
+    .reader-copy {
+      flex: 1;
+      overflow: hidden;
+      padding-top: 18px;
+    }
+    .reader-text {
+      font-family: var(--reader-font, var(--font-display));
+      font-size: var(--reader-size, 19px);
+      line-height: var(--reader-leading, 1.45);
+      padding: 0 var(--reader-margin, 16px);
+      text-align: var(--reader-align, justify);
+      hyphens: none;
+      -webkit-hyphens: none;
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
+    }
+    .reader-text.hyphenate {
+      hyphens: auto;
+      -webkit-hyphens: auto;
+    }
+    .reader-text.aa-off {
+      text-rendering: optimizeSpeed;
+      -webkit-font-smoothing: none;
+      filter: contrast(1.03);
+    }
+    .reader-text p {
+      margin: 0 0 0.48em;
+    }
+    .reader-text.spacious p {
+      margin-bottom: 1.05em;
+    }
+    .reader-text.book-style-on p:first-child::first-letter {
+      float: left;
+      font-size: 2.4em;
+      line-height: 0.88;
+      padding-right: 0.12em;
+      font-weight: 700;
+    }
+    .reader-text.book-style-on .lead-emphasis {
+      font-style: italic;
+    }
+    .reader-text.align-left { text-align: left; }
+    .reader-text.align-center { text-align: center; }
+    .reader-text.align-right { text-align: right; }
+    .reader-illustration {
+      margin: 1.05em var(--reader-margin, 16px) 1.1em;
+      min-height: 92px;
+      border: 1px solid var(--black);
+      background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.16));
+      position: relative;
+      overflow: hidden;
+    }
+    .reader-illustration::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 24% 32%, rgba(255,255,255,0.7), rgba(255,255,255,0) 24%),
+        linear-gradient(180deg, rgba(255,255,255,0.42), rgba(0,0,0,0.12));
+      mix-blend-mode: screen;
+    }
+    .reader-illustration.placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: repeating-linear-gradient(-45deg, rgba(0,0,0,0.06), rgba(0,0,0,0.06) 10px, rgba(255,255,255,0.22) 10px, rgba(255,255,255,0.22) 20px);
+    }
+    .reader-illustration.placeholder::before {
+      display: none;
+    }
+    .reader-illustration-label {
+      position: relative;
+      z-index: 1;
+      font-size: 0.76em;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(247,244,237,0.92);
+      padding: 6px 10px;
+      border: 1px solid var(--black);
+    }
+    .reader-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 var(--reader-margin, 16px) 12px;
+      min-height: 34px;
+      font-size: 0.72em;
+      font-weight: 700;
+    }
+    .reader-battery {
+      min-width: 40px;
+    }
+    .reader-title {
+      flex: 1;
+      text-align: center;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .reader-progress {
+      min-width: 92px;
+      text-align: right;
+    }
+    .reader-progress-bar {
+      height: 4px;
+      margin: 0 var(--reader-margin, 16px) 4px;
+      background: color-mix(in srgb, var(--black) 12%, transparent);
+      position: relative;
+      overflow: hidden;
+    }
+    .reader-progress-bar::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 57%;
+      background: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <div class="reader-stage" id="reader-root"></div>
+    <div class="button-hints">
+      <button type="button">Menu</button>
+      <button type="button">Select</button>
+      <button type="button">Prev</button>
+      <button type="button">Next</button>
+    </div>
+  </div>
+  <div class="sleep-preview-overlay" id="sleep-preview-overlay" aria-hidden="true"></div>
+  <script>
+    let theme = ${themePayload};
+    let sleepPreview = ${sleepPreviewPayload};
+    let reader = ${readerPayload};
+    const root = document.getElementById('reader-root');
+    const sleepPreviewOverlay = document.getElementById('sleep-preview-overlay');
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+    function applyTheme() {
+      Object.entries(theme).forEach(([key, value]) => {
+        document.documentElement.style.setProperty('--' + key, value);
+      });
+    }
+    function renderSleepPreview() {
+      if (!sleepPreviewOverlay) return;
+      const modeClass = ['dark', 'light', 'custom', 'transparent'][sleepPreview.mode] || 'dark';
+      const customFilterClass = sleepPreview.filterLabel === 'Contrast'
+        ? 'filter-contrast'
+        : sleepPreview.filterLabel === 'Inverted'
+          ? 'filter-inverted'
+          : '';
+      const customFitClass = sleepPreview.coverMode === 1 ? '' : 'fit-contain';
+      let inner = '';
+      if (sleepPreview.mode === 2) {
+        const usesPokedexSource = sleepPreview.sourceLabel === 'Pokédex' || sleepPreview.sourceLabel === 'Sleep + Pokédex';
+        const customSource = sleepPreview.studioImagePath || (usesPokedexSource ? sleepPreview.pokedexPreviewPath : sleepPreview.coverPath);
+        inner = '<img class="sleep-preview-image ' + customFitClass + ' ' + customFilterClass + '" src="' + escapeHtml(customSource) + '" alt="' +
+          escapeHtml(sleepPreview.studioFileName || 'Custom sleep image') + '" />';
+      } else if (sleepPreview.mode === 3) {
+        inner = '';
+      } else {
+        inner = '<div class="sleep-preview-default">' +
+          '<img class="sleep-preview-logo" src="' + escapeHtml(sleepPreview.logoPath) + '" alt="" />' +
+          '<div class="sleep-preview-title">CrossPoint</div>' +
+          '<div class="sleep-preview-meta">SLEEPING</div>' +
+        '</div>';
+      }
+      sleepPreviewOverlay.classList.toggle('visible', !!sleepPreview.visible);
+      sleepPreviewOverlay.setAttribute('aria-hidden', sleepPreview.visible ? 'false' : 'true');
+      sleepPreviewOverlay.innerHTML = '<div class="sleep-preview-shell">' +
+        '<div class="sleep-preview-frame ' + modeClass + '">' +
+          inner +
+        '</div>' +
+      '</div>';
+    }
+    function renderReader() {
+      const topGlobalBar = reader.globalStatusBar && reader.globalStatusBarPosition === 'top'
+        ? '<div class="reader-global-bar visible"><span>WiFi</span><span>12:48</span><span>' + escapeHtml(reader.batteryLabel || 'BAT') + '</span></div>'
+        : '';
+      const bottomGlobalBar = reader.globalStatusBar && reader.globalStatusBarPosition === 'bottom'
+        ? '<div class="reader-global-bar bottom visible"><span>WiFi</span><span>12:48</span><span>' + escapeHtml(reader.batteryLabel || 'BAT') + '</span></div>'
+        : '';
+      const imageBlock = reader.imageMode === 'display'
+        ? '<figure class="reader-illustration" aria-hidden="true"></figure>'
+        : reader.imageMode === 'placeholder'
+          ? '<figure class="reader-illustration placeholder" aria-hidden="true"><div class="reader-illustration-label">Image Placeholder</div></figure>'
+          : '';
+      const battery = reader.batteryLabel
+        ? '<div class="reader-battery">' + escapeHtml(reader.batteryLabel) + '</div>'
+        : '<div class="reader-battery"></div>';
+      document.documentElement.style.setProperty('--reader-font', reader.fontFamily);
+      document.documentElement.style.setProperty('--reader-size', reader.fontSize + 'px');
+      document.documentElement.style.setProperty('--reader-leading', reader.lineHeight);
+      document.documentElement.style.setProperty('--reader-margin', reader.margin + 'px');
+      document.documentElement.style.setProperty('--reader-align', reader.textAlign);
+      root.innerHTML =
+        '<article class="reader-page orientation-' + escapeHtml(reader.orientation) + '">' +
+          topGlobalBar +
+          '<div class="reader-body">' +
+            '<div class="reader-copy">' +
+              '<div class="reader-text ' + escapeHtml(reader.bodyClass) + '">' +
+                '<p><span class="lead-emphasis">We walked through the quiet city</span> as the daylight thinned into a pale silver dusk over the harbor, and every closed window along the street held the last of the afternoon like a secret.</p>' +
+                '<p>No one spoke for a while. The only sound was the wind pressing at the shutters and the soft drag of my thumb against the next page, as if the book itself were reluctant to let the chapter end.</p>' +
+                imageBlock +
+                '<p>The lamps came on one by one behind us, reflected in the canal in broken lines that made the water look stitched together. I kept reading anyway, standing beneath them, unwilling to trade the sentence in my hand for the night gathering at my back.</p>' +
+              '</div>' +
+            '</div>' +
+            '<div class="reader-status">' +
+              battery +
+              '<div class="reader-title">' + escapeHtml(reader.chapterTitle) + '</div>' +
+              '<div class="reader-progress">' + escapeHtml(reader.progressLabel) + '</div>' +
+            '</div>' +
+            '<div class="reader-progress-bar" aria-hidden="true"></div>' +
+          '</div>' +
+          bottomGlobalBar +
+        '</article>';
+    }
+    function render() {
+      applyTheme();
+      renderReader();
+      renderSleepPreview();
+    }
+    window.addEventListener('message', event => {
+      const data = event.data;
+      if (!data || data.type !== 'configurator-preview-state') return;
+      theme = data.theme || theme;
+      sleepPreview = data.sleepPreview || sleepPreview;
+      reader = data.reader || reader;
+      render();
+    });
+    render();
+  <\/script>
+</body>
+</html>`;
+        }
+
+        function pushPreviewState() {
+          if (!previewFrame?.contentWindow) return;
+          previewFrame.contentWindow.postMessage({
+            type: 'configurator-preview-state',
+            ...getPreviewState(),
+          }, '*');
+        }
 
         function drawPreview() {
-          if (!ctx) return;
-          const s = readSettings();
-          const dark = s.darkMode === 1;
-          const paper = dark ? '#1a1a1a' : '#f4f0e8';
-          const ink = dark ? '#e8e4d8' : '#1a1a1a';
-          const barBg = dark ? '#2a2a2a' : '#e0dcd0';
+          if (!previewFrame) return;
+          const settings = readSettings();
+          const powerActions = ['Ignore', 'Sleep', 'Page', 'Select'];
+          const frontLabels = getFrontButtonLabels(settings);
+          const powerLabel = document.getElementById('preview-power-label');
+          const volUpLabel = document.getElementById('preview-vol-up-label');
+          const volDownLabel = document.getElementById('preview-vol-down-label');
+          const frontLabelEls = [
+            document.getElementById('preview-front-0-label'),
+            document.getElementById('preview-front-1-label'),
+            document.getElementById('preview-front-2-label'),
+            document.getElementById('preview-front-3-label'),
+          ];
+          if (powerLabel) powerLabel.textContent = powerActions[settings.shortPwrBtn] || 'Ignore';
+          if (volUpLabel) volUpLabel.textContent = settings.sideButtonLayout === 1 ? 'Next' : 'Prev';
+          if (volDownLabel) volDownLabel.textContent = settings.sideButtonLayout === 1 ? 'Prev' : 'Next';
+          frontLabelEls.forEach((el, index) => {
+            if (el) el.textContent = frontLabels[index] || '-';
+          });
+          updateFrontButtonRemapStatus();
+          if (!previewFrame.srcdoc) previewFrame.srcdoc = buildPreviewDoc();
+          else pushPreviewState();
+        }
 
-          ctx.clearRect(0, 0, W, H);
+        document.querySelectorAll('[data-preview-action]').forEach(button => {
+          button.addEventListener('click', () => {
+            const action = button.dataset.previewAction;
+          if (action === 'power-cycle') {
+            const control = document.getElementById('s-shortPwrBtn');
+            if (!control) return;
+              const enabledOptions = Array.from(control.options).filter(option => !option.disabled);
+              const currentIndex = enabledOptions.findIndex(option => option.value === control.value);
+              const nextOption = enabledOptions[(currentIndex + 1) % enabledOptions.length];
+              if (!nextOption) return;
+              control.value = nextOption.value;
+            } else if (action === 'side-toggle') {
+              const control = document.getElementById('s-sideButtonLayout');
+              if (!control) return;
+              control.value = control.value === '1' ? '0' : '1';
+            }
+            sleepPreviewFlashActive = false;
+            if (currentSelections) updateSettingsVisibility(currentSelections);
+            else drawPreview();
+          });
+        });
 
-          // Background
-          ctx.fillStyle = paper;
-          ctx.fillRect(0, 0, W, H);
+        document.querySelectorAll('[data-preview-front]').forEach(button => {
+          button.addEventListener('click', () => {
+            const hardwareIndex = parseInt(button.dataset.previewFront || '-1', 10);
+            if (hardwareIndex < 0) return;
+            if (assignFrontButtonHardware(hardwareIndex)) return;
+            sleepPreviewFlashActive = false;
+            drawPreview();
+          });
+        });
 
-          // Subtle scanline texture
-          for (let y = 0; y < H; y += 3) {
-            ctx.fillStyle = dark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.012)';
-            ctx.fillRect(0, y, W, 1);
+        window.addEventListener('message', (event) => {
+          const data = event.data;
+          if (!data) return;
+
+          if (data.type === 'configurator-preview-button') {
+            const proxy = document.querySelector('[data-preview-action="' + data.action + '"]');
+            if (proxy) proxy.click();
+            return;
           }
 
-          const margin = Math.max(0, Math.min(20, s.screenMargin));
-          const hasStatusBar = s.statusBar > 0;
-          const statusH = hasStatusBar ? 14 : 0;
-          const textTop = margin + statusH + 4;
+          if (data.type === 'configurator-preview-change' && data.key) {
+            const control = document.getElementById('s-' + data.key);
+            if (!control) return;
 
-          // Status bar
-          if (hasStatusBar) {
-            ctx.fillStyle = barBg;
-            ctx.fillRect(0, 0, W, statusH);
-
-            ctx.fillStyle = ink;
-            ctx.font = '7px IBM Plex Mono, monospace';
-            ctx.textBaseline = 'middle';
-
-            // Title (left)
-            const title = s.statusBarTitle === 2 ? '' :
-                          (s.statusBarTitle === 0 ? 'My Book Title' : 'Chapter One');
-            if (title) ctx.fillText(title, margin, statusH / 2);
-
-            // Battery (right)
-            if (s.statusBarBattery) {
-              ctx.textAlign = 'right';
-              ctx.fillText('87%', W - margin, statusH / 2);
-              ctx.textAlign = 'left';
+            if (control.tagName === 'SELECT') {
+              const nextValue = String(data.value);
+              const nextOption = Array.from(control.options).find(option => option.value === nextValue && !option.disabled);
+              if (!nextOption) return;
+              control.value = nextValue;
+            } else {
+              control.value = String(data.value ?? '');
             }
 
-            // Separator line
-            ctx.fillStyle = dark ? '#444' : '#ccc';
-            ctx.fillRect(0, statusH, W, 1);
+            sleepPreviewFlashActive = data.key === 'sleepScreen';
+            if (currentSelections) updateSettingsVisibility(currentSelections);
+            else drawPreview();
           }
-
-          // Sample paragraphs simulating text
-          const fontSizes = [8, 10, 12, 14];
-          const fsize = fontSizes[s.fontSize] || 10;
-          const lineH = fsize * (s.lineSpacing === 0 ? 1.2 : s.lineSpacing === 2 ? 1.8 : 1.5);
-          const fontName = FONT_NAMES[s.fontFamily] || 'Bookerly';
-
-          ctx.fillStyle = ink;
-          ctx.font = `${fsize}px 'IBM Plex Mono', monospace`;
-          ctx.textBaseline = 'top';
-
-          const textW = W - margin * 2;
-          // Simulate lines of varying width
-          const lineWidths = [0.92, 0.78, 0.95, 0.61, 0.87, 0.72, 0.94, 0.55, 0.83, 0.90,
-                              0.70, 0.96, 0.68, 0.88, 0.50, 0.91, 0.76, 0.84, 0.63, 0.97];
-          const paraBreaks = new Set([4, 10, 15]);
-          let y = textTop;
-          const paraGap = s.extraParagraphSpacing ? lineH * 0.6 : lineH * 0.1;
-
-          for (let i = 0; i < lineWidths.length; i++) {
-            if (y + fsize > H - margin - 12) break;
-            if (paraBreaks.has(i)) y += paraGap;
-
-            const lw = textW * lineWidths[i];
-            const x = s.paragraphAlignment === 2 ? margin + (textW - lw) / 2  // center
-                    : s.paragraphAlignment === 3 ? margin + (textW - lw)       // right
-                    : margin;                                                    // left/justified
-
-            ctx.fillStyle = ink;
-            ctx.fillRect(x, y, i === lineWidths.length - 1 ? lw * 0.55 : lw, fsize * 0.72);
-            y += lineH;
-          }
-
-          // Bottom progress bar (if mode shows bar)
-          if (s.statusBar === 3 || s.statusBar === 4 || s.statusBar === 5) {
-            const barH = 3;
-            ctx.fillStyle = barBg;
-            ctx.fillRect(0, H - barH, W, barH);
-            ctx.fillStyle = ink;
-            ctx.fillRect(0, H - barH, W * 0.37, barH); // 37% progress example
-          }
-
-          // Font name watermark
-          ctx.fillStyle = dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
-          ctx.font = '7px IBM Plex Mono, monospace';
-          ctx.textAlign = 'right';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(fontName, W - margin, H - margin - (s.statusBar >= 3 ? 5 : 0));
-          ctx.textAlign = 'left';
-        }
+        });
 
         // ── Download ────────────────────────────────────────────────
         document.getElementById('settings-download-btn').addEventListener('click', () => {
           const s = readSettings();
-          const out = {};
-
-          // Only emit non-default values
-          Object.keys(DEFAULTS).forEach(key => {
-            const val = s[key];
-            const def = DEFAULTS[key];
-            if (val === undefined) return;
-            if (typeof def === 'number' && val === def) return;
-            if (typeof def === 'string' && val === def) return;
-            out[key] = val;
-          });
+          const out = buildSettingsPayload(s, currentSelections);
 
           const json = JSON.stringify(out, null, 2);
           const blob = new Blob([json], { type: 'application/json' });
@@ -5129,6 +6365,7 @@
 
         // Expose updater for feature flag changes
         window._updateSettingsVisibility = updateSettingsVisibility;
+        window._refreshSettingsPreview = drawPreview;
 
         drawPreview();
       }

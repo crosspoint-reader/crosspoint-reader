@@ -23,6 +23,7 @@ class CrossPointSettings {
     LIGHT = 1,
     CUSTOM = 2,
     TRANSPARENT = 3,
+    FOLLOW_THEME = 4,
     SLEEP_SCREEN_MODE_COUNT,
     // Legacy raw values — never assigned via UI; handled in validateAndClamp().
     COVER = 9,          // was 3

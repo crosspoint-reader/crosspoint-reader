@@ -6,38 +6,29 @@
   <title>CrossPoint Reader - Settings</title>
   <style>
     :root {
-      --black: #000;
-      --white: #fff;
-      --gray-2: #222;
-      --gray-3: #444;
-      --gray-4: #666;
-      --gray-5: #888;
-      --gray-6: #aaa;
-      --gray-7: #ccc;
-      --gray-8: #ddd;
-      --gray-9: #eee;
-      --gray-10: #f5f5f5;
-      --font-mono: 'Courier New', Courier, monospace;
-      --font-display: Georgia, 'Times New Roman', Times, serif;
+      /* THEME_TOKENS_START */
+      /* THEME_TOKENS_END */
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: var(--font-mono);
       max-width: 800px;
       margin: 0 auto;
-      background-color: var(--gray-10);
+      background-color: var(--paper);
       color: var(--black);
-      background-image: radial-gradient(circle, var(--gray-8) 1px, transparent 1px);
-      background-size: 4px 4px;
     }
     h1 {
       font-family: var(--font-display);
       font-weight: 700;
       color: var(--black);
-      font-size: 1.4em;
-      padding: 14px 16px;
-      border-bottom: 2px solid var(--black);
-      background: var(--white);
+      font-size: 1.55em;
+      line-height: 1;
+      padding: 18px 16px 8px;
+    }
+    .header-rule {
+      height: 2px;
+      background: var(--black);
+      margin-bottom: 16px;
     }
     h2 {
       color: var(--gray-2);
@@ -47,12 +38,23 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.08em;
+      padding: 10px 0 4px;
     }
+    /* Settings category sections — flat groups, no card box */
     .card {
+      padding: 0 16px;
+      margin-bottom: 4px;
+    }
+    /* Action module cards (WiFi, OTA, font, Pokédex, sleep picker) keep a box */
+    #fontUploadCard,
+    #ota-container,
+    #pokedex-container,
+    #wifi-container,
+    #sleep-cover-card {
       background: var(--white);
+      border: 1px solid var(--gray-7);
       padding: 16px;
-      margin: 12px 16px;
-      border: 2px solid var(--black);
+      margin: 0 16px 12px;
     }
     /* Nav bar matching home page */
     .nav {
@@ -83,47 +85,52 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px dotted var(--gray-7);
+      min-height: 42px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--black);
     }
     .setting-row:last-child {
       border-bottom: none;
     }
     .setting-name {
-      font-weight: 500;
+      font-weight: 600;
       color: var(--black);
       flex: 1;
       min-width: 0;
       padding-right: 12px;
-      font-size: 0.85em;
+      font-size: 0.95em;
     }
     .setting-control {
       flex-shrink: 0;
+      max-width: 48%;
     }
     .setting-control select,
     .setting-control input[type="number"],
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
-      padding: 6px 10px;
-      border: 2px solid var(--black);
+      padding: 0;
+      border: none;
       font-family: var(--font-mono);
-      font-size: 0.85em;
-      background: var(--white);
+      font-size: 0.95em;
+      font-weight: 700;
+      background: transparent;
+      color: var(--black);
+      text-align: right;
     }
     .setting-control select:focus,
     .setting-control input:focus {
       outline: none;
-      border-color: var(--gray-3);
     }
     .setting-control select {
-      min-width: 160px;
+      min-width: 140px;
+      max-width: 200px;
     }
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
-      width: 220px;
+      width: 180px;
     }
     .setting-control input[type="number"] {
-      width: 80px;
+      width: 60px;
     }
     /* Toggle switch - grayscale */
     .toggle-switch {
@@ -194,7 +201,7 @@
       margin: 12px 16px;
       text-align: center;
       display: none;
-      border: 2px solid var(--black);
+      border: 1px solid var(--black);
       font-size: 0.85em;
     }
     .message.success {
@@ -227,21 +234,11 @@
       to { transform: rotate(360deg); }
     }
     @media (max-width: 600px) {
-      body {
-        font-size: 13px;
-      }
-      .card {
-        padding: 12px;
-        margin: 8px 10px;
-      }
-      h1 {
-        font-size: 1.2em;
-        padding: 12px;
-      }
-      .setting-row {
-        flex-wrap: wrap;
-        gap: 6px;
-      }
+      body { font-size: 13px; }
+      .card { padding: 0 10px; }
+      h1 { font-size: 1.3em; padding: 14px 12px 8px; }
+      .setting-row { flex-wrap: wrap; gap: 4px; }
+      .setting-control { max-width: 100%; }
       .setting-control select,
       .setting-control input[type="text"],
       .setting-control input[type="password"] {
@@ -259,6 +256,7 @@
   </nav>
 
   <h1>Settings</h1>
+  <div class="header-rule"></div>
 
   <div id="message" class="message"></div>
 

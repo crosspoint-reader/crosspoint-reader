@@ -10,6 +10,42 @@ POKEDEX_CACHE_MARKER_RE = re.compile(
     r"/\* POKEMON_CACHE_INJECT_START \*/.*?/\* POKEMON_CACHE_INJECT_END \*/",
     re.DOTALL,
 )
+THEME_TOKENS_MARKER_RE = re.compile(
+    r"/\* THEME_TOKENS_START \*/.*?/\* THEME_TOKENS_END \*/",
+    re.DOTALL,
+)
+
+
+def load_theme_tokens(script_dir: str) -> str:
+    """Read theme.css, extract body of the :root { } block."""
+    theme_path = Path(script_dir) / "theme.css"
+    text = theme_path.read_text(encoding="utf-8")
+    m = re.search(r":root\s*\{([^}]*)\}", text, re.DOTALL)
+    if not m:
+        raise RuntimeError(f"No :root block found in {theme_path}")
+    return m.group(1)
+
+
+def inject_theme_tokens(html: str, tokens: str) -> str:
+    """Replace THEME_TOKENS markers with canonical token declarations."""
+    if "THEME_TOKENS_START" not in html:
+        return html  # page opted out — no markers
+    if not THEME_TOKENS_MARKER_RE.search(html):
+        raise RuntimeError("THEME_TOKENS_START found but marker pair not matched — malformed markers")
+    replacement = f"/* THEME_TOKENS_START */{tokens}    /* THEME_TOKENS_END */"
+    return THEME_TOKENS_MARKER_RE.sub(replacement, html)
+
+
+def update_configurator_tokens(tokens: str, repo_root: str):
+    """Inject theme tokens into buildPreviewDoc() in the configurator."""
+    path = Path(repo_root) / "docs/configurator/index.html"
+    if not path.exists():
+        return
+    content = path.read_text(encoding="utf-8")
+    updated = inject_theme_tokens(content, tokens)
+    if updated != content:
+        path.write_text(updated, encoding="utf-8")
+        print(f"Updated theme tokens in {path}")
 
 
 def inject_pokedex_cache(html_path: str, html: str) -> str:
@@ -66,6 +102,10 @@ def minify_html(html: str) -> str:
 
     return html.strip()
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+theme_tokens = load_theme_tokens(SCRIPT_DIR)
+
 for root, _, files in os.walk(SRC_DIR):
     for file in files:
         if file.endswith(".html"):
@@ -74,6 +114,7 @@ for root, _, files in os.walk(SRC_DIR):
                 html_content = f.read()
 
             html_content = inject_pokedex_cache(html_path, html_content)
+            html_content = inject_theme_tokens(html_content, theme_tokens)
 
             # minified = regex.sub("\g<1>", html_content)
             minified = minify_html(html_content)
@@ -114,3 +155,5 @@ for root, _, files in os.walk(SRC_DIR):
             print(f"  Original: {len(html_content)} bytes")
             print(f"  Minified: {len(minified)} bytes ({100*len(minified)/len(html_content):.1f}%)")
             print(f"  Compressed: {len(compressed)} bytes ({100*len(compressed)/len(html_content):.1f}%)")
+
+update_configurator_tokens(theme_tokens, REPO_ROOT)

@@ -9,15 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
   <style>
     :root {
-      --black: #000;
-      --white: #fff;
-      --gray-2: #222;
-      --gray-4: #666;
-      --gray-6: #aaa;
-      --gray-8: #ddd;
-      --gray-10: #f5f5f5;
-      --font-mono: 'Courier New', Courier, monospace;
-      --font-display: Georgia, 'Times New Roman', Times, serif;
+      /* THEME_TOKENS_START */
+      /* THEME_TOKENS_END */
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1654,16 +1647,34 @@
 
     const html = partyBooks.map(function(book) {
       const title = escapeHtml(book.title || "Untitled");
+      const author = book.author ? escapeHtml(book.author) : "";
       const assigned = book.pokemon || null;
       const progress = getProgressState(book);
-      const pokemonName = assigned && assigned.name ? titleCase(assigned.name) : "No Pokemon assigned";
+      const level = progress ? progress.level : 1;
+      const pokemonName = assigned && assigned.name ? titleCase(assigned.name) : "";
       const spriteUrl = getAssignedSpriteUrl(assigned);
-      const progressLine = progress
-        ? "Lv " + progress.level
-        : "Lv 1";
-      const pokemonHtml = assigned
-        ? '<div class="party-pokemon-name">' + escapeHtml(pokemonName) + '</div>'
-        : '<div class="party-pokemon-empty">No Pokemon assigned yet.</div>';
+      const progressLine = "Lv " + level;
+
+      const evoState = assigned ? getEvolutionState(assigned, level) : null;
+      let evoChipsHtml = "";
+      if (evoState) {
+        const chips = [];
+        if (evoState.next) {
+          const nextName = titleCase(evoState.next.name || "");
+          const nextText = evoState.next.text ? escapeHtml(evoState.next.text) : "";
+          const label = "\u2192 " + (nextName || "Next") + (nextText ? " \u2014 " + nextText : "");
+          chips.push('<span class="party-chip">' + label + '</span>');
+        } else if (assigned.evolutionChain && assigned.evolutionChain.length > 1) {
+          chips.push('<span class="party-chip">Final form</span>');
+        }
+        if (chips.length) {
+          evoChipsHtml = '<div class="party-chip-row">' + chips.join("") + '</div>';
+        }
+      }
+
+      const pokemonSection = assigned
+        ? '<div class="party-pokemon"><div class="party-pokemon-name">' + escapeHtml(pokemonName) + '</div>' + evoChipsHtml + '</div>'
+        : '<div class="party-pokemon"><div class="party-pokemon-empty">No Pok\u00e9mon assigned yet.</div></div>';
 
       return [
         '<div class="party-slot">',
@@ -1678,8 +1689,9 @@
         '    </div>',
         '    <div class="party-meta">',
         '      <div class="party-book-title">' + title + '</div>',
-        '      ' + pokemonHtml,
+               author ? '      <div class="party-book-author">' + author + '</div>' : '',
         '      <div class="party-book-progress">' + escapeHtml(progressLine) + '</div>',
+        '      ' + pokemonSection,
         '    </div>',
         '  </div>',
         '  <div class="party-actions">',

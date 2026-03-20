@@ -24,9 +24,10 @@ if [ -n "$STAGED_STRINGS" ]; then
     fi
 fi
 
-# Regenerate HTML headers when source HTML is staged.
+# Regenerate HTML headers when source HTML or theme tokens are staged.
+STAGED_THEME=$(git diff --cached --name-only --diff-filter=ACM | grep -F 'scripts/theme.css' || true)
 STAGED_HTML=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src/.*\.html$' || true)
-if [ -n "$STAGED_HTML" ]; then
+if [ -n "$STAGED_HTML" ] || [ -n "$STAGED_THEME" ]; then
     if command -v python3 &> /dev/null; then
         python3 scripts/build_html.py
         GEN_HEADERS=()
