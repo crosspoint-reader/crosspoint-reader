@@ -1,6 +1,7 @@
 #include "ContainerParser.h"
 
 #include <Logging.h>
+#include <XmlParserUtils.h>
 
 bool ContainerParser::setup() {
   parser = XML_ParserCreate(nullptr);
@@ -14,14 +15,7 @@ bool ContainerParser::setup() {
   return true;
 }
 
-ContainerParser::~ContainerParser() {
-  if (parser) {
-    XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-    XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-    XML_ParserFree(parser);
-    parser = nullptr;
-  }
-}
+ContainerParser::~ContainerParser() { destroyXmlParser(parser); }
 
 size_t ContainerParser::write(const uint8_t data) { return write(&data, 1); }
 
