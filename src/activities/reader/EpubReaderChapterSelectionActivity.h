@@ -14,7 +14,6 @@ class EpubReaderChapterSelectionActivity final : public Activity {
   int currentTocIndex = 0;
   int selectorIndex = 0;
 
-
   // Number of items that fit on a page, derived from logical screen height.
   // This adapts automatically when switching between portrait and landscape.
   int getPageItems() const;

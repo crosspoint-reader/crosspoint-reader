@@ -4,7 +4,6 @@
 
 #include <climits>
 #include <functional>
-#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -51,6 +50,7 @@ class ChapterHtmlSlimParser {
   bool hyphenationEnabled;
   const CssParser* cssParser;
   bool embeddedStyle;
+  uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
   int imageCounter = 0;
@@ -73,7 +73,8 @@ class ChapterHtmlSlimParser {
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
-  std::map<std::string, uint16_t> anchorPageMap;
+  std::vector<std::pair<std::string, uint16_t>> anchorData;
+  std::string pendingAnchorId;  // deferred until after previous text block is flushed
   std::set<std::string> tocAnchors;
 
   // Footnote link tracking
@@ -102,8 +103,9 @@ class ChapterHtmlSlimParser {
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
-                                 const std::string& imageBasePath, std::set<std::string> tocAnchors = {},
-                                 const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
+                                 const std::string& imageBasePath, const uint8_t imageRendering = 0,
+                                 std::set<std::string> tocAnchors = {}, const std::function<void()>& popupFn = nullptr,
+                                 const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
@@ -119,6 +121,7 @@ class ChapterHtmlSlimParser {
         popupFn(popupFn),
         cssParser(cssParser),
         embeddedStyle(embeddedStyle),
+        imageRendering(imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {}
@@ -126,5 +129,5 @@ class ChapterHtmlSlimParser {
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
-  const std::map<std::string, uint16_t>& getAnchorPageMap() const { return anchorPageMap; }
+  const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 };

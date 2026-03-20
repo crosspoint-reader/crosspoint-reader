@@ -29,16 +29,16 @@ void SettingsActivity::onEnter() {
   controlsSettings.clear();
   systemSettings.clear();
 
-  for (auto& setting : getSettingsList()) {
+  for (const auto& setting : getSettingsList()) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
-      displaySettings.push_back(std::move(setting));
+      displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
-      readerSettings.push_back(std::move(setting));
+      readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
-      controlsSettings.push_back(std::move(setting));
+      controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      systemSettings.push_back(std::move(setting));
+      systemSettings.push_back(setting);
     }
     // Web-only categories (KOReader Sync, OPDS Browser) are skipped for device UI
   }

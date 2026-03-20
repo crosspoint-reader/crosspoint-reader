@@ -133,10 +133,20 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
       // div's margin should be preserved, even though it has no direct text content.
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
+
+      if (!pendingAnchorId.empty()) {
+        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+        pendingAnchorId.clear();
+      }
       return;
     }
 
     makePages();
+  }
+  // Record deferred anchor after previous block is flushed
+  if (!pendingAnchorId.empty()) {
+    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+    pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
   wordsExtractedInBlock = 0;
@@ -163,6 +173,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
         idAttr = atts[i + 1];
+        // Defer recording until startNewTextBlock, after previous block is flushed to pages
+        self->pendingAnchorId = atts[i + 1];
       }
     }
   }
@@ -170,6 +182,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Record anchor AFTER any block flush so completedPageCount reflects the correct page.
   // If this anchor is a TOC chapter boundary, start a fresh page so the chapter doesn't
   // begin mid-page.
+  // Force a page break at TOC chapter boundaries so chapters don't begin mid-page.
+  // Anchor-to-page recording is handled separately via pendingAnchorId in startNewTextBlock.
   const auto recordAnchor = [self, &idAttr]() {
     if (idAttr.empty() || !self->tocAnchors.count(idAttr)) return;
     if (self->currentPage && !self->currentPage->elements.empty()) {
@@ -178,7 +192,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->currentPage.reset(new Page());
       self->currentPageNextY = 0;
     }
-    self->anchorPageMap[idAttr] = static_cast<uint16_t>(self->completedPageCount);
   };
 
   auto centeredBlockStyle = BlockStyle();
@@ -263,7 +276,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         }
       }
 
-      if (!src.empty()) {
+      // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
+      if (self->imageRendering == 2) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
+
+      if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
 
         {
@@ -298,8 +318,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
                 int displayWidth = 0;
                 int displayHeight = 0;
-                const float emSize =
-                    static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+                const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
                 CssStyle imgStyle = self->cssParser ? self->cssParser->resolveStyle("img", classAttr) : CssStyle{};
                 // Merge inline style (e.g. style="height: 2em") so it overrides stylesheet rules
                 if (!styleAttr.empty()) {
@@ -528,7 +547,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+  const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
   const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
@@ -1008,6 +1027,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
+    if (!pendingAnchorId.empty()) {
+      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+      pendingAnchorId.clear();
+    }
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset();

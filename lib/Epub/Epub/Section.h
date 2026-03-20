@@ -20,7 +20,7 @@ class Section {
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                              bool embeddedStyle);
+                              bool embeddedStyle, uint8_t imageRendering);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
   struct TocBoundary {
@@ -43,11 +43,12 @@ class Section {
         filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin") {}
   ~Section() = default;
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                       uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle);
+                       uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
+                       uint8_t imageRendering);
   bool clearCache() const;
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         const std::function<void()>& popupFn = nullptr);
+                         uint8_t imageRendering, const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
 
   // Given a page in this section, return the TOC index for that page.
@@ -69,5 +70,8 @@ class Section {
                                                      float lineCompression, bool extraParagraphSpacing,
                                                      uint8_t paragraphAlignment, uint16_t viewportWidth,
                                                      uint16_t viewportHeight, bool hyphenationEnabled,
-                                                     bool embeddedStyle);
+                                                     bool embeddedStyle, uint8_t imageRendering);
+
+  // Look up the page number for an anchor id from the section cache file.
+  std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
 };

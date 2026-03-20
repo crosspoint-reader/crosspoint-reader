@@ -16,7 +16,6 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
-#include "util/StringUtils.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -44,7 +43,7 @@ unsigned long wsLastCompleteAt = 0;
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
   // Only clear cache for .epub files
-  if (StringUtils::checkFileExtension(filePath, ".epub")) {
+  if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
   }
@@ -391,11 +390,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
   root.close();
 }
 
-bool CrossPointWebServer::isEpubFile(const String& filename) const {
-  String lower = filename;
-  lower.toLowerCase();
-  return lower.endsWith(".epub");
-}
+bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
 
 void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
@@ -1033,7 +1028,7 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  auto settings = getSettingsList();
+  const auto& settings = getSettingsList();
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1087,8 +1082,8 @@ void CrossPointWebServer::handleGetSettings() const {
         doc["type"] = "string";
         if (s.stringGetter) {
           doc["value"] = s.stringGetter();
-        } else if (s.stringPtr) {
-          doc["value"] = s.stringPtr;
+        } else if (s.stringOffset > 0) {
+          doc["value"] = reinterpret_cast<const char*>(&SETTINGS) + s.stringOffset;
         }
         break;
       }
@@ -1129,10 +1124,10 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  auto settings = getSettingsList();
+  const auto& settings = getSettingsList();
   int applied = 0;
 
-  for (auto& s : settings) {
+  for (const auto& s : settings) {
     if (!s.key) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
@@ -1171,9 +1166,10 @@ void CrossPointWebServer::handlePostSettings() {
         const std::string val = doc[s.key].as<std::string>();
         if (s.stringSetter) {
           s.stringSetter(val);
-        } else if (s.stringPtr && s.stringMaxLen > 0) {
-          strncpy(s.stringPtr, val.c_str(), s.stringMaxLen - 1);
-          s.stringPtr[s.stringMaxLen - 1] = '\0';
+        } else if (s.stringOffset > 0 && s.stringMaxLen > 0) {
+          char* ptr = reinterpret_cast<char*>(&SETTINGS) + s.stringOffset;
+          strncpy(ptr, val.c_str(), s.stringMaxLen - 1);
+          ptr[s.stringMaxLen - 1] = '\0';
         }
         applied++;
         break;
