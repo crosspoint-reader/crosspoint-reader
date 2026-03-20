@@ -463,11 +463,63 @@ static std::optional<ParserState> parseSpineItem(const std::shared_ptr<Epub>& ep
   return state;
 }
 
+// Keep a single parsed spine in memory to avoid repeated decompress+parse work
+// in the KO sync flow.
+//
+// Why this helps here:
+// - Sync result screen calls both mapping directions (remote->local for compare,
+//   local->KOReader for display).
+// - If the user chooses Upload, local->KOReader mapping is performed again.
+// - Without caching, the same chapter can be decompressed and reparsed multiple
+//   times during one activity session.
+//
+// Why the cache is exactly one entry:
+// - We only need to accelerate immediate repeat lookups for the current chapter.
+// - A single-entry cache bounds RAM use and avoids long-lived heap growth on
+//   ESP32-C3.
+static const ParserState* getParsedStateCached(const std::shared_ptr<Epub>& epub, const int spineIndex) {
+  static const Epub* cachedEpub = nullptr;
+  static int cachedSpineIndex = -1;
+  static std::string cachedHref;
+  static std::optional<ParserState> cachedState;
+
+  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+    return nullptr;
+  }
+
+  const auto spineItem = epub->getSpineItem(spineIndex);
+  if (spineItem.href.empty()) {
+    return nullptr;
+  }
+
+  const bool cacheHit = cachedState.has_value() && cachedEpub == epub.get() && cachedSpineIndex == spineIndex &&
+                        cachedHref == spineItem.href;
+  if (cacheHit) {
+    LOG_DBG("KOX", "Cache hit: spine=%d anchors=%zu textBytes=%zu", spineIndex, cachedState->anchors.size(),
+            cachedState->totalTextBytes);
+    return &cachedState.value();
+  }
+
+  auto parsed = parseSpineItem(epub, spineIndex);
+  if (!parsed) {
+    return nullptr;
+  }
+
+  cachedEpub = epub.get();
+  cachedSpineIndex = spineIndex;
+  cachedHref = spineItem.href;
+  cachedState = std::move(parsed);
+
+  LOG_DBG("KOX", "Cache store: spine=%d anchors=%zu textBytes=%zu", spineIndex, cachedState->anchors.size(),
+          cachedState->totalTextBytes);
+  return &cachedState.value();
+}
+
 }  // namespace
 
 std::string ChapterXPathIndexer::findXPathForProgress(const std::shared_ptr<Epub>& epub, const int spineIndex,
                                                       const float intraSpineProgress) {
-  const auto state = parseSpineItem(epub, spineIndex);
+  const auto* state = getParsedStateCached(epub, spineIndex);
   if (!state) {
     return "";
   }
@@ -488,7 +540,7 @@ bool ChapterXPathIndexer::findProgressForXPath(const std::shared_ptr<Epub>& epub
     return false;
   }
 
-  const auto state = parseSpineItem(epub, spineIndex);
+  const auto* state = getParsedStateCached(epub, spineIndex);
   if (!state) {
     return false;
   }
