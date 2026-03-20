@@ -4,6 +4,13 @@ set -e
 
 cd "$(dirname "$0")"
 
+# Set FONT_PACKED_GROUPS=1 to generate packed-format compressed fonts
+# for use with the FONT_PACKED_GROUPS compile flag in FontDecompressor.h.
+COMPRESS_FLAGS="--compress"
+if [ "${FONT_PACKED_GROUPS}" = "1" ]; then
+  COMPRESS_FLAGS="--compress --no-byte-align"
+fi
+
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
 BOOKERLY_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
@@ -14,7 +21,7 @@ for size in ${BOOKERLY_FONT_SIZES[@]}; do
     font_name="bookerly_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Bookerly/Bookerly-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit $COMPRESS_FLAGS > $output_path
     echo "Generated $output_path"
   done
 done
@@ -24,7 +31,7 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit $COMPRESS_FLAGS > $output_path
     echo "Generated $output_path"
   done
 done
@@ -34,7 +41,7 @@ for size in ${OPENDYSLEXIC_FONT_SIZES[@]}; do
     font_name="opendyslexic_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/OpenDyslexic/OpenDyslexic-${style}.otf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit $COMPRESS_FLAGS > $output_path
     echo "Generated $output_path"
   done
 done

@@ -17,6 +17,7 @@ parser.add_argument("fontstack", action="store", nargs='+', help="list of font f
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
+parser.add_argument("--no-byte-align", dest="no_byte_align", action="store_true", help="With --compress, store packed format instead of byte-aligned. Use with FONT_PACKED_GROUPS.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 args = parser.parse_args()
 
@@ -688,6 +689,7 @@ ligature_pairs = sorted(unique_ligature_pairs, key=lambda p: p[0])
 print(f"ligatures: {len(ligature_pairs)} pairs extracted", file=sys.stderr)
 
 compress = args.compress
+no_byte_align = args.no_byte_align
 
 
 def to_byte_aligned(packed, width, height):
@@ -719,7 +721,7 @@ def to_byte_aligned(packed, width, height):
 
 # Build groups for compression
 if compress and not is2Bit:
-    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
+    print("Error: --compress requires --2bit (compression only supports 2-bit format)", file=sys.stderr)
     sys.exit(1)
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
@@ -796,9 +798,12 @@ if compress:
                 code_point=old_props.code_point,
             )
             packed_len += len(packed)
-            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
+            if no_byte_align:
+                group_aligned.extend(packed)
+            else:
+                group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
 
-        # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
+        # Compress group data with raw DEFLATE (no zlib/gzip header)
         compressor = zlib.compressobj(level=9, wbits=-15)
         compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
 
