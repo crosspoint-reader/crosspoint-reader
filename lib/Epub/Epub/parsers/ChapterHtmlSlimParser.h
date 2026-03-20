@@ -5,7 +5,6 @@
 #include <climits>
 #include <functional>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -75,7 +74,7 @@ class ChapterHtmlSlimParser {
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
-  std::set<std::string> tocAnchors;
+  std::vector<std::string> tocAnchors;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -104,7 +103,7 @@ class ChapterHtmlSlimParser {
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
-                                 std::set<std::string> tocAnchors = {}, const std::function<void()>& popupFn = nullptr,
+                                 std::vector<std::string> tocAnchors = {}, const std::function<void()>& popupFn = nullptr,
                                  const CssParser* cssParser = nullptr)
 
       : epub(epub),

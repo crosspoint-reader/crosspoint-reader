@@ -5,7 +5,6 @@
 #include <Serialization.h>
 
 #include <algorithm>
-#include <set>
 
 #include "Epub/css/CssParser.h"
 #include "Page.h"
@@ -208,14 +207,14 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   // Collect TOC anchors for this spine so the parser can insert page breaks at chapter boundaries
-  std::set<std::string> tocAnchors;
+  std::vector<std::string> tocAnchors;
   const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
   if (startTocIndex >= 0) {
     for (int i = startTocIndex; i < epub->getTocItemsCount(); i++) {
       auto entry = epub->getTocItem(i);
       if (entry.spineIndex != spineIndex) break;
       if (!entry.anchor.empty()) {
-        tocAnchors.insert(std::move(entry.anchor));
+        tocAnchors.push_back(std::move(entry.anchor));
       }
     }
   }
