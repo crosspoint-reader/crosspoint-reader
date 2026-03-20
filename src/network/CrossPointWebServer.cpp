@@ -522,8 +522,9 @@ void CrossPointWebServer::handleDownload() const {
 
   bool downloadOk = true;
   while (downloadOk && file.available()) {
-    size_t bytesRead = file.read(buffer, chunkSize);
-    if (bytesRead == 0) break;
+    int result = file.read(buffer, chunkSize);
+    if (result <= 0) break;
+    size_t bytesRead = static_cast<size_t>(result);
     size_t totalWritten = 0;
     while (totalWritten < bytesRead) {
       esp_task_wdt_reset();
@@ -1331,6 +1332,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       if (written != length) {
         wsUploadFile.close();
         wsUploadInProgress = false;
+        wsUploadClientNum = 255;
         wsServer->sendTXT(num, "ERROR:Write failed - disk full?");
         return;
       }
