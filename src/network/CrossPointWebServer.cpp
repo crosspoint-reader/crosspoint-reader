@@ -401,9 +401,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 }
 
 bool CrossPointWebServer::isEpubFile(const String& filename) const {
-  String lower = filename;
-  lower.toLowerCase();
-  return lower.endsWith(".epub");
+  return FsHelpers::checkFileExtension(filename, ".epub");
 }
 
 void CrossPointWebServer::handleFileList() const {
@@ -522,10 +520,19 @@ void CrossPointWebServer::handleDownload() const {
   const size_t chunkSize = 4096;
   uint8_t buffer[chunkSize];
 
-  while (file.available()) {
+  bool downloadOk = true;
+  while (downloadOk && file.available()) {
     size_t bytesRead = file.read(buffer, chunkSize);
-    if (bytesRead > 0) {
-      client.write(buffer, bytesRead);
+    if (bytesRead == 0) break;
+    size_t totalWritten = 0;
+    while (totalWritten < bytesRead) {
+      esp_task_wdt_reset();
+      size_t wrote = client.write(buffer + totalWritten, bytesRead - totalWritten);
+      if (wrote == 0) {
+        downloadOk = false;
+        break;
+      }
+      totalWritten += wrote;
     }
   }
   client.clear();
@@ -1252,8 +1259,9 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
       if (msg.startsWith("START:")) {
-        // Reject if another client already owns an active upload
-        if (wsUploadInProgress && wsUploadClientNum != 255 && wsUploadClientNum != num) {
+        // Reject any START while an upload is already active to prevent
+        // leaking the open wsUploadFile handle (owning client re-START included)
+        if (wsUploadInProgress) {
           wsServer->sendTXT(num, "ERROR:Upload already in progress");
           break;
         }
