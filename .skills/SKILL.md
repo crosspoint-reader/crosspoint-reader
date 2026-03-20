@@ -300,6 +300,8 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 **CRITICAL**: With `-fno-exceptions`, bare `new` on OOM calls `abort()` — it does NOT return `nullptr`. Always use `makeUniqueNoThrow` from `lib/Memory/Memory.h`, which wraps `new (std::nothrow)` and returns a `std::unique_ptr` that is null on OOM and automatically frees on scope exit.
 
+**`std::make_unique` has the same problem**: It uses bare `new` internally, so it also calls `abort()` on OOM instead of returning `nullptr`. **Never use `std::make_unique`** for fallible allocations. Use `makeUniqueNoThrow` instead.
+
 **Preferred pattern**:
 ```cpp
 #include <Memory.h>
@@ -324,9 +326,12 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 **Rules**:
 - **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
 - **NEVER use bare `new`** — always `makeUniqueNoThrow` or `new (std::nothrow)`
+- **NEVER use `std::make_unique`** — same OOM behavior as bare `new` (calls `abort()`)
 - **ALWAYS `LOG_ERR` before returning false** on OOM
 - **Use `.get()`** to pass the raw pointer to C-style APIs; ownership stays with the `unique_ptr`
 - **`new (std::nothrow)` directly only** when a C API takes ownership; document why in a comment
+
+**Exception**: Activity creation (e.g., `std::make_unique<MyActivity>`) may use `std::make_unique` if OOM during activity creation is considered a fatal system state. However, prefer `makeUniqueNoThrow` for consistency and better error reporting.
 
 **Examples in codebase**:
 - Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
