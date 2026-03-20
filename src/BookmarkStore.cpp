@@ -107,11 +107,7 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
     return false;
   }
 
-  entries.push_back(entry);
-
-  // Sort by bookPercent ascending
-  std::sort(entries.begin(), entries.end(),
-            [](const BookmarkEntry& a, const BookmarkEntry& b) { return a.bookPercent < b.bookPercent; });
+  entries.insert(entries.begin(), entry);
 
   const bool ok = writeBookmarks(path, entries);
   if (ok) {
