@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 
-
 struct RecentBook {
   std::string path;
   std::string title;
