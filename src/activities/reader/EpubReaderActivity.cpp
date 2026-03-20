@@ -193,6 +193,12 @@ void EpubReaderActivity::loop() {
 
   const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
 
+  // Chapter skip navigates by TOC entries, not spine boundaries.
+  // Spine items without their own TOC entry inherit the previous spine's tocIndex
+  // (see BookMetadataCache), so they're treated as continuations of the last chapter.
+  // At the boundaries: skipping forward past the last TOC entry jumps to end-of-book
+  // (clamped in render()); skipping backward before the first TOC entry jumps to the
+  // spine before the current chapter's first spine (clamped to 0 in render()).
   if (skipChapter) {
     lastPageTurnTime = millis();
     {
@@ -880,7 +886,9 @@ void EpubReaderActivity::ensureChapterCached(const uint16_t viewportWidth, const
     }
     if (lastSpine < firstSpine) lastSpine = firstSpine;
   } else {
-    lastSpine = spineCount - 1;
+    // Last TOC entry: cap to its own spine rather than pulling in all remaining
+    // spines (which are typically end-of-book material like appendices or copyright).
+    lastSpine = firstSpine;
   }
 
   if (firstSpine < 0 || firstSpine >= spineCount) return;
