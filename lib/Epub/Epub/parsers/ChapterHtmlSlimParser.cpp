@@ -187,8 +187,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Force a page break at TOC chapter boundaries so chapters don't begin mid-page.
   // Anchor-to-page recording is handled separately via pendingAnchorId in startNewTextBlock.
   const auto recordAnchor = [self, &idAttr]() {
-    if (idAttr.empty() ||
-        std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idAttr) == self->tocAnchors.end())
+    if (idAttr.empty() || std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idAttr) == self->tocAnchors.end())
       return;
     if (self->currentPage && !self->currentPage->elements.empty()) {
       self->completePageFn(std::move(self->currentPage));
