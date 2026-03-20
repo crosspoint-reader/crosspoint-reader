@@ -110,13 +110,13 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
 
 ### Directory Structure
 * lib/: Internal libraries (Epub engine, GfxRenderer, UITheme, I18n)
   * lib/hal/: Hardware Abstraction Layer (HalDisplay, HalGPIO, HalStorage)
   * lib/I18n/: Internationalization (translations in `translations/*.yaml`, generated string tables)
-* src/activities/: UI logic using the Activity Lifecycle (onEnter, loop, onExit); `ActivityManager` is the navigation singleton
+* src/activities/: UI logic using the Activity Lifecycle (onEnter, loop, onExit)
 * open-x4-sdk/: Low-level SDK (EInkDisplay, InputManager, BatteryMonitor, SDCardManager)
 * .crosspoint/: SD-based binary cache for EPUB metadata and pre-rendered layout sections
 
@@ -130,7 +130,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 | `HalGPIO` | `InputManager` | Button input handling | *(none)* |
 | `HalStorage` | `SDCardManager` | SD card file I/O | `Storage` |
 
-**Location**: [lib/hal/](lib/hal/)
+**Location**: [lib/hal/](../lib/hal/)
 
 **Why HAL?**
 - Provides consistent error logging per module
@@ -247,7 +247,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: [src/main.cpp:132-143](../src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](../lib/GfxRenderer/GfxRenderer.cpp)
 
 **Pattern Hierarchy**:
 1. **LOG_ERR + return false** (90%): `LOG_ERR("MOD", "Failed: %s", reason); return false;`
@@ -259,7 +259,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Acceptable malloc/free Patterns
 
-**Source**: [src/activities/home/HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp), [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: [src/activities/home/HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp), [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
 
 Despite "prefer stack allocation," malloc is acceptable for:
 1. **Large temporary buffers** (> 256 bytes, won't fit on stack)
@@ -290,10 +290,10 @@ buffer = nullptr;
 - **Document size**: Comment why stack allocation was rejected
 
 **Examples in codebase**:
-- Cover image buffers: [HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp#L166)
-- Text chunk buffers: [TxtReaderActivity.cpp:259](src/activities/reader/TxtReaderActivity.cpp#L259)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp#L439-L440)
-- OTA update buffer: [OtaUpdater.cpp:40](src/network/OtaUpdater.cpp#L40)
+- Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
+- Text chunk buffers: [TxtReaderActivity.cpp:259](../src/activities/reader/TxtReaderActivity.cpp)
+- Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+- OTA update buffer: [OtaUpdater.cpp:40](../src/network/OtaUpdater.cpp)
 
 ---
 
@@ -305,7 +305,7 @@ buffer = nullptr;
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](src/MappedInputManager.cpp)
+**Source**: [src/MappedInputManager.cpp:20-55](../src/MappedInputManager.cpp)
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -348,86 +348,53 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 #define GUI UITheme::getInstance()                   // Current theme
 #define Storage HalStorage::getInstance()            // SD card I/O
 #define I18N I18n::getInstance()                     // Internationalization
-// ActivityManager is accessed via the global `activityManager` variable (not a macro)
 ```
 
-### Activity Lifecycle and ActivityManager
+### Activity Lifecycle and Memory Management
 
-**Source**: [src/activities/ActivityManager.h](src/activities/ActivityManager.h), [docs/activity-manager.md](docs/activity-manager.md)
+**Source**: [src/main.cpp:132-143](../src/main.cpp)
 
-Navigation is handled by the **centralized `ActivityManager`** singleton (not free functions in `main.cpp`). It owns the single shared render task and manages an activity stack.
+**CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
 
-**Navigation API**:
 ```cpp
-// Replace/reset the stack to a new activity
-activityManager.goHome();
-activityManager.goToReader(path);   // path = absolute SD path to EPUB/TXT
+// main.cpp navigation pattern
+void exitActivity() {
+  if (currentActivity) {
+    currentActivity->onExit();
+    delete currentActivity;  // Activity deleted here!
+    currentActivity = nullptr;
+  }
+}
 
-// Push/pop on the activity stack (parent pauses while child is active)
-activityManager.pushActivity(std::make_unique<MyActivity>());
-activityManager.popActivity();      // returns to parent; if stack empty → goHome()
-
-// Launch a child and receive its result
-startActivityForResult(
-    std::make_unique<MyChildActivity>(),
-    [this](ActivityResult result) {
-        // called when child calls finish() or is popped
-    });
-
-// Inside the child activity:
-setResult(ActivityResult::ok(someValue));  // optional result data
-finish();                                   // triggers parent callback, pops child
+void enterNewActivity(Activity* activity) {
+  currentActivity = activity;  // Heap-allocated activity
+  currentActivity->onEnter();
+}
 ```
 
-**Memory rules** (unchanged):
+**Memory Implications**:
+- Activity navigation = `delete` old activity + `new` create next activity
 - Any memory allocated in `onEnter()` MUST be freed in `onExit()`
-- Background FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
+- FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
 - File handles MUST be closed in `onExit()`
 
 **Activity Pattern**:
 ```cpp
-void onEnter()  { Activity::onEnter(); /* alloc */ requestUpdate(); }
-void loop()     { mappedInput.update(); /* handle input, call requestUpdate() */ }
-void onExit()   { /* free tasks, buffers, files */ Activity::onExit(); }
+void onEnter()  { Activity::onEnter(); /* alloc: buffer, tasks */ render(); }
+void loop()     { mappedInput.update(); /* handle input */ }
+void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::onExit(); }
 ```
 
 **Critical**: Free resources in reverse order. Delete tasks BEFORE activity destruction.
 
-### RenderLock Pattern
-
-**Source**: [src/activities/RenderLock.h](src/activities/RenderLock.h)
-
-`ActivityManager` owns a single global FreeRTOS mutex that serializes `loop()` (main task) and `render()` (render task). Acquire it whenever `loop()` writes state that `render()` also reads.
-
-```cpp
-// In loop() — protect state writes that render() reads:
-{
-    RenderLock lock;
-    mySharedState = newValue;
-}  // mutex released at end of scope
-
-// In render() — the ActivityManager holds the lock before calling render(),
-// so no explicit locking is needed there.
-
-// To check without blocking (e.g., skip an expensive update if busy):
-if (RenderLock::peek()) { /* mutex is held */ }
-```
-
-**Rules**:
-- Never hold a `RenderLock` across a blocking call (SD I/O, network, vTaskDelay)
-- `render()` already runs under the lock — do NOT re-acquire inside render
-- The `RenderLock` constructor blocks until the mutex is free; prefer short critical sections
-
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](../src/activities/util/KeyboardEntryActivity.cpp)
 
-**The render task is shared** — `ActivityManager` owns the single render task (8KB stack). Activities must NOT create their own render tasks. Background work tasks (e.g., network downloads) are fine.
-
-**Pattern**: `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
+**Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
 
 **Stack Sizing** (in BYTES, not words):
-- **2048**: Simple background tasks
+- **2048**: Simple rendering (most activities)
 - **4096**: Network, EPUB parsing
 - Monitor: `uxTaskGetStackHighWaterMark()` if crashes
 
@@ -435,7 +402,7 @@ if (RenderLock::peek()) { /* mutex is held */ }
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](src/main.cpp)
+**Source**: [src/main.cpp:40-115](../src/main.cpp)
 
 **All fonts are loaded as global static objects** at firmware startup:
 - Bookerly: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
@@ -456,7 +423,7 @@ if (RenderLock::peek()) { /* mutex is held */ }
 - Fonts stored in **Flash** (marked as `static const` in `lib/EpdFont/builtinFonts/`)
 - Font rendering data cached in **DRAM** when first used
 - `OMIT_FONTS` can reduce binary size for minimal builds
-- Font IDs defined in [src/fontIds.h](src/fontIds.h)
+- Font IDs defined in [src/fontIds.h](../src/fontIds.h)
 
 **Usage**:
 ```cpp
@@ -522,35 +489,6 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 clang-format -i src/**/*.cpp src/**/*.h
 ```
 
-### OTA Firmware Updates — Critical: Rollback Enabled
-
-**`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=1` is set in the ESP-IDF sdkconfig for this platform.**
-
-This means: after a successful OTA flash, the bootloader gives the new firmware one boot to prove itself. If the new firmware does NOT call `esp_ota_mark_app_valid_cancel_rollback()` within the watchdog timeout, the bootloader **automatically rolls back to the previous firmware** — silently, with no error log.
-
-**Symptom**: OTA appears to succeed (progress bar completes, `firmware.bin` is deleted, device reboots), but the device comes back running the old firmware version.
-
-**Fix**: `esp_ota_mark_app_valid_cancel_rollback()` MUST be called early in `setup()`, before any code that could hang or crash:
-
-```cpp
-#include <esp_ota_ops.h>
-
-void setup() {
-  // MUST be first — prevents OTA rollback on clean boot
-  esp_ota_mark_app_valid_cancel_rollback();
-  // ... rest of setup
-}
-```
-
-**This call is already in `src/main.cpp`** — do not remove it. If you add a new entry point or split setup(), ensure this call happens first.
-
-**Why rollback is good**: It prevents bricked devices. If new firmware crashes on boot, the device automatically recovers. The call above is what tells the bootloader "this firmware is healthy, don't roll back."
-
-**Debugging silent rollbacks**: If OTA seems to work but old firmware keeps running, check:
-1. Is `esp_ota_mark_app_valid_cancel_rollback()` being called?
-2. Is the firmware crashing before that call?
-3. Check `esp_reset_reason()` in `/api/status` — `ESP_RST_TASK_WDT` or `ESP_RST_PANIC` after an OTA attempt = rollback triggered
-
 ### Debugging Crashes
 
 **Common Crash Causes**:
@@ -579,7 +517,7 @@ void setup() {
 4. **Corrupt Cache Files**:
    - Delete `.crosspoint/` directory on SD card
    - Forces clean re-parse of all EPUBs
-   - Check file format versions in [docs/file-formats.md](docs/file-formats.md)
+   - Check file format versions in [docs/file-formats.md](../docs/file-formats.md)
 
 5. **Watchdog Timeout**:
    - Loop/task blocked for >5 seconds
@@ -932,74 +870,3 @@ struct PageLine {
 ---
 
 Philosophy: We are building a dedicated e-reader, not a Swiss Army knife. If a feature adds RAM pressure without significantly improving the reading experience, it is Out of Scope.
----
-
-## OpenClaw Firmware Dev Loop
-
-This section documents the build/deploy/test cycle used with OpenClaw (Chip) as the dev agent.
-
-### Prerequisites
-- Reader IP: `192.168.0.234` (Laird's reader), `192.168.0.194` (Juliette's)
-- Feed server: `http://192.168.0.83:8090` (serves firmware + content via RSS)
-- Reader must be manually brought online (Settings → WiFi) — does NOT auto-connect until Danger Zone is enabled
-
-### Build
-```bash
-cd /home/laird/src/crosspoint-claw
-pio run
-# Verify SHA embedded correctly:
-strings .pio/build/default/firmware.bin | grep "^1\.[0-9]\."
-# Expected: 1.1.0-dev+<sha>
-```
-
-### Deploy to Feed Server
-```bash
-SHA=$(git rev-parse --short HEAD)
-cp .pio/build/default/firmware.bin /home/laird/clawd/crosspoint-feed/firmware/firmware.bin
-echo "$SHA" > /home/laird/clawd/crosspoint-feed/firmware/.version
-```
-
-### Upload to Reader SD Card
-```bash
-curl -X POST "http://192.168.0.234/upload?path=/" \
-  -F "file=@/home/laird/src/crosspoint-claw/.pio/build/default/firmware.bin"
-```
-
-### Trigger Flash
-- **Sleep/wake** on the device triggers the flash on boot (most reliable method)
-- Power cycle also works
-- There is no "Settings → Restart" menu option
-- `/api/reboot` (POST, Danger Zone auth required) can trigger reboot remotely once DZ is enabled
-
-### Verify
-```bash
-curl -s "http://192.168.0.234/api/status" | jq .version
-# Should show: "1.1.0-dev+<sha>"
-```
-
-### Key Lessons Learned
-- **Settings are persisted via `JsonSettingsIO`** — new settings fields MUST be added to both `saveSettings()` and `loadSettings()` in `src/JsonSettingsIO.cpp` or they silently reset to defaults on every boot
-- **Version string is injected at build time** via `scripts/git_version.py` pre-script — always run `strings firmware.bin | grep "^1\."` to confirm the right SHA is baked in before uploading
-- **Feed server auto-picks up `firmware.bin`** — updating the file is enough, the RSS feed reflects it immediately
-- **Reader does not auto-connect** to WiFi on boot until Danger Zone is enabled + password set
-- **`/api/feed/sync`, `/api/flash`, `/api/reboot`** are all Danger Zone endpoints (require `X-Danger-Zone-Password` header)
-- **Multiple flashes in one session**: each build produces a new `firmware.bin`; always verify SHA after upload before triggering flash
-
-### Danger Zone Setup (one-time on device)
-1. Settings → SYST tab → toggle **Danger Zone** ON
-2. Tap **Danger Zone Password** → set a password
-3. After reboot, device auto-connects and web server runs in background
-4. All DZ endpoints require: `-H "X-Danger-Zone-Password: YOUR_PASSWORD"` (NOT Basic Auth)
-
-### Full Automated Loop (once Danger Zone active)
-```bash
-pio run && \
-SHA=$(git rev-parse --short HEAD) && \
-strings .pio/build/default/firmware.bin | grep "^1\." && \
-cp .pio/build/default/firmware.bin ~/clawd/crosspoint-feed/firmware/firmware.bin && \
-echo "$SHA" > ~/clawd/crosspoint-feed/firmware/.version && \
-curl -X POST "http://192.168.0.234/upload?path=/" -F "file=@.pio/build/default/firmware.bin" && \
-curl -X POST "http://192.168.0.234/api/reboot" -H "X-Danger-Zone-Password: YOUR_PASSWORD" && \
-sleep 45 && \
-curl -s "http://192.168.0.234/api/status" | jq .version
-```
