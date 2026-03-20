@@ -10,11 +10,14 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const bool hasFootnotes, const int8_t initialEmbeddedStyleOverride,
+                                               const int8_t initialImageRenderingOverride)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
+      pendingEmbeddedStyleOverride(initialEmbeddedStyleOverride),
+      pendingImageRenderingOverride(initialImageRenderingOverride),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
@@ -26,6 +29,8 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
+  items.push_back({MenuAction::EMBEDDED_STYLE, StrId::STR_EMBEDDED_STYLE});
+  items.push_back({MenuAction::IMAGE_RENDERING, StrId::STR_IMAGES});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -71,13 +76,41 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
+    if (selectedAction == MenuAction::EMBEDDED_STYLE) {
+      // Cycle per-book override: default -> ON -> OFF -> default.
+      if (pendingEmbeddedStyleOverride < 0) {
+        pendingEmbeddedStyleOverride = 1;
+      } else if (pendingEmbeddedStyleOverride > 0) {
+        pendingEmbeddedStyleOverride = 0;
+      } else {
+        pendingEmbeddedStyleOverride = -1;
+      }
+      requestUpdate();
+      return;
+    }
+
+    if (selectedAction == MenuAction::IMAGE_RENDERING) {
+      // Cycle per-book override: default -> display -> placeholder -> suppress -> default.
+      if (pendingImageRenderingOverride < 0) {
+        pendingImageRenderingOverride = 0;
+      } else if (pendingImageRenderingOverride >= 2) {
+        pendingImageRenderingOverride = -1;
+      } else {
+        pendingImageRenderingOverride++;
+      }
+      requestUpdate();
+      return;
+    }
+
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
+                         pendingEmbeddedStyleOverride, pendingImageRenderingOverride});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
-    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption, pendingEmbeddedStyleOverride,
+                             pendingImageRenderingOverride};
     setResult(std::move(result));
     finish();
     return;
@@ -133,6 +166,26 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       const auto value = pageTurnLabels[selectedPageTurnOption];
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentRect.x + contentRect.width - 20 - width, displayY, value, !isSelected);
+    }
+
+    if (menuItems[i].action == MenuAction::EMBEDDED_STYLE) {
+      const char* value = tr(STR_DEFAULT_VALUE);
+      if (pendingEmbeddedStyleOverride == 1) {
+        value = tr(STR_STATE_ON);
+      } else if (pendingEmbeddedStyleOverride == 0) {
+        value = tr(STR_STATE_OFF);
+      }
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    }
+
+    if (menuItems[i].action == MenuAction::IMAGE_RENDERING) {
+      const char* value = tr(STR_DEFAULT_VALUE);
+      if (pendingImageRenderingOverride >= 0 && pendingImageRenderingOverride < imageRenderingLabels.size()) {
+        value = I18N.get(imageRenderingLabels[pendingImageRenderingOverride]);
+      }
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
     }
   }
 

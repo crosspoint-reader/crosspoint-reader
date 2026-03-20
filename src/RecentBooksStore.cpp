@@ -22,15 +22,23 @@ RecentBooksStore RecentBooksStore::instance;
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& series, const std::string& coverBmpPath) {
+                               const std::string& coverBmpPath) {
+  int8_t embeddedStyleOverride = -1;
+  int8_t imageRenderingOverride = -1;
+
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
+    embeddedStyleOverride = it->embeddedStyleOverride;
+    imageRenderingOverride = it->imageRenderingOverride;
     recentBooks.erase(it);
   }
 
   // Add to front
   recentBooks.insert(recentBooks.begin(), {path, title, author, series, coverBmpPath});
+  recentBooks.insert(recentBooks.begin(),
+                     {path, title, author, coverBmpPath, embeddedStyleOverride, imageRenderingOverride});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -52,6 +60,28 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+RecentBook RecentBooksStore::getBookByPath(const std::string& path) const {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    return *it;
+  }
+  return RecentBook{};
+}
+
+bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
+                                          const int8_t imageRenderingOverride) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return false;
+  }
+
+  it->embeddedStyleOverride = embeddedStyleOverride;
+  it->imageRenderingOverride = imageRenderingOverride;
+  return saveToFile();
 }
 
 bool RecentBooksStore::saveToFile() const {

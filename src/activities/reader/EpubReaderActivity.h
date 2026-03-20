@@ -27,6 +27,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  // -1 means use global SETTINGS value.
+  int8_t bookEmbeddedStyleOverride = -1;
+  int8_t bookImageRenderingOverride = -1;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -48,6 +51,9 @@ class EpubReaderActivity final : public Activity {
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
+  void applyBookReaderOverrides(int8_t embeddedStyleOverride, int8_t imageRenderingOverride);
+  bool getEffectiveEmbeddedStyle() const;
+  uint8_t getEffectiveImageRendering() const;
   void pageTurn(bool isForwardTurn);
 
   // Footnote navigation

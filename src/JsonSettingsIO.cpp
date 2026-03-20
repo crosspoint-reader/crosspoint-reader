@@ -303,6 +303,8 @@ bool JsonSettingsIO::saveRecentBooks(const RecentBooksStore& store, const char* 
     obj["author"] = book.author;
     obj["series"] = book.series;
     obj["coverBmpPath"] = book.coverBmpPath;
+    obj["embeddedStyleOverride"] = book.embeddedStyleOverride;
+    obj["imageRenderingOverride"] = book.imageRenderingOverride;
   }
 
   String json;
@@ -320,6 +322,13 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
 
   store.recentBooks.clear();
   JsonArray arr = doc["books"].as<JsonArray>();
+  auto clampInt8 = [](int value, int minValue, int maxValue, int8_t fallback) -> int8_t {
+    if (value < minValue || value > maxValue) {
+      return fallback;
+    }
+    return static_cast<int8_t>(value);
+  };
+
   for (JsonObject obj : arr) {
     if (store.getCount() >= 10) break;
     RecentBook book;
@@ -328,6 +337,8 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
     book.author = obj["author"] | std::string("");
     book.series = obj["series"] | std::string("");
     book.coverBmpPath = obj["coverBmpPath"] | std::string("");
+    book.embeddedStyleOverride = clampInt8(obj["embeddedStyleOverride"] | -1, -1, 1, -1);
+    book.imageRenderingOverride = clampInt8(obj["imageRenderingOverride"] | -1, -1, 2, -1);
     store.recentBooks.push_back(book);
   }
 
