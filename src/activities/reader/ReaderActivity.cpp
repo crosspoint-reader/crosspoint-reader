@@ -41,7 +41,10 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   }
 
   auto epub = std::unique_ptr<Epub>(new Epub(path, "/.crosspoint"));
-  if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
+  // Skip cover generation on initial load to avoid memory spikes with large cover images
+  // (e.g., 1.1MB cover images in large EPUBs like "Omniversal Journeys")
+  // Cover will be generated on-demand if explicitly requested
+  if (epub->load(true, SETTINGS.embeddedStyle == 0, true)) {
     return epub;
   }
 

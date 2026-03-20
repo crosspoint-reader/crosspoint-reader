@@ -331,8 +331,8 @@ void Epub::parseCssFiles() const {
 }
 
 // load in the meta data for the epub file
-bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
-  LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
+bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, const bool skipCoverGen) {
+  LOG_DBG("EBP", "Loading ePub: %s%s", filepath.c_str(), skipCoverGen ? " (deferring cover generation)" : "");
 
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
