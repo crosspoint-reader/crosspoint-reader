@@ -73,6 +73,9 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it == recentBooks.end()) {
+    LOG_ERR("RBS",
+            "Cannot set reader overrides: path not found '%s' (embeddedStyleOverride=%d, imageRenderingOverride=%d)",
+            path.c_str(), static_cast<int>(embeddedStyleOverride), static_cast<int>(imageRenderingOverride));
     return false;
   }
 
@@ -86,7 +89,7 @@ bool RecentBooksStore::saveToFile() const {
   return JsonSettingsIO::saveRecentBooks(*this, RECENT_BOOKS_FILE_JSON);
 }
 
-RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
+RecentBook RecentBooksStore::loadBookMetadataFromFile(const std::string& path) const {
   std::string lastBookFileName = "";
   const size_t lastSlash = path.find_last_of('/');
   if (lastSlash != std::string::npos) {
@@ -155,7 +158,7 @@ bool RecentBooksStore::loadFromBinaryFile() {
       serialization::readString(inputFile, path);
 
       // load book to get missing data
-      RecentBook book = getDataFromBook(path);
+      RecentBook book = loadBookMetadataFromFile(path);
       if (book.title.empty() && book.author.empty() && version == 2) {
         // Fall back to loading what we can from the store
         std::string title, author;

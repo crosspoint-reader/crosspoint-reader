@@ -51,7 +51,7 @@ class RecentBooksStore {
   bool saveToFile() const;
 
   bool loadFromFile();
-  RecentBook getDataFromBook(std::string path) const;
+  RecentBook loadBookMetadataFromFile(const std::string& path) const;
   RecentBook getBookByPath(const std::string& path) const;
   bool setReaderOverrides(const std::string& path, int8_t embeddedStyleOverride, int8_t imageRenderingOverride);
 

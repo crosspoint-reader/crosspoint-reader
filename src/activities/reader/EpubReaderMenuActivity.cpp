@@ -194,8 +194,11 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
     if (menuItems[i].action == MenuAction::IMAGE_RENDERING) {
       const char* value = tr(STR_DEFAULT_VALUE);
-      if (pendingImageRenderingOverride >= 0 && pendingImageRenderingOverride < imageRenderingLabels.size()) {
-        value = I18N.get(imageRenderingLabels[pendingImageRenderingOverride]);
+      if (pendingImageRenderingOverride >= 0) {
+        const size_t imageRenderingIndex = static_cast<size_t>(pendingImageRenderingOverride);
+        if (imageRenderingIndex < imageRenderingLabels.size()) {
+          value = I18N.get(imageRenderingLabels[imageRenderingIndex]);
+        }
       }
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
