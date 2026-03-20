@@ -46,7 +46,7 @@ unsigned long wsLastCompleteAt = 0;
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
   // Only clear cache for .epub files
-  if (FsHelpers::hasEpubExtension(filePath)) {
+  if (FsHelpers::checkFileExtension(filePath, ".epub")) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
   }
@@ -415,7 +415,9 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
   root.close();
 }
 
-bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
+bool CrossPointWebServer::isEpubFile(const String& filename) const {
+  return FsHelpers::checkFileExtension(filename, ".epub");
+}
 
 void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
@@ -1087,7 +1089,7 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  const auto& settings = getSettingsList();
+  auto settings = getSettingsList();
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1183,10 +1185,10 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList();
+  auto settings = getSettingsList();
   int applied = 0;
 
-  for (const auto& s : settings) {
+  for (auto& s : settings) {
     if (!s.key) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
