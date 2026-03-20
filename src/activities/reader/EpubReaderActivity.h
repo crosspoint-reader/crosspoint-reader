@@ -1,5 +1,6 @@
 #pragma once
 #include <Epub.h>
+#include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
 #include <optional>
@@ -45,6 +46,16 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   };
   ChapterPageInfo chapterPageInfo;
 
+  // Footnote support
+  std::vector<FootnoteEntry> currentPageFootnotes;
+  struct SavedPosition {
+    int spineIndex;
+    int pageNumber;
+  };
+  static constexpr int MAX_FOOTNOTE_DEPTH = 3;
+  SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
+  int footnoteDepth = 0;
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
@@ -58,6 +69,10 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   void ensureChapterCached(uint16_t viewportWidth, uint16_t viewportHeight);
   // Returns the chapter-relative page number for the current position.
   int getChapterRelativePage() const;
+
+  // Footnote navigation
+  void navigateToHref(const char* href, bool savePosition = false);
+  void restoreSavedPosition();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,

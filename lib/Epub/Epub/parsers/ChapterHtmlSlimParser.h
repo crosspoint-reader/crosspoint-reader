@@ -8,7 +8,9 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
+#include "../FootnoteEntry.h"
 #include "../ParsedText.h"
 #include "../blocks/ImageBlock.h"
 #include "../blocks/TextBlock.h"
@@ -73,6 +75,15 @@ class ChapterHtmlSlimParser {
   int completedPageCount = 0;
   std::map<std::string, uint16_t> anchorPageMap;
   std::set<std::string> tocAnchors;
+
+  // Footnote link tracking
+  bool insideFootnoteLink = false;
+  int footnoteLinkDepth = -1;
+  char currentFootnoteLinkText[24] = {};
+  int currentFootnoteLinkTextLen = 0;
+  char currentFootnoteLinkHref[64] = {};
+  std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
+  int wordsExtractedInBlock = 0;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
