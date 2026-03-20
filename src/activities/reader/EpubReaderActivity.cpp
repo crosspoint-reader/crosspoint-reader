@@ -643,20 +643,20 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // between sub-chapters within the same spine via page turns or chapter skip).
   // prepareSection uses the spine-level TOC index since the section isn't loaded yet;
   // this check uses the per-page index once the section is available.
-  if (section) {
-    const int pageTocIndex = section->getTocIndexForPage(section->currentPage);
-    if (pageTocIndex >= 0 && chapterPageInfo.tocIndex != pageTocIndex) {
-      // Recompute chapter info for the new sub-chapter. Since we're on the same spine,
-      // no section reload is needed, just update the page range aggregation.
-      chapterPageInfo.tocIndex = pageTocIndex;
-      chapterPageInfo.segments.clear();
-      chapterPageInfo.totalPages = 0;
-      auto range = section->getPageRangeForTocIndex(pageTocIndex);
-      if (!range) range = Section::TocPageRange{0, section->pageCount};
-      const int segPages = range->endPage - range->startPage;
-      chapterPageInfo.segments.push_back({currentSpineIndex, range->startPage, segPages, 0});
-      chapterPageInfo.totalPages = segPages;
-    }
+  // section is guaranteed non-null here: prepareSection returns false (early exit above)
+  // if it can't load the section, and the else branch only runs when section already exists.
+  const int pageTocIndex = section->getTocIndexForPage(section->currentPage);
+  if (pageTocIndex >= 0 && chapterPageInfo.tocIndex != pageTocIndex) {
+    // Recompute chapter info for the new sub-chapter. Since we're on the same spine,
+    // no section reload is needed, just update the page range aggregation.
+    chapterPageInfo.tocIndex = pageTocIndex;
+    chapterPageInfo.segments.clear();
+    chapterPageInfo.totalPages = 0;
+    auto range = section->getPageRangeForTocIndex(pageTocIndex);
+    if (!range) range = Section::TocPageRange{0, section->pageCount};
+    const int segPages = range->endPage - range->startPage;
+    chapterPageInfo.segments.push_back({currentSpineIndex, range->startPage, segPages, 0});
+    chapterPageInfo.totalPages = segPages;
   }
 
   renderer.clearScreen();
