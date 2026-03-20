@@ -13,6 +13,9 @@
 // Represents a line of text on a page
 class TextBlock final : public Block {
  private:
+  // Parallel vectors — words, wordXpos, and wordStyles MUST have the same size.
+  // wordLinkHrefs is either empty (no links) or the same size as words.
+  // Invariant enforced by constructor asserts; vectors are immutable after construction.
   std::vector<std::string> words;
   std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;

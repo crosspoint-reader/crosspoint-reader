@@ -5,14 +5,12 @@
 #include <I18n.h>
 #include <Serialization.h>
 #include <Utf8.h>
-#include <time.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
-#include "activities/ActivityResult.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -72,32 +70,7 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  // When long-press chapter skip is disabled, turn pages on press instead of release.
-  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
-  const bool prevTriggered = usePressForPageTurn ? (mappedInput.wasPressed(MappedInputManager::Button::PageBack) ||
-                                                    mappedInput.wasPressed(MappedInputManager::Button::Left))
-                                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                                                    mappedInput.wasReleased(MappedInputManager::Button::Left));
-  const bool powerPageTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                             mappedInput.wasReleased(MappedInputManager::Button::Power);
-  const bool nextTriggered = usePressForPageTurn
-                                 ? (mappedInput.wasPressed(MappedInputManager::Button::PageForward) || powerPageTurn ||
-                                    mappedInput.wasPressed(MappedInputManager::Button::Right))
-                                 : (mappedInput.wasReleased(MappedInputManager::Button::PageForward) || powerPageTurn ||
-                                    mappedInput.wasReleased(MappedInputManager::Button::Right));
-
-  // Confirm button opens the reader menu (orientation, etc.)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    startActivityForResult(
-        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, txt ? txt->getTitle() : "", currentPage + 1,
-                                                 totalPages, 0, SETTINGS.orientation, false),
-        [this](const ActivityResult& result) {
-          const auto& menu = std::get<MenuResult>(result.data);
-          applyOrientation(menu.orientation);
-        });
-    return;
-  }
-
+  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -318,38 +291,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   return !outLines.empty();
 }
 
-void TxtReaderActivity::applyOrientation(const uint8_t orientation) {
-  if (SETTINGS.orientation == orientation) return;
-
-  SETTINGS.orientation = orientation;
-  SETTINGS.saveToFile();
-
-  // Apply new orientation to renderer
-  switch (orientation) {
-    case CrossPointSettings::ORIENTATION::PORTRAIT:
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
-      break;
-    case CrossPointSettings::ORIENTATION::INVERTED:
-      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
-      break;
-    case CrossPointSettings::ORIENTATION::LANDSCAPE_CCW:
-      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-      break;
-    default:
-      break;
-  }
-
-  // Reset reader state so it re-paginates for the new viewport dimensions
-  initialized = false;
-  pageOffsets.clear();
-  currentPageLines.clear();
-  currentPage = 0;
-  requestUpdate();
-}
-
 void TxtReaderActivity::render(RenderLock&&) {
   if (!txt) {
     return;
@@ -441,22 +382,6 @@ void TxtReaderActivity::renderStatusBar() const {
   if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     title = txt->getTitle();
   }
-  // Append current time to title if system clock is synced
-  {
-    struct tm timeinfo = {};
-    if (getLocalTime(&timeinfo) && timeinfo.tm_year >= 120) {  // year >= 2020 sanity check
-      char timeStr[8];
-      const int roundedMin = (timeinfo.tm_min / 5) * 5;  // round down to 5-min mark for e-ink
-      snprintf(timeStr, sizeof(timeStr), "%02d:%02d", timeinfo.tm_hour, roundedMin);
-      if (title.empty()) {
-        title = timeStr;
-      } else {
-        title += "  ";
-        title += timeStr;
-      }
-    }
-  }
-
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
 }
 
