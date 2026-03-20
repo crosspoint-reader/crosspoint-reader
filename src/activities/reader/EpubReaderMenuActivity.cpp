@@ -10,17 +10,14 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const std::function<void(uint8_t)>& onBack,
-                                               const std::function<void(MenuAction)>& onAction)
-    : ActivityWithSubactivity("EpubReaderMenu", renderer, mappedInput),
+                                               const bool hasFootnotes)
+    : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent),
-      onBack(onBack),
-      onAction(onAction) {}
+      bookProgressPercent(bookProgressPercent) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -40,18 +37,13 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
 }
 
 void EpubReaderMenuActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
   requestUpdate();
 }
 
-void EpubReaderMenuActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderMenuActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   // Handle navigation
   buttonNavigator.onNext([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
@@ -63,7 +55,6 @@ void EpubReaderMenuActivity::loop() {
     requestUpdate();
   });
 
-  // Use local variables for items we need to check after potential deletion
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto selectedAction = menuItems[selectedIndex].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
@@ -73,22 +64,20 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    // 1. Capture the callback and action locally
-    auto actionCallback = onAction;
-
-    // 2. Execute the callback
-    actionCallback(selectedAction);
-
-    // 3. CRITICAL: Return immediately. 'this' is likely deleted now.
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation});
+    finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    // Return the pending orientation to the parent so it can apply on exit.
-    onBack(pendingOrientation);
-    return;  // Also return here just in case
+    ActivityResult result;
+    result.isCancelled = true;
+    result.data = MenuResult{-1, pendingOrientation};
+    setResult(std::move(result));
+    finish();
+    return;
   }
 }
 
-void EpubReaderMenuActivity::render(Activity::RenderLock&&) {
+void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
   const auto orientation = renderer.getOrientation();

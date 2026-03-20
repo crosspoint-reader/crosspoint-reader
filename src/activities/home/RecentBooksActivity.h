@@ -18,20 +18,14 @@ class RecentBooksActivity final : public Activity {
   // Recent tab state
   std::vector<RecentBook> recentBooks;
 
-  // Callbacks
-  const std::function<void(const std::string& path)> onSelectBook;
-  const std::function<void()> onGoHome;
-
   // Data loading
   void loadRecentBooks();
 
  public:
-  explicit RecentBooksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                               const std::function<void()>& onGoHome,
-                               const std::function<void(const std::string& path)>& onSelectBook)
-      : Activity("RecentBooks", renderer, mappedInput), onSelectBook(onSelectBook), onGoHome(onGoHome) {}
+  explicit RecentBooksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("RecentBooks", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 };

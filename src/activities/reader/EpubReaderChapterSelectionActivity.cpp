@@ -26,7 +26,7 @@ int EpubReaderChapterSelectionActivity::getPageItems() const {
 }
 
 void EpubReaderChapterSelectionActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   if (!epub) {
     return;
@@ -43,26 +43,28 @@ void EpubReaderChapterSelectionActivity::onEnter() {
   requestUpdate();
 }
 
-void EpubReaderChapterSelectionActivity::onExit() { ActivityWithSubactivity::onExit(); }
+void EpubReaderChapterSelectionActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderChapterSelectionActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto newSpineIndex = epub->getSpineIndexForTocIndex(selectorIndex);
     if (newSpineIndex == -1) {
-      onGoBack();
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
     } else {
-      onSelectPosition(newSpineIndex, selectorIndex);
+      setResult(ChapterResult{newSpineIndex, selectorIndex});
+      finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
   }
 
   buttonNavigator.onNextRelease([this, totalItems] {
@@ -86,7 +88,7 @@ void EpubReaderChapterSelectionActivity::loop() {
   });
 }
 
-void EpubReaderChapterSelectionActivity::render(Activity::RenderLock&&) {
+void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

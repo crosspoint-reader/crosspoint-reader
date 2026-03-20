@@ -2,14 +2,13 @@
 #include <Epub.h>
 #include <I18n.h>
 
-#include <functional>
 #include <string>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
-class EpubReaderMenuActivity final : public ActivityWithSubactivity {
+class EpubReaderMenuActivity final : public Activity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
@@ -26,14 +25,12 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes,
-                                  const std::function<void(uint8_t)>& onBack,
-                                  const std::function<void(MenuAction)>& onAction);
+                                  const uint8_t currentOrientation, const bool hasFootnotes);
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   struct MenuItem {
@@ -56,7 +53,4 @@ class EpubReaderMenuActivity final : public ActivityWithSubactivity {
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;
-
-  const std::function<void(uint8_t)> onBack;
-  const std::function<void(MenuAction)> onAction;
 };
