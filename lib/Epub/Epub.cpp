@@ -458,6 +458,16 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, const bool
     Storage.removeDir((cachePath + "/sections").c_str());
   }
 
+  // Skip cover generation if requested (e.g., for fast opening during reading)
+  // Cover will be generated on-demand when explicitly needed (e.g., viewing book details)
+  if (!skipCoverGen) {
+    // Generate cover BMP for use in home screen, book browser, etc.
+    // This is deferred when skipCoverGen=true to improve initial load time
+    generateCoverBmp(false);  // Generate fit version first (full page)
+  } else {
+    LOG_DBG("EBP", "Cover generation deferred (skipCoverGen=true)");
+  }
+
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
   return true;
 }
