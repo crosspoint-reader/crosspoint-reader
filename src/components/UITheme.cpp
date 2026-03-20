@@ -5,8 +5,6 @@
 #include <Logging.h>
 #include <Memory.h>
 
-#include <memory>
-
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"

@@ -4,7 +4,6 @@
 #include <qrcode.h>
 
 #include <algorithm>
-#include <memory>
 
 #include "Logging.h"
 #include "Memory.h"
