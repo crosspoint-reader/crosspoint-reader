@@ -329,8 +329,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             if (result.isCancelled) return;
             RenderLock lock(*this);
             const auto& chapter = std::get<ChapterResult>(result.data);
-            auto resolvedPage = (chapter.spineIndex == currentSpineIndex && section)
-                                    ? section->getPageForTocIndex(chapter.tocIndex)
+            auto resolvedPage = (chapter.tocIndex && chapter.spineIndex == currentSpineIndex && section)
+                                    ? section->getPageForTocIndex(*chapter.tocIndex)
                                     : std::nullopt;
             if (resolvedPage) {
               section->currentPage = *resolvedPage;

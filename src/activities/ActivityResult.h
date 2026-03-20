@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -25,7 +26,7 @@ struct MenuResult {
 
 struct ChapterResult {
   int spineIndex = 0;
-  int tocIndex = -1;
+  std::optional<int> tocIndex;
 };
 
 struct PercentResult {

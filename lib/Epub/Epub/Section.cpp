@@ -4,8 +4,6 @@
 #include <Logging.h>
 #include <Serialization.h>
 
-#include <algorithm>
-
 #include "Epub/css/CssParser.h"
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
