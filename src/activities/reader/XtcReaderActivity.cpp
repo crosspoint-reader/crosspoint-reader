@@ -194,8 +194,8 @@ void XtcReaderActivity::renderPage() {
     // - Grayscale: 0=White, 1=Dark Grey, 2=Light Grey, 3=Black
 
     const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
-    const uint8_t* plane1 = pageBuffer.get();              // Bit1 plane
-    // cppcheck-suppress arithOperationsOnVoidPointer — pageBuffer is unique_ptr<uint8_t[]>, .get() returns uint8_t* not void*
+    const uint8_t* plane1 = pageBuffer.get();  // Bit1 plane
+    // cppcheck-suppress arithOperationsOnVoidPointer - unique_ptr<uint8_t[]>, .get() returns uint8_t* not void*
     const uint8_t* plane2 = pageBuffer.get() + planeSize;  // Bit2 plane
     const size_t colBytes = (pageHeight + 7) / 8;          // Bytes per column (100 for 800 height)
 

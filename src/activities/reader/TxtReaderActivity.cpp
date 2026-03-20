@@ -214,7 +214,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
 
     // Extract line content for display (without CR/LF)
-    // cppcheck-suppress arithOperationsOnVoidPointer — buffer is unique_ptr<uint8_t[]>, .get() returns uint8_t* not void*
+    // cppcheck-suppress arithOperationsOnVoidPointer - unique_ptr<uint8_t[]>, .get() returns uint8_t* not void*
     std::string line(reinterpret_cast<char*>(buffer.get() + pos), displayLen);
 
     // Track position within this source line (in bytes from pos)
