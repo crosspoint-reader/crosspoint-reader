@@ -89,6 +89,7 @@ void EpubReaderChapterSelectionActivity::loop() {
 void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto orientation = renderer.getOrientation();
   // Landscape orientation: reserve a horizontal gutter for button hints.
@@ -123,9 +124,9 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
     auto item = epub->getTocItem(itemIndex);
 
     // Indent per TOC level while keeping content within the gutter-safe region.
-    const int indentSize = contentX + 20 + (item.level - 1) * 15;
-    const std::string chapterName =
-        renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentWidth - 40 - indentSize);
+    const int indentSize = contentX + metrics.contentSidePadding + (item.level - 1) * 15;
+    const int availableWidth = contentWidth - indentSize - metrics.contentSidePadding;
+    const std::string chapterName = renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), availableWidth);
 
     renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
   }
