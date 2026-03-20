@@ -66,8 +66,9 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
-  // Build section caches for all spine items in the current TOC chapter and compute page info.
-  void ensureChapterCached(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Load the current section and build caches for all spine items in its TOC chapter.
+  // Returns false if the current section could not be loaded or built.
+  bool prepareSection(uint16_t viewportWidth, uint16_t viewportHeight);
   // Returns the chapter-relative page number for the current position.
   int getChapterRelativePage() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
