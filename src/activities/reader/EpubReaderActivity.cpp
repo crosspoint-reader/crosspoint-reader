@@ -907,7 +907,7 @@ void EpubReaderActivity::ensureChapterCached(const uint16_t viewportWidth, const
     auto tmpSection = std::unique_ptr<Section>(new Section(epub, i, renderer));
     const auto popupFn = [this, buildIndex, totalSpines]() {
       char buf[48];
-      snprintf(buf, sizeof(buf), tr(STR_INDEXING_PROGRESS), buildIndex, totalSpines);
+      snprintf(buf, sizeof(buf), "%s (%d/%d)", tr(STR_INDEXING), buildIndex, totalSpines);
       GUI.drawPopup(renderer, buf);
     };
     if (!tmpSection->createSectionFile(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment,
