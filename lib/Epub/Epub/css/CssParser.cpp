@@ -317,6 +317,9 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.imageWidth = len;
       style.defined.imageWidth = 1;
     }
+  } else if (propNameBuf == "display") {
+    style.display = (propValueBuf == "none") ? CssDisplay::None : CssDisplay::Block;
+    style.defined.display = 1;
   }
 }
 
@@ -692,6 +695,7 @@ bool CssParser::saveToCache() const {
     writeLength(style.paddingRight);
     writeLength(style.imageHeight);
     writeLength(style.imageWidth);
+    file.write(static_cast<uint8_t>(style.display));
 
     // Write defined flags as uint16_t
     uint16_t definedBits = 0;
@@ -710,6 +714,7 @@ bool CssParser::saveToCache() const {
     if (style.defined.paddingRight) definedBits |= 1 << 12;
     if (style.defined.imageHeight) definedBits |= 1 << 13;
     if (style.defined.imageWidth) definedBits |= 1 << 14;
+    if (style.defined.display) definedBits |= 1 << 15;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -820,6 +825,15 @@ bool CssParser::loadFromCache() {
       return false;
     }
 
+    // Read display value
+    uint8_t displayVal;
+    if (file.read(&displayVal, 1) != 1) {
+      rulesBySelector_.clear();
+      file.close();
+      return false;
+    }
+    style.display = static_cast<CssDisplay>(displayVal);
+
     // Read defined flags
     uint16_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
@@ -842,6 +856,7 @@ bool CssParser::loadFromCache() {
     style.defined.paddingRight = (definedBits & 1 << 12) != 0;
     style.defined.imageHeight = (definedBits & 1 << 13) != 0;
     style.defined.imageWidth = (definedBits & 1 << 14) != 0;
+    style.defined.display = (definedBits & 1 << 15) != 0;
 
     rulesBySelector_[selector] = style;
   }
