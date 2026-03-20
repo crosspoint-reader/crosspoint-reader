@@ -131,10 +131,10 @@ void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder ro
   bmpHeader->infoHeader.biBitCount = 1;
   bmpHeader->infoHeader.biCompression = 0;
   bmpHeader->infoHeader.biSizeImage = imageSize;
-  bmpHeader->infoHeader.biXPelsPerMeter = 0;
-  bmpHeader->infoHeader.biYPelsPerMeter = 0;
-  bmpHeader->infoHeader.biClrUsed = 0;
-  bmpHeader->infoHeader.biClrImportant = 0;
+  bmpHeader->infoHeader.biXPelsPerMeter = 2835;  // 72 DPI
+  bmpHeader->infoHeader.biYPelsPerMeter = 2835;  // 72 DPI
+  bmpHeader->infoHeader.biClrUsed = 2;
+  bmpHeader->infoHeader.biClrImportant = 2;
 
   // Color 0 (black)
   bmpHeader->colors[0].rgbBlue = 0;
