@@ -222,6 +222,20 @@ int Dictionary::readWordInto(FsFile& file, char* buf, size_t bufSize) {
 // OFT binary search helper
 // ---------------------------------------------------------------------------
 
+// Case-insensitive strcmp for ASCII — used in findPageBounds() because StarDict
+// dictionaries (including wiktionary-derived ones) are sorted case-insensitively.
+// Using plain strcmp would cause the binary search to land on the wrong page for
+// any word whose alphabetic neighbourhood contains mixed-case page boundaries.
+static int cistrcmp(const char* a, const char* b) {
+  while (*a && *b) {
+    int diff = std::tolower(static_cast<unsigned char>(*a)) - std::tolower(static_cast<unsigned char>(*b));
+    if (diff != 0) return diff;
+    a++;
+    b++;
+  }
+  return std::tolower(static_cast<unsigned char>(*a)) - std::tolower(static_cast<unsigned char>(*b));
+}
+
 void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
                                 uint32_t* endByte) {
   const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());
@@ -256,7 +270,7 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, 
     uint32_t midStart = pageStart(mid);
     src.seekSet(midStart);
     int len = readWordInto(src, wordBuf, sizeof(wordBuf));
-    if (len < 0 || strcmp(wordBuf, target) > 0) {
+    if (len < 0 || cistrcmp(wordBuf, target) > 0) {
       hi = mid - 1;
     } else {
       lo = mid;
