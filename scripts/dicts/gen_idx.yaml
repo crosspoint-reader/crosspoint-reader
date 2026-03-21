@@ -1,0 +1,9 @@
+meta:
+  name: gen-idx
+  bookname: "Gen IDX Test"
+  output_dir: test/dictionaries/gen-idx
+  entry_format: m
+  compress: false
+  generate_idx_oft: false
+  ifo_version: "2.4.2"
+  base_entries: basic

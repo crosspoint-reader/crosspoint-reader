@@ -1,0 +1,117 @@
+meta:
+  name: phrase-syn
+  bookname: "Phrase Test Dictionary (with synonyms)"
+  output_dir: test/dictionaries/phrase-syn
+  entry_format: m
+  compress: false
+  generate_oft: true
+  ifo_version: "2.4.2"
+
+entries:
+  - headword: a cappella
+    definition: "adverb; adjective: performed without instrumental accompaniment. [2 words]"
+  - headword: a stitch in time saves nine
+    definition: "proverb: timely action prevents a small problem becoming a larger one. [6 words]"
+  - headword: act of god
+    definition: "noun: an unforeseeable natural event beyond human control. [3 words]"
+  - headword: adding fuel to the fire
+    definition: "idiom: to worsen an already difficult situation. [5 words]"
+  - headword: at face value
+    definition: "idiom: accepting something as it appears without looking deeper. [3 words]"
+  - headword: back to the wall
+    definition: "idiom: in a desperate situation with no room to manoeuvre. [4 words]"
+  - headword: birds of a feather flock together
+    definition: "proverb: people with similar interests tend to associate. [6 words]"
+  - headword: birds of prey
+    definition: "noun: carnivorous birds that hunt other animals, such as hawks and eagles. [3 words]"
+  - headword: brain drain
+    definition: "noun: emigration of skilled or educated people from one region to another. [2 words]"
+  - headword: cat and mouse
+    definition: "idiom: a game of pursuit in which the pursuer has the upper hand. [3 words]"
+  - headword: caught red handed in act
+    definition: "idiom: discovered in the very act of doing something wrong. [5 words]"
+  - headword: cut to the chase
+    definition: "idiom: to get to the important point without preamble. [4 words]"
+  - headword: dark matter
+    definition: "noun: hypothetical matter that does not emit or interact with electromagnetic radiation. [2 words]"
+  - headword: do not cry over spilled milk
+    definition: "proverb: there is no use lamenting what cannot be undone. [6 words]"
+  - headword: every cloud has silver lining
+    definition: "idiom: every negative situation contains a positive aspect. [5 words]"
+  - headword: fly in the ointment
+    definition: "idiom: a minor flaw that spoils an otherwise satisfactory plan. [4 words]"
+  - headword: good things come to those who wait
+    definition: "proverb: patience is ultimately rewarded. [7 words]"
+  - headword: gut feeling
+    definition: "noun: an instinctive reaction without conscious reasoning. [2 words]"
+  - headword: half a loaf is better than none
+    definition: "proverb: receiving less than desired is better than nothing. [7 words]"
+  - headword: hard nut to crack
+    definition: "idiom: a problem very difficult to solve, or a stubborn person. [4 words]"
+  - headword: jump the gun
+    definition: "idiom: to act before the appropriate time. [3 words]"
+  - headword: laws of motion
+    definition: "noun: Newton's three laws describing how objects behave under forces. [3 words]"
+  - headword: let the cat out
+    definition: "idiom: to accidentally reveal a secret. [4 words]"
+  - headword: lights at end of tunnel
+    definition: "idiom: signs of improvement after a long difficulty. [5 words]"
+  - headword: main course
+    definition: "noun: the principal dish of a meal. [2 words]"
+  - headword: make a long story short
+    definition: "idiom: to summarise, omitting unnecessary detail. [5 words]"
+  - headword: quantum leap
+    definition: "noun: an abrupt, large, and important change or advance. [2 words]"
+  - headword: read between the lines
+    definition: "idiom: to find meaning that is not explicitly stated. [4 words]"
+  - headword: rule of thumb
+    definition: "noun: a broadly accurate guide based on experience rather than theory. [3 words]"
+  - headword: the proof is in the pudding
+    definition: "proverb: the real value of something can only be judged by use. [6 words]"
+  - headword: too many cooks spoil broth
+    definition: "proverb: too many people involved causes poor results. [5 words]"
+  - headword: turn over new leaf
+    definition: "idiom: to reform and make a fresh start. [4 words]"
+  - headword: water under the bridge now
+    definition: "idiom: past events that no longer matter. [5 words]"
+  - headword: you cannot judge a book by its cover
+    definition: "proverb: outward appearances are not a reliable indicator of quality. [8 words]"
+  - headword: zero sum
+    definition: "adjective: a situation where one participant gains only at another's expense. [2 words]"
+
+synonyms:
+  - [a cappella singing, a cappella]
+  - [act of nature, act of god]
+  - [adding petrol to the fire, adding fuel to the fire]
+  - [at face worth, at face value]
+  - [back against the wall, back to the wall]
+  - [birds feather together, birds of a feather flock together]
+  - [brainpower exodus, brain drain]
+  - [cat mouse game, cat and mouse]
+  - [caught in the act, caught red handed in act]
+  - [come to the point, cut to the chase]
+  - [do not cry over spilt milk, do not cry over spilled milk]
+  - [every dark cloud has a lining, every cloud has silver lining]
+  - [fly in the soup, fly in the ointment]
+  - [good things come to the patient, good things come to those who wait]
+  - [gut instinct, gut feeling]
+  - [half is better than nothing, half a loaf is better than none]
+  - [hard nut, hard nut to crack]
+  - [invisible matter, dark matter]
+  - [jumping the gun, jump the gun]
+  - [laws of physics, laws of motion]
+  - [let the secret out, let the cat out]
+  - [light at end of tunnel, lights at end of tunnel]
+  - [main dish, main course]
+  - [major breakthrough, quantum leap]
+  - [make a short story, make a long story short]
+  - [raptors, birds of prey]
+  - [read the subtext, read between the lines]
+  - [rule of practice, rule of thumb]
+  - [the pudding proves it, the proof is in the pudding]
+  - [too many chiefs, too many cooks spoil broth]
+  - [turn over a new leaf, turn over new leaf]
+  - [turning over a new leaf, turn over new leaf]
+  - [water gone under the bridge, water under the bridge now]
+  - [you cannot judge by appearance, you cannot judge a book by its cover]
+  - [zero sum game, zero sum]

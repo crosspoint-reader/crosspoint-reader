@@ -1,0 +1,20 @@
+meta:
+  name: all-prep
+  bookname: "All Prep Test"
+  output_dir: test/dictionaries/all-prep
+  author: CrossPoint Test Suite
+  description: "Large synthetic dictionary for pre-processing timing tests on ESP32-C3."
+  entry_format: m
+  compress: true
+  generate_oft: false   # intentionally absent — device generates idx.oft and syn.oft
+  ifo_version: "stardict-2.4.2"
+
+# 100 000 headwords, all 4 pre-processing steps take 5+ minutes on ESP32-C3.
+# Each definition is ~900 bytes; 8 synonyms per word.
+# Raw .dict ~84 MB -> ~21 MB compressed; raw .syn ~24 MB -> ~7-9 MB compressed.
+# Reduce word_count if .dict.dz exceeds 25 MB; increase if processing is too fast.
+synthetic:
+  word_prefix: all_prep_word    # headword format: all_prep_word_{n:05d}
+  syn_prefix: all_prep_syn      # synonym format: all_prep_syn_{n:05d}_v{k}_{suffix:04d}
+  word_count: 100000
+  synonyms_per_word: 8

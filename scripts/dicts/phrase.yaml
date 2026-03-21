@@ -1,0 +1,60 @@
+meta:
+  name: phrase
+  bookname: "Phrase Test Dictionary"
+  output_dir: test/dictionaries/phrase
+  entry_format: m
+  compress: false
+  generate_oft: true
+  ifo_version: "2.4.2"
+
+entries:
+  - headword: a cappella
+    definition: "adverb; adjective: performed without instrumental accompaniment. [2 words]"
+  - headword: a stitch in time saves nine
+    definition: "proverb: timely action prevents a small problem from becoming a larger one. [6 words]"
+  - headword: act of god
+    definition: "noun: an unforeseeable natural event beyond human control, used especially in insurance. [3 words]"
+  - headword: adding fuel to the fire
+    definition: "idiom: to worsen an already tense or difficult situation by introducing a new irritant. [5 words]"
+  - headword: back to the wall
+    definition: "idiom: in a desperate situation with no room to retreat or manoeuvre. [4 words]"
+  - headword: birds of a feather flock together
+    definition: "proverb: people with similar interests or character tend to associate with one another. [6 words]"
+  - headword: birds of prey
+    definition: "noun: carnivorous birds that hunt other animals, such as hawks, eagles, and owls. [3 words]"
+  - headword: dark matter
+    definition: "noun: hypothetical matter that does not emit or interact with electromagnetic radiation. [2 words]"
+  - headword: every cloud has silver lining
+    definition: "idiom: every negative situation contains within it some positive aspect or opportunity. [5 words]"
+  - headword: fly in the ointment
+    definition: "idiom: a minor but irritating flaw that spoils an otherwise satisfactory plan. [4 words]"
+  - headword: good things come to those who wait
+    definition: "proverb: patience is ultimately rewarded; worthwhile outcomes require time to develop. [7 words]"
+  - headword: half a loaf is better than none
+    definition: "proverb: receiving less than desired is still preferable to receiving nothing at all. [7 words]"
+  - headword: hard nut to crack
+    definition: "idiom: a problem very difficult to solve, or a stubborn person. [4 words]"
+  - headword: laws of motion
+    definition: "noun: Newton's three laws describing how objects behave under the influence of forces. [3 words]"
+  - headword: lights at end of tunnel
+    definition: "idiom: signs of improvement visible at the conclusion of a long difficulty. [5 words]"
+  - headword: main course
+    definition: "noun: the principal dish of a meal. [2 words]"
+  - headword: method to the madness
+    definition: "idiom: a rational purpose underlying behaviour that appears chaotic or absurd. [4 words]"
+  - headword: quantum leap
+    definition: "noun: an abrupt, large, and important change or advance in method or knowledge. [2 words]"
+  - headword: rest on ones laurels
+    definition: "idiom: to rely on past achievements rather than continuing to strive for new ones. [4 words]"
+  - headword: rule of thumb
+    definition: "noun: a broadly accurate guide based on practical experience rather than precise calculation. [3 words]"
+  - headword: the proof is in the pudding
+    definition: "proverb: the real value of something can only be judged by putting it to use. [6 words]"
+  - headword: too many cooks spoil broth
+    definition: "proverb: when too many people manage a task the result is often poor. [5 words]"
+  - headword: water under the bridge now
+    definition: "idiom: past events that are done with and should no longer cause concern. [5 words]"
+  - headword: wolf at door
+    definition: "idiom: the threat of poverty or starvation pressing close to one's circumstances. [3 words]"
+  - headword: zero sum
+    definition: "adjective: describing a situation where one participant gains only at another's expense. [2 words]"

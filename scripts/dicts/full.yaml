@@ -1,0 +1,33 @@
+meta:
+  name: full
+  bookname: "Full Test"
+  output_dir: test/dictionaries/full
+  entry_format: m
+  compress: false
+  generate_oft: true
+  ifo_version: "2.4.2"
+  base_entries: basic
+
+synonyms:
+  - [apples, apple]
+  - [blaze, flame]
+  - [bridges, bridge]
+  - [canopy, grove]
+  - [clouds, cloud]
+  - [coastline, ocean]
+  - [dawning, dawn]
+  - [echoes, echo]
+  - [glades, meadow]
+  - [groves, grove]
+  - [harvests, harvest]
+  - [jungles, jungle]
+  - [kettles, kettle]
+  - [lanterns, lantern]
+  - [meadows, meadow]
+  - [oceans, ocean]
+  - [riddles, riddle]
+  - [shadows, shadow]
+  - [valleys, valley]
+  - [willows, willow]
+  - [yearning, yearn]
+  - [zeniths, zenith]

@@ -1,0 +1,13 @@
+meta:
+  name: multi-ifo
+  bookname: "Multi IFO Test"
+  output_dir: test/dictionaries/multi-ifo
+  entry_format: m
+  ifo_version: "2.4.2"
+  generate_ifo: false
+  base_entries: basic
+  extra_ifo_files:
+    - stem: multi-ifo-a
+      bookname: "Multi IFO Test A"
+    - stem: multi-ifo-b
+      bookname: "Multi IFO Test B"

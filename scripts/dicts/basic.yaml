@@ -1,0 +1,62 @@
+meta:
+  name: basic
+  bookname: "Basic Test"
+  output_dir: test/dictionaries/basic
+  entry_format: m
+  compress: false
+  generate_oft: true
+  ifo_version: "2.4.2"
+
+entries:
+  - headword: apple
+    definition: "noun: the round fruit of a tree of the rose family."
+  - headword: bridge
+    definition: "noun: a structure carrying a road or path across a river or gap."
+  - headword: cloud
+    definition: "noun: a visible mass of condensed water vapour floating in the atmosphere."
+  - headword: dawn
+    definition: "noun: the first appearance of light in the sky before sunrise."
+  - headword: echo
+    definition: "noun: a sound caused by reflection of sound waves from a surface."
+  - headword: flame
+    definition: "noun: a hot glowing body of burning gas produced by combustion."
+  - headword: grove
+    definition: "noun: a small wood or group of trees."
+  - headword: harvest
+    definition: "noun: the process or period of gathering crops from fields."
+  - headword: ivory
+    definition: "noun: a hard creamy-white material from the tusks of an elephant."
+  - headword: jungle
+    definition: "noun: an area of land overgrown with dense tropical vegetation."
+  - headword: kettle
+    definition: "noun: a metal container with a lid and spout used for boiling water."
+  - headword: lantern
+    definition: "noun: a lamp with a transparent case protecting the flame from the wind."
+  - headword: meadow
+    definition: "noun: a field of grass, especially one used for hay or grazing."
+  - headword: narrow
+    definition: "adjective: of small width in proportion to length or height."
+  - headword: ocean
+    definition: "noun: a very large expanse of sea covering most of the earth's surface."
+  - headword: pilgrim
+    definition: "noun: a person who journeys to a sacred place for religious reasons."
+  - headword: quarry
+    definition: "noun: a place from which stone or other materials are extracted."
+  - headword: riddle
+    definition: "noun: a question or statement phrased so as to require ingenuity to answer."
+  - headword: shadow
+    definition: "noun: a dark area or shape produced by an object blocking light."
+  - headword: timber
+    definition: "noun: wood prepared for use in building and carpentry."
+  - headword: umber
+    definition: "noun: a natural pigment of a dark yellowish-brown colour."
+  - headword: valley
+    definition: "noun: a low area of land between hills or mountains."
+  - headword: willow
+    definition: "noun: a tree or shrub with narrow leaves, typically growing near water."
+  - headword: xenon
+    definition: "noun: a heavy inert gaseous element occurring in trace amounts in air."
+  - headword: yearn
+    definition: "verb: to have an intense longing or desire for something."
+  - headword: zenith
+    definition: "noun: the time at which something is most powerful or successful."

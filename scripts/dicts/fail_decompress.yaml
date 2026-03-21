@@ -1,0 +1,8 @@
+meta:
+  name: fail-decompress
+  bookname: "Fail Decompress Test"
+  output_dir: test/dictionaries/fail-decompress
+  entry_format: m
+  corrupt_dict: true
+  ifo_version: "2.4.2"
+  base_entries: basic
