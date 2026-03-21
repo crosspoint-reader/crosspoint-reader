@@ -691,7 +691,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 
   if (showBookmarkMessage) {
-    GUI.drawPopup(renderer, tr(STR_BOOKMARK_ADDED));
+    GUI.drawPopup(renderer, maxBookmarksError ? tr(STR_MAX_BOOKMARKS_ERROR) : tr(STR_BOOKMARK_ADDED));
   }
 }
 
@@ -896,6 +896,7 @@ void EpubReaderActivity::addBookmark() {
   {
     RenderLock lock(*this);
     showBookmarkMessage = true;
+    maxBookmarksError = !ok;
   }
 
   requestUpdate();

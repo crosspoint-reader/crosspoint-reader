@@ -101,9 +101,9 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
     return true;
   }
 
-  // Reject if at capacity (uint8_t count field supports max 255)
-  if (entries.size() >= 255) {
-    LOG_DBG(TAG, "Bookmark limit reached (255)");
+  // Reject if at capacity (uint8_t count field supports max 256)
+  if (entries.size() >= LIMIT) {
+    LOG_DBG(TAG, "Bookmark limit reached (%d)", LIMIT);
     return false;
   }
 

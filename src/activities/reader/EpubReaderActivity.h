@@ -28,6 +28,7 @@ class EpubReaderActivity final : public Activity {
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
   bool showBookmarkMessage = false;
+  bool maxBookmarksError = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
