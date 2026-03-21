@@ -98,6 +98,32 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   }
 }
 
+BlockStyle ChapterHtmlSlimParser::getAccumulatedBlockStyle() const {
+  BlockStyle accumulated;
+  const int count = (blockStyleStackSize < MAX_BLOCK_STYLE_DEPTH) ? blockStyleStackSize : MAX_BLOCK_STYLE_DEPTH;
+  for (int i = 0; i < count; ++i) {
+    accumulated = accumulated.getCombinedBlockStyle(blockStyleStack[i].style);
+  }
+  return accumulated;
+}
+
+void ChapterHtmlSlimParser::pushBlockStyle(const int depth, const BlockStyle& style) {
+  if (blockStyleStackSize < MAX_BLOCK_STYLE_DEPTH) {
+    blockStyleStack[blockStyleStackSize] = {depth, style};
+  } else {
+    LOG_ERR("EHP", "Block style stack overflow at depth %d", depth);
+  }
+  ++blockStyleStackSize;
+}
+
+void ChapterHtmlSlimParser::popBlockStyle(const int depth) {
+  if (blockStyleStackSize <= 0) return;
+  if (blockStyleStackSize > MAX_BLOCK_STYLE_DEPTH ||
+      blockStyleStack[blockStyleStackSize - 1].depth == depth) {
+    --blockStyleStackSize;
+  }
+}
+
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
   // Determine font style from depth-based tracking and CSS effective style
@@ -130,10 +156,9 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
-      // Merge with existing block style to accumulate CSS styling from parent block elements.
-      // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
-      // div's margin should be preserved, even though it has no direct text content.
-      currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
+      // The accumulated block style from the stack already includes all ancestor contributions,
+      // so we set it directly rather than merging with the previous empty block's style.
+      currentTextBlock->setBlockStyle(blockStyle);
 
       if (!pendingAnchorId.empty()) {
         anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
@@ -537,7 +562,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->embeddedStyle && cssStyle.hasTextAlign()) {
       headerBlockStyle.alignment = cssStyle.textAlign;
     }
-    self->startNewTextBlock(headerBlockStyle);
+    self->pushBlockStyle(self->depth, headerBlockStyle);
+    self->startNewTextBlock(self->getAccumulatedBlockStyle());
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
@@ -546,10 +572,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
+      self->startNewTextBlock(self->getAccumulatedBlockStyle());
     } else {
       self->currentCssStyle = cssStyle;
-      self->startNewTextBlock(userAlignmentBlockStyle);
+      self->pushBlockStyle(self->depth, userAlignmentBlockStyle);
+      self->startNewTextBlock(self->getAccumulatedBlockStyle());
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
@@ -926,20 +953,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (headerOrBlockTag) {
     self->currentCssStyle.reset();
     self->updateEffectiveInlineStyle();
-
-    // Reset alignment on empty text blocks to prevent stale alignment from bleeding
-    // into the next sibling element. This fixes issue #1026 where an empty <h1> (default
-    // Center) followed by an image-only <p> causes Center to persist through the chain
-    // of empty block reuse into subsequent text paragraphs.
-    // Margins/padding are preserved so parent element spacing still accumulates correctly.
-    if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
-      auto style = self->currentTextBlock->getBlockStyle();
-      style.textAlignDefined = false;
-      style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                            ? CssTextAlign::Justify
-                            : static_cast<CssTextAlign>(self->paragraphAlignment);
-      self->currentTextBlock->setBlockStyle(style);
-    }
+    self->popBlockStyle(self->depth);
   }
 }
 
