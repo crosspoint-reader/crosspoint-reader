@@ -9,12 +9,13 @@ struct BookmarkEntry {
   uint8_t chapterPercent;  // 0-100 chapter progress
   uint16_t spineIndex;     // Spine item index
   uint16_t pageIndex;      // Page index within spine item
+  std::string summary;     // First few words of a page to help identify it
 };
 
 // Stores and retrieves bookmarks in binary files on the SD card.
 // Files are stored at /.crosspoint/bookmarks/<path-hash>.bookmarks
-// Binary format: [version:1][count:1][entries: count * 6 bytes]
-// Each entry: [bookPercent:1][chapterPercent:1][spineIndex:2 LE][pageIndex:2 LE]
+// Binary format: [version:1][count:1][entries: variable]
+// Each entry: [bookPercent:1][chapterPercent:1][spineIndex:2 LE][pageIndex:2 LE][summaryLen:2 LE][summary: summaryLen bytes]
 class BookmarkStore {
  public:
   // Add a bookmark. Skips if a bookmark at the same position (spineIndex + pageIndex) already exists.

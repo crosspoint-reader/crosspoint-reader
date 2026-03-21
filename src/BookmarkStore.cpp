@@ -45,6 +45,18 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
     entry.chapterPercent = data[1];
     entry.spineIndex = data[2] | (data[3] << 8);
     entry.pageIndex = data[4] | (data[5] << 8);
+
+    uint8_t lenData[2];
+    if (file.read(lenData, 2) != 2) {
+      break;
+    }
+    uint16_t summaryLen = lenData[0] | (lenData[1] << 8);
+    std::vector<char> buf(summaryLen);
+    if (file.read(buf.data(), summaryLen) != summaryLen) {
+      break;
+    }
+    entry.summary = std::string(buf.begin(), buf.end());
+
     entries.push_back(entry);
   }
 
@@ -77,6 +89,17 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
     data[4] = entry.pageIndex & 0xFF;
     data[5] = (entry.pageIndex >> 8) & 0xFF;
     if (file.write(data, 6) != 6) {
+      file.close();
+      return false;
+    }
+
+    uint16_t len = entry.summary.size();
+    uint8_t lenData[2] = { static_cast<uint8_t>(len & 0xFF), static_cast<uint8_t>((len >> 8) & 0xFF) };
+    if (file.write(lenData, 2) != 2) {
+      file.close();
+      return false;
+    }
+    if (file.write(entry.summary.data(), len) != len) {
       file.close();
       return false;
     }

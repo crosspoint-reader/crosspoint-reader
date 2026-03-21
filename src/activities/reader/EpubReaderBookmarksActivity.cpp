@@ -129,7 +129,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       GUI.drawList(
           renderer, Rect{0, pageHeight / 2, pageWidth, LINE_HEIGHT * pageItems}, 1, 0,
           [this](int index) {
-            return std::to_string(bookmarks.at(selectorIndex).bookPercent) + "%";
+            return bookmarks.at(selectorIndex).summary;
           },
           [this](int index) {
             auto bookmark = bookmarks.at(selectorIndex);
@@ -143,7 +143,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       GUI.drawList(
           renderer, Rect{0, LINE_HEIGHT + contentY, pageWidth, LINE_HEIGHT * pageItems}, numBookmarks, selectorIndex,
           [this](int index) {
-            return std::to_string(bookmarks.at(index).bookPercent) + "%";
+            return bookmarks.at(index).summary;
           },
           [this](int index) {
             auto bookmark = bookmarks.at(index);
