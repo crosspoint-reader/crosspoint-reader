@@ -3098,7 +3098,7 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
     }
     const savedInfo = saved > 0 ? `, <span style="color:#27ae60">-${savedPct}%</span>` : '';
     const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
-    log(`<strong>${name}</strong>${stateIndicator} <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
+    log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
     if (partsDetail) {
       log(`<span class="log-detail" style="margin-left: 20px;">↳ ${partsDetail}</span>`, '', '');
     }
@@ -3108,7 +3108,7 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
     const detail = saved > 0
       ? `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(origSize)} → ${formatBytes(newSize)}, <span style="color:#27ae60">-${savedPct}%</span>)</span>`
       : `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(newSize)})</span>`;
-    log(`<strong>${name}</strong>${stateIndicator} ${detail}`, '', 'CONVERT');
+    log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} ${detail}`, '', 'CONVERT');
   }
 }
 
@@ -3121,7 +3121,7 @@ function logFix(type, detail) {
 // Log skipped item
 function logSkip(name, reason) {
   conversionStats.skipped++;
-  log(`${name} <span class="log-detail">(${reason})</span>`, '', 'SKIP');
+  log(`${escapeHtml(name)} <span class="log-detail">(${reason})</span>`, '', 'SKIP');
 }
 
 // Log error
@@ -3220,7 +3220,7 @@ function finalizeBatchLog() {
     fileHeader.style.marginTop = index > 0 ? '15px' : '5px';
     fileHeader.style.borderTop = index > 0 ? '1px solid var(--border-color)' : 'none';
     fileHeader.style.paddingTop = index > 0 ? '10px' : '0';
-    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${fileLog.fileName}</strong> — ${fileLog.succeeded ? '<span style="color:#27ae60">✓ Success</span>' : '<span style="color:#e74c3c">✗ Failed</span>'}</span>`;
+    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${escapeHtml(fileLog.fileName)}</strong> — ${fileLog.succeeded ? '<span style="color:#27ae60">✓ Success</span>' : '<span style="color:#e74c3c">✗ Failed</span>'}</span>`;
     logContainer.appendChild(fileHeader);
 
     fileLog.entries.forEach(entry => {
