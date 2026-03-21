@@ -1,11 +1,11 @@
 #include "CrashActivity.h"
 
-#include <HalSystem.h>
 #include <GfxRenderer.h>
+#include <HalSystem.h>
 #include <I18n.h>
 
-#include "fontIds.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 
 void CrashActivity::onEnter() {
   Activity::onEnter();
