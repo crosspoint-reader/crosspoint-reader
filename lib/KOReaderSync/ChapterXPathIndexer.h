@@ -12,9 +12,9 @@
  * - CrossPoint stores reading position as chapter/page.
  * - KOReader sync uses XPath + percentage.
  *
- * This utility reparses exactly one spine XHTML item with Expat and builds
- * transient text anchors (<xpath, textOffset>) so we can translate in both
- * directions without keeping a full DOM in memory.
+ * This utility reparses exactly one spine XHTML item with Expat to translate
+ * between the two formats.  It streams through the parse using O(1) memory
+ * (no anchor list), so it handles arbitrarily large chapters without OOM.
  *
  * Design constraints (ESP32-C3):
  * - No persistent full-book structures.
