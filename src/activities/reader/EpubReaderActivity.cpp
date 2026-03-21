@@ -197,6 +197,12 @@ void EpubReaderActivity::loop() {
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
+    if (showBookmarkMessage) {
+      showBookmarkMessage = false;
+      requestUpdate();
+      return;
+    }
+
     if (footnoteDepth > 0) {
       restoreSavedPosition();
       return;
@@ -878,13 +884,10 @@ void EpubReaderActivity::addBookmark() {
   {
     RenderLock lock(*this);
     currentPage = section->currentPage;
-    chapterProgress =
-        (section->pageCount > 0) ? static_cast<float>(currentPage) / static_cast<float>(section->pageCount) : 0.0f;
   }
 
   const int bookPercent =
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
-  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
 
   std::string pageText;
   if (section->currentPage >= 0 && section->currentPage < section->pageCount) {
@@ -893,7 +896,8 @@ void EpubReaderActivity::addBookmark() {
 
   BookmarkEntry entry;
   entry.bookPercent = static_cast<uint8_t>(bookPercent);
-  entry.chapterPercent = static_cast<uint8_t>(chapterPercent);
+  entry.chapterPageCount = static_cast<uint16_t>(section->pageCount);
+  entry.chapterProgress = static_cast<uint16_t>(currentPage + 1);
   entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
   entry.pageIndex = static_cast<uint16_t>(currentPage);
   entry.summary = pageText;

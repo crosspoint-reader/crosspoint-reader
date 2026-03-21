@@ -123,38 +123,36 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
 
   if (numBookmarks > 0) {
     if (confirmingDelete) {
-      GUI.drawPopup(renderer, tr(STR_CONFIRM_DELETE_BOOKMARK));
+      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, pageWidth, LINE_HEIGHT}, tr(STR_CONFIRM_DELETE_BOOKMARK));
 
       // render list with just the selected item for the user to confirm to delete
       GUI.drawList(
           renderer, Rect{0, pageHeight / 2, pageWidth, LINE_HEIGHT * pageItems}, 1, 0,
-          [this](int index) {
-            return bookmarks.at(selectorIndex).summary;
-          },
-          [this](int index) {
-            auto bookmark = bookmarks.at(selectorIndex);
-            auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
-            auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-            return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterPercent) +
-                  "% - " + tocTitle;
-          },
-          [this](int index) { return UIIcon::BookmarkFilled; });
+            [this](int index) {
+              return bookmarks.at(selectorIndex).summary;
+            }, 
+            [this](int index) {
+              auto bookmark = bookmarks.at(selectorIndex);
+              auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
+              auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
+              return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" + std::to_string(bookmark.chapterPageCount) +
+                    " - " + tocTitle;
+            }, [](int index) { return UIIcon::BookmarkFilled; });
     } else {
       GUI.drawList(
           renderer, Rect{0, LINE_HEIGHT + contentY, pageWidth, LINE_HEIGHT * pageItems}, numBookmarks, selectorIndex,
-          [this](int index) {
-            return bookmarks.at(index).summary;
-          },
-          [this](int index) {
-            auto bookmark = bookmarks.at(index);
-            auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
-            auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-            return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterPercent) +
-                  "% - " + tocTitle;
-          },
-          [this](int index) { return UIIcon::BookmarkFilled; });
+            [this](int index) {
+              return bookmarks.at(index).summary;
+            },
+            [this](int index) {
+              auto bookmark = bookmarks.at(index);
+              auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
+              auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
+              return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" + std::to_string(bookmark.chapterPageCount) +
+                    " - " + tocTitle;
+            }, [](int index) { return UIIcon::BookmarkFilled; });
       
-      GUI.drawHelpText(renderer, Rect{0, pageHeight - LINE_HEIGHT, pageWidth, LINE_HEIGHT}, tr(STR_HOLD_CONFIRM_TO_DELETE));
+      GUI.drawHelpText(renderer, Rect{0, pageHeight - 80, pageWidth, LINE_HEIGHT}, tr(STR_HOLD_CONFIRM_TO_DELETE));
     }
   } else {
     GUI.drawHelpText(renderer, Rect{0, LINE_HEIGHT * 2, pageWidth, LINE_HEIGHT}, tr(STR_BOOKMARK_INSTRUCTIONS));
@@ -162,7 +160,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
 
   const auto backLabel = confirmingDelete ? tr(STR_CANCEL) : tr(STR_BACK);
   const auto confirmLabel = confirmingDelete ? tr(STR_DELETE) : tr(STR_OPEN);
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_DOWN), tr(STR_DIR_UP));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

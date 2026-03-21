@@ -36,15 +36,16 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
 
   const uint8_t count = header[1];
   for (uint8_t i = 0; i < count; i++) {
-    uint8_t data[6];
-    if (file.read(data, 6) != 6) {
+    uint8_t data[9];
+    if (file.read(data, 9) != 9) {
       break;
     }
     BookmarkEntry entry;
     entry.bookPercent = data[0];
-    entry.chapterPercent = data[1];
-    entry.spineIndex = data[2] | (data[3] << 8);
-    entry.pageIndex = data[4] | (data[5] << 8);
+    entry.chapterPageCount = data[1] | (data[2] << 8);
+    entry.chapterProgress = data[3] | (data[4] << 8);
+    entry.spineIndex = data[5] | (data[6] << 8);
+    entry.pageIndex = data[7] | (data[8] << 8);
 
     uint8_t lenData[2];
     if (file.read(lenData, 2) != 2) {
@@ -81,19 +82,35 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
   }
 
   for (const auto& entry : entries) {
-    uint8_t data[6];
+    uint8_t data[9];
     data[0] = entry.bookPercent;
-    data[1] = entry.chapterPercent;
-    data[2] = entry.spineIndex & 0xFF;
-    data[3] = (entry.spineIndex >> 8) & 0xFF;
-    data[4] = entry.pageIndex & 0xFF;
-    data[5] = (entry.pageIndex >> 8) & 0xFF;
-    if (file.write(data, 6) != 6) {
+    data[1] = entry.chapterPageCount & 0xFF;
+    data[2] = (entry.chapterPageCount >> 8) & 0xFF;
+    data[3] = entry.chapterProgress & 0xFF;
+    data[4] = (entry.chapterProgress >> 8) & 0xFF;
+    data[5] = entry.spineIndex & 0xFF;
+    data[6] = (entry.spineIndex >> 8) & 0xFF;
+    data[7] = entry.pageIndex & 0xFF;
+    data[8] = (entry.pageIndex >> 8) & 0xFF;
+    if (file.write(data, 9) != 9) {
       file.close();
       return false;
     }
 
-    uint16_t len = entry.summary.size();
+    // trim summary of double whitespaces and newlines, and trim whitespace from start and end
+    std::string summary = entry.summary;
+    summary.erase(std::unique(summary.begin(), summary.end(),
+                              [](char a, char b) { return std::isspace(a) && std::isspace(b); }),
+                  summary.end());
+    summary.erase(std::remove(summary.begin(), summary.end(), '\n'), summary.end());
+    summary.erase(summary.begin(), std::find_if(summary.begin(), summary.end(),
+                                                [](unsigned char ch) { return !std::isspace(ch); }));
+    summary.erase(std::find_if(summary.rbegin(), summary.rend(),
+                                                [](unsigned char ch) { return !std::isspace(ch); }).base(),
+                  summary.end());
+
+    // truncate summary to 48 characters before saving
+    uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(48));
     uint8_t lenData[2] = { static_cast<uint8_t>(len & 0xFF), static_cast<uint8_t>((len >> 8) & 0xFF) };
     if (file.write(lenData, 2) != 2) {
       file.close();
