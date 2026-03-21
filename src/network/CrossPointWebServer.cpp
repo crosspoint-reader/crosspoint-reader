@@ -192,6 +192,21 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after server.begin(): %d bytes", ESP.getFreeHeap());
 }
 
+void CrossPointWebServer::abortWsUpload(const char* tag) {
+  wsUploadFile.close();
+  String filePath = wsUploadPath;
+  if (!filePath.endsWith("/")) filePath += "/";
+  filePath += wsUploadFileName;
+  if (Storage.remove(filePath.c_str())) {
+    LOG_DBG(tag, "Deleted incomplete upload: %s", filePath.c_str());
+  } else {
+    LOG_DBG(tag, "Failed to delete incomplete upload: %s", filePath.c_str());
+  }
+  wsUploadInProgress = false;
+  wsUploadClientNum = 255;
+  wsLastProgressSent = 0;
+}
+
 void CrossPointWebServer::stop() {
   if (!running || !server) {
     LOG_DBG("WEB", "stop() called but already stopped (running=%d, server=%p)", running, server.get());
@@ -205,14 +220,7 @@ void CrossPointWebServer::stop() {
 
   // Close any in-progress WebSocket upload and remove partial file
   if (wsUploadInProgress && wsUploadFile) {
-    wsUploadFile.close();
-    String filePath = wsUploadPath;
-    if (!filePath.endsWith("/")) filePath += "/";
-    filePath += wsUploadFileName;
-    Storage.remove(filePath.c_str());
-    LOG_DBG("WEB", "Deleted incomplete upload on stop: %s", filePath.c_str());
-    wsUploadInProgress = false;
-    wsUploadClientNum = 255;
+    abortWsUpload("WEB");
   }
 
   // Stop WebSocket server
@@ -1243,16 +1251,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       // A new client may have already started a fresh upload before this
       // DISCONNECTED event fires (race condition on quick cancel + retry).
       if (num == wsUploadClientNum && wsUploadInProgress && wsUploadFile) {
-        wsUploadFile.close();
-        // Delete incomplete file
-        String filePath = wsUploadPath;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += wsUploadFileName;
-        Storage.remove(filePath.c_str());
-        LOG_DBG("WS", "Deleted incomplete upload: %s", filePath.c_str());
-        wsUploadInProgress = false;
-        wsUploadClientNum = 255;
-        wsLastProgressSent = 0;
+        abortWsUpload("WS");
       }
       break;
 
@@ -1351,14 +1350,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       esp_task_wdt_reset();
 
       if (written != length) {
-        wsUploadFile.close();
-        String filePath = wsUploadPath;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += wsUploadFileName;
-        Storage.remove(filePath.c_str());
-        LOG_DBG("WS", "Deleted incomplete upload after short write: %s", filePath.c_str());
-        wsUploadInProgress = false;
-        wsUploadClientNum = 255;
+        abortWsUpload("WS");
         wsServer->sendTXT(num, "ERROR:Write failed - disk full?");
         return;
       }
