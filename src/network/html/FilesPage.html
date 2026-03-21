@@ -8,23 +8,34 @@
     :root {
       --font-color: #333;
       --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
+      --card-bg: #fff;
       --label-color: #7f8c8d;
       --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-color-10: rgba(110, 154, 130, 0.1);
+      --accent-color: #6e9a82;
+      --accent-color-10: #6e9a821a;
+      --accent-color-25: #6e9a8240;
       --accent-hover-color: #5a8c73;
+    }
+    .alert-warning {
+      --alert-color: #664d03;
+      --alert-bg: #fff3cd;
+      --alert-border-color: #ffe69c;
+      --alert-link-color: #664d03;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --font-color: #f5f5f5;
         --bg: #333;
-        --title-color: #ecf0f1;
         --card-bg: #444;
         --label-color: #bdc3c7;
         --border-color: #555;
         color-scheme: dark;
+      }
+      .alert-warning {
+        --alert-color: #ffda6a;
+        --alert-bg: #332701;
+        --alert-border-color: #997404;
+        --alert-link-color: #ffda6a;
       }
     }
     body {
@@ -36,13 +47,47 @@
       background-color: var(--bg);
       color: var(--font-color);
     }
+    c-svg {
+      width: 16px;
+      height: 16px;
+      display: inline-block;
+    }
+    .alert {
+      position: relative;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      color: var(--alert-color);
+      background-color: var(--alert-bg);
+      border: solid 1px var(--alert-border-color);
+      border-radius: 0.375rem;
+    }
+    .alert a {
+      color: var(--alert-link-color);
+    }
+    .alert-icon {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .alert-icon c-svg {
+      width: 20px;
+      height: 20px;
+    }
     h1 {
-      color: var(--title-color);
-      margin-bottom: 5px;
+      margin-top: 0;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 svg {
+      background-color: var(--accent-color);
+      padding: 4px;
+      border-radius: 4px;
     }
     h2 {
-      color: var(--title-color);
       margin-top: 0;
+      font-size: 20px;
     }
     .card {
       background: var(--card-bg);
@@ -51,40 +96,40 @@
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
+    .card h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .contents-card {
+      margin-top: 6px;
+    }
     .page-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid var(--accent-color);
+      gap: 8px;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--accent-color);
     }
-    .page-header-left {
+    .page-header h2 {
+      margin: 0;
+    }
+    #breadcrumbs {
       display: flex;
-      align-items: baseline;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 0.9em;
     }
-    .breadcrumb-inline {
-      color: var(--label-color);
-      font-size: 1.1em;
-    }
-    .breadcrumb-inline a {
+    #breadcrumbs a {
       color: var(--accent-color);
       text-decoration: none;
     }
-    .breadcrumb-inline a:hover {
+    #breadcrumbs a:hover {
       text-decoration: underline;
     }
-    .breadcrumb-inline .sep {
-      margin: 0 6px;
+    #breadcrumbs .sep {
       color: var(--border-color);
-    }
-    .breadcrumb-inline .current {
-      color: var(--title-color);
-      font-weight: 500;
     }
     .nav-links {
       margin: 20px 0;
@@ -99,128 +144,168 @@
     }
     .nav-links a.active {
       background-color: var(--accent-color);
-      color: white;
+      color: #fff;
     }
     .nav-links a:not(.active):hover {
       background-color: var(--accent-hover-color);
-      color: white;
+      color: #fff;
     }
     /* Action buttons */
     .action-buttons {
       display: flex;
       gap: 10px;
     }
-    .action-btn {
-      color: white;
-      padding: 10px 16px;
+    .btn {
+      color: #fff;
+      padding: 8px 10px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
       display: flex;
       align-items: center;
       gap: 6px;
+      font-size: 16px;
     }
-    .upload-action-btn {
-      background-color: #27ae60;
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+      border-radius: 0.25rem;
     }
-    .upload-action-btn:hover {
-      background-color: #219a52;
+    .btn-primary {
+      background-color: var(--accent-color);
     }
-    .folder-action-btn {
-      background-color: #f39c12;
+    .btn-primary:hover {
+      background-color: var(--accent-hover-color);
     }
-    .folder-action-btn:hover {
-      background-color: #d68910;
+    .btn-secondary {
+      background-color: #6c757d;
     }
-    /* Upload modal */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 200;
-      justify-content: center;
-      align-items: center;
+    .btn-secondary:hover {
+      background-color: #5a6268;
     }
-    .modal-overlay.open {
-      display: flex;
+    .btn-warning {
+      background-color: #ffc107;
+      color: #000;
     }
-    .modal {
+    .btn-warning:hover {
+      background-color: #ffca2c;
+      color: #000;
+    }
+    .btn-danger,
+    .btn-icon.btn-danger:hover {
+      background: tomato;
+      color: #FFF;
+    }
+    .btn-danger:hover {
+      background-color: #e74c3c;
+    }
+    .btn-icon {
+      padding: 4px;
+      width: 24px;
+      height: 24px;
+      background: none;
+      display: inline-block;
+      color: var(--accent-color);
+    }
+    .btn-icon.btn-danger {
+      color: tomato;
+    }
+    .btn-icon:hover {
+      background: var(--accent-color);
+      color: #FFF;
+    }
+    dialog {
       background: var(--card-bg);
+      border: none;
       border-radius: 8px;
       padding: 25px;
       max-width: 450px;
       width: 90%;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }
-    .modal h3 {
-      margin: 0 0 15px 0;
-      color: var(--title-color);
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 1.5em;
+   }
+    dialog h3 {
+      margin: 0;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
     }
     .modal-close {
-      float: right;
       background: none;
       border: none;
       font-size: 1.5em;
       cursor: pointer;
-      color: var(--label-color);
-      line-height: 1;
+      opacity: .7;
     }
     .modal-close:hover {
-      color: var(--title-color);
+      opacity: 1;
     }
     .file-table {
       width: 100%;
       border-collapse: collapse;
+      font-size: .9em;
+    }
+    .file-table th {
+      text-align: start;
     }
     .file-table th,
     .file-table td {
-      padding: 12px;
+      padding: 8px;
       text-align: left;
       border-bottom: 1px solid var(--border-color);
     }
     .file-table th {
-      font-weight: 600;
       color: var(--label-color);
     }
-    .file-table tr:hover {
+    .file-table tbody tr:nth-child(even) {
       background-color: var(--accent-color-10);
     }
-    .epub-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      background-color: #27ae60;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
-      margin-left: 8px;
+    .file-table tbody tr:hover {
+      background-color: var(--accent-color-25);
     }
-    .folder-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      background-color: #f39c12;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
-      margin-left: 8px;
+    .file-table tbody tr:last-child td {
+      border-bottom: none;
     }
-    .file-icon {
-      margin-right: 8px;
+    .file-table tr th:first-child,
+    .file-table tr td:first-child {
+      width: 1px;
+      padding-right: 0;
     }
-    .folder-link,
-    .file-link {
+    .file-table tbody tr:has(input:checked) {
+      background: var(--accent-color-25);
+    }
+    .file-table tbody tr:has(input:checked) a {
+      color: #fff;
+    }
+    .file-table td.icon-col {
+      padding-right: 0;
+    }
+    th.size-col,
+    th.actions-col {
+      text-align: end;
+    }
+    tbody td.size-col {
+      text-align: end;
+    }
+    .file-table a {
       color: var(--accent-color);
       text-decoration: none;
       cursor: pointer;
     }
-    .folder-link:hover,
-    .file-link:hover {
-      color: var(--accent-hover-color);
+    .file-table a:hover {
+      color: #fff;
       text-decoration: underline;
     }
     .upload-form {
@@ -230,20 +315,7 @@
       margin: 10px 0;
       width: 100%;
     }
-    .upload-btn {
-      background-color: #27ae60;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .upload-btn:hover {
-      background-color: #219a52;
-    }
-    .upload-btn:disabled {
+    .btn-primary:disabled {
       background-color: #95a5a6;
       cursor: not-allowed;
     }
@@ -279,13 +351,7 @@
       align-items: center;
       margin-bottom: 12px;
     }
-    .contents-title {
-      font-size: 1.1em;
-      font-weight: 600;
-      color: var(--title-color);
-      margin: 0;
-    }
-    .summary-inline {
+    #folder-summary {
       color: var(--label-color);
       font-size: 0.9em;
     }
@@ -317,77 +383,24 @@
     }
     .folder-input {
       width: 100%;
-      padding: 10px;
+      padding: 6px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      font-size: 1em;
       margin-bottom: 10px;
       box-sizing: border-box;
     }
-    .folder-btn {
-      background-color: #f39c12;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .folder-btn:hover {
-      background-color: #d68910;
-    }
     /* Action button styles */
-    .delete-btn,
-    .rename-btn,
-    .move-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 1.1em;
-      padding: 4px 8px;
-      border-radius: 4px;
-      transition: all 0.15s;
-    }
-    .delete-btn {
-      color: #95a5a6;
-    }
-    .delete-btn:hover {
-      background-color: #fee;
-      color: #e74c3c;
-    }
-    .rename-btn {
-      color: #2980b9;
-    }
-    .rename-btn:hover {
-      background-color: #e8f4fd;
-    }
-    .move-btn {
-      color: #16a085;
-    }
-    .move-btn:hover {
-      background-color: #e6f7f4;
-    }
-    .actions-col {
-      width: 140px;
-      text-align: center;
-    }
-    .action-icon-group {
-      display: inline-flex;
+    .actions {
+      display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
+      justify-content: end;
     }
     /* Failed uploads banner */
-    .failed-uploads-banner {
-      background-color: #fff3cd;
-      border: 1px solid #ffc107;
-      border-radius: 4px;
-      padding: 15px;
-      margin-bottom: 15px;
+    #failedUploadsBanner {
       display: none;
+      margin: 16px 0;
     }
-    .failed-uploads-banner.show {
+    #failedUploadsBanner.show {
       display: block;
     }
     .failed-uploads-header {
@@ -398,27 +411,30 @@
     }
     .failed-uploads-title {
       font-weight: 600;
-      color: #856404;
       margin: 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .failed-uploads-title c-svg {
+      width: 20px;
+      height: 20px;
     }
     .dismiss-btn {
       background: none;
       border: none;
       font-size: 1.2em;
       cursor: pointer;
-      color: #856404;
       padding: 0;
       line-height: 1;
-    }
-    .dismiss-btn:hover {
-      color: #533f03;
+      color: var(--alert-link-color);
     }
     .failed-file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 8px 0;
-      border-bottom: 1px solid #ffe69c;
+      border-bottom: 1px solid var(--alert-border-color);
     }
     .failed-file-item:last-child {
       border-bottom: none;
@@ -427,104 +443,22 @@
       flex: 1;
     }
     .failed-file-name {
-      font-weight: 500;
-      color: #856404;
+      display: flex;
+      gap: 4px;
+      align-items: center;
     }
     .failed-file-error {
       font-size: 0.85em;
-      color: #856404;
       opacity: 0.8;
+      margin-left: 20px;
     }
     .retry-btn {
       background-color: #ffc107;
       color: #533f03;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 4px;
       cursor: pointer;
-      font-size: 0.9em;
-      font-weight: 600;
     }
     .retry-btn:hover {
       background-color: #e0a800;
-    }
-    .retry-all-btn {
-      background-color: #ffc107;
-      color: #533f03;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
-      margin-top: 10px;
-    }
-    .retry-all-btn:hover {
-      background-color: #e0a800;
-    }
-    /* Delete modal */
-    .delete-warning {
-      color: #e74c3c;
-      font-weight: 600;
-      margin: 10px 0;
-    }
-    .delete-item-name {
-      font-weight: 600;
-      color: var(--title-color);
-      word-break: break-all;
-    }
-    .delete-btn-confirm {
-      background-color: #e74c3c;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .delete-btn-confirm:hover {
-      background-color: #c0392b;
-    }
-    .delete-btn-cancel {
-      background-color: #95a5a6;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-      margin-top: 10px;
-    }
-    .delete-btn-cancel:hover {
-      background-color: var(--label-color);
-    }
-    .rename-btn-confirm {
-      background-color: #3498db;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .rename-btn-confirm:hover {
-      background-color: #2e86c1;
-    }
-    .move-btn-confirm {
-      background-color: #16a085;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .move-btn-confirm:hover {
-      background-color: #138d75;
     }
     .loader-container {
       display: flex;
@@ -542,6 +476,28 @@
       box-sizing: border-box;
       animation: rotation 1s linear infinite;
     }
+    svg.epub {
+      color: #86b918;
+    }
+    .alert svg.epub {
+      color: var(--alert-color);
+    }
+    svg.epub {
+      color: #86b918;
+    }
+    footer {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: .85em;
+    }
+    #deleteItemList {
+      max-height: 240px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
     @keyframes rotation {
       from {
         transform: rotate(0deg);
@@ -550,68 +506,77 @@
         transform: rotate(360deg);
       }
     }
+    .icon {
+      width: 100%;
+      height: 100%;
+    }
     /* Mobile responsive styles */
     @media (max-width: 600px) {
       body {
         padding: 10px;
         font-size: 14px;
       }
+      h1 {
+        justify-content: center;
+      }
       .card {
         padding: 12px;
         margin: 10px 0;
       }
-      .page-header {
-        gap: 10px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
-      }
-      .page-header-left {
-        gap: 8px;
-      }
-      h1 {
-        font-size: 1.3em;
-      }
-      .breadcrumb-inline {
+      #breadcrumbs {
         font-size: 0.95em;
-      }
-      .nav-links a {
-        padding: 8px 12px;
-        margin-right: 6px;
-        font-size: 0.9em;
       }
       .action-buttons {
         gap: 6px;
       }
-      .action-btn {
-        padding: 8px 10px;
-        font-size: 0.85em;
+      .file-table thead {
+        display: none;
       }
-      .file-table th,
       .file-table td {
-        padding: 8px 6px;
+        padding: 6px;
         font-size: 0.9em;
+        border-bottom: none;
       }
-      .file-table th {
-        font-size: 0.85em;
+      .file-table tbody tr {
+        display: grid;
+        grid-template-columns: 24px min-content min-content auto auto;
       }
-      .file-icon {
-        margin-right: 4px;
+      .file-table tbody tr td:first-child {
+        grid-row: 1;
+        grid-column: 1;
+        width: 20px;
       }
-      .epub-badge,
-      .folder-badge {
-        padding: 2px 5px;
-        font-size: 0.65em;
-        margin-left: 4px;
+      .file-table tbody tr td:nth-child(2) {
+        grid-row: 1;
+        grid-column: 2;
+        font-size: 14px;
+      }
+      .file-table tbody tr td:nth-child(3) {
+        grid-row: 1;
+        grid-column: 3/6;
+        font-size: 14px;
+      }
+      .file-table tbody tr td:nth-child(4) {
+        grid-row: 2;
+        grid-column: 3;
+        align-self: center;
+      }
+      .file-table tbody tr td:nth-child(5) {
+        grid-row: 2;
+        grid-column: 4;
+        text-align: start;
+        align-self: center;
+      }
+      .file-table tbody tr td:nth-child(6) {
+        grid-row: 2;
+        grid-column: 5;
       }
       .contents-header {
         margin-bottom: 8px;
         flex-wrap: wrap;
         gap: 4px;
       }
-      .contents-title {
-        font-size: 1em;
-      }
-      .summary-inline {
+      #folder-summary {
         font-size: 0.8em;
       }
       .modal {
@@ -620,26 +585,24 @@
       .modal h3 {
         font-size: 1.1em;
       }
-      .actions-col {
-        width: 120px;
-      }
-      .delete-btn,
-      .rename-btn,
-      .move-btn {
-        font-size: 1em;
-        padding: 2px 4px;
-      }
-      .action-icon-group {
+      .actions {
         gap: 4px;
       }
       .no-files {
         padding: 20px;
         font-size: 0.9em;
       }
+      footer {
+        justify-content: center;
+      }
     }
   </style>
 </head>
 <body>
+<h1>
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 162 180"><path fill="#000" d="M141.133 1.938c8.969-5.38 20.384 1.079 20.388 11.537v153.051c-.004 10.458-11.419 16.916-20.388 11.537l-60.374-36.226-60.372 36.226C11.417 183.442.003 176.984 0 166.526V13.475C.003 3.017 11.418-3.441 20.387 1.938L80.76 38.16zm-19.858 115.586-28.89 17.34 54.896 32.947c.996.597 2.261-.126 2.264-1.285v-65.959zM14.239 12.19c-.995-.598-2.26.125-2.263 1.285v73.137l62.796 37.678V48.51z"/><path fill="#fff" d="m121.275 117.524-28.89 17.34 54.896 32.947c.996.597 2.261-.126 2.264-1.285v-65.959ZM14.24 12.19c-.996-.598-2.26.125-2.264 1.285v73.137l62.797 37.678V48.51Z"/></svg>
+  CrossPoint Reader
+</h1>
 <div class="nav-links">
   <a href="/">Home</a>
   <a href="/files" class="active">File Manager</a>
@@ -647,32 +610,30 @@
 </div>
 
 <div class="page-header">
-  <div class="page-header-left">
-    <h1>📁 File Manager</h1>
-    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
-  </div>
-
+  <h2>File Manager</h2>
   <div class="action-buttons">
-    <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
-    <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
-    <button class="action-btn" style="background-color:#e74c3c" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
+    <button class="btn btn-sm btn-primary" onclick="openUploadModal()"><c-svg name="upload"></c-svg> Upload</button>
+    <button class="btn btn-sm btn-primary" onclick="openFolderModal()"><c-svg name="folder"></c-svg> New Folder</button>
+    <button class="btn btn-sm btn-danger" onclick="openDeleteSelectedModal()"><c-svg name="trash"></c-svg> Delete Selected</button>
   </div>
 </div>
 
+<div id="breadcrumbs"></div>
+
 <!-- Failed Uploads Banner -->
-<div class="failed-uploads-banner" id="failedUploadsBanner">
+<div class="alert alert-warning" id="failedUploadsBanner">
   <div class="failed-uploads-header">
-    <h3 class="failed-uploads-title">⚠️ Some files failed to upload</h3>
+    <h3 class="failed-uploads-title"><c-svg name="warning"></c-svg> Some files failed to upload</h3>
     <button class="dismiss-btn" onclick="dismissFailedUploads()" title="Dismiss">&times;</button>
   </div>
   <div id="failedFilesList"></div>
-  <button class="retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
+  <button id="retryAllBtn" class="btn btn-warning btn-sm" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
 </div>
 
-<div class="card">
+<div class="card contents-card">
   <div class="contents-header">
-    <h2 class="contents-title">Contents</h2>
-    <span class="summary-inline" id="folder-summary"></span>
+    <h3>Contents</h3>
+    <span id="folder-summary"></span>
   </div>
 
   <div id="file-table">
@@ -682,91 +643,106 @@
   </div>
 </div>
 
-<div class="card">
-  <p style="text-align: center; color: #95a5a6; margin: 0;">
-    CrossPoint E-Reader • Open Source
-  </p>
-</div>
+<footer>CrossPoint Reader • Open Source</footer>
 
-<!-- Upload Modal -->
-<div class="modal-overlay" id="uploadModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeUploadModal()">&times;</button>
-    <h3>📤 Upload file</h3>
-    <div class="upload-form">
-      <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
-      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
-      <div id="progress-container">
-        <div id="progress-bar"><div id="progress-fill"></div></div>
-        <div id="progress-text"></div>
+<dialog id="uploadModal" closedby="any">
+  <div class="modal-header">
+    <h3><c-svg name="upload"></c-svg> Upload file</h3>
+    <button class="modal-close" onclick="closeModal('uploadModal')">&times;</button>
+  </div>
+  <div class="upload-form">
+    <p class="file-info" aria-label="fileInput">Select a file (or multiple files) to upload to <strong id="uploadPathDisplay"></strong></p>
+    <form id="uploadForm" onsubmit="uploadFile(event)">
+    <input type="file" id="fileInput" multiple required>
+    <div id="progress-container">
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <div id="progress-text"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="uploadBtn" class="btn btn-primary" type="submit">Upload</button>
+    </div>
+  </form>
+  </div>
+</dialog>
+
+<dialog id="folderModal" closedby="any">
+  <div class="modal-header">
+    <h3><c-svg name="folder"></c-svg> New Folder</h3>
+    <button class="modal-close" onclick="closeModal('folderModal')">&times;</button>
+  </div>
+  <div class="folder-form">
+    <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
+    <form onsubmit="createFolder(event)">
+      <input type="text" id="folderName" class="folder-input" placeholder="Folder name..." required autofocus/>
+      <div class="modal-footer">
+        <button class="btn btn-primary" type="submit">Create Folder</button>
       </div>
-    </div>
+    </form>
   </div>
-</div>
+</dialog>
 
-<!-- New Folder Modal -->
-<div class="modal-overlay" id="folderModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeFolderModal()">&times;</button>
-    <h3>📁 New Folder</h3>
-    <div class="folder-form">
-      <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
-      <input type="text" id="folderName" class="folder-input" placeholder="Folder name...">
-      <button class="folder-btn" onclick="createFolder()">Create Folder</button>
+<dialog id="deleteModal" closedby="any">
+  <div class="modal-header">
+    <h3><c-svg name="trash"></c-svg> Delete Item(s)</h3>
+    <button class="modal-close" onclick="closeModal('deleteModal')">&times;</button>
+  </div>
+  <div class="folder-form">
+    <p class="alert alert-warning alert-icon"><c-svg name="warning"></c-svg> This action cannot be undone!</p>
+    <p class="file-info">Are you sure you want to delete the following item(s)?</p>
+    <div id="deleteItemList"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
     </div>
   </div>
-</div>
+</dialog>
 
-<!-- Delete Confirmation Modal -->
-<div class="modal-overlay" id="deleteModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-    <h3>🗑️ Delete Item(s)</h3>
-    <div class="folder-form">
-      <p class="delete-warning">⚠️ This action cannot be undone!</p>
-      <p class="file-info">Are you sure you want to delete the following item(s)?</p>
-      <div id="deleteItemList" style="max-height:240px; overflow:auto; margin-bottom:10px;"></div>
-      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
-      <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+<dialog id="renameModal" closedby="any">
+  <div class="modal-header">
+    <h3><c-svg name="edit"></c-svg> Rename File</h3>
+    <button class="modal-close" onclick="closeModal('renameModal')">&times;</button>
+  </div>
+  <div class="folder-form">
+    <p>Renaming <span id="renameItemName"></span></p>
+    <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
+    <input type="hidden" id="renameItemPath">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('renameModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmRename()">Rename</button>
     </div>
   </div>
-</div>
+</dialog>
 
-<!-- Rename Modal -->
-<div class="modal-overlay" id="renameModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
-    <div class="folder-form">
-      <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
-      <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
-      <input type="hidden" id="renameItemPath">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
-      <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+<dialog id="moveModal" closedby="any">
+  <div class="modal-header">
+    <h3><c-svg name="move"></c-svg> Move File</h3>
+    <button class="modal-close" onclick="closeModal('moveModal')">&times;</button>
+  </div>
+  <div class="folder-form">
+    <p>Moving <span id="moveItemName"></span></p>
+    <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder" autofocus>
+    <datalist id="moveFolderOptions"></datalist>
+    <input type="hidden" id="moveItemPath">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('moveModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmMove()">Move</button>
     </div>
   </div>
-</div>
+</dialog>
 
-<!-- Move Modal -->
-<div class="modal-overlay" id="moveModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
-    <div class="folder-form">
-      <p class="file-info">Moving <strong id="moveItemName"></strong></p>
-      <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
-      <datalist id="moveFolderOptions"></datalist>
-      <input type="hidden" id="moveItemPath">
-      <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
-      <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
-    </div>
-  </div>
-</div>
+<svg xmlns="http://www.w3.org/2000/svg"><symbol id="i-trash" viewBox="260 205 27 32"><path fill="currentColor" d="M268 220a1 1 0 0 1 2 0v12a1 1 0 1 1-2 0zm5 0a1 1 0 0 1 2 0v12a1 1 0 1 1-2 0zm5 0a1 1 0 0 1 2 0v12a1 1 0 1 1-2 0zm-15 13a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4v-16h-22zm14-24h-6v-1a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1zm8 0h-6v-2a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v2h-6a2 2 0 0 0-2 2v2a2 2 0 0 0 1.999 2h22.003a2 2 0 0 0 1.998-2v-2a2 2 0 0 0-2-2"/></symbol><symbol id="i-edit" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21a1 1 0 0 1 1-1h8a1 1 0 1 1 0 2h-8a1 1 0 0 1-1-1M20.774 8.1c1.61-1.616 1.541-3.738.339-5.038A3.3 3.3 0 0 0 18.748 2c-.949-.022-1.931.34-2.838 1.099a1 1 0 0 0-.067.061L2.874 16.181A3 3 0 0 0 2 18.3v1.693C2 21.094 2.892 22 4.004 22h1.679a3 3 0 0 0 2.125-.883zm-3.567-2.307a1 1 0 1 0-1.414 1.414l1 1a1 1 0 1 0 1.414-1.414z"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M1 5a3 3 0 0 1 3-3h4.558a3 3 0 0 1 2.847 2.051L11.72 5H20a2 2 0 0 1 2 2v2.01a2 2 0 0 1 1.77 2.348l-1.637 9A2 2 0 0 1 20.165 22H3a2 2 0 0 1-2-2zm19 4V7h-8.28a2 2 0 0 1-1.897-1.368l-.316-.948A1 1 0 0 0 8.558 4H4a1 1 0 0 0-1 1v7.27l.354-1.682A2 2 0 0 1 5.311 9zM3.366 20a1 1 0 0 0 .113-.294L5.31 11h16.491l-1.637 9z" clip-rule="evenodd"/></symbol><symbol id="i-epub" viewBox="-10 -5 1034 1034"><path fill="currentColor" d="M500 227q-19 0-32 13L113 594q-13 14-13 33t13 32l355 354q13 14 32 14t32-14l355-354q13-13 13-32t-13-33l-52-51-335 335-251-251 251-252 84 84-168 168 84 83 251-251-219-219q-13-13-32-13"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" fill="transparent" d="M19 9v8.8c0 1.12 0 1.68-.218 2.108a2 2 0 0 1-.874.874C17.48 21 16.92 21 15.8 21H8.2c-1.12 0-1.68 0-2.108-.218a2 2 0 0 1-.874-.874C5 19.48 5 18.92 5 17.8V6.2c0-1.12 0-1.68.218-2.108a2 2 0 0 1 .874-.874C6.52 3 7.08 3 8.2 3H13m6 6-6-6m6 6h-5a1 1 0 0 1-1-1V3"/></symbol><symbol id="i-move" viewBox="0 0 24 24"><path fill="transparent" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h6m0 0-2 2m2-2-2-2M13 3H8.2c-1.12 0-1.68 0-2.108.218a2 2 0 0 0-.874.874C5 4.52 5 5.08 5 6.2v11.6c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874C6.52 21 7.08 21 8.2 21H15M13 3l6 6m-6-6v4.4c0 .56 0 .84.109 1.054a1 1 0 0 0 .437.437C13.76 9 14.04 9 14.6 9H19m0 0v2.023"/></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path fill="transparent" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h.01m-1.41-3H18c.932 0 1.398 0 1.765.152a2 2 0 0 1 1.083 1.083C21 15.602 21 16.068 21 17s0 1.398-.152 1.765a2 2 0 0 1-1.083 1.083C19.398 20 18.932 20 18 20H6c-.932 0-1.398 0-1.765-.152a2 2 0 0 1-1.083-1.083C3 18.398 3 17.932 3 17s0-1.398.152-1.765a2 2 0 0 1 1.083-1.083C4.602 14 5.068 14 6 14h2.4m3.6 1V4m0 0 3 3m-3-3L9 7"/></symbol><symbol id="i-home" viewBox="0 0 64 64"><path fill="currentColor" d="m56.87 25.981-6.6-4.95-3-2.25-11.7-8.78a6.54 6.54 0 0 0-7.8 0l-6.1 4.58v-.21a2.006 2.006 0 0 0-2-2h-7.2a2 2 0 0 0-2 2v8.79l-4.03 3.13a2.001 2.001 0 0 0 1.23 3.58c.442 0 .872-.148 1.22-.42l1.58-1.22v20.05a6.506 6.506 0 0 0 6.5 6.5h8.63a1.99 1.99 0 0 0 1.75-1.05 1.92 1.92 0 0 0 .24-1.16v-5.72a4.076 4.076 0 0 1 8.15 0v5.93c0 .333.086.66.25.95a2.01 2.01 0 0 0 1.76 1.05h8.62a6.51 6.51 0 0 0 6.5-6.5v-20.3l1.6 1.2a1.98 1.98 0 0 0 2.088.188c.28-.139.523-.34.712-.588a2 2 0 0 0-.4-2.8"/></symbol><symbol id="i-warning" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M11 13a1 1 0 1 0 2 0v-3a1 1 0 1 0-2 0zm2 2.989a1 1 0 1 0-2 0V16a1 1 0 1 0 2 0zM9.377 4.66c1.143-2.057 4.102-2.057 5.245 0l6.601 11.882c1.111 2-.335 4.457-2.622 4.457H5.399c-2.288 0-3.734-2.457-2.623-4.457z" clip-rule="evenodd"/></symbol><symbol id="i-info" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10m-10 5.75a.75.75 0 0 0 .75-.75v-6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75M12 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2" clip-rule="evenodd"/></symbol></svg>
 
 <script>
   // get current path from query parameter
-  const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  let currentPath = '/';
+  try {
+    currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  } catch (e) {
+    console.error('Invalid path encoding:', e);
+  }
+  const FILE_EXTENSION_REGEX = /\.([0-9a-z]+)(?:[\?#]|$)/i;
+  const id = id => document.getElementById(id);
+  const icon = i => `<c-svg name="${i}"></c-svg>`;
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -786,41 +762,30 @@
   }
 
   async function hydrate() {
-    // Close modals when clicking overlay
-    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
-      overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-          overlay.classList.remove('open');
-        }
-      });
-    });
+    const breadcrumbsEl = id('breadcrumbs');
+    const fileTable = id('file-table');
 
-    const breadcrumbs = document.getElementById('directory-breadcrumbs');
-    const fileTable = document.getElementById('file-table');
-
-    let breadcrumbContent = '<span class="sep">/</span>';
+    let breadcrumbs = '<span class="sep">/</span>';
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      breadcrumbs += `<span class="current">${icon('home')}</span>`;
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
+      breadcrumbs += `<a href="/files">${icon('home')}</a>`;
       const pathSegments = currentPath.split('/');
-      pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
-        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
+      pathSegments.slice(1, pathSegments.length - 1).forEach((segment, i) => {
+        breadcrumbs += `<span class="sep">/</span><a href="/files?path=${encodeURIComponent(pathSegments.slice(0, i + 2).join('/'))}">${escapeHtml(segment)}</a>`;
       });
-      breadcrumbContent += '<span class="sep">/</span>';
-      breadcrumbContent += '<span class="current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
+      breadcrumbs += `<span class="sep">/</span><span class="current">${escapeHtml(pathSegments[pathSegments.length - 1])}</span>`;
     }
-    breadcrumbs.innerHTML = breadcrumbContent;
+    breadcrumbsEl.innerHTML = breadcrumbs;
 
     let files = [];
     try {
       const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath));
       if (!response.ok) {
-        throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
+        throw new Error(`Failed to load files: ${response.status} ${response.statusText}`);
       }
       files = await response.json();
     } catch (e) {
-      console.error(e);
       fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
       return;
     }
@@ -831,17 +796,27 @@
       if (file.isDirectory) folderCount++;
       totalSize += file.size;
     });
+    const fileCount = files.length - folderCount
+    let folderSummaryArr = [];
 
-    document.getElementById('folder-summary').innerHTML = `${folderCount} folders, ${files.length - folderCount} files, ${formatFileSize(totalSize)}`;
+    if (folderCount > 0) {
+      folderSummaryArr.push(`${folderCount} folder${folderCount > 1 ? 's' : ''}`);
+    }
+    if (fileCount > 0) {
+      folderSummaryArr.push(`${fileCount} file${fileCount > 1 ? 's' : ''}`);
+    }
+    if (totalSize > 0) {
+      folderSummaryArr.push(formatFileSize(totalSize));
+    }
+
+    id('folder-summary').innerHTML = folderSummaryArr.join(', ');
 
     if (files.length === 0) {
       fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
     } else {
       let fileTableContent = '<table class="file-table">';
-
-				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
-
+			// Add select-all checkbox column
+      fileTableContent += '<thead><tr><th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th class="icon-col"></th><th>Name</th><th>Type</th><th class="size-col">Size</th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
       const sortedFiles = files.sort((a, b) => {
         // Directories first, then epub files, then other files, alphabetically within each group
@@ -853,89 +828,84 @@
       });
 
       sortedFiles.forEach(file => {
-        if (file.isDirectory) {
-          let folderPath = currentPath;
-          if (!folderPath.endsWith("/")) folderPath += "/";
-          folderPath += file.name;
+        let filePath = currentPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += file.name;
+        const nameEscaped = escapeHtml(file.name);
+        const filePathUri = encodeURIComponent(filePath);
 
-         // Checkbox cell + folder row
-          fileTableContent += `<tr class="folder-row">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
-          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
-          fileTableContent += '<td>Folder</td>';
-          fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
-          fileTableContent += '</tr>';
+        if (file.isDirectory) {
+          // Checkbox cell + folder row
+          fileTableContent += `<tr class="folder-row">
+            <td><input type="checkbox" class="select-item" data-path="${filePathUri}" data-name="${nameEscaped}" data-type="folder"></td>
+            <td class="icon-col">${icon('folder')}</td>
+            <td><a href="/files?path=${filePathUri}">${nameEscaped}</a></td>
+            <td></td>
+            <td></td>
+            <td><div class="actions"><button class="btn btn-icon btn-danger" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', true)" title="Delete folder">${icon('trash')}</button></div></td>
+            </tr>`;
         } else {
-          let filePath = currentPath;
-          if (!filePath.endsWith("/")) filePath += "/";
-          filePath += file.name;
+          const match = file.name.match(FILE_EXTENSION_REGEX);
+          const fileExtension = match ? match[1].toUpperCase() : '';
+          const fileName = file.name.replaceAll("'", "\\'");
+          const path = filePath.replaceAll("'", "\\'");
+          const fileType = file.isEpub ? 'epub' : 'file';
 
           // Checkbox cell + file row
-          fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
-          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
-          if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
-          fileTableContent += '</td>';
-          fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
-          fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
-          fileTableContent += `</div></td>`;
-          fileTableContent += '</tr>';
+          fileTableContent += `<tr>
+            <td><input type="checkbox" class="select-item" data-path="${filePathUri}" data-name="${nameEscaped}" data-type="${fileType}"></td>
+            <td class="icon-col">${icon(fileType)}</td>
+            <td><a rel="noopener noreferrer" target="_blank" href="/download?path=${filePathUri}">${nameEscaped}</a></td>
+            <td>${fileExtension}</td>
+            <td class="size-col">${formatFileSize(file.size)}</td>
+            <td><div class="actions">
+              <button class="btn btn-icon" onclick="openMoveModal('${fileName}', '${path}', ${file.isEpub})" title="Move file">${icon('move')}</button>
+              <button class="btn btn-icon" onclick="openRenameModal('${fileName}', '${path}', ${file.isEpub})" title="Rename file">${icon('edit')}</button>
+              <button class="btn btn-icon btn-danger" onclick="openDeleteModal('${fileName}', '${path}', false, ${file.isEpub})" title="Delete file">${icon('trash')}</button>
+            </div></td></tr>`;
         }
       });
 
-      fileTableContent += '</table>';
+      fileTableContent += '</tbody></table>';
       fileTable.innerHTML = fileTableContent;
     }
   }
 
   // Modal functions
   function openUploadModal() {
-    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
-    document.getElementById('uploadModal').classList.add('open');
-  }
-
-  function closeUploadModal() {
-    document.getElementById('uploadModal').classList.remove('open');
-    document.getElementById('fileInput').value = '';
-    document.getElementById('uploadBtn').disabled = true;
-    document.getElementById('progress-container').style.display = 'none';
-    document.getElementById('progress-fill').style.width = '0%';
-    document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
+    id('uploadPathDisplay').innerHTML = currentPath === '/' ? `/ ${icon('home')}` : escapeHtml(currentPath);
+    id('fileInput').value = '';
+    id('progress-container').style.display = 'none';
+    id('progress-fill').style.width = '0%';
+    id('progress-fill').style.backgroundColor = '#27ae60';
+    id('uploadModal').showModal();
   }
 
   function openFolderModal() {
-    document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
-    document.getElementById('folderModal').classList.add('open');
-    document.getElementById('folderName').value = '';
+    id('folderPathDisplay').innerHTML = currentPath === '/' ? `/ ${icon('home')}` : escapeHtml(currentPath);
+    id('folderName').value = '';
+    id('folderModal').showModal();
   }
 
-  function closeFolderModal() {
-    document.getElementById('folderModal').classList.remove('open');
+  function closeModal(id) {
+    document.getElementById(id).close();
   }
 
   // Toggle select-all checkbox
-  function toggleSelectAll(master) {
-    const checked = master.checked;
-    document.querySelectorAll('.select-item').forEach(cb => {
-      cb.checked = checked;
-    });
+  function toggleSelectAll({ checked }) {
+    document.querySelectorAll('.select-item').forEach(c => c.checked = checked);
   }
 
   function getSelectedItems() {
     const items = [];
-    document.querySelectorAll('.select-item:checked').forEach(cb => {
+    document.querySelectorAll('.select-item:checked').forEach(({ dataset }) => 
       items.push({
-        name: cb.dataset.name || decodeURIComponent(cb.dataset.path).split('/').pop(),
-        path: decodeURIComponent(cb.dataset.path),
-        isFolder: cb.dataset.type === 'folder'
-      });
-    });
+        name: dataset.name || decodeURIComponent(dataset.path).split('/').pop(),
+        path: decodeURIComponent(dataset.path),
+        isFolder: dataset.type === 'folder',
+        isEpub: dataset.type === 'epub'
+      })
+    );
     return items;
   }
 
@@ -950,32 +920,27 @@
   }
 
   // Open delete modal for a single item (keeps backwards compatibility with per-row delete button)
-  function openDeleteModal(name, path, isFolder) {
-    openDeleteModalForItems([{ name: name, path: path, isFolder: !!isFolder }]);
+  function openDeleteModal(name, path, isFolder, isEpub = false) {
+    openDeleteModalForItems([{ name, path, isFolder: !!isFolder, isEpub }]);
   }
 
   let deleteItemsGlobal = [];
 
   function openDeleteModalForItems(items) {
     deleteItemsGlobal = items;
-    const listEl = document.getElementById('deleteItemList');
+    const listEl = id('deleteItemList');
     listEl.innerHTML = '';
     items.forEach(it => {
       const div = document.createElement('div');
-      div.style.marginBottom = '6px';
-      div.textContent = (it.isFolder ? '📁 ' : '📄 ') + it.path;
+      div.innerHTML = `${icon(it.isFolder ? 'folder' : it.isEpub ? 'epub' : 'file')} ${escapeHtml(it.path)}`;
       listEl.appendChild(div);
     });
-    document.getElementById('deleteModal').classList.add('open');
-  }
-
-  function closeDeleteModal() {
-    document.getElementById('deleteModal').classList.remove('open');
+    id('deleteModal').showModal();
   }
 
   function confirmDelete() {
     if (!deleteItemsGlobal || deleteItemsGlobal.length === 0) {
-      closeDeleteModal();
+      closeModal('deleteModal');
       return;
     }
 
@@ -997,19 +962,12 @@
       } else {
         const text = await res.text();
         alert('Failed to delete: ' + text);
-        closeDeleteModal();
+        closeModal('deleteModal');
       }
     }).catch(() => {
       alert('Failed to delete - network error');
-      closeDeleteModal();
+      closeModal('deleteModal');
     });
-  }
-
-  function validateFile() {
-    const fileInput = document.getElementById('fileInput');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const files = fileInput.files;
-    uploadBtn.disabled = !(files.length > 0);
   }
 
 let failedUploadsGlobal = [];
@@ -1034,8 +992,8 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
-      // Send start message: START:<filename>:<size>:<path>
-      ws.send(`START:${file.name}:${file.size}:${currentPath}`);
+      // Send start message as JSON for safe parsing
+      ws.send(JSON.stringify({ cmd: 'START', name: file.name, size: file.size, path: currentPath }));
     };
 
     ws.onmessage = async function(event) {
@@ -1159,8 +1117,9 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
   });
 }
 
-function uploadFile() {
-  const fileInput = document.getElementById('fileInput');
+function uploadFile(event) {
+  event.preventDefault();
+  const fileInput = id('fileInput');
   const files = Array.from(fileInput.files);
 
   if (files.length === 0) {
@@ -1168,10 +1127,10 @@ function uploadFile() {
     return;
   }
 
-  const progressContainer = document.getElementById('progress-container');
-  const progressFill = document.getElementById('progress-fill');
-  const progressText = document.getElementById('progress-text');
-  const uploadBtn = document.getElementById('uploadBtn');
+  const progressContainer = id('progress-container');
+  const progressFill = id('progress-fill');
+  const progressText = id('progress-text');
+  const uploadBtn = id('uploadBtn');
 
   progressContainer.style.display = 'block';
   uploadBtn.disabled = true;
@@ -1187,7 +1146,7 @@ function uploadFile() {
         progressFill.style.backgroundColor = '#4caf50';
         progressText.textContent = 'All uploads complete!';
         setTimeout(() => {
-          closeUploadModal();
+          closeModal('uploadModal');
           hydrate();
         }, 1000);
       } else {
@@ -1196,7 +1155,7 @@ function uploadFile() {
         progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
         failedUploadsGlobal = failedFiles;
         setTimeout(() => {
-          closeUploadModal();
+          closeModal('uploadModal');
           showFailedUploadsBanner();
           hydrate();
         }, 2000);
@@ -1213,7 +1172,6 @@ function uploadFile() {
     const onProgress = (loaded, total) => {
       const percent = Math.round((loaded / total) * 100);
       progressFill.style.width = percent + '%';
-      const speed = ''; // Could calculate speed here
       progressText.textContent = `Uploading ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${percent}%`;
     };
 
@@ -1259,33 +1217,31 @@ function uploadFile() {
 }
 
 function showFailedUploadsBanner() {
-  const banner = document.getElementById('failedUploadsBanner');
-  const filesList = document.getElementById('failedFilesList');
+  const banner = id('failedUploadsBanner');
+  const filesList = id('failedFilesList');
   
   filesList.innerHTML = '';
   
-  failedUploadsGlobal.forEach((failedFile, index) => {
+  failedUploadsGlobal.forEach((failedFile, i) => {
+    const match = failedFile.name.match(FILE_EXTENSION_REGEX);
+    const ext = match ? match[1].toUpperCase() : '';
     const item = document.createElement('div');
     item.className = 'failed-file-item';
-    item.innerHTML = `
-      <div class="failed-file-info">
-        <div class="failed-file-name">📄 ${escapeHtml(failedFile.name)}</div>
+    item.innerHTML = `<div class="failed-file-info">
+        <div class="failed-file-name">${icon(ext === 'EPUB' ? 'epub' : 'file')} ${escapeHtml(failedFile.name)}</div>
         <div class="failed-file-error">Error: ${escapeHtml(failedFile.error)}</div>
       </div>
-      <button class="retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
-    `;
+      <button class="btn btn-sm retry-btn" onclick="retrySingleUpload(${i})">Retry</button>`;
     filesList.appendChild(item);
   });
   
   // Ensure retry all button is visible
-  const retryAllBtn = banner.querySelector('.retry-all-btn');
-  if (retryAllBtn) retryAllBtn.style.display = '';
-  
+  id('retryAllBtn').style.display = '';
   banner.classList.add('show');
 }
 
 function dismissFailedUploads() {
-  const banner = document.getElementById('failedUploadsBanner');
+  const banner = id('failedUploadsBanner');
   banner.classList.remove('show');
   failedUploadsGlobal = [];
 }
@@ -1298,7 +1254,7 @@ function retrySingleUpload(index) {
   const dt = new DataTransfer();
   dt.items.add(failedFile.file);
   
-  const fileInput = document.getElementById('fileInput');
+  const fileInput = id('fileInput');
   fileInput.files = dt.files;
   
   // Remove this file from failed list
@@ -1311,7 +1267,6 @@ function retrySingleUpload(index) {
   
   // Open modal and trigger upload
   openUploadModal();
-  validateFile();
 }
 
 function retryAllFailedUploads() {
@@ -1323,8 +1278,7 @@ function retryAllFailedUploads() {
     dt.items.add(failedFile.file);
   });
   
-  const fileInput = document.getElementById('fileInput');
-  fileInput.files = dt.files;
+  id('fileInput').files = dt.files;
   
   // Clear failed files list
   failedUploadsGlobal = [];
@@ -1332,11 +1286,11 @@ function retryAllFailedUploads() {
   
   // Open modal and trigger upload
   openUploadModal();
-  validateFile();
 }
 
-  function createFolder() {
-    const folderName = document.getElementById('folderName').value.trim();
+  function createFolder(event) {
+    event.preventDefault();
+    const folderName = id('folderName').value.trim();
 
     if (!folderName) {
       alert('Please enter a folder name!');
@@ -1373,32 +1327,29 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
-    document.getElementById('renameItemPath').value = path;
-    document.getElementById('renameNewName').value = name;
-    document.getElementById('renameModal').classList.add('open');
-    setTimeout(() => {
-      const input = document.getElementById('renameNewName');
-      input.focus();
-      input.select();
-    }, 50);
-  }
-
-  function closeRenameModal() {
-    document.getElementById('renameModal').classList.remove('open');
+  function openRenameModal(name, path, isEpub = false) {;
+    id('renameItemName').innerHTML = `${icon(isEpub ? 'epub' : 'file')} ${escapeHtml(name)}`;
+    id('renameItemPath').value = path;
+    id('renameNewName').value = name;
+    id('renameModal').showModal();
+    id('renameNewName').select();
   }
 
   function confirmRename() {
-    const path = document.getElementById('renameItemPath').value;
-    const newName = document.getElementById('renameNewName').value.trim();
+    const path = id('renameItemPath').value;
+    const newName = id('renameNewName').value.trim();
 
     if (!newName) {
       alert('Please enter a new name.');
       return;
     }
-    if (newName.includes('/') || newName.includes('\\')) {
+    if (/[/\\]/.test(newName)) {
       alert('File name cannot include slashes.');
+      return;
+    }
+    const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(newName);
+    if (!validName) {
+      alert('File name cannot contain " * : < > ? / \\ | and must not be . or ..');
       return;
     }
 
@@ -1415,12 +1366,12 @@ function retryAllFailedUploads() {
       } else {
         alert('Failed to rename: ' + xhr.responseText);
       }
-      closeRenameModal();
+      closeModal('renameModal');
     };
 
     xhr.onerror = function() {
       alert('Failed to rename - network error');
-      closeRenameModal();
+      closeModal('renameModal');
     };
 
     xhr.send(formData);
@@ -1479,7 +1430,7 @@ function retryAllFailedUploads() {
       });
     }
 
-    const dataList = document.getElementById('moveFolderOptions');
+    const dataList = id('moveFolderOptions');
     dataList.innerHTML = '';
     Array.from(options).sort().forEach(path => {
       const option = document.createElement('option');
@@ -1488,24 +1439,17 @@ function retryAllFailedUploads() {
     });
   }
 
-  function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
-    document.getElementById('moveItemPath').value = path;
-    document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
-    document.getElementById('moveModal').classList.add('open');
+  function openMoveModal(name, path, isEpub = false) {
+    id('moveItemName').innerHTML = `${icon(isEpub ? 'epub' : 'file')} ${escapeHtml(name)}`;
+    id('moveItemPath').value = path;
+    id('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
+    id('moveModal').showModal();
     loadMoveFolderOptions();
-    setTimeout(() => {
-      document.getElementById('moveDestPath').focus();
-    }, 50);
-  }
-
-  function closeMoveModal() {
-    document.getElementById('moveModal').classList.remove('open');
   }
 
   function confirmMove() {
-    const path = document.getElementById('moveItemPath').value;
-    const destPath = normalizePath(document.getElementById('moveDestPath').value);
+    const path = id('moveItemPath').value;
+    const destPath = normalizePath(id('moveDestPath').value);
 
     if (!destPath) {
       alert('Please enter a destination folder.');
@@ -1523,18 +1467,26 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to move: ' + xhr.responseText);
+        alert(`Failed to move: ${xhr.responseText}`);
       }
-      closeMoveModal();
+      closeModal('moveModal');
     };
 
     xhr.onerror = function() {
       alert('Failed to move - network error');
-      closeMoveModal();
+      closeModal('moveModal');
     };
 
     xhr.send(formData);
   }
+
+  customElements.define('c-svg', class extends HTMLElement{
+    connectedCallback() {
+      const n = this.getAttribute('name');
+      n && (this.innerHTML=`<svg class="icon ${n}"><use href="#i-${n}"></use></svg>`)
+    }
+  })
+  
   hydrate();
 </script>
 </body>

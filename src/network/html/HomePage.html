@@ -8,18 +8,16 @@
       :root {
         --font-color: #333;
         --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
+        --card-bg: #fff;
         --label-color: #7f8c8d;
         --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
+        --accent-color: #6e9a82;
         --accent-hover-color: #5a8c73;
       }
       @media (prefers-color-scheme: dark) {
         :root {
           --font-color: #f5f5f5;
           --bg: #333;
-          --title-color: #ecf0f1;
           --card-bg: #444;
           --label-color: #bdc3c7;
           --border-color: #555;
@@ -36,13 +34,20 @@
         color: var(--font-color);
       }
       h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
+        margin-top: 0;
+        font-size: 24px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      h1 svg {
+        background-color: var(--accent-color);
+        padding: 4px;
+        border-radius: 4px;
       }
       h2 {
-        color: var(--title-color);
         margin-top: 0;
+        font-size: 20px;
       }
       .card {
         background: var(--card-bg);
@@ -60,20 +65,17 @@
       }
       .info-row:last-child {
         border-bottom: none;
+        padding-bottom: 0;
       }
       .label {
-        font-weight: 600;
         color: var(--label-color);
-      }
-      .value {
-        color: var(--title-color);
       }
       .status {
         display: inline-block;
-        padding: 4px 12px;
+        padding: 4px 10px;
         border-radius: 12px;
         background-color: #27ae60;
-        color: white;
+        color: #fff;
         font-size: 0.9em;
       }
       .nav-links {
@@ -89,16 +91,32 @@
       }
       .nav-links a.active {
         background-color: var(--accent-color);
-        color: white;
+        color: #fff;
       }
-      .nav-links a:not(.active):hover {
+      .nav-links a:hover {
         background-color: var(--accent-hover-color);
-        color: white;
+        color: #fff;
+      }
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+          font-size: 14px;
+        }
+        .card {
+          padding: 12px;
+          margin: 10px 0;
+        }
+        footer {
+          text-align: center;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>📚 CrossPoint Reader</h1>
+    <h1>
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 162 180"><path fill="#000" d="M141.133 1.938c8.969-5.38 20.384 1.079 20.388 11.537v153.051c-.004 10.458-11.419 16.916-20.388 11.537l-60.374-36.226-60.372 36.226C11.417 183.442.003 176.984 0 166.526V13.475C.003 3.017 11.418-3.441 20.387 1.938L80.76 38.16zm-19.858 115.586-28.89 17.34 54.896 32.947c.996.597 2.261-.126 2.264-1.285v-65.959zM14.239 12.19c-.995-.598-2.26.125-2.263 1.285v73.137l62.796 37.678V48.51z"/><path fill="#fff" d="m121.275 117.524-28.89 17.34 54.896 32.947c.996.597 2.261-.126 2.264-1.285v-65.959ZM14.24 12.19c-.996-.598-2.26.125-2.264 1.285v73.137l62.797 37.678V48.51Z"/></svg>
+      CrossPoint Reader
+    </h1>
 
     <div class="nav-links">
       <a href="/" class="active">Home</a>
@@ -126,30 +144,25 @@
       </div>
     </div>
 
-    <div class="card">
-      <p style="text-align: center; color: #95a5a6; margin: 0">
-        CrossPoint E-Reader • Open Source
-      </p>
-    </div>
+    <footer>CrossPoint Reader • Open Source</footer>
   <script>
     async function fetchStatus() {
       try {
         const response = await fetch('/api/status');
         if (!response.ok) {
-          throw new Error('Failed to fetch status: ' + response.status + ' ' + response.statusText);
+          throw new Error(`Failed to fetch status: ${response.status} ${response.statusText}`);
         }
         const data = await response.json();
         document.getElementById('version').textContent = data.version || 'N/A';
         document.getElementById('ip-address').textContent = data.ip || 'N/A';
         document.getElementById('free-heap').textContent = data.freeHeap
-          ? data.freeHeap.toLocaleString() + ' bytes'
+          ? `${data.freeHeap.toLocaleString()} bytes`
           : 'N/A';
       } catch (error) {
         console.error('Error fetching status:', error);
       }
     }
 
-    // Fetch status on page load
     window.onload = fetchStatus;
   </script>
   </body>
