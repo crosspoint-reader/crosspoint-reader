@@ -104,14 +104,25 @@ if (parsedSize != fileSize) {
 
 ## Bookmark files
 
-Each EPUB has a small number of fixed‑index bookmark files stored in the
-cache directory (`bookmark_0.bin`, `bookmark_1.bin`, …).
+Each EPUB has a bookmark file, stored in `/.crosspoint/bookmarks` with the filename format `<epub-key>.bookmarks`.
 
-``c++
-// bytes 0–1 : u16 current spine index
-// bytes 2–3 : u16 current page in spine
-// bytes 4–5 : u16 page count for the chapter
-// bytes 6..EOF : summary text bytes, max 40 bytes, no null terminator
+> Note: These aren't stored in the cache so that they are persisted beyond cache clearing.
+
+```c++
+// byte 0      : u8 bookmark file version
+// byte 1      : u8 number of bookmarks (limit of 256 bookmarks)
+```
+
+After the above, each bookmark follows the following format, saved in order of newest to oldest:
+
+```c++
+// byte  0      : percentage of total book completion
+// bytes 1-2    : current chapter total page count
+// bytes 3-4    : current chapter page progress
+// bytes 5-6    : spine index
+// bytes 7-8    : page index
+// bytes 9      : summary text length
+// bytes 10+    : summary text
 ```
 
 ## `section.bin`

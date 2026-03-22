@@ -387,7 +387,17 @@ Accessible by pressing **Confirm** while inside a book.
 
 ---
 
-## 6. Current Limitations & Roadmap
+## 6. Bookmarks
+
+Bookmarks can be created to quickly save and restore your place in a book.
+
+To create a bookmark, hold **Confirm** for 1 second while inside a book. A popup will appear letting you know a bookmark was created. Press **Back**, **Confirm** or change page to dismiss the popup.
+
+To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for 1 second, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
+
+There is a hard limit of 256 bookmarks per book. Attempting to create more will result in a "Too many bookmarks!" popup to appear.
+
+## 7. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
@@ -396,7 +406,7 @@ Please note that this firmware is currently in active development. The following
 
 ---
 
-## 7. Troubleshooting Issues & Escaping Bootloop
+## 8. Troubleshooting Issues & Escaping Bootloop
 
 If an issue or crash is encountered while using Crosspoint, feel free to raise an issue ticket and attach the serial monitor logs. The logs can be obtained by connecting the device to a computer and starting a serial monitor. Either [Serial Monitor](https://www.serialmonitor.org/) or the following command can be used:
 

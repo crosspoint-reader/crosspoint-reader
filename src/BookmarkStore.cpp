@@ -47,11 +47,11 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
     entry.spineIndex = data[5] | (data[6] << 8);
     entry.pageIndex = data[7] | (data[8] << 8);
 
-    uint8_t lenData[2];
-    if (file.read(lenData, 2) != 2) {
+    uint8_t lenData[1];
+    if (file.read(lenData, 1) != 1) {
       break;
     }
-    uint16_t summaryLen = lenData[0] | (lenData[1] << 8);
+    uint8_t summaryLen = lenData[0];
     std::vector<char> buf(summaryLen);
     if (file.read(buf.data(), summaryLen) != summaryLen) {
       break;
@@ -111,8 +111,8 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
 
     // truncate summary to 72 characters before saving
     uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(72));
-    uint8_t lenData[2] = { static_cast<uint8_t>(len & 0xFF), static_cast<uint8_t>((len >> 8) & 0xFF) };
-    if (file.write(lenData, 2) != 2) {
+    uint8_t lenData[1] = { static_cast<uint8_t>(len) };
+    if (file.write(lenData, 1) != 1) {
       file.close();
       return false;
     }
