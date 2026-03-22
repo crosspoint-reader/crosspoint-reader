@@ -190,13 +190,8 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
     requestUpdate();
     return;
   }
-  GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-  vTaskDelay(1500 / portTICK_PERIOD_MS);
-  ActivityResult r;
-  r.isCancelled = true;
-  setResult(std::move(r));
-  finish();
+  isShowingNotFound = true;
+  requestUpdate();
 }
 
 void DictionaryWordSelectActivity::loop() {
@@ -273,6 +268,22 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
+  // "Not found" popup — persists until Done or Back is pressed
+  if (isShowingNotFound) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      isShowingNotFound = false;
+      setResult(ActivityResult{});
+      finish();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      isShowingNotFound = false;
+      requestUpdate();
+      return;
+    }
+    return;
+  }
+
   // "Search alternate forms?" prompt shown after all direct lookups fail
   if (isAskingAltFormSearch) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -325,9 +336,7 @@ void DictionaryWordSelectActivity::loop() {
               }
             });
       } else {
-        GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
-        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-        vTaskDelay(1500 / portTICK_PERIOD_MS);
+        isShowingNotFound = true;
         requestUpdate();
       }
       return;
@@ -531,6 +540,15 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     return;
   }
 
+  // "Not found" popup — show until dismissed
+  if (isShowingNotFound) {
+    GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    return;
+  }
+
   // If looking up, show popup
   if (isLookingUp) {
     Rect popupLayout = GUI.drawPopup(renderer, tr(STR_LOOKING_UP));
@@ -564,8 +582,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
+  const auto labels = mappedInput.mapLabels("", "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

@@ -77,6 +77,9 @@ class DictionaryWordSelectActivity final : public Activity {
   std::vector<std::string> suggestionWords;
   int suggestionIndex = 0;
 
+  // State for persistent "not found" popup (dismissed by user via Done or Back)
+  bool isShowingNotFound = false;
+
   bool skipLoopDelay() override { return isLookingUp; }
 
   void extractWords();
