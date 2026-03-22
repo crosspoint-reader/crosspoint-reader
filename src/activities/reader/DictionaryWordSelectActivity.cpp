@@ -193,7 +193,10 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   GUI.drawPopup(renderer, tr(STR_DICT_NOT_FOUND));
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   vTaskDelay(1500 / portTICK_PERIOD_MS);
-  requestUpdate();
+  ActivityResult r;
+  r.isCancelled = true;
+  setResult(std::move(r));
+  finish();
 }
 
 void DictionaryWordSelectActivity::loop() {
@@ -561,7 +564,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CONFIRM), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

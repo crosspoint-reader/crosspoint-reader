@@ -344,7 +344,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
     uint8_t suffix[8];
     if (idx.read(suffix, 8) != 8) break;
 
-    int cmp = strcmp(wordBuf, word.c_str());
+    int cmp = cistrcmp(wordBuf, word.c_str());
     if (cmp == 0) {
       // Big-endian offset and size in .idx
       uint32_t dictOffset = (static_cast<uint32_t>(suffix[0]) << 24) | (static_cast<uint32_t>(suffix[1]) << 16) |
@@ -440,7 +440,7 @@ std::string Dictionary::resolveAltForm(const std::string& word) {
     uint8_t idxBuf[4];
     if (syn.read(idxBuf, 4) != 4) break;
 
-    int cmp = strcmp(wordBuf, word.c_str());
+    int cmp = cistrcmp(wordBuf, word.c_str());
     if (cmp == 0) {
       // Big-endian original word index in .idx
       uint32_t originalIdx = (static_cast<uint32_t>(idxBuf[0]) << 24) | (static_cast<uint32_t>(idxBuf[1]) << 16) |
@@ -736,7 +736,7 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
     if (idx.read(skip, 8) != 8) break;
 
     if (len == 0) continue;
-    if (strcmp(wordBuf, word.c_str()) == 0) continue;
+    if (cistrcmp(wordBuf, word.c_str()) == 0) continue;
 
     int dist = editDistance(wordBuf, word, maxDist);
     if (dist <= maxDist) {

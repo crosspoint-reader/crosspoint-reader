@@ -71,6 +71,7 @@ class DictHtmlRenderer {
     FORMAT_UNDERLINE,
     FORMAT_STRIKE,
     FORMAT_SMALL,
+    FORMAT_CODE,
     BLOCK_BREAK,
     BLOCK_QUOTE,
     LIST_ITEM,

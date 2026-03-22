@@ -38,8 +38,8 @@ DictHtmlRenderer::TagAction DictHtmlRenderer::classify(const XML_Char* name) {
   if (strcmp(name, "s") == 0) return TagAction::FORMAT_STRIKE;
   if (strcmp(name, "sup") == 0) return TagAction::FORMAT_SMALL;
   if (strcmp(name, "sub") == 0) return TagAction::FORMAT_SMALL;
-  if (strcmp(name, "code") == 0) return TagAction::FORMAT_SMALL;
-  if (strcmp(name, "tt") == 0) return TagAction::FORMAT_SMALL;
+  if (strcmp(name, "code") == 0) return TagAction::FORMAT_CODE;
+  if (strcmp(name, "tt") == 0) return TagAction::FORMAT_CODE;
   if (strcmp(name, "small") == 0) return TagAction::FORMAT_SMALL;
   if (strcmp(name, "big") == 0) return TagAction::FORMAT_SMALL;
 
@@ -222,7 +222,12 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
         break;
 
       case TagAction::FORMAT_SMALL:
-        // No visual change on e-ink
+        self->flushPending();
+        break;
+
+      case TagAction::FORMAT_CODE:
+        self->flushPending();
+        self->fmt.bold = true;
         break;
 
       case TagAction::BLOCK_BREAK:
@@ -309,6 +314,7 @@ void XMLCALL DictHtmlRenderer::onEnd(void* ud, const XML_Char* name) {
       case TagAction::FORMAT_UNDERLINE:
       case TagAction::FORMAT_STRIKE:
       case TagAction::FORMAT_SMALL:
+      case TagAction::FORMAT_CODE:
       case TagAction::VAR:
       case TagAction::SPAN:
       case TagAction::REGISTERED:
