@@ -916,7 +916,9 @@ void EpubReaderActivity::addBookmark() {
   int currentPage;
   {
     RenderLock lock(*this);
-    chapterProgress = section->pageCount > 0 ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount) : 0.0f;
+    chapterProgress = section->pageCount > 0
+                          ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                          : 0.0f;
     currentPage = section->currentPage;
   }
 
