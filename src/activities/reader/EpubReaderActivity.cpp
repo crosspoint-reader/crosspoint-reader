@@ -412,16 +412,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
-      const int currentPage = section ? section->currentPage : 0;
-      const int pageCount = section ? section->pageCount : 0;
-
-      std::string pageText;
-      if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
-        pageText = section->getTextFromSectionFile();
-      }
       startActivityForResult(
-          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                        currentPage, pageCount, pageText),
+          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
           progressChangeResultHandler);
     }
   }

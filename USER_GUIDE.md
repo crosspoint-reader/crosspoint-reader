@@ -28,8 +28,9 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
-  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
+  - [6. Bookmarks](#6-bookmarks)
+  - [7. Current Limitations \& Roadmap](#7-current-limitations--roadmap)
+  - [8. Troubleshooting Issues \& Escaping Bootloop](#8-troubleshooting-issues--escaping-bootloop)
 
 
 ## 1. Hardware Overview
