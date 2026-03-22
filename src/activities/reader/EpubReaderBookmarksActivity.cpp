@@ -137,7 +137,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
               auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
               return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" + std::to_string(bookmark.chapterPageCount) +
                     " - " + tocTitle;
-            }, [](int index) { return UIIcon::BookmarkFilled; });
+            }, [](int index) { return UIIcon::Bookmark; });
     } else {
       GUI.drawList(
           renderer, Rect{0, LINE_HEIGHT + contentY, pageWidth, LINE_HEIGHT * pageItems}, numBookmarks, selectorIndex,
@@ -150,7 +150,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
               auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
               return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" + std::to_string(bookmark.chapterPageCount) +
                     " - " + tocTitle;
-            }, [](int index) { return UIIcon::BookmarkFilled; });
+            }, [](int index) { return UIIcon::Bookmark; });
       
       GUI.drawHelpText(renderer, Rect{0, pageHeight - 75, pageWidth, LINE_HEIGHT}, tr(STR_HOLD_CONFIRM_TO_DELETE));
     }

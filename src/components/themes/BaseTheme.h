@@ -76,8 +76,7 @@ enum UIIcon {
   Library,
   Wifi,
   Hotspot,
-  Bookmark,
-  BookmarkFilled
+  Bookmark
 };
 
 // Default theme implementation (Classic Theme)
