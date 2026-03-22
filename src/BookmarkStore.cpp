@@ -28,8 +28,7 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
     return entries;
   }
   if (header[0] != FORMAT_VERSION) {
-    LOG_DBG(TAG, "Skipping bookmark file with version %d (expected %d): %s", header[0],
-                  FORMAT_VERSION, path.c_str());
+    LOG_DBG(TAG, "Skipping bookmark file with version %d (expected %d): %s", header[0], FORMAT_VERSION, path.c_str());
     file.close();
     return entries;
   }
@@ -75,7 +74,7 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
     LOG_DBG(TAG, "Cannot open bookmark file for writing: %s", path.c_str());
     return false;
   }
-  uint8_t header[2] = {FORMAT_VERSION, static_cast<uint8_t>(entries.size())};
+  const uint8_t header[2] = {FORMAT_VERSION, static_cast<uint8_t>(entries.size())};
   if (file.write(header, 2) != 2) {
     file.close();
     return false;
@@ -99,19 +98,19 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
 
     // trim summary of double whitespaces and newlines, and trim whitespace from start and end
     std::string summary = entry.summary;
-    summary.erase(std::unique(summary.begin(), summary.end(),
-                              [](char a, char b) { return std::isspace(a) && std::isspace(b); }),
-                  summary.end());
+    summary.erase(
+        std::unique(summary.begin(), summary.end(), [](char a, char b) { return std::isspace(a) && std::isspace(b); }),
+        summary.end());
     summary.erase(std::remove(summary.begin(), summary.end(), '\n'), summary.end());
-    summary.erase(summary.begin(), std::find_if(summary.begin(), summary.end(),
-                                                [](unsigned char ch) { return !std::isspace(ch); }));
-    summary.erase(std::find_if(summary.rbegin(), summary.rend(),
-                                                [](unsigned char ch) { return !std::isspace(ch); }).base(),
-                  summary.end());
+    summary.erase(summary.begin(),
+                  std::find_if(summary.begin(), summary.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+    summary.erase(
+        std::find_if(summary.rbegin(), summary.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(),
+        summary.end());
 
     // truncate summary to 72 characters before saving
-    uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(72));
-    uint8_t lenData[1] = { static_cast<uint8_t>(len) };
+    const uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(72));
+    const uint8_t lenData[1] = {static_cast<uint8_t>(len)};
     if (file.write(lenData, 1) != 1) {
       file.close();
       return false;
@@ -136,8 +135,7 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
   if (std::any_of(entries.begin(), entries.end(), [&entry](const BookmarkEntry& existing) {
         return existing.spineIndex == entry.spineIndex && existing.pageIndex == entry.pageIndex;
       })) {
-    LOG_DBG(TAG, "Bookmark already exists at spine %d page %d", entry.spineIndex,
-                  entry.pageIndex);
+    LOG_DBG(TAG, "Bookmark already exists at spine %d page %d", entry.spineIndex, entry.pageIndex);
     return true;
   }
 
@@ -151,8 +149,7 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
 
   const bool ok = writeBookmarks(path, entries);
   if (ok) {
-    LOG_DBG(TAG, "Bookmark added at %d%% (total: %d)", entry.bookPercent,
-                  static_cast<int>(entries.size()));
+    LOG_DBG(TAG, "Bookmark added at %d%% (total: %d)", entry.bookPercent, static_cast<int>(entries.size()));
   }
   return ok;
 }
@@ -169,8 +166,7 @@ bool BookmarkStore::deleteBookmark(const std::string& bookPath, int index) {
   entries.erase(entries.begin() + index);
   const bool ok = writeBookmarks(path, entries);
   if (ok) {
-    LOG_DBG(TAG, "Bookmark deleted at %d%% (remaining: %d)", bookPercent,
-                  static_cast<int>(entries.size()));
+    LOG_DBG(TAG, "Bookmark deleted at %d%% (remaining: %d)", bookPercent, static_cast<int>(entries.size()));
   }
   return ok;
 }

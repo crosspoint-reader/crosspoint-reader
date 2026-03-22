@@ -9,7 +9,7 @@
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
-} 
+}
 
 // Layout constants used in renderScreen
 const int LINE_HEIGHT = 60;
@@ -97,10 +97,11 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int contentWidth = pageWidth - hintGutterWidth;
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int hintGutterBottom = isPortrait ? 75 : 40; // Reserve vertical space for button hints at the bottom
+  const int hintGutterBottom = isPortrait ? 75 : 40;  // Reserve vertical space for button hints at the bottom
   const int contentY = hintGutterHeight;
-  const int listY = contentY + LINE_HEIGHT; // Reserve vertical space for title
-  const int listHeight = pageHeight - hintGutterBottom - LINE_HEIGHT; // Reserve vertical space for title and button hints
+  const int listY = contentY + LINE_HEIGHT;  // Reserve vertical space for title
+  const int listHeight =
+      pageHeight - hintGutterBottom - LINE_HEIGHT;  // Reserve vertical space for title and button hints
   const int numBookmarks = bookmarks.size();
 
   // Manual centering to honor content gutters.
@@ -109,37 +110,38 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_BOOKMARKS), true, EpdFontFamily::BOLD);
 
   const auto getBookmarkTitle = [this](int index) {
-              return bookmarks.at(confirmingDelete ? selectorIndex : index).summary;
-            };
+    return bookmarks.at(confirmingDelete ? selectorIndex : index).summary;
+  };
   const auto getBookmarkSubtitle = [this](int index) {
-              auto bookmark = bookmarks.at(confirmingDelete ? selectorIndex : index);
-              auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
-              auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-              return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" + std::to_string(bookmark.chapterPageCount) +
-                    " - " + tocTitle;
-            };
-  const auto getBookmarkIcon = [isPortrait](int index) { 
+    auto bookmark = bookmarks.at(confirmingDelete ? selectorIndex : index);
+    auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
+    auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
+    return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" +
+           std::to_string(bookmark.chapterPageCount) + " - " + tocTitle;
+  };
+  const auto getBookmarkIcon = [isPortrait](int index) {
     // only enabled icon in portrait mode due to limitation with rotating icons for other orientations
     return isPortrait ? UIIcon::Bookmark : UIIcon::None;
   };
 
   if (numBookmarks > 0) {
     if (confirmingDelete) {
-      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT}, tr(STR_CONFIRM_DELETE_BOOKMARK));
+      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
+                       tr(STR_CONFIRM_DELETE_BOOKMARK));
 
       // render list with just the selected item for the user to confirm to delete
-      GUI.drawList(
-          renderer, Rect{contentX, pageHeight / 2, contentWidth, LINE_HEIGHT}, 1, 0, 
-            getBookmarkTitle, getBookmarkSubtitle, getBookmarkIcon);
+      GUI.drawList(renderer, Rect{contentX, pageHeight / 2, contentWidth, LINE_HEIGHT}, 1, 0, getBookmarkTitle,
+                   getBookmarkSubtitle, getBookmarkIcon);
     } else {
-      GUI.drawList(
-          renderer, Rect{contentX, listY, contentWidth, listHeight}, numBookmarks, selectorIndex,
-             getBookmarkTitle, getBookmarkSubtitle, getBookmarkIcon);
-      
-      GUI.drawHelpText(renderer, Rect{contentX, pageHeight - hintGutterBottom, contentWidth, LINE_HEIGHT}, tr(STR_HOLD_CONFIRM_TO_DELETE));
+      GUI.drawList(renderer, Rect{contentX, listY, contentWidth, listHeight}, numBookmarks, selectorIndex,
+                   getBookmarkTitle, getBookmarkSubtitle, getBookmarkIcon);
+
+      GUI.drawHelpText(renderer, Rect{contentX, pageHeight - hintGutterBottom, contentWidth, LINE_HEIGHT},
+                       tr(STR_HOLD_CONFIRM_TO_DELETE));
     }
   } else {
-    GUI.drawHelpText(renderer, Rect{contentX, LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT}, tr(STR_BOOKMARK_INSTRUCTIONS));
+    GUI.drawHelpText(renderer, Rect{contentX, LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
+                     tr(STR_BOOKMARK_INSTRUCTIONS));
   }
 
   const auto backLabel = confirmingDelete ? tr(STR_CANCEL) : tr(STR_BACK);

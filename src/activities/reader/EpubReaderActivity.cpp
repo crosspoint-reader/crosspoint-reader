@@ -149,23 +149,24 @@ void EpubReaderActivity::loop() {
         const int totalPages = section ? section->pageCount : 0;
         float bookProgress = 0.0f;
         if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-          const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+          const float chapterProgress =
+              static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
           bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
         }
         const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
         startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                                  renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                                  SETTINGS.orientation, !currentPageFootnotes.empty()),
-                              [this](const ActivityResult& result) {
-                                // Always apply orientation change even if the menu was cancelled
-                                const auto& menu = std::get<MenuResult>(result.data);
-                                applyOrientation(menu.orientation);
-                                toggleAutoPageTurn(menu.pageTurnOption);
-                                if (!result.isCancelled) {
-                                  onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                                }
-                              });
-        }
+                                   renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
+                                   bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               [this](const ActivityResult& result) {
+                                 // Always apply orientation change even if the menu was cancelled
+                                 const auto& menu = std::get<MenuResult>(result.data);
+                                 applyOrientation(menu.orientation);
+                                 toggleAutoPageTurn(menu.pageTurnOption);
+                                 if (!result.isCancelled) {
+                                   onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                                 }
+                               });
+      }
     }
   }
 
@@ -193,7 +194,7 @@ void EpubReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-  
+
   // Clear any status bar override on page turn
   if (prevTriggered || nextTriggered) {
     RenderLock lock(*this);
@@ -923,6 +924,7 @@ void EpubReaderActivity::addBookmark() {
   int currentPage;
   {
     RenderLock lock(*this);
+    chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
     currentPage = section->currentPage;
   }
 
