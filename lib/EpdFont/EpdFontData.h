@@ -50,7 +50,7 @@ typedef struct {
   uint32_t compressedSize;    ///< Compressed DEFLATE stream size
   uint32_t uncompressedSize;  ///< Decompressed size
   uint16_t glyphCount;        ///< Number of glyphs in this group
-  uint16_t firstGlyphIndex;   ///< First glyph index in the global glyph array
+  uint32_t firstGlyphIndex;   ///< First glyph index in the global glyph array
 } EpdFontGroup;
 
 /// Glyph interval structure
@@ -86,6 +86,7 @@ typedef struct {
   bool is2Bit;
   const EpdFontGroup* groups;                 ///< NULL for uncompressed fonts
   uint16_t groupCount;                        ///< 0 for uncompressed fonts
+  const uint16_t* glyphToGroup;               ///< Per-glyph group ID (nullptr for contiguous-group fonts)
   const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
   const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
   const int8_t* kernMatrix;              ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels

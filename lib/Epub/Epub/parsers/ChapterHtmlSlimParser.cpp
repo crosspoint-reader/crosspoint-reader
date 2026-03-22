@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Utf8.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -758,9 +759,30 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
     }
 
-    // If we're about to run out of space, then cut the word off and start a new one
+    // If we're about to run out of space, then cut the word off and start a new one.
+    // For CJK text (no spaces), this is the primary word-breaking mechanism.
+    // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
+    // otherwise the trailing bytes become orphaned continuation bytes that the
+    // decoder can't interpret.
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      self->flushPartWordBuffer();
+      int safeLen = utf8SafeTruncateBuffer(self->partWordBuffer, self->partWordBufferIndex);
+
+      if (safeLen < self->partWordBufferIndex && safeLen > 0) {
+        // Incomplete UTF-8 sequence at the end — save it before flushing
+        int overflow = self->partWordBufferIndex - safeLen;
+        char saved[4];
+        for (int j = 0; j < overflow; j++) {
+          saved[j] = self->partWordBuffer[safeLen + j];
+        }
+        self->partWordBufferIndex = safeLen;
+        self->flushPartWordBuffer();
+        for (int j = 0; j < overflow; j++) {
+          self->partWordBuffer[j] = saved[j];
+        }
+        self->partWordBufferIndex = overflow;
+      } else {
+        self->flushPartWordBuffer();
+      }
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
@@ -772,8 +794,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
+    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
+    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
+                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
+                                        : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, self->viewportWidth,
+        self->renderer, self->fontId, effectiveWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
   }
 }
@@ -1019,6 +1045,11 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
