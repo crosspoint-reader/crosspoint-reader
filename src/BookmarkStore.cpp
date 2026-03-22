@@ -109,8 +109,8 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
                                                 [](unsigned char ch) { return !std::isspace(ch); }).base(),
                   summary.end());
 
-    // truncate summary to 48 characters before saving
-    uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(48));
+    // truncate summary to 72 characters before saving
+    uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(72));
     uint8_t lenData[2] = { static_cast<uint8_t>(len & 0xFF), static_cast<uint8_t>((len >> 8) & 0xFF) };
     if (file.write(lenData, 2) != 2) {
       file.close();

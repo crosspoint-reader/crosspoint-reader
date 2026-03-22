@@ -65,6 +65,7 @@ struct ThemeMetrics {
 };
 
 enum UIIcon {
+  None = 0,
   Folder,
   Text,
   Image,

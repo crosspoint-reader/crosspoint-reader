@@ -19,10 +19,6 @@ class EpubReaderBookmarksActivity final : public Activity {
   std::vector<BookmarkEntry> bookmarks;
   bool confirmingDelete = false;
 
-  // Number of items that fit on a page, derived from logical screen height.
-  // This adapts automatically when switching between portrait and landscape.
-  int getPageItems() const;
-
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        const std::shared_ptr<Epub>& epub, const std::string& epubPath,
