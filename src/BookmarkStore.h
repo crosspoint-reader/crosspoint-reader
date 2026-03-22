@@ -30,7 +30,7 @@ class BookmarkStore {
   // Delete a bookmark at the given index. Returns true on success.
   static bool deleteBookmark(const std::string& bookPath, int index);
 
-  static const int LIMIT = 256;
+  static const int LIMIT = 255;
 
  private:
   static std::string getBookmarkPath(const std::string& bookPath);

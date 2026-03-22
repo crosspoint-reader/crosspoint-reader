@@ -110,7 +110,7 @@ Each EPUB has a bookmark file, stored in `/.crosspoint/bookmarks` with the filen
 
 ```c++
 // byte 0      : u8 bookmark file version
-// byte 1      : u8 number of bookmarks (limit of 256 bookmarks)
+// byte 1      : u8 number of bookmarks (limit of 255 bookmarks)
 ```
 
 After the above, each bookmark follows the following format, saved in order of newest to oldest:

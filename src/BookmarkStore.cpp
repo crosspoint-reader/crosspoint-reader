@@ -65,7 +65,7 @@ std::vector<BookmarkEntry> BookmarkStore::loadBookmarks(const std::string& bookP
 }
 
 bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<BookmarkEntry>& entries) {
-  if (entries.size() > 255) {
+  if (entries.size() > LIMIT) {
     LOG_DBG(TAG, "Cannot write bookmarks: too many entries (%d)", static_cast<int>(entries.size()));
     return false;
   }
@@ -109,13 +109,13 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
         summary.end());
 
     // truncate summary to 72 characters before saving
-    const uint16_t len = std::min(entry.summary.size(), static_cast<size_t>(72));
+    const uint16_t len = std::min(summary.size(), static_cast<size_t>(72));
     const uint8_t lenData[1] = {static_cast<uint8_t>(len)};
     if (file.write(lenData, 1) != 1) {
       file.close();
       return false;
     }
-    if (file.write(entry.summary.data(), len) != len) {
+    if (file.write(summary.data(), len) != len) {
       file.close();
       return false;
     }
@@ -139,7 +139,7 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
     return true;
   }
 
-  // Reject if at capacity (uint8_t count field supports max 256)
+  // Reject if at capacity (uint8_t count field supports max 255)
   if (entries.size() >= LIMIT) {
     LOG_DBG(TAG, "Bookmark limit reached (%d)", LIMIT);
     return false;
