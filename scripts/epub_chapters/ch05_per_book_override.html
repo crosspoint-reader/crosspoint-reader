@@ -71,6 +71,7 @@ complete and the book dictionary must be set to <em>mini-prep</em>.</p>
 <li>Press <em>Confirm</em>.</li>
 <li>All four steps complete with [OK]. <em>Preparation complete</em>.</li>
 <li>Picker closes. Open the reader menu. <em>Look Up Word</em> is visible.</li>
+<li>Verify the <em>Book Dictionary</em> row shows <em>mini-prep</em> on the right side.</li>
 </ol>
 <h3>Words</h3>
 <ul>
@@ -97,4 +98,20 @@ selection still shown as active.</p>
 <li>Screen shows: <em>User cancelled</em></li>
 <li>The dictionary picker returns. <em>mini-prep</em> is still shown as selected.</li>
 <li>Press <em>&#171; Back</em> to close the picker without changing the book dictionary.</li>
+</ol>
+
+<h2>Test F: Global dictionary restored when book is closed</h2>
+<p>The per-book dictionary override must not affect the global dictionary setting.
+Closing the book must restore the global dictionary to whatever it was before
+the book was opened.</p>
+<h3>Note</h3>
+<p>The per-book dictionary for this book is currently <em>mini-prep</em> (set in Test D).
+The global dictionary in Settings is whatever was set before starting this chapter.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open Settings -> Dictionary. Note which dictionary is currently selected as the global setting.</li>
+<li>Return to this book. The per-book dictionary (<em>mini-prep</em>) is active.</li>
+<li>Press <em>&#171; Back</em> (long press) to close the book and return to the home screen.</li>
+<li>Open Settings -> Dictionary.</li>
+<li>Verify the global dictionary is unchanged from step 1.</li>
 </ol>

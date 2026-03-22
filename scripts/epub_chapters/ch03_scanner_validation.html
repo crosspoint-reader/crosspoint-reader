@@ -129,3 +129,32 @@ Pressing <em>Back</em> from the raw view must return to the parsed view.</p>
 <li>Press <em>Back</em>. Parsed info view reappears.</li>
 <li>Press <em>Back</em>. Picker reappears.</li>
 </ol>
+
+<h2>Test J: Compressed dictionary shows "Compressed" status line</h2>
+<p>The info view for a compressed dictionary must include a "Compressed"
+status line in addition to the standard metadata fields.</p>
+<h3>Dictionary</h3>
+<p><em>mini-prep</em> (do not select it -- long-press only)</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Long-press <em>mini-prep</em>. Parsed info view appears.</li>
+<li>Verify a <em>Compressed</em> status line is shown.</li>
+<li>Press <em>Back</em>. Picker reappears.</li>
+</ol>
+
+<h2>Test K: "None found" when no dictionaries are present</h2>
+<p>When no valid dictionary folders exist on the SD card, the picker
+must show a "None found" message rather than an empty list.</p>
+<h3>Note</h3>
+<p>This test requires temporarily removing all dictionary folders from
+the SD card. Move them to a temporary folder on the card or on your
+computer, then run the test, then move them back before continuing.</p>
+<h3>Steps</h3>
+<ol>
+<li>Move all dictionary folders off the SD card (or into a non-dictionary location).</li>
+<li>Open Settings -> Dictionary.</li>
+<li>Verify the picker shows: <em>None found</em></li>
+<li>Press <em>&#171; Back</em>.</li>
+<li>Restore all dictionary folders to their original location before continuing.</li>
+</ol>

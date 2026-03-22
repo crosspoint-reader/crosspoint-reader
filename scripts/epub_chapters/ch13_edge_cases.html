@@ -1,7 +1,7 @@
 <h1>13. Edge Cases</h1>
 
-<p>These tests cover back navigation, SD card state changes, and disabling
-the dictionary.</p>
+<p>These tests cover back navigation, non-word selection, SD card state
+changes, and disabling the dictionary.</p>
 <h3>Dictionary</h3>
 <p><em>full</em></p>
 
@@ -25,7 +25,21 @@ to exactly the same page position with no layout shift.</p>
 <li>valley</li>
 </ul>
 
-<h2>Test B: Dictionary removed mid-session</h2>
+<h2>Test B: Confirm on a non-word shows brief popup</h2>
+<p>Selecting a punctuation mark or number with <em>Confirm</em> must show a brief
+"no word" popup and return to the word-select screen. No lookup must be
+attempted and no crash must occur.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open word select on this page.</li>
+<li>Navigate to a punctuation mark or number (such as a period, hyphen, or
+    the "3." in the list below).</li>
+<li>Press <em>Confirm</em>.</li>
+<li>A brief "no word" popup appears.</li>
+<li>Word-select screen returns. No crash.</li>
+</ol>
+
+<h2>Test C: Dictionary removed mid-session</h2>
 <p>When the SD card is removed and reinserted without changing the
 dictionary setting, attempting a lookup must not crash the device.
 Acceptable outcomes are an error popup, the dictionary UI becoming
@@ -44,9 +58,9 @@ hidden, or an automatic reset to None.</p>
 <li>meadow</li>
 </ul>
 
-<h2>Test C: None selection disables dictionary UI</h2>
+<h2>Test D: None selection disables dictionary UI</h2>
 <p>After selecting None, the dictionary word-select UI must no longer
-be accessible from the reader. Selecting <em>basic</em> prepares for Chapter 13.</p>
+be accessible from the reader. Selecting <em>basic</em> prepares for Chapter 14.</p>
 <h3>Steps</h3>
 <ol>
 <li>Navigate to Settings -> Dictionary. Select None.</li>

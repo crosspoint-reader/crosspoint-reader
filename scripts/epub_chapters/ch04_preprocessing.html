@@ -5,13 +5,18 @@ Open Settings -> Dictionary for each test.
 No word lookups are needed in this chapter.</p>
 
 <h2>Test A: Generate dictionary offset file only</h2>
-<p>Confirmation screen must list exactly one step.
-That step must complete with [OK] and <em>Preparation complete</em> must appear.</p>
+<p>This test first verifies that pressing <em>&#171; Back</em> at the confirmation screen
+cancels without starting any processing, then completes the preparation.
+Confirmation screen must list exactly one step. That step must complete with
+[OK] and <em>Preparation complete</em> must appear.</p>
 <h3>Dictionary</h3>
 <p><em>gen-idx</em></p>
 <h3>Steps</h3>
 <ol>
 <li>Select <em>gen-idx</em> in the picker.</li>
+<li>Confirmation screen lists: <em>Generate dictionary offset file</em></li>
+<li>Press <em>&#171; Back</em>. Picker returns. No processing started.</li>
+<li>Select <em>gen-idx</em> again.</li>
 <li>Confirmation screen lists: <em>Generate dictionary offset file</em></li>
 <li>Press <em>Confirm</em>.</li>
 <li>Step completes: [OK] <em>Generate dictionary offset file</em></li>

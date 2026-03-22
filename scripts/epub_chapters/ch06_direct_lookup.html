@@ -31,7 +31,19 @@ definition screen directly with no alternate forms prompt or suggestions screen.
 <li>zenith</li>
 </ul>
 
-<h2>Test B: Done button on direct hit</h2>
+<h2>Test B: Multi-page definition navigation</h2>
+<p>The word <em>chronicle</em> has a long definition that spans more than one page.
+The page navigation controls must become active and both forward and backward
+navigation must work without a crash.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>chronicle</em>. Definition screen appears on page 1.</li>
+<li>Press <em>PageForward</em> or <em>Right</em>. Page 2 appears.</li>
+<li>Press <em>PageBack</em> or <em>Left</em>. Page 1 reappears.</li>
+<li>Press <em>Done</em>. Reader returns.</li>
+</ol>
+
+<h2>Test C: Done button on direct hit</h2>
 <p>After any successful lookup from Test A, the <em>Confirm</em> button on the
 definition screen must be labelled <em>Done</em>. This confirms showDoneButton
 is set correctly for direct hits.</p>

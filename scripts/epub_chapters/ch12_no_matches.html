@@ -6,9 +6,10 @@ with the not-found popup.</p>
 <h3>Dictionary</h3>
 <p><em>full</em></p>
 
-<h2>Test A: Full failure sequence -- Confirm at alternate forms prompt</h2>
+<h2>Test A: Full failure sequence -- both popup dismissal paths</h2>
 <p>Every lookup stage must fail cleanly and end at the not-found popup.
-No crash at any step.</p>
+Both dismissal paths must work: <em>&#171; Back</em> returns to word-select;
+<em>Confirm</em> (Done) exits the lookup entirely. No crash at any step.</p>
 <h3>Steps</h3>
 <ol>
 <li>Select xzqwvb.</li>
@@ -17,6 +18,9 @@ No crash at any step.</p>
 <li>No alternate form found.</li>
 <li>Fuzzy search finds no neighbours.</li>
 <li>Not-found popup appears: <em>Word not found</em></li>
+<li>Press <em>&#171; Back</em>. Word-select screen returns.</li>
+<li>Select xzqwvb again. Not-found popup appears again.</li>
+<li>Press <em>Confirm</em> (Done). Reader returns.</li>
 </ol>
 <h3>Additional</h3>
 <ul>
