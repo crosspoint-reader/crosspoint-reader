@@ -19,12 +19,17 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   // Calculate overall book progress (0.0-1.0)
   result.percentage = epub->calculateProgress(pos.spineIndex, intraSpineProgress);
 
-  // Generate the best available XPath for the current chapter position.
-  // Prefer element-level XPaths from a lightweight XHTML reparse; fall back
-  // to a synthetic chapter-level path if parsing fails.
-  result.xpath = ChapterXPathIndexer::findXPathForProgress(epub, pos.spineIndex, intraSpineProgress);
-  if (result.xpath.empty()) {
-    result.xpath = generateXPath(pos.spineIndex);
+  // Generate XPath for the current position.
+  // Prefer paragraph index from the section cache LUT (exact element mapping) over
+  // byte-offset estimation (which can drift in chapters with non-uniform content density).
+  if (pos.hasParagraphIndex && pos.paragraphIndex > 0) {
+    result.xpath = "/body/DocFragment[" + std::to_string(pos.spineIndex + 1) + "]/body/p[" +
+                   std::to_string(pos.paragraphIndex) + "]";
+  } else {
+    result.xpath = ChapterXPathIndexer::findXPathForProgress(epub, pos.spineIndex, intraSpineProgress);
+    if (result.xpath.empty()) {
+      result.xpath = generateXPath(pos.spineIndex);
+    }
   }
 
   // Get chapter info for logging
@@ -63,6 +68,12 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       result.spineIndex = xpathSpineIndex;
       resolvedIntraSpineProgress = intraFromXPath;
       usedXPathMapping = true;
+    }
+    // Extract paragraph index from XPath for direct page lookup via section cache
+    uint16_t pIndex = 0;
+    if (ChapterXPathIndexer::tryExtractParagraphIndexFromXPath(koPos.xpath, pIndex)) {
+      result.paragraphIndex = pIndex;
+      result.hasParagraphIndex = true;
     }
   }
 

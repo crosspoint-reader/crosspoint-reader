@@ -36,8 +36,10 @@ via a KOReader contributor mapping spine items to DocFragment numbers.
 Implemented in `ProgressMapper::toKOReader`.
 
 1. Compute overall `percentage` from chapter/page.
-2. Attempt to compute a real element-level XPath via `ChapterXPathIndexer::findXPathForProgress`.
-3. If XPath extraction fails, fallback to synthetic chapter path:
+2. If a paragraph index is available from the section cache LUT (`CrossPointPosition::hasParagraphIndex`),
+   generate an XPath directly: `/body/DocFragment[spineIndex + 1]/body/p[paragraphIndex]`.
+3. Otherwise, attempt byte-offset estimation via `ChapterXPathIndexer::findXPathForProgress`.
+4. If XPath extraction fails, fallback to synthetic chapter path:
    - `/body/DocFragment[spineIndex + 1]/body`
 
 ### KOReader -> CrossPoint
@@ -46,8 +48,15 @@ Implemented in `ProgressMapper::toCrossPoint`.
 
 1. Attempt to parse `DocFragment[N]` from incoming XPath; convert N to 0-based `spineIndex = N - 1`.
 2. If valid, attempt XPath-to-offset mapping via `ChapterXPathIndexer::findProgressForXPath`.
-3. Convert resolved intra-spine progress to page estimate.
-4. If XPath path is invalid/unresolvable, fallback to percentage-based chapter/page estimation.
+3. Extract paragraph index from XPath via `ChapterXPathIndexer::tryExtractParagraphIndexFromXPath`
+   (e.g. `/body/DocFragment[7]/body/p[685]/text().96` → `paragraphIndex = 685`).
+4. Convert resolved intra-spine progress to page estimate.
+5. If XPath path is invalid/unresolvable, fallback to percentage-based chapter/page estimation.
+
+When a paragraph index is available, `EpubReaderActivity` refines the page estimate using
+the section cache's per-page paragraph LUT (`Section::getPageForParagraphIndex`). This finds
+the first page whose recorded paragraph index is >= the target, giving a more accurate
+landing position than byte-offset-based estimation alone.
 
 ## ChapterXPathIndexer Design
 
@@ -81,9 +90,27 @@ The implementation intentionally avoids full DOM storage.
 - Free XML parser and chapter byte buffer on all success/failure paths.
 - No persistent cache structures are introduced by this module.
 
+## Paragraph Index LUT
+
+The section cache stores a per-page paragraph index LUT built during page layout
+(`ChapterHtmlSlimParser`). Each entry records the 1-based `<p>` sibling index
+(direct children of `<body>`, matching XPath convention) at the time each page was completed.
+
+This enables two lookups without reparsing:
+
+- **XPath → page** (`Section::getPageForParagraphIndex`): finds the first page where the
+  recorded paragraph index >= target. Used when applying remote KOReader progress.
+- **Page → XPath** (`Section::getParagraphIndexForPage`): returns the paragraph index for
+  a given page. Used when uploading local progress to KOReader.
+
+The paragraph counter in `ChapterHtmlSlimParser` counts **all** `<p>` elements at body-child
+level, including `display:none` elements. This matches `ChapterXPathIndexer` and crengine's
+standard XPath same-name sibling counting.
+
 ## Known Limitations
 
 - Page number on reverse mapping is still an estimate (renderer differences).
+  The paragraph LUT refines this but cannot guarantee exact page matching.
 - XPath mapping intentionally uses original spine XHTML while pagination comes from distilled renderer output, so minor roundtrip page drift is expected.
 - Image-only/low-text chapters may yield coarse anchors.
 - Extremely malformed XHTML can force fallback behavior.

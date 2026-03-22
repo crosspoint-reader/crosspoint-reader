@@ -599,3 +599,43 @@ bool ChapterXPathIndexer::tryExtractSpineIndexFromXPath(const std::string& xpath
   outSpineIndex = static_cast<int>(parsed) - 1;
   return true;
 }
+
+bool ChapterXPathIndexer::tryExtractParagraphIndexFromXPath(const std::string& xpath, uint16_t& outParagraphIndex) {
+  outParagraphIndex = 0;
+  if (xpath.empty()) {
+    return false;
+  }
+
+  const std::string normalized = normalizeXPath(xpath);
+
+  // Find /p[ after the second /body/ (the inner body inside DocFragment)
+  const std::string bodyKey = "/body";
+  size_t secondBody = normalized.find(bodyKey);
+  if (secondBody != std::string::npos) {
+    secondBody = normalized.find(bodyKey, secondBody + bodyKey.size());
+  }
+
+  const std::string pKey = "/p[";
+  const size_t pos = normalized.find(pKey, secondBody != std::string::npos ? secondBody : 0);
+  if (pos == std::string::npos) {
+    return false;
+  }
+
+  const size_t start = pos + pKey.size();
+  size_t end = start;
+  while (end < normalized.size() && std::isdigit(static_cast<unsigned char>(normalized[end]))) {
+    end++;
+  }
+
+  if (end == start || end >= normalized.size() || normalized[end] != ']') {
+    return false;
+  }
+
+  const long parsed = std::strtol(normalized.substr(start, end - start).c_str(), nullptr, 10);
+  if (parsed < 1 || parsed > UINT16_MAX) {
+    return false;
+  }
+
+  outParagraphIndex = static_cast<uint16_t>(parsed);
+  return true;
+}

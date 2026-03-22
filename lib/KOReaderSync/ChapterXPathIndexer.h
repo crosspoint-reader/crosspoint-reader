@@ -64,4 +64,16 @@ class ChapterXPathIndexer {
    *         (converted to 0-based outSpineIndex); false otherwise
    */
   static bool tryExtractSpineIndexFromXPath(const std::string& xpath, int& outSpineIndex);
+
+  /**
+   * Extract the paragraph index from a KOReader XPath.
+   * Looks for the first /p[N] segment after /body/ and returns N (1-based).
+   *
+   * Example: "/body/DocFragment[7]/body/p[685]/text().96" → outParagraphIndex = 685
+   *
+   * @param xpath KOReader XPath
+   * @param outParagraphIndex 1-based paragraph index
+   * @return true if a /p[N] segment was found
+   */
+  static bool tryExtractParagraphIndexFromXPath(const std::string& xpath, uint16_t& outParagraphIndex);
 };

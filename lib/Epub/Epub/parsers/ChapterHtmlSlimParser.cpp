@@ -491,6 +491,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // Track body element depth for paragraph index counting
+  if (strcmp(name, "body") == 0 && self->xpathBodyDepth < 0) {
+    self->xpathBodyDepth = self->depth;
+  }
+
+  // Count <p> sibling indices at body-child level. Must happen BEFORE the display:none
+  // check so that hidden <p> elements are still counted, matching ChapterXPathIndexer's
+  // counting (pure XML, no CSS). This ensures paragraph indices in the section cache LUT
+  // align with KOReader's crengine XPath indices.
+  if (self->xpathBodyDepth >= 0 && self->depth == self->xpathBodyDepth + 1 && strcmp(name, "p") == 0) {
+    self->xpathParagraphIndex++;
+  }
+
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
     // start skip
     self->skipUntilDepth = self->depth;
@@ -1062,6 +1075,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
     }
+    paragraphIndexPerPage.push_back(xpathParagraphIndex);
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset();
@@ -1080,6 +1094,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
+    paragraphIndexPerPage.push_back(xpathParagraphIndex);
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset(new Page());

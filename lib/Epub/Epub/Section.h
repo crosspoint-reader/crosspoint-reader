@@ -42,4 +42,14 @@ class Section {
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
+
+  // Look up the page number for a paragraph index (1-based, from XPath p[N]).
+  // Uses the per-page paragraph index LUT stored in the section cache.
+  // Returns nullopt if the paragraph LUT is not available (old cache format).
+  std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;
+
+  // Look up the paragraph index for a given page number.
+  // Returns the 1-based paragraph index of the last <p> element on or before the page.
+  // Returns nullopt if the paragraph LUT is not available (old cache format).
+  std::optional<uint16_t> getParagraphIndexForPage(uint16_t page) const;
 };

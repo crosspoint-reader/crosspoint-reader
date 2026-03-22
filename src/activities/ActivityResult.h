@@ -39,7 +39,9 @@ struct PageResult {
 
 struct SyncResult {
   int spineIndex = 0;
-  int page = 0;
+  int page = 0;                    // estimated page (fallback)
+  uint16_t paragraphIndex = 0;     // 1-based <p> index from XPath
+  bool hasParagraphIndex = false;  // true when paragraphIndex is available
 };
 
 enum class NetworkMode;

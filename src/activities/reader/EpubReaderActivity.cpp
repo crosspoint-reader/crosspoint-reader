@@ -395,9 +395,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
         const int totalPages = section ? section->pageCount : 0;
+        // Look up paragraph index from section cache for accurate XPath generation on upload
+        uint16_t paragraphIdx = 0;
+        bool hasParagraphIdx = false;
+        if (section) {
+          if (const auto pIdx = section->getParagraphIndexForPage(currentPage)) {
+            paragraphIdx = *pIdx;
+            hasParagraphIdx = true;
+          }
+        }
         startActivityForResult(
             std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages),
+                                                   currentPage, totalPages, paragraphIdx, hasParagraphIdx),
             [this](const ActivityResult& result) {
               if (!result.isCancelled) {
                 const auto& sync = std::get<SyncResult>(result.data);
@@ -405,6 +414,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                   RenderLock lock(*this);
                   currentSpineIndex = sync.spineIndex;
                   nextPageNumber = sync.page;
+                  if (sync.hasParagraphIndex) {
+                    pendingParagraphLookup = true;
+                    pendingParagraphIndex = sync.paragraphIndex;
+                  }
                   section.reset();
                 }
               }
@@ -621,6 +634,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
       }
       pendingAnchor.clear();
+    }
+
+    // Resolve pending KOReader sync paragraph index to accurate page via Section paragraph LUT
+    if (pendingParagraphLookup) {
+      if (const auto page = section->getPageForParagraphIndex(pendingParagraphIndex)) {
+        section->currentPage = *page;
+        LOG_DBG("ERS", "Resolved p[%u] to page %d (was %d)", pendingParagraphIndex, *page, nextPageNumber);
+      } else {
+        LOG_DBG("ERS", "Paragraph LUT not available, using estimated page %d", nextPageNumber);
+      }
+      pendingParagraphLookup = false;
     }
 
     // handles changes in reader settings and reset to approximate position based on cached progress

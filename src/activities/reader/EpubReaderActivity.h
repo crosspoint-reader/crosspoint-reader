@@ -24,6 +24,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingPercentJump = false;
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
+  // Pending paragraph index from KOReader sync (resolved to page via Section paragraph LUT)
+  bool pendingParagraphLookup = false;
+  uint16_t pendingParagraphIndex = 0;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;

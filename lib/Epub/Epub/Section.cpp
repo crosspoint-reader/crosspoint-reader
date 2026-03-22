@@ -10,10 +10,21 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 18;
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
-                                 sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
+constexpr uint8_t SECTION_FILE_VERSION = 20;
+constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) +   // SECTION_FILE_VERSION
+                                 sizeof(int) +       // fontId
+                                 sizeof(float) +     // lineCompression
+                                 sizeof(bool) +      // extraParagraphSpacing
+                                 sizeof(uint8_t) +   // paragraphAlignment
+                                 sizeof(uint16_t) +  // viewportWidth
+                                 sizeof(uint16_t) +  // viewportHeight
+                                 sizeof(uint16_t) +  // pageCount (stored as 16-bit in header)
+                                 sizeof(bool) +      // hyphenationEnabled
+                                 sizeof(bool) +      // embeddedStyle
+                                 sizeof(uint8_t) +   // imageRendering
+                                 sizeof(uint32_t) +  // page LUT offset
+                                 sizeof(uint32_t) +  // anchor map offset
+                                 sizeof(uint32_t);   // paragraph LUT offset
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -44,7 +55,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
                                    sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
-                                   sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(uint32_t) + sizeof(uint32_t),
+                                   sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(uint32_t) +
+                                   sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
@@ -59,6 +71,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
+  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for paragraph LUT offset (patched later)
 }
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
@@ -249,11 +262,20 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     serialization::writePod(file, page);
   }
 
-  // Patch header with final pageCount, lutOffset, and anchorMapOffset
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 2 - sizeof(pageCount));
+  // Write per-page paragraph index LUT for XPath-to-page resolution
+  const uint32_t paragraphLutOffset = file.position();
+  const auto& paragraphPerPage = visitor.getParagraphIndexPerPage();
+  serialization::writePod(file, static_cast<uint16_t>(paragraphPerPage.size()));
+  for (const uint16_t& pIdx : paragraphPerPage) {
+    serialization::writePod(file, pIdx);
+  }
+
+  // Patch header with final pageCount, lutOffset, anchorMapOffset, and paragraphLutOffset
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 3 - sizeof(pageCount));
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   serialization::writePod(file, anchorMapOffset);
+  serialization::writePod(file, paragraphLutOffset);
   file.close();
   if (cssParser) {
     cssParser->clear();
@@ -266,7 +288,7 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 3);
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
   file.seek(lutOffset + sizeof(uint32_t) * currentPage);
@@ -286,7 +308,7 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   }
 
   const uint32_t fileSize = f.size();
-  f.seek(HEADER_SIZE - sizeof(uint32_t));
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
   if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
@@ -310,4 +332,92 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
 
   f.close();
   return std::nullopt;
+}
+
+std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
+  FsFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  const uint32_t fileSize = f.size();
+
+  // Read paragraph LUT offset from end of header
+  f.seek(HEADER_SIZE - sizeof(uint32_t));
+  uint32_t paragraphLutOffset;
+  serialization::readPod(f, paragraphLutOffset);
+  if (paragraphLutOffset == 0 || paragraphLutOffset >= fileSize) {
+    f.close();
+    return std::nullopt;
+  }
+
+  f.seek(paragraphLutOffset);
+  uint16_t count;
+  serialization::readPod(f, count);
+  if (count == 0) {
+    f.close();
+    return std::nullopt;
+  }
+
+  // Validate that all entries fit within the file
+  const uint32_t lutEnd = paragraphLutOffset + sizeof(uint16_t) + count * sizeof(uint16_t);
+  if (lutEnd > fileSize) {
+    f.close();
+    return std::nullopt;
+  }
+
+  // Find the first page whose paragraph index >= pIndex.
+  // Each entry stores the <p> index at the time that page was completed.
+  uint16_t resultPage = count - 1;  // default to last page
+  for (uint16_t i = 0; i < count; i++) {
+    uint16_t pagePIdx;
+    serialization::readPod(f, pagePIdx);
+    if (pagePIdx >= pIndex) {
+      resultPage = i;
+      break;
+    }
+  }
+
+  f.close();
+  return resultPage;
+}
+
+std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) const {
+  FsFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  const uint32_t fileSize = f.size();
+
+  f.seek(HEADER_SIZE - sizeof(uint32_t));
+  uint32_t paragraphLutOffset;
+  serialization::readPod(f, paragraphLutOffset);
+  if (paragraphLutOffset == 0 || paragraphLutOffset >= fileSize) {
+    f.close();
+    return std::nullopt;
+  }
+
+  f.seek(paragraphLutOffset);
+  uint16_t count;
+  serialization::readPod(f, count);
+  if (count == 0 || page >= count) {
+    f.close();
+    return std::nullopt;
+  }
+
+  // Validate that the target entry fits within the file
+  const uint32_t entryEnd = paragraphLutOffset + sizeof(uint16_t) + (page + 1) * sizeof(uint16_t);
+  if (entryEnd > fileSize) {
+    f.close();
+    return std::nullopt;
+  }
+
+  // Seek to the entry for the requested page
+  f.seek(paragraphLutOffset + sizeof(uint16_t) + page * sizeof(uint16_t));
+  uint16_t pIdx;
+  serialization::readPod(f, pIdx);
+
+  f.close();
+  return pIdx;
 }

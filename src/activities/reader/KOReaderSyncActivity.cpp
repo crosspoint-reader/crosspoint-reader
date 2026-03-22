@@ -132,11 +132,24 @@ void KOReaderSyncActivity::performSync() {
 
   // Convert remote progress to CrossPoint position
   hasRemoteProgress = true;
+  {
+    RenderLock lock(*this);
+    statusMessage = tr(STR_MAPPING_REMOTE);
+  }
+  requestUpdateAndWait();
+
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
   // Calculate local progress in KOReader format (for display)
-  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  {
+    RenderLock lock(*this);
+    statusMessage = tr(STR_MAPPING_LOCAL);
+  }
+  requestUpdateAndWait();
+
+  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine, localParagraphIndex,
+                                 hasLocalParagraphIndex};
   localProgress = ProgressMapper::toKOReader(epub, localPos);
 
   {
@@ -162,7 +175,8 @@ void KOReaderSyncActivity::performUpload() {
   requestUpdateAndWait();
 
   // Convert current position to KOReader format
-  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine, localParagraphIndex,
+                                 hasLocalParagraphIndex};
   KOReaderPosition koPos = ProgressMapper::toKOReader(epub, localPos);
 
   KOReaderProgress progress;
@@ -361,7 +375,8 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
         // Wifi will be turned off in onExit()
-        setResult(SyncResult{remotePosition.spineIndex, remotePosition.pageNumber});
+        setResult(SyncResult{remotePosition.spineIndex, remotePosition.pageNumber, remotePosition.paragraphIndex,
+                             remotePosition.hasParagraphIndex});
         finish();
       } else if (selectedOption == 1) {
         // Upload local progress

@@ -75,6 +75,14 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
 
+  // Paragraph index tracking for XPath-to-page lookup table.
+  // Counts <p> sibling indices (1-based, matching XPath convention) during page building.
+  // Stored per page in the section cache so that XPath p[N] can be resolved to a page
+  // without reparsing, and current page can generate an XPath without reparsing.
+  uint16_t xpathParagraphIndex = 0;             // current <p> sibling index (1-based)
+  int xpathBodyDepth = -1;                      // depth of the <body> element (-1 = not yet seen)
+  std::vector<uint16_t> paragraphIndexPerPage;  // <p> index at each page completion
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
@@ -126,4 +134,5 @@ class ChapterHtmlSlimParser {
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::vector<uint16_t>& getParagraphIndexPerPage() const { return paragraphIndexPerPage; }
 };
