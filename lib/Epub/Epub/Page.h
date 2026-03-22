@@ -78,9 +78,12 @@ class Page {
 
   void addLink(const char* href, int16_t x, int16_t y, int16_t w, int16_t h) {
     if (links.size() >= MAX_LINKS_PER_PAGE) return;
+    if (!href || strlen(href) >= sizeof(LinkEntry::href)) {
+      // Reject truncated or null hrefs to avoid unresolved navigation targets
+      return;
+    }
     LinkEntry entry;
-    strncpy(entry.href, href, sizeof(entry.href) - 1);
-    entry.href[sizeof(entry.href) - 1] = '\0';
+    strcpy(entry.href, href);  // Safe: length already validated
     entry.x = x;
     entry.y = y;
     entry.w = w;

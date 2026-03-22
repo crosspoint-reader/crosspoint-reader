@@ -26,7 +26,15 @@ class TextBlock final : public Block {
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
         blockStyle(blockStyle),
-        wordLinkHrefs(std::move(word_link_hrefs)) {}
+        wordLinkHrefs(std::move(word_link_hrefs)) {
+    // Normalize wordLinkHrefs: if empty, treat as "no link metadata" and resize to match words
+    if (wordLinkHrefs.empty() && !this->words.empty()) {
+      this->wordLinkHrefs.resize(this->words.size(), "");
+    } else if (!wordLinkHrefs.empty()) {
+      // Ensure word-parallel invariant: wordLinkHrefs.size() == words.size()
+      assert(this->wordLinkHrefs.size() == this->words.size());
+    }
+  }
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }

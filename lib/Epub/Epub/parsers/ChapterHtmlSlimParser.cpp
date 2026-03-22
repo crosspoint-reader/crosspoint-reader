@@ -1080,6 +1080,9 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     const auto& words = line->getWords();
     const auto& xpos = line->getWordXpos();
     const auto& styles = line->getWordStyles();
+    // Assert parallel word/link arrays are in sync
+    assert(linkHrefs.size() == words.size() && linkHrefs.size() == xpos.size() &&
+           linkHrefs.size() == styles.size());
     size_t i = 0;
     while (i < linkHrefs.size()) {
       if (linkHrefs[i].empty()) {
