@@ -152,7 +152,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
                     " - " + tocTitle;
             }, [](int index) { return UIIcon::BookmarkFilled; });
       
-      GUI.drawHelpText(renderer, Rect{0, pageHeight - 80, pageWidth, LINE_HEIGHT}, tr(STR_HOLD_CONFIRM_TO_DELETE));
+      GUI.drawHelpText(renderer, Rect{0, pageHeight - 75, pageWidth, LINE_HEIGHT}, tr(STR_HOLD_CONFIRM_TO_DELETE));
     }
   } else {
     GUI.drawHelpText(renderer, Rect{0, LINE_HEIGHT * 2, pageWidth, LINE_HEIGHT}, tr(STR_BOOKMARK_INSTRUCTIONS));

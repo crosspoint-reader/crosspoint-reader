@@ -142,7 +142,7 @@ void EpubReaderActivity::loop() {
       showBookmarkMessage = false;
       requestUpdate();
     } else {
-      if (mappedInput.getHeldTime() >= bookmarkHoldMs) {
+      if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
         addBookmark();
       } else {
         const int currentPage = section ? section->currentPage + 1 : 0;
