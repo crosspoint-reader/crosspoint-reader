@@ -92,7 +92,10 @@ class Page {
   }
 
   size_t getLinkCount() const { return links.size(); }
-  const LinkEntry& getLink(int i) const { return links[i]; }
+  const LinkEntry& getLink(int i) const {
+    assert(i >= 0 && i < static_cast<int>(links.size()));
+    return links[i];
+  }
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
