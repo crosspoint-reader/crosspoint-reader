@@ -1098,7 +1098,10 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
       const int16_t linkX = xpos[i] + xOffset;
       const int16_t lastWordW = renderer.getTextWidth(fontId, words[last].c_str(), styles[last]);
       const int16_t linkW = (xpos[last] + xOffset + lastWordW) - linkX;
-      currentPage->addLink(href.c_str(), linkX, currentPageNextY, linkW, static_cast<int16_t>(lineHeight));
+      if (!currentPage->addLink(href.c_str(), linkX, currentPageNextY, linkW, static_cast<int16_t>(lineHeight))) {
+        // Log if link was dropped due to page full or href too long
+        fprintf(stderr, "Warning: Link dropped (page full or href too long): %.50s\n", href.c_str());
+      }
       i = last + 1;
     }
   }

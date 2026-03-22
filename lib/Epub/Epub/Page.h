@@ -76,11 +76,11 @@ class Page {
     footnotes.push_back(entry);
   }
 
-  void addLink(const char* href, int16_t x, int16_t y, int16_t w, int16_t h) {
-    if (links.size() >= MAX_LINKS_PER_PAGE) return;
+  bool addLink(const char* href, int16_t x, int16_t y, int16_t w, int16_t h) {
+    if (links.size() >= MAX_LINKS_PER_PAGE) return false;
     if (!href || strlen(href) >= sizeof(LinkEntry::href)) {
       // Reject truncated or null hrefs to avoid unresolved navigation targets
-      return;
+      return false;
     }
     LinkEntry entry;
     strcpy(entry.href, href);  // Safe: length already validated
@@ -89,6 +89,7 @@ class Page {
     entry.w = w;
     entry.h = h;
     links.push_back(entry);
+    return true;
   }
 
   size_t getLinkCount() const { return links.size(); }
