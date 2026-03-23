@@ -1,11 +1,42 @@
-# Runs clang-format -i on all *.cpp and *.h files, excluding generated/vendored content.
-# Usage:
-#   .\clang-format-fix.ps1          # format all files
-#   .\clang-format-fix.ps1 -g       # format only git-modified files
+<#
+.SYNOPSIS
+    Runs clang-format -i on project *.cpp and *.h files.
+
+.DESCRIPTION
+    Formats all C/C++ source and header files in the repository, excluding
+    generated, vendored, and build directories (open-x4-sdk, builtinFonts,
+    hyphenation tries, uzlib, .pio, *.generated.h).
+
+    The clang-format binary path is resolved once and cached in
+    .local/clang-format-fix.local. On first run it checks a default path,
+    then PATH, then common install locations. Edit the .local file to
+    override manually.
+
+.PARAMETER g
+    Format only git-modified files (git diff --name-only HEAD) instead of
+    the full tree.
+
+.PARAMETER h
+    Show this help text.
+
+.EXAMPLE
+    .\clang-format-fix.ps1
+    Format all files.
+
+.EXAMPLE
+    .\clang-format-fix.ps1 -g
+    Format only git-modified files.
+#>
 
 param(
-    [switch]$g
+    [switch]$g,
+    [switch]$h
 )
+
+if ($h) {
+    Get-Help $PSCommandPath -Detailed
+    return
+}
 
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $configFile = Join-Path $PSScriptRoot 'clang-format-fix.local'
@@ -78,7 +109,10 @@ function Test-Excluded($fullPath) {
 
 if ($g) {
     # Only git-modified *.cpp / *.h files
-    $files = git -C $repoRoot diff --name-only HEAD |
+    # Covers both staged and unstaged changes
+    $files = @(git -C $repoRoot diff --name-only HEAD) +
+             @(git -C $repoRoot diff --name-only --cached) |
+        Sort-Object -Unique |
         Where-Object { $_ -match '\.(cpp|h)$' } |
         ForEach-Object { Get-Item (Join-Path $repoRoot $_) -ErrorAction SilentlyContinue } |
         Where-Object { $_ -and -not (Test-Excluded $_.FullName) }
