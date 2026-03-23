@@ -214,6 +214,19 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
   controller.setNotFound();
 }
 
+std::string DictionaryWordSelectActivity::buildPhraseFromRange(int fromIdx, int toIdx) const {
+  const int lo = std::min(fromIdx, toIdx);
+  const int hi = std::max(fromIdx, toIdx);
+  std::string phrase;
+  for (int i = lo; i <= hi; i++) {
+    const auto* w = navigator.getWordAt(i);
+    if (!w) continue;
+    if (!phrase.empty()) phrase += ' ';
+    phrase += w->text;
+  }
+  return Dictionary::cleanWord(phrase);
+}
+
 void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
@@ -263,7 +276,41 @@ void DictionaryWordSelectActivity::loop() {
     requestUpdate();
   }
 
+  if (inMultiSelectMode) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      const int cursorIdx = navigator.getCurrentFlatIndex();
+      std::string phrase = buildPhraseFromRange(anchorFlatIndex, cursorIdx);
+      if (phrase.empty()) {
+        GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        requestUpdate();
+        return;
+      }
+      inMultiSelectMode = false;
+      controller.startLookup(phrase);
+      return;
+    }
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      inMultiSelectMode = false;
+      requestUpdate();
+      return;
+    }
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      const int flatIdx = navigator.getCurrentFlatIndex();
+      if (flatIdx >= 0) {
+        inMultiSelectMode = true;
+        anchorFlatIndex = flatIdx;
+        requestUpdate();
+      }
+      return;
+    }
+
     const auto* sel = navigator.getSelected();
     if (!sel) return;
     std::string cleaned = Dictionary::cleanWord(sel->lookupText);
@@ -296,15 +343,27 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   // Render the page content
   page->render(renderer, fontId, marginLeft, marginTop);
 
-  if (const auto* w = navigator.getSelected()) {
-    const int lineHeight = renderer.getLineHeight(fontId);
-    renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
-    renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false);
+  const int lineHeight = renderer.getLineHeight(fontId);
+  if (inMultiSelectMode) {
+    const int cursorIdx = navigator.getCurrentFlatIndex();
+    const int lo = std::min(anchorFlatIndex, cursorIdx);
+    const int hi = std::max(anchorFlatIndex, cursorIdx);
+    for (int i = lo; i <= hi; i++) {
+      const auto* w = navigator.getWordAt(i);
+      if (!w) continue;
+      renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
+      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false);
+    }
+  } else {
+    if (const auto* w = navigator.getSelected()) {
+      renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
+      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false);
 
-    // Highlight the other half of a hyphenated word
-    if (const auto* other = navigator.getContinuation()) {
-      renderer.fillRect(other->screenX - 1, other->screenY - 1, other->width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, other->screenX, other->screenY, other->text.c_str(), false);
+      // Highlight the other half of a hyphenated word
+      if (const auto* other = navigator.getContinuation()) {
+        renderer.fillRect(other->screenX - 1, other->screenY - 1, other->width + 2, lineHeight + 2, true);
+        renderer.drawText(fontId, other->screenX, other->screenY, other->text.c_str(), false);
+      }
     }
   }
 

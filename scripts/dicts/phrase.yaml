@@ -47,6 +47,9 @@ entries:
 
   # --- 5 words ---
 
+  - headword: have a good time
+    definition: "Verb. (informal) To enjoy oneself; to have fun. Compare: have a whale of a time."
+
   - headword: a blessing and a curse
     definition: "Noun. Something that is simultaneously a benefit and a burden, or that may seem initially beneficial but also brings unforeseen negative consequences."
 
@@ -146,6 +149,7 @@ synonyms:
   - [pilot monitoring, pilot not flying]
   - [point fingers at, point the finger at]
   - [blessing and a curse, a blessing and a curse]
+  - [having a good time, have a good time]
   - [having a whale of a time, have a whale of a time]
   - [day late and a dollar short, a day late and a dollar short]
   - [marching to the beat of a different drum, march to the beat of a different drum]

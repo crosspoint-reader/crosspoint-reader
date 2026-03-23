@@ -50,6 +50,15 @@ class WordSelectNavigator {
 
   bool isEmpty() const { return words.empty(); }
 
+  // Flat index of the current cursor word. -1 if empty.
+  int getCurrentFlatIndex() const;
+
+  // Word at flat index idx. nullptr if out of bounds.
+  const WordInfo* getWordAt(int idx) const;
+
+  // Total word count.
+  int getWordCount() const { return static_cast<int>(words.size()); }
+
   void reset();
 
  private:

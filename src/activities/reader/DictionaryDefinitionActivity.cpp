@@ -29,9 +29,24 @@ void DictionaryDefinitionActivity::onExit() {
 // Layout helpers — shared setup
 // ---------------------------------------------------------------------------
 
+std::string DictionaryDefinitionActivity::buildPhraseFromRange(int fromIdx, int toIdx) const {
+  const int lo = std::min(fromIdx, toIdx);
+  const int hi = std::max(fromIdx, toIdx);
+  std::string phrase;
+  for (int i = lo; i <= hi; i++) {
+    const auto* w = navigator.getWordAt(i);
+    if (!w) continue;
+    if (!phrase.empty()) phrase += ' ';
+    phrase += w->text;
+  }
+  return Dictionary::cleanWord(phrase);
+}
+
 void DictionaryDefinitionActivity::wrapText() {
   layoutLines.clear();
   isWordSelectMode = false;
+  inMultiSelectMode = false;
+  anchorFlatIndex = -1;
   navigator.reset();
 
   const auto orient = renderer.getOrientation();
@@ -343,6 +358,7 @@ void DictionaryDefinitionActivity::loop() {
         break;
       case DictionaryLookupController::LookupEvent::Cancelled:
         isWordSelectMode = false;
+        inMultiSelectMode = false;
         navigator.reset();
         requestUpdate();
         break;
@@ -358,7 +374,40 @@ void DictionaryDefinitionActivity::loop() {
       requestUpdate();
     }
 
+    if (inMultiSelectMode) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        const int cursorIdx = navigator.getCurrentFlatIndex();
+        std::string phrase = buildPhraseFromRange(anchorFlatIndex, cursorIdx);
+        if (phrase.empty()) {
+          GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+          renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+          vTaskDelay(1000 / portTICK_PERIOD_MS);
+          requestUpdate();
+          return;
+        }
+        inMultiSelectMode = false;
+        controller.startLookup(phrase);
+        return;
+      }
+
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+        inMultiSelectMode = false;
+        requestUpdate();
+        return;
+      }
+      return;
+    }
+
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+        const int flatIdx = navigator.getCurrentFlatIndex();
+        if (flatIdx >= 0) {
+          inMultiSelectMode = true;
+          anchorFlatIndex = flatIdx;
+          requestUpdate();
+        }
+        return;
+      }
       const auto* sel = navigator.getSelected();
       if (!sel) return;
       if (sel->lookupText.empty()) return;
@@ -374,6 +423,7 @@ void DictionaryDefinitionActivity::loop() {
       } else {
         // Short press — exit word-select, return to definition view
         isWordSelectMode = false;
+        inMultiSelectMode = false;
         navigator.reset();
         requestUpdate();
       }
@@ -462,11 +512,23 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     }
   }
 
-  // Word-select mode: overlay the highlighted word
+  // Word-select mode: overlay highlighted word(s)
   if (isWordSelectMode) {
-    if (const auto* sel = navigator.getSelected()) {
-      renderer.fillRect(sel->screenX - 1, sel->screenY - 1, sel->width + 2, lineHeight + 2, true);
-      renderer.drawText(readerFontId, sel->screenX, sel->screenY, sel->text.c_str(), false);
+    if (inMultiSelectMode) {
+      const int cursorIdx = navigator.getCurrentFlatIndex();
+      const int lo = std::min(anchorFlatIndex, cursorIdx);
+      const int hi = std::max(anchorFlatIndex, cursorIdx);
+      for (int i = lo; i <= hi; i++) {
+        const auto* w = navigator.getWordAt(i);
+        if (!w) continue;
+        renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
+        renderer.drawText(readerFontId, w->screenX, w->screenY, w->text.c_str(), false);
+      }
+    } else {
+      if (const auto* sel = navigator.getSelected()) {
+        renderer.fillRect(sel->screenX - 1, sel->screenY - 1, sel->width + 2, lineHeight + 2, true);
+        renderer.drawText(readerFontId, sel->screenX, sel->screenY, sel->text.c_str(), false);
+      }
     }
     // Empty button hints in word-select mode (same convention as EPUB word-select)
     const auto labels = mappedInput.mapLabels("", "", "", "");

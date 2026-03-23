@@ -40,6 +40,17 @@ const WordSelectNavigator::WordInfo* WordSelectNavigator::getContinuation() cons
   return nullptr;
 }
 
+int WordSelectNavigator::getCurrentFlatIndex() const {
+  if (rows.empty() || currentRow >= static_cast<int>(rows.size())) return -1;
+  if (rows[currentRow].wordIndices.empty()) return -1;
+  return rows[currentRow].wordIndices[currentWordInRow];
+}
+
+const WordSelectNavigator::WordInfo* WordSelectNavigator::getWordAt(int idx) const {
+  if (idx < 0 || idx >= static_cast<int>(words.size())) return nullptr;
+  return &words[idx];
+}
+
 int WordSelectNavigator::findClosestWord(int targetRow) const {
   if (rows[targetRow].wordIndices.empty()) return 0;
   const int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
