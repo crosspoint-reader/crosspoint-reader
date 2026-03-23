@@ -46,12 +46,11 @@ void RecentBooksActivity::onExit() {
 void RecentBooksActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
-      LOG_DBG("RBA", "Selected recent book: %s", recentBooks[selectorIndex].path.c_str());
-      onSelectBook(recentBooks[selectorIndex].path);
-      return;
-    }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !recentBooks.empty() &&
+      selectorIndex < static_cast<int>(recentBooks.size())) {
+    LOG_DBG("RBA", "Selected recent book: %s", recentBooks[selectorIndex].path.c_str());
+    onSelectBook(recentBooks[selectorIndex].path);
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -85,14 +84,13 @@ void RecentBooksActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
-      const std::string& path = recentBooks[selectorIndex].path;
-      if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
-        startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
-                               [this](const ActivityResult&) { requestUpdate(); });
-        return;
-      }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right) && !recentBooks.empty() &&
+      selectorIndex < static_cast<int>(recentBooks.size())) {
+    const std::string& path = recentBooks[selectorIndex].path;
+    if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
+      startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      return;
     }
   }
 
@@ -143,7 +141,8 @@ void RecentBooksActivity::render(RenderLock&&) {
                        (FsHelpers::hasEpubExtension(recentBooks[selectorIndex].path) ||
                         FsHelpers::hasXtcExtension(recentBooks[selectorIndex].path));
   const bool hasBooks = !recentBooks.empty();
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), hasBooks ? tr(STR_OPEN) : "", hasBooks ? tr(STR_REMOVE) : "", hasInfo ? tr(STR_INFO) : "");
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), hasBooks ? tr(STR_OPEN) : "", hasBooks ? tr(STR_REMOVE) : "",
+                                            hasInfo ? tr(STR_INFO) : "");
 
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   // Side buttons (Up/Down) navigate; show their hints on the side
