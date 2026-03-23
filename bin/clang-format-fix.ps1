@@ -1,0 +1,113 @@
+# Runs clang-format -i on all *.cpp and *.h files, excluding generated/vendored content.
+# Usage:
+#   .\clang-format-fix.ps1          # format all files
+#   .\clang-format-fix.ps1 -g       # format only git-modified files
+
+param(
+    [switch]$g
+)
+
+$repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$configFile = Join-Path $PSScriptRoot 'clang-format-fix.local'
+$defaultPath = 'C:\Program Files\LLVM\bin\clang-format.exe'
+
+$candidatePaths = @(
+    'C:\Program Files\LLVM\bin\clang-format.exe'
+    'C:\Program Files (x86)\LLVM\bin\clang-format.exe'
+    'C:\msys64\ucrt64\bin\clang-format.exe'
+    'C:\msys64\mingw64\bin\clang-format.exe'
+    "$env:LOCALAPPDATA\LLVM\bin\clang-format.exe"
+)
+
+function Find-ClangFormat {
+    # Try PATH first
+    $inPath = Get-Command clang-format -ErrorAction SilentlyContinue
+    if ($inPath) { return $inPath.Source }
+
+    # Try candidate paths
+    foreach ($p in $candidatePaths) {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
+}
+
+function Resolve-ClangFormat {
+    # 1. Read from config if present
+    if (Test-Path $configFile) {
+        $saved = (Get-Content $configFile -Raw).Trim()
+        if ($saved -and (Test-Path $saved)) { return $saved }
+        Write-Host "Configured path no longer valid: $saved"
+    }
+
+    # 2. Check default
+    if (Test-Path $defaultPath) {
+        $defaultPath | Set-Content $configFile
+        Write-Host "Saved clang-format path to $configFile"
+        return $defaultPath
+    }
+
+    # 3. Search PATH and candidate locations
+    $found = Find-ClangFormat
+    if ($found) {
+        $found | Set-Content $configFile
+        Write-Host "Found clang-format at $found - saved to $configFile"
+        return $found
+    }
+
+    Write-Error "clang-format not found. Install LLVM or add clang-format to PATH."
+    exit 1
+}
+
+$clangFormat = Resolve-ClangFormat
+
+$exclude = @(
+    'open-x4-sdk'
+    'lib\EpdFont\builtinFonts'
+    'lib\Epub\Epub\hyphenation\generated'
+    'lib\uzlib'
+    '.pio'
+)
+
+function Test-Excluded($fullPath) {
+    foreach ($ex in $exclude) {
+        if ($fullPath -like "*\$ex\*") { return $true }
+    }
+    if ($fullPath -like '*.generated.h') { return $true }
+    return $false
+}
+
+if ($g) {
+    # Only git-modified *.cpp / *.h files
+    $files = git -C $repoRoot diff --name-only HEAD |
+        Where-Object { $_ -match '\.(cpp|h)$' } |
+        ForEach-Object { Get-Item (Join-Path $repoRoot $_) -ErrorAction SilentlyContinue } |
+        Where-Object { $_ -and -not (Test-Excluded $_.FullName) }
+} else {
+    $files = Get-ChildItem -Path $repoRoot -Recurse -Include *.cpp, *.h -File |
+        Where-Object { -not (Test-Excluded $_.FullName) }
+}
+
+$files = @($files)
+
+if ($files.Count -eq 0) {
+    Write-Host 'No files to format.'
+    return
+}
+
+Write-Host "Formatting $($files.Count) files..."
+$i = 0
+$changed = 0
+foreach ($f in $files) {
+    $i++
+    $rel = $f.FullName.Substring($repoRoot.Length + 1)
+    $hashBefore = (Get-FileHash $f.FullName -Algorithm MD5).Hash
+    & $clangFormat -i $f.FullName
+    $hashAfter = (Get-FileHash $f.FullName -Algorithm MD5).Hash
+    if ($hashBefore -ne $hashAfter) {
+        $changed++
+        Write-Host "  [$i/$($files.Count)] $rel (changed)"
+    } else {
+        Write-Host "  [$i/$($files.Count)] $rel"
+    }
+}
+Write-Host "Done. $changed/$($files.Count) files changed."
