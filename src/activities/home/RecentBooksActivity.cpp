@@ -119,7 +119,9 @@ void RecentBooksActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_REMOVE), "");
+  const bool hasBooks = !recentBooks.empty();
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_HOME), hasBooks ? tr(STR_OPEN) : "", hasBooks ? tr(STR_REMOVE) : "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
