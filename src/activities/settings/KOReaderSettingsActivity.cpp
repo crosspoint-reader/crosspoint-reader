@@ -13,9 +13,9 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+constexpr int MENU_ITEMS = 6;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,     StrId::STR_SYNC_SERVER_URL,
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE, StrId::STR_REGISTER};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -107,7 +107,16 @@ void KOReaderSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+    startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::LOGIN),
+                           [](const ActivityResult&) {});
+  } else if (selectedIndex == 5) {
+    // Register
+    if (!KOREADER_STORE.hasCredentials()) {
+      return;
+    }
+    startActivityForResult(
+        std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::REGISTER),
+        [](const ActivityResult&) {});
   }
 }
 
@@ -140,6 +149,8 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
           return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
+          return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        } else if (index == 5) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));

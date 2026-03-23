@@ -28,6 +28,67 @@ void addAuthHeaders(HTTPClient& http) {
 bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
 }  // namespace
 
+KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
+  if (!KOREADER_STORE.hasCredentials()) {
+    LOG_DBG("KOSync", "No credentials configured");
+    return NO_CREDENTIALS;
+  }
+
+  std::string url = KOREADER_STORE.getBaseUrl() + "/users/create";
+  LOG_DBG("KOSync", "Registering user: %s", url.c_str());
+
+  HTTPClient http;
+  std::unique_ptr<WiFiClientSecure> secureClient;
+  WiFiClient plainClient;
+
+  if (isHttpsUrl(url)) {
+    secureClient.reset(new WiFiClientSecure);
+    secureClient->setInsecure();
+    http.begin(*secureClient, url.c_str());
+  } else {
+    http.begin(plainClient, url.c_str());
+  }
+
+  http.addHeader("Accept", "application/vnd.koreader.v1+json");
+  http.addHeader("Content-Type", "application/json");
+
+  JsonDocument doc;
+  doc["username"] = KOREADER_STORE.getUsername();
+  doc["password"] = KOREADER_STORE.getMd5Password();
+  std::string body;
+  serializeJson(doc, body);
+
+  LOG_DBG("KOSync", "Register request body: <redacted credentials>");
+
+  const int httpCode = http.POST(body.c_str());
+  const String responseBody = http.getString();
+  http.end();
+
+  LOG_DBG("KOSync", "Register response: %d | body: %s", httpCode, responseBody.c_str());
+
+  if (httpCode == 201) {
+    return OK;
+  } else if (httpCode == 200) {
+    // Some server implementations return 200 when the user already exists
+    return USER_EXISTS;
+  } else if (httpCode == 402) {
+    // Both "user already exists" (error 2002) and "registration disabled" (error 2005)
+    // return HTTP 402 on the original kosync server. Distinguish them by body text.
+    String lowerBody = responseBody;
+    lowerBody.toLowerCase();
+    if (lowerBody.indexOf("already") >= 0) {
+      return USER_EXISTS;
+    }
+    return REGISTRATION_DISABLED;
+  } else if (httpCode == 409) {
+    // korrosync returns 409 for existing users
+    return USER_EXISTS;
+  } else if (httpCode < 0) {
+    return NETWORK_ERROR;
+  }
+  return SERVER_ERROR;
+}
+
 KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
@@ -195,6 +256,10 @@ const char* KOReaderSyncClient::errorString(Error error) {
       return "JSON parse error";
     case NOT_FOUND:
       return "No progress found";
+    case USER_EXISTS:
+      return "Username is already taken";
+    case REGISTRATION_DISABLED:
+      return "Registration is disabled on this server";
     default:
       return "Unknown error";
   }
