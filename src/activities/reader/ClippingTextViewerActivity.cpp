@@ -93,13 +93,8 @@ void ClippingTextViewerActivity::wrapText() {
   }
 }
 
-void ClippingTextViewerActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<ClippingTextViewerActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void ClippingTextViewerActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   wrapText();
 
@@ -111,29 +106,12 @@ void ClippingTextViewerActivity::onEnter() {
   const int availableHeight = renderer.getScreenHeight() - startY - 30;  // 30px for footer area
   linesPerPage = std::max(1, availableHeight / LINE_HEIGHT);
 
-  renderingMutex = xSemaphoreCreateMutex();
-  updateRequired = true;
-  xTaskCreate(&ClippingTextViewerActivity::taskTrampoline, "ClipViewTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void ClippingTextViewerActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void ClippingTextViewerActivity::onExit() { Activity::onExit(); }
 
 void ClippingTextViewerActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int totalLines = static_cast<int>(lines.size());
   const int maxOffset = std::max(0, totalLines - linesPerPage);
 
@@ -146,34 +124,19 @@ void ClippingTextViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
       mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onGoBack();
+    finish();
   } else if (prevReleased) {
     const int step = skipPage ? linesPerPage : 1;
     scrollOffset = std::max(0, scrollOffset - step);
-    updateRequired = true;
+    requestUpdate();
   } else if (nextReleased) {
     const int step = skipPage ? linesPerPage : 1;
     scrollOffset = std::min(maxOffset, scrollOffset + step);
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void ClippingTextViewerActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      // cppcheck-suppress knownConditionTrueFalse
-      if (updateRequired && !subActivity) {
-        updateRequired = false;
-        renderScreen();
-      }
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void ClippingTextViewerActivity::renderScreen() {
+void ClippingTextViewerActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto orientation = renderer.getOrientation();

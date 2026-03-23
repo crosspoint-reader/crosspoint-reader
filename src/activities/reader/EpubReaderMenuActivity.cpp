@@ -21,12 +21,14 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
-  items.reserve(11);
+  items.reserve(13);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
   items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
+  items.push_back({MenuAction::CLIPPINGS, StrId::STR_CLIPPINGS});
+  items.push_back({MenuAction::CAPTURE, StrId::STR_CAPTURE});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});

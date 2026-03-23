@@ -46,6 +46,9 @@ class ClippingStore {
   // Load a short preview of a clipping (first N characters).
   static std::string loadClippingPreview(const std::string& bookPath, const ClippingEntry& entry, int maxChars = 60);
 
+  // Check if any clipping covers the given page.
+  static bool hasClippingAtPage(const std::vector<ClippingEntry>& entries, uint16_t spineIndex, uint16_t pageIndex);
+
   // Delete a clipping at the given index. Rewrites both files.
   static bool deleteClipping(const std::string& bookPath, int index);
 

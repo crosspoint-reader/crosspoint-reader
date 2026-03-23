@@ -3,6 +3,11 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <string>
+#include <vector>
+
+#include "BookmarkStore.h"
+#include "ClippingStore.h"
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -30,6 +35,13 @@ class EpubReaderActivity final : public Activity {
   bool showBookmarkMessage = false;
   bool maxBookmarksError = false;
 
+  std::string statusBarOverride;
+  enum class CaptureState { IDLE, CAPTURING };
+  CaptureState captureState = CaptureState::IDLE;
+  std::vector<CapturedPage> captureBuffer;
+  bool pendingCaptureAfterRender = false;
+  std::vector<ClippingEntry> cachedClippings;
+
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
@@ -52,6 +64,11 @@ class EpubReaderActivity final : public Activity {
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void addBookmark();
+
+  void captureCurrentPage();
+  void startCapture();
+  void stopCapture();
+  void cancelCapture();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

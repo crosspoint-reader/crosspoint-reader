@@ -1,6 +1,10 @@
 #include "EpubReaderClippingsListActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
+#include <Logging.h>
+
+#include <memory>
 
 #include "ClippingTextViewerActivity.h"
 #include "MappedInputManager.h"
@@ -20,7 +24,12 @@ void EpubReaderClippingsListActivity::refreshPreviews() {
     // Read enough to skip markdown headers, but truncate to visible length for fast rendering
     std::string preview = ClippingStore::loadClippingPreview(bookPath, entry, 200);
     if (preview.size() > 55) {
-      preview.resize(52);
+      size_t limit = 52;
+      // Don't split UTF-8 multi-byte characters
+      while (limit > 0 && (preview[limit] & 0xC0) == 0x80) {
+        --limit;
+      }
+      preview.resize(limit);
       preview += "...";
     }
     previewCache.push_back(std::move(preview));
@@ -38,51 +47,29 @@ int EpubReaderClippingsListActivity::getPageItems() const {
   return std::max(1, availableHeight / lineHeight);
 }
 
-void EpubReaderClippingsListActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<EpubReaderClippingsListActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void EpubReaderClippingsListActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   clippings = ClippingStore::loadIndex(bookPath);
   refreshPreviews();
-  renderingMutex = xSemaphoreCreateMutex();
 
   if (selectorIndex >= getTotalItems()) {
     selectorIndex = std::max(0, getTotalItems() - 1);
   }
 
-  updateRequired = true;
-  xTaskCreate(&EpubReaderClippingsListActivity::taskTrampoline, "ClippingsListTask", 4096, this, 1, &displayTaskHandle);
+  requestUpdate();
 }
 
-void EpubReaderClippingsListActivity::onExit() {
-  ActivityWithSubactivity::onExit();
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-}
+void EpubReaderClippingsListActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderClippingsListActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   const int totalItems = getTotalItems();
 
   // Handle empty clippings list
   if (totalItems == 0 && !confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      onGoBack();
+      finish();
     }
     return;
   }
@@ -90,17 +77,19 @@ void EpubReaderClippingsListActivity::loop() {
   // Delete confirmation mode
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      ClippingStore::deleteClipping(bookPath, selectorIndex);
+      if (!ClippingStore::deleteClipping(bookPath, selectorIndex)) {
+        LOG_ERR("ClippingsList", "Failed to delete clipping at index %d", selectorIndex);
+      }
       clippings = ClippingStore::loadIndex(bookPath);
       refreshPreviews();
       if (selectorIndex >= getTotalItems()) {
         selectorIndex = std::max(0, getTotalItems() - 1);
       }
       confirmingDelete = false;
-      updateRequired = true;
+      requestUpdate();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       confirmingDelete = false;
-      updateRequired = true;
+      requestUpdate();
     }
     return;
   }
@@ -116,53 +105,34 @@ void EpubReaderClippingsListActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
       confirmingDelete = true;
-      updateRequired = true;
+      requestUpdate();
     } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
       const std::string text = ClippingStore::loadClippingText(bookPath, clippings[selectorIndex]);
       if (!text.empty()) {
-        xSemaphoreTake(renderingMutex, portMAX_DELAY);
-        enterNewActivity(new ClippingTextViewerActivity(renderer, mappedInput, text, [this]() {
-          exitActivity();
-          updateRequired = true;
-        }));
-        xSemaphoreGive(renderingMutex);
+        startActivityForResult(std::make_unique<ClippingTextViewerActivity>(renderer, mappedInput, text),
+                               [this](const ActivityResult&) { requestUpdate(); });
       }
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoBack();
+    finish();
   } else if (prevReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;
     } else {
       selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
     }
-    updateRequired = true;
+    requestUpdate();
   } else if (nextReleased) {
     if (skipPage) {
       selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
     } else {
       selectorIndex = (selectorIndex + 1) % totalItems;
     }
-    updateRequired = true;
+    requestUpdate();
   }
 }
 
-void EpubReaderClippingsListActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired && !subActivity) {
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      // cppcheck-suppress knownConditionTrueFalse
-      if (updateRequired && !subActivity) {
-        updateRequired = false;
-        renderScreen();
-      }
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void EpubReaderClippingsListActivity::renderScreen() {
+void EpubReaderClippingsListActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -178,18 +148,18 @@ void EpubReaderClippingsListActivity::renderScreen() {
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
-  const char* titleText = confirmingDelete ? "Delete clipping?" : "Clippings";
+  const char* titleText = confirmingDelete ? tr(STR_DELETE_CLIPPING_CONFIRM) : tr(STR_CLIPPINGS);
   const int titleX =
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, titleText, EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, titleText, true, EpdFontFamily::BOLD);
 
   if (!confirmingDelete && totalItems > 0) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 40 + contentY, "Hold confirm to delete");
+    renderer.drawCenteredText(UI_10_FONT_ID, 40 + contentY, tr(STR_HOLD_CONFIRM_TO_DELETE));
   }
 
   if (totalItems == 0) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, "No clippings", true);
-    const auto labels = mappedInput.mapLabels("« Back", "", "", "");
+    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_NO_CLIPPINGS), true);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -210,10 +180,10 @@ void EpubReaderClippingsListActivity::renderScreen() {
   }
 
   if (confirmingDelete) {
-    const auto labels = mappedInput.mapLabels("Cancel", "Delete", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
-    const auto labels = mappedInput.mapLabels("« Back", "View", "Up", "Down");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_VIEW), tr(STR_UP), tr(STR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 

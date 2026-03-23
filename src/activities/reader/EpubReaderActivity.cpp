@@ -9,11 +9,15 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <esp_system.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderClippingsListActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -87,6 +91,8 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  cachedClippings = ClippingStore::loadIndex(epub->getPath());
+
   // Trigger first update
   requestUpdate();
 }
@@ -101,6 +107,65 @@ void EpubReaderActivity::onExit() {
   APP_STATE.saveToFile();
   section.reset();
   epub.reset();
+}
+
+void EpubReaderActivity::captureCurrentPage() {
+  if (!section || !epub) {
+    return;
+  }
+  auto page = section->loadPageFromSectionFile();
+  if (!page) {
+    return;
+  }
+  const std::string pageText = page->getPlainText();
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  const std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : tr(STR_UNNAMED);
+  const float chapterProgress = (section->pageCount > 0)
+                                    ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
+                                    : 0.0f;
+  const int bookPercent =
+      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+  const int chapterPercent = clampPercent(static_cast<int>(chapterProgress * 100.0f + 0.5f));
+  captureBuffer.push_back({pageText, chapterTitle, bookPercent, chapterPercent,
+                           static_cast<uint16_t>(currentSpineIndex), static_cast<uint16_t>(section->currentPage)});
+}
+
+void EpubReaderActivity::startCapture() {
+  if (epub && epub->getPath().find("/.crosspoint/") != std::string::npos) {
+    statusBarOverride = tr(STR_CANNOT_CAPTURE_HERE);
+    requestUpdate();
+    return;
+  }
+  captureBuffer.clear();
+  {
+    RenderLock lock(*this);
+    captureCurrentPage();
+  }
+  captureState = CaptureState::CAPTURING;
+  statusBarOverride = tr(STR_CAPTURE_STARTED);
+  requestUpdate();
+}
+
+void EpubReaderActivity::stopCapture() {
+  if (captureBuffer.empty()) {
+    cancelCapture();
+    return;
+  }
+  const bool ok = ClippingStore::saveClipping(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
+  statusBarOverride = ok ? tr(STR_CLIPPING_SAVED) : tr(STR_SAVE_FAILED);
+  if (ok) {
+    cachedClippings = ClippingStore::loadIndex(epub->getPath());
+  }
+  captureBuffer.clear();
+  captureState = CaptureState::IDLE;
+  pendingCaptureAfterRender = false;
+  requestUpdate();
+}
+
+void EpubReaderActivity::cancelCapture() {
+  captureBuffer.clear();
+  captureState = CaptureState::IDLE;
+  pendingCaptureAfterRender = false;
 }
 
 void EpubReaderActivity::loop() {
@@ -145,6 +210,11 @@ void EpubReaderActivity::loop() {
       if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
         addBookmark();
       } else {
+        if (captureState == CaptureState::CAPTURING) {
+          stopCapture();
+          requestUpdate();
+          vTaskDelay(400 / portTICK_PERIOD_MS);
+        }
         const int currentPage = section ? section->currentPage + 1 : 0;
         const int totalPages = section ? section->pageCount : 0;
         float bookProgress = 0.0f;
@@ -172,6 +242,9 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+    if (captureState == CaptureState::CAPTURING) {
+      cancelCapture();
+    }
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
@@ -181,6 +254,12 @@ void EpubReaderActivity::loop() {
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (showBookmarkMessage) {
       showBookmarkMessage = false;
+      requestUpdate();
+      return;
+    }
+
+    if (captureState == CaptureState::CAPTURING) {
+      cancelCapture();
       requestUpdate();
       return;
     }
@@ -199,6 +278,7 @@ void EpubReaderActivity::loop() {
   if (prevTriggered || nextTriggered) {
     RenderLock lock(*this);
     showBookmarkMessage = false;
+    statusBarOverride.clear();
   }
 
   if (!prevTriggered && !nextTriggered) {
@@ -234,10 +314,23 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (prevTriggered && captureState == CaptureState::CAPTURING) {
+    stopCapture();
+  }
+
   if (prevTriggered) {
     pageTurn(false);
   } else {
     pageTurn(true);
+  }
+
+  if (captureState == CaptureState::CAPTURING && !prevTriggered && nextTriggered) {
+    if (section) {
+      RenderLock lock(*this);
+      captureCurrentPage();
+    } else {
+      pendingCaptureAfterRender = true;
+    }
   }
 }
 
@@ -344,6 +437,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                              });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::CAPTURE: {
+      applyOrientation(SETTINGS.orientation);
+      startCapture();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
+      startActivityForResult(std::make_unique<EpubReaderClippingsListActivity>(renderer, mappedInput, epub->getPath()),
+                             [this](const ActivityResult&) {
+                               cachedClippings = ClippingStore::loadIndex(epub->getPath());
+                               requestUpdate();
+                             });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
       float bookProgress = 0.0f;
       if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
@@ -415,6 +521,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
           progressChangeResultHandler);
+      break;
     }
   }
 }
@@ -611,6 +718,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
   }
 
+  if (pendingCaptureAfterRender && section) {
+    captureCurrentPage();
+    pendingCaptureAfterRender = false;
+  }
+
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
@@ -641,6 +753,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                         // TODO: prevent infinite loop if the page keeps failing to load for some reason
       automaticPageTurnActive = false;
       return;
+    }
+
+    if (!cachedClippings.empty() &&
+        ClippingStore::hasClippingAtPage(cachedClippings, static_cast<uint16_t>(currentSpineIndex),
+                                         static_cast<uint16_t>(section->currentPage))) {
+      constexpr int barWidth = 3;
+      constexpr int tickLen = 8;
+      constexpr int edgePad = 4;
+      const int screenWidth = renderer.getScreenWidth();
+      const int sidebarY = orientedMarginTop;
+      const int sidebarHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+      const int leftX = edgePad;
+      renderer.fillRect(leftX, sidebarY, barWidth, sidebarHeight, true);
+      renderer.fillRect(leftX + barWidth, sidebarY, tickLen, barWidth, true);
+      renderer.fillRect(leftX + barWidth, sidebarY + sidebarHeight - barWidth, tickLen, barWidth, true);
+      const int rightX = screenWidth - edgePad - barWidth;
+      renderer.fillRect(rightX, sidebarY, barWidth, sidebarHeight, true);
+      renderer.fillRect(rightX - tickLen, sidebarY, tickLen, barWidth, true);
+      renderer.fillRect(rightX - tickLen, sidebarY + sidebarHeight - barWidth, tickLen, barWidth, true);
     }
 
     // Collect footnotes from the loaded page
@@ -813,6 +944,39 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::renderStatusBar() const {
+  if (!section) {
+    return;
+  }
+
+  if (!statusBarOverride.empty()) {
+    int orientedMarginTop = 0;
+    int orientedMarginRight = 0;
+    int orientedMarginBottom = 0;
+    int orientedMarginLeft = 0;
+    renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                     &orientedMarginLeft);
+    const auto textY = renderer.getScreenHeight() - orientedMarginBottom - 4;
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, statusBarOverride.c_str());
+    return;
+  }
+
+  if (captureState == CaptureState::CAPTURING) {
+    int orientedMarginTop = 0;
+    int orientedMarginRight = 0;
+    int orientedMarginBottom = 0;
+    int orientedMarginLeft = 0;
+    renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                     &orientedMarginLeft);
+    const auto textY = renderer.getScreenHeight() - orientedMarginBottom - 4;
+    const char* capText = tr(STR_CAPTURE_STARTED);
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, capText);
+    const int x = (renderer.getScreenWidth() - textWidth) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, textY, capText);
+    return;
+  }
+
   // Calculate progress in book
   const int currentPage = section->currentPage + 1;
   const float pageCount = section->pageCount;
@@ -910,6 +1074,11 @@ void EpubReaderActivity::restoreSavedPosition() {
 
 void EpubReaderActivity::addBookmark() {
   if (!section || !epub) {
+    return;
+  }
+  if (epub->getPath().find("/.crosspoint/") != std::string::npos) {
+    statusBarOverride = tr(STR_CANNOT_BOOKMARK_HERE);
+    requestUpdate();
     return;
   }
   float chapterProgress;
