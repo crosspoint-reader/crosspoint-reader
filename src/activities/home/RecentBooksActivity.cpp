@@ -78,7 +78,7 @@ void RecentBooksActivity::loop() {
       }
     };
 
-    std::string heading = tr(STR_DELETE) + std::string("? ");
+    std::string heading = tr(STR_REMOVE) + std::string("? ");
     startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, bookTitle), handler);
     return;
   }
@@ -119,7 +119,7 @@ void RecentBooksActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DELETE), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_REMOVE), "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
