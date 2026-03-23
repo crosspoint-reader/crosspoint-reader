@@ -7,8 +7,8 @@
 
 #include <algorithm>
 
-#include "BookInfoActivity.h"
 #include "../util/ConfirmationActivity.h"
+#include "BookInfoActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -59,7 +59,8 @@ void RecentBooksActivity::loop() {
   }
 
   // Left button: remove selected book from recent list
-  if (!recentBooks.empty() && selectorIndex < recentBooks.size() && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  if (!recentBooks.empty() && selectorIndex < recentBooks.size() &&
+      mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     const std::string bookPath = recentBooks[selectorIndex].path;
     const std::string bookTitle = recentBooks[selectorIndex].title;
 

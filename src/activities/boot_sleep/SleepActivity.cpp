@@ -20,7 +20,6 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 
-
 namespace {
 
 // Context passed through PNGdec's decode() user-pointer to the per-scanline draw callback.
