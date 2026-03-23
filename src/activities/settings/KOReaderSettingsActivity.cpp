@@ -107,8 +107,9 @@ void KOReaderSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::LOGIN),
-                           [](const ActivityResult&) {});
+    startActivityForResult(
+        std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::LOGIN),
+        [](const ActivityResult&) {});
   } else if (selectedIndex == 5) {
     // Register
     if (!KOREADER_STORE.hasCredentials()) {
