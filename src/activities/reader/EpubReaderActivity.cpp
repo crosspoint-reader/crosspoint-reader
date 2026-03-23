@@ -141,10 +141,9 @@ void EpubReaderActivity::loop() {
       mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS && KOREADER_STORE.hasCredentials()) {
     const int currentPage = section ? section->currentPage : 0;
     const int totalPages = section ? section->pageCount : 0;
-    startActivityForResult(
-        std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                               currentPage, totalPages),
-        [this](const ActivityResult& result) { handleSyncResult(result); });
+    startActivityForResult(std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(),
+                                                                  currentSpineIndex, currentPage, totalPages),
+                           [this](const ActivityResult& result) { handleSyncResult(result); });
     return;
   }
 
@@ -398,10 +397,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : 0;
         const int totalPages = section ? section->pageCount : 0;
-        startActivityForResult(
-            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages),
-            [this](const ActivityResult& result) { handleSyncResult(result); });
+        startActivityForResult(std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(),
+                                                                      currentSpineIndex, currentPage, totalPages),
+                               [this](const ActivityResult& result) { handleSyncResult(result); });
       }
       break;
     }
