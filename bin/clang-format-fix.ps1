@@ -8,7 +8,7 @@
     hyphenation tries, uzlib, .pio, *.generated.h).
 
     The clang-format binary path is resolved once and cached in
-    .local/clang-format-fix.local. On first run it checks a default path,
+    bin/clang-format-fix.local. On first run it checks a default path,
     then PATH, then common install locations. Edit the .local file to
     override manually.
 
@@ -131,11 +131,17 @@ if ($files.Count -eq 0) {
 Write-Host "Formatting $($files.Count) files..."
 $i = 0
 $changed = 0
+$failures = 0
 foreach ($f in $files) {
     $i++
     $rel = $f.FullName.Substring($repoRoot.Length + 1)
     $hashBefore = (Get-FileHash $f.FullName -Algorithm MD5).Hash
     & $clangFormat -i $f.FullName
+    if ($LASTEXITCODE -ne 0) {
+        $failures++
+        Write-Host "  [$i/$($files.Count)] $rel (FAILED, exit code $LASTEXITCODE)"
+        continue
+    }
     $hashAfter = (Get-FileHash $f.FullName -Algorithm MD5).Hash
     if ($hashBefore -ne $hashAfter) {
         $changed++
@@ -144,4 +150,5 @@ foreach ($f in $files) {
         Write-Host "  [$i/$($files.Count)] $rel"
     }
 }
-Write-Host "Done. $changed/$($files.Count) files changed."
+Write-Host "Done. $changed/$($files.Count) files changed, $failures failed."
+if ($failures -gt 0) { exit 1 }
