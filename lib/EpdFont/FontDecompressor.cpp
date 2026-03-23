@@ -24,12 +24,12 @@ void FontDecompressor::clearCache() {
 }
 
 void FontDecompressor::freePageBuffer() {
-  free(pageBuffer);
-  pageBuffer = nullptr;
-  free(pageGlyphs);
-  pageGlyphs = nullptr;
-  pageFont = nullptr;
-  pageGlyphCount = 0;
+  for (uint8_t s = 0; s < pageSlotCount; s++) {
+    free(pageSlots[s].buffer);
+    free(pageSlots[s].glyphs);
+    pageSlots[s] = {};
+  }
+  pageSlotCount = 0;
 }
 
 void FontDecompressor::freeHotGroup() {
@@ -137,24 +137,28 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     return &fontData->bitmap[glyph->dataOffset];
   }
 
-  // Check page buffer first (populated by prewarmCache)
-  if (pageBuffer && pageFont == fontData && pageGlyphCount > 0) {
-    int left = 0, right = pageGlyphCount - 1;
+  // Check page buffer slots (populated by prewarmCache — one slot per font style)
+  for (uint8_t s = 0; s < pageSlotCount; s++) {
+    const auto& slot = pageSlots[s];
+    if (slot.fontData != fontData || slot.glyphCount == 0) continue;
+
+    int left = 0, right = slot.glyphCount - 1;
     while (left <= right) {
       int mid = left + (right - left) / 2;
-      if (pageGlyphs[mid].glyphIndex == glyphIndex) {
-        if (pageGlyphs[mid].bufferOffset != UINT32_MAX) {
+      if (slot.glyphs[mid].glyphIndex == glyphIndex) {
+        if (slot.glyphs[mid].bufferOffset != UINT32_MAX) {
           stats.cacheHits++;
           stats.getBitmapTimeUs += micros() - tStart;
-          return &pageBuffer[pageGlyphs[mid].bufferOffset];
+          return &slot.buffer[slot.glyphs[mid].bufferOffset];
         }
         break;  // Not extracted during prewarm; fall through to hot-group path
       }
-      if (pageGlyphs[mid].glyphIndex < glyphIndex)
+      if (slot.glyphs[mid].glyphIndex < glyphIndex)
         left = mid + 1;
       else
         right = mid - 1;
     }
+    break;  // Found the right slot but glyph wasn't in it; don't check other slots
   }
 
   // Fallback: hot group slot
@@ -239,8 +243,14 @@ int32_t FontDecompressor::findGlyphIndex(const EpdFontData* fontData, uint32_t c
 }
 
 int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8Text) {
-  freePageBuffer();
   if (!fontData || !fontData->groups || !utf8Text) return 0;
+
+  // Allocate the next available slot (caller must call freePageBuffer/clearCache to reset)
+  if (pageSlotCount >= MAX_PAGE_SLOTS) {
+    LOG_ERR("FDC", "All %u page buffer slots full, cannot prewarm fontData=%p", MAX_PAGE_SLOTS, (void*)fontData);
+    return -1;
+  }
+  PageSlot& slot = pageSlots[pageSlotCount];
 
   // Step 1: Collect unique glyph indices needed for this page
   uint32_t neededGlyphs[MAX_PAGE_GLYPHS];
@@ -304,34 +314,37 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
 
   stats.uniqueGroupsAccessed = groupCount;
 
-  // Step 3: Allocate page buffer and lookup table
-  pageBuffer = static_cast<uint8_t*>(malloc(totalBytes));
-  pageGlyphs = static_cast<PageGlyphEntry*>(malloc(glyphCount * sizeof(PageGlyphEntry)));
-  if (!pageBuffer || !pageGlyphs) {
+  // Step 3: Allocate page buffer and lookup table for this slot
+  slot.buffer = static_cast<uint8_t*>(malloc(totalBytes));
+  slot.glyphs = static_cast<PageGlyphEntry*>(malloc(glyphCount * sizeof(PageGlyphEntry)));
+  if (!slot.buffer || !slot.glyphs) {
     LOG_ERR("FDC", "Failed to allocate page buffer (%u bytes, %u glyphs)", totalBytes, glyphCount);
-    freePageBuffer();
+    free(slot.buffer);
+    free(slot.glyphs);
+    slot = {};
     return glyphCount;
   }
-  stats.pageBufferBytes = totalBytes;
-  stats.pageGlyphsBytes = glyphCount * sizeof(PageGlyphEntry);
+  stats.pageBufferBytes += totalBytes;
+  stats.pageGlyphsBytes += glyphCount * sizeof(PageGlyphEntry);
 
-  pageFont = fontData;
-  pageGlyphCount = glyphCount;
+  slot.fontData = fontData;
+  slot.glyphCount = glyphCount;
+  pageSlotCount++;
 
   // Initialize lookup entries (bufferOffset = UINT32_MAX means not yet extracted)
   for (uint16_t i = 0; i < glyphCount; i++) {
-    pageGlyphs[i] = {neededGlyphs[i], UINT32_MAX, 0};
+    slot.glyphs[i] = {neededGlyphs[i], UINT32_MAX, 0};
   }
 
   // Sort by glyphIndex for binary search in getBitmap()
   for (uint16_t i = 1; i < glyphCount; i++) {
-    PageGlyphEntry key = pageGlyphs[i];
+    PageGlyphEntry key = slot.glyphs[i];
     int j = i - 1;
-    while (j >= 0 && pageGlyphs[j].glyphIndex > key.glyphIndex) {
-      pageGlyphs[j + 1] = pageGlyphs[j];
+    while (j >= 0 && slot.glyphs[j].glyphIndex > key.glyphIndex) {
+      slot.glyphs[j + 1] = slot.glyphs[j];
       j--;
     }
-    pageGlyphs[j + 1] = key;
+    slot.glyphs[j + 1] = key;
   }
 
   // Step 3b: Pre-scan to compute each needed glyph's byte-aligned offset within its group.
@@ -357,15 +370,15 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
 
       const EpdGlyph& glyph = fontData->glyph[i];
 
-      // Binary search in sorted pageGlyphs to find if glyph i is needed
-      int left = 0, right = (int)pageGlyphCount - 1;
+      // Binary search in sorted slot.glyphs to find if glyph i is needed
+      int left = 0, right = (int)slot.glyphCount - 1;
       while (left <= right) {
         const int mid = left + (right - left) / 2;
-        if (pageGlyphs[mid].glyphIndex == i) {
-          pageGlyphs[mid].alignedOffset = groupAlignedTracker[gpPos];
+        if (slot.glyphs[mid].glyphIndex == i) {
+          slot.glyphs[mid].alignedOffset = groupAlignedTracker[gpPos];
           break;
         }
-        if (pageGlyphs[mid].glyphIndex < i)
+        if (slot.glyphs[mid].glyphIndex < i)
           left = mid + 1;
         else
           right = mid - 1;
@@ -384,14 +397,14 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
         const uint32_t glyphI = group.firstGlyphIndex + j;
         const EpdGlyph& glyph = fontData->glyph[glyphI];
 
-        int left = 0, right = (int)pageGlyphCount - 1;
+        int left = 0, right = (int)slot.glyphCount - 1;
         while (left <= right) {
           const int mid = left + (right - left) / 2;
-          if (pageGlyphs[mid].glyphIndex == glyphI) {
-            pageGlyphs[mid].alignedOffset = alignedOff;
+          if (slot.glyphs[mid].glyphIndex == glyphI) {
+            slot.glyphs[mid].alignedOffset = alignedOff;
             break;
           }
-          if (pageGlyphs[mid].glyphIndex < glyphI)
+          if (slot.glyphs[mid].glyphIndex < glyphI)
             left = mid + 1;
           else
             right = mid - 1;
@@ -430,13 +443,13 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
 
     // Extract needed glyphs directly from the byte-aligned temp buffer, compacting on the fly.
     // alignedOffset was pre-computed in step 3b — no full-group compact scan needed.
-    for (uint16_t i = 0; i < pageGlyphCount; i++) {
-      if (pageGlyphs[i].bufferOffset != UINT32_MAX) continue;  // already extracted
-      if (getGroupIndex(fontData, pageGlyphs[i].glyphIndex) != groupIdx) continue;
+    for (uint16_t i = 0; i < slot.glyphCount; i++) {
+      if (slot.glyphs[i].bufferOffset != UINT32_MAX) continue;  // already extracted
+      if (getGroupIndex(fontData, slot.glyphs[i].glyphIndex) != groupIdx) continue;
 
-      const EpdGlyph& glyph = fontData->glyph[pageGlyphs[i].glyphIndex];
-      compactSingleGlyph(&tempBuf[pageGlyphs[i].alignedOffset], &pageBuffer[writeOffset], glyph.width, glyph.height);
-      pageGlyphs[i].bufferOffset = writeOffset;
+      const EpdGlyph& glyph = fontData->glyph[slot.glyphs[i].glyphIndex];
+      compactSingleGlyph(&tempBuf[slot.glyphs[i].alignedOffset], &slot.buffer[writeOffset], glyph.width, glyph.height);
+      slot.glyphs[i].bufferOffset = writeOffset;
       writeOffset += glyph.dataLength;
     }
 
