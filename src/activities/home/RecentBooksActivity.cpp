@@ -8,14 +8,11 @@
 #include <algorithm>
 
 #include "BookInfoActivity.h"
+#include "../util/ConfirmationActivity.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-
-namespace {
-constexpr unsigned long GO_HOME_MS = 1000;
-}  // namespace
 
 void RecentBooksActivity::loadRecentBooks() {
   recentBooks.clear();
@@ -61,6 +58,32 @@ void RecentBooksActivity::loop() {
     onGoHome();
   }
 
+  // Left button: remove selected book from recent list
+  if (!recentBooks.empty() && selectorIndex < recentBooks.size() && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    const std::string bookPath = recentBooks[selectorIndex].path;
+    const std::string bookTitle = recentBooks[selectorIndex].title;
+
+    auto handler = [this, bookPath](const ActivityResult& res) {
+      if (!res.isCancelled) {
+        LOG_DBG("RBA", "Removing from recent books: %s", bookPath.c_str());
+        RECENT_BOOKS.removeBook(bookPath);
+        loadRecentBooks();
+        if (recentBooks.empty()) {
+          selectorIndex = 0;
+        } else if (selectorIndex >= recentBooks.size()) {
+          selectorIndex = recentBooks.size() - 1;
+        }
+        requestUpdate(true);
+      } else {
+        LOG_DBG("RBA", "Remove cancelled by user");
+      }
+    };
+
+    std::string heading = tr(STR_DELETE) + std::string("? ");
+    startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, bookTitle), handler);
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
       const std::string& path = recentBooks[selectorIndex].path;
@@ -79,18 +102,8 @@ void RecentBooksActivity::loop() {
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
   buttonNavigator.onNextContinuous([this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
 }
@@ -128,7 +141,7 @@ void RecentBooksActivity::render(RenderLock&&) {
   const bool hasInfo = !recentBooks.empty() && selectorIndex < recentBooks.size() &&
                        (FsHelpers::hasEpubExtension(recentBooks[selectorIndex].path) ||
                         FsHelpers::hasXtcExtension(recentBooks[selectorIndex].path));
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), "", hasInfo ? tr(STR_INFO) : "");
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DELETE), hasInfo ? tr(STR_INFO) : "");
 
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   // Side buttons (Up/Down) navigate; show their hints on the side
