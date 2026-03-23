@@ -148,8 +148,9 @@ void EpubReaderActivity::loop() {
   }
 
   // Short press CONFIRM enters reader menu activity.
+  // Also opens the menu on long-press release when no KOReader credentials are configured.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+      (mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS || !KOREADER_STORE.hasCredentials())) {
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -409,7 +410,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 void EpubReaderActivity::handleSyncResult(const ActivityResult& result) {
   if (!result.isCancelled) {
     const auto& sync = std::get<SyncResult>(result.data);
-    if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
+    const int effectivePage = section ? section->currentPage : nextPageNumber;
+    if (currentSpineIndex != sync.spineIndex || effectivePage != sync.page) {
       RenderLock lock(*this);
       currentSpineIndex = sync.spineIndex;
       nextPageNumber = sync.page;
