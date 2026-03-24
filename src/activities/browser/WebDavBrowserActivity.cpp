@@ -1,6 +1,7 @@
 #include "WebDavBrowserActivity.h"
 
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -221,13 +222,6 @@ void WebDavBrowserActivity::fetchListing() {
   LOG_DBG("DAV", "Found %d entries", entries.size());
   selectorIndex = 0;
 
-  if (entries.empty()) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_NO_ENTRIES);
-    requestUpdate();
-    return;
-  }
-
   state = BrowserState::BROWSING;
   requestUpdate();
 }
@@ -289,8 +283,10 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
   if (result == HttpDownloader::OK) {
     LOG_DBG("DAV", "Download complete: %s", filename.c_str());
 
-    Epub epub(filename, "/.crosspoint");
-    epub.clearCache();
+    if (FsHelpers::hasEpubExtension(filename)) {
+      Epub epub(filename, "/.crosspoint");
+      epub.clearCache();
+    }
 
     state = BrowserState::BROWSING;
     requestUpdate();
