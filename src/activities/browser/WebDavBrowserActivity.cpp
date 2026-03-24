@@ -229,8 +229,7 @@ void WebDavBrowserActivity::fetchListing() {
 void WebDavBrowserActivity::navigateToEntry(const WebDavEntry& entry) {
   navigationHistory.push_back(currentUrl);
 
-  std::string baseUrl = UrlUtils::extractHost(currentUrl);
-  currentUrl = baseUrl + entry.href;
+  currentUrl = UrlUtils::buildUrl(currentUrl, entry.href);
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_WEBDAV_LOADING);
@@ -265,8 +264,7 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
   downloadTotal = 0;
   requestUpdate(true);
 
-  std::string baseUrl = UrlUtils::extractHost(currentUrl);
-  std::string downloadUrl = baseUrl + entry.href;
+  std::string downloadUrl = UrlUtils::buildUrl(currentUrl, entry.href);
 
   std::string filename = "/" + StringUtils::sanitizeFilename(entry.name);
 
@@ -291,8 +289,7 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
     state = BrowserState::BROWSING;
     requestUpdate();
   } else {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_DOWNLOAD_FAILED);
+    state = BrowserState::BROWSING;
     requestUpdate();
   }
 }
