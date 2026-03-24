@@ -82,6 +82,7 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
   void goToBrowser();
+  void goToWebDavBrowser();
   void goToReader(std::string path);
   void goToSleep();
   void goToBoot();

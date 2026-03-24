@@ -185,6 +185,10 @@ class CrossPointSettings {
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
   char opdsPassword[64] = "";
+  // WebDAV browser settings
+  char webdavServerUrl[128] = "";
+  char webdavUsername[64] = "";
+  char webdavPassword[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons

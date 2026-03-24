@@ -27,6 +27,9 @@ int HomeActivity::getMenuItemCount() const {
   if (hasOpdsUrl) {
     count++;
   }
+  if (hasWebDavUrl) {
+    count++;
+  }
   return count;
 }
 
@@ -112,6 +115,7 @@ void HomeActivity::onEnter() {
 
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
+  hasWebDavUrl = strlen(SETTINGS.webdavServerUrl) > 0;
 
   selectorIndex = 0;
 
@@ -191,6 +195,7 @@ void HomeActivity::loop() {
     const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int webDavIdx = hasWebDavUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
@@ -202,6 +207,8 @@ void HomeActivity::loop() {
       onRecentsOpen();
     } else if (menuSelectedIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
+    } else if (menuSelectedIndex == webDavIdx) {
+      onWebDavBrowserOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
       onFileTransferOpen();
     } else if (menuSelectedIndex == settingsIdx) {
@@ -230,9 +237,13 @@ void HomeActivity::render(RenderLock&&) {
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
   if (hasOpdsUrl) {
-    // Insert OPDS Browser after File Browser
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
+  }
+  if (hasWebDavUrl) {
+    int insertPos = hasOpdsUrl ? 3 : 2;
+    menuItems.insert(menuItems.begin() + insertPos, tr(STR_WEBDAV_BROWSER));
+    menuIcons.insert(menuIcons.begin() + insertPos, Library);
   }
 
   GUI.drawButtonMenu(
@@ -269,3 +280,5 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onWebDavBrowserOpen() { activityManager.goToWebDavBrowser(); }
