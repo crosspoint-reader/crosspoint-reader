@@ -29,6 +29,7 @@ class WebDavBrowserActivity final : public Activity {
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
+  int failedDownloadIndex = -1;
 
   void checkAndConnectWifi();
   void launchWifiSelection();

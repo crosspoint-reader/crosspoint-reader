@@ -47,7 +47,9 @@ void WebDavBrowserActivity::loop() {
 
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!entries.empty()) {
+      if (failedDownloadIndex >= 0 && failedDownloadIndex < static_cast<int>(entries.size())) {
+        downloadFile(entries[failedDownloadIndex]);
+      } else if (!entries.empty()) {
         state = BrowserState::BROWSING;
         requestUpdate();
       } else if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
@@ -206,6 +208,7 @@ void WebDavBrowserActivity::render(RenderLock&&) {
 }
 
 void WebDavBrowserActivity::fetchListing() {
+  failedDownloadIndex = -1;
   if (currentUrl.empty()) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_SERVER_URL);
@@ -305,9 +308,11 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
       epub.clearCache();
     }
 
+    failedDownloadIndex = -1;
     state = BrowserState::BROWSING;
     requestUpdate();
   } else {
+    failedDownloadIndex = selectorIndex;
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
     requestUpdate();
