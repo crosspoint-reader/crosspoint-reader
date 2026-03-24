@@ -62,7 +62,7 @@ import sys
 import time
 from pathlib import Path
 
-import yaml
+import json
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ def _print_summary(out_dir: str, stem_name: str, extensions: list) -> None:
 
 def _load_entries_from_yaml(yaml_path: str) -> list:
     with open(yaml_path, encoding="utf-8") as f:
-        base_cfg = yaml.safe_load(f)
+        base_cfg = json.load(f)
     return [(str(e["headword"]), str(e["definition"])) for e in base_cfg["entries"]]
 
 
@@ -221,7 +221,7 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
 
     # Load entries (from base_entries or directly)
     if "base_entries" in meta:
-        base_yaml = os.path.join(yaml_dir, meta["base_entries"] + ".yaml")
+        base_yaml = os.path.join(yaml_dir, meta["base_entries"] + ".json")
         raw = _load_entries_from_yaml(base_yaml)
     else:
         raw = [(str(e["headword"]), str(e["definition"])) for e in cfg["entries"]]
@@ -471,7 +471,7 @@ def build_synthetic(cfg: dict, out_dir: str) -> None:
 
 def generate(yaml_path: str) -> None:
     with open(yaml_path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+        cfg = json.load(f)
 
     meta = cfg["meta"]
     yaml_dir = os.path.dirname(os.path.abspath(yaml_path))
@@ -507,7 +507,7 @@ def main() -> None:
     if args.all:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         dicts_dir = os.path.join(script_dir, "dicts")
-        yaml_files = sorted(Path(dicts_dir).glob("*.yaml"))
+        yaml_files = sorted(Path(dicts_dir).glob("*.json"))
         if not yaml_files:
             print(f"No YAML files found in {dicts_dir}", file=sys.stderr)
             sys.exit(1)

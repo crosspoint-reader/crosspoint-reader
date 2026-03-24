@@ -1,8 +1,0 @@
-meta:
-  name: no-ifo
-  bookname: "No IFO Test"
-  output_dir: test/dictionaries/no-ifo
-  entry_format: m
-  ifo_version: "2.4.2"
-  generate_ifo: false
-  base_entries: basic

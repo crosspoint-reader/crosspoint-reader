@@ -1,9 +1,0 @@
-meta:
-  name: extract-dict
-  bookname: "Extract Dict Test"
-  output_dir: test/dictionaries/extract-dict
-  entry_format: m
-  compress_dict: true
-  generate_idx_oft: true
-  ifo_version: "2.4.2"
-  base_entries: basic

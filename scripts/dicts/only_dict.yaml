@@ -1,9 +1,0 @@
-meta:
-  name: only-dict
-  bookname: "Only Dict Test"
-  output_dir: test/dictionaries/only-dict
-  entry_format: m
-  ifo_version: "2.4.2"
-  generate_ifo: false
-  generate_idx: false
-  base_entries: basic
