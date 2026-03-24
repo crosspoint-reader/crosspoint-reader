@@ -269,7 +269,23 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
 
   std::string downloadUrl = UrlUtils::buildUrl(currentUrl, entry.href);
 
-  std::string filename = "/" + StringUtils::sanitizeFilename(entry.name);
+  std::string baseName = StringUtils::sanitizeFilename(entry.name);
+  std::string filename = "/" + baseName;
+
+  // Avoid overwriting existing files by appending a numeric suffix
+  if (Storage.exists(filename.c_str())) {
+    std::string stem = baseName;
+    std::string ext;
+    auto dot = baseName.rfind('.');
+    if (dot != std::string::npos) {
+      stem = baseName.substr(0, dot);
+      ext = baseName.substr(dot);
+    }
+    for (int i = 1; i < 100; i++) {
+      filename = "/" + stem + " (" + std::to_string(i) + ")" + ext;
+      if (!Storage.exists(filename.c_str())) break;
+    }
+  }
 
   LOG_DBG("DAV", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
