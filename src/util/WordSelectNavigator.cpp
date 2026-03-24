@@ -69,8 +69,7 @@ int WordSelectNavigator::findClosestWord(int targetRow) const {
   return bestMatch;
 }
 
-bool WordSelectNavigator::handleNavigation(const MappedInputManager& input,
-                                           const GfxRenderer& renderer) {
+bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, const GfxRenderer& renderer) {
   if (rows.empty()) return false;
 
   const auto orient = renderer.getOrientation();

@@ -9,7 +9,7 @@
 class LookedUpWordsActivity final : public Activity {
  public:
   explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string cachePath,
-                                  int readerFontId)
+                                 int readerFontId)
       : Activity("LookedUpWords", renderer, mappedInput),
         cachePath(std::move(cachePath)),
         readerFontId(readerFontId),

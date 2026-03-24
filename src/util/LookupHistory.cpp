@@ -41,11 +41,21 @@ std::vector<LookupHistory::Entry> LookupHistory::readAll(const std::string& path
           e.word = std::string(lineBuf, sepIdx);
           char code = lineBuf[sepIdx + 1];
           switch (code) {
-            case 'D': e.status = Status::Direct; break;
-            case 'T': e.status = Status::Stem; break;
-            case 'Y': e.status = Status::AltForm; break;
-            case 'S': e.status = Status::Suggestion; break;
-            default:  e.status = Status::NotFound; break;
+            case 'D':
+              e.status = Status::Direct;
+              break;
+            case 'T':
+              e.status = Status::Stem;
+              break;
+            case 'Y':
+              e.status = Status::AltForm;
+              break;
+            case 'S':
+              e.status = Status::Suggestion;
+              break;
+            default:
+              e.status = Status::NotFound;
+              break;
           }
         } else {
           // No separator — legacy line, treat as not-found status
@@ -68,18 +78,31 @@ std::vector<LookupHistory::Entry> LookupHistory::readAll(const std::string& path
     lineBuf[lineLen] = '\0';
     int sepIdx = -1;
     for (int i = lineLen - 1; i >= 0; i--) {
-      if (lineBuf[i] == '|') { sepIdx = i; break; }
+      if (lineBuf[i] == '|') {
+        sepIdx = i;
+        break;
+      }
     }
     Entry e;
     if (sepIdx >= 0 && sepIdx + 1 < lineLen) {
       e.word = std::string(lineBuf, sepIdx);
       char code = lineBuf[sepIdx + 1];
       switch (code) {
-        case 'D': e.status = Status::Direct; break;
-        case 'T': e.status = Status::Stem; break;
-        case 'Y': e.status = Status::AltForm; break;
-        case 'S': e.status = Status::Suggestion; break;
-        default:  e.status = Status::NotFound; break;
+        case 'D':
+          e.status = Status::Direct;
+          break;
+        case 'T':
+          e.status = Status::Stem;
+          break;
+        case 'Y':
+          e.status = Status::AltForm;
+          break;
+        case 'S':
+          e.status = Status::Suggestion;
+          break;
+        default:
+          e.status = Status::NotFound;
+          break;
       }
     } else {
       e.word = std::string(lineBuf, lineLen);

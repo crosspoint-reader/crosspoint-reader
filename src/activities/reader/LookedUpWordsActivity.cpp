@@ -13,22 +13,33 @@
 
 static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
   switch (fs) {
-    case DictionaryLookupController::FoundStatus::Direct:     return LookupHistory::Status::Direct;
-    case DictionaryLookupController::FoundStatus::Stem:       return LookupHistory::Status::Stem;
-    case DictionaryLookupController::FoundStatus::AltForm:    return LookupHistory::Status::AltForm;
-    case DictionaryLookupController::FoundStatus::Suggestion: return LookupHistory::Status::Suggestion;
-    default:                                                  return LookupHistory::Status::NotFound;
+    case DictionaryLookupController::FoundStatus::Direct:
+      return LookupHistory::Status::Direct;
+    case DictionaryLookupController::FoundStatus::Stem:
+      return LookupHistory::Status::Stem;
+    case DictionaryLookupController::FoundStatus::AltForm:
+      return LookupHistory::Status::AltForm;
+    case DictionaryLookupController::FoundStatus::Suggestion:
+      return LookupHistory::Status::Suggestion;
+    default:
+      return LookupHistory::Status::NotFound;
   }
 }
 
 const char* LookedUpWordsActivity::glyphFor(LookupHistory::Status s) {
   switch (s) {
-    case LookupHistory::Status::Direct:     return "\xe2\x88\x9a";  // √ U+221A
-    case LookupHistory::Status::Stem:       return "~";
-    case LookupHistory::Status::AltForm:    return "~";
-    case LookupHistory::Status::Suggestion: return "?";
-    case LookupHistory::Status::NotFound:   return "\xc3\x97";  // × U+00D7
-    default:                                return "?";
+    case LookupHistory::Status::Direct:
+      return "\xe2\x88\x9a";  // √ U+221A
+    case LookupHistory::Status::Stem:
+      return "~";
+    case LookupHistory::Status::AltForm:
+      return "~";
+    case LookupHistory::Status::Suggestion:
+      return "?";
+    case LookupHistory::Status::NotFound:
+      return "\xc3\x97";  // × U+00D7
+    default:
+      return "?";
   }
 }
 
@@ -47,21 +58,20 @@ void LookedUpWordsActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        const int chainStart = LookupHistory::addWord(cachePath, controller.getLookupWord(),
-                                                      toHistStatus(controller.getFoundStatus()));
-        startActivityForResult(
-            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
-                                                          controller.getFoundDefinition(), readerFontId, true,
-                                                          cachePath, chainStart),
-            [this](const ActivityResult& result) {
-              entries = LookupHistory::load(cachePath);
-              if (!result.isCancelled) {
-                setResult(ActivityResult{});
-                finish();
-              } else {
-                requestUpdate();
-              }
-            });
+        const int chainStart =
+            LookupHistory::addWord(cachePath, controller.getLookupWord(), toHistStatus(controller.getFoundStatus()));
+        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
+                                   renderer, mappedInput, controller.getFoundWord(), controller.getFoundDefinition(),
+                                   readerFontId, true, cachePath, chainStart),
+                               [this](const ActivityResult& result) {
+                                 entries = LookupHistory::load(cachePath);
+                                 if (!result.isCancelled) {
+                                   setResult(ActivityResult{});
+                                   finish();
+                                 } else {
+                                   requestUpdate();
+                                 }
+                               });
         break;
       }
       case DictionaryLookupController::LookupEvent::LookupFailed:

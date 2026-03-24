@@ -17,11 +17,16 @@
 
 static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
   switch (fs) {
-    case DictionaryLookupController::FoundStatus::Direct:     return LookupHistory::Status::Direct;
-    case DictionaryLookupController::FoundStatus::Stem:       return LookupHistory::Status::Stem;
-    case DictionaryLookupController::FoundStatus::AltForm:    return LookupHistory::Status::AltForm;
-    case DictionaryLookupController::FoundStatus::Suggestion: return LookupHistory::Status::Suggestion;
-    default:                                                  return LookupHistory::Status::NotFound;
+    case DictionaryLookupController::FoundStatus::Direct:
+      return LookupHistory::Status::Direct;
+    case DictionaryLookupController::FoundStatus::Stem:
+      return LookupHistory::Status::Stem;
+    case DictionaryLookupController::FoundStatus::AltForm:
+      return LookupHistory::Status::AltForm;
+    case DictionaryLookupController::FoundStatus::Suggestion:
+      return LookupHistory::Status::Suggestion;
+    default:
+      return LookupHistory::Status::NotFound;
   }
 }
 

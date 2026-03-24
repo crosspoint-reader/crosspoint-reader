@@ -43,8 +43,7 @@ class DictionaryWordSelectActivity final : public Activity {
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
-  void extractWords(std::vector<WordSelectNavigator::WordInfo>& words,
-                    std::vector<WordSelectNavigator::Row>& rows);
+  void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows);
   void mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
                             std::vector<WordSelectNavigator::Row>& rows);
   void handleNotFound(const std::string& word);
