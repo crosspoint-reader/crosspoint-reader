@@ -109,6 +109,8 @@ void EpubReaderActivity::onExit() {
   epub.reset();
 }
 
+void EpubReaderActivity::onRestoredFromStack() { skipNextButtonCheck = true; }
+
 void EpubReaderActivity::captureCurrentPage() {
   if (!section || !epub) {
     return;
@@ -139,10 +141,10 @@ void EpubReaderActivity::startCapture() {
   captureBuffer.clear();
   {
     RenderLock lock(*this);
+    showCaptureFinishMessage = false;
     captureCurrentPage();
   }
   captureState = CaptureState::CAPTURING;
-  statusBarOverride = tr(STR_CAPTURE_STARTED);
   requestUpdate();
 }
 
@@ -152,13 +154,17 @@ void EpubReaderActivity::stopCapture() {
     return;
   }
   const bool ok = ClippingStore::saveClipping(epub->getPath(), epub->getTitle(), epub->getAuthor(), captureBuffer);
-  statusBarOverride = ok ? tr(STR_CLIPPING_SAVED) : tr(STR_SAVE_FAILED);
   if (ok) {
     cachedClippings = ClippingStore::loadIndex(epub->getPath());
   }
   captureBuffer.clear();
   captureState = CaptureState::IDLE;
   pendingCaptureAfterRender = false;
+  {
+    RenderLock lock(*this);
+    showCaptureFinishMessage = true;
+    captureSaveFailed = !ok;
+  }
   requestUpdate();
 }
 
@@ -172,6 +178,11 @@ void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
     finish();
+    return;
+  }
+
+  if (skipNextButtonCheck) {
+    skipNextButtonCheck = false;
     return;
   }
 
@@ -206,14 +217,16 @@ void EpubReaderActivity::loop() {
     if (showBookmarkMessage) {
       showBookmarkMessage = false;
       requestUpdate();
+    } else if (showCaptureFinishMessage) {
+      showCaptureFinishMessage = false;
+      requestUpdate();
     } else {
       if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
         addBookmark();
       } else {
         if (captureState == CaptureState::CAPTURING) {
-          stopCapture();
+          cancelCapture();
           requestUpdate();
-          vTaskDelay(400 / portTICK_PERIOD_MS);
         }
         const int currentPage = section ? section->currentPage + 1 : 0;
         const int totalPages = section ? section->pageCount : 0;
@@ -258,6 +271,12 @@ void EpubReaderActivity::loop() {
       return;
     }
 
+    if (showCaptureFinishMessage) {
+      showCaptureFinishMessage = false;
+      requestUpdate();
+      return;
+    }
+
     if (captureState == CaptureState::CAPTURING) {
       cancelCapture();
       requestUpdate();
@@ -278,6 +297,7 @@ void EpubReaderActivity::loop() {
   if (prevTriggered || nextTriggered) {
     RenderLock lock(*this);
     showBookmarkMessage = false;
+    showCaptureFinishMessage = false;
     statusBarOverride.clear();
   }
 
@@ -314,17 +334,20 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (prevTriggered && captureState == CaptureState::CAPTURING) {
-    stopCapture();
-  }
+  // If both prev and next fire in one frame (noise / dual edge), prefer forward so we do not
+  // treat a page-forward action as "go back and finish capture".
+  const bool backwardOnly = prevTriggered && !nextTriggered;
+  const bool forwardIntent = nextTriggered;
 
-  if (prevTriggered) {
+  if (backwardOnly && captureState == CaptureState::CAPTURING) {
+    stopCapture();
+  } else if (backwardOnly) {
     pageTurn(false);
-  } else {
+  } else if (forwardIntent) {
     pageTurn(true);
   }
 
-  if (captureState == CaptureState::CAPTURING && !prevTriggered && nextTriggered) {
+  if (captureState == CaptureState::CAPTURING && nextTriggered) {
     if (section) {
       RenderLock lock(*this);
       captureCurrentPage();
@@ -443,11 +466,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::CLIPPINGS: {
-      startActivityForResult(std::make_unique<EpubReaderClippingsListActivity>(renderer, mappedInput, epub->getPath()),
-                             [this](const ActivityResult&) {
-                               cachedClippings = ClippingStore::loadIndex(epub->getPath());
-                               requestUpdate();
-                             });
+      startActivityForResult(
+          std::make_unique<EpubReaderClippingsListActivity>(renderer, mappedInput, epub, epub->getPath()),
+          [this](const ActivityResult&) {
+            cachedClippings = ClippingStore::loadIndex(epub->getPath());
+            requestUpdate();
+          });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
@@ -789,7 +813,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     ScreenshotUtil::takeScreenshot(renderer);
   }
 
-  if (showBookmarkMessage) {
+  if (showCaptureFinishMessage) {
+    GUI.drawPopup(renderer, captureSaveFailed ? tr(STR_SAVE_FAILED) : tr(STR_CLIPPING_SAVED));
+  } else if (showBookmarkMessage) {
     GUI.drawPopup(renderer, maxBookmarksError ? tr(STR_MAX_BOOKMARKS_ERROR) : tr(STR_BOOKMARK_ADDED));
   }
 }
@@ -948,35 +974,6 @@ void EpubReaderActivity::renderStatusBar() const {
     return;
   }
 
-  if (!statusBarOverride.empty()) {
-    int orientedMarginTop = 0;
-    int orientedMarginRight = 0;
-    int orientedMarginBottom = 0;
-    int orientedMarginLeft = 0;
-    renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                     &orientedMarginLeft);
-    const auto textY = renderer.getScreenHeight() - orientedMarginBottom - 4;
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, statusBarOverride.c_str());
-    const int x = (renderer.getScreenWidth() - textWidth) / 2;
-    renderer.drawText(SMALL_FONT_ID, x, textY, statusBarOverride.c_str());
-    return;
-  }
-
-  if (captureState == CaptureState::CAPTURING) {
-    int orientedMarginTop = 0;
-    int orientedMarginRight = 0;
-    int orientedMarginBottom = 0;
-    int orientedMarginLeft = 0;
-    renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                     &orientedMarginLeft);
-    const auto textY = renderer.getScreenHeight() - orientedMarginBottom - 4;
-    const char* capText = tr(STR_CAPTURE_STARTED);
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, capText);
-    const int x = (renderer.getScreenWidth() - textWidth) / 2;
-    renderer.drawText(SMALL_FONT_ID, x, textY, capText);
-    return;
-  }
-
   // Calculate progress in book
   const int currentPage = section->currentPage + 1;
   const float pageCount = section->pageCount;
@@ -984,16 +981,17 @@ void EpubReaderActivity::renderStatusBar() const {
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
   std::string title;
-
   int textYOffset = 0;
 
-  if (automaticPageTurnActive) {
+  if (captureState == CaptureState::CAPTURING) {
+    title = std::string(tr(STR_CAPTURING)) + " (" + std::to_string(captureBuffer.size()) + ")";
+  } else if (!statusBarOverride.empty()) {
+    title = statusBarOverride;
+  } else if (automaticPageTurnActive) {
     title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
 
-    // calculates textYOffset when rendering title in status bar
     const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
 
-    // offsets text if no status bar or progress bar only
     if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
       textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
     }

@@ -4,7 +4,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
-#include <memory>
+#include <string>
 
 #include "ClippingTextViewerActivity.h"
 #include "MappedInputManager.h"
@@ -13,38 +13,15 @@
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
+const int LINE_HEIGHT = 60;
 }  // namespace
-
-int EpubReaderClippingsListActivity::getTotalItems() const { return static_cast<int>(clippings.size()); }
 
 void EpubReaderClippingsListActivity::refreshPreviews() {
   previewCache.clear();
   previewCache.reserve(clippings.size());
   for (const auto& entry : clippings) {
-    // Read enough to skip markdown headers, but truncate to visible length for fast rendering
-    std::string preview = ClippingStore::loadClippingPreview(bookPath, entry, 200);
-    if (preview.size() > 55) {
-      size_t limit = 52;
-      // Don't split UTF-8 multi-byte characters
-      while (limit > 0 && (preview[limit] & 0xC0) == 0x80) {
-        --limit;
-      }
-      preview.resize(limit);
-      preview += "...";
-    }
-    previewCache.push_back(std::move(preview));
+    previewCache.push_back(ClippingStore::loadClippingPreview(bookPath, entry, 200));
   }
-}
-
-int EpubReaderClippingsListActivity::getPageItems() const {
-  constexpr int lineHeight = 30;
-  const int screenHeight = renderer.getScreenHeight();
-  const auto orientation = renderer.getOrientation();
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int startY = 75 + hintGutterHeight;
-  const int availableHeight = screenHeight - startY - lineHeight;
-  return std::max(1, availableHeight / lineHeight);
 }
 
 void EpubReaderClippingsListActivity::onEnter() {
@@ -53,8 +30,8 @@ void EpubReaderClippingsListActivity::onEnter() {
   clippings = ClippingStore::loadIndex(bookPath);
   refreshPreviews();
 
-  if (selectorIndex >= getTotalItems()) {
-    selectorIndex = std::max(0, getTotalItems() - 1);
+  if (selectorIndex >= static_cast<int>(clippings.size())) {
+    selectorIndex = std::max(0, static_cast<int>(clippings.size()) - 1);
   }
 
   requestUpdate();
@@ -63,129 +40,130 @@ void EpubReaderClippingsListActivity::onEnter() {
 void EpubReaderClippingsListActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderClippingsListActivity::loop() {
-  const int totalItems = getTotalItems();
-
-  // Handle empty clippings list
-  if (totalItems == 0 && !confirmingDelete) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      finish();
-    }
-    return;
-  }
-
-  // Delete confirmation mode
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!ClippingStore::deleteClipping(bookPath, selectorIndex)) {
         LOG_ERR("ClippingsList", "Failed to delete clipping at index %d", selectorIndex);
+      } else {
+        clippings = ClippingStore::loadIndex(bookPath);
+        refreshPreviews();
+        if (selectorIndex >= static_cast<int>(clippings.size()) && selectorIndex > 0) {
+          selectorIndex--;
+        }
       }
-      clippings = ClippingStore::loadIndex(bookPath);
-      refreshPreviews();
-      if (selectorIndex >= getTotalItems()) {
-        selectorIndex = std::max(0, getTotalItems() - 1);
-      }
-      confirmingDelete = false;
       requestUpdate();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       confirmingDelete = false;
-      requestUpdate();
+      return;
     }
-    return;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      requestUpdate();
+      confirmingDelete = false;
+      return;
+    }
   }
-
-  // Normal navigation
-  const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-                            mappedInput.wasReleased(MappedInputManager::Button::Right);
-  const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
-  const int pageItems = getPageItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
       confirmingDelete = true;
       requestUpdate();
-    } else if (selectorIndex >= 0 && selectorIndex < totalItems) {
-      const std::string text = ClippingStore::loadClippingText(bookPath, clippings[selectorIndex]);
+    } else if (!clippings.empty()) {
+      const std::string text = ClippingStore::loadClippingText(bookPath, clippings[static_cast<size_t>(selectorIndex)]);
       if (!text.empty()) {
         startActivityForResult(std::make_unique<ClippingTextViewerActivity>(renderer, mappedInput, text),
                                [this](const ActivityResult&) { requestUpdate(); });
       }
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
     finish();
-  } else if (prevReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems - 1) * pageItems + totalItems) % totalItems;
-    } else {
-      selectorIndex = (selectorIndex + totalItems - 1) % totalItems;
-    }
-    requestUpdate();
-  } else if (nextReleased) {
-    if (skipPage) {
-      selectorIndex = ((selectorIndex / pageItems + 1) * pageItems) % totalItems;
-    } else {
-      selectorIndex = (selectorIndex + 1) % totalItems;
-    }
-    requestUpdate();
   }
+
+  buttonNavigator.onNextRelease([this] {
+    if (!clippings.empty()) {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, static_cast<int>(clippings.size()));
+      requestUpdate();
+    }
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    if (!clippings.empty()) {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, static_cast<int>(clippings.size()));
+      requestUpdate();
+    }
+  });
 }
 
 void EpubReaderClippingsListActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
   const auto orientation = renderer.getOrientation();
   const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  const bool isPortrait = orientation == GfxRenderer::Orientation::Portrait;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 40 : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int contentWidth = pageWidth - hintGutterWidth;
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
+  const int hintGutterBottom = isPortrait ? 75 : 40;
   const int contentY = hintGutterHeight;
-  const int pageItems = getPageItems();
-  const int totalItems = getTotalItems();
+  const int listY = contentY + LINE_HEIGHT;
+  const int listHeight = pageHeight - hintGutterBottom - LINE_HEIGHT;
+  const int numItems = static_cast<int>(clippings.size());
 
-  const char* titleText = confirmingDelete ? tr(STR_DELETE_CLIPPING_CONFIRM) : tr(STR_CLIPPINGS);
   const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, titleText, EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, titleText, true, EpdFontFamily::BOLD);
+      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_CLIPPINGS), EpdFontFamily::BOLD)) / 2;
+  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_CLIPPINGS), true, EpdFontFamily::BOLD);
 
-  if (!confirmingDelete && totalItems > 0) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 40 + contentY, tr(STR_HOLD_CONFIRM_TO_DELETE));
-  }
+  const auto getRowTitle = [this](int index) {
+    return previewCache.at(static_cast<size_t>(confirmingDelete ? selectorIndex : index));
+  };
 
-  if (totalItems == 0) {
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_NO_CLIPPINGS), true);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
+  const auto getRowSubtitle = [this](int index) {
+    const auto& e = clippings.at(static_cast<size_t>(confirmingDelete ? selectorIndex : index));
+    const std::string pages = "p." + std::to_string(static_cast<unsigned>(e.startPage) + 1U) + "-" +
+                              std::to_string(static_cast<unsigned>(e.endPage) + 1U);
+    if (!epub) {
+      return std::to_string(static_cast<unsigned>(e.bookPercent)) + "% · " + pages;
+    }
+    const int tocIndex = epub->getTocIndexForSpineIndex(e.spineIndex);
+    const std::string tocTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : std::string(tr(STR_UNNAMED));
+    return std::to_string(static_cast<unsigned>(e.bookPercent)) + "% · " + tocTitle + " · " + pages;
+  };
 
-  const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(contentX, 75 + contentY + (selectorIndex % pageItems) * 30 - 2, contentWidth - 1, 30);
+  const auto getClippingIcon = [isPortrait](int index) {
+    (void)index;
+    return isPortrait ? UIIcon::Bookmark : UIIcon::None;
+  };
 
-  for (int i = 0; i < pageItems; i++) {
-    const int itemIndex = pageStartIndex + i;
-    if (itemIndex >= totalItems) break;
-    const int displayY = 75 + contentY + i * 30;
-    const bool isSelected = (itemIndex == selectorIndex);
+  if (numItems > 0) {
+    if (confirmingDelete) {
+      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
+                       tr(STR_DELETE_CLIPPING_CONFIRM));
 
-    const std::string& preview = previewCache[itemIndex];
-    const int textX = contentX + 20;
-    renderer.drawText(UI_10_FONT_ID, textX, displayY, preview.c_str(), !isSelected);
-  }
+      GUI.drawList(renderer, Rect{contentX, pageHeight / 2, contentWidth, LINE_HEIGHT}, 1, 0, getRowTitle,
+                   getRowSubtitle, getClippingIcon);
+    } else {
+      GUI.drawList(renderer, Rect{contentX, listY, contentWidth, listHeight}, numItems, selectorIndex, getRowTitle,
+                   getRowSubtitle, getClippingIcon);
 
-  if (confirmingDelete) {
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawHelpText(renderer, Rect{contentX, pageHeight - hintGutterBottom, contentWidth, LINE_HEIGHT},
+                       tr(STR_HOLD_CONFIRM_TO_DELETE));
+    }
   } else {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_VIEW), tr(STR_UP), tr(STR_DOWN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawHelpText(renderer, Rect{contentX, LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
+                     tr(STR_CLIPPINGS_INSTRUCTIONS));
+    GUI.drawHelpText(renderer, Rect{contentX, LINE_HEIGHT * 4, contentWidth, LINE_HEIGHT}, tr(STR_NO_CLIPPINGS));
   }
+
+  const auto backLabel = confirmingDelete ? tr(STR_CANCEL) : tr(STR_BACK);
+  const auto confirmLabel = confirmingDelete ? tr(STR_DELETE) : tr(STR_OPEN);
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

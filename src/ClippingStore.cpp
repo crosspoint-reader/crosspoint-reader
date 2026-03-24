@@ -157,6 +157,21 @@ std::vector<ClippingEntry> ClippingStore::loadIndex(const std::string& bookPath)
   }
 
   file.close();
+
+  // Reading order: earlier in the book first (not creation/append order).
+  std::sort(entries.begin(), entries.end(), [](const ClippingEntry& a, const ClippingEntry& b) {
+    if (a.bookPercent != b.bookPercent) {
+      return a.bookPercent < b.bookPercent;
+    }
+    if (a.spineIndex != b.spineIndex) {
+      return a.spineIndex < b.spineIndex;
+    }
+    if (a.startPage != b.startPage) {
+      return a.startPage < b.startPage;
+    }
+    return a.endPage < b.endPage;
+  });
+
   return entries;
 }
 

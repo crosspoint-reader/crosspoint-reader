@@ -34,6 +34,8 @@ class EpubReaderActivity final : public Activity {
   bool automaticPageTurnActive = false;
   bool showBookmarkMessage = false;
   bool maxBookmarksError = false;
+  bool showCaptureFinishMessage = false;
+  bool captureSaveFailed = false;
 
   std::string statusBarOverride;
   enum class CaptureState { IDLE, CAPTURING };
@@ -79,6 +81,7 @@ class EpubReaderActivity final : public Activity {
       : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
   void onEnter() override;
   void onExit() override;
+  void onRestoredFromStack() override;
   void loop() override;
   void render(RenderLock&& lock) override;
   bool isReaderActivity() const override { return true; }
