@@ -1,7 +1,7 @@
 #pragma once
+#include <Stream.h>
 #include <expat.h>
 
-#include <Stream.h>
 #include <string>
 #include <vector>
 
