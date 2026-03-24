@@ -47,7 +47,10 @@ void WebDavBrowserActivity::loop() {
 
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+      if (!entries.empty()) {
+        state = BrowserState::BROWSING;
+        requestUpdate();
+      } else if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
         state = BrowserState::LOADING;
         statusMessage = tr(STR_WEBDAV_LOADING);
         requestUpdate();
@@ -289,7 +292,8 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
     state = BrowserState::BROWSING;
     requestUpdate();
   } else {
-    state = BrowserState::BROWSING;
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_DOWNLOAD_FAILED);
     requestUpdate();
   }
 }
