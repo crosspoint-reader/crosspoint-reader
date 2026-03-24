@@ -12,19 +12,18 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.platformio/.cache
-          key: ${{ runner.os }}-pio
-
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
       - name: Install PlatformIO Core
-        run: pip install --upgrade platformio
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
 
       - name: Extract env
         run: |
