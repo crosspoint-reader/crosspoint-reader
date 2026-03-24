@@ -78,8 +78,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
   return fetchUrl(url, outContent, SETTINGS.opdsUsername, SETTINGS.opdsPassword);
 }
 
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const char* username,
-                              const char* password) {
+bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const char* username, const char* password) {
   auto client = createClient(url);
   HTTPClient http;
 

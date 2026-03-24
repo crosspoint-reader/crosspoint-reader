@@ -8,14 +8,7 @@
 
 class WebDavBrowserActivity final : public Activity {
  public:
-  enum class BrowserState {
-    CHECK_WIFI,
-    WIFI_SELECTION,
-    LOADING,
-    BROWSING,
-    DOWNLOADING,
-    ERROR
-  };
+  enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR };
 
   explicit WebDavBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("WebDavBrowser", renderer, mappedInput) {}
