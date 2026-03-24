@@ -397,7 +397,7 @@ To create a bookmark, hold **Confirm** for 1 second while inside a book. A popup
 
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for 1 second, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
-There is a hard limit of 255 bookmarks per book. Attempting to create more will result in a "Too many bookmarks!" popup to appear.
+Each book can have up to 255 bookmarks; attempting to add more will display a "Too many bookmarks!" popup.
 
 ## 7. Clippings (captures)
 

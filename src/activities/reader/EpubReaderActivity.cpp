@@ -424,7 +424,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
     if (!result.isCancelled) {
       const auto& sync = std::get<ProgressChangeResult>(result.data);
-      if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
+      // section can be null after applyOrientation() clears it; still sync spine/page from result.
+      if (currentSpineIndex != sync.spineIndex || !section || section->currentPage != sync.page) {
         RenderLock lock(*this);
         currentSpineIndex = sync.spineIndex;
         nextPageNumber = sync.page;

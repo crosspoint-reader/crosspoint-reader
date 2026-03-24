@@ -4,6 +4,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 namespace {
@@ -253,8 +254,12 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
   entry.startPage = pages[0].pageIndex;
   entry.endPage = pages.back().pageIndex;
 
-  // Load existing index, append new entry, write index
+  // Load existing index, append new entry, write index (count field is uint16_t)
   auto entries = loadIndex(bookPath);
+  if (entries.size() >= UINT16_MAX) {
+    LOG_ERR(TAG, "Too many clippings for book (max %u)", static_cast<unsigned>(UINT16_MAX));
+    return false;
+  }
   entries.push_back(entry);
 
   const bool ok = writeIndex(idxPath, entries);

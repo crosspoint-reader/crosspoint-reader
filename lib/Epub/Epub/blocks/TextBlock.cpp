@@ -115,6 +115,14 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
 
 std::string TextBlock::getPlainText() const {
   std::string result;
+  size_t totalLen = 0;
+  for (const auto& w : words) {
+    totalLen += w.size();
+  }
+  if (words.size() > 1) {
+    totalLen += words.size() - 1;
+  }
+  result.reserve(totalLen);
   for (auto it = words.begin(); it != words.end(); ++it) {
     if (it != words.begin()) {
       result += ' ';

@@ -104,7 +104,7 @@ if (parsedSize != fileSize) {
 
 ## Bookmark files
 
-Each EPUB has a bookmark file, stored in `/.crosspoint/bookmarks` with the filename format `<epub-key>.bookmarks`.
+Each EPUB has a bookmark file stored in `/.crosspoint/bookmarks` with the filename format `<epub-key>.bookmarks`.
 
 > Note: These aren't stored in the cache so that they are persisted beyond cache clearing.
 

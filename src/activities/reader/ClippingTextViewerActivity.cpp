@@ -97,6 +97,8 @@ void ClippingTextViewerActivity::onEnter() {
   Activity::onEnter();
 
   wrapText();
+  text.clear();
+  text.shrink_to_fit();
 
   const auto orientation = renderer.getOrientation();
   const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;

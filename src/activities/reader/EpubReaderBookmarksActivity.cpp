@@ -31,6 +31,12 @@ void EpubReaderBookmarksActivity::onEnter() {
 void EpubReaderBookmarksActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderBookmarksActivity::loop() {
+  if (confirmingDelete && bookmarks.empty()) {
+    confirmingDelete = false;
+    requestUpdate();
+    return;
+  }
+
   // Delete confirmation mode
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -54,6 +60,9 @@ void EpubReaderBookmarksActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
+    if (bookmarks.empty()) {
+      return;
+    }
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
       confirmingDelete = true;
       requestUpdate();
