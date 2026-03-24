@@ -28,6 +28,9 @@ int HomeActivity::getMenuItemCount() const {
   if (hasOpdsServers) {
     count++;
   }
+  if (hasWebDavUrl) {
+    count++;
+  }
   return count;
 }
 
@@ -112,12 +115,13 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  hasWebDavUrl = strlen(SETTINGS.webdavServerUrl) > 0;
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers, hasWebDavUrl);
 
   // Trigger first update
   requestUpdate();
@@ -184,7 +188,7 @@ void HomeActivity::loop() {
       onSelectBook(recentBooks[selectorIndex].path);
     } else {
       const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+      switch (indexToMenuItem(menuIndex, hasOpdsServers, hasWebDavUrl)) {
         case HomeMenuItem::FILE_BROWSER:
           onFileBrowserOpen();
           break;
@@ -193,6 +197,9 @@ void HomeActivity::loop() {
           break;
         case HomeMenuItem::OPDS_BROWSER:
           onOpdsBrowserOpen();
+          break;
+        case HomeMenuItem::WEBDAV_BROWSER:
+          onWebDavBrowserOpen();
           break;
         case HomeMenuItem::FILE_TRANSFER:
           onFileTransferOpen();
@@ -239,6 +246,11 @@ void HomeActivity::render(RenderLock&&) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
+  if (hasWebDavUrl) {
+    int insertPos = hasOpdsServers ? 3 : 2;
+    menuItems.insert(menuItems.begin() + insertPos, tr(STR_WEBDAV_BROWSER));
+    menuIcons.insert(menuIcons.begin() + insertPos, Library);
+  }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
@@ -281,3 +293,5 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onWebDavBrowserOpen() { activityManager.goToWebDavBrowser(); }

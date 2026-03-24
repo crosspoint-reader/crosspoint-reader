@@ -232,6 +232,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koSendMetadata", StrId::STR_KOREADER_SYNC),
+        // --- WebDAV Browser (web-only, uses CrossPointSettings char arrays) ---
+        SettingInfo::String(StrId::STR_WEBDAV_SERVER_URL, SETTINGS.webdavServerUrl, sizeof(SETTINGS.webdavServerUrl),
+                            "webdavServerUrl", StrId::STR_WEBDAV_BROWSER),
+        SettingInfo::String(StrId::STR_USERNAME, SETTINGS.webdavUsername, sizeof(SETTINGS.webdavUsername),
+                            "webdavUsername", StrId::STR_WEBDAV_BROWSER),
+        SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.webdavPassword, sizeof(SETTINGS.webdavPassword),
+                            "webdavPassword", StrId::STR_WEBDAV_BROWSER)
+            .withObfuscated(),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),
