@@ -4,6 +4,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <algorithm>
+#include <iterator>
 #include <string>
 
 #include "ClippingTextViewerActivity.h"
@@ -19,9 +21,9 @@ const int LINE_HEIGHT = 60;
 void EpubReaderClippingsListActivity::refreshPreviews() {
   previewCache.clear();
   previewCache.reserve(clippings.size());
-  for (const auto& entry : clippings) {
-    previewCache.push_back(ClippingStore::loadClippingPreview(bookPath, entry, 200));
-  }
+  std::transform(
+      clippings.begin(), clippings.end(), std::back_inserter(previewCache),
+      [this](const ClippingEntry& entry) { return ClippingStore::loadClippingPreview(bookPath, entry, 200); });
 }
 
 void EpubReaderClippingsListActivity::onEnter() {
