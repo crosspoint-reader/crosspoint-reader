@@ -12,8 +12,24 @@
 #include <Logging.h>
 
 #include <cstring>
+#include <limits>
 
 namespace xtc {
+
+namespace {
+
+bool canSeekToOffset(const uint64_t offset) {
+  return offset <= static_cast<uint64_t>(std::numeric_limits<size_t>::max());
+}
+
+bool seekToOffset(FsFile& file, const uint64_t offset) {
+  if (!canSeekToOffset(offset)) {
+    return false;
+  }
+  return file.seek(static_cast<size_t>(offset));
+}
+
+}  // namespace
 
 XtcParser::XtcParser()
     : m_isOpen(false),
@@ -170,7 +186,7 @@ XtcError XtcParser::readPageTable() {
   }
 
   // Seek to page table
-  if (!m_file.seek(m_header.pageTableOffset)) {
+  if (!seekToOffset(m_file, m_header.pageTableOffset)) {
     LOG_DBG("XTC", "Failed to seek to page table at %llu", m_header.pageTableOffset);
     return XtcError::READ_ERROR;
   }
@@ -186,7 +202,7 @@ XtcError XtcParser::readPageTable() {
       return XtcError::READ_ERROR;
     }
 
-    m_pageTable[i].offset = static_cast<uint32_t>(entry.dataOffset);
+    m_pageTable[i].offset = entry.dataOffset;
     m_pageTable[i].size = entry.dataSize;
     m_pageTable[i].width = entry.width;
     m_pageTable[i].height = entry.height;
@@ -256,7 +272,7 @@ XtcError XtcParser::readChapters() {
     return XtcError::OK;
   }
 
-  if (!m_file.seek(chapterOffset)) {
+  if (!seekToOffset(m_file, chapterOffset)) {
     return XtcError::READ_ERROR;
   }
 
@@ -331,8 +347,8 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
   const PageInfo& page = m_pageTable[pageIndex];
 
   // Seek to page data
-  if (!m_file.seek(page.offset)) {
-    LOG_DBG("XTC", "Failed to seek to page %u at offset %lu", pageIndex, page.offset);
+  if (!seekToOffset(m_file, page.offset)) {
+    LOG_DBG("XTC", "Failed to seek to page %u at offset %llu", pageIndex, static_cast<unsigned long long>(page.offset));
     m_lastError = XtcError::READ_ERROR;
     return 0;
   }
@@ -399,7 +415,8 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
   const PageInfo& page = m_pageTable[pageIndex];
 
   // Seek to page data
-  if (!m_file.seek(page.offset)) {
+  if (!seekToOffset(m_file, page.offset)) {
+    LOG_DBG("XTC", "Failed to seek to page %u at offset %llu", pageIndex, static_cast<unsigned long long>(page.offset));
     return XtcError::READ_ERROR;
   }
 
