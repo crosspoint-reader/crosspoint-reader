@@ -59,6 +59,7 @@ void EpubReaderActivity::onEnter() {
   // progress.bin layout (little-endian, backward-compatible):
   //   [0-1] spineIndex   [2-3] page   [4-5] pageCount
   //   [6-7] rulerLineIndex   [8] rulerActive (0/1)
+  bool hasSavedReadingRulerState = false;
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[9];
@@ -76,12 +77,13 @@ void EpubReaderActivity::onEnter() {
       rulerLineIndex = data[6] + (data[7] << 8);
     }
     if (dataSize >= 9) {
+      hasSavedReadingRulerState = true;
       readingRulerActive = (data[8] != 0) && (SETTINGS.readingRulerEnabled != 0);
     }
     f.close();
   }
   // Default for books without saved ruler state: follow global setting
-  if (readingRulerActive == false && rulerLineIndex == 0) {
+  if (!hasSavedReadingRulerState) {
     readingRulerActive = (SETTINGS.readingRulerEnabled != 0);
   }
   rulerLastInteraction = millis();
@@ -204,7 +206,7 @@ void EpubReaderActivity::loop() {
 
   // Reading ruler: intercept short-press page turns for line-by-line navigation
   if (readingRulerActive && !automaticPageTurnActive && section && (prevTriggered || nextTriggered)) {
-    const bool isLongPress = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
+    const bool isLongPress = mappedInput.getHeldTime() > skipChapterMs;
     if (!isLongPress) {
       if (nextTriggered) {
         if (rulerLineIndex < rulerLineCount - 1) {
@@ -214,6 +216,8 @@ void EpubReaderActivity::loop() {
         // Last line: page forward, ruler to top
         rulerLineIndex = 0;
         pageTurn(true);
+        rulerLastInteraction = millis();
+        rulerLastAutoMove = 0;
         return;
       }
       if (prevTriggered) {
@@ -222,8 +226,12 @@ void EpubReaderActivity::loop() {
           return;
         }
         // First line: page back, ruler to last line (resolved after render)
-        rulerLineIndex = INT16_MAX;
-        pageTurn(false);
+        if (section->currentPage > 0 || currentSpineIndex > 0) {
+          rulerLineIndex = INT16_MAX;
+          pageTurn(false);
+          rulerLastInteraction = millis();
+          rulerLastAutoMove = 0;
+        }
         return;
       }
     }
