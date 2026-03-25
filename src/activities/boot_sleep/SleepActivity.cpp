@@ -80,7 +80,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       // Generate a random number between 1 and numFiles
       auto randomFileIndex = random(numFiles);
       // If we picked the same image as last time, reroll
-      while (numFiles > 1 && randomFileIndex == APP_STATE.lastSleepImage) {
+      while (numFiles > 1 && APP_STATE.lastSleepImage != UINT8_MAX && randomFileIndex == APP_STATE.lastSleepImage) {
         randomFileIndex = random(numFiles);
       }
       APP_STATE.lastSleepImage = randomFileIndex;
