@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <iosfwd>
 #include <string>
 
@@ -8,7 +9,7 @@ class CrossPointState {
 
  public:
   std::string openEpubPath;
-  uint8_t lastSleepImage;
+  uint8_t lastSleepImage = UINT8_MAX;  // UINT8_MAX = unset sentinel
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   ~CrossPointState() = default;

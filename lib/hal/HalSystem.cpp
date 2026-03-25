@@ -76,6 +76,14 @@ void begin() {
   // `clearPanic()` to clear it after dumping
   if (!isRebootFromPanic()) {
     clearPanic();
+  } else {
+    // Panic reboot: preserve logs and panic info, but clamp logHead in case the
+    // panic occurred before begin() ever ran (e.g. in a static constructor).
+    // If logHead was out of range, logMessages is also garbage — clear it so
+    // getLastLogs() does not dump corrupt data into the crash report.
+    if (sanitizeLogHead()) {
+      clearLastLogs();
+    }
   }
 }
 
