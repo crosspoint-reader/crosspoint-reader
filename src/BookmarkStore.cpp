@@ -98,9 +98,9 @@ bool BookmarkStore::writeBookmarks(const std::string& path, const std::vector<Bo
 
     // trim summary of double whitespaces and newlines, and trim whitespace from start and end
     std::string summary = entry.summary;
-    summary.erase(
-        std::unique(summary.begin(), summary.end(), [](char a, char b) { return std::isspace(a) && std::isspace(b); }),
-        summary.end());
+    summary.erase(std::unique(summary.begin(), summary.end(),
+                              [](unsigned char a, unsigned char b) { return std::isspace(a) && std::isspace(b); }),
+                  summary.end());
     summary.erase(std::remove(summary.begin(), summary.end(), '\n'), summary.end());
     summary.erase(summary.begin(),
                   std::find_if(summary.begin(), summary.end(), [](unsigned char ch) { return !std::isspace(ch); }));

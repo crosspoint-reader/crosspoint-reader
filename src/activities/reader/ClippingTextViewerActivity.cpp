@@ -17,6 +17,9 @@ constexpr int BODY_FONT_ID = BOOKERLY_14_FONT_ID;
 
 void ClippingTextViewerActivity::wrapText() {
   lines.clear();
+  if (text.empty()) {
+    return;
+  }
   const auto orientation = renderer.getOrientation();
   const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;

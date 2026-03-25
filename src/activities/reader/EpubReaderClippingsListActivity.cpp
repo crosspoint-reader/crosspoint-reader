@@ -42,9 +42,15 @@ void EpubReaderClippingsListActivity::onEnter() {
 void EpubReaderClippingsListActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderClippingsListActivity::loop() {
+  if (confirmingDelete && clippings.empty()) {
+    confirmingDelete = false;
+    requestUpdate();
+    return;
+  }
+
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!ClippingStore::deleteClipping(bookPath, selectorIndex)) {
+      if (!ClippingStore::deleteClipping(bookPath, clippings[static_cast<size_t>(selectorIndex)])) {
         LOG_ERR("ClippingsList", "Failed to delete clipping at index %d", selectorIndex);
       } else {
         clippings = ClippingStore::loadIndex(bookPath);
@@ -65,10 +71,13 @@ void EpubReaderClippingsListActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (clippings.empty()) {
+      return;
+    }
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
       confirmingDelete = true;
       requestUpdate();
-    } else if (!clippings.empty()) {
+    } else {
       const std::string text = ClippingStore::loadClippingText(bookPath, clippings[static_cast<size_t>(selectorIndex)]);
       if (!text.empty()) {
         startActivityForResult(std::make_unique<ClippingTextViewerActivity>(renderer, mappedInput, text),
@@ -144,7 +153,7 @@ void EpubReaderClippingsListActivity::render(RenderLock&&) {
 
   if (numItems > 0) {
     if (confirmingDelete) {
-      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
+      GUI.drawHelpText(renderer, Rect{contentX, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
                        tr(STR_DELETE_CLIPPING_CONFIRM));
 
       GUI.drawList(renderer, Rect{contentX, pageHeight / 2, contentWidth, LINE_HEIGHT}, 1, 0, getRowTitle,

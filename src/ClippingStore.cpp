@@ -248,8 +248,8 @@ bool ClippingStore::saveClipping(const std::string& bookPath, const std::string&
   ClippingEntry entry;
   entry.textOffset = textOffset;
   entry.textLength = textLength;
-  entry.bookPercent = static_cast<uint8_t>(pages[0].bookPercent);
-  entry.chapterPercent = static_cast<uint8_t>(pages[0].chapterPercent);
+  entry.bookPercent = static_cast<uint8_t>(std::clamp(pages[0].bookPercent, 0, 100));
+  entry.chapterPercent = static_cast<uint8_t>(std::clamp(pages[0].chapterPercent, 0, 100));
   entry.spineIndex = pages[0].spineIndex;
   entry.startPage = pages[0].pageIndex;
   entry.endPage = pages.back().pageIndex;
@@ -377,12 +377,17 @@ bool ClippingStore::hasClippingAtPage(const std::vector<ClippingEntry>& entries,
   });
 }
 
-bool ClippingStore::deleteClipping(const std::string& bookPath, int index) {
+bool ClippingStore::deleteClipping(const std::string& bookPath, const ClippingEntry& target) {
   auto entries = loadIndex(bookPath);
 
-  if (index < 0 || index >= static_cast<int>(entries.size())) {
+  const auto match = std::find_if(entries.begin(), entries.end(), [&target](const ClippingEntry& e) {
+    return e.textOffset == target.textOffset && e.textLength == target.textLength;
+  });
+  if (match == entries.end()) {
+    LOG_ERR(TAG, "deleteClipping: entry not found in index (offset=%u len=%u)", target.textOffset, target.textLength);
     return false;
   }
+  const int index = static_cast<int>(match - entries.begin());
 
   const std::string mdPath = getMdPath(bookPath);
   const std::string idxPath = getIndexPath(bookPath);

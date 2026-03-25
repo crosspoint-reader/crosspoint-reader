@@ -49,8 +49,8 @@ class ClippingStore {
   // Check if any clipping covers the given page.
   static bool hasClippingAtPage(const std::vector<ClippingEntry>& entries, uint16_t spineIndex, uint16_t pageIndex);
 
-  // Delete a clipping at the given index. Rewrites both files.
-  static bool deleteClipping(const std::string& bookPath, int index);
+  // Delete a clipping by stable on-disk identity (offset/length). Rewrites both files.
+  static bool deleteClipping(const std::string& bookPath, const ClippingEntry& entry);
 
   // Get the index file path for a book.
   static std::string getIndexPath(const std::string& bookPath);
