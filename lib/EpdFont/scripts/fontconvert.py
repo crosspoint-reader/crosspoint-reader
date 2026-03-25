@@ -137,6 +137,33 @@ def norm_floor(val):
 def norm_ceil(val):
     return int(math.ceil(val / (1 << 6)))
 
+# Fixed-point (fp4) output conventions (must match EpdFontData.h / fp4 namespace):
+#
+#   advanceX    12.4 unsigned fixed-point (uint16_t).
+#               12 integer bits, 4 fractional bits = 1/16-pixel resolution.
+#               Encoded from FreeType's 16.16 linearHoriAdvance.
+#
+#   kernMatrix  4.4 signed fixed-point (int8_t).
+#               4 integer bits, 4 fractional bits = 1/16-pixel resolution.
+#               Range: -8.0 to +7.9375 pixels.
+#               Encoded from font design-unit kerning values.
+#
+# Both share 4 fractional bits so the renderer can add them directly into a
+# single int32_t accumulator and defer rounding until pixel placement.
+
+def fp4_from_ft16_16(val):
+    """Convert FreeType 16.16 fixed-point to 12.4 fixed-point with rounding."""
+    return (val + (1 << 11)) >> 12
+
+def fp4_from_design_units(du, scale):
+    """Convert a font design-unit value to 4.4 fixed-point, clamped to int8_t.
+
+    Multiplies by scale (ppem / units_per_em) and shifts into 4 fractional
+    bits.  The result is rounded to nearest and clamped to [-128, 127].
+    """
+    raw = round(du * scale * 16)
+    return max(-128, min(127, raw))
+
 def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
@@ -270,7 +297,9 @@ for i_start, i_end in intervals:
         glyph = GlyphProps(
             width = bitmap.width,
             height = bitmap.rows,
-            advance_x = norm_floor(face.glyph.advance.x),
+            # We use linearHoriAdvance (16.16 fixed-point, unhinted) instead of
+            # advance.x (26.6 fixed-point, grid-fitted to whole pixels by hinter)
+            advance_x = fp4_from_ft16_16(face.glyph.linearHoriAdvance),
             left = face.glyph.bitmap_left,
             top = face.glyph.bitmap_top,
             data_length = len(packed),
@@ -406,15 +435,14 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
 
     font.close()
 
-    # Scale design-unit values to pixels
+    # Scale design-unit kerning values to 4.4 fixed-point pixels.
     scale = ppem / units_per_em
-    result = {}  # (leftCp, rightCp) -> adjust
+    result = {}  # (leftCp, rightCp) -> 4.4 fixed-point adjust
     for (lg, rg), du in raw_kern.items():
         lcp = glyph_to_cp[lg]
         rcp = glyph_to_cp[rg]
-        adjust = int(math.floor(du * scale))
+        adjust = fp4_from_design_units(du, scale)
         if adjust != 0:
-            adjust = max(-128, min(127, adjust))
             result[(lcp, rcp)] = adjust
     return result
 
@@ -661,7 +689,38 @@ print(f"ligatures: {len(ligature_pairs)} pairs extracted", file=sys.stderr)
 
 compress = args.compress
 
+
+def to_byte_aligned(packed, width, height):
+    """Convert packed 2-bit bitmap to byte-aligned format (rows padded to byte boundary).
+
+    In packed format, pixels flow continuously across row boundaries (4 pixels/byte).
+    In byte-aligned format, each row starts at a byte boundary, padding the last byte
+    of each row with zero bits if width % 4 != 0. This improves DEFLATE compression
+    because identical pixel rows produce identical byte patterns regardless of position.
+    """
+    if width == 0 or height == 0:
+        return b''
+    row_stride = (width + 3) // 4  # bytes per byte-aligned row
+    aligned = bytearray(row_stride * height)
+    for y in range(height):
+        for x in range(width):
+            # Read pixel from packed format (continuous bit stream)
+            packed_pos = y * width + x
+            packed_byte_idx = packed_pos // 4
+            packed_shift = (3 - (packed_pos % 4)) * 2
+            pixel = (packed[packed_byte_idx] >> packed_shift) & 0x3
+
+            # Write pixel to byte-aligned format (row-aligned)
+            aligned_byte_idx = y * row_stride + x // 4
+            aligned_shift = (3 - (x % 4)) * 2
+            aligned[aligned_byte_idx] |= (pixel << aligned_shift)
+    return bytes(aligned)
+
+
 # Build groups for compression
+if compress and not is2Bit:
+    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
+    sys.exit(1)
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
     # are grouped together for efficient LRU caching on the embedded target.
@@ -719,11 +778,12 @@ if compress:
 
     for first_idx, count in groups:
         # Concatenate bitmap data for this group
-        group_data = b''
+        packed_len = 0
+        group_aligned = bytearray()
         for gi in range(first_idx, first_idx + count):
             props, packed = all_glyphs[gi]
-            # Update glyph's dataOffset to be within-group offset
-            within_group_offset = len(group_data)
+            # Update glyph's dataOffset to be within-group offset (packed offset)
+            within_group_offset = packed_len
             old_props = modified_glyph_props[gi]
             modified_glyph_props[gi] = GlyphProps(
                 width=old_props.width,
@@ -735,13 +795,14 @@ if compress:
                 data_offset=within_group_offset,
                 code_point=old_props.code_point,
             )
-            group_data += packed
+            packed_len += len(packed)
+            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
 
-        # Compress with raw DEFLATE (no zlib/gzip header)
+        # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
         compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(group_data) + compressor.flush()
+        compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
 
-        compressed_groups.append((compressed, len(group_data), count, first_idx))
+        compressed_groups.append((compressed, len(group_aligned), count, first_idx))
         compressed_bitmap_data.extend(compressed)
         compressed_offset += len(compressed)
 
@@ -834,8 +895,10 @@ if compress:
     print(f"    {font_name}Groups,")
     print(f"    {len(compressed_groups)},")
 else:
-    print(f"    nullptr,")
-    print(f"    0,")
+    print("    nullptr,")
+    print("    0,")
+# glyphToGroup (not used for script-grouped fonts)
+print("    nullptr,")
 if kern_map:
     print(f"    {font_name}KernLeftClasses,")
     print(f"    {font_name}KernRightClasses,")
