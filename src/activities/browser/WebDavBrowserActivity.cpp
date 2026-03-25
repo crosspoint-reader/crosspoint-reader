@@ -225,7 +225,7 @@ void WebDavBrowserActivity::fetchListing() {
     return;
   }
 
-  LOG_DBG("DAV", "Found %d entries", entries.size());
+  LOG_DBG("DAV", "Found %zu entries", entries.size());
   selectorIndex = 0;
 
   state = BrowserState::BROWSING;
