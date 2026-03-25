@@ -32,6 +32,7 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+constexpr int READING_RULER_LINE_WIDTH = 2;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -259,9 +260,8 @@ void EpubReaderActivity::loop() {
         const unsigned long ref = rulerLastAutoMove > 0 ? rulerLastAutoMove : rulerLastInteraction;
         if (ref > 0 && (now - ref) >= autoMs) {
           if (rulerLineIndex < rulerLineCount - 1) {
-            rulerLineIndex++;
+            moveRuler(+1);
             rulerLastAutoMove = now;
-            requestUpdate();
           } else {
             // Last line: page forward, ruler to top
             rulerLineIndex = 0;
@@ -864,7 +864,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int rulerY = geo.y + geo.height + 1;
     const int x1 = cachedContentLeft;
     const int x2 = renderer.getScreenWidth() - cachedContentRight - 1;
-    renderer.drawLine(x1, rulerY, x2, rulerY, 2, true);
+    renderer.drawLine(x1, rulerY, x2, rulerY, READING_RULER_LINE_WIDTH, true);
   }
 
   fcm->logStats("bw_render");
@@ -944,10 +944,55 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::moveRuler(int direction) {
-  rulerLineIndex += direction;
+  const int16_t previousLineIndex = rulerLineIndex;
+  if (rulerLineCount > 0) {
+    const int newIndex = std::clamp<int>(rulerLineIndex + direction, 0, rulerLineCount - 1);
+    rulerLineIndex = static_cast<int16_t>(newIndex);
+  } else {
+    rulerLineIndex = static_cast<int16_t>(rulerLineIndex + direction);
+  }
   rulerLastInteraction = millis();
   rulerLastAutoMove = 0;
-  requestUpdate();
+  if (rulerLineIndex == previousLineIndex) {
+    return;
+  }
+  if (!refreshReadingRulerFast(previousLineIndex)) {
+    requestUpdate();
+  }
+}
+
+bool EpubReaderActivity::drawReadingRulerLine(const int16_t lineIndex, const bool state) const {
+  if (lineIndex < 0 || lineIndex >= rulerLineCount || lineIndex >= currentPageLines.size()) {
+    return false;
+  }
+
+  const auto& geo = currentPageLines[lineIndex];
+  const int rulerY = geo.y + geo.height + 1;
+  const int x1 = cachedContentLeft;
+  const int x2 = renderer.getScreenWidth() - cachedContentRight - 1;
+  renderer.drawLine(x1, rulerY, x2, rulerY, READING_RULER_LINE_WIDTH, state);
+  return true;
+}
+
+bool EpubReaderActivity::refreshReadingRulerFast(const int16_t previousLineIndex) {
+  if (!section || !readingRulerActive || currentPageLines.empty() || rulerLineCount <= 0) {
+    return false;
+  }
+  if (rulerLineIndex < 0 || rulerLineIndex >= rulerLineCount) {
+    return false;
+  }
+
+  RenderLock lock(*this);
+  const bool erasedPrevious = drawReadingRulerLine(previousLineIndex, false);
+  const bool drewCurrent = drawReadingRulerLine(rulerLineIndex, true);
+  if (!erasedPrevious && !drewCurrent) {
+    return false;
+  }
+
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+  saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  return true;
 }
 
 void EpubReaderActivity::renderStatusBar() const {

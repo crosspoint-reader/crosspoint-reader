@@ -41,6 +41,8 @@ class EpubReaderActivity final : public Activity {
   std::vector<LineGeometry> currentPageLines;
   int16_t cachedContentLeft = 0;
   int16_t cachedContentRight = 0;
+  bool refreshReadingRulerFast(int16_t previousLineIndex);
+  bool drawReadingRulerLine(int16_t lineIndex, bool state) const;
   void moveRuler(int direction);
 
   // Footnote support
