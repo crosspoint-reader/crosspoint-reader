@@ -15,12 +15,14 @@
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
 #include "components/icons/cover.h"
+#include "components/icons/epub24.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
 #include "components/icons/folder24.h"
 #include "components/icons/hotspot.h"
 #include "components/icons/image24.h"
 #include "components/icons/library.h"
+#include "components/icons/pdf24.h"
 #include "components/icons/recent.h"
 #include "components/icons/settings2.h"
 #include "components/icons/text24.h"
@@ -95,6 +97,10 @@ const uint8_t* iconForName(UIIcon icon, int size) {
         return Image24Icon;
       case UIIcon::Book:
         return Book24Icon;
+      case UIIcon::EpubBook:
+        return Epub24Icon;
+      case UIIcon::PdfDocument:
+        return Pdf24Icon;
       case UIIcon::File:
         return File24Icon;
       default:
