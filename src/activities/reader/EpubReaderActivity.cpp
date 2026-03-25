@@ -619,28 +619,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
-      pageLoadFailCount++;
-      LOG_ERR("ERS", "Failed to load page from SD (attempt %d/%d)", pageLoadFailCount, MAX_PAGE_LOAD_RETRIES);
-      nextPageNumber = section->currentPage;  // preserve page so retry reopens same page
-      if (pageLoadFailCount < MAX_PAGE_LOAD_RETRIES) {
-        currentPageFootnotes.clear();
-        section->clearCache();
-        section.reset();
-        requestUpdate();
-      } else {
-        LOG_ERR("ERS", "Page load failed %d times - giving up", pageLoadFailCount);
-        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
-        renderStatusBar();  // section still valid here
-        renderer.displayBuffer();
-        pageLoadFailCount = 0;
-        currentPageFootnotes.clear();
-        section->clearCache();
-        section.reset();
-      }
+      // The section cache is corrupt or unreadable. Retrying would re-read
+      // the same bad file, so clear it immediately and show an error.
+      // The user can navigate away and back to trigger a fresh render.
+      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+      currentPageFootnotes.clear();
+      section->clearCache();
+      section.reset();
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+      renderStatusBar();
+      renderer.displayBuffer();
       automaticPageTurnActive = false;
       return;
     }
-    pageLoadFailCount = 0;
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);

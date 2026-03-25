@@ -25,8 +25,6 @@ class EpubReaderActivity final : public Activity {
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
-  int pageLoadFailCount = 0;
-  static constexpr int MAX_PAGE_LOAD_RETRIES = 3;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
 
