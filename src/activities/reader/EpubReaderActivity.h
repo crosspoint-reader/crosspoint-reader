@@ -11,9 +11,14 @@ class EpubReaderActivity final : public Activity {
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  // Set when navigating to a footnote href with a fragment (e.g. #note1).
+  // Cleared on the next render after the new section loads and resolves it to a page.
+  std::string pendingAnchor;
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
+  unsigned long lastPageTurnTime = 0UL;
+  unsigned long pageTurnDuration = 0UL;
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;
@@ -21,6 +26,7 @@ class EpubReaderActivity final : public Activity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  bool automaticPageTurnActive = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -35,11 +41,14 @@ class EpubReaderActivity final : public Activity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
+  void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   void saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+  void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
+  void pageTurn(bool isForwardTurn);
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

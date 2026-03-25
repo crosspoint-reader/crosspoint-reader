@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 
@@ -34,13 +35,40 @@ void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, i
   renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
   renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
 
+  const bool charging = gpio.isUsbConnected();
+
   // The +1 is to round up, so that we always fill at least one pixel
-  int filledWidth = percentage * (battWidth - 5) / 100 + 1;
-  if (filledWidth > battWidth - 5) {
-    filledWidth = battWidth - 5;  // Ensure we don't overflow
+  const int maxFillWidth = battWidth - 5;
+  const int fillHeight = rectHeight - 4;
+  if (maxFillWidth <= 0 || fillHeight <= 0) {
+    return;
+  }
+  int filledWidth = percentage * maxFillWidth / 100 + 1;
+  if (filledWidth > maxFillWidth) {
+    filledWidth = maxFillWidth;
   }
 
-  renderer.fillRect(x + 2, y + 2, filledWidth, rectHeight - 4);
+  // When charging, ensure minimum fill so lightning bolt is fully visible
+  constexpr int minFillForBolt = 8;
+  if (charging && filledWidth < minFillForBolt) {
+    filledWidth = std::min(minFillForBolt, maxFillWidth);
+  }
+
+  renderer.fillRect(x + 2, y + 2, filledWidth, fillHeight);
+
+  // Draw lightning bolt when charging (white/inverted on black fill for visibility)
+  if (charging) {
+    const int boltX = x + 4;
+    const int boltY = y + 2;
+    renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
+    renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
+    renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);
+    renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
+    renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
+    renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);
+    renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
+    renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
+  }
 }
 }  // namespace
 
@@ -629,7 +657,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom) const {
+                              const int pageCount, std::string title, const int paddingBottom,
+                              const int textYOffset) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -637,8 +666,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
-  const auto textY =
-      screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
+  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
   int progressTextWidth = 0;
 
   if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
@@ -688,7 +716,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Title
-  if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
+  if (!title.empty()) {
+    textY -= textYOffset;
     // Centered chapter title text
     // Page width minus existing content with 30px padding on each side
     const int rendererableScreenWidth =

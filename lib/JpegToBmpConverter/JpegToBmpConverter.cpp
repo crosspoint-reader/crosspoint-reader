@@ -278,8 +278,37 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
+  uint8_t* rowBuffer = nullptr;
+  uint8_t* mcuRowBuffer = nullptr;
+  AtkinsonDitherer* atkinsonDitherer = nullptr;
+  FloydSteinbergDitherer* fsDitherer = nullptr;
+  Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
+  uint32_t* rowAccum = nullptr;  // Accumulator for each output X (32-bit for larger sums)
+  uint32_t* rowCount = nullptr;  // Count of source pixels accumulated per output X
+
+  // RAII guard: frees all heap resources on any return path, including early exits.
+  // Holds references so it always sees the latest pointer values assigned below.
+  struct Cleanup {
+    uint8_t*& rowBuffer;
+    uint8_t*& mcuRowBuffer;
+    AtkinsonDitherer*& atkinsonDitherer;
+    FloydSteinbergDitherer*& fsDitherer;
+    Atkinson1BitDitherer*& atkinson1BitDitherer;
+    uint32_t*& rowAccum;
+    uint32_t*& rowCount;
+    ~Cleanup() {
+      delete[] rowAccum;
+      delete[] rowCount;
+      delete atkinsonDitherer;
+      delete fsDitherer;
+      delete atkinson1BitDitherer;
+      free(mcuRowBuffer);
+      free(rowBuffer);
+    }
+  } cleanup{rowBuffer, mcuRowBuffer, atkinsonDitherer, fsDitherer, atkinson1BitDitherer, rowAccum, rowCount};
+
   // Allocate row buffer
-  auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
+  rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
   if (!rowBuffer) {
     LOG_ERR("JPG", "Failed to allocate row buffer");
     return false;
@@ -293,23 +322,17 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // Validate MCU row buffer size before allocation
   if (mcuRowPixels > MAX_MCU_ROW_BYTES) {
     LOG_DBG("JPG", "MCU row buffer too large (%d bytes), max: %d", mcuRowPixels, MAX_MCU_ROW_BYTES);
-    free(rowBuffer);
     return false;
   }
 
-  auto* mcuRowBuffer = static_cast<uint8_t*>(malloc(mcuRowPixels));
+  mcuRowBuffer = static_cast<uint8_t*>(malloc(mcuRowPixels));
   if (!mcuRowBuffer) {
     LOG_ERR("JPG", "Failed to allocate MCU row buffer (%d bytes)", mcuRowPixels);
-    free(rowBuffer);
     return false;
   }
 
   // Create ditherer if enabled
   // Use OUTPUT dimensions for dithering (after prescaling)
-  AtkinsonDitherer* atkinsonDitherer = nullptr;
-  FloydSteinbergDitherer* fsDitherer = nullptr;
-  Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
-
   if (oneBit) {
     // For 1-bit output, use Atkinson dithering for better quality
     atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
@@ -324,14 +347,12 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // For scaling: accumulate source rows into scaled output rows
   // We need to track which source Y maps to which output Y
   // Using fixed-point: srcY_fp = outY * scaleY_fp (gives source Y in 16.16 format)
-  uint32_t* rowAccum = nullptr;    // Accumulator for each output X (32-bit for larger sums)
-  uint16_t* rowCount = nullptr;    // Count of source pixels accumulated per output X
   int currentOutY = 0;             // Current output row being accumulated
   uint32_t nextOutY_srcStart = 0;  // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
     rowAccum = new uint32_t[outWidth]();
-    rowCount = new uint16_t[outWidth]();
+    rowCount = new uint32_t[outWidth]();
     nextOutY_srcStart = scaleY_fp;  // First boundary is at scaleY_fp (source Y for outY=1)
   }
 
@@ -351,8 +372,6 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
         } else {
           LOG_ERR("JPG", "JPEG decode MCU failed at (%d, %d) with error code: %d", mcuX, mcuY, mcuStatus);
         }
-        free(mcuRowBuffer);
-        free(rowBuffer);
         return false;
       }
 
@@ -528,30 +547,11 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           }
           // Moving to next source row - reset accumulators
           memset(rowAccum, 0, outWidth * sizeof(uint32_t));
-          memset(rowCount, 0, outWidth * sizeof(uint16_t));
+          memset(rowCount, 0, outWidth * sizeof(uint32_t));
         }
       }
     }
   }
-
-  // Clean up
-  if (rowAccum) {
-    delete[] rowAccum;
-  }
-  if (rowCount) {
-    delete[] rowCount;
-  }
-  if (atkinsonDitherer) {
-    delete atkinsonDitherer;
-  }
-  if (fsDitherer) {
-    delete fsDitherer;
-  }
-  if (atkinson1BitDitherer) {
-    delete atkinson1BitDitherer;
-  }
-  free(mcuRowBuffer);
-  free(rowBuffer);
 
   LOG_DBG("JPG", "Successfully converted JPEG to BMP");
   return true;

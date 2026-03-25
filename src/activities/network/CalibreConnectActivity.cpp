@@ -61,7 +61,7 @@ void CalibreConnectActivity::onExit() {
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {
   if (!connected) {
-    activityManager.popActivity();
+    finish();
     return;
   }
 
@@ -160,7 +160,7 @@ void CalibreConnectActivity::loop() {
   }
 
   if (exitRequested) {
-    activityManager.popActivity();
+    finish();
     return;
   }
 }

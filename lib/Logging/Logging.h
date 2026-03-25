@@ -2,6 +2,8 @@
 
 #include <HardwareSerial.h>
 
+#include <string>
+
 /*
 Define ENABLE_SERIAL_LOG to enable logging
 Can be set in platformio.ini build_flags or as a compile definition
@@ -52,6 +54,14 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 #define LOG_ERR(origin, format, ...)
 #define LOG_INF(origin, format, ...)
 #endif
+
+std::string getLastLogs();
+void clearLastLogs();
+// Validates the RTC log state (magic word + logHead range). Returns true if
+// corruption was detected (magic mismatch or logHead out of range), meaning
+// logMessages is untrusted garbage. Callers should call clearLastLogs() when
+// this returns true so getLastLogs() does not dump corrupt data into crash reports.
+bool sanitizeLogHead();
 
 class MySerialImpl : public Print {
  public:

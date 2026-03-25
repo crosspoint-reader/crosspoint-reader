@@ -58,18 +58,7 @@ void KOReaderAuthActivity::onEnter() {
 
   // Check if already connected
   if (network.isConnected()) {
-    state = AUTHENTICATING;
-    statusMessage = tr(STR_AUTHENTICATING);
-    requestUpdate();
-
-    // Perform authentication in a separate task
-    xTaskCreate(
-        [](void* param) {
-          auto* self = static_cast<KOReaderAuthActivity*>(param);
-          self->performAuthentication();
-          vTaskDelete(nullptr);
-        },
-        "AuthTask", 4096, this, 1, nullptr);
+    onWifiSelectionComplete(true);
     return;
   }
 

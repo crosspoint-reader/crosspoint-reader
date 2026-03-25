@@ -5,6 +5,7 @@
 #include <climits>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "../FootnoteEntry.h"
@@ -48,6 +49,7 @@ class ChapterHtmlSlimParser {
   bool hyphenationEnabled;
   const CssParser* cssParser;
   bool embeddedStyle;
+  uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
   int imageCounter = 0;
@@ -67,6 +69,11 @@ class ChapterHtmlSlimParser {
   int tableDepth = 0;
   int tableRowIndex = 0;
   int tableColIndex = 0;
+
+  // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
+  int completedPageCount = 0;
+  std::vector<std::pair<std::string, uint16_t>> anchorData;
+  std::string pendingAnchorId;  // deferred until after previous text block is flushed
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -94,8 +101,8 @@ class ChapterHtmlSlimParser {
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
-                                 const std::string& imageBasePath, const std::function<void()>& popupFn = nullptr,
-                                 const CssParser* cssParser = nullptr)
+                                 const std::string& imageBasePath, const uint8_t imageRendering = 0,
+                                 const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
@@ -111,10 +118,12 @@ class ChapterHtmlSlimParser {
         popupFn(popupFn),
         cssParser(cssParser),
         embeddedStyle(embeddedStyle),
+        imageRendering(imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath) {}
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
+  const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 };
