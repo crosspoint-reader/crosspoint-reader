@@ -58,14 +58,18 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
 
     const auto& wordList = block->getWords();
     const auto& xPosList = block->getWordXpos();
+    const auto& styleList = block->getWordStyles();
 
     auto wordIt = wordList.begin();
     auto xIt = xPosList.begin();
+    auto styleIt = styleList.begin();
 
     while (wordIt != wordList.end() && xIt != xPosList.end()) {
       int16_t screenX = line->xPos + static_cast<int16_t>(*xIt) + marginLeft;
       int16_t screenY = line->yPos + marginTop;
       const std::string& wordText = *wordIt;
+      const EpdFontFamily::Style wordStyle =
+          (styleIt != styleList.end()) ? *styleIt : EpdFontFamily::REGULAR;
 
       // Split on en-dash (U+2013: E2 80 93) and em-dash (U+2014: E2 80 94)
       std::vector<size_t> splitStarts;
@@ -84,8 +88,8 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       if (partStart < wordText.size()) splitStarts.push_back(partStart);
 
       if (splitStarts.size() <= 1 && partStart == 0) {
-        int16_t wordWidth = renderer.getTextWidth(fontId, wordText.c_str());
-        words.push_back({wordText, screenX, screenY, wordWidth, 0});
+        int16_t wordWidth = renderer.getTextWidth(fontId, wordText.c_str(), wordStyle);
+        words.push_back({wordText, screenX, screenY, wordWidth, 0, wordStyle});
       } else {
         for (size_t si = 0; si < splitStarts.size(); si++) {
           size_t start = splitStarts[si];
@@ -105,14 +109,15 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           if (part.empty()) continue;
 
           std::string prefix = wordText.substr(0, start);
-          int16_t offsetX = prefix.empty() ? 0 : renderer.getTextWidth(fontId, prefix.c_str());
-          int16_t partWidth = renderer.getTextWidth(fontId, part.c_str());
-          words.push_back({part, static_cast<int16_t>(screenX + offsetX), screenY, partWidth, 0});
+          int16_t offsetX = prefix.empty() ? 0 : renderer.getTextWidth(fontId, prefix.c_str(), wordStyle);
+          int16_t partWidth = renderer.getTextWidth(fontId, part.c_str(), wordStyle);
+          words.push_back({part, static_cast<int16_t>(screenX + offsetX), screenY, partWidth, 0, wordStyle});
         }
       }
 
       ++wordIt;
       ++xIt;
+      if (styleIt != styleList.end()) ++styleIt;
     }
   }
 
@@ -371,18 +376,18 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     for (int i = lo; i <= hi; i++) {
       const auto* w = navigator.getWordAt(i);
       if (!w) continue;
-      renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false);
+      renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
+      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
     }
   } else {
     if (const auto* w = navigator.getSelected()) {
-      renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false);
+      renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
+      renderer.drawText(fontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
 
       // Highlight the other half of a hyphenated word
       if (const auto* other = navigator.getContinuation()) {
-        renderer.fillRect(other->screenX - 1, other->screenY - 1, other->width + 2, lineHeight + 2, true);
-        renderer.drawText(fontId, other->screenX, other->screenY, other->text.c_str(), false);
+        renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
+        renderer.drawText(fontId, other->screenX, other->screenY, other->text.c_str(), false, other->style);
       }
     }
   }

@@ -54,6 +54,8 @@ In word-select mode, you can select a sequence of words to look up as a phrase.
 4. Short-press the select button to look up the selected phrase.
 5. Press the back button to cancel and return to single-word select mode.
 
+**Limitation:** Multi-word selection cannot span a page boundary. If a phrase crosses from one page to the next, only the words on the current page are available for selection. As a workaround, reduce the reader font size so more words fit on a single page, perform the lookup, then restore the original font size.
+
 ---
 
 ## Per-Book Dictionary

@@ -178,10 +178,7 @@ void LookedUpWordsActivity::render(RenderLock&&) {
     return;
   }
 
-  // Reserve a hint line above the button hints bar.
-  const int hintLineHeight = 20;
-  const int hintY = pageHeight - metrics.buttonHintsHeight - hintLineHeight;
-  const int contentHeight = hintY - contentTop - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - metrics.buttonHintsHeight - contentTop - metrics.verticalSpacing;
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(entries.size()), selectedIndex,
@@ -195,7 +192,6 @@ void LookedUpWordsActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
-    renderer.drawCenteredText(UI_10_FONT_ID, hintY + 2, tr(STR_LOOKUP_HISTORY_DELETE_HINT));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }

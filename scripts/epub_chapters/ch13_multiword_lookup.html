@@ -79,6 +79,16 @@ Verify the definition text reads: "…Compare: have a whale of a time."</li>
 <li>Short-press <em>Confirm</em>. The definition for <em>have a whale of a time</em> appears. No crash.</li>
 </ol>
 
+<h2>Known Limitation: Page boundaries</h2>
+<p>Multi-word selection cannot span a page boundary. Words on the next page are
+not loaded into memory, so extending the selection past the last word on the
+current page is not possible.</p>
+<p><strong>Workaround:</strong> Reduce the reader font size in Settings &rarr; Reader
+&rarr; Font Size so that more words fit on a single page. Perform the phrase
+lookup, then restore the original font size.</p>
+<p>A complete fix would require significant changes to the rendering engine and
+is out of scope for the dictionary feature.</p>
+
 <h2>Test F: Phrase not in dictionary</h2>
 <p>Selecting a word sequence that does not appear in the dictionary must trigger
 the normal not-found flow (popup or suggestions), not a crash.</p>

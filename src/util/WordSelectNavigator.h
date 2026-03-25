@@ -1,5 +1,6 @@
 #pragma once
 
+#include <EpdFontFamily.h>
 #include <climits>
 #include <cstdint>
 #include <string>
@@ -23,8 +24,10 @@ class WordSelectNavigator {
     int16_t row = 0;
     int continuationIndex = -1;  // index of hyphenated second half (EPUB only)
     int continuationOf = -1;     // index of hyphenated first half (EPUB only)
-    WordInfo(const std::string& t, int16_t x, int16_t y, int16_t w, int16_t r)
-        : text(t), lookupText(t), screenX(x), screenY(y), width(w), row(r) {}
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    WordInfo(const std::string& t, int16_t x, int16_t y, int16_t w, int16_t r,
+             EpdFontFamily::Style s = EpdFontFamily::REGULAR)
+        : text(t), lookupText(t), screenX(x), screenY(y), width(w), row(r), style(s) {}
   };
 
   struct Row {

@@ -294,7 +294,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
         const int tokWidth = renderer.getTextWidth(readerFontId, tok.c_str(), seg.style);
         std::string cleaned = Dictionary::cleanWord(tok);
         if (!cleaned.empty()) {
-          words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokWidth), 0});
+          words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokWidth), 0, seg.style});
           words.back().lookupText = cleaned;
         }
         x += tokWidth;
@@ -557,13 +557,13 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       for (int i = lo; i <= hi; i++) {
         const auto* w = navigator.getWordAt(i);
         if (!w) continue;
-        renderer.fillRect(w->screenX - 1, w->screenY - 1, w->width + 2, lineHeight + 2, true);
-        renderer.drawText(readerFontId, w->screenX, w->screenY, w->text.c_str(), false);
+        renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
+        renderer.drawText(readerFontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
       }
     } else {
       if (const auto* sel = navigator.getSelected()) {
-        renderer.fillRect(sel->screenX - 1, sel->screenY - 1, sel->width + 2, lineHeight + 2, true);
-        renderer.drawText(readerFontId, sel->screenX, sel->screenY, sel->text.c_str(), false);
+        renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
+        renderer.drawText(readerFontId, sel->screenX, sel->screenY, sel->text.c_str(), false, sel->style);
       }
     }
     // Empty button hints in word-select mode (same convention as EPUB word-select)
