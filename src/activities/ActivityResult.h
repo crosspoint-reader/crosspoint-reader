@@ -22,6 +22,7 @@ struct MenuResult {
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
   bool readingRulerToggled = false;
+  bool pageTurnChanged = false;
 };
 
 struct ChapterResult {

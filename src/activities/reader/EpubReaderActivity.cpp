@@ -10,6 +10,8 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -155,34 +157,44 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
+    uint8_t currentPageTurnOption = 0;
+    if (automaticPageTurnActive && pageTurnDuration > 0) {
+      const unsigned long pagesPerMinute = (1UL * 60 * 1000) / pageTurnDuration;
+      const auto option =
+          std::find(PAGE_TURN_LABELS.begin() + 1, PAGE_TURN_LABELS.end(), static_cast<int>(pagesPerMinute));
+      if (option != PAGE_TURN_LABELS.end()) {
+        currentPageTurnOption = static_cast<uint8_t>(std::distance(PAGE_TURN_LABELS.begin(), option));
+      }
+    }
     float bookProgress = 0.0f;
     if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
       const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    startActivityForResult(
-        std::make_unique<EpubReaderMenuActivity>(
-            renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
-            !currentPageFootnotes.empty(), readingRulerActive, SETTINGS.readingRulerEnabled != 0),
-        [this](const ActivityResult& result) {
-          // Always apply orientation change even if the menu was cancelled
-          const auto& menu = std::get<MenuResult>(result.data);
-          applyOrientation(menu.orientation);
-          toggleAutoPageTurn(menu.pageTurnOption);
-          if (menu.readingRulerToggled) {
-            readingRulerActive = !readingRulerActive;
-            if (readingRulerActive) {
-              rulerLineIndex = 0;
-              rulerLastInteraction = millis();
-              rulerLastAutoMove = 0;
-            }
-            requestUpdate();
-          }
-          if (!result.isCancelled) {
-            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-          }
-        });
+    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
+                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+                               SETTINGS.orientation, currentPageTurnOption, !currentPageFootnotes.empty(),
+                               readingRulerActive, SETTINGS.readingRulerEnabled != 0),
+                           [this](const ActivityResult& result) {
+                             // Always apply orientation change even if the menu was cancelled
+                             const auto& menu = std::get<MenuResult>(result.data);
+                             applyOrientation(menu.orientation);
+                             if (menu.pageTurnChanged) {
+                               toggleAutoPageTurn(menu.pageTurnOption);
+                             }
+                             if (menu.readingRulerToggled) {
+                               readingRulerActive = !readingRulerActive;
+                               if (readingRulerActive) {
+                                 rulerLastInteraction = millis();
+                                 rulerLastAutoMove = 0;
+                               }
+                               requestUpdate();
+                             }
+                             if (!result.isCancelled) {
+                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                             }
+                           });
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -273,6 +285,11 @@ void EpubReaderActivity::loop() {
   const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
 
   if (skipChapter) {
+    if (readingRulerActive) {
+      const unsigned long now = millis();
+      rulerLastInteraction = now;
+      rulerLastAutoMove = 0;
+    }
     lastPageTurnTime = millis();
     // We don't want to delete the section mid-render, so grab the semaphore
     {
@@ -292,8 +309,18 @@ void EpubReaderActivity::loop() {
   }
 
   if (prevTriggered) {
+    if (readingRulerActive) {
+      const unsigned long now = millis();
+      rulerLastInteraction = now;
+      rulerLastAutoMove = 0;
+    }
     pageTurn(false);
   } else {
+    if (readingRulerActive) {
+      const unsigned long now = millis();
+      rulerLastInteraction = now;
+      rulerLastAutoMove = 0;
+    }
     pageTurn(true);
   }
 }
@@ -572,6 +599,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
   }
+
+  // Reset per-page ruler geometry before any early return paths.
+  currentPageLines.clear();
+  rulerLineCount = 0;
 
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {

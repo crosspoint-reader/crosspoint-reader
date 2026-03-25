@@ -10,12 +10,14 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const bool readingRulerActive,
-                                               const bool readingRulerEnabled)
+                                               const uint8_t currentPageTurnOption, const bool hasFootnotes,
+                                               const bool readingRulerActive, const bool readingRulerEnabled)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, readingRulerEnabled)),
       title(title),
       pendingOrientation(currentOrientation),
+      selectedPageTurnOption(currentPageTurnOption),
+      initialPageTurnOption(currentPageTurnOption),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent),
@@ -85,14 +87,17 @@ void EpubReaderMenuActivity::loop() {
     }
 
     const bool rulerToggled = (readingRulerActive != initialRulerActive);
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption, rulerToggled});
+    const bool pageTurnChanged = (selectedPageTurnOption != initialPageTurnOption);
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption, rulerToggled,
+                         pageTurnChanged});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     const bool rulerToggled = (readingRulerActive != initialRulerActive);
+    const bool pageTurnChanged = (selectedPageTurnOption != initialPageTurnOption);
     ActivityResult result;
     result.isCancelled = true;
-    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption, rulerToggled};
+    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption, rulerToggled, pageTurnChanged};
     setResult(std::move(result));
     finish();
     return;
