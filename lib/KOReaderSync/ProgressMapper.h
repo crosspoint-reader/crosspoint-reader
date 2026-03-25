@@ -2,6 +2,7 @@
 #include <Epub.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 /**
@@ -64,6 +65,21 @@ class ProgressMapper {
    * Returns 0-based spine index, or -1 if parsing fails.
    */
   static int parseDocFragmentIndex(const std::string& xpath);
+
+  // Element types for XPath-based page lookup
+  enum class ElementType : uint8_t { PARAGRAPH = 0, IMAGE = 1 };
+
+  /**
+   * Parse element type and index from KOReader XPath for page lookup.
+   * E.g., "p[25]" → PARAGRAPH index 24, "div/img.0" → IMAGE index 0.
+   */
+  static std::optional<std::pair<ElementType, int>> parseXPathElement(const std::string& xpath);
+
+  /**
+   * Look up page number for an element from a section cache file.
+   * Reads the element-to-page map written by Section (cache v19+).
+   */
+  static std::optional<uint16_t> lookupElementPage(const std::string& sectionFilePath, ElementType type, int index);
 
   /**
    * Generate XPath for KOReader compatibility.

@@ -75,6 +75,11 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
 
+  // Element-to-page mapping for KOSync XPath-based positioning
+  std::vector<uint16_t> paragraphPages;  // page number for each <p> element (0-based index)
+  std::vector<uint16_t> imagePages;      // page number for each <img> element (0-based index)
+  int paragraphCount = 0;                // running count of <p> elements encountered
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
@@ -126,4 +131,6 @@ class ChapterHtmlSlimParser {
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::vector<uint16_t>& getParagraphPages() const { return paragraphPages; }
+  const std::vector<uint16_t>& getImagePages() const { return imagePages; }
 };

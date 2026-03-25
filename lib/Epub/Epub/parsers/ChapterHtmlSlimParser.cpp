@@ -459,6 +459,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 self->currentPage->elements.push_back(pageImage);
                 self->currentPageNextY += displayHeight;
 
+                // Track image-to-page mapping for KOSync XPath positioning
+                self->imagePages.push_back(static_cast<uint16_t>(self->completedPageCount));
+
                 self->depth += 1;
                 return;
               } else {
@@ -579,6 +582,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->currentCssStyle = cssStyle;
       self->startNewTextBlock(userAlignmentBlockStyle);
       self->updateEffectiveInlineStyle();
+
+      // Track paragraph-to-page mapping for KOSync XPath positioning
+      if (strcmp(name, "p") == 0) {
+        self->paragraphPages.push_back(static_cast<uint16_t>(self->completedPageCount));
+        self->paragraphCount++;
+      }
 
       if (strcmp(name, "li") == 0) {
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);

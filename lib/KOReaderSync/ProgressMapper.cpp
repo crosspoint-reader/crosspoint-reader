@@ -1,6 +1,8 @@
 #include "ProgressMapper.h"
 
 #include <Logging.h>
+#include <HalStorage.h>
+#include <Serialization.h>
 
 #include <cmath>
 #include <cstdlib>
@@ -74,6 +76,22 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       result.spineIndex = spineCount - 1;
     }
     LOG_DBG("ProgressMapper", "Spine %d from percentage fallback (%.2f%%)", result.spineIndex, koPos.percentage * 100);
+  }
+
+  // Try XPath element-based page lookup from the section cache (most precise)
+  if (spineFromXPath && !isFragmentStart) {
+    auto element = parseXPathElement(koPos.xpath);
+    if (element) {
+      const std::string sectionPath =
+          epub->getCachePath() + "/sections/" + std::to_string(result.spineIndex) + ".bin";
+      auto page = lookupElementPage(sectionPath, element->first, element->second);
+      if (page) {
+        result.pageNumber = *page;
+        LOG_DBG("ProgressMapper", "KOReader -> CrossPoint: %.2f%% at %s -> spine=%d, page=%d (element lookup)",
+                koPos.percentage * 100, koPos.xpath.c_str(), result.spineIndex, result.pageNumber);
+        return result;
+      }
+    }
   }
 
   // Estimate page number within the spine item using percentage
@@ -161,6 +179,127 @@ int ProgressMapper::parseDocFragmentIndex(const std::string& xpath) {
   }
 
   return -1;
+}
+
+std::optional<std::pair<ProgressMapper::ElementType, int>> ProgressMapper::parseXPathElement(const std::string& xpath) {
+  const char* str = xpath.c_str();
+
+  // Look for "img" followed by ".N" or "[N]" — image index (0-based)
+  const char* imgPos = strstr(str, "img");
+  if (imgPos) {
+    const char* after = imgPos + 3;
+    if (*after == '.') {
+      char* end = nullptr;
+      long idx = strtol(after + 1, &end, 10);
+      if (end != after + 1 && idx >= 0) {
+        return std::pair{ElementType::IMAGE, static_cast<int>(idx)};
+      }
+    } else if (*after == '[') {
+      char* end = nullptr;
+      long idx = strtol(after + 1, &end, 10);
+      if (end != after + 1 && *end == ']' && idx >= 0) {
+        return std::pair{ElementType::IMAGE, static_cast<int>(idx)};
+      }
+    }
+  }
+
+  // Look for "p[N]" — paragraph index (1-based in XPath, convert to 0-based)
+  // Search backwards to find the deepest/last p[N] in the path
+  const char* pPos = nullptr;
+  const char* search = str;
+  while ((search = strstr(search, "/p[")) != nullptr) {
+    pPos = search + 1;  // point to 'p'
+    search += 3;
+  }
+  if (pPos && pPos[0] == 'p' && pPos[1] == '[') {
+    char* end = nullptr;
+    long idx = strtol(pPos + 2, &end, 10);
+    if (end != pPos + 2 && *end == ']' && idx >= 1) {
+      return std::pair{ElementType::PARAGRAPH, static_cast<int>(idx - 1)};  // 1-based to 0-based
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::optional<uint16_t> ProgressMapper::lookupElementPage(const std::string& sectionFilePath, const ElementType type,
+                                                          const int index) {
+  if (index < 0) {
+    return std::nullopt;
+  }
+
+  FsFile f;
+  if (!Storage.openFileForRead("PM", sectionFilePath, f)) {
+    return std::nullopt;
+  }
+
+  // Section cache header: the last 3 uint32_t fields are lutOffset, anchorMapOffset, elementMapOffset.
+  // We need to read elementMapOffset (the very last field before page data starts).
+  // HEADER_SIZE is defined in Section.cpp but we know the layout ends with 3 × uint32_t.
+  // Seek to the version byte first to validate.
+  uint8_t version;
+  serialization::readPod(f, version);
+  if (version < 19) {
+    // Element map not available in older cache formats
+    f.close();
+    return std::nullopt;
+  }
+
+  // Seek to end of header to read elementMapOffset (last uint32_t in header)
+  const uint32_t fileSize = f.size();
+  // Header layout ends with: pageCount(2) + lutOffset(4) + anchorMapOffset(4) + elementMapOffset(4)
+  // Total header = version(1)+fontId(4)+lineComp(4)+extraPara(1)+paraAlign(1)+vw(2)+vh(2)+hyph(1)+embed(1)+imgRend(1)
+  //              + pageCount(2) + lutOffset(4) + anchorMapOffset(4) + elementMapOffset(4) = 32 bytes
+  // elementMapOffset is at offset 28
+  constexpr uint32_t ELEMENT_MAP_OFFSET_POS = 28;
+  f.seek(ELEMENT_MAP_OFFSET_POS);
+  uint32_t elementMapOffset;
+  serialization::readPod(f, elementMapOffset);
+  if (elementMapOffset == 0 || elementMapOffset >= fileSize) {
+    f.close();
+    return std::nullopt;
+  }
+
+  f.seek(elementMapOffset);
+
+  // Element map format: [paragraphCount(u16)][page...] [imageCount(u16)][page...]
+  uint16_t paragraphCount;
+  serialization::readPod(f, paragraphCount);
+
+  if (type == ElementType::PARAGRAPH) {
+    if (index >= paragraphCount) {
+      f.close();
+      return std::nullopt;
+    }
+    f.seek(elementMapOffset + sizeof(uint16_t) + static_cast<uint32_t>(index) * sizeof(uint16_t));
+    uint16_t page;
+    serialization::readPod(f, page);
+    f.close();
+    return page;
+  }
+
+  // Skip past paragraph data to image data
+  const uint32_t imageDataOffset =
+      elementMapOffset + sizeof(uint16_t) + static_cast<uint32_t>(paragraphCount) * sizeof(uint16_t);
+  f.seek(imageDataOffset);
+
+  uint16_t imageCount;
+  serialization::readPod(f, imageCount);
+
+  if (type == ElementType::IMAGE) {
+    if (index >= imageCount) {
+      f.close();
+      return std::nullopt;
+    }
+    f.seek(imageDataOffset + sizeof(uint16_t) + static_cast<uint32_t>(index) * sizeof(uint16_t));
+    uint16_t page;
+    serialization::readPod(f, page);
+    f.close();
+    return page;
+  }
+
+  f.close();
+  return std::nullopt;
 }
 
 std::string ProgressMapper::generateXPath(int spineIndex, int pageNumber, int totalPages) {
