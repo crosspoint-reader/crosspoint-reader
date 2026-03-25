@@ -74,7 +74,7 @@ void EpubReaderActivity::onEnter() {
     }
     f.close();
   }
-  readingRulerActive = false;  // always starts inactive; toggled via reader menu
+  readingRulerActive = (SETTINGS.readingRulerEnabled != 0);
   rulerLastInteraction = millis();
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
