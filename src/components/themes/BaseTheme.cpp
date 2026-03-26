@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 
+#include "CrossPointSettings.h"
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -20,6 +21,55 @@ constexpr int batteryPercentSpacing = 4;
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
+
+// Format a byte value with one decimal place as KB/MB/GB (decimal, base-1000).
+static void formatSdVal(uint64_t bytes, char* buf, size_t len) {
+  constexpr uint64_t GB = 1000ULL * 1000 * 1000;
+  constexpr uint64_t MB = 1000ULL * 1000;
+  constexpr uint64_t KB = 1000ULL;
+  if (bytes >= GB) {
+    const uint32_t t = (uint32_t)((bytes * 10 + GB / 2) / GB);
+    snprintf(buf, len, "%lu.%luGB", (unsigned long)(t / 10), (unsigned long)(t % 10));
+  } else if (bytes >= MB) {
+    const uint32_t t = (uint32_t)((bytes * 10 + MB / 2) / MB);
+    snprintf(buf, len, "%lu.%luMB", (unsigned long)(t / 10), (unsigned long)(t % 10));
+  } else {
+    const uint32_t t = (uint32_t)((bytes * 10 + KB / 2) / KB);
+    snprintf(buf, len, "%lu.%luKB", (unsigned long)(t / 10), (unsigned long)(t % 10));
+  }
+}
+
+// Format SD info according to the display mode setting.
+static void formatSdInfo(uint64_t freeBytes, uint64_t totalBytes, CrossPointSettings::SD_INFO_DISPLAY mode, char* buf,
+                         size_t len) {
+  if (freeBytes > totalBytes) freeBytes = totalBytes;
+  const uint64_t usedBytes = totalBytes - freeBytes;
+  switch (mode) {
+    case CrossPointSettings::SD_INFO_USED_TOTAL: {
+      char u[10], t[10];
+      formatSdVal(usedBytes, u, sizeof(u));
+      formatSdVal(totalBytes, t, sizeof(t));
+      snprintf(buf, len, "%s/%s", u, t);
+      break;
+    }
+    case CrossPointSettings::SD_INFO_USED_ONLY:
+      formatSdVal(usedBytes, buf, len);
+      break;
+    case CrossPointSettings::SD_INFO_FREE_ONLY:
+      formatSdVal(freeBytes, buf, len);
+      break;
+    default:
+      buf[0] = '\0';
+      break;
+  }
+}
+
+// Draw a simple bold 10×12 microSD card icon: solid body with top-left diagonal notch.
+static void drawMicroSdIcon(const GfxRenderer& renderer, int x, int y) {
+  renderer.fillRect(x + 2, y, 8, 1);      // row 0: notch removes left 2px
+  renderer.fillRect(x + 1, y + 1, 9, 1);  // row 1: notch removes left 1px
+  renderer.fillRect(x, y + 2, 10, 10);    // rows 2-11: full-width body
+}
 
 // Helper: draw battery icon at given position
 void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight, uint16_t percentage) {
@@ -104,6 +154,34 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
 
   // Icon is already at correct position from rect.x
   drawBatteryIcon(renderer, rect.x, y, BaseMetrics::values.batteryWidth, rect.height, percentage);
+}
+
+void BaseTheme::drawSdInfo(const GfxRenderer& renderer, Rect rect, const bool rightAlign) const {
+  const auto mode = static_cast<CrossPointSettings::SD_INFO_DISPLAY>(SETTINGS.sdInfoDisplay);
+  if (mode == CrossPointSettings::SD_INFO_HIDE) return;
+  const uint64_t total = Storage.sdTotalBytes();
+  if (total == 0) return;
+  constexpr int iconWidth = 10;
+  constexpr int iconGap = 2;
+  constexpr int rightMargin = 12;
+  char buf[24];
+  formatSdInfo(Storage.sdFreeBytes(), total, mode, buf, sizeof(buf));
+  const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
+  const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
+  if (rightAlign) {
+    // Right-aligned: text then icon, icon right-edge anchored to right margin (mirrors battery)
+    const int iconX = rect.x + rect.width - rightMargin - iconWidth;
+    const int textX = iconX - iconGap - textWidth;
+    renderer.fillRect(textX, rect.y, textWidth, textHeight, false);  // clear before draw to prevent e-ink ghosting
+    renderer.drawText(SMALL_FONT_ID, textX, rect.y, buf);
+    drawMicroSdIcon(renderer, iconX, rect.y + 6);
+  } else {
+    // Left-aligned: icon then text, anchored to left edge of rect
+    drawMicroSdIcon(renderer, rect.x, rect.y + 6);
+    const int textX = rect.x + iconWidth + iconGap;
+    renderer.fillRect(textX, rect.y, textWidth, textHeight, false);  // clear before draw to prevent e-ink ghosting
+    renderer.drawText(SMALL_FONT_ID, textX, rect.y, buf);
+  }
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
@@ -280,7 +358,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   }
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool showSdInfo) const {
   // Hide last battery draw
   constexpr int maxBatteryWidth = 80;
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
@@ -293,6 +372,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   drawBatteryRight(renderer,
                    Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
                    showBatteryPercentage);
+
+  // SD free space — upper left, mirroring the battery's right margin (only when requested)
+  if (showSdInfo) drawSdInfo(renderer, Rect{rect.x + 12, rect.y + 5, 0, 0});
 
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;

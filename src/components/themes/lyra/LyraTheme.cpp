@@ -156,7 +156,8 @@ void LyraTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   drawLyraBatteryIcon(renderer, rect.x, rect.y + 6, LyraMetrics::values.batteryWidth, rect.height, percentage);
 }
 
-void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool showSdInfo) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
   const bool showBatteryPercentage =
@@ -166,6 +167,16 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   drawBatteryRight(renderer,
                    Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
+
+  // SD free space — right-aligned, bottom-aligned with title text (only when requested)
+  // Title draws at titleY with UI_12_FONT_ID. SD icon is 12px tall drawn at sdY+6 (bottom = sdY+18).
+  // To align: sdY + 18 = titleY + titleFontHeight  =>  sdY = titleY + titleFontHeight - 18
+  if (showSdInfo) {
+    const int titleY = rect.y + LyraMetrics::values.batteryBarHeight + 3;
+    const int titleFontHeight = renderer.getTextHeight(UI_12_FONT_ID);
+    const int sdInfoY = titleY + titleFontHeight - 18;
+    drawSdInfo(renderer, Rect{rect.x, sdInfoY, rect.width, 0}, true);
+  }
 
   int maxTitleWidth =
       rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);

@@ -33,6 +33,7 @@ struct ThemeMetrics {
   int verticalSpacing;
 
   int contentSidePadding;
+  int listItemInset;  // extra horizontal inset applied to list item labels (e.g. hPaddingInSelection in Lyra)
   int listRowHeight;
   int listWithSubtitleRowHeight;
   int menuRowHeight;
@@ -62,6 +63,7 @@ struct ThemeMetrics {
   int keyboardKeySpacing;
   bool keyboardBottomAligned;
   bool keyboardCenteredText;
+  int listItemTextYOffset;  // vertical offset applied to text within a list row (e.g. 7 in Lyra)
 };
 
 enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot };
@@ -77,6 +79,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
                                  .contentSidePadding = 20,
+                                 .listItemInset = 0,
                                  .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 65,
                                  .menuRowHeight = 45,
@@ -99,7 +102,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardKeyHeight = 30,
                                  .keyboardKeySpacing = 10,
                                  .keyboardBottomAligned = false,
-                                 .keyboardCenteredText = false};
+                                 .keyboardCenteredText = false,
+                                 .listItemTextYOffset = 0};
 }
 
 class BaseTheme {
@@ -112,6 +116,7 @@ class BaseTheme {
                                bool showPercentage = true) const;  // Left aligned (reader mode)
   virtual void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
                                 bool showPercentage = true) const;  // Right aligned (UI headers)
+  virtual void drawSdInfo(const GfxRenderer& renderer, Rect rect, bool rightAlign = false) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
@@ -121,8 +126,8 @@ class BaseTheme {
                         const std::function<UIIcon(int index)>& rowIcon = nullptr,
                         const std::function<std::string(int index)>& rowValue = nullptr,
                         bool highlightValue = false) const;
-  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                          const char* subtitle = nullptr) const;
+  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
+                          bool showSdInfo = false) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -141,5 +146,4 @@ class BaseTheme {
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const;
-  virtual bool showsFileIcons() const { return false; }
 };
