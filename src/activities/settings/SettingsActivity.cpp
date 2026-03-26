@@ -13,6 +13,7 @@
 #include "OtaUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
+#include "SystemInformationActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -52,6 +53,7 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_SYSTEM_INFO, SettingAction::SystemInfo));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category
@@ -166,6 +168,7 @@ void SettingsActivity::toggleCurrentSetting() {
     }
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
+    auto noopHandler = [](const ActivityResult&) {};
 
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
@@ -191,6 +194,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::SystemInfo:
+        startActivityForResult(std::make_unique<SystemInformationActivity>(renderer, mappedInput), noopHandler);
         break;
       case SettingAction::None:
         // Do nothing
