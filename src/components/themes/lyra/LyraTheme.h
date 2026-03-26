@@ -28,7 +28,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
-                                 .bookProgressBarHeight = 4,
+                                 .progressBarMarginTop = 1,
+                                 .statusBarHorizontalMargin = 5,
+                                 .statusBarVerticalMargin = 19,
                                  .keyboardKeyWidth = 31,
                                  .keyboardKeyHeight = 50,
                                  .keyboardKeySpacing = 0,
@@ -66,4 +68,5 @@ class LyraTheme : public BaseTheme {
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const override;
   void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const override;
+  bool showsFileIcons() const override { return true; }
 };

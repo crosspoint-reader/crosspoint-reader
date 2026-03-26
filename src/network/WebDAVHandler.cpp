@@ -6,8 +6,6 @@
 #include <Logging.h>
 #include <esp_task_wdt.h>
 
-#include "util/StringUtils.h"
-
 namespace {
 const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
@@ -801,28 +799,26 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
 }
 
 void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
-  if (StringUtils::checkFileExtension(path, ".epub")) {
+  if (FsHelpers::hasEpubExtension(path)) {
     Epub(path.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("DAV", "Cleared epub cache for: %s", path.c_str());
   }
 }
 
 String WebDAVHandler::getMimeType(const String& path) const {
-  if (StringUtils::checkFileExtension(path, ".epub")) return "application/epub+zip";
-  if (StringUtils::checkFileExtension(path, ".pdf")) return "application/pdf";
-  if (StringUtils::checkFileExtension(path, ".txt")) return "text/plain";
-  if (StringUtils::checkFileExtension(path, ".html") || StringUtils::checkFileExtension(path, ".htm"))
-    return "text/html";
-  if (StringUtils::checkFileExtension(path, ".css")) return "text/css";
-  if (StringUtils::checkFileExtension(path, ".js")) return "application/javascript";
-  if (StringUtils::checkFileExtension(path, ".json")) return "application/json";
-  if (StringUtils::checkFileExtension(path, ".xml")) return "application/xml";
-  if (StringUtils::checkFileExtension(path, ".jpg") || StringUtils::checkFileExtension(path, ".jpeg"))
-    return "image/jpeg";
-  if (StringUtils::checkFileExtension(path, ".png")) return "image/png";
-  if (StringUtils::checkFileExtension(path, ".gif")) return "image/gif";
-  if (StringUtils::checkFileExtension(path, ".svg")) return "image/svg+xml";
-  if (StringUtils::checkFileExtension(path, ".zip")) return "application/zip";
-  if (StringUtils::checkFileExtension(path, ".gz")) return "application/gzip";
+  if (FsHelpers::hasEpubExtension(path)) return "application/epub+zip";
+  if (FsHelpers::checkFileExtension(path, ".pdf")) return "application/pdf";
+  if (FsHelpers::hasTxtExtension(path)) return "text/plain";
+  if (FsHelpers::checkFileExtension(path, ".html") || FsHelpers::checkFileExtension(path, ".htm")) return "text/html";
+  if (FsHelpers::checkFileExtension(path, ".css")) return "text/css";
+  if (FsHelpers::checkFileExtension(path, ".js")) return "application/javascript";
+  if (FsHelpers::checkFileExtension(path, ".json")) return "application/json";
+  if (FsHelpers::checkFileExtension(path, ".xml")) return "application/xml";
+  if (FsHelpers::hasJpgExtension(path)) return "image/jpeg";
+  if (FsHelpers::hasPngExtension(path)) return "image/png";
+  if (FsHelpers::hasGifExtension(path)) return "image/gif";
+  if (FsHelpers::checkFileExtension(path, ".svg")) return "image/svg+xml";
+  if (FsHelpers::checkFileExtension(path, ".zip")) return "application/zip";
+  if (FsHelpers::checkFileExtension(path, ".gz")) return "application/gzip";
   return "application/octet-stream";
 }
