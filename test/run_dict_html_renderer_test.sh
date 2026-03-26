@@ -31,6 +31,7 @@ CXXFLAGS=(
   -I"$ROOT_DIR"
   -I"$ROOT_DIR/lib"
   -I"$ROOT_DIR/lib/expat"
+  -I"$ROOT_DIR/lib/Utf8"
 )
 
 # Compile expat C sources with gcc
@@ -42,6 +43,7 @@ gcc "${CFLAGS[@]}" -c "$ROOT_DIR/lib/expat/xmltok.c"   -o "$BUILD_DIR/xmltok.o"
 g++ "${CXXFLAGS[@]}" \
   "$ROOT_DIR/test/dict_html_renderer/DictHtmlRendererTest.cpp" \
   "$ROOT_DIR/lib/DictHtmlRenderer/DictHtmlRenderer.cpp" \
+  "$ROOT_DIR/lib/Utf8/Utf8.cpp" \
   "$BUILD_DIR/xmlparse.o" \
   "$BUILD_DIR/xmlrole.o" \
   "$BUILD_DIR/xmltok.o" \

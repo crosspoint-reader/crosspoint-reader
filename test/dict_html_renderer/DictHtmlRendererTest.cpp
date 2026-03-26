@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "lib/DictHtmlRenderer/DictHtmlRenderer.h"
+#include "src/util/IpaUtils.h"
 
 // ---------------------------------------------------------------------------
 // Helper: read binary file
@@ -225,7 +226,7 @@ static const std::vector<ExpectedSpan> kAbbrExpand = {
 static const std::vector<ExpectedSpan> kBlockStrip = {
     S("Nine block tags and all their children should be stripped entirely.", true),
     S("Nothing should appear between the two rules below.", true),
-    S("Tags tested: hiero (with nested table/tr/td/img), svg (with defs/g/path/rect), math (with sup), gallery, "
+    S("Tags tested: hiero (with nested table/tr/td/img), svg (with defs/g/path/rect/use), math (with sup), gallery, "
       "nowiki, poem, ref (lowercase), REF (uppercase), img (standalone).",
       true),
     S("----------", true),
@@ -331,14 +332,16 @@ static const std::vector<ExpectedSpan> kFormatTags = {
 //   <p>----------</p>
 // unknowntag / outertag / innertag are intentional unknown tags — expectUnknownTags=true.
 static const std::vector<ExpectedSpan> kStripKeep = {
-    S("Three cases where the tag is stripped but its text content is kept.", true),
+    S("Four cases where the tag is stripped but its text content is kept.", true),
     S("Case 1: span tag stripped, text kept. Expected: visible span text", true),
     S("Case 2: single unknown tag stripped, text kept. Expected: visible unknown text", true),
     S("Case 3: nested unknown tags both stripped, innermost text kept. Expected: visible nested text", true),
+    S("Case 4: anchor tag stripped, text kept. Expected: visible anchor text", true),
     S("----------", true),
     S("visible span text", true),
     S("visible unknown text", true),
     S("visible nested text", true),
+    S("visible anchor text", true),
     S("----------", true),
 };
 
@@ -352,6 +355,8 @@ static const std::vector<ExpectedSpan> kStripKeep = {
 static const std::vector<ExpectedSpan> kWikiAnnot = {
     S("Eight wikitext annotation tags. Each is a self-closing tag of the form XX:YY where the text to render is the "
       "suffix YY (the part after the colon).",
+      true),
+    S("A ninth case uses a tag with body text. Body must be suppressed; only the suffix renders. Expected: value",
       true),
     S("Expected inline text in order: four, oikos, la, sharp, noun, Grek, ameba, female", true),
     S("----------", true),
@@ -371,6 +376,8 @@ static const std::vector<ExpectedSpan> kWikiAnnot = {
     S("ameba"),
     S(" identifier: "),
     S("female"),
+    S("body suppressed: ", true),
+    S("value"),
     S("----------", true),
 };
 
@@ -451,6 +458,194 @@ int main(int argc, char** argv) {
 #endif
 
     if (pass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // B1: parseError — malformed XML
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== parseError (malformed XML) ===\n");
+    const auto& badSpans = renderer.render("<p>unclosed", 11);
+    const bool pass = badSpans.empty();
+    printf("  spans: %zu (expected 0)\n", badSpans.size());
+    printf("  %s\n", pass ? "PASS" : "FAIL");
+    if (pass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // B2: TEXT_BUF_SIZE truncation — 100 paragraphs of 90 chars each (9000 bytes)
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== TEXT_BUF_SIZE truncation ===\n");
+    std::string bigHtml;
+    bigHtml.reserve(100 * 96);
+    for (int i = 0; i < 100; i++) {
+      bigHtml += "<p>";
+      bigHtml.append(90, 'A');
+      bigHtml += "</p>";
+    }
+    const auto& bigSpans = renderer.render(bigHtml.c_str(), static_cast<int>(bigHtml.size()));
+    bool pass = bigSpans.size() < 100;
+    for (const auto& s : bigSpans)
+      if (!s.text) {
+        pass = false;
+        break;
+      }
+    printf("  spans: %zu (expected < 100)\n", bigSpans.size());
+    printf("  %s\n", pass ? "PASS" : "FAIL");
+    if (pass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // B3: PENDING_SIZE overflow — single <p> with 600 'B' chars
+  // emitText clamps to 511 bytes (PENDING_SIZE-1); remaining 89 discarded
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== PENDING_SIZE overflow ===\n");
+    std::string html = "<p>";
+    html.append(600, 'B');
+    html += "</p>";
+    const auto& spans = renderer.render(html.c_str(), static_cast<int>(html.size()));
+    const bool pass = spans.size() == 1 && spans[0].text && strlen(spans[0].text) == 511;
+    printf("  spans: %zu, len: %zu (expected 1 span, 511 chars)\n", spans.size(),
+           spans.empty() ? 0UL : strlen(spans[0].text));
+    printf("  %s\n", pass ? "PASS" : "FAIL");
+    if (pass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // B4: MAX_STACK overflow — 35 nested <i> tags (MAX_STACK=32; _root + 31 fit)
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== MAX_STACK overflow ===\n");
+    std::string html;
+    for (int i = 0; i < 35; i++) html += "<i>";
+    html += "deep text";
+    for (int i = 0; i < 35; i++) html += "</i>";
+    const auto& spans = renderer.render(html.c_str(), static_cast<int>(html.size()));
+    const bool pass = spans.size() == 1 && spans[0].text && strcmp(spans[0].text, "deep text") == 0 && spans[0].italic;
+    printf("  spans: %zu\n", spans.size());
+    if (!spans.empty()) printSpan(0, spans[0]);
+    printf("  %s (expected 1 span, \"deep text\", italic)\n", pass ? "PASS" : "FAIL");
+    if (pass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Group C: isIpaCodepoint unit tests
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== isIpaCodepoint ===\n");
+    struct IpaCase {
+      uint32_t cp;
+      bool expected;
+      const char* label;
+    };
+    const IpaCase cases[] = {
+        {0x024F, false, "U+024F (below IPA Extensions)"},
+        {0x0250, true, "U+0250 (IPA Extensions start)"},
+        {0x02FF, true, "U+02FF (Modifier Letters end)"},
+        {0x0300, false, "U+0300 (above Modifier Letters)"},
+        {0x1D00, true, "U+1D00 (Phonetic Extensions start)"},
+        {0x1DBF, true, "U+1DBF (Phonetic Extensions Supplement end)"},
+        {0x1DC0, false, "U+1DC0 (above Phonetic Ext Supplement)"},
+        {0x0061, false, "U+0061 (ASCII 'a')"},
+    };
+    bool allPass = true;
+    for (const auto& c : cases) {
+      const bool got = isIpaCodepoint(c.cp);
+      const bool ok = (got == c.expected);
+      printf("  %s: %s%s\n", c.label, got ? "true" : "false", ok ? "" : " FAIL");
+      if (!ok) allPass = false;
+    }
+    printf("  %s\n", allPass ? "PASS" : "FAIL");
+    if (allPass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Group C: splitIpaRuns unit tests
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== splitIpaRuns ===\n");
+    bool allPass = true;
+
+    // Empty string → 0 runs
+    {
+      auto runs = splitIpaRuns("");
+      const bool ok = runs.empty();
+      printf("  empty string → %zu runs (expected 0)%s\n", runs.size(), ok ? "" : " FAIL");
+      if (!ok) allPass = false;
+    }
+
+    // Pure ASCII → 1 non-IPA run
+    {
+      auto runs = splitIpaRuns("abc");
+      const bool ok = runs.size() == 1 && !runs[0].isIpa && runs[0].text == "abc";
+      printf("  \"abc\" → %zu run(s), isIpa=%d (expected 1, false)%s\n", runs.size(),
+             runs.empty() ? -1 : (int)runs[0].isIpa, ok ? "" : " FAIL");
+      if (!ok) allPass = false;
+    }
+
+    // Single IPA codepoint U+0250 (UTF-8: 0xC9 0x90)
+    {
+      std::string ipa;
+      ipa += '\xC9';
+      ipa += '\x90';
+      auto runs = splitIpaRuns(ipa);
+      const bool ok = runs.size() == 1 && runs[0].isIpa && runs[0].text == ipa;
+      printf("  U+0250 → %zu run(s), isIpa=%d (expected 1, true)%s\n", runs.size(),
+             runs.empty() ? -1 : (int)runs[0].isIpa, ok ? "" : " FAIL");
+      if (!ok) allPass = false;
+    }
+
+    // Mixed: "abc" + U+0250 + "xyz" → 3 runs
+    {
+      std::string mixed = "abc";
+      mixed += '\xC9';
+      mixed += '\x90';
+      mixed += "xyz";
+      auto runs = splitIpaRuns(mixed);
+      const bool ok = runs.size() == 3 && !runs[0].isIpa && runs[0].text == "abc" && runs[1].isIpa && !runs[2].isIpa &&
+                      runs[2].text == "xyz";
+      printf("  \"abc\"+U+0250+\"xyz\" → %zu run(s) (expected 3)%s\n", runs.size(), ok ? "" : " FAIL");
+      if (!ok) allPass = false;
+    }
+
+    // Consecutive IPA → 1 IPA run: "ab" + U+0250 + U+0251 + "cd" → 3 runs
+    {
+      std::string s = "ab";
+      s += '\xC9';
+      s += '\x90';  // U+0250
+      s += '\xC9';
+      s += '\x91';  // U+0251
+      s += "cd";
+      auto runs = splitIpaRuns(s);
+      const bool ok = runs.size() == 3 && !runs[0].isIpa && runs[0].text == "ab" && runs[1].isIpa &&
+                      runs[1].text.size() == 4 && !runs[2].isIpa && runs[2].text == "cd";
+      printf("  \"ab\"+U+0250+U+0251+\"cd\" → %zu run(s) (expected 3, IPA run len 4)%s\n", runs.size(),
+             ok ? "" : " FAIL");
+      if (!ok) allPass = false;
+    }
+
+    printf("  %s\n", allPass ? "PASS" : "FAIL");
+    if (allPass)
       passed++;
     else
       failed++;
