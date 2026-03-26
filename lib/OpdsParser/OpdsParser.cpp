@@ -1,7 +1,5 @@
 #include "OpdsParser.h"
-
 #include <Logging.h>
-
 #include <cstring>
 
 OpdsParser::OpdsParser() {
@@ -77,7 +75,7 @@ bool OpdsParser::error() const { return errorOccured; }
 
 void OpdsParser::clear() {
   entries.clear();
-  searchTemplate.clear(); // Reset search template on clear
+  searchTemplate.clear();
   currentEntry = OpdsEntry{};
   currentText.clear();
   inEntry = false;
@@ -109,26 +107,30 @@ const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
 void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<OpdsParser*>(userData);
 
-  // Handle feed-level or entry-level links
   if (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr) {
     const char* rel = findAttribute(atts, "rel");
     const char* type = findAttribute(atts, "type");
     const char* href = findAttribute(atts, "href");
 
     if (href) {
-      // 1. Search Template: Look for search relation
       if (rel && strcmp(rel, "search") == 0) {
-        self->searchTemplate = href;
+        std::string sHref(href);
+        std::string sType = type ? type : "";
+        
+        // Only accept direct templates containing {searchTerms}
+        if (sHref.find("{searchTerms}") != std::string::npos) {
+          self->searchTemplate = sHref;
+        } else if (sType == "application/opensearchdescription+xml") {
+          LOG_DBG("OPDS", "OpenSearch description found: %s. Skipping direct template assignment.", href);
+        }
       }
       
       if (self->inEntry) {
-        // 2. Book: acquisition link with epub type
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
           self->currentEntry.type = OpdsEntryType::BOOK;
           self->currentEntry.href = href;
         }
-        // 3. Navigation: atom+xml type
         else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
             self->currentEntry.type = OpdsEntryType::NAVIGATION;
