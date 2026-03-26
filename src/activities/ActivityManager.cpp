@@ -59,9 +59,9 @@ void ActivityManager::loop() {
   }
 
   if (SETTINGS.useClock && HalClock::isSynced()) {
-    static time_t lastMinute = -1;
     time_t now = HalClock::now();
     if (now > 0) {
+      static time_t lastMinute = -1;
       time_t minute = now / 60;
       if (minute != lastMinute) {
         lastMinute = minute;
