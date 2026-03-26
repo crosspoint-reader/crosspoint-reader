@@ -41,3 +41,17 @@ must be fully legible.</p>
 <p>Expected: the long IPA string in the definition wraps correctly at the screen
 margin. No truncation or corruption of characters at the wrap point. All glyphs
 must remain legible after wrapping.</p>
+
+<h2>Test H: Pronunciation line with no trailing glyph (F-060/F-061)</h2>
+<p>These entries use the real-dict format: plain-text pronunciation on the first
+line followed by a newline, then HTML body. The newline must be treated as a line
+break, not rendered as a filled diamond.</p>
+<p>Look up <strong>meetings</strong> (stems to <strong>meeting</strong>).</p>
+<p>Expected: pronunciation line <em>/ˈmitɪŋ/, /ˈmiːtɪŋ/</em> appears cleanly with
+no trailing filled diamond. Body text (Noun definition and etymology) follows on
+the next line.</p>
+<p>Look up <strong>austere</strong>.</p>
+<p>Expected: pronunciation line <em>/ɑˈstiɹ/, /ɒˈstɪə(ɹ)/, /ɔˈstiɹ/, /ɔːˈstɪə(ɹ)/</em>
+appears cleanly with no trailing filled diamond. Unsupported Greek characters in the
+etymology body render as filled diamonds — this is expected and correct behaviour for
+unsupported scripts.</p>

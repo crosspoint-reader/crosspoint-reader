@@ -159,14 +159,19 @@ void DictHtmlRenderer::pushSpan() {
 
 void DictHtmlRenderer::emitText(const char* s, int len) {
   if (len <= 0) return;
-  int remaining = PENDING_SIZE - pendingLen;
-  if (len >= remaining) {
-    pushSpan();
-    remaining = PENDING_SIZE;
+  for (int i = 0; i < len; i++) {
+    char c = s[i];
+    if (c == '\r' || c == '\n') {
+      pushSpan();
+      newlinePending = true;
+      // Treat \r\n as a single line ending
+      if (c == '\r' && i + 1 < len && s[i + 1] == '\n') i++;
+      continue;
+    }
+    if (c == '\t') c = ' ';
+    if (pendingLen >= PENDING_SIZE - 1) pushSpan();
+    pendingText[pendingLen++] = c;
   }
-  int toWrite = len < remaining - 1 ? len : remaining - 1;
-  memcpy(pendingText + pendingLen, s, toWrite);
-  pendingLen += toWrite;
 }
 
 void DictHtmlRenderer::flushPending() { pushSpan(); }

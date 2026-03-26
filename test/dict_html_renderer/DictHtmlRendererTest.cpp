@@ -507,7 +507,7 @@ int main(int argc, char** argv) {
 
   // ---------------------------------------------------------------------------
   // B3: PENDING_SIZE overflow — single <p> with 600 'B' chars
-  // emitText clamps to 511 bytes (PENDING_SIZE-1); remaining 89 discarded
+  // emitText flushes at PENDING_SIZE-1 (511) and continues: 2 spans (511 + 89)
   // ---------------------------------------------------------------------------
   {
     printf("\n=== PENDING_SIZE overflow ===\n");
@@ -515,9 +515,11 @@ int main(int argc, char** argv) {
     html.append(600, 'B');
     html += "</p>";
     const auto& spans = renderer.render(html.c_str(), static_cast<int>(html.size()));
-    const bool pass = spans.size() == 1 && spans[0].text && strlen(spans[0].text) == 511;
-    printf("  spans: %zu, len: %zu (expected 1 span, 511 chars)\n", spans.size(),
-           spans.empty() ? 0UL : strlen(spans[0].text));
+    const bool pass = spans.size() == 2 && spans[0].text && strlen(spans[0].text) == 511 && spans[1].text &&
+                      strlen(spans[1].text) == 89;
+    printf("  spans: %zu (expected 2: 511 + 89 chars)\n", spans.size());
+    if (spans.size() >= 1) printf("  span[0] len: %zu\n", strlen(spans[0].text));
+    if (spans.size() >= 2) printf("  span[1] len: %zu\n", strlen(spans[1].text));
     printf("  %s\n", pass ? "PASS" : "FAIL");
     if (pass)
       passed++;
@@ -539,6 +541,28 @@ int main(int argc, char** argv) {
     printf("  spans: %zu\n", spans.size());
     if (!spans.empty()) printSpan(0, spans[0]);
     printf("  %s (expected 1 span, \"deep text\", italic)\n", pass ? "PASS" : "FAIL");
+    if (pass)
+      passed++;
+    else
+      failed++;
+  }
+
+  // ---------------------------------------------------------------------------
+  // B5: control characters in plain text — \n triggers line break, \t → space
+  // Reproduces F-060/F-061: pronunciation\n<p>definition</p> must not emit ◆
+  // ---------------------------------------------------------------------------
+  {
+    printf("\n=== control chars in plain text (\\n, \\t) ===\n");
+    // \n between plain text and first <p> must produce a newline break, not a glyph
+    const char* html = "pronunciation\n<p>definition</p>";
+    const auto& spans = renderer.render(html, static_cast<int>(strlen(html)));
+    // Expected: span[0]="pronunciation" newlineBefore=false, span[1]="definition" newlineBefore=true
+    const bool pass = spans.size() == 2 && spans[0].text && strcmp(spans[0].text, "pronunciation") == 0 &&
+                      !spans[0].newlineBefore && spans[1].text && strcmp(spans[1].text, "definition") == 0 &&
+                      spans[1].newlineBefore;
+    printf("  spans: %zu (expected 2)\n", spans.size());
+    for (int i = 0; i < static_cast<int>(spans.size()); i++) printSpan(i, spans[i]);
+    printf("  %s\n", pass ? "PASS" : "FAIL");
     if (pass)
       passed++;
     else
