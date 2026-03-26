@@ -173,29 +173,55 @@ void PdfReaderActivity::renderContents(const PdfPage& page) {
   int y = marginTop;
   const int bottomLimit = renderer.getScreenHeight() - marginBottom - lineHeight;
 
+  auto toRendererStyle = [](uint8_t pdfStyle) {
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    if ((pdfStyle & PdfTextStyleBold) != 0) {
+      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+    }
+    if ((pdfStyle & PdfTextStyleItalic) != 0) {
+      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::ITALIC);
+    }
+    return style;
+  };
+
   auto drawTextBlock = [&](const PdfTextBlock& block) {
     if (block.text.empty()) {
       return;
     }
+    const bool isHeader = (block.style & PdfTextStyleHeader) != 0;
+    EpdFontFamily::Style textStyle = toRendererStyle(block.style);
+    if (isHeader) {
+      textStyle = static_cast<EpdFontFamily::Style>(textStyle | EpdFontFamily::BOLD);
+    }
     constexpr int kMaxLines = 400;
-    const auto lines = renderer.wrappedText(cachedFontId, block.text.c_str(), viewportWidth, kMaxLines);
+    const auto lines = renderer.wrappedText(cachedFontId, block.text.c_str(), viewportWidth, kMaxLines, textStyle);
+    if (isHeader && y > marginTop) {
+      y += std::max(2, lineHeight / 3);
+    }
     for (const auto& line : lines) {
       if (y > bottomLimit) {
         return;
       }
       int x = marginLeft;
-      switch (SETTINGS.paragraphAlignment) {
-        case CrossPointSettings::CENTER_ALIGN:
-          x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str())) / 2;
-          break;
-        case CrossPointSettings::RIGHT_ALIGN:
-          x = marginLeft + viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str());
-          break;
-        default:
-          break;
+      if (isHeader) {
+        x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str(), textStyle)) / 2;
+      } else {
+        switch (SETTINGS.paragraphAlignment) {
+          case CrossPointSettings::CENTER_ALIGN:
+            x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str(), textStyle)) / 2;
+            break;
+          case CrossPointSettings::RIGHT_ALIGN:
+            x = marginLeft + viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str(), textStyle);
+            break;
+          default:
+            break;
+        }
       }
-      renderer.drawText(cachedFontId, x, y, line.c_str());
+      renderer.drawText(cachedFontId, x, y, line.c_str(), true, textStyle);
       y += lineHeight;
+    }
+    if (isHeader) {
+      y += std::max(2, lineHeight / 4);
     }
   };
 

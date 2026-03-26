@@ -110,12 +110,32 @@ size_t totalTextChars(const PdfPage& p) {
   return n;
 }
 
+bool hasStyle(uint8_t style, uint8_t flag) {
+  return (style & flag) != 0;
+}
+
+const char* styleName(uint8_t style) {
+  if (hasStyle(style, PdfTextStyleHeader)) {
+    return "header";
+  }
+  if (hasStyle(style, PdfTextStyleBold) && hasStyle(style, PdfTextStyleItalic)) {
+    return "bold+italic";
+  }
+  if (hasStyle(style, PdfTextStyleBold)) {
+    return "bold";
+  }
+  if (hasStyle(style, PdfTextStyleItalic)) {
+    return "italic";
+  }
+  return "regular";
+}
+
 void dumpPageText(size_t pageIndex, const PdfPage& page) {
   std::printf("----- page %zu -----\n", pageIndex + 1);
   for (const auto& block : page.textBlocks) {
     const std::string text = std::string(block.text.view());
     if (!text.empty()) {
-      std::printf("%s\n", text.c_str());
+      std::printf("[%s] %s\n", styleName(block.style), text.c_str());
     }
   }
   std::printf("\n");
@@ -227,6 +247,25 @@ bool runOnePdf(const char* path) {
   const bool dumpText = std::getenv("PDF_TEST_DUMP_TEXT") != nullptr;
   if (dumpText) {
     dumpPageText(0, page0);
+  }
+
+  if (std::strcmp(base, "Problem-Solving Treatment_ Learning and Pl - IHS.pdf") == 0) {
+    REQUIRE(!page0.textBlocks.empty());
+    REQUIRE(hasStyle(page0.textBlocks[0].style, PdfTextStyleHeader));
+  }
+  if (std::strcmp(base, "EE-366.pdf") == 0) {
+    bool sawBold = false;
+    bool sawItalic = false;
+    for (const auto& block : page0.textBlocks) {
+      if (hasStyle(block.style, PdfTextStyleBold)) {
+        sawBold = true;
+      }
+      if (hasStyle(block.style, PdfTextStyleItalic)) {
+        sawItalic = true;
+      }
+    }
+    REQUIRE(sawBold);
+    REQUIRE(sawItalic);
   }
 
   if (exp && exp->requireTextOnPage0) {

@@ -15,6 +15,7 @@ constexpr uint8_t kPageVersionV1 = 1;
 constexpr uint8_t kPageVersionV2 = 2;
 constexpr uint8_t kPageVersionV3 = 3;
 constexpr uint8_t kPageVersionV4 = 4;
+constexpr uint8_t kPageVersionV5 = 5;
 
 size_t hashPathCstr(const char* s) {
   size_t h = 5381;
@@ -161,7 +162,7 @@ bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
 
   uint8_t ver = 0;
   serialization::readPod(f, ver);
-  if (ver != kPageVersionV4) {
+  if (ver != kPageVersionV5) {
     f.close();
     return false;
   }
@@ -180,6 +181,11 @@ bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
     if (!readFixedString(f, outPage.textBlocks[i].text)) {
       f.close();
       return false;
+    }
+    if (ver >= kPageVersionV5) {
+      serialization::readPod(f, outPage.textBlocks[i].style);
+    } else {
+      outPage.textBlocks[i].style = PdfTextStyleRegular;
     }
     serialization::readPod(f, outPage.textBlocks[i].orderHint);
   }
@@ -257,7 +263,7 @@ bool PdfCache::savePage(uint32_t pageNum, const PdfPage& page) {
     return false;
   }
 
-  serialization::writePod(f, kPageVersionV4);
+  serialization::writePod(f, kPageVersionV5);
   const uint32_t textCount = static_cast<uint32_t>(page.textBlocks.size());
   serialization::writePod(f, textCount);
   for (uint32_t i = 0; i < textCount; ++i) {
@@ -265,6 +271,7 @@ bool PdfCache::savePage(uint32_t pageNum, const PdfPage& page) {
       f.close();
       return false;
     }
+    serialization::writePod(f, page.textBlocks[i].style);
     serialization::writePod(f, page.textBlocks[i].orderHint);
   }
   const uint32_t imageCount = static_cast<uint32_t>(page.images.size());

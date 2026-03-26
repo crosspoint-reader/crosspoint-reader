@@ -5,8 +5,16 @@
 
 #include <cstdint>
 
+enum PdfTextStyle : uint8_t {
+  PdfTextStyleRegular = 0,
+  PdfTextStyleBold = 1u << 0,
+  PdfTextStyleItalic = 1u << 1,
+  PdfTextStyleHeader = 1u << 2,
+};
+
 struct PdfTextBlock {
   PdfFixedString<PDF_MAX_TEXT_BLOCK_BYTES> text;
+  uint8_t style = PdfTextStyleRegular;
   uint32_t orderHint = 0;
 };
 
