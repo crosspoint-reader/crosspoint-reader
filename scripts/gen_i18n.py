@@ -146,6 +146,29 @@ def load_translations(
     if english_file is None:
         raise ValueError("No YAML file with _language_code: EN found")
 
+    duplicate_orders: Dict[str, List[str]] = {}
+    order_to_files: Dict[str, List[str]] = {}
+    for fname, data in parsed.items():
+        order = data.get("_order")
+        if not order:
+            continue
+        order_to_files.setdefault(order, []).append(fname)
+
+    for order, files in order_to_files.items():
+        if len(files) > 1:
+            duplicate_orders[order] = sorted(files)
+
+    if duplicate_orders:
+        duplicate_messages = [
+            f"_order {order}: {', '.join(files)}"
+            for order, files in sorted(
+                duplicate_orders.items(), key=lambda item: int(item[0])
+            )
+        ]
+        raise ValueError(
+            "Duplicate _order values found:\n  " + "\n  ".join(duplicate_messages) + "\nEach _order value must be unique to ensure a deterministic language order."
+        )
+
     # Order: English first, then by _order metadata (falls back to filename)
     def sort_key(fname: str) -> Tuple[int, int, str]:
         """English always first (0), then by _order, then by filename."""
@@ -266,56 +289,12 @@ def report_unused_keys(
     used_keys: Set[str],
 ) -> List[str]:
     """Return a sorted list of keys from *string_keys* absent in *used_keys*."""
-    return [k for k in string_keys if k not in used_keys]
+    return [k for k in sorted(string_keys) if k not in used_keys]
 
 
 # ---------------------------------------------------------------------------
 # C++ string escaping
 # ---------------------------------------------------------------------------
-
-LANG_ABBREVIATIONS = {
-    "english": "EN",
-    "español": "ES",
-    "espanol": "ES",
-    "italiano": "IT",
-    "svenska": "SV",
-    "français": "FR",
-    "francais": "FR",
-    "deutsch": "DE",
-    "german": "DE",
-    "polski": "PL",
-    "português": "PT",
-    "portugues": "PT",
-    "português (brasil)": "PO",
-    "中文": "ZH",
-    "chinese": "ZH",
-    "日本語": "JA",
-    "japanese": "JA",
-    "한국어": "KO",
-    "korean": "KO",
-    "русский": "RU",
-    "russian": "RU",
-    "العربية": "AR",
-    "arabic": "AR",
-    "עברית": "HE",
-    "hebrew": "HE",
-    "فارسی": "FA",
-    "persian": "FA",
-    "čeština": "CS",
-    "türkçe": "TR",
-    "turkish": "TR",
-    "Қазақша": "KK",
-    "kazakh": "KK",
-}
-
-
-def get_lang_abbreviation(lang_code: str, lang_name: str) -> str:
-    """Return a 2-letter abbreviation for a language."""
-    lower = lang_name.lower()
-    if lower in LANG_ABBREVIATIONS:
-        return LANG_ABBREVIATIONS[lower]
-    return lang_code[:2].upper()
-
 
 def escape_cpp_string(s: str) -> List[str]:
     r"""
@@ -471,10 +450,9 @@ def generate_keys_header(
         "namespace i18n_strings {",
     ]
 
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"extern const char STRINGS_{abbrev}_DATA[];")
-        lines.append(f"extern const uint16_t OFFSETS_{abbrev}[];")
+    for code in languages:
+        lines.append(f"extern const char STRINGS_{code}_DATA[];")
+        lines.append(f"extern const uint16_t OFFSETS_{code}[];")
 
     lines.append("}  // namespace i18n_strings")
     lines.append("")
@@ -518,16 +496,15 @@ def generate_keys_header(
     lines.append("// Helper function to get string data for a language")
     lines.append("inline LangStrings getLanguageStrings(Language lang) {")
     lines.append("  switch (lang) {")
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
+    for code in languages:
         lines.append(f"    case Language::{code}:")
         lines.append(
-            f"      return {{i18n_strings::STRINGS_{abbrev}_DATA, i18n_strings::OFFSETS_{abbrev}}};"
+            f"      return {{i18n_strings::STRINGS_{code}_DATA, i18n_strings::OFFSETS_{code}}};"
         )
-    first_abbrev = get_lang_abbreviation(languages[0], language_names[0])
+    first_code = languages[0]
     lines.append("    default:")
     lines.append(
-        f"      return {{i18n_strings::STRINGS_{first_abbrev}_DATA, i18n_strings::OFFSETS_{first_abbrev}}};"
+        f"      return {{i18n_strings::STRINGS_{first_code}_DATA, i18n_strings::OFFSETS_{first_code}}};"
     )
     lines.append("  }")
     lines.append("}")
@@ -583,10 +560,9 @@ def generate_strings_header(
         "",
     ]
 
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"extern const char STRINGS_{abbrev}_DATA[];")
-        lines.append(f"extern const uint16_t OFFSETS_{abbrev}[];")
+    for code in languages:
+        lines.append(f"extern const char STRINGS_{code}_DATA[];")
+        lines.append(f"extern const uint16_t OFFSETS_{code}[];")
 
     lines.append("")
     lines.append("}  // namespace i18n_strings")
@@ -631,8 +607,7 @@ def generate_strings_cpp(
     lines.append("namespace i18n_strings {")
     lines.append("")
 
-    for lang_idx, (code, name) in enumerate(zip(languages, language_names)):
-        abbrev = get_lang_abbreviation(code, name)
+    for lang_idx, code in enumerate(languages):
         lang_strings = [translations[key][lang_idx] for key in string_keys]
 
         # Precompute byte offsets (UTF-8 encoded, +1 per string for null terminator)
@@ -650,7 +625,7 @@ def generate_strings_cpp(
         # Flat string data blob — all strings concatenated with \0 separators.
         # clang-format off/on avoids reformatting of the adjacent string literals.
         lines.append("// clang-format off")
-        lines.append(f"const char STRINGS_{abbrev}_DATA[] =")
+        lines.append(f"const char STRINGS_{code}_DATA[] =")
         for text in lang_strings:
             _append_string_data_entry(lines, text)
         lines.append(";")
@@ -658,7 +633,7 @@ def generate_strings_cpp(
         lines.append("")
 
         # Offset table — one uint16_t per StrId
-        lines.append(f"const uint16_t OFFSETS_{abbrev}[] = {{")
+        lines.append(f"const uint16_t OFFSETS_{code}[] = {{")
         chunk_size = 12
         for i in range(0, len(offsets), chunk_size):
             chunk = offsets[i : i + chunk_size]
@@ -671,14 +646,13 @@ def generate_strings_cpp(
 
     # Compile-time size checks
     lines.append("// Compile-time validation of array sizes")
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
+    for code in languages:
         lines.append(
-            f"static_assert(sizeof(i18n_strings::OFFSETS_{abbrev}) "
-            f"/ sizeof(i18n_strings::OFFSETS_{abbrev}[0]) =="
+            f"static_assert(sizeof(i18n_strings::OFFSETS_{code}) "
+            f"/ sizeof(i18n_strings::OFFSETS_{code}[0]) =="
         )
         lines.append("                  static_cast<size_t>(StrId::_COUNT),")
-        lines.append(f'              "OFFSETS_{abbrev} size mismatch");')
+        lines.append(f'              "OFFSETS_{code} size mismatch");')
 
     _write_file(output_path, lines, verbose)
 
@@ -845,6 +819,17 @@ def main(
         else:
             used_keys = set(string_keys)
             unused_set = set()
+
+        # --- Missing-string detection (used in code but absent from English) ---
+        missing_keys = sorted(used_keys - set(string_keys))
+        if missing_keys:
+            print(
+                f"\n  CRITICAL: {len(missing_keys)} string(s) used in source but missing from english.yaml:"
+            )
+            for key in missing_keys:
+                print(f"    - {key}")
+            print()
+            sys.exit(1)
 
         # Compute per-language data blob sizes:
         # sum of UTF-8 byte length + 1 (null terminator) per string
