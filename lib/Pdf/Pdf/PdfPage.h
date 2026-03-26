@@ -1,11 +1,13 @@
 #pragma once
+
+#include "PdfFixed.h"
+#include "PdfLimits.h"
+
 #include <cstdint>
-#include <string>
-#include <vector>
 
 struct PdfTextBlock {
-  std::string text;
-  uint32_t orderHint = 0;  // Y position from PDF (descending = top)
+  PdfFixedString<PDF_MAX_TEXT_BLOCK_BYTES> text;
+  uint32_t orderHint = 0;
 };
 
 struct PdfImageDescriptor {
@@ -22,7 +24,13 @@ struct PdfDrawStep {
 };
 
 struct PdfPage {
-  std::vector<PdfTextBlock> textBlocks;
-  std::vector<PdfImageDescriptor> images;
-  std::vector<PdfDrawStep> drawOrder;
+  PdfFixedVector<PdfTextBlock, PDF_MAX_TEXT_BLOCKS> textBlocks;
+  PdfFixedVector<PdfImageDescriptor, PDF_MAX_IMAGES_PER_PAGE> images;
+  PdfFixedVector<PdfDrawStep, PDF_MAX_DRAW_STEPS> drawOrder;
+
+  void clear() {
+    textBlocks.clear();
+    images.clear();
+    drawOrder.clear();
+  }
 };

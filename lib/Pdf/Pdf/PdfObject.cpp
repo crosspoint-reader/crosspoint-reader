@@ -10,7 +10,7 @@
 
 namespace {
 
-size_t findStreamKeyword(const std::string& s) {
+size_t findStreamKeywordSv(std::string_view s) {
   static const char pat[] = "\nstream";
   constexpr size_t plen = 7;
   size_t pos = 0;
@@ -24,38 +24,40 @@ size_t findStreamKeyword(const std::string& s) {
     }
     ++pos;
   }
-  return std::string::npos;
+  return std::string_view::npos;
 }
 
-size_t findEndobjKeyword(const std::string& s) {
+size_t findEndobjKeywordSv(std::string_view s) {
   size_t p = 0;
   while (p < s.size()) {
-    p = s.find("endobj", p);
-    if (p == std::string::npos) return std::string::npos;
-    if (p > 0 && (std::isalnum(static_cast<unsigned char>(s[p - 1])) || s[p - 1] == '/')) {
-      p += 6;
+    const size_t f = s.find("endobj", p);
+    if (f == std::string_view::npos) return std::string_view::npos;
+    if (f > 0 && (std::isalnum(static_cast<unsigned char>(s[f - 1])) || s[f - 1] == '/')) {
+      p = f + 6;
       continue;
     }
-    size_t after = p + 6;
+    const size_t after = f + 6;
     if (after < s.size()) {
       const char c = s[after];
       if (c != '\r' && c != '\n' && c != ' ' && c != '\t' && c != '<' && c != '\0') {
-        p += 6;
+        p = f + 6;
         continue;
       }
     }
-    return p;
+    return f;
   }
-  return std::string::npos;
+  return std::string_view::npos;
 }
 
-void trimTrailingWs(std::string& s) {
-  while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n')) {
-    s.pop_back();
+void trimTrailingWsFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& s) {
+  while (s.size() > 0) {
+    const char c = s[s.size() - 1];
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break;
+    s.resize(s.size() - 1);
   }
 }
 
-bool locateObjKeyword(std::string& acc, size_t& outEraseTo) {
+bool locateObjKeywordFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& acc, size_t& outEraseTo) {
   for (size_t i = 0; i + 3 <= acc.size(); ++i) {
     if (std::memcmp(acc.data() + i, "obj", 3) != 0) continue;
     if (i >= 3 && acc[i - 1] == 'b' && acc[i - 2] == 'd' && acc[i - 3] == 'n') continue;
@@ -75,13 +77,15 @@ bool locateObjKeyword(std::string& acc, size_t& outEraseTo) {
   return false;
 }
 
-uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, const std::string& dictPart) {
-  std::string v = PdfObject::getDictValue("/Length", dictPart);
-  while (!v.empty() && (v[0] == ' ' || v[0] == '\t' || v[0] == '\r' || v[0] == '\n')) {
-    v.erase(0, 1);
+uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, std::string_view dictPart) {
+  PdfFixedString<PDF_DICT_VALUE_MAX> v;
+  if (!PdfObject::getDictValue("/Length", dictPart, v)) return 0;
+  while (v.size() > 0 && (v[0] == ' ' || v[0] == '\t' || v[0] == '\r' || v[0] == '\n')) {
+    v.erase_prefix(1);
   }
-  while (!v.empty() && (v.back() == ' ' || v.back() == '\t' || v.back() == '\r' || v.back() == '\n')) {
-    v.pop_back();
+  while (v.size() > 0 && (v[v.size() - 1] == ' ' || v[v.size() - 1] == '\t' || v[v.size() - 1] == '\r' ||
+                          v[v.size() - 1] == '\n')) {
+    v.resize(v.size() - 1);
   }
   if (v.empty()) return 0;
   const char* p = v.c_str();
@@ -110,7 +114,7 @@ uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, const std::str
   if (loff == 0) {
     return 0;
   }
-  std::string lenBody;
+  PdfFixedString<PDF_OBJECT_BODY_MAX> lenBody;
   if (!PdfObject::readAt(file, loff, lenBody, nullptr, nullptr, nullptr)) {
     return 0;
   }
@@ -121,8 +125,8 @@ uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, const std::str
 
 }  // namespace
 
-bool PdfObject::readAt(FsFile& file, uint32_t offset, std::string& bodyStr, uint32_t* streamOffset,
-                       uint32_t* streamLength, const XrefTable* xrefForIndirectLength) {
+bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_BODY_MAX>& bodyStr,
+                       uint32_t* streamOffset, uint32_t* streamLength, const XrefTable* xrefForIndirectLength) {
   bodyStr.clear();
   if (streamOffset) *streamOffset = 0;
   if (streamLength) *streamLength = 0;
@@ -131,28 +135,26 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, std::string& bodyStr, uint
     return false;
   }
 
-  auto* buf = static_cast<uint8_t*>(malloc(4096));
-  if (!buf) {
-    LOG_ERR("PDF", "PdfObject::readAt malloc failed");
-    return false;
-  }
+  uint8_t chunk[4096];
 
-  std::string acc;
-  acc.reserve(16384);
-  constexpr size_t kMaxAcc = 196608;
+  constexpr size_t kMaxAcc = PDF_OBJECT_BODY_MAX;
 
   bool strippedHeader = false;
-  while (acc.size() < kMaxAcc) {
-    const int n = file.read(buf, 4096);
+  while (bodyStr.size() < kMaxAcc) {
+    const int n = file.read(chunk, sizeof(chunk));
     if (n <= 0) break;
-    acc.append(reinterpret_cast<char*>(buf), static_cast<size_t>(n));
+    if (!bodyStr.append(reinterpret_cast<const char*>(chunk), static_cast<size_t>(n))) {
+      LOG_ERR("PDF", "PdfObject::readAt object body overflow");
+      return false;
+    }
 
     if (!strippedHeader) {
       size_t eraseTo = 0;
-      if (locateObjKeyword(acc, eraseTo)) {
-        acc.erase(0, eraseTo);
-        while (!acc.empty() && (acc[0] == ' ' || acc[0] == '\t' || acc[0] == '\r' || acc[0] == '\n')) {
-          acc.erase(0, 1);
+      if (locateObjKeywordFs(bodyStr, eraseTo)) {
+        bodyStr.erase_prefix(eraseTo);
+        while (bodyStr.size() > 0 && (bodyStr[0] == ' ' || bodyStr[0] == '\t' || bodyStr[0] == '\r' ||
+                                      bodyStr[0] == '\n')) {
+          bodyStr.erase_prefix(1);
         }
         strippedHeader = true;
       }
@@ -163,59 +165,76 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, std::string& bodyStr, uint
     }
 
     if (streamOffset != nullptr) {
-      const size_t sp = findStreamKeyword(acc);
-      if (sp != std::string::npos) {
-        std::string dictPart = acc.substr(0, sp);
-        trimTrailingWs(dictPart);
-        bodyStr = std::move(dictPart);
+      const std::string_view acc = bodyStr.view();
+      const size_t sp = findStreamKeywordSv(acc);
+      if (sp != std::string_view::npos) {
+        PdfFixedString<PDF_OBJECT_BODY_MAX> dictPart;
+        if (!dictPart.assign(acc.data(), sp)) {
+          return false;
+        }
+        trimTrailingWsFs(dictPart);
+        bodyStr.clear();
+        if (!bodyStr.assign(dictPart.view())) {
+          return false;
+        }
         size_t dataIdx = sp + 6;
         while (dataIdx < acc.size() && (acc[dataIdx] == '\r' || acc[dataIdx] == '\n')) {
           ++dataIdx;
         }
         const size_t curPos = file.position();
         if (curPos < acc.size()) {
-          free(buf);
           return false;
         }
         const uint32_t acc0File = static_cast<uint32_t>(curPos - acc.size());
         *streamOffset = acc0File + static_cast<uint32_t>(dataIdx);
-        *streamLength = resolveStreamLength(file, xrefForIndirectLength, bodyStr);
-        free(buf);
-        return !bodyStr.empty() && *streamLength > 0;
+        *streamLength = resolveStreamLength(file, xrefForIndirectLength, bodyStr.view());
+        return bodyStr.size() > 0 && *streamLength > 0;
       }
     }
 
-    const size_t ep = findEndobjKeyword(acc);
-    if (ep != std::string::npos && streamOffset == nullptr) {
-      bodyStr = acc.substr(0, ep);
-      trimTrailingWs(bodyStr);
-      free(buf);
-      return !bodyStr.empty();
+    const size_t ep = findEndobjKeywordSv(bodyStr.view());
+    if (ep != std::string_view::npos && streamOffset == nullptr) {
+      PdfFixedString<PDF_OBJECT_BODY_MAX> only;
+      if (!only.assign(bodyStr.view().data(), ep)) {
+        return false;
+      }
+      trimTrailingWsFs(only);
+      bodyStr.clear();
+      if (!bodyStr.assign(only.view())) {
+        return false;
+      }
+      return bodyStr.size() > 0;
     }
   }
 
   if (strippedHeader && streamOffset == nullptr) {
-    const size_t ep = findEndobjKeyword(acc);
-    if (ep != std::string::npos) {
-      bodyStr = acc.substr(0, ep);
-      trimTrailingWs(bodyStr);
-      free(buf);
-      return !bodyStr.empty();
+    const size_t ep = findEndobjKeywordSv(bodyStr.view());
+    if (ep != std::string_view::npos) {
+      PdfFixedString<PDF_OBJECT_BODY_MAX> only;
+      if (!only.assign(bodyStr.view().data(), ep)) {
+        return false;
+      }
+      trimTrailingWsFs(only);
+      bodyStr.clear();
+      if (!bodyStr.assign(only.view())) {
+        return false;
+      }
+      return bodyStr.size() > 0;
     }
   }
 
-  free(buf);
   return false;
 }
 
-std::string PdfObject::getDictValue(const char* key, const std::string& dict) {
+bool PdfObject::getDictValue(const char* key, std::string_view dict, PdfFixedString<PDF_DICT_VALUE_MAX>& out) {
+  out.clear();
   const size_t keyLen = std::strlen(key);
-  if (keyLen == 0) return {};
+  if (keyLen == 0) return false;
 
   size_t pos = 0;
   while (pos < dict.size()) {
     pos = dict.find(key, pos);
-    if (pos == std::string::npos) break;
+    if (pos == std::string_view::npos) break;
     if (pos > 0 && dict[pos - 1] == '/') {
       pos += keyLen;
       continue;
@@ -224,7 +243,7 @@ std::string PdfObject::getDictValue(const char* key, const std::string& dict) {
     while (v < dict.size() && (dict[v] == ' ' || dict[v] == '\t' || dict[v] == '\r' || dict[v] == '\n')) {
       ++v;
     }
-    if (v >= dict.size()) return {};
+    if (v >= dict.size()) return false;
 
     const size_t start = v;
     int depth = 0;
@@ -244,8 +263,6 @@ std::string PdfObject::getDictValue(const char* key, const std::string& dict) {
       }
       if (depth == 0) {
         if (dict[v] == '/') {
-          // Value can be a PDF name (e.g. /Type /Pages). Only treat '/' as the
-          // next key when we have already consumed part of the value.
           if (v > start) {
             break;
           }
@@ -258,7 +275,7 @@ std::string PdfObject::getDictValue(const char* key, const std::string& dict) {
             }
             ++v;
           }
-          return dict.substr(start, v - start);
+          return out.assign(dict.data() + start, v - start);
         }
         if (dict[v] == '>' && v + 1 < dict.size() && dict[v + 1] == '>') {
           break;
@@ -266,14 +283,14 @@ std::string PdfObject::getDictValue(const char* key, const std::string& dict) {
       }
       ++v;
     }
-    return dict.substr(start, v - start);
+    return out.assign(dict.data() + start, v - start);
   }
-  return {};
+  return false;
 }
 
-int PdfObject::getDictInt(const char* key, const std::string& dict, int defaultVal) {
-  const std::string v = getDictValue(key, dict);
-  if (v.empty()) return defaultVal;
+int PdfObject::getDictInt(const char* key, std::string_view dict, int defaultVal) {
+  PdfFixedString<PDF_DICT_VALUE_MAX> v;
+  if (!getDictValue(key, dict, v) || v.empty()) return defaultVal;
   const char* p = v.c_str();
   while (*p == ' ' || *p == '\t') ++p;
   if (!*p) return defaultVal;
@@ -283,9 +300,9 @@ int PdfObject::getDictInt(const char* key, const std::string& dict, int defaultV
   return static_cast<int>(n);
 }
 
-uint32_t PdfObject::getDictRef(const char* key, const std::string& dict) {
-  const std::string v = getDictValue(key, dict);
-  if (v.empty()) return 0;
+uint32_t PdfObject::getDictRef(const char* key, std::string_view dict) {
+  PdfFixedString<PDF_DICT_VALUE_MAX> v;
+  if (!getDictValue(key, dict, v) || v.empty()) return 0;
   const char* p = v.c_str();
   while (*p == ' ' || *p == '\t') ++p;
   char* end = nullptr;

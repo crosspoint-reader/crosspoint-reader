@@ -2,49 +2,55 @@
 
 #include <Logging.h>
 
-#include <vector>
-
 #include "PdfObject.h"
 
 namespace {
 
-void trimInPlace(std::string& s) {
-  while (!s.empty() && (s.front() == ' ' || s.front() == '\t' || s.front() == '\r' || s.front() == '\n')) {
-    s.erase(0, 1);
+void trimInPlaceFs(PdfFixedString<PDF_DICT_VALUE_MAX>& s) {
+  while (s.size() > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\r' || s[0] == '\n')) {
+    s.erase_prefix(1);
   }
-  while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n')) {
-    s.pop_back();
+  while (s.size() > 0) {
+    const char c = s[s.size() - 1];
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break;
+    s.resize(s.size() - 1);
   }
 }
 
-bool typeIs(const std::string& body, const char* name) {
-  std::string t = PdfObject::getDictValue("/Type", body);
-  trimInPlace(t);
-  return t == name;
+bool typeIs(std::string_view body, const char* name) {
+  PdfFixedString<PDF_DICT_VALUE_MAX> t;
+  if (!PdfObject::getDictValue("/Type", body, t)) {
+    return false;
+  }
+  trimInPlaceFs(t);
+  return t.view() == name;
 }
 
-void parseKidsRefs(const std::string& arr, std::vector<uint32_t>& out) {
+void parseKidsRefs(std::string_view arr, PdfFixedVector<uint32_t, PDF_MAX_PAGES>& out) {
   out.clear();
-  const char* p = arr.c_str();
-  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
-  if (*p == '[') ++p;
-  while (*p) {
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
-    if (*p == ']' || *p == '\0') break;
-    char* end = nullptr;
-    const unsigned long id = std::strtoul(p, &end, 10);
-    if (end == p) {
+  const char* p = arr.data();
+  const char* end = arr.data() + arr.size();
+  while (p < end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
+  if (p < end && *p == '[') ++p;
+  while (p < end) {
+    while (p < end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
+    if (p >= end || *p == ']' || *p == '\0') break;
+    char* e = nullptr;
+    const unsigned long id = std::strtoul(p, &e, 10);
+    if (e == p) {
       ++p;
       continue;
     }
-    p = end;
-    while (*p == ' ' || *p == '\t') ++p;
-    std::strtoul(p, const_cast<char**>(&end), 10);
-    p = end;
-    while (*p == ' ' || *p == '\t') ++p;
-    if (*p == 'R' || (*p == 'r')) {
+    p = e;
+    while (p < end && (*p == ' ' || *p == '\t')) ++p;
+    std::strtoul(p, &e, 10);
+    p = e;
+    while (p < end && (*p == ' ' || *p == '\t')) ++p;
+    if (p < end && (*p == 'R' || *p == 'r')) {
       ++p;
-      out.push_back(static_cast<uint32_t>(id));
+      if (!out.push_back(static_cast<uint32_t>(id))) {
+        return;
+      }
     }
   }
 }
@@ -55,26 +61,39 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
   pageOffsets.clear();
   pageObjectIds.clear();
 
-  std::vector<uint32_t> stack;
-  stack.push_back(pagesObjId);
+  PdfFixedVector<uint32_t, PDF_MAX_PAGES> stack;
+  if (!stack.push_back(pagesObjId)) {
+    return false;
+  }
 
-  while (!stack.empty() && pageOffsets.size() < 9999) {
+  while (!stack.empty() && pageOffsets.size() < PDF_MAX_PAGES) {
     const uint32_t objId = stack.back();
     stack.pop_back();
 
-    std::string body;
+    PdfFixedString<PDF_OBJECT_BODY_MAX> body;
     if (!xref.readDictForObject(file, objId, body)) continue;
 
-    if (typeIs(body, "/Pages")) {
-      const std::string kidsStr = PdfObject::getDictValue("/Kids", body);
-      std::vector<uint32_t> kids;
-      parseKidsRefs(kidsStr, kids);
-      for (auto it = kids.rbegin(); it != kids.rend(); ++it) {
-        stack.push_back(*it);
+    if (typeIs(body.view(), "/Pages")) {
+      PdfFixedString<PDF_DICT_VALUE_MAX> kidsStr;
+      if (!PdfObject::getDictValue("/Kids", body.view(), kidsStr)) {
+        continue;
       }
-    } else if (typeIs(body, "/Page")) {
-      pageOffsets.push_back(xref.getOffset(objId));
-      pageObjectIds.push_back(objId);
+      PdfFixedVector<uint32_t, PDF_MAX_PAGES> kids;
+      parseKidsRefs(kidsStr.view(), kids);
+      for (int ki = static_cast<int>(kids.size()) - 1; ki >= 0; --ki) {
+        if (!stack.push_back(kids[static_cast<size_t>(ki)])) {
+          LOG_ERR("PDF", "PageTree: stack overflow");
+          return false;
+        }
+      }
+    } else if (typeIs(body.view(), "/Page")) {
+      if (!pageOffsets.push_back(xref.getOffset(objId))) {
+        LOG_ERR("PDF", "PageTree: too many pages");
+        return false;
+      }
+      if (!pageObjectIds.push_back(objId)) {
+        return false;
+      }
     }
   }
 

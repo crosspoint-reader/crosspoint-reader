@@ -1,21 +1,37 @@
 #pragma once
+
 #include <HalStorage.h>
 
+#include "PdfFixed.h"
+#include "PdfLimits.h"
+
+#include <cstddef>
 #include <cstdint>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
+#include <string_view>
 
 class XrefTable {
-  std::vector<uint32_t> offsets;  // file byte offset; 0 = free or in object stream only
+  uint32_t offsets_[PDF_MAX_OBJECTS]{};
+  uint32_t offsetCount_ = 0;
   uint32_t rootObjId_ = 0;
-  std::unordered_map<uint32_t, std::string> inlineDict_;
-  std::unordered_map<uint32_t, std::vector<uint8_t>> inlineStream_;
-  std::unordered_set<uint32_t> loadedObjStreams_;
+
+  struct InlineEntry {
+    bool used = false;
+    uint32_t objId = 0;
+    uint16_t dictLen = 0;
+    uint16_t streamLen = 0;
+    char dict[PDF_INLINE_DICT_MAX]{};
+    uint8_t stream[PDF_INLINE_STREAM_MAX]{};
+  };
+
+  InlineEntry inline_[PDF_MAX_INLINE_OBJECTS]{};
+  uint8_t loadedObjStm_[PDF_MAX_OBJECTS]{};
 
   bool parseXrefStream(FsFile& file, size_t fileSize, uint32_t xrefObjOffset);
   void loadObjStream(FsFile& file, uint32_t stmObjId);
+
+  bool insertInlineObject(uint32_t objNum, const PdfFixedString<PDF_INLINE_DICT_MAX>& d, const uint8_t* stm,
+                          size_t stmLen);
+  const InlineEntry* findInline(uint32_t objId) const;
 
  public:
   bool parse(FsFile& file);
@@ -23,8 +39,11 @@ class XrefTable {
   uint32_t objectCount() const;
   uint32_t rootObjId() const;
 
-  // Resolve object dict (and optional stream) from file offset or object stream cache.
-  bool readDictForObject(FsFile& file, uint32_t objId, std::string& dictBody) const;
-  bool readStreamForObject(FsFile& file, uint32_t objId, std::string& dictOut, std::vector<uint8_t>& streamPayload,
-                           bool& flateDecode) const;
+  // Used by classic xref merge (non-member in .cpp); bounded xref table updates only.
+  bool setOffset(uint32_t objId, uint32_t off);
+  void ensureOffsetCount(uint32_t n);
+
+  bool readDictForObject(FsFile& file, uint32_t objId, PdfFixedString<PDF_OBJECT_BODY_MAX>& dictBody) const;
+  bool readStreamForObject(FsFile& file, uint32_t objId, PdfFixedString<PDF_OBJECT_BODY_MAX>& dictOut,
+                           PdfByteBuffer& streamPayload, bool& flateDecode) const;
 };

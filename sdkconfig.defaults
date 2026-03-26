@@ -1,0 +1,3 @@
+# Merged into the Arduino-ESP32 sdkconfig (see platformio.ini board_build.sdkconfig.defaults).
+# Enables symbolized esp_backtrace_print() on RISC-V at runtime (see esp_debug_helpers.h).
+CONFIG_ESP_SYSTEM_USE_EH_FRAME=y

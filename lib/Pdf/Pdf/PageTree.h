@@ -1,13 +1,15 @@
 #pragma once
+
 #include <HalStorage.h>
 
-#include <vector>
-
+#include "PdfFixed.h"
+#include "PdfLimits.h"
 #include "XrefTable.h"
 
 class PageTree {
-  std::vector<uint32_t> pageOffsets;    // byte offset of each page object
-  std::vector<uint32_t> pageObjectIds;  // parallel PDF object ids (for outline dest resolution)
+  PdfFixedVector<uint32_t, PDF_MAX_PAGES> pageOffsets;
+  PdfFixedVector<uint32_t, PDF_MAX_PAGES> pageObjectIds;
+
  public:
   bool parse(FsFile& file, const XrefTable& xref, uint32_t rootObjId);
   uint32_t pageCount() const;

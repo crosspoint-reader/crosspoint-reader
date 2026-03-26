@@ -18,7 +18,10 @@ class HalPowerManager {
 
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
-  SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  SemaphoreHandle_t modeMutex = nullptr;  // Serializes CPU frequency changes + currentLockMode
+
+  // Caller must hold modeMutex. Used by setPowerSaving() and Lock (see friend below).
+  void applyPowerSavingNoMutex(bool enabled);
 
  public:
   static constexpr int LOW_POWER_FREQ = 10;                    // MHz
@@ -53,4 +56,6 @@ class HalPowerManager {
     Lock(Lock&&) = delete;
     Lock& operator=(Lock&&) = delete;
   };
+
+  friend class Lock;
 };

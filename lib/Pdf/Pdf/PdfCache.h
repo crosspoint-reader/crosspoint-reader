@@ -1,21 +1,25 @@
 #pragma once
-#include <string>
-#include <vector>
 
+#include "PdfFixed.h"
+#include "PdfLimits.h"
 #include "PdfOutline.h"
 #include "PdfPage.h"
 
 class PdfCache {
-  std::string cacheDir;
+  PdfFixedString<PDF_MAX_PATH> cacheDir;
 
  public:
-  explicit PdfCache(const std::string& pdfFilePath);
-  bool loadMeta(uint32_t& pageCount, std::vector<PdfOutlineEntry>& outline);
-  bool saveMeta(uint32_t pageCount, const std::vector<PdfOutlineEntry>& outline);
+  PdfCache() = default;
+  explicit PdfCache(const char* pdfFilePath) { configure(pdfFilePath); }
+
+  void configure(const char* pdfFilePath);
+
+  bool loadMeta(uint32_t& pageCount, PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline);
+  bool saveMeta(uint32_t pageCount, const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline);
   bool loadPage(uint32_t pageNum, PdfPage& outPage);
   bool savePage(uint32_t pageNum, const PdfPage& page);
   bool loadProgress(uint32_t& currentPage);
   bool saveProgress(uint32_t currentPage);
-  void invalidate();  // delete all cache files
-  const std::string& getCacheDir() const;
+  void invalidate();
+  const PdfFixedString<PDF_MAX_PATH>& getCacheDir() const { return cacheDir; }
 };

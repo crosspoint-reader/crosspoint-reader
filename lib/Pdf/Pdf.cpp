@@ -4,26 +4,23 @@
 #include <Logging.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <cstring>
-#include <vector>
 
 #include "Pdf/ContentStream.h"
-#include "Pdf/PageTree.h"
-#include "Pdf/PdfCache.h"
 #include "Pdf/PdfObject.h"
-#include "Pdf/PdfOutline.h"
-#include "Pdf/XrefTable.h"
 
 namespace {
 
-uint32_t contentsObjectId(const std::string& pageBody) {
-  std::string cv = PdfObject::getDictValue("/Contents", pageBody);
-  while (!cv.empty() && (cv[0] == ' ' || cv[0] == '\t' || cv[0] == '\r' || cv[0] == '\n')) {
-    cv.erase(0, 1);
+uint32_t contentsObjectId(std::string_view pageBody) {
+  PdfFixedString<PDF_DICT_VALUE_MAX> cv;
+  if (!PdfObject::getDictValue("/Contents", pageBody, cv)) {
+    return 0;
+  }
+  while (cv.size() > 0 && (cv[0] == ' ' || cv[0] == '\t' || cv[0] == '\r' || cv[0] == '\n')) {
+    cv.erase_prefix(1);
   }
   if (cv.empty()) return 0;
-  if (!cv.empty() && cv[0] == '[') {
+  if (cv[0] == '[') {
     const char* p = cv.c_str();
     while (*p && *p != '[') ++p;
     if (*p == '[') ++p;
@@ -38,145 +35,139 @@ uint32_t contentsObjectId(const std::string& pageBody) {
 
 }  // namespace
 
-struct Pdf::Impl {
-  std::string path;
-  FsFile file;
-  XrefTable xref;
-  PageTree pageTree;
-  std::vector<PdfOutlineEntry> outlineEntries;
-  std::unique_ptr<PdfCache> cache;
-  uint32_t pages = 0;
-};
+Pdf::~Pdf() { close(); }
 
-Pdf::Pdf(std::unique_ptr<Impl> implIn) : impl(std::move(implIn)) {}
-Pdf::~Pdf() = default;
+Pdf::Pdf(Pdf&& o) noexcept = default;
+Pdf& Pdf::operator=(Pdf&& o) noexcept = default;
 
-std::unique_ptr<Pdf> Pdf::open(const std::string& path) {
-  if (!Storage.exists(path.c_str())) {
-    LOG_ERR("PDF", "File does not exist: %s", path.c_str());
-    return nullptr;
+void Pdf::close() {
+  if (valid_) {
+    file_.close();
+    valid_ = false;
+  }
+  pages_ = 0;
+  outlineEntries_.clear();
+  path_.clear();
+}
+
+bool Pdf::open(const char* path) {
+  close();
+  if (!path || !path[0]) {
+    return false;
+  }
+  if (!path_.assign(path, std::strlen(path))) {
+    LOG_ERR("PDF", "Path too long");
+    return false;
   }
 
-  auto impl = std::make_unique<Impl>();
-  impl->path = path;
-
-  if (!Storage.openFileForRead("PDF", path, impl->file)) {
-    LOG_ERR("PDF", "Cannot open: %s", path.c_str());
-    return nullptr;
+  if (!Storage.exists(path_.c_str())) {
+    LOG_ERR("PDF", "File does not exist: %s", path_.c_str());
+    return false;
   }
 
-  if (!impl->xref.parse(impl->file)) {
-    LOG_ERR("PDF", "Failed to parse xref: %s", path.c_str());
-    return nullptr;
+  if (!Storage.openFileForRead("PDF", path_.c_str(), file_)) {
+    LOG_ERR("PDF", "Cannot open: %s", path_.c_str());
+    return false;
   }
 
-  std::string catalogBody;
-  const uint32_t rootId = impl->xref.rootObjId();
-  if (rootId == 0 || !impl->xref.readDictForObject(impl->file, rootId, catalogBody)) {
+  if (!xref_.parse(file_)) {
+    LOG_ERR("PDF", "Failed to parse xref: %s", path_.c_str());
+    file_.close();
+    return false;
+  }
+
+  PdfFixedString<PDF_OBJECT_BODY_MAX> catalogBody;
+  const uint32_t rootId = xref_.rootObjId();
+  if (rootId == 0 || !xref_.readDictForObject(file_, rootId, catalogBody)) {
     LOG_ERR("PDF", "Bad catalog");
-    return nullptr;
+    file_.close();
+    return false;
   }
 
-  const uint32_t pagesObjId = PdfObject::getDictRef("/Pages", catalogBody);
-  if (pagesObjId == 0 || !impl->pageTree.parse(impl->file, impl->xref, pagesObjId)) {
+  const uint32_t pagesObjId = PdfObject::getDictRef("/Pages", catalogBody.view());
+  if (pagesObjId == 0 || !pageTree_.parse(file_, xref_, pagesObjId)) {
     LOG_ERR("PDF", "Failed to parse page tree");
-    return nullptr;
+    file_.close();
+    return false;
   }
 
-  impl->pages = impl->pageTree.pageCount();
-  impl->cache = std::make_unique<PdfCache>(path);
+  pages_ = pageTree_.pageCount();
+  cache_.configure(path_.c_str());
 
   uint32_t cachedPageCount = 0;
-  if (!impl->cache->loadMeta(cachedPageCount, impl->outlineEntries) || cachedPageCount != impl->pages) {
-    impl->outlineEntries.clear();
-    const uint32_t outlinesId = PdfObject::getDictRef("/Outlines", catalogBody);
+  if (!cache_.loadMeta(cachedPageCount, outlineEntries_) || cachedPageCount != pages_) {
+    outlineEntries_.clear();
+    const uint32_t outlinesId = PdfObject::getDictRef("/Outlines", catalogBody.view());
     if (outlinesId != 0) {
-      PdfOutlineParser::parse(impl->file, impl->xref, impl->pageTree, outlinesId, impl->outlineEntries);
+      PdfOutlineParser::parse(file_, xref_, pageTree_, outlinesId, outlineEntries_);
     }
-    impl->cache->saveMeta(impl->pages, impl->outlineEntries);
+    cache_.saveMeta(pages_, outlineEntries_);
   }
 
-  return std::unique_ptr<Pdf>(new Pdf(std::move(impl)));
+  valid_ = true;
+  return true;
 }
 
-uint32_t Pdf::pageCount() const { return impl ? impl->pages : 0; }
+bool Pdf::saveProgress(uint32_t page) { return valid_ && cache_.saveProgress(page); }
 
-const std::vector<PdfOutlineEntry>& Pdf::outline() const {
-  static const std::vector<PdfOutlineEntry> empty;
-  return impl ? impl->outlineEntries : empty;
-}
+bool Pdf::loadProgress(uint32_t& page) { return valid_ && cache_.loadProgress(page); }
 
-const std::string& Pdf::filePath() const {
-  static const std::string empty;
-  return impl ? impl->path : empty;
-}
-
-bool Pdf::saveProgress(uint32_t page) { return impl && impl->cache && impl->cache->saveProgress(page); }
-
-bool Pdf::loadProgress(uint32_t& page) { return impl && impl->cache && impl->cache->loadProgress(page); }
-
-std::unique_ptr<PdfPage> Pdf::getPage(uint32_t pageNum) {
-  if (!impl || pageNum >= impl->pages) {
-    return nullptr;
+bool Pdf::getPage(uint32_t pageNum, PdfPage& out) {
+  out.clear();
+  if (!valid_ || pageNum >= pages_) {
+    return false;
   }
-  auto page = std::make_unique<PdfPage>();
-  if (impl->cache->loadPage(pageNum, *page)) {
-    return page;
+  if (cache_.loadPage(pageNum, out)) {
+    return true;
   }
 
-  const uint32_t pageObjId = impl->pageTree.getPageObjectId(pageNum);
+  const uint32_t pageObjId = pageTree_.getPageObjectId(pageNum);
   if (pageObjId == 0) {
-    return nullptr;
+    return false;
   }
 
-  std::string pageBody;
-  if (!impl->xref.readDictForObject(impl->file, pageObjId, pageBody)) {
-    return nullptr;
+  PdfFixedString<PDF_OBJECT_BODY_MAX> pageBody;
+  if (!xref_.readDictForObject(file_, pageObjId, pageBody)) {
+    return false;
   }
 
-  const uint32_t contentId = contentsObjectId(pageBody);
+  const uint32_t contentId = contentsObjectId(pageBody.view());
   if (contentId == 0) {
     LOG_ERR("PDF", "No /Contents for page %u", static_cast<unsigned>(pageNum));
-    return nullptr;
+    return false;
   }
 
-  std::string contentDict;
-  std::vector<uint8_t> streamPayload;
+  PdfFixedString<PDF_OBJECT_BODY_MAX> contentDict;
+  PdfByteBuffer streamPayload;
   bool compressed = false;
-  if (!impl->xref.readStreamForObject(impl->file, contentId, contentDict, streamPayload, compressed)) {
-    return nullptr;
+  if (!xref_.readStreamForObject(file_, contentId, contentDict, streamPayload, compressed)) {
+    return false;
   }
-  if (streamPayload.empty()) {
-    return nullptr;
+  if (streamPayload.len == 0) {
+    return false;
   }
 
-  if (!ContentStream::parseBuffer(streamPayload.data(), streamPayload.size(), compressed, impl->file, impl->xref,
-                                   pageBody, *page)) {
+  if (!ContentStream::parseBuffer(streamPayload.ptr(), streamPayload.len, compressed, file_, xref_, pageBody.view(),
+                                   out)) {
     LOG_ERR("PDF", "Failed to parse page %u", static_cast<unsigned>(pageNum));
-    return nullptr;
+    return false;
   }
 
-  impl->cache->savePage(pageNum, *page);
-  return page;
+  cache_.savePage(pageNum, out);
+  return true;
 }
 
-const std::string& Pdf::cacheDirectory() const {
-  static const std::string empty;
-  if (!impl || !impl->cache) {
-    return empty;
-  }
-  return impl->cache->getCacheDir();
-}
+const PdfFixedString<PDF_MAX_PATH>& Pdf::cacheDirectory() const { return cache_.getCacheDir(); }
 
 size_t Pdf::extractImageStream(const PdfImageDescriptor& img, uint8_t* outBuf, size_t maxBytes) {
-  if (!impl || !outBuf || maxBytes == 0 || img.pdfStreamLength == 0) {
+  if (!valid_ || !outBuf || maxBytes == 0 || img.pdfStreamLength == 0) {
     return 0;
   }
-  if (!impl->file.seek(img.pdfStreamOffset)) {
+  if (!file_.seek(img.pdfStreamOffset)) {
     return 0;
   }
   const size_t toRead = std::min(maxBytes, static_cast<size_t>(img.pdfStreamLength));
-  const int r = impl->file.read(outBuf, toRead);
+  const int r = file_.read(outBuf, toRead);
   if (r <= 0) {
     return 0;
   }

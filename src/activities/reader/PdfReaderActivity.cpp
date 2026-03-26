@@ -22,6 +22,11 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+// Cap stream buffer for embedded heap; corrupt PDFs can advertise huge lengths.
+constexpr size_t kMaxPdfImageStreamBytes = 2 * 1024 * 1024;
+}
+
 void PdfReaderActivity::jumpToPage(uint32_t page) {
   if (page < totalPages) {
     currentPage = page;
@@ -205,6 +210,11 @@ void PdfReaderActivity::renderContents(const PdfPage& page) {
     }
     const char* name = img.format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
     const std::string tmpPath = dir + "/" + name;
+    if (img.pdfStreamLength == 0 || img.pdfStreamLength > kMaxPdfImageStreamBytes) {
+      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
+      y += lineHeight;
+      return;
+    }
     auto* raw = static_cast<uint8_t*>(malloc(img.pdfStreamLength));
     if (!raw) {
       renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
@@ -265,9 +275,9 @@ void PdfReaderActivity::renderContents(const PdfPage& page) {
     y += advanceY;
   };
 
-  auto* fcm = renderer.getFontCacheManager();
-  auto scope = fcm->createPrewarmScope();
-
+  // Single layout pass (no two-pass prewarm scan). PDF pages can hold far more text than reflowed EPUB;
+  // the prewarm path concatenates all glyphs into one string and runs layout twice, which exhausted heap
+  // (operator new -> terminate) on ESP32 with dense PDFs + anti-aliasing.
   auto drawBody = [&]() {
     y = marginTop;
     if (!page.drawOrder.empty()) {
@@ -290,9 +300,6 @@ void PdfReaderActivity::renderContents(const PdfPage& page) {
     }
   };
 
-  drawBody();
-  scope.endScanAndPrewarm();
-  y = marginTop;
   drawBody();
 
   renderStatusBar();

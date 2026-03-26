@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
@@ -13,20 +14,67 @@ constexpr uint8_t kMetaVersion = 1;
 constexpr uint8_t kPageVersionV1 = 1;
 constexpr uint8_t kPageVersionV2 = 2;
 
-}  // namespace
-
-PdfCache::PdfCache(const std::string& pdfFilePath) {
-  const size_t hash = std::hash<std::string>{}(pdfFilePath);
-  char buf[64];
-  snprintf(buf, sizeof(buf), "/.crosspoint/pdf_%zu", hash);
-  cacheDir = buf;
+size_t hashPathCstr(const char* s) {
+  size_t h = 5381;
+  if (!s) return h;
+  while (*s) {
+    h = ((h << 5) + h) + static_cast<unsigned char>(*s++);
+  }
+  return h;
 }
 
-bool PdfCache::loadMeta(uint32_t& pageCount, std::vector<PdfOutlineEntry>& outline) {
+template <size_t N>
+bool readFixedString(FsFile& f, PdfFixedString<N>& s) {
+  uint32_t len = 0;
+  serialization::readPod(f, len);
+  if (len >= N) {
+    return false;
+  }
+  if (!s.resize(len)) {
+    return false;
+  }
+  if (len > 0) {
+    if (f.read(reinterpret_cast<uint8_t*>(s.data()), len) != static_cast<int>(len)) {
+      return false;
+    }
+  }
+  s.data()[len] = '\0';
+  return true;
+}
+
+template <size_t N>
+bool writeFixedString(FsFile& f, const PdfFixedString<N>& s) {
+  const uint32_t len = static_cast<uint32_t>(s.size());
+  serialization::writePod(f, len);
+  if (len > 0) {
+    f.write(reinterpret_cast<const uint8_t*>(s.data()), len);
+  }
+  return true;
+}
+
+}  // namespace
+
+void PdfCache::configure(const char* pdfFilePath) {
+  cacheDir.clear();
+  if (!pdfFilePath) {
+    return;
+  }
+  const size_t hash = hashPathCstr(pdfFilePath);
+  char buf[64];
+  const int n = snprintf(buf, sizeof(buf), "/.crosspoint/pdf_%zu", hash);
+  if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+    cacheDir.assign(buf, static_cast<size_t>(n));
+  }
+}
+
+bool PdfCache::loadMeta(uint32_t& pageCount, PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline) {
   outline.clear();
-  const std::string path = cacheDir + "/meta.bin";
+  PdfFixedString<PDF_MAX_PATH> path = cacheDir;
+  if (!path.append("/meta.bin", 9)) {
+    return false;
+  }
   FsFile f;
-  if (!Storage.openFileForRead("PDF", path, f)) {
+  if (!Storage.openFileForRead("PDF", path.c_str(), f)) {
     return false;
   }
   uint8_t ver = 0;
@@ -38,53 +86,67 @@ bool PdfCache::loadMeta(uint32_t& pageCount, std::vector<PdfOutlineEntry>& outli
   serialization::readPod(f, pageCount);
   uint32_t outlineCount = 0;
   serialization::readPod(f, outlineCount);
-  if (outlineCount > 512) {
+  if (outlineCount > PDF_MAX_OUTLINE_ENTRIES) {
     f.close();
     return false;
   }
-  outline.reserve(outlineCount);
   for (uint32_t i = 0; i < outlineCount; ++i) {
     PdfOutlineEntry e;
     serialization::readPod(f, e.pageNum);
-    serialization::readString(f, e.title);
-    outline.push_back(std::move(e));
+    if (!readFixedString(f, e.title)) {
+      f.close();
+      return false;
+    }
+    if (!outline.push_back(std::move(e))) {
+      f.close();
+      return false;
+    }
   }
   f.close();
   return true;
 }
 
-bool PdfCache::saveMeta(uint32_t pageCount, const std::vector<PdfOutlineEntry>& outline) {
+bool PdfCache::saveMeta(uint32_t pageCount,
+                        const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline) {
   Storage.ensureDirectoryExists(cacheDir.c_str());
-  const std::string path = cacheDir + "/meta.bin";
+  PdfFixedString<PDF_MAX_PATH> path = cacheDir;
+  if (!path.append("/meta.bin", 9)) {
+    return false;
+  }
   FsFile f;
-  if (!Storage.openFileForWrite("PDF", path, f)) {
+  if (!Storage.openFileForWrite("PDF", path.c_str(), f)) {
     return false;
   }
   serialization::writePod(f, kMetaVersion);
   serialization::writePod(f, pageCount);
-  const uint32_t outlineCount = static_cast<uint32_t>(std::min(outline.size(), size_t{512}));
+  const uint32_t outlineCount =
+      static_cast<uint32_t>(std::min(outline.size(), static_cast<size_t>(PDF_MAX_OUTLINE_ENTRIES)));
   serialization::writePod(f, outlineCount);
   for (uint32_t i = 0; i < outlineCount; ++i) {
     serialization::writePod(f, outline[i].pageNum);
-    serialization::writeString(f, outline[i].title);
+    if (!writeFixedString(f, outline[i].title)) {
+      f.close();
+      return false;
+    }
   }
   f.close();
   return true;
 }
 
 bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
-  outPage.textBlocks.clear();
-  outPage.images.clear();
-  outPage.drawOrder.clear();
+  outPage.clear();
 
   char name[32];
   snprintf(name, sizeof(name), "%u", static_cast<unsigned>(pageNum));
-  const std::string path = cacheDir + "/pages/" + name + ".bin";
+  PdfFixedString<PDF_MAX_PATH> path = cacheDir;
+  if (!path.append("/pages/", 7) || !path.append(name, std::strlen(name)) || !path.append(".bin", 4)) {
+    return false;
+  }
   if (!Storage.exists(path.c_str())) {
     return false;
   }
   FsFile f;
-  if (!Storage.openFileForRead("PDF", path, f)) {
+  if (!Storage.openFileForRead("PDF", path.c_str(), f)) {
     return false;
   }
 
@@ -97,23 +159,32 @@ bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
 
   uint32_t textCount = 0;
   serialization::readPod(f, textCount);
-  if (textCount > 10000) {
+  if (textCount > PDF_MAX_TEXT_BLOCKS) {
     f.close();
     return false;
   }
-  outPage.textBlocks.resize(textCount);
+  if (!outPage.textBlocks.resize(textCount)) {
+    f.close();
+    return false;
+  }
   for (uint32_t i = 0; i < textCount; ++i) {
-    serialization::readString(f, outPage.textBlocks[i].text);
+    if (!readFixedString(f, outPage.textBlocks[i].text)) {
+      f.close();
+      return false;
+    }
     serialization::readPod(f, outPage.textBlocks[i].orderHint);
   }
 
   uint32_t imageCount = 0;
   serialization::readPod(f, imageCount);
-  if (imageCount > 1024) {
+  if (imageCount > PDF_MAX_IMAGES_PER_PAGE) {
     f.close();
     return false;
   }
-  outPage.images.resize(imageCount);
+  if (!outPage.images.resize(imageCount)) {
+    f.close();
+    return false;
+  }
   for (uint32_t i = 0; i < imageCount; ++i) {
     serialization::readPod(f, outPage.images[i].pdfStreamOffset);
     serialization::readPod(f, outPage.images[i].pdfStreamLength);
@@ -125,11 +196,14 @@ bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
   if (ver >= kPageVersionV2) {
     uint32_t drawCount = 0;
     serialization::readPod(f, drawCount);
-    if (drawCount > 20000) {
+    if (drawCount > PDF_MAX_DRAW_STEPS) {
       f.close();
       return false;
     }
-    outPage.drawOrder.resize(drawCount);
+    if (!outPage.drawOrder.resize(drawCount)) {
+      f.close();
+      return false;
+    }
     for (uint32_t i = 0; i < drawCount; ++i) {
       uint8_t im = 0;
       serialization::readPod(f, im);
@@ -138,10 +212,16 @@ bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
     }
   } else {
     for (uint32_t i = 0; i < textCount; ++i) {
-      outPage.drawOrder.push_back({false, i});
+      if (!outPage.drawOrder.push_back({false, i})) {
+        f.close();
+        return false;
+      }
     }
     for (uint32_t j = 0; j < imageCount; ++j) {
-      outPage.drawOrder.push_back({true, j});
+      if (!outPage.drawOrder.push_back({true, j})) {
+        f.close();
+        return false;
+      }
     }
   }
 
@@ -150,15 +230,21 @@ bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
 }
 
 bool PdfCache::savePage(uint32_t pageNum, const PdfPage& page) {
-  const std::string pagesDir = cacheDir + "/pages";
+  PdfFixedString<PDF_MAX_PATH> pagesDir = cacheDir;
+  if (!pagesDir.append("/pages", 6)) {
+    return false;
+  }
   Storage.ensureDirectoryExists(cacheDir.c_str());
   Storage.ensureDirectoryExists(pagesDir.c_str());
 
   char name[32];
   snprintf(name, sizeof(name), "%u", static_cast<unsigned>(pageNum));
-  const std::string path = pagesDir + "/" + name + ".bin";
+  PdfFixedString<PDF_MAX_PATH> path = pagesDir;
+  if (!path.append("/", 1) || !path.append(name, std::strlen(name)) || !path.append(".bin", 4)) {
+    return false;
+  }
   FsFile f;
-  if (!Storage.openFileForWrite("PDF", path, f)) {
+  if (!Storage.openFileForWrite("PDF", path.c_str(), f)) {
     return false;
   }
 
@@ -166,7 +252,10 @@ bool PdfCache::savePage(uint32_t pageNum, const PdfPage& page) {
   const uint32_t textCount = static_cast<uint32_t>(page.textBlocks.size());
   serialization::writePod(f, textCount);
   for (uint32_t i = 0; i < textCount; ++i) {
-    serialization::writeString(f, page.textBlocks[i].text);
+    if (!writeFixedString(f, page.textBlocks[i].text)) {
+      f.close();
+      return false;
+    }
     serialization::writePod(f, page.textBlocks[i].orderHint);
   }
   const uint32_t imageCount = static_cast<uint32_t>(page.images.size());
@@ -190,9 +279,13 @@ bool PdfCache::savePage(uint32_t pageNum, const PdfPage& page) {
 }
 
 bool PdfCache::loadProgress(uint32_t& currentPage) {
-  const std::string path = cacheDir + "/progress.bin";
+  PdfFixedString<PDF_MAX_PATH> path = cacheDir;
+  if (!path.append("/progress.bin", 13)) {
+    currentPage = 0;
+    return false;
+  }
   FsFile f;
-  if (!Storage.openFileForRead("PDF", path, f)) {
+  if (!Storage.openFileForRead("PDF", path.c_str(), f)) {
     currentPage = 0;
     return false;
   }
@@ -203,9 +296,12 @@ bool PdfCache::loadProgress(uint32_t& currentPage) {
 
 bool PdfCache::saveProgress(uint32_t currentPage) {
   Storage.ensureDirectoryExists(cacheDir.c_str());
-  const std::string path = cacheDir + "/progress.bin";
+  PdfFixedString<PDF_MAX_PATH> path = cacheDir;
+  if (!path.append("/progress.bin", 13)) {
+    return false;
+  }
   FsFile f;
-  if (!Storage.openFileForWrite("PDF", path, f)) {
+  if (!Storage.openFileForWrite("PDF", path.c_str(), f)) {
     return false;
   }
   serialization::writePod(f, currentPage);
@@ -214,5 +310,3 @@ bool PdfCache::saveProgress(uint32_t currentPage) {
 }
 
 void PdfCache::invalidate() { Storage.removeDir(cacheDir.c_str()); }
-
-const std::string& PdfCache::getCacheDir() const { return cacheDir; }

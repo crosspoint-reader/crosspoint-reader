@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <string_view>
 
 #include "PageTree.h"
 #include "PdfObject.h"
@@ -22,72 +23,74 @@ static constexpr uint16_t kWin1252ToU[128] = {
     0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x00EC, 0x00ED, 0x00EE, 0x00EF, 0x00F0, 0x00F1, 0x00F2, 0x00F3, 0x00F4,
     0x00F5, 0x00F6, 0x00F7, 0x00F8, 0x00F9, 0x00FA, 0x00FB, 0x00FC, 0x00FD, 0x00FE, 0x00FF};
 
-void appendUtf8(std::string& out, uint32_t cp) {
+void appendUtf8(PdfFixedString<PDF_MAX_OUTLINE_TITLE_BYTES>& out, uint32_t cp) {
   if (cp < 0x80) {
-    out.push_back(static_cast<char>(cp));
+    out.append(static_cast<char>(cp));
   } else if (cp < 0x800) {
-    out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
-    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    out.append(static_cast<char>(0xC0 | (cp >> 6)));
+    out.append(static_cast<char>(0x80 | (cp & 0x3F)));
   } else {
-    out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
-    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    out.append(static_cast<char>(0xE0 | (cp >> 12)));
+    out.append(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    out.append(static_cast<char>(0x80 | (cp & 0x3F)));
   }
 }
 
-std::string pdfBytesToUtf8(const uint8_t* data, size_t len) {
-  std::string out;
+void pdfBytesToUtf8(const uint8_t* data, size_t len, PdfFixedString<PDF_MAX_OUTLINE_TITLE_BYTES>& out) {
+  out.clear();
   if (len >= 2 && data[0] == 0xFE && data[1] == 0xFF) {
     for (size_t i = 2; i + 1 < len; i += 2) {
       const uint16_t cu = static_cast<uint16_t>((data[i] << 8) | data[i + 1]);
       appendUtf8(out, cu);
     }
-    return out;
+    return;
   }
   for (size_t i = 0; i < len; ++i) {
     const unsigned char b = data[i];
     if (b < 0x80) {
-      out.push_back(static_cast<char>(b));
+      out.append(static_cast<char>(b));
     } else {
       appendUtf8(out, kWin1252ToU[b - 0x80]);
     }
   }
-  return out;
 }
 
-void trimVal(std::string& s) {
-  while (!s.empty() && (s.front() == ' ' || s.front() == '\t' || s.front() == '\r' || s.front() == '\n')) {
-    s.erase(0, 1);
+void trimVal(PdfFixedString<PDF_DICT_VALUE_MAX>& s) {
+  while (s.size() > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\r' || s[0] == '\n')) {
+    s.erase_prefix(1);
   }
-  while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n')) {
-    s.pop_back();
+  while (s.size() > 0) {
+    const char c = s[s.size() - 1];
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break;
+    s.resize(s.size() - 1);
   }
 }
 
-std::string decodeTitleValue(std::string raw) {
+bool decodeTitleValue(PdfFixedString<PDF_DICT_VALUE_MAX> raw, PdfFixedString<PDF_MAX_OUTLINE_TITLE_BYTES>& out) {
+  out.clear();
   trimVal(raw);
-  if (raw.empty()) return {};
+  if (raw.empty()) return true;
   if (raw[0] == '(') {
-    std::string inner;
+    PdfFixedString<PDF_DICT_VALUE_MAX> inner;
     const char* p = raw.c_str() + 1;
     int depth = 1;
     while (*p && depth > 0) {
       if (*p == '\\') {
         ++p;
         if (*p == 'n')
-          inner.push_back('\n');
+          inner.append('\n');
         else if (*p == 'r')
-          inner.push_back('\r');
+          inner.append('\r');
         else if (*p == 't')
-          inner.push_back('\t');
+          inner.append('\t');
         else if (*p)
-          inner.push_back(*p);
+          inner.append(*p);
         if (*p) ++p;
         continue;
       }
       if (*p == '(') {
         ++depth;
-        inner.push_back(*p++);
+        inner.append(*p++);
         continue;
       }
       if (*p == ')') {
@@ -96,15 +99,16 @@ std::string decodeTitleValue(std::string raw) {
           ++p;
           break;
         }
-        inner.push_back(*p++);
+        inner.append(*p++);
         continue;
       }
-      inner.push_back(*p++);
+      inner.append(*p++);
     }
-    return pdfBytesToUtf8(reinterpret_cast<const uint8_t*>(inner.data()), inner.size());
+    pdfBytesToUtf8(reinterpret_cast<const uint8_t*>(inner.data()), inner.size(), out);
+    return true;
   }
   if (raw[0] == '<' && (raw.size() < 2 || raw[1] != '<')) {
-    std::string bytes;
+    PdfFixedString<PDF_DICT_VALUE_MAX> bytes;
     size_t i = 1;
     uint8_t acc = 0;
     bool have = false;
@@ -128,21 +132,22 @@ std::string decodeTitleValue(std::string raw) {
         have = true;
       } else {
         acc |= static_cast<uint8_t>(v);
-        bytes.push_back(static_cast<char>(acc));
+        bytes.append(static_cast<char>(acc));
         have = false;
       }
       ++i;
     }
-    return pdfBytesToUtf8(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    pdfBytesToUtf8(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out);
+    return true;
   }
-  return raw;
+  return out.assign(raw.view());
 }
 
-uint32_t destStringToPage(const PageTree& pageTree, const std::string& dest) {
+uint32_t destStringToPage(const PageTree& pageTree, std::string_view dest) {
   if (dest.empty()) return 0;
   const size_t lb = dest.find('[');
-  if (lb == std::string::npos) return 0;
-  const char* p = dest.c_str() + lb + 1;
+  if (lb == std::string_view::npos) return 0;
+  const char* p = dest.data() + lb + 1;
   while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
   char* end = nullptr;
   const unsigned long id = std::strtoul(p, &end, 10);
@@ -151,59 +156,71 @@ uint32_t destStringToPage(const PageTree& pageTree, const std::string& dest) {
 }
 
 void walkOutlineItem(FsFile& file, const XrefTable& xref, const PageTree& pageTree, uint32_t itemId,
-                     std::vector<PdfOutlineEntry>& out, size_t& count, const size_t maxEntries) {
+                     PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& out, size_t& count,
+                     const size_t maxEntries) {
   while (itemId != 0 && count < maxEntries) {
-    std::string body;
+    PdfFixedString<PDF_OBJECT_BODY_MAX> body;
     if (!xref.readDictForObject(file, itemId, body)) break;
 
     PdfOutlineEntry entry;
-    entry.title = decodeTitleValue(PdfObject::getDictValue("/Title", body));
+    PdfFixedString<PDF_DICT_VALUE_MAX> titleRaw;
+    if (PdfObject::getDictValue("/Title", body.view(), titleRaw)) {
+      decodeTitleValue(std::move(titleRaw), entry.title);
+    }
 
-    std::string dest = PdfObject::getDictValue("/Dest", body);
+    PdfFixedString<PDF_DICT_VALUE_MAX> dest;
+    if (!PdfObject::getDictValue("/Dest", body.view(), dest)) {
+      dest.clear();
+    }
     trimVal(dest);
     if (dest.empty()) {
-      const std::string action = PdfObject::getDictValue("/A", body);
-      if (!action.empty()) {
-        dest = PdfObject::getDictValue("/D", action);
+      PdfFixedString<PDF_DICT_VALUE_MAX> action;
+      if (PdfObject::getDictValue("/A", body.view(), action) && !action.empty()) {
+        if (!PdfObject::getDictValue("/D", action.view(), dest)) {
+          dest.clear();
+        }
         trimVal(dest);
       }
     }
-    entry.pageNum = destStringToPage(pageTree, dest);
+    entry.pageNum = destStringToPage(pageTree, dest.view());
 
     if (!entry.title.empty()) {
-      out.push_back(std::move(entry));
-      ++count;
+      if (out.push_back(std::move(entry))) {
+        ++count;
+      } else {
+        break;
+      }
     }
 
-    const uint32_t firstChild = PdfObject::getDictRef("/First", body);
+    const uint32_t firstChild = PdfObject::getDictRef("/First", body.view());
     if (firstChild != 0) {
       walkOutlineItem(file, xref, pageTree, firstChild, out, count, maxEntries);
     }
-    itemId = PdfObject::getDictRef("/Next", body);
+    itemId = PdfObject::getDictRef("/Next", body.view());
   }
 }
 
 }  // namespace
 
 bool PdfOutlineParser::parse(FsFile& file, const XrefTable& xref, const PageTree& pageTree, uint32_t outlinesObjId,
-                             std::vector<PdfOutlineEntry>& outEntries) {
+                             PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outEntries) {
   outEntries.clear();
   if (outlinesObjId == 0) {
     return true;
   }
 
-  std::string body;
+  PdfFixedString<PDF_OBJECT_BODY_MAX> body;
   if (!xref.readDictForObject(file, outlinesObjId, body)) {
     return true;
   }
 
-  const uint32_t first = PdfObject::getDictRef("/First", body);
+  const uint32_t first = PdfObject::getDictRef("/First", body.view());
   if (first == 0) {
     return true;
   }
 
   size_t count = 0;
-  constexpr size_t kMax = 256;
+  constexpr size_t kMax = PDF_MAX_OUTLINE_ENTRIES;
   walkOutlineItem(file, xref, pageTree, first, outEntries, count, kMax);
   return true;
 }

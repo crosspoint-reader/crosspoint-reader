@@ -14,12 +14,15 @@ void FontCacheManager::clearCache() {
 }
 
 void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask) {
-  if (!fontDecompressor_ || fontMap_.count(fontId) == 0) return;
+  if (!fontDecompressor_) return;
+  // Avoid std::map::at(): with -fno-exceptions, out-of-range can abort().
+  const auto itFont = fontMap_.find(fontId);
+  if (itFont == fontMap_.end()) return;
 
   for (uint8_t i = 0; i < 4; i++) {
     if (!(styleMask & (1 << i))) continue;
     auto style = static_cast<EpdFontFamily::Style>(i);
-    const EpdFontData* data = fontMap_.at(fontId).getData(style);
+    const EpdFontData* data = itFont->second.getData(style);
     if (!data || !data->groups) continue;
     int missed = fontDecompressor_->prewarmCache(data, utf8Text);
     if (missed > 0) {
@@ -39,16 +42,29 @@ void FontCacheManager::resetStats() {
 bool FontCacheManager::isScanning() const { return scanMode_ == ScanMode::Scanning; }
 
 void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::Style style) {
-  scanText_ += text;
+  // PDF (and huge EPUB sections) can exceed available DRAM if we concatenate full extracted text for prewarm.
+  // With -fno-exceptions, operator new failure terminates the process.
+  static constexpr size_t kMaxScanTextBytes = 32 * 1024;
+  size_t appendLen = 0;
+  if (text && *text && scanText_.size() < kMaxScanTextBytes) {
+    const size_t room = kMaxScanTextBytes - scanText_.size();
+    appendLen = strnlen(text, room);
+    if (appendLen > 0) {
+      scanText_.append(text, appendLen);
+    }
+  }
   if (scanFontId_ < 0) scanFontId_ = fontId;
   const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-  uint32_t cpCount = 0;
-  while (*p) {
-    if ((*p & 0xC0) != 0x80) cpCount++;
-    p++;
+  if (appendLen > 0) {
+    const auto* p = reinterpret_cast<const unsigned char*>(text);
+    uint32_t cpCount = 0;
+    const auto* end = p + appendLen;
+    while (p < end) {
+      if ((*p & 0xC0) != 0x80) cpCount++;
+      p++;
+    }
+    scanStyleCounts_[baseStyle] += cpCount;
   }
-  scanStyleCounts_[baseStyle] += cpCount;
 }
 
 // --- PrewarmScope implementation ---

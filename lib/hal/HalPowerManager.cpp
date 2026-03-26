@@ -17,19 +17,16 @@ void HalPowerManager::begin() {
   assert(modeMutex != nullptr);
 }
 
-void HalPowerManager::setPowerSaving(bool enabled) {
+void HalPowerManager::applyPowerSavingNoMutex(bool enabled) {
   if (normalFreq <= 0) {
-    return;  // invalid state
+    return;
   }
 
   auto wifiMode = WiFi.getMode();
   if (wifiMode != WIFI_MODE_NULL) {
-    // Wifi is active, force disabling power saving
     enabled = false;
   }
 
-  // Note: We don't use mutex here to avoid too much overhead,
-  // it's not very important if we read a slightly stale value for currentLockMode
   const LockMode mode = currentLockMode;
 
   if (mode == None && enabled && !isLowPower) {
@@ -48,8 +45,15 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     }
     isLowPower = false;
   }
+}
 
-  // Otherwise, no change needed
+void HalPowerManager::setPowerSaving(bool enabled) {
+  if (!modeMutex) {
+    return;
+  }
+  xSemaphoreTake(modeMutex, portMAX_DELAY);
+  applyPowerSavingNoMutex(enabled);
+  xSemaphoreGive(modeMutex);
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
@@ -69,7 +73,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   gpio_hold_en(GPIO_SPIWP);
   pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
   // Arm the wakeup trigger *after* the button is released
-  // Note: this is only useful for waking up on USB power. On battery, the MCU will be completely powered off, so the
+  // Note that this is only useful for waking up on USB power. On battery, the MCU will be completely powered off, so the
   // power button is hard-wired to briefly provide power to the MCU, waking it up regardless of the wakeup source
   // configuration
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
@@ -84,7 +88,6 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
 
 HalPowerManager::Lock::Lock() {
   xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
-  // Current limitation: only one lock at a time
   if (powerManager.currentLockMode != None) {
     LOG_ERR("PWR", "Lock already held, ignore");
     valid = false;
@@ -92,11 +95,10 @@ HalPowerManager::Lock::Lock() {
     powerManager.currentLockMode = NormalSpeed;
     valid = true;
   }
-  xSemaphoreGive(powerManager.modeMutex);
   if (valid) {
-    // Immediately restore normal CPU frequency if currently in low-power mode
-    powerManager.setPowerSaving(false);
+    powerManager.applyPowerSavingNoMutex(false);
   }
+  xSemaphoreGive(powerManager.modeMutex);
 }
 
 HalPowerManager::Lock::~Lock() {
