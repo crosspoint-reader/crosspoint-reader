@@ -9,7 +9,7 @@
 #endif
 #else
 #ifndef PDF_CONTENT_STREAM_MAX
-#define PDF_CONTENT_STREAM_MAX 1024
+#define PDF_CONTENT_STREAM_MAX (4 * 1024)
 #endif
 #endif
 

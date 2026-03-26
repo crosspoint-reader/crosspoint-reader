@@ -107,7 +107,7 @@ bool Pdf::open(const char* path) {
   }
 
   pages_ = pageTree_.pageCount();
-  cache_.configure(path_.c_str(), file_.size());
+  cache_.configure(path_.c_str(), file_.fileSize());
 
   uint32_t cachedPageCount = 0;
   if (!cache_.loadMeta(cachedPageCount, outlineEntries_) || cachedPageCount != pages_) {
