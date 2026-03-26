@@ -8,6 +8,7 @@
 #include "PdfObject.h"
 #include "PdfOutline.h"
 #include "PdfPage.h"
+#include "PdfPageNavigation.h"
 #include "XrefTable.h"
 
 #include <HalStorage.h>
@@ -139,6 +140,28 @@ void dumpPageText(size_t pageIndex, const PdfPage& page) {
     }
   }
   std::printf("\n");
+}
+
+void testPdfPageNavigationPolicy() {
+  PdfPageNavigationState state{};
+  REQUIRE(state.page == 0);
+  REQUIRE(state.slice == 0);
+
+  REQUIRE(pdfPageTurnForward(state, 10, 3));
+  REQUIRE(state.page == 0);
+  REQUIRE(state.slice == 1);
+
+  REQUIRE(pdfPageTurnForward(state, 10, 3));
+  REQUIRE(state.page == 0);
+  REQUIRE(state.slice == 2);
+
+  REQUIRE(pdfPageTurnForward(state, 10, 3));
+  REQUIRE(state.page == 1);
+  REQUIRE(state.slice == 0);
+
+  REQUIRE(pdfPageTurnBackward(state, 3));
+  REQUIRE(state.page == 0);
+  REQUIRE(state.slice == 2);
 }
 
 void collapseAsciiWhitespace(std::string& s) {
@@ -309,6 +332,7 @@ bool runOnePdf(const char* path) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  testPdfPageNavigationPolicy();
   std::vector<const char*> paths;
   if (argc > 1) {
     for (int i = 1; i < argc; ++i) paths.push_back(argv[i]);

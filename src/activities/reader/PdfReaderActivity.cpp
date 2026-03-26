@@ -53,12 +53,246 @@ void PdfReaderActivity::ensureLayout() {
   layoutReady = true;
 }
 
+bool PdfReaderActivity::loadPage(uint32_t page) {
+  if (!pdf) {
+    return false;
+  }
+  if (!pdf->getPage(page, pageBuffer)) {
+    return false;
+  }
+  loadedPage = page;
+  navigationState.page = page;
+  navigationState.slice = 0;
+  rebuildPageSlices();
+  return !pageSliceStarts.empty();
+}
+
+bool PdfReaderActivity::renderPageSlice(const PdfPage& page, const PdfRenderCursor& start, PdfRenderCursor& next,
+                                        bool draw) const {
+  const int lineHeight = renderer.getLineHeight(cachedFontId);
+  int y = marginTop;
+  const int bottomLimit = renderer.getScreenHeight() - marginBottom - lineHeight;
+
+  auto toRendererStyle = [](uint8_t pdfStyle) {
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    if ((pdfStyle & PdfTextStyleBold) != 0) {
+      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+    }
+    if ((pdfStyle & PdfTextStyleItalic) != 0) {
+      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::ITALIC);
+    }
+    return style;
+  };
+
+  auto getStep = [&](size_t stepIndex, bool& isImage, uint32_t& index) -> bool {
+    if (!page.drawOrder.empty()) {
+      if (stepIndex >= page.drawOrder.size()) {
+        return false;
+      }
+      isImage = page.drawOrder[stepIndex].isImage;
+      index = page.drawOrder[stepIndex].index;
+      return true;
+    }
+
+    if (stepIndex < page.textBlocks.size()) {
+      isImage = false;
+      index = static_cast<uint32_t>(stepIndex);
+      return true;
+    }
+
+    const size_t imageIndex = stepIndex - page.textBlocks.size();
+    if (imageIndex < page.images.size()) {
+      isImage = true;
+      index = static_cast<uint32_t>(imageIndex);
+      return true;
+    }
+    return false;
+  };
+
+  auto drawTextBlock = [&](const PdfTextBlock& block, size_t stepIndex, size_t startLine) -> bool {
+    if (block.text.empty()) {
+      next.stepIndex = stepIndex + 1;
+      next.lineIndex = 0;
+      return true;
+    }
+
+    constexpr int kMaxLines = 400;
+    const auto textStyle = toRendererStyle(block.style);
+    const bool isHeader = (block.style & PdfTextStyleHeader) != 0;
+    const auto lines = renderer.wrappedText(cachedFontId, block.text.c_str(), viewportWidth, kMaxLines, textStyle);
+    if (startLine > lines.size()) {
+      startLine = lines.size();
+    }
+    const bool blockStartsHere = startLine == 0;
+
+    if (isHeader && blockStartsHere && y > marginTop) {
+      y += std::max(2, lineHeight / 3);
+    }
+
+    for (size_t lineIndex = startLine; lineIndex < lines.size(); ++lineIndex) {
+      if (y > bottomLimit) {
+        next.stepIndex = stepIndex;
+        next.lineIndex = lineIndex;
+        return false;
+      }
+      if (draw) {
+        int x = marginLeft;
+        if (isHeader) {
+          x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle)) / 2;
+        } else {
+          switch (SETTINGS.paragraphAlignment) {
+            case CrossPointSettings::CENTER_ALIGN:
+              x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle)) / 2;
+              break;
+            case CrossPointSettings::RIGHT_ALIGN:
+              x = marginLeft + viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle);
+              break;
+            default:
+              break;
+          }
+        }
+        renderer.drawText(cachedFontId, x, y, lines[lineIndex].c_str(), true, textStyle);
+      }
+      y += lineHeight;
+    }
+
+    if (isHeader && blockStartsHere) {
+      y += std::max(2, lineHeight / 4);
+    }
+    next.stepIndex = stepIndex + 1;
+    next.lineIndex = 0;
+    return true;
+  };
+
+  for (size_t stepIndex = start.stepIndex; ; ++stepIndex) {
+    bool isImage = false;
+    uint32_t index = 0;
+    if (!getStep(stepIndex, isImage, index)) {
+      next.stepIndex = stepIndex;
+      next.lineIndex = 0;
+      return true;
+    }
+
+    if (isImage) {
+      if (!pdf) {
+        next.stepIndex = stepIndex;
+        next.lineIndex = 0;
+        return false;
+      }
+      const auto dir = pdf->cacheDirectory().view();
+      const char* name = index < page.images.size() && page.images[index].format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
+      const auto& img = page.images[index];
+      if (y > bottomLimit) {
+        next.stepIndex = stepIndex;
+        next.lineIndex = 0;
+        return false;
+      }
+
+      int advanceY = lineHeight;
+      if (img.width > 0 && img.height > 0) {
+        advanceY = static_cast<int>(img.height) * viewportWidth / static_cast<int>(img.width);
+        if (advanceY > bottomLimit - y + lineHeight) {
+          advanceY = bottomLimit - y + lineHeight;
+        }
+        if (advanceY < lineHeight) {
+          advanceY = lineHeight;
+        }
+      }
+      if (draw) {
+        if (dir.empty()) {
+          renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
+        } else {
+          const std::string tmpPath = std::string(dir) + "/" + name;
+          if (img.pdfStreamLength == 0 || img.pdfStreamLength > kMaxPdfImageStreamBytes) {
+            renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
+          } else {
+            auto* raw = static_cast<uint8_t*>(malloc(img.pdfStreamLength));
+            if (!raw) {
+              renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
+            } else {
+              const size_t got = pdf->extractImageStream(img, raw, img.pdfStreamLength);
+              bool drawn = false;
+              if (got >= 4) {
+                FsFile wf;
+                if (Storage.openFileForWrite("PDF", tmpPath, wf)) {
+                  wf.write(raw, got);
+                  wf.close();
+
+                  RenderConfig cfg;
+                  cfg.x = marginLeft;
+                  cfg.y = y;
+                  cfg.maxWidth = viewportWidth;
+                  cfg.maxHeight = bottomLimit - y;
+                  cfg.useGrayscale = true;
+                  cfg.useDithering = true;
+                  if (cfg.maxHeight >= 16) {
+                    if (img.format == 0) {
+                      JpegToFramebufferConverter jpg;
+                      drawn = jpg.decodeToFramebuffer(tmpPath, renderer, cfg);
+                    } else {
+                      PngToFramebufferConverter png;
+                      drawn = png.decodeToFramebuffer(tmpPath, renderer, cfg);
+                    }
+                  }
+                  Storage.remove(tmpPath.c_str());
+                }
+              }
+              free(raw);
+              if (!drawn) {
+                renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
+              }
+            }
+          }
+        }
+      }
+      y += advanceY;
+      next.stepIndex = stepIndex + 1;
+      next.lineIndex = 0;
+      continue;
+    }
+
+    if (index < page.textBlocks.size()) {
+      const size_t startLine = (stepIndex == start.stepIndex) ? start.lineIndex : 0;
+      if (!drawTextBlock(page.textBlocks[index], stepIndex, startLine)) {
+        return false;
+      }
+      continue;
+    }
+
+    next.stepIndex = stepIndex + 1;
+    next.lineIndex = 0;
+  }
+}
+
+void PdfReaderActivity::rebuildPageSlices() {
+  pageSliceStarts.clear();
+  PdfRenderCursor cursor{};
+  if (!pageSliceStarts.push_back(cursor)) {
+    return;
+  }
+
+  while (pageSliceStarts.size() < PDF_MAX_PAGE_SLICES) {
+    PdfRenderCursor next{};
+    const bool finished = renderPageSlice(pageBuffer, cursor, next, false);
+    if (finished) {
+      return;
+    }
+    if (!pageSliceStarts.push_back(next)) {
+      return;
+    }
+    cursor = next;
+  }
+}
+
 void PdfReaderActivity::onEnter() {
   Activity::onEnter();
   if (!pdf) {
     return;
   }
   layoutReady = false;
+  loadedPage = UINT32_MAX;
+  navigationState = {};
+  pageSliceStarts.clear();
   ensureLayout();
   pageBuffer.clear();
 
@@ -145,12 +379,36 @@ void PdfReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-  if (prevTriggered && currentPage > 0) {
-    currentPage--;
-    requestUpdate();
-  } else if (nextTriggered && totalPages > 0 && currentPage + 1 < totalPages) {
-    currentPage++;
-    requestUpdate();
+  if (prevTriggered) {
+    if (navigationState.slice > 0) {
+      --navigationState.slice;
+      requestUpdate();
+      return;
+    }
+    if (currentPage > 0) {
+      const uint32_t previousPage = currentPage - 1;
+      if (loadPage(previousPage)) {
+        currentPage = previousPage;
+        navigationState.page = previousPage;
+        navigationState.slice = static_cast<uint16_t>(pageSliceStarts.size() - 1);
+        requestUpdate();
+      }
+      return;
+    }
+  } else if (nextTriggered) {
+    if (navigationState.slice + 1 < pageSliceStarts.size()) {
+      ++navigationState.slice;
+      requestUpdate();
+      return;
+    }
+    if (currentPage + 1 < totalPages) {
+      currentPage++;
+      loadedPage = UINT32_MAX;
+      navigationState.page = currentPage;
+      navigationState.slice = 0;
+      requestUpdate();
+      return;
+    }
   }
 }
 
@@ -169,176 +427,12 @@ void PdfReaderActivity::renderStatusBar() const {
 }
 
 void PdfReaderActivity::renderContents(const PdfPage& page) {
-  const int lineHeight = renderer.getLineHeight(cachedFontId);
-  int y = marginTop;
-  const int bottomLimit = renderer.getScreenHeight() - marginBottom - lineHeight;
-
-  auto toRendererStyle = [](uint8_t pdfStyle) {
-    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
-    if ((pdfStyle & PdfTextStyleBold) != 0) {
-      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
-    }
-    if ((pdfStyle & PdfTextStyleItalic) != 0) {
-      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::ITALIC);
-    }
-    return style;
-  };
-
-  auto drawTextBlock = [&](const PdfTextBlock& block) {
-    if (block.text.empty()) {
-      return;
-    }
-    const bool isHeader = (block.style & PdfTextStyleHeader) != 0;
-    EpdFontFamily::Style textStyle = toRendererStyle(block.style);
-    if (isHeader) {
-      textStyle = static_cast<EpdFontFamily::Style>(textStyle | EpdFontFamily::BOLD);
-    }
-    constexpr int kMaxLines = 400;
-    const auto lines = renderer.wrappedText(cachedFontId, block.text.c_str(), viewportWidth, kMaxLines, textStyle);
-    if (isHeader && y > marginTop) {
-      y += std::max(2, lineHeight / 3);
-    }
-    for (const auto& line : lines) {
-      if (y > bottomLimit) {
-        return;
-      }
-      int x = marginLeft;
-      if (isHeader) {
-        x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str(), textStyle)) / 2;
-      } else {
-        switch (SETTINGS.paragraphAlignment) {
-          case CrossPointSettings::CENTER_ALIGN:
-            x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str(), textStyle)) / 2;
-            break;
-          case CrossPointSettings::RIGHT_ALIGN:
-            x = marginLeft + viewportWidth - renderer.getTextWidth(cachedFontId, line.c_str(), textStyle);
-            break;
-          default:
-            break;
-        }
-      }
-      renderer.drawText(cachedFontId, x, y, line.c_str(), true, textStyle);
-      y += lineHeight;
-    }
-    if (isHeader) {
-      y += std::max(2, lineHeight / 4);
-    }
-  };
-
-  auto drawImage = [&](const PdfImageDescriptor& img) {
-    if (!pdf) {
-      return;
-    }
-    const auto dir = pdf->cacheDirectory().view();
-    if (dir.empty()) {
-      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-      y += lineHeight;
-      return;
-    }
-    const char* name = img.format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
-    const std::string tmpPath = std::string(dir) + "/" + name;
-    if (img.pdfStreamLength == 0 || img.pdfStreamLength > kMaxPdfImageStreamBytes) {
-      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-      y += lineHeight;
-      return;
-    }
-    auto* raw = static_cast<uint8_t*>(malloc(img.pdfStreamLength));
-    if (!raw) {
-      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-      y += lineHeight;
-      return;
-    }
-    const size_t got = pdf->extractImageStream(img, raw, img.pdfStreamLength);
-    if (got < 4) {
-      free(raw);
-      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-      y += lineHeight;
-      return;
-    }
-    FsFile wf;
-    if (!Storage.openFileForWrite("PDF", tmpPath, wf)) {
-      free(raw);
-      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-      y += lineHeight;
-      return;
-    }
-    wf.write(raw, got);
-    wf.close();
-    free(raw);
-
-    RenderConfig cfg;
-    cfg.x = marginLeft;
-    cfg.y = y;
-    cfg.maxWidth = viewportWidth;
-    cfg.maxHeight = bottomLimit - y;
-    if (cfg.maxHeight < 16) {
-      Storage.remove(tmpPath.c_str());
-      return;
-    }
-    cfg.useGrayscale = true;
-    cfg.useDithering = true;
-
-    int advanceY = lineHeight;
-    if (img.width > 0 && img.height > 0) {
-      advanceY = static_cast<int>(img.height) * viewportWidth / static_cast<int>(img.width);
-      if (advanceY > cfg.maxHeight) advanceY = cfg.maxHeight;
-      if (advanceY < lineHeight) advanceY = lineHeight;
-    }
-
-    bool ok = false;
-    if (img.format == 0) {
-      JpegToFramebufferConverter jpg;
-      ok = jpg.decodeToFramebuffer(tmpPath, renderer, cfg);
-    } else {
-      PngToFramebufferConverter png;
-      ok = png.decodeToFramebuffer(tmpPath, renderer, cfg);
-    }
-    Storage.remove(tmpPath.c_str());
-    if (!ok) {
-      renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-      y += lineHeight;
-      return;
-    }
-    y += advanceY;
-  };
-
-  // Single layout pass (no two-pass prewarm scan). PDF pages can hold far more text than reflowed EPUB;
-  // the prewarm path concatenates all glyphs into one string and runs layout twice, which exhausted heap
-  // (operator new -> terminate) on ESP32 with dense PDFs + anti-aliasing.
-  auto drawBody = [&]() {
-    y = marginTop;
-    if (!page.drawOrder.empty()) {
-      for (const auto& step : page.drawOrder) {
-        if (step.isImage) {
-          if (step.index < page.images.size()) {
-            drawImage(page.images[step.index]);
-          }
-        } else if (step.index < page.textBlocks.size()) {
-          drawTextBlock(page.textBlocks[step.index]);
-        }
-      }
-    } else {
-      for (const auto& tb : page.textBlocks) {
-        drawTextBlock(tb);
-      }
-      for (const auto& im : page.images) {
-        drawImage(im);
-      }
-    }
-  };
-
-  drawBody();
-
-  renderStatusBar();
-  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
-
-  if (SETTINGS.textAntiAliasing) {
-    ReaderUtils::renderAntiAliased(renderer, [&, this]() {
-      y = marginTop;
-      drawBody();
-      renderStatusBar();
-    });
+  if (pageSliceStarts.empty()) {
+    return;
   }
+  const uint16_t slice = std::min<uint16_t>(navigationState.slice, static_cast<uint16_t>(pageSliceStarts.size() - 1));
+  PdfRenderCursor next{};
+  renderPageSlice(page, pageSliceStarts[slice], next, true);
 }
 
 void PdfReaderActivity::render(RenderLock&&) {
@@ -349,12 +443,23 @@ void PdfReaderActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  if (!pdf->getPage(currentPage, pageBuffer)) {
-    renderer.drawCenteredText(UI_12_FONT_ID, 200, tr(STR_PDF_LOAD_ERROR), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
+  if (loadedPage != currentPage || pageSliceStarts.empty()) {
+    if (!loadPage(currentPage)) {
+      renderer.drawCenteredText(UI_12_FONT_ID, 200, tr(STR_PDF_LOAD_ERROR), true, EpdFontFamily::BOLD);
+      renderer.displayBuffer();
+      return;
+    }
   }
 
   renderContents(pageBuffer);
+  renderStatusBar();
+  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+
+  if (SETTINGS.textAntiAliasing) {
+    ReaderUtils::renderAntiAliased(renderer, [&, this]() {
+      renderContents(pageBuffer);
+      renderStatusBar();
+    });
+  }
   saveProgressNow();
 }

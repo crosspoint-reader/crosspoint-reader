@@ -15,6 +15,7 @@ INCLUDES=(
   -I "test/pdf/stubs"
   -I "lib/Pdf"
   -I "lib/Pdf/Pdf"
+  -I "src/activities/reader"
   -I "lib/InflateReader"
   -I "lib/uzlib/src"
 )

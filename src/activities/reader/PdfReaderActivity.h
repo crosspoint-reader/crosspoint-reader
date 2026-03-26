@@ -3,14 +3,23 @@
 #include <Pdf.h>
 
 #include "../Activity.h"
+#include "PdfPageNavigation.h"
 
 class PdfReaderActivity final : public Activity {
+  struct PdfRenderCursor {
+    size_t stepIndex = 0;
+    size_t lineIndex = 0;
+  };
+
   std::unique_ptr<Pdf> pdf;
   uint32_t currentPage = 0;
   uint32_t totalPages = 0;
   int pagesUntilFullRefresh = 0;
   uint32_t lastSavedPage = UINT32_MAX;
+  uint32_t loadedPage = UINT32_MAX;
   PdfPage pageBuffer;
+  PdfFixedVector<PdfRenderCursor, PDF_MAX_PAGE_SLICES> pageSliceStarts;
+  PdfPageNavigationState navigationState;
 
   int cachedFontId = 0;
   int viewportWidth = 0;
@@ -21,6 +30,9 @@ class PdfReaderActivity final : public Activity {
   bool layoutReady = false;
 
   void ensureLayout();
+  bool renderPageSlice(const PdfPage& page, const PdfRenderCursor& start, PdfRenderCursor& next, bool draw) const;
+  void rebuildPageSlices();
+  bool loadPage(uint32_t page);
   void renderContents(const PdfPage& page);
   void renderStatusBar() const;
   void saveProgressNow();

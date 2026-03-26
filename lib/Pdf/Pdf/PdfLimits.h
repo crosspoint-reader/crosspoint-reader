@@ -107,6 +107,10 @@
 #define PDF_MAX_DRAW_STEPS 24
 #endif
 
+#ifndef PDF_MAX_PAGE_SLICES
+#define PDF_MAX_PAGE_SLICES 64
+#endif
+
 #ifndef PDF_MAX_TEXT_BLOCK_BYTES
 #define PDF_MAX_TEXT_BLOCK_BYTES 96
 #endif
