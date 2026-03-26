@@ -1,5 +1,6 @@
 #include "ActivityManager.h"
 
+#include <HalClock.h>
 #include <HalPowerManager.h>
 
 #include "boot_sleep/BootActivity.h"
@@ -54,6 +55,18 @@ void ActivityManager::loop() {
   if (currentActivity) {
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
+  }
+
+  if (SETTINGS.statusBarClock && HalClock::isSynced()) {
+    static time_t lastClockMinute = 0;
+    time_t now = HalClock::now();
+    if (now > 0) {
+      time_t minute = now / 60;
+      if (minute != lastClockMinute) {
+        lastClockMinute = minute;
+        requestUpdate();
+      }
+    }
   }
 
   while (pendingAction != PendingAction::None) {

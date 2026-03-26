@@ -30,6 +30,9 @@ namespace HalClock {
 /// Returns true if the sync succeeded.
 bool syncNtp();
 
+/// Apply timezone/DST rules via the POSIX TZ string for the given setting.
+void applyTimezone(uint8_t timeZoneSetting);
+
 /// Call just before deep sleep.  Snapshots the current system time to RTC
 /// memory and NVS so it can be restored on wake / cold boot.  Pass true when
 /// the LP timer is kept alive during sleep.

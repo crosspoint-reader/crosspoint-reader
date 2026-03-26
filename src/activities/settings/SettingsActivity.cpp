@@ -1,12 +1,14 @@
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <Logging.h>
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "DetectTimezoneActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
@@ -48,6 +50,7 @@ void SettingsActivity::onEnter() {
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SYNC_TIME, SettingAction::SyncTime));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_DETECT_TIMEZONE, SettingAction::DetectTimezone));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
@@ -197,6 +200,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::SyncTime:
         startActivityForResult(std::make_unique<SyncTimeActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::DetectTimezone:
+        startActivityForResult(std::make_unique<DetectTimezoneActivity>(renderer, mappedInput), resultHandler);
+        break;
       case SettingAction::None:
         // Do nothing
         break;
@@ -204,6 +210,10 @@ void SettingsActivity::toggleCurrentSetting() {
     return;  // Results will be handled in the result handler, so we can return early here
   } else {
     return;
+  }
+
+  if (setting.nameId == StrId::STR_TIMEZONE) {
+    HalClock::applyTimezone(SETTINGS.timeZone);
   }
 
   SETTINGS.saveToFile();

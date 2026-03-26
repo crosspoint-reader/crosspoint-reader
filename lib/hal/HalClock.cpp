@@ -6,6 +6,9 @@
 #include <esp_private/esp_clk.h>
 #include <esp_sntp.h>
 #include <sys/time.h>
+#include <time.h>
+
+#include <cstdlib>
 
 // ---- RTC-memory state (survives deep sleep, not cold boot) ----------------
 
@@ -18,6 +21,29 @@ RTC_NOINIT_ATTR static time_t rtcEpoch;       // last-known unix epoch
 RTC_NOINIT_ATTR static uint64_t rtcLpTimeUs;  // esp_clk_rtc_time() at capture
 
 static bool clockApproximate = true;
+
+struct TimeZoneEntry {
+  const char* tz;
+};
+
+static constexpr TimeZoneEntry TIMEZONES[] = {
+    {"GMT0BST,M3.5.0/1,M10.5.0/2"},
+    {"CET-1CEST,M3.5.0/2,M10.5.0/3"},
+    {"EET-2EEST,M3.5.0/3,M10.5.0/4"},
+    {"MSK-3"},
+    {"UTC-4"},
+    {"UTC-5:30"},
+    {"UTC-7"},
+    {"UTC-8"},
+    {"UTC-9"},
+    {"AEST-10AEDT,M10.1.0/2,M4.1.0/3"},
+    {"NZST-12NZDT,M9.5.0/2,M4.1.0/3"},
+    {"UTC+3"},
+    {"EST5EDT,M3.2.0/2,M11.1.0/2"},
+    {"CST6CDT,M3.2.0/2,M11.1.0/2"},
+    {"MST7MDT,M3.2.0/2,M11.1.0/2"},
+    {"PST8PDT,M3.2.0/2,M11.1.0/2"},
+};
 
 // ---- NVS helpers ----------------------------------------------------------
 
@@ -64,6 +90,13 @@ static void capture(bool lpValid) {
 // ---- public API -----------------------------------------------------------
 
 namespace HalClock {
+
+void applyTimezone(uint8_t timeZoneSetting) {
+  const size_t index = timeZoneSetting < (sizeof(TIMEZONES) / sizeof(TIMEZONES[0])) ? timeZoneSetting : 0;
+  setenv("TZ", TIMEZONES[index].tz, 1);
+  tzset();
+  LOG_DBG("CLK", "Timezone applied: %s", TIMEZONES[index].tz);
+}
 
 bool syncNtp() {
   if (esp_sntp_enabled()) {

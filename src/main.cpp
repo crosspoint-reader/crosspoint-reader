@@ -260,6 +260,7 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  HalClock::applyTimezone(SETTINGS.timeZone);
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
