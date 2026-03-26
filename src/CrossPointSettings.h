@@ -226,9 +226,9 @@ class CrossPointSettings {
   uint8_t clockFormat12h = 0;
   // Timezone selection (applies POSIX TZ rules for DST)
   uint8_t timeZone = TZ_UTC;
-  // Keep the LP timer running during deep sleep (GPIO13 HIGH) so the clock
-  // can be accurately restored on wake.  Increases sleep current by ~3-4 mA.
-  uint8_t keepClockAlive = 0;
+  // Use clock and keep the LP timer running during deep sleep (GPIO13 HIGH)
+  // so time can be accurately restored on wake. Increases sleep current by ~3-4 mA.
+  uint8_t useClock = 0;
 
   ~CrossPointSettings() = default;
 

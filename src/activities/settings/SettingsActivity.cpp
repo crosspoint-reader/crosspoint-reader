@@ -7,6 +7,7 @@
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
+#include "ClockSettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "DetectTimezoneActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -34,6 +35,11 @@ void SettingsActivity::onEnter() {
 
   for (const auto& setting : getSettingsList()) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
+    if (setting.category == StrId::STR_CAT_SYSTEM &&
+        (setting.nameId == StrId::STR_USE_CLOCK || setting.nameId == StrId::STR_CLOCK_FORMAT ||
+         setting.nameId == StrId::STR_TIMEZONE)) {
+      continue;
+    }
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
@@ -49,8 +55,7 @@ void SettingsActivity::onEnter() {
   // Append device-only ACTION items
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_SYNC_TIME, SettingAction::SyncTime));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_DETECT_TIMEZONE, SettingAction::DetectTimezone));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLOCK_SETTINGS, SettingAction::ClockSettings));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
@@ -179,6 +184,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::ClockSettings:
+        startActivityForResult(std::make_unique<ClockSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
       case SettingAction::KOReaderSync:
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -214,6 +222,10 @@ void SettingsActivity::toggleCurrentSetting() {
 
   if (setting.nameId == StrId::STR_TIMEZONE) {
     HalClock::applyTimezone(SETTINGS.timeZone);
+  }
+
+  if (setting.nameId == StrId::STR_USE_CLOCK && !SETTINGS.useClock) {
+    SETTINGS.statusBarClock = 0;
   }
 
   SETTINGS.saveToFile();

@@ -1,5 +1,6 @@
 #include "ActivityManager.h"
 
+#include <Arduino.h>
 #include <HalClock.h>
 #include <HalPowerManager.h>
 
@@ -57,13 +58,13 @@ void ActivityManager::loop() {
     currentActivity->loop();
   }
 
-  if (SETTINGS.statusBarClock && HalClock::isSynced()) {
-    static time_t lastClockMinute = 0;
+  if (SETTINGS.useClock && HalClock::isSynced()) {
+    static time_t lastMinute = -1;
     time_t now = HalClock::now();
     if (now > 0) {
       time_t minute = now / 60;
-      if (minute != lastClockMinute) {
-        lastClockMinute = minute;
+      if (minute != lastMinute) {
+        lastMinute = minute;
         requestUpdate();
       }
     }

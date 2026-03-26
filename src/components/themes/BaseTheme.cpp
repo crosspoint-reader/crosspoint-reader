@@ -296,7 +296,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    showBatteryPercentage);
 
   // Draw clock in header
-  {
+  if (SETTINGS.useClock) {
     char clockStr[16];
     HalClock::formatTime(clockStr, sizeof(clockStr), !SETTINGS.clockFormat12h);
     renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, rect.y + 5, clockStr);
@@ -725,7 +725,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Clock
   int clockTextWidth = 0;
-  if (SETTINGS.statusBarClock) {
+  if (SETTINGS.useClock && SETTINGS.statusBarClock) {
     char clockStr[16];
     HalClock::formatTime(clockStr, sizeof(clockStr), !SETTINGS.clockFormat12h);
     clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, clockStr);

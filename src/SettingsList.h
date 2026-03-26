@@ -88,8 +88,7 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                          StrId::STR_TZ_UTC_PLUS9, StrId::STR_TZ_AEST, StrId::STR_TZ_NZST, StrId::STR_TZ_UTC_MINUS3,
                          StrId::STR_TZ_EST, StrId::STR_TZ_CST, StrId::STR_TZ_MST, StrId::STR_TZ_PST},
                         "timeZone", StrId::STR_CAT_SYSTEM),
-      SettingInfo::Toggle(StrId::STR_KEEP_CLOCK_ALIVE, &CrossPointSettings::keepClockAlive, "keepClockAlive",
-                          StrId::STR_CAT_SYSTEM),
+      SettingInfo::Toggle(StrId::STR_USE_CLOCK, &CrossPointSettings::useClock, "useClock", StrId::STR_CAT_SYSTEM),
 
       // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
       SettingInfo::DynamicString(

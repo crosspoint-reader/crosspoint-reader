@@ -38,6 +38,9 @@ void StatusBarSettingsActivity::onEnter() {
   Activity::onEnter();
 
   selectedIndex = 0;
+  if (!SETTINGS.useClock && selectedIndex >= MENU_ITEMS - 1) {
+    selectedIndex = 0;
+  }
 
   // Clamp statusBarProgressBar and statusBarTitle in case of corrupt/migrated data
   if (SETTINGS.statusBarProgressBar >= PROGRESS_BAR_ITEMS) {
@@ -71,22 +74,26 @@ void StatusBarSettingsActivity::loop() {
 
   // Handle navigation
   buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+    const int menuCount = SETTINGS.useClock ? MENU_ITEMS : MENU_ITEMS - 1;
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, menuCount);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+    const int menuCount = SETTINGS.useClock ? MENU_ITEMS : MENU_ITEMS - 1;
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, menuCount);
     requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+    const int menuCount = SETTINGS.useClock ? MENU_ITEMS : MENU_ITEMS - 1;
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, menuCount);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+    const int menuCount = SETTINGS.useClock ? MENU_ITEMS : MENU_ITEMS - 1;
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, menuCount);
     requestUpdate();
   });
 }
@@ -111,7 +118,7 @@ void StatusBarSettingsActivity::handleSelection() {
   } else if (selectedIndex == 5) {
     // Show Battery
     SETTINGS.statusBarBattery = (SETTINGS.statusBarBattery + 1) % 2;
-  } else if (selectedIndex == 6) {
+  } else if (selectedIndex == 6 && SETTINGS.useClock) {
     // Show Clock
     SETTINGS.statusBarClock = (SETTINGS.statusBarClock + 1) % 2;
   }
@@ -129,8 +136,9 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int menuCount = SETTINGS.useClock ? MENU_ITEMS : MENU_ITEMS - 1;
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(menuCount),
       static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
       nullptr,
       [this](int index) {

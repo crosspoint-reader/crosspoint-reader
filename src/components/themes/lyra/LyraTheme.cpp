@@ -169,7 +169,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    showBatteryPercentage);
 
   // Draw clock in header
-  {
+  if (SETTINGS.useClock) {
     char clockStr[16];
     HalClock::formatTime(clockStr, sizeof(clockStr), !SETTINGS.clockFormat12h);
     renderer.drawText(SMALL_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding, rect.y + 5, clockStr);

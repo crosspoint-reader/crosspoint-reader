@@ -185,7 +185,7 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-  HalClock::saveBeforeSleep(SETTINGS.keepClockAlive);
+  HalClock::saveBeforeSleep(SETTINGS.useClock);
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();
@@ -194,7 +194,7 @@ void enterDeepSleep() {
   LOG_DBG("MAIN", "Power button press calibration value: %lu ms", t2 - t1);
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio, SETTINGS.keepClockAlive);
+  powerManager.startDeepSleep(gpio, SETTINGS.useClock);
 }
 
 void setupDisplayAndFonts() {
