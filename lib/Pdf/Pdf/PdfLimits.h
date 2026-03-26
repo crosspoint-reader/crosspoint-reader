@@ -20,11 +20,11 @@
 #endif
 
 #ifndef PDF_MAX_OBJECTS
-#define PDF_MAX_OBJECTS 2048
+#define PDF_MAX_OBJECTS 4096
 #endif
 
 #ifndef PDF_MAX_PAGES
-#define PDF_MAX_PAGES 64
+#define PDF_MAX_PAGES 512
 #endif
 
 #ifndef PDF_MAX_OUTLINE_ENTRIES

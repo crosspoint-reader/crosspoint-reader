@@ -96,6 +96,7 @@ const Expectation kExpect[] = {
     {"esp32-c6_datasheet_en.pdf", 20, 0, 10, true, 0},
     // Clinical handbook: xref + page tree + outlines + content streams parse; no text yet (CID/CMap).
     {"Problem-Solving Treatment_ Learning and Pl - IHS.pdf", 33, 33, 200, true, 0},
+    {"DBT(r) Skills Training Handouts and Worksh - Marsha M Linehan.pdf", 446, 0, 0, false, 0},
 };
 
 const Expectation* findExpect(const char* base) {
