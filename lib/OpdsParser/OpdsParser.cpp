@@ -1,5 +1,7 @@
 #include "OpdsParser.h"
+
 #include <Logging.h>
+
 #include <cstring>
 
 OpdsParser::OpdsParser() {
@@ -116,7 +118,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       if (rel && strcmp(rel, "search") == 0) {
         std::string sHref(href);
         std::string sType = type ? type : "";
-        
+
         // Only accept direct templates containing {searchTerms}
         if (sHref.find("{searchTerms}") != std::string::npos) {
           self->searchTemplate = sHref;
@@ -124,14 +126,13 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
           LOG_DBG("OPDS", "OpenSearch description found: %s. Skipping direct template assignment.", href);
         }
       }
-      
+
       if (self->inEntry) {
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
           self->currentEntry.type = OpdsEntryType::BOOK;
           self->currentEntry.href = href;
-        }
-        else if (type && strstr(type, "application/atom+xml") != nullptr) {
+        } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
             self->currentEntry.type = OpdsEntryType::NAVIGATION;
             self->currentEntry.href = href;
