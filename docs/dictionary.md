@@ -83,3 +83,24 @@ Lookup history is stored per-book and accessible from the reader menu.
 4. Long-press the select button on any entry to enter delete mode. Press the select button to confirm deletion, or the back button to cancel.
 
 The history list is capped at the **History Limit** value in Settings. When the cap is reached, the oldest entry is removed to make room for the new one.
+
+---
+
+## IPA Phonetic Characters
+
+Dictionary definitions that contain IPA phonetic transcriptions are rendered using a dedicated built-in font — **Doulos SIL Regular** (SIL International, SIL Open Font License). IPA characters in a definition are always displayed in this font, regardless of your chosen reading font or size.
+
+**Coverage.** The font covers all four IPA Unicode blocks — 368 glyphs in total:
+
+| Block | Glyphs |
+|---|---|
+| IPA Extensions | 96 |
+| Modifier Letters (IPA subset) | 80 |
+| Phonetic Extensions | 128 |
+| Phonetic Extensions Supplement | 64 |
+
+**Fixed size.** The IPA font is fixed at 16 pt (equivalent to the *Large* reader size setting). This keeps the font data compact in firmware and ensures consistent glyph sizing across all reader font and size combinations.
+
+**Why Doulos SIL?** Doulos SIL is designed specifically for IPA phonetic notation and provides complete coverage of all four blocks above. Several other candidates were evaluated first but lacked coverage of one or more blocks.
+
+If you see a filled diamond where a symbol should appear, that character is not covered by the built-in IPA font.

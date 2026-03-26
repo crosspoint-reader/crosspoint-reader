@@ -68,8 +68,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       int16_t screenX = line->xPos + static_cast<int16_t>(*xIt) + marginLeft;
       int16_t screenY = line->yPos + marginTop;
       const std::string& wordText = *wordIt;
-      const EpdFontFamily::Style wordStyle =
-          (styleIt != styleList.end()) ? *styleIt : EpdFontFamily::REGULAR;
+      const EpdFontFamily::Style wordStyle = (styleIt != styleList.end()) ? *styleIt : EpdFontFamily::REGULAR;
 
       // Split on en-dash (U+2013: E2 80 93) and em-dash (U+2014: E2 80 94)
       std::vector<size_t> splitStarts;

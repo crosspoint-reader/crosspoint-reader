@@ -3,17 +3,63 @@
 #include <DictHtmlRenderer.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 #include <memory>
+#include <numeric>
 
 #include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
+#include "util/IpaUtils.h"
 #include "util/LookupHistory.h"
+
+// Split a UTF-8 string into runs of IPA vs non-IPA codepoints.
+struct IpaTextSpan {
+  std::string text;
+  bool isIpa;
+};
+
+static std::vector<IpaTextSpan> splitIpaRuns(const std::string& text) {
+  std::vector<IpaTextSpan> result;
+  if (text.empty()) return result;
+  std::string current;
+  bool currentIsIpa = false;
+  bool first = true;
+  const auto* p = reinterpret_cast<const uint8_t*>(text.c_str());
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(&p))) {
+    const bool ipa = isIpaCodepoint(cp);
+    if (!first && ipa != currentIsIpa) {
+      result.push_back({std::move(current), currentIsIpa});
+      current.clear();
+    }
+    currentIsIpa = ipa;
+    first = false;
+    // Re-encode cp to UTF-8
+    if (cp < 0x80) {
+      current += static_cast<char>(cp);
+    } else if (cp < 0x800) {
+      current += static_cast<char>(0xC0 | (cp >> 6));
+      current += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+      current += static_cast<char>(0xE0 | (cp >> 12));
+      current += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      current += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+      current += static_cast<char>(0xF0 | (cp >> 18));
+      current += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+      current += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      current += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+  }
+  if (!current.empty()) result.push_back({std::move(current), currentIsIpa});
+  return result;
+}
 
 static LookupHistory::Status toHistStatus(DictionaryLookupController::FoundStatus fs) {
   switch (fs) {
@@ -129,13 +175,69 @@ void DictionaryDefinitionActivity::wrapHtml() {
     currentX = indent * indentStep + (listItem ? bulletWidth : 0);
   };
 
-  auto appendToLine = [&](const std::string& text, EpdFontFamily::Style style, int width) {
-    if (!currentLine.segments.empty() && currentLine.segments.back().style == style) {
+  auto appendToLine = [&](const std::string& text, EpdFontFamily::Style style, bool isIpa, int width) {
+    if (!currentLine.segments.empty() && currentLine.segments.back().style == style &&
+        currentLine.segments.back().isIpa == isIpa) {
       currentLine.segments.back().text += text;
     } else {
-      currentLine.segments.push_back({text, style});
+      currentLine.segments.push_back({text, style, isIpa});
     }
     currentX += width;
+  };
+
+  // Measure and append a string that may contain mixed IPA/non-IPA runs.
+  auto getMixedWidth = [&](const std::string& text, EpdFontFamily::Style style) -> int {
+    const auto runs = splitIpaRuns(text);
+    return std::accumulate(runs.begin(), runs.end(), 0, [&](int sum, const IpaTextSpan& run) {
+      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : readerFontId, run.text.c_str(), style);
+    });
+  };
+
+  auto appendMixed = [&](const std::string& text, EpdFontFamily::Style style) {
+    for (const auto& run : splitIpaRuns(text)) {
+      const int fontId = run.isIpa ? IPA_FONT_ID : readerFontId;
+      appendToLine(run.text, style, run.isIpa, renderer.getTextWidth(fontId, run.text.c_str(), style));
+    }
+  };
+
+  // Break a single token at codepoint boundaries when it is wider than the available line width.
+  auto breakToken = [&](const std::string& tok, EpdFontFamily::Style style, uint8_t indentLevel) {
+    const auto* bp = reinterpret_cast<const uint8_t*>(tok.c_str());
+    std::string pending;
+    int pendingWidth = 0;
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(&bp))) {
+      char buf[5] = {};
+      if (cp < 0x80) {
+        buf[0] = static_cast<char>(cp);
+      } else if (cp < 0x800) {
+        buf[0] = static_cast<char>(0xC0 | (cp >> 6));
+        buf[1] = static_cast<char>(0x80 | (cp & 0x3F));
+      } else if (cp < 0x10000) {
+        buf[0] = static_cast<char>(0xE0 | (cp >> 12));
+        buf[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        buf[2] = static_cast<char>(0x80 | (cp & 0x3F));
+      } else {
+        buf[0] = static_cast<char>(0xF0 | (cp >> 18));
+        buf[1] = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        buf[2] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        buf[3] = static_cast<char>(0x80 | (cp & 0x3F));
+      }
+      const int cpLen = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+      std::string cpStr(buf, cpLen);
+      const int fontId = isIpaCodepoint(cp) ? IPA_FONT_ID : readerFontId;
+      const int cpWidth = renderer.getTextWidth(fontId, cpStr.c_str(), style);
+      if (!pending.empty() && currentX + pendingWidth + cpWidth > maxWidth) {
+        appendMixed(pending, style);
+        flushLine();
+        startLine(indentLevel, false);
+        pending.clear();
+        pendingWidth = 0;
+      }
+      pending += cpStr;
+      pendingWidth += cpWidth;
+    }
+    if (!pending.empty()) appendMixed(pending, style);
   };
 
   startLine(0, false);
@@ -159,10 +261,10 @@ void DictionaryDefinitionActivity::wrapHtml() {
       startLine(span.indentLevel, span.isListItem);
     }
 
-    int spanWidth = renderer.getTextWidth(readerFontId, span.text, style);
+    const int spanWidth = getMixedWidth(std::string(span.text), style);
     if (currentX + spanWidth <= maxWidth) {
       // Fast path: entire span fits on the current line.
-      appendToLine(std::string(span.text), style, spanWidth);
+      appendMixed(std::string(span.text), style);
     } else {
       // Word-wrap within the span.
       const char* p = span.text;
@@ -180,16 +282,20 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
         bool lineIsEmpty = currentLine.segments.empty();
         std::string candidate = (!lineIsEmpty && hadSpace) ? " " + tok : tok;
-        int candidateWidth = renderer.getTextWidth(readerFontId, candidate.c_str(), style);
+        int candidateWidth = getMixedWidth(candidate, style);
 
         if (currentX + candidateWidth > maxWidth && !lineIsEmpty) {
           flushLine();
           startLine(span.indentLevel, false);
           candidate = tok;
-          candidateWidth = renderer.getTextWidth(readerFontId, tok.c_str(), style);
+          candidateWidth = getMixedWidth(tok, style);
         }
 
-        appendToLine(candidate, style, candidateWidth);
+        if (currentX + candidateWidth > maxWidth) {
+          breakToken(candidate, style, span.indentLevel);
+        } else {
+          appendMixed(candidate, style);
+        }
       }
     }
   }
@@ -209,9 +315,19 @@ void DictionaryDefinitionActivity::wrapPlain() {
   std::string currentWord;
   std::string currentLineText;
 
+  auto getMixedWidthPlain = [&](const std::string& text) -> int {
+    const auto runs = splitIpaRuns(text);
+    return std::accumulate(runs.begin(), runs.end(), 0, [&](int sum, const IpaTextSpan& run) {
+      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : readerFontId, run.text.c_str());
+    });
+  };
+
   auto flushLine = [&]() {
+    if (currentLineText.empty()) return;
     LayoutLine line;
-    line.segments.push_back({currentLineText, EpdFontFamily::REGULAR});
+    for (const auto& run : splitIpaRuns(currentLineText)) {
+      line.segments.push_back({run.text, EpdFontFamily::REGULAR, run.isIpa});
+    }
     layoutLines.push_back(std::move(line));
     currentLineText.clear();
   };
@@ -225,7 +341,7 @@ void DictionaryDefinitionActivity::wrapPlain() {
           currentLineText = currentWord;
         } else {
           std::string test = currentLineText + " " + currentWord;
-          if (renderer.getTextWidth(readerFontId, test.c_str()) <= maxWidth) {
+          if (getMixedWidthPlain(test) <= maxWidth) {
             currentLineText = test;
           } else {
             flushLine();
@@ -241,7 +357,7 @@ void DictionaryDefinitionActivity::wrapPlain() {
           currentLineText = currentWord;
         } else {
           std::string test = currentLineText + " " + currentWord;
-          if (renderer.getTextWidth(readerFontId, test.c_str()) <= maxWidth) {
+          if (getMixedWidthPlain(test) <= maxWidth) {
             currentLineText = test;
           } else {
             flushLine();
@@ -291,7 +407,8 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
         while (*p && *p != ' ') ++p;
         std::string tok(tokStart, p - tokStart);
 
-        const int tokWidth = renderer.getTextWidth(readerFontId, tok.c_str(), seg.style);
+        const int segFontId = seg.isIpa ? IPA_FONT_ID : readerFontId;
+        const int tokWidth = renderer.getTextWidth(segFontId, tok.c_str(), seg.style);
         std::string cleaned = Dictionary::cleanWord(tok);
         if (!cleaned.empty()) {
           words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokWidth), 0, seg.style});
@@ -543,8 +660,9 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     }
 
     for (const auto& seg : line.segments) {
-      renderer.drawText(readerFontId, x, y, seg.text.c_str(), true, seg.style);
-      x += renderer.getTextWidth(readerFontId, seg.text.c_str(), seg.style);
+      const int segFontId = seg.isIpa ? IPA_FONT_ID : readerFontId;
+      renderer.drawText(segFontId, x, y, seg.text.c_str(), true, seg.style);
+      x += renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
     }
   }
 

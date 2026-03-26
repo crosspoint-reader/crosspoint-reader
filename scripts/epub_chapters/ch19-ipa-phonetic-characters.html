@@ -1,0 +1,43 @@
+<h1>19. IPA Phonetic Characters</h1>
+
+<p>This chapter tests rendering of IPA phonetic characters in dictionary definitions.
+Set the active dictionary to <em>IPA Phonetic Characters</em> before starting.</p>
+
+<p>IPA characters must render as legible Doulos SIL glyphs. A filled diamond
+indicates a rendering failure.</p>
+
+<h2>Test A: IPA Extensions block (U+0250 to U+02AF)</h2>
+<p>Look up <strong>ipa-extensions</strong>.</p>
+<p>Expected: definition shows a heading followed by a dense block of 96 IPA glyphs.
+All must be legible Doulos SIL characters, not filled diamonds.</p>
+
+<h2>Test B: Modifier Letters block (U+02B0 to U+02FF)</h2>
+<p>Look up <strong>ipa-modifier-letters</strong>.</p>
+<p>Expected: definition shows a heading followed by a dense block of 80 glyphs.
+All must be legible.</p>
+
+<h2>Test C: Phonetic Extensions block (U+1D00 to U+1D7F)</h2>
+<p>Look up <strong>phonetic-extensions</strong>.</p>
+<p>Expected: definition shows a heading followed by 128 glyphs. All must be legible.</p>
+
+<h2>Test D: Phonetic Extensions Supplement (U+1D80 to U+1DBF)</h2>
+<p>Look up <strong>phonetic-extensions-supplement</strong>.</p>
+<p>Expected: definition shows a heading followed by 64 glyphs. All must be legible.</p>
+
+<h2>Test E: Mixed IPA and regular text (inline font switching)</h2>
+<p>Look up <strong>pronunciation</strong>.</p>
+<p>Expected: the definition shows a pronunciation transcription in IPA symbols
+inline within regular English text. The IPA characters must be legible and match
+the surrounding text size visually. No filled diamonds.</p>
+
+<h2>Test F: Mixed IPA mid-sentence</h2>
+<p>Look up <strong>schwa</strong>.</p>
+<p>Expected: definition mixes regular English text with inline IPA symbols.
+IPA glyphs must appear correctly inline. The example transcriptions in brackets
+must be fully legible.</p>
+
+<h2>Test G: Word-wrap with long IPA string</h2>
+<p>Look up <strong>ipa-wrap-test</strong>.</p>
+<p>Expected: the long IPA string in the definition wraps correctly at the screen
+margin. No truncation or corruption of characters at the wrap point. All glyphs
+must remain legible after wrapping.</p>

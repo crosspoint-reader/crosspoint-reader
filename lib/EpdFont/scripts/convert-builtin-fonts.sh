@@ -54,6 +54,29 @@ done
 
 python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h
 
+# IPA font — Doulos SIL Regular, 16pt, IPA codepoints only
+IPA_SOURCE="../builtinFonts/source/DoulosSIL/DoulosSIL-Regular.ttf"
+IPA_STRIPPED="/tmp/doulos_sil_ipa_stripped.ttf"
+IPA_UNICODES="U+0250-02AF,U+02B0-02FF,U+1D00-1D7F,U+1D80-1DBF"
+
+pyftsubset "$IPA_SOURCE" \
+  --unicodes="$IPA_UNICODES" \
+  --output-file="$IPA_STRIPPED" \
+  --no-layout-closure \
+  --drop-tables+=GSUB,GPOS,GDEF,Silt
+
+python fontconvert.py ipa_16_regular 16 "$IPA_STRIPPED" \
+  --2bit --compress \
+  --no-default-intervals \
+  --additional-intervals 0x0250,0x02AF \
+  --additional-intervals 0x02B0,0x02FF \
+  --additional-intervals 0x1D00,0x1D7F \
+  --additional-intervals 0x1D80,0x1DBF \
+  > ../builtinFonts/ipa_16_regular.h
+
+echo "Generated ipa_16_regular.h"
+rm -f "$IPA_STRIPPED"
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/

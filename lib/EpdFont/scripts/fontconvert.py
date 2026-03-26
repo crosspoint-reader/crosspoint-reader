@@ -18,6 +18,7 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--no-default-intervals", dest="no_default_intervals", action="store_true", help="Skip the built-in codepoint interval list; export only the intervals supplied via --additional-intervals.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -179,7 +180,7 @@ def load_glyph(code_point):
         face_index += 1
     return None
 
-unmerged_intervals = sorted(intervals + add_ints)
+unmerged_intervals = sorted(([] if args.no_default_intervals else intervals) + add_ints)
 intervals = []
 unvalidated_intervals = []
 for i_start, i_end in unmerged_intervals:
@@ -310,7 +311,10 @@ for i_start, i_end in intervals:
         all_glyphs.append((glyph, packed))
 
 # pipe seems to be a good heuristic for the "real" descender
+# Fall back to the first available interval codepoint when | is not in the font (e.g. IPA-only subset)
 face = load_glyph(ord('|'))
+if face is None and intervals:
+    face = load_glyph(intervals[0][0])
 
 glyph_data = []
 glyph_props = []

@@ -50,6 +50,7 @@ class DictionaryDefinitionActivity final : public Activity {
   struct LayoutSegment {
     std::string text;
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    bool isIpa = false;  // true → render with IPA_FONT_ID
   };
 
   // One wrapped display line, containing one or more styled segments.
