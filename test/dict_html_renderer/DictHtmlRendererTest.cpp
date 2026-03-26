@@ -381,6 +381,31 @@ static const std::vector<ExpectedSpan> kWikiAnnot = {
     S("----------", true),
 };
 
+// HtmlEntities
+// Full entry:
+//   <p>HTML named entities resolved to UTF-8. ...</p>
+//   <p>----------</p>
+//   <p>Brackets: &lsqb;enclosed&rsqb;</p>
+//   <p>Non-breaking space: left&nbsp;right</p>
+//   <p>En dash: 1939&ndash;1945</p>
+//   <p>Zero-width: be&lrm;fore</p>           (lrm dropped → "before")
+//   <p>Unknown: be&unknownentity;fore</p>    (unknown dropped → "before")
+//   <p>----------</p>
+static const std::vector<ExpectedSpan> kHtmlEntities = {
+    S("HTML named entities resolved to UTF-8. Expected: brackets, space, dash, zero-width marks dropped, unknown "
+      "entity dropped.",
+      true),
+    S("----------", true),
+    S("Brackets: [enclosed]", true),
+    S("Non-breaking space: left right", true),
+    S("En dash: 1939\xE2\x80\x93"
+      "1945",
+      true),
+    S("Zero-width: before", true),
+    S("Unknown: before", true),
+    S("----------", true),
+};
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -421,6 +446,7 @@ int main(int argc, char** argv) {
   const TestCase tests[] = {
       {"BlazeSilent", kAbbrExpand, false},  {"ClearSvg", kBlockStrip, false},  {"DarkMath", kBlockStruct, false},
       {"EmptyGallery", kFormatTags, false}, {"FrostNowiki", kStripKeep, true}, {"GlowPoem", kWikiAnnot, false},
+      {"HazeEntity", kHtmlEntities, false},
   };
 
   for (const auto& test : tests) {

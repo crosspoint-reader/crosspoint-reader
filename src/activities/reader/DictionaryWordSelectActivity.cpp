@@ -70,6 +70,14 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       const std::string& wordText = *wordIt;
       const EpdFontFamily::Style wordStyle = (styleIt != styleList.end()) ? *styleIt : EpdFontFamily::REGULAR;
 
+      // Skip tokens with no alphanumeric characters (bullets, punctuation, etc.)
+      if (!std::any_of(wordText.begin(), wordText.end(), [](unsigned char c) { return std::isalnum(c); })) {
+        ++wordIt;
+        ++xIt;
+        if (styleIt != styleList.end()) ++styleIt;
+        continue;
+      }
+
       // Split on en-dash (U+2013: E2 80 93) and em-dash (U+2014: E2 80 94)
       std::vector<size_t> splitStarts;
       size_t partStart = 0;

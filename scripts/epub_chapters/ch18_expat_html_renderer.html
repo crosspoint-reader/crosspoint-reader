@@ -3,7 +3,7 @@
 <p>This chapter tests the expat-based HTML renderer used to display dictionary
 definitions. Set the active dictionary to <em>expat-full</em> before starting.</p>
 
-<p>There are six tests, one per lookup word. Each test describes what you should
+<p>There are seven tests, one per lookup word. Each test describes what you should
 see on the definition screen. Do not use <em>expat-full</em> for any other chapter in
 this book.</p>
 
@@ -95,3 +95,18 @@ wikitext annotation tags of the form <code>XX:YY</code>. The renderer emits the
 suffix (the part after the colon) as inline text; the tag itself does not appear.</p>
 
 <p>Expected inline text in order: four, oikos, la, sharp, noun, Grek, ameba, female</p>
+
+<h2>Test 7: HazeEntity (HTML named entity resolution)</h2>
+
+<p>Look up <strong>HazeEntity</strong>. The definition contains five HTML named
+entities. The renderer resolves them to their UTF-8 equivalents inline before
+passing the text to the XML parser.</p>
+
+<p>Expected output (five lines after the description):</p>
+<ul>
+<li>Brackets: [enclosed] (lsqb / rsqb resolved to [ ])</li>
+<li>Non-breaking space: left right (nbsp resolved to space)</li>
+<li>En dash: 1939&#x2013;1945 (ndash resolved to UTF-8 en dash)</li>
+<li>Zero-width: before (lrm silently dropped)</li>
+<li>Unknown: before (unknown entity silently dropped)</li>
+</ul>

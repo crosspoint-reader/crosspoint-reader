@@ -417,6 +417,44 @@ void XMLCALL DictHtmlRenderer::onText(void* ud, const XML_Char* s, int len) {
 }
 
 // ---------------------------------------------------------------------------
+// HTML entity resolver — feeds definition to expat incrementally
+// ---------------------------------------------------------------------------
+
+// Returns the UTF-8 replacement for a known HTML named entity (matched by
+// in-place strncmp — no copy, no stack buffer). Returns nullptr for unknowns.
+// Empty string ("") means the entity should be silently dropped (zero-width chars).
+static const char* lookupHtmlEntity(const char* name, int nameLen) {
+  struct E {
+    const char* n;
+    int nLen;
+    const char* utf8;
+  };
+  static constexpr E kTable[] = {
+      {"lsqb", 4, "["},
+      {"rsqb", 4, "]"},
+      {"nbsp", 4, " "},
+      {"ndash", 5, "\xE2\x80\x93"},   // –
+      {"mdash", 5, "\xE2\x80\x94"},   // —
+      {"hellip", 6, "\xE2\x80\xA6"},  // …
+      {"bull", 4, "\xE2\x80\xA2"},    // •
+      {"dagger", 6, "\xE2\x80\xA0"},  // †
+      {"sect", 4, "\xC2\xA7"},        // §
+      {"para", 4, "\xC2\xB6"},        // ¶
+      {"prime", 5, "\xE2\x80\xB2"},   // ′
+      {"Prime", 5, "\xE2\x80\xB3"},   // ″
+      {"times", 5, "\xC3\x97"},       // ×
+      {"minus", 5, "\xE2\x88\x92"},   // −
+      {"middot", 6, "\xC2\xB7"},      // ·
+      {"lrm", 3, ""},                 // LEFT-TO-RIGHT MARK — zero-width, drop
+      {"rlm", 3, ""},                 // RIGHT-TO-LEFT MARK — zero-width, drop
+  };
+  for (const auto& e : kTable) {
+    if (e.nLen == nameLen && strncmp(name, e.n, nameLen) == 0) return e.utf8;
+  }
+  return nullptr;
+}
+
+// ---------------------------------------------------------------------------
 // Public render()
 // ---------------------------------------------------------------------------
 
@@ -440,10 +478,72 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
     parseError = true;
     return spans;
   }
-  if (XML_Parse(parser, html, len, 0) != XML_STATUS_OK) {
-    parseError = true;
-    return spans;
+
+  // Walk the definition, feeding normal text runs directly to expat and
+  // resolving HTML named entities inline. No heap allocation; entity names
+  // compared in-place with strncmp — no copy, no extra stack buffer.
+  {
+    static const char* const kXmlBuiltins[] = {"amp", "lt", "gt", "quot", "apos"};
+    int i = 0;
+    while (i < len && !parseError) {
+      // Feed run of non-entity characters directly (zero copy)
+      int runStart = i;
+      while (i < len && html[i] != '&') i++;
+      if (i > runStart) {
+        if (XML_Parse(parser, html + runStart, i - runStart, 0) != XML_STATUS_OK) {
+          parseError = true;
+          return spans;
+        }
+      }
+      if (i >= len) break;
+
+      // html[i] == '&' — scan for matching ';'
+      int j = i + 1;
+      while (j < len && html[j] != ';' && html[j] != '&' && html[j] != '<' && (j - i) < 33) j++;
+
+      if (j < len && html[j] == ';') {
+        int nameLen = j - i - 1;
+        const char* nameStart = html + i + 1;
+
+        // Numeric references (&#NN; / &#xNN;) and XML built-ins pass through unchanged
+        bool passThrough = (nameLen > 0 && nameStart[0] == '#');
+        if (!passThrough) {
+          for (const auto* b : kXmlBuiltins) {
+            if (static_cast<int>(strlen(b)) == nameLen && strncmp(nameStart, b, nameLen) == 0) {
+              passThrough = true;
+              break;
+            }
+          }
+        }
+
+        if (passThrough) {
+          // Feed entire &name; sequence to expat
+          if (XML_Parse(parser, html + i, j - i + 1, 0) != XML_STATUS_OK) {
+            parseError = true;
+            return spans;
+          }
+        } else {
+          const char* repl = lookupHtmlEntity(nameStart, nameLen);
+          if (repl && repl[0] != '\0') {
+            if (XML_Parse(parser, repl, static_cast<int>(strlen(repl)), 0) != XML_STATUS_OK) {
+              parseError = true;
+              return spans;
+            }
+          }
+          // else: zero-width (lrm/rlm) or unknown — silently drop
+        }
+        i = j + 1;
+      } else {
+        // Malformed entity — pass '&' through and continue
+        if (XML_Parse(parser, html + i, 1, 0) != XML_STATUS_OK) {
+          parseError = true;
+          return spans;
+        }
+        i++;
+      }
+    }
   }
+
   if (XML_Parse(parser, kClose, static_cast<int>(sizeof(kClose) - 1), 1) != XML_STATUS_OK) {
     parseError = true;
     return spans;

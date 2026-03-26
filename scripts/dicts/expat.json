@@ -33,6 +33,10 @@
     {
       "headword": "GlowPoem",
       "definition": "<p>Eight wikitext annotation tags. Each is a self-closing tag of the form XX:YY where the text to render is the suffix YY (the part after the colon).</p><p>A ninth case uses a tag with body text. Body must be suppressed; only the suffix renders. Expected: value</p><p>Expected inline text in order: four, oikos, la, sharp, noun, Grek, ameba, female</p><p>----------</p><p>count: <t:four/> origin: <tr:oikos/> language: <lang:la/> meaning: <gloss:sharp/> part of speech: <pos:noun/> script: <sc:Grek/> alternate: <alt:ameba/> identifier: <id:female/></p><p>body suppressed: <t:value>ignored body text</t:value></p><p>----------</p>"
+    },
+    {
+      "headword": "HazeEntity",
+      "definition": "<p>HTML named entities resolved to UTF-8. Expected: brackets, space, dash, zero-width marks dropped, unknown entity dropped.</p><p>----------</p><p>Brackets: &lsqb;enclosed&rsqb;</p><p>Non-breaking space: left&nbsp;right</p><p>En dash: 1939&ndash;1945</p><p>Zero-width: be&lrm;fore</p><p>Unknown: be&unknownentity;fore</p><p>----------</p>"
     }
   ]
 }

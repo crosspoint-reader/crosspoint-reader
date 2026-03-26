@@ -10,7 +10,9 @@ void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r) {
   words = std::move(w);
   rows = std::move(r);
   currentRow = static_cast<int>(rows.size()) / 2;
-  currentWordInRow = 0;
+  currentWordInRow = (!rows.empty() && !rows[currentRow].wordIndices.empty())
+                         ? static_cast<int>(rows[currentRow].wordIndices.size()) / 2
+                         : 0;
 }
 
 void WordSelectNavigator::reset() {
