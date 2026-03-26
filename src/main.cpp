@@ -185,7 +185,7 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-  HalClock::saveBeforeSleep();
+  HalClock::saveBeforeSleep(SETTINGS.keepClockAlive);
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();

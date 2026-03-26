@@ -15,7 +15,7 @@ class SyncTimeActivity final : public Activity {
  private:
   enum State { CONNECTING, SYNCING, SUCCESS, FAILED };
   State state = CONNECTING;
-
   void onWifiSelectionComplete(bool success);
+  void onWifiSelectionCancelled();
   void performSync();
 };

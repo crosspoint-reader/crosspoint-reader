@@ -34,7 +34,13 @@ void SyncTimeActivity::onEnter() {
   }
 
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
-                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
+                         [this](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             onWifiSelectionCancelled();
+                             return;
+                           }
+                           onWifiSelectionComplete(true);
+                         });
 }
 
 void SyncTimeActivity::onExit() {
@@ -57,6 +63,8 @@ void SyncTimeActivity::onWifiSelectionComplete(bool success) {
 
   performSync();
 }
+
+void SyncTimeActivity::onWifiSelectionCancelled() { finish(); }
 
 void SyncTimeActivity::performSync() {
   bool ok = HalClock::syncNtp();

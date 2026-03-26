@@ -10,8 +10,10 @@
 // ---- RTC-memory state (survives deep sleep, not cold boot) ----------------
 
 static constexpr uint32_t CLOCK_RTC_MAGIC = 0xC10C4B1D;
+static constexpr uint32_t CLOCK_RTC_FLAG_LP_VALID = 0x00000001u;
 
 RTC_NOINIT_ATTR static uint32_t rtcClockMagic;
+RTC_NOINIT_ATTR static uint32_t rtcClockFlags;
 RTC_NOINIT_ATTR static time_t rtcEpoch;       // last-known unix epoch
 RTC_NOINIT_ATTR static uint64_t rtcLpTimeUs;  // esp_clk_rtc_time() at capture
 
@@ -51,10 +53,11 @@ static void setSystemClock(time_t epoch) {
 static bool rtcValid() { return rtcClockMagic == CLOCK_RTC_MAGIC && rtcEpoch > 0; }
 
 /// Capture current time + LP timer into RTC memory, and epoch into NVS.
-static void capture() {
+static void capture(bool lpValid) {
   rtcEpoch = time(nullptr);
   rtcLpTimeUs = esp_clk_rtc_time();
   rtcClockMagic = CLOCK_RTC_MAGIC;
+  rtcClockFlags = lpValid ? CLOCK_RTC_FLAG_LP_VALID : 0;
   nvsWrite(rtcEpoch);
 }
 
@@ -83,22 +86,23 @@ bool syncNtp() {
     return false;
   }
 
-  capture();
+  capture(false);
   clockApproximate = false;
   LOG_INF("CLK", "NTP synced, epoch %lld", (long long)rtcEpoch);
   return true;
 }
 
-void saveBeforeSleep() {
+void saveBeforeSleep(bool keepLpAlive) {
   if (!isSynced()) {
     return;
   }
-  capture();
+  capture(keepLpAlive);
   LOG_DBG("CLK", "Saved epoch %lld before sleep", (long long)rtcEpoch);
 }
 
 void restore() {
-  if (rtcValid()) {
+  const bool lpValid = (rtcClockFlags & CLOCK_RTC_FLAG_LP_VALID) != 0;
+  if (rtcValid() && lpValid) {
     // RTC memory survived — we woke from deep sleep.
     // Use the LP timer to compute how much time elapsed during sleep.
     uint64_t lpNow = esp_clk_rtc_time();
@@ -122,6 +126,7 @@ void restore() {
     rtcEpoch = epoch;
     rtcLpTimeUs = esp_clk_rtc_time();
     rtcClockMagic = CLOCK_RTC_MAGIC;
+    rtcClockFlags = 0;
     clockApproximate = true;
     LOG_INF("CLK", "Restored from NVS, epoch %lld (no elapsed correction)", (long long)epoch);
   }

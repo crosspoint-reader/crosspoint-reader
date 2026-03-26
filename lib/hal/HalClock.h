@@ -31,8 +31,9 @@ namespace HalClock {
 bool syncNtp();
 
 /// Call just before deep sleep.  Snapshots the current system time to RTC
-/// memory and NVS so it can be restored on wake / cold boot.
-void saveBeforeSleep();
+/// memory and NVS so it can be restored on wake / cold boot.  Pass true when
+/// the LP timer is kept alive during sleep.
+void saveBeforeSleep(bool keepLpAlive);
 
 /// Call on boot to seed the system clock from the best available stored
 /// value.  When RTC memory is valid (deep-sleep wake) and the LP timer was
