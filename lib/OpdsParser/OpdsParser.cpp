@@ -1,7 +1,5 @@
 #include "OpdsParser.h"
-
 #include <Logging.h>
-
 #include <cstring>
 
 OpdsParser::OpdsParser() {
@@ -25,9 +23,7 @@ OpdsParser::~OpdsParser() {
 size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 
 size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
-  if (errorOccured) {
-    return length;
-  }
+  if (errorOccured) return length;
 
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
@@ -41,9 +37,7 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
     void* const buf = XML_GetBuffer(parser, chunkSize);
     if (!buf) {
       errorOccured = true;
-      LOG_DBG("OPDS", "Couldn't allocate memory for buffer");
       XML_ParserFree(parser);
-      parser = nullptr;
       return length;
     }
 
@@ -52,13 +46,9 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), 0) == XML_STATUS_ERROR) {
       errorOccured = true;
-      LOG_DBG("OPDS", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
-              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_ParserFree(parser);
-      parser = nullptr;
       return length;
     }
-
     currentPos += toRead;
     remaining -= toRead;
   }
@@ -80,28 +70,20 @@ void OpdsParser::clear() {
   searchTemplate.clear();
   currentEntry = OpdsEntry{};
   currentText.clear();
-  inEntry = false;
-  inTitle = false;
-  inAuthor = false;
-  inAuthorName = false;
-  inId = false;
+  inEntry = inTitle = inAuthor = inAuthorName = inId = false;
 }
 
 std::vector<OpdsEntry> OpdsParser::getBooks() const {
   std::vector<OpdsEntry> books;
   for (const auto& entry : entries) {
-    if (entry.type == OpdsEntryType::BOOK) {
-      books.push_back(entry);
-    }
+    if (entry.type == OpdsEntryType::BOOK) books.push_back(entry);
   }
   return books;
 }
 
 const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
   for (int i = 0; atts[i]; i += 2) {
-    if (strcmp(atts[i], name) == 0) {
-      return atts[i + 1];
-    }
+    if (strcmp(atts[i], name) == 0) return atts[i + 1];
   }
   return nullptr;
 }
@@ -110,26 +92,20 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   auto* self = static_cast<OpdsParser*>(userData);
 
   if (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr) {
-    const char* rel = findAttribute(atts, "rel");
-    const char* type = findAttribute(atts, "type");
     const char* href = findAttribute(atts, "href");
-
     if (href) {
+      const char* rel = findAttribute(atts, "rel");
+      const char* type = findAttribute(atts, "type");
+
       if (rel && strcmp(rel, "search") == 0) {
         std::string sHref(href);
-        std::string sType = type ? type : "";
-
-        // Only accept direct templates containing {searchTerms}
         if (sHref.find("{searchTerms}") != std::string::npos) {
           self->searchTemplate = sHref;
-        } else if (sType == "application/opensearchdescription+xml") {
-          LOG_DBG("OPDS", "OpenSearch description found: %s. Skipping direct template assignment.", href);
         }
       }
 
       if (self->inEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-            strcmp(type, "application/epub+zip") == 0) {
+        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr && strcmp(type, "application/epub+zip") == 0) {
           self->currentEntry.type = OpdsEntryType::BOOK;
           self->currentEntry.href = href;
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
@@ -153,24 +129,14 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
     self->inTitle = true;
     self->currentText.clear();
-    return;
-  }
-
-  if (strcmp(name, "author") == 0 || strstr(name, ":author") != nullptr) {
+  } else if (strcmp(name, "author") == 0 || strstr(name, ":author") != nullptr) {
     self->inAuthor = true;
-    return;
-  }
-
-  if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
+  } else if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
     self->inAuthorName = true;
     self->currentText.clear();
-    return;
-  }
-
-  if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
+  } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
     self->inId = true;
     self->currentText.clear();
-    return;
   }
 }
 
@@ -182,39 +148,19 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
       self->entries.push_back(self->currentEntry);
     }
     self->inEntry = false;
-    self->currentEntry = OpdsEntry{};
-    return;
-  }
-
-  if (!self->inEntry) return;
-
-  if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
-    if (self->inTitle) {
-      self->currentEntry.title = self->currentText;
-    }
-    self->inTitle = false;
-    return;
-  }
-
-  if (strcmp(name, "author") == 0 || strstr(name, ":author") != nullptr) {
-    self->inAuthor = false;
-    return;
-  }
-
-  if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
-    if (self->inAuthorName) {
+  } else if (self->inEntry) {
+    if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
+      if (self->inTitle) self->currentEntry.title = self->currentText;
+      self->inTitle = false;
+    } else if (strcmp(name, "author") == 0 || strstr(name, ":author") != nullptr) {
+      self->inAuthor = false;
+    } else if (self->inAuthorName && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
       self->currentEntry.author = self->currentText;
+      self->inAuthorName = false;
+    } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
+      if (self->inId) self->currentEntry.id = self->currentText;
+      self->inId = false;
     }
-    self->inAuthorName = false;
-    return;
-  }
-
-  if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
-    if (self->inId) {
-      self->currentEntry.id = self->currentText;
-    }
-    self->inId = false;
-    return;
   }
 }
 
