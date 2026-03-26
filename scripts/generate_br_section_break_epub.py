@@ -98,7 +98,7 @@ ch3 = xhtml("Ch3: Multiple br", f"""
 # ---------------------------------------------------------------------------
 # Chapter 4 — inline <br> inside a paragraph (line break, NOT a gap)
 # ---------------------------------------------------------------------------
-ch4 = xhtml("Ch4: Inline br", f"""
+ch4 = xhtml("Ch4: Inline br", """
 <h1>Ch 4: Inline &lt;br&gt; Inside a Paragraph</h1>
 <p>PASS: The two lines below should be adjacent with NO extra gap between them.
 The &lt;br&gt; is inside the paragraph and must only break the line.</p>
