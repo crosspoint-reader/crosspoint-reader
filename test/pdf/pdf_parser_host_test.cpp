@@ -250,7 +250,6 @@ bool runOnePdf(const char* path) {
   } else if (exp && exp->minTextCharsPage1 > 0) {
     REQF(false);
   }
-
   if (dumpText && pageCount > 2) {
     PdfPage page2;
     const uint32_t pageObjId = pageTree.getPageObjectId(2);

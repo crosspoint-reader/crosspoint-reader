@@ -12,7 +12,7 @@ class PdfCache {
   PdfCache() = default;
   explicit PdfCache(const char* pdfFilePath) { configure(pdfFilePath); }
 
-  void configure(const char* pdfFilePath);
+  void configure(const char* pdfFilePath, size_t fileSize = 0);
 
   bool loadMeta(uint32_t& pageCount, PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline);
   bool saveMeta(uint32_t pageCount, const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline);

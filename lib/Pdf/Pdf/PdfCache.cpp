@@ -55,7 +55,7 @@ bool writeFixedString(FsFile& f, const PdfFixedString<N>& s) {
 
 }  // namespace
 
-void PdfCache::configure(const char* pdfFilePath) {
+void PdfCache::configure(const char* pdfFilePath, size_t fileSize) {
   cacheDir.clear();
   if (!pdfFilePath) {
     return;
@@ -65,6 +65,13 @@ void PdfCache::configure(const char* pdfFilePath) {
   const int n = snprintf(buf, sizeof(buf), "/.crosspoint/pdf_%zu", hash);
   if (n > 0 && n < static_cast<int>(sizeof(buf))) {
     cacheDir.assign(buf, static_cast<size_t>(n));
+  }
+  if (fileSize != 0 && !cacheDir.empty()) {
+    char sizeBuf[32];
+    const int sn = snprintf(sizeBuf, sizeof(sizeBuf), "_%zu", fileSize);
+    if (sn > 0 && sn < static_cast<int>(sizeof(sizeBuf)) && cacheDir.size() + static_cast<size_t>(sn) < PDF_MAX_PATH) {
+      cacheDir.append(sizeBuf, static_cast<size_t>(sn));
+    }
   }
 }
 
