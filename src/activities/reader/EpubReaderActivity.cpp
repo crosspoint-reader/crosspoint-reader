@@ -734,6 +734,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               heapAfterPrewarm, prewarmDelta);
     }
   } else {
+    scope.endScanAndPrewarm();
     fcm->logStats("prewarm_off");
     if (fontPrewarmSuppressPages > 0) {
       LOG_DBG("ERS", "Prewarm skipped due to cooldown (%u pages left)", fontPrewarmSuppressPages);
