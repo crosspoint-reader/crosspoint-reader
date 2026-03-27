@@ -1,0 +1,3 @@
+Pdf.cpp still lacks the new cache/signature implementation, so the build is inconsistent and the cache shortcut cannot run	proven
+PdfCache meta serialization changed but readers/writers are still out of sync on the on-disk format	not relevant
+PageTree can rebuild page IDs from cache, but the cached page map is not yet wired into Pdf::open()	proven

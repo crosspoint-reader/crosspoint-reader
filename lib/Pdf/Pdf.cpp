@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 #include "Pdf/ContentStream.h"
@@ -10,6 +11,8 @@
 #include "Pdf/PdfLog.h"
 
 namespace {
+
+constexpr size_t kSourceSignatureChunkSize = 64;
 
 uint32_t contentsObjectId(std::string_view pageBody) {
   PdfFixedString<PDF_DICT_VALUE_MAX> cv;
@@ -38,6 +41,31 @@ struct CatalogInfo {
   uint32_t outlinesId = 0;
 };
 
+uint32_t hashBytes(const uint8_t* data, size_t len) {
+  uint32_t hash = 2166136261u;
+  for (size_t i = 0; i < len; ++i) {
+    hash ^= static_cast<uint32_t>(data[i]);
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+bool readSignatureChunk(FsFile& file, size_t offset, size_t maxLen, uint32_t& outHash) {
+  uint8_t buf[kSourceSignatureChunkSize]{};
+  if (!file.seek(offset)) {
+    return false;
+  }
+
+  const size_t toRead = std::min(maxLen, sizeof(buf));
+  const int read = file.read(buf, toRead);
+  if (read < 0) {
+    return false;
+  }
+
+  outHash = hashBytes(buf, static_cast<size_t>(read));
+  return true;
+}
+
 bool loadCatalogInfo(FsFile& file, const XrefTable& xref, uint32_t rootId, CatalogInfo& info) {
   static PdfFixedString<PDF_OBJECT_BODY_MAX> catalogBody;
   info = {};
@@ -59,12 +87,90 @@ Pdf& Pdf::operator=(Pdf&& o) noexcept = default;
 void Pdf::close() {
   if (valid_) {
     file_.close();
-    valid_ = false;
   }
+  valid_ = false;
+  xrefReady_ = false;
+  outlinesFromCache_ = false;
+  pageMapFromCache_ = false;
   pages_ = 0;
   outlineEntries_.clear();
+  cachedPageObjectIds_.clear();
+  cachedSourceSignature_ = {};
+  sourceSignature_ = {};
   path_.clear();
   streamScratch_.clear();
+}
+
+bool Pdf::computeSourceSignature(SourceSignature& outSignature) {
+  outSignature = {};
+  const size_t fileSize = file_.fileSize();
+  if (fileSize == 0) {
+    return false;
+  }
+
+  outSignature.fileSize = fileSize;
+  const size_t headLen = std::min(fileSize, kSourceSignatureChunkSize);
+  if (!readSignatureChunk(file_, 0, headLen, outSignature.headHash)) {
+    return false;
+  }
+
+  const size_t tailOffset = (fileSize > kSourceSignatureChunkSize) ? (fileSize - kSourceSignatureChunkSize) : 0;
+  const size_t tailLen = std::min(fileSize - tailOffset, kSourceSignatureChunkSize);
+  if (!readSignatureChunk(file_, tailOffset, tailLen, outSignature.tailHash)) {
+    return false;
+  }
+
+  return true;
+}
+
+bool Pdf::parseFromSource(bool needsOutlines) {
+  CatalogInfo catalogInfo;
+  if (!xref_.parse(file_)) {
+    return false;
+  }
+  if (!loadCatalogInfo(file_, xref_, xref_.rootObjId(), catalogInfo)) {
+    return false;
+  }
+  if (!pageTree_.parse(file_, xref_, catalogInfo.pagesObjId)) {
+    return false;
+  }
+
+  pages_ = pageTree_.pageCount();
+  cachedPageObjectIds_.clear();
+  for (uint32_t i = 0; i < pages_; ++i) {
+    if (!cachedPageObjectIds_.push_back(pageTree_.getPageObjectId(i))) {
+      return false;
+    }
+  }
+
+  if (needsOutlines) {
+    outlineEntries_.clear();
+    if (catalogInfo.outlinesId != 0) {
+      PdfOutlineParser::parse(file_, xref_, pageTree_, catalogInfo.outlinesId, outlineEntries_);
+    }
+  }
+
+  cachedSourceSignature_ = sourceSignature_;
+  xrefReady_ = true;
+  pageMapFromCache_ = false;
+  outlinesFromCache_ = false;
+  cache_.saveMeta(pages_, outlineEntries_, &cachedPageObjectIds_, static_cast<uint32_t>(sourceSignature_.fileSize),
+                  sourceSignature_.headHash, sourceSignature_.tailHash);
+  return true;
+}
+
+bool Pdf::ensureXrefReady() {
+  if (xrefReady_) {
+    return true;
+  }
+  if (!valid_) {
+    return false;
+  }
+  if (!xref_.parse(file_)) {
+    return false;
+  }
+  xrefReady_ = true;
+  return true;
 }
 
 bool Pdf::open(const char* path) {
@@ -87,36 +193,35 @@ bool Pdf::open(const char* path) {
     return false;
   }
 
-  if (!xref_.parse(file_)) {
-    pdfLogErrPath("Failed to parse xref: ", path_.c_str());
-    file_.close();
-    return false;
-  }
-
-  const uint32_t rootId = xref_.rootObjId();
-  CatalogInfo catalogInfo;
-  if (!loadCatalogInfo(file_, xref_, rootId, catalogInfo)) {
-    pdfLogErr("Bad catalog");
-    file_.close();
-    return false;
-  }
-
-  if (!pageTree_.parse(file_, xref_, catalogInfo.pagesObjId)) {
-    pdfLogErr("Failed to parse page tree");
-    file_.close();
-    return false;
-  }
-
-  pages_ = pageTree_.pageCount();
   cache_.configure(path_.c_str(), file_.fileSize());
+  if (!computeSourceSignature(sourceSignature_)) {
+    pdfLogErrPath("Failed to fingerprint source: ", path_.c_str());
+    file_.close();
+    return false;
+  }
 
   uint32_t cachedPageCount = 0;
-  if (!cache_.loadMeta(cachedPageCount, outlineEntries_) || cachedPageCount != pages_) {
-    outlineEntries_.clear();
-    if (catalogInfo.outlinesId != 0) {
-      PdfOutlineParser::parse(file_, xref_, pageTree_, catalogInfo.outlinesId, outlineEntries_);
-    }
-    cache_.saveMeta(pages_, outlineEntries_);
+  uint32_t cachedFileSize = 0;
+  uint32_t cachedHead = 0;
+  uint32_t cachedTail = 0;
+  if (cache_.loadMeta(cachedPageCount, outlineEntries_, &cachedPageObjectIds_, &cachedFileSize, &cachedHead, &cachedTail) &&
+      cachedPageCount > 0 && cachedPageCount <= PDF_MAX_PAGES && cachedPageCount == cachedPageObjectIds_.size() &&
+      cachedFileSize == static_cast<uint32_t>(sourceSignature_.fileSize) && cachedHead == sourceSignature_.headHash &&
+      cachedTail == sourceSignature_.tailHash && cache_.allPagesCached(cachedPageCount) &&
+      pageTree_.setPageObjectIds(cachedPageObjectIds_)) {
+    pages_ = cachedPageCount;
+    cachedSourceSignature_ = sourceSignature_;
+    outlinesFromCache_ = true;
+    pageMapFromCache_ = true;
+    xrefReady_ = false;
+    valid_ = true;
+    return true;
+  }
+
+  if (!parseFromSource(true)) {
+    pdfLogErrPath("Failed to parse PDF source: ", path_.c_str());
+    file_.close();
+    return false;
   }
 
   valid_ = true;
@@ -136,6 +241,10 @@ bool Pdf::getPage(uint32_t pageNum, PdfPage& out) {
   }
   if (cache_.loadPage(pageNum, out)) {
     return true;
+  }
+
+  if (!ensureXrefReady()) {
+    return false;
   }
 
   const uint32_t pageObjId = pageTree_.getPageObjectId(pageNum);

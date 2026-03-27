@@ -15,6 +15,8 @@ class PageTree {
 
  public:
   bool parse(FsFile& file, const XrefTable& xref, uint32_t rootObjId);
+  bool setPageObjectIds(const PdfFixedVector<uint32_t, PDF_MAX_PAGES>& pageObjectIds);
+  const PdfFixedVector<uint32_t, PDF_MAX_PAGES>& objectIds() const { return pageObjectIds; }
   uint32_t pageCount() const;
   uint32_t getPageOffset(uint32_t pageIndex) const;
   uint32_t getPageObjectId(uint32_t pageIndex) const;

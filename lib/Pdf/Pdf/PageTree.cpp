@@ -159,6 +159,31 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
   return true;
 }
 
+bool PageTree::setPageObjectIds(const PdfFixedVector<uint32_t, PDF_MAX_PAGES>& cachedPageObjectIds) {
+  pageOffsets.clear();
+  pageObjectIds.clear();
+
+  for (uint32_t i = 0; i < PDF_MAX_OBJECTS; ++i) {
+    pageIndexByObjectId_[i] = kInvalidPageIndex;
+  }
+
+  for (size_t i = 0; i < cachedPageObjectIds.size(); ++i) {
+    if (!pageOffsets.push_back(0)) {
+      return false;
+    }
+    const uint32_t objId = cachedPageObjectIds[i];
+    if (!this->pageObjectIds.push_back(objId)) {
+      return false;
+    }
+    if (objId < PDF_MAX_OBJECTS) {
+      pageIndexByObjectId_[objId] = static_cast<uint16_t>(i);
+    }
+  }
+
+  pageIndexMapReady_ = true;
+  return true;
+}
+
 uint32_t PageTree::pageCount() const { return static_cast<uint32_t>(pageOffsets.size()); }
 
 uint32_t PageTree::getPageOffset(uint32_t pageIndex) const {
