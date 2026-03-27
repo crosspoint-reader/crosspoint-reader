@@ -7,8 +7,14 @@ It keeps the open firmware foundation and adds a practical PDF reading path for 
 
 ## What It Adds
 
+- PDF reading with text extraction, basic markup, page rendering, bookmarks, and table-of-contents navigation
+- Cached PDF loading to reduce repeated parsing
+- PDF reader stability improvements for large and complex documents
+- EPUB reading optimizations for faster, more reliable rendering and navigation
+
+## Other Features of CrossPoint
+
 - EPUB reading for the Xteink X4
-- PDF support with text extraction, basic markup, page rendering, and bookmarks
 - Saved reading position
 - File browser, Wi-Fi book upload, and OTA updates
 - Configurable font, layout, rotation, and display options
@@ -23,22 +29,11 @@ bash test/pdf/run_pdf_parser_tests.sh
 
 ## Installation
 
-### Web (latest firmware)
+1. Download the latest `firmware.bin` from the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
+2. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
+3. Open https://xteink.dve.al/ and flash the firmware file with the OTA flash controls
 
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
-2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
-
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
-
-### Web (specific firmware version)
-
-1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
-3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
-
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
+The release page provides a single firmware binary for the current build.
 
 ### Manual
 
