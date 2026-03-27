@@ -26,6 +26,7 @@ class XrefTable {
 
   InlineEntry inline_[PDF_MAX_INLINE_OBJECTS]{};
   uint8_t objStmContainers_[(PDF_MAX_OBJECTS + 7) / 8]{};
+  uint16_t inlineVictim_ = 0;
 
   bool parseXrefStream(FsFile& file, size_t fileSize, uint32_t xrefObjOffset);
   bool loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t targetObjId);

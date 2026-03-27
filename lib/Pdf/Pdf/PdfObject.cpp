@@ -244,6 +244,14 @@ bool PdfObject::getDictValue(const char* key, std::string_view dict, PdfFixedStr
       pos += keyLen;
       continue;
     }
+    const size_t afterKey = pos + keyLen;
+    if (afterKey < dict.size()) {
+      const unsigned char c = static_cast<unsigned char>(dict[afterKey]);
+      if (!std::isspace(c) && c != '/' && c != '<' && c != '[' && c != '(' && c != '>' && c != ']') {
+        pos += keyLen;
+        continue;
+      }
+    }
     size_t v = pos + keyLen;
     while (v < dict.size() && (dict[v] == ' ' || dict[v] == '\t' || dict[v] == '\r' || dict[v] == '\n')) {
       ++v;

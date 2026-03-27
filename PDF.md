@@ -12,7 +12,7 @@ The xref tells us where each object starts in the file, or that it lives inside 
 
 2. **XRef streams** — When `startxref` points at an object whose dict has `/Type /XRef`, the xref is read from a **FlateDecode** stream. Rows use `/W` field widths: type **1** is a normal file offset; type **2** means the object is stored in an **object stream** (`/Type /ObjStm`) identified by another object number.
 
-3. **Object streams** — For each referenced ObjStm object, the library decompresses the stream, parses the integer header (`/N`, `/First`), and splits embedded objects. Offsets in the header are **relative to `/First`** in the decoded stream. Parsed dicts and raw stream bytes are cached in memory maps (`inlineDict_` / `inlineStream_`).
+3. **Object streams** — For each referenced ObjStm object, the library decompresses the stream, parses the header integers (`/N`, `/First`), and splits embedded objects. Offsets in the header are **relative to `/First`** in the decoded stream. Parsed entries are cached in an inline object cache (`inline_`) with per-object dict bytes and optional stream bytes for content objects.
 
 4. **Reading objects** — `readDictForObject` resolves a dict from a file offset or from the object-stream cache. `readStreamForObject` returns dict + payload bytes for stream objects (file-backed or cached). Page tree walking and outlines use dict reads; page **content** uses stream reads.
 

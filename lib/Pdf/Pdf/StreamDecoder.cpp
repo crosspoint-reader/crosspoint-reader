@@ -133,7 +133,7 @@ size_t StreamDecoder::flateDecodeBytes(const uint8_t* compressed, size_t compres
   if (!compressed || compressedLen == 0 || !outBuf || maxOutBytes == 0) return 0;
 
   InflateReader ir;
-  if (!ir.init(false)) {
+  if (!ir.init(true)) {
     return 0;
   }
   const size_t zlibSkip = zlibWrapperSkipLen(compressed, compressedLen);
@@ -240,7 +240,7 @@ bool StreamDecoder::flateDecodeBytesChunks(const uint8_t* compressed, size_t com
   if (!compressed || compressedLen == 0 || !consumer) return false;
 
   InflateReader ir;
-  if (!ir.init(false)) {
+  if (!ir.init(true)) {
     return false;
   }
   const size_t zlibSkip = zlibWrapperSkipLen(compressed, compressedLen);

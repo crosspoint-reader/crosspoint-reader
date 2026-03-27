@@ -470,6 +470,9 @@ void testPreviewMatchesPdftotext() {
        "Engineer-to-Engineer Note\n\nEE-366\nTechnical notes on using Analog Devices DSPs, processors and development "
        "tools\nVisit our Web resources http://www.analog.com/ee-notes and http://www.analog.com/processors or\n"
        "e-mail processor.support@analog.com or processo"},
+      {"test/pdf/esp32-c6_datasheet_en.pdf",
+       "ESP32-C6 Series\nDatasheet Version 1.4\nUltra-low-power SoC with RISC-V single-core microprocessor\n2.4 GHz "
+       "Wi-Fi 6"},
   };
 
   for (const auto& c : cases) {

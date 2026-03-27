@@ -3,6 +3,32 @@
 #include "PdfObject.h"
 #include "PdfLog.h"
 
+#include <cstdlib>
+#include <cstring>
+
+bool debugPageTree() {
+  static int enabled = -1;
+  if (enabled < 0) {
+    enabled = (std::getenv("PDF_DEBUG_PAGETREE") != nullptr) ? 1 : 0;
+  }
+  return enabled == 1;
+}
+
+void logPageObject(uint32_t objId, const std::string_view body) {
+  if (body.empty()) return;
+  constexpr size_t maxLen = 180;
+  const size_t n = std::min(maxLen, body.size());
+  char preview[256];
+  std::memcpy(preview, body.data(), n);
+  preview[n] = '\0';
+  if (body.size() > maxLen) {
+    preview[n - 3] = '.';
+    preview[n - 2] = '.';
+    preview[n - 1] = '.';
+  }
+  LOG_ERR("PageTree", "obj=%u body=%s", objId, preview);
+}
+
 namespace {
 
 constexpr size_t kTraversalCap = 64;
@@ -72,11 +98,25 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
     stack.pop_back();
 
     PdfFixedString<PDF_OBJECT_BODY_MAX> body;
-    if (!xref.readDictForObject(file, objId, body)) continue;
+    if (!xref.readDictForObject(file, objId, body)) {
+      if (debugPageTree()) {
+        LOG_ERR("PageTree", "readDictForObject failed obj=%u", objId);
+      }
+      continue;
+    }
+    if (debugPageTree()) {
+      logPageObject(objId, body.view());
+    }
 
     if (typeIs(body.view(), "/Pages")) {
+      if (debugPageTree()) {
+        LOG_ERR("PageTree", "type=Pages obj=%u", objId);
+      }
       PdfFixedString<PDF_DICT_VALUE_MAX> kidsStr;
       if (!PdfObject::getDictValue("/Kids", body.view(), kidsStr)) {
+        if (debugPageTree()) {
+          LOG_ERR("PageTree", "missing /Kids obj=%u", objId);
+        }
         continue;
       }
       PdfFixedVector<uint32_t, kTraversalCap> kids;
@@ -88,6 +128,9 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
         }
       }
     } else if (typeIs(body.view(), "/Page")) {
+      if (debugPageTree()) {
+        LOG_ERR("PageTree", "type=Page obj=%u", objId);
+      }
       if (!pageOffsets.push_back(xref.getOffset(objId))) {
         pdfLogErr("PageTree: too many pages");
         return false;
@@ -95,6 +138,8 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
       if (!pageObjectIds.push_back(objId)) {
         return false;
       }
+    } else if (debugPageTree()) {
+      LOG_ERR("PageTree", "unrecognized type obj=%u", objId);
     }
   }
 

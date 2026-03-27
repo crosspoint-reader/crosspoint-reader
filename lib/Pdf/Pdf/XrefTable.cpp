@@ -10,9 +10,9 @@
 #include <cstdio>
 #include <cctype>
 #include <cstring>
-#include <vector>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -177,6 +177,69 @@ bool splitObjStmObjectSlice(std::string_view slice, PdfFixedString<PDF_INLINE_DI
   return !dictOut.empty();
 }
 
+struct ObjStmDecodeAccum {
+  std::vector<uint8_t> bytes;
+};
+
+[[maybe_unused]] bool appendObjStmBytes(void* ctx, const uint8_t* data, size_t len) {
+  auto* out = static_cast<ObjStmDecodeAccum*>(ctx);
+  if (!out) return false;
+  out->bytes.insert(out->bytes.end(), data, data + len);
+  return true;
+}
+
+[[maybe_unused]] bool parseObjStmPairToken(const uint8_t* buf, size_t len, size_t limit, size_t& pos, uint32_t& out) {
+  while (pos < limit && pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\r' || buf[pos] == '\n')) {
+    ++pos;
+  }
+  if (pos >= limit || pos >= len) {
+    return false;
+  }
+  if (buf[pos] < '0' || buf[pos] > '9') {
+    return false;
+  }
+  uint32_t val = 0;
+  while (pos < limit && pos < len) {
+    const uint8_t c = buf[pos];
+    if (c < '0' || c > '9') {
+      break;
+    }
+    const uint32_t next = val * 10U + static_cast<uint32_t>(c - '0');
+    if (next < val) {
+      return false;
+    }
+    val = next;
+    ++pos;
+  }
+  out = val;
+  return true;
+}
+
+bool scanObjStmHeaderFromBytes(const uint8_t* bytes, size_t len, size_t first, int nObj, uint32_t targetObjId,
+                               uint32_t& targetRel, uint32_t& nextRel) {
+  if (!bytes || len <= first || nObj <= 0) {
+    return false;
+  }
+  targetRel = 0;
+  nextRel = UINT32_MAX;
+  bool targetFound = false;
+  size_t pos = 0;
+  for (int i = 0; i < nObj; ++i) {
+    uint32_t objId = 0;
+    uint32_t rel = 0;
+    if (!parseObjStmPairToken(bytes, len, first, pos, objId) || !parseObjStmPairToken(bytes, len, first, pos, rel)) {
+      return false;
+    }
+    if (objId == targetObjId) {
+      targetFound = true;
+      targetRel = rel;
+    } else if (targetFound && rel > targetRel && rel < nextRel) {
+      nextRel = rel;
+    }
+  }
+  return targetFound;
+}
+
 [[maybe_unused]] bool readObjStmUnsignedToken(FsFile& file, size_t limit, uint32_t& out) {
   out = 0;
   bool haveDigit = false;
@@ -242,38 +305,6 @@ struct StreamToFileCtx {
 [[maybe_unused]] bool writeChunkToFile(void* ctx, const uint8_t* data, size_t len) {
   auto* s = static_cast<StreamToFileCtx*>(ctx);
   return s && s->file && s->file->write(data, len) == len;
-}
-
-struct VecPushCtx {
-  std::vector<uint8_t>* bytes = nullptr;
-};
-
-[[maybe_unused]] bool appendToVector(void* ctx, const uint8_t* data, size_t len) {
-  auto* c = static_cast<VecPushCtx*>(ctx);
-  if (!c || !c->bytes) {
-    return false;
-  }
-  c->bytes->insert(c->bytes->end(), data, data + len);
-  return true;
-}
-
-[[maybe_unused]] bool parseObjStmHeaderToken(const char*& p, const char* end, uint32_t& out) {
-  while (p < end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) {
-    ++p;
-  }
-  if (p >= end || *p < '0' || *p > '9') {
-    return false;
-  }
-  uint64_t v = 0;
-  while (p < end && *p >= '0' && *p <= '9') {
-    v = v * 10ULL + static_cast<uint64_t>(*p - '0');
-    ++p;
-  }
-  if (v > 0xFFFFFFFFULL) {
-    return false;
-  }
-  out = static_cast<uint32_t>(v);
-  return true;
 }
 
 struct ClassicXrefMeta {
@@ -506,13 +537,16 @@ namespace {
 
 struct XrefStreamDecodeState {
   XrefTable* xref = nullptr;
-  uint32_t indexStart = 0;
-  uint32_t indexCount = 0;
+  uint32_t rangeStart = 0;
+  uint32_t rangeLeft = 0;
+  uint16_t rangeCount = 0;
+  uint16_t currentRange = 0;
+  uint32_t rangeStarts[16]{};
+  uint32_t rangeCounts[16]{};
   size_t w0 = 0;
   size_t w1 = 0;
   size_t w2 = 0;
   size_t recBytes = 0;
-  uint32_t rowIndex = 0;
   uint8_t rowBuf[32]{};
   size_t rowPos = 0;
   uint8_t objStmBits[(PDF_MAX_OBJECTS + 7) / 8]{};
@@ -534,7 +568,18 @@ bool takeXrefStreamChunk(void* ctx, const uint8_t* data, size_t len) {
     if (s->rowPos < s->recBytes) {
       continue;
     }
-    const uint32_t objId = static_cast<uint32_t>(s->indexStart + static_cast<int>(s->rowIndex));
+    if (s->rangeLeft == 0) {
+      if (s->currentRange + 1 >= s->rangeCount) {
+        return false;
+      }
+      ++s->currentRange;
+      s->rangeStart = s->rangeStarts[s->currentRange];
+      s->rangeLeft = s->rangeCounts[s->currentRange];
+    }
+    if (s->rangeLeft == 0) {
+      return false;
+    }
+    const uint32_t objId = s->rangeStart;
     if (objId >= PDF_MAX_OBJECTS) {
       return false;
     }
@@ -573,8 +618,9 @@ bool takeXrefStreamChunk(void* ctx, const uint8_t* data, size_t len) {
       }
     }
     s->rowPos = 0;
-    ++s->rowIndex;
-    if (s->rowIndex >= s->indexCount) {
+    ++s->rangeStart;
+    --s->rangeLeft;
+    if (s->currentRange + 1 >= s->rangeCount && s->rangeLeft == 0) {
       break;
     }
   }
@@ -627,19 +673,16 @@ bool XrefTable::parseXrefStream(FsFile& file, size_t /*fileSize*/, uint32_t xref
     return false;
   }
 
-  int indexStart = 0;
-  int indexCount = size;
   PdfFixedString<PDF_DICT_VALUE_MAX> idxStr;
   PdfFixedVector<int, 32> idxv;
-  if (PdfObject::getDictValue("/Index", dict.view(), idxStr) && !idxStr.empty() && parseBracketInts(idxStr.view(), idxv) &&
-      idxv.size() >= 2) {
-    indexStart = idxv[0];
-    indexCount = idxv[1];
-  }
-  if (indexCount <= 0 || indexStart < 0 ||
-      static_cast<size_t>(indexStart) + static_cast<size_t>(indexCount) > PDF_MAX_OBJECTS) {
-    LOG_ERR("PDF", "xref: bad /Index");
-    return false;
+  bool hasIndex = false;
+  if (PdfObject::getDictValue("/Index", dict.view(), idxStr) && !idxStr.empty() &&
+      parseBracketInts(idxStr.view(), idxv) && idxv.size() >= 2) {
+    hasIndex = true;
+    if ((idxv.size() & 1) != 0) {
+      LOG_ERR("PDF", "xref: bad /Index pair count");
+      return false;
+    }
   }
 
   std::memset(offsets_, 0, sizeof(offsets_));
@@ -647,8 +690,55 @@ bool XrefTable::parseXrefStream(FsFile& file, size_t /*fileSize*/, uint32_t xref
 
   XrefStreamDecodeState st{};
   st.xref = this;
-  st.indexStart = static_cast<uint32_t>(indexStart);
-  st.indexCount = static_cast<uint32_t>(indexCount);
+  st.rangeCount = 0;
+  st.currentRange = 0;
+  st.rangeStart = 0;
+  st.rangeLeft = 0;
+
+  auto clearRangesAndFail = [&]() -> bool {
+    LOG_ERR("PDF", "xref: bad /Index");
+    return false;
+  };
+
+  if (hasIndex) {
+    constexpr uint16_t kMaxRanges = 16;
+    for (size_t i = 0; i + 1 < idxv.size(); i += 2) {
+      const int start = idxv[i];
+      const int count = idxv[i + 1];
+      if (start < 0 || count <= 0) {
+        return clearRangesAndFail();
+      }
+      const uint32_t uStart = static_cast<uint32_t>(start);
+      const uint32_t uCount = static_cast<uint32_t>(count);
+      if (uStart >= PDF_MAX_OBJECTS || uCount > PDF_MAX_OBJECTS - uStart) {
+        return clearRangesAndFail();
+      }
+      if (st.rangeCount >= kMaxRanges) {
+        return clearRangesAndFail();
+      }
+      st.rangeStarts[st.rangeCount] = uStart;
+      st.rangeCounts[st.rangeCount] = uCount;
+      ++st.rangeCount;
+    }
+  } else {
+    st.rangeStarts[0] = 0;
+    st.rangeCounts[0] = static_cast<uint32_t>(size);
+    st.rangeCount = 1;
+  }
+
+  size_t totalRangeCount = 0;
+  for (uint16_t i = 0; i < st.rangeCount; ++i) {
+    totalRangeCount += st.rangeCounts[i];
+    if (totalRangeCount > static_cast<size_t>(size)) {
+      return clearRangesAndFail();
+    }
+  }
+  if (st.rangeCount == 0) {
+    return clearRangesAndFail();
+  }
+
+  st.rangeStart = st.rangeStarts[0];
+  st.rangeLeft = st.rangeCounts[0];
   st.w0 = w0;
   st.w1 = w1;
   st.w2 = w2;
@@ -823,78 +913,50 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
   }
   return insertInlineObject(targetObjId, d, stm.ptr(), stm.len);
 #else
-  std::vector<uint8_t> raw;
-  raw.reserve(64 * 1024);
-  VecPushCtx vecCtx{&raw};
-  if (!StreamDecoder::flateDecodeChunks(file, so, sl, appendToVector, &vecCtx)) {
+  ObjStmDecodeAccum stream{};
+  if (!StreamDecoder::flateDecodeChunks(file, so, sl, appendObjStmBytes, &stream)) {
     return false;
   }
-  const size_t rawLen = raw.size();
-  if (rawLen == 0 || static_cast<size_t>(first) > rawLen) {
+  if (stream.bytes.empty() || stream.bytes.size() < static_cast<size_t>(first)) {
     return false;
   }
 
-  const char* const rawBegin = reinterpret_cast<const char*>(raw.data());
-  const char* const headerEnd = rawBegin + static_cast<size_t>(first);
-  if (headerEnd > rawBegin + rawLen) {
+  uint32_t targetRel = 0;
+  uint32_t nextRel = 0;
+  if (!scanObjStmHeaderFromBytes(stream.bytes.data(), stream.bytes.size(), static_cast<size_t>(first), nObj, targetObjId,
+                                targetRel, nextRel)) {
     return false;
   }
-
-  std::vector<std::pair<uint32_t, uint32_t>> pairs;
-  pairs.reserve(static_cast<size_t>(nObj));
-  const char* p = rawBegin;
-  for (int i = 0; i < nObj; ++i) {
-    uint32_t oid = 0;
-    uint32_t rel = 0;
-    if (!parseObjStmHeaderToken(p, headerEnd, oid) || !parseObjStmHeaderToken(p, headerEnd, rel)) {
-      return false;
-    }
-    pairs.push_back({oid, rel});
-  }
-
-  const auto targetIt = std::find_if(pairs.begin(), pairs.end(),
-                                     [targetObjId](const std::pair<uint32_t, uint32_t>& e) { return e.first == targetObjId; });
-  if (targetIt == pairs.end()) {
-    return false;
-  }
-  const uint32_t targetRel = targetIt->second;
-
-  size_t nextRel = SIZE_MAX;
-  for (const auto& entry : pairs) {
-    const size_t rel = static_cast<size_t>(entry.second);
-    if (rel > static_cast<size_t>(targetRel) && rel < nextRel) {
-      nextRel = rel;
-    }
-  }
-
   const size_t base = static_cast<size_t>(first);
   const size_t start = base + static_cast<size_t>(targetRel);
-  if (start > rawLen) {
+  const size_t end = nextRel == UINT32_MAX ? SIZE_MAX : base + static_cast<size_t>(nextRel);
+  if (end != SIZE_MAX && end < start) {
     return false;
   }
-  size_t end = rawLen;
-  if (nextRel != SIZE_MAX) {
-    const size_t nextStart = base + nextRel;
-    if (nextStart > start && nextStart <= rawLen) {
-      end = nextStart;
-    }
+  if (nextRel != UINT32_MAX && end > stream.bytes.size()) {
+    return false;
   }
 
-  std::string_view slice(rawBegin + start, end - start);
-  while (slice.size() > 0 &&
-         (slice.front() == ' ' || slice.front() == '\t' || slice.front() == '\r' || slice.front() == '\n')) {
-    slice.remove_prefix(1);
+  const size_t clipEnd = (end == SIZE_MAX) ? stream.bytes.size() : std::min(end, stream.bytes.size());
+  if (start >= clipEnd) {
+    return false;
   }
-  while (slice.size() > 0 &&
-         (slice.back() == ' ' || slice.back() == '\t' || slice.back() == '\r' || slice.back() == '\n')) {
-    slice.remove_suffix(1);
+  std::string_view slice(reinterpret_cast<const char*>(stream.bytes.data() + start), clipEnd - start);
+  std::string_view trimmed = slice;
+  while (!trimmed.empty() &&
+         (trimmed.front() == ' ' || trimmed.front() == '\t' || trimmed.front() == '\r' || trimmed.front() == '\n')) {
+    trimmed.remove_prefix(1);
   }
-  if (slice.empty()) {
+  while (!trimmed.empty() &&
+         (trimmed.back() == ' ' || trimmed.back() == '\t' || trimmed.back() == '\r' || trimmed.back() == '\n')) {
+    trimmed.remove_suffix(1);
+  }
+  if (trimmed.empty()) {
     return false;
   }
   PdfFixedString<PDF_INLINE_DICT_MAX> d;
   PdfByteBuffer stm;
-  if (!splitObjStmObjectSlice(slice, d, stm)) {
+  if (!splitObjStmObjectSlice(trimmed, d, stm)) {
     return false;
   }
   return insertInlineObject(targetObjId, d, stm.ptr(), stm.len);
