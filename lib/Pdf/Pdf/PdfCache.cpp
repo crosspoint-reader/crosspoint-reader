@@ -27,6 +27,26 @@ size_t hashPathCstr(const char* s) {
 }
 
 template <size_t N>
+bool appendUnsigned(PdfFixedString<N>& s, size_t value) {
+  char buf[32];
+  size_t len = 0;
+  do {
+    if (len >= sizeof(buf)) {
+      return false;
+    }
+    buf[len++] = static_cast<char>('0' + (value % 10));
+    value /= 10;
+  } while (value != 0);
+  while (len > 0) {
+    if (!s.append(&buf[len - 1], 1)) {
+      return false;
+    }
+    --len;
+  }
+  return true;
+}
+
+template <size_t N>
 bool readFixedString(FsFile& f, PdfFixedString<N>& s) {
   uint32_t len = 0;
   serialization::readPod(f, len);
@@ -63,16 +83,14 @@ void PdfCache::configure(const char* pdfFilePath, size_t fileSize) {
     return;
   }
   const size_t hash = hashPathCstr(pdfFilePath);
-  char buf[64];
-  const int n = snprintf(buf, sizeof(buf), "/.crosspoint/pdf_%zu", hash);
-  if (n > 0 && n < static_cast<int>(sizeof(buf))) {
-    cacheDir.assign(buf, static_cast<size_t>(n));
+  constexpr size_t kCachePrefixLen = sizeof("/.crosspoint/pdf_") - 1;
+  if (!cacheDir.assign("/.crosspoint/pdf_", kCachePrefixLen) || !appendUnsigned(cacheDir, hash)) {
+    cacheDir.clear();
+    return;
   }
   if (fileSize != 0 && !cacheDir.empty()) {
-    char sizeBuf[32];
-    const int sn = snprintf(sizeBuf, sizeof(sizeBuf), "_%zu", fileSize);
-    if (sn > 0 && sn < static_cast<int>(sizeof(sizeBuf)) && cacheDir.size() + static_cast<size_t>(sn) < PDF_MAX_PATH) {
-      cacheDir.append(sizeBuf, static_cast<size_t>(sn));
+    if (!cacheDir.append("_", 1) || !appendUnsigned(cacheDir, fileSize)) {
+      cacheDir.clear();
     }
   }
 }
@@ -146,10 +164,8 @@ bool PdfCache::saveMeta(uint32_t pageCount,
 bool PdfCache::loadPage(uint32_t pageNum, PdfPage& outPage) {
   outPage.clear();
 
-  char name[32];
-  snprintf(name, sizeof(name), "%u", static_cast<unsigned>(pageNum));
   PdfFixedString<PDF_MAX_PATH> path = cacheDir;
-  if (!path.append("/pages/", 7) || !path.append(name, std::strlen(name)) || !path.append(".bin", 4)) {
+  if (!path.append("/pages/", 7) || !appendUnsigned(path, static_cast<size_t>(pageNum)) || !path.append(".bin", 4)) {
     return false;
   }
   if (!Storage.exists(path.c_str())) {
@@ -252,10 +268,8 @@ bool PdfCache::savePage(uint32_t pageNum, const PdfPage& page) {
   Storage.ensureDirectoryExists(cacheDir.c_str());
   Storage.ensureDirectoryExists(pagesDir.c_str());
 
-  char name[32];
-  snprintf(name, sizeof(name), "%u", static_cast<unsigned>(pageNum));
   PdfFixedString<PDF_MAX_PATH> path = pagesDir;
-  if (!path.append("/", 1) || !path.append(name, std::strlen(name)) || !path.append(".bin", 4)) {
+  if (!path.append("/", 1) || !appendUnsigned(path, static_cast<size_t>(pageNum)) || !path.append(".bin", 4)) {
     return false;
   }
   FsFile f;

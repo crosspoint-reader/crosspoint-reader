@@ -5,6 +5,7 @@
 
 #include "ContentStream.h"
 #include "PageTree.h"
+#include "PdfCachedPageReader.h"
 #include "PdfObject.h"
 #include "PdfOutline.h"
 #include "PdfPage.h"
@@ -16,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -163,6 +165,66 @@ void testPdfPageNavigationPolicy() {
   REQUIRE(pdfPageTurnBackward(state, 3));
   REQUIRE(state.page == 0);
   REQUIRE(state.slice == 2);
+}
+
+void testPdfCachedPageReader() {
+  const std::filesystem::path cacheRoot = std::filesystem::path("test/pdf/build") / "pdf-cache-reader-test";
+  std::filesystem::create_directories(cacheRoot / "pages");
+  const std::filesystem::path pagePath = cacheRoot / "pages" / "0.bin";
+  FILE* f = std::fopen(pagePath.string().c_str(), "wb");
+  REQUIRE(f != nullptr);
+  auto writeU8 = [&](uint8_t v) { REQUIRE(std::fwrite(&v, 1, 1, f) == 1); };
+  auto writeU16 = [&](uint16_t v) { REQUIRE(std::fwrite(&v, sizeof(v), 1, f) == 1); };
+  auto writeU32 = [&](uint32_t v) { REQUIRE(std::fwrite(&v, sizeof(v), 1, f) == 1); };
+  auto writeBytes = [&](const void* p, size_t n) { REQUIRE(std::fwrite(p, 1, n, f) == n); };
+
+  writeU8(5);
+  writeU32(1);
+  const char text[] = "hello cached page";
+  writeU32(static_cast<uint32_t>(sizeof(text) - 1));
+  writeBytes(text, sizeof(text) - 1);
+  writeU8(static_cast<uint8_t>(PdfTextStyleBold | PdfTextStyleHeader));
+  writeU32(42);
+  writeU32(1);
+  writeU32(111);
+  writeU32(222);
+  writeU16(33);
+  writeU16(44);
+  writeU8(1);
+  writeU32(2);
+  writeU8(0);
+  writeU32(0);
+  writeU8(1);
+  writeU32(0);
+  REQUIRE(std::fclose(f) == 0);
+
+  PdfCachedPageReader reader;
+  REQUIRE(reader.open(cacheRoot.c_str(), 0));
+  REQUIRE(reader.textCount() == 1);
+  REQUIRE(reader.imageCount() == 1);
+  REQUIRE(reader.drawCount() == 2);
+
+  PdfTextBlock loadedText;
+  REQUIRE(reader.loadTextBlock(0, loadedText));
+  REQUIRE(loadedText.text.view() == "hello cached page");
+  REQUIRE(loadedText.style == static_cast<uint8_t>(PdfTextStyleBold | PdfTextStyleHeader));
+  REQUIRE(loadedText.orderHint == 42);
+
+  PdfImageDescriptor loadedImg{};
+  REQUIRE(reader.loadImage(0, loadedImg));
+  REQUIRE(loadedImg.pdfStreamOffset == 111);
+  REQUIRE(loadedImg.pdfStreamLength == 222);
+  REQUIRE(loadedImg.width == 33);
+  REQUIRE(loadedImg.height == 44);
+  REQUIRE(loadedImg.format == 1);
+
+  PdfDrawStep loadedStep{};
+  REQUIRE(reader.loadDrawStep(0, loadedStep));
+  REQUIRE(!loadedStep.isImage);
+  REQUIRE(loadedStep.index == 0);
+  REQUIRE(reader.loadDrawStep(1, loadedStep));
+  REQUIRE(loadedStep.isImage);
+  REQUIRE(loadedStep.index == 0);
 }
 
 void collapseAsciiWhitespace(std::string& s) {
@@ -334,6 +396,7 @@ bool runOnePdf(const char* path) {
 
 int main(int argc, char** argv) {
   testPdfPageNavigationPolicy();
+  testPdfCachedPageReader();
   std::vector<const char*> paths;
   if (argc > 1) {
     for (int i = 1; i < argc; ++i) paths.push_back(argv[i]);

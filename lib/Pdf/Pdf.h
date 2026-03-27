@@ -44,6 +44,7 @@ class Pdf {
   PageTree pageTree_;
   PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES> outlineEntries_;
   PdfCache cache_;
+  PdfByteBuffer streamScratch_;
   uint32_t pages_ = 0;
   bool valid_ = false;
 };

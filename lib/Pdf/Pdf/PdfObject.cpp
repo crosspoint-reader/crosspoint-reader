@@ -1,8 +1,7 @@
 #include "PdfObject.h"
 
 #include "XrefTable.h"
-
-#include <Logging.h>
+#include "PdfLog.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -143,14 +142,14 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
   while (bodyStr.size() < kMaxAcc) {
     const size_t remaining = kMaxAcc - bodyStr.size() - 1;
     if (remaining == 0) {
-      LOG_ERR("PDF", "PdfObject::readAt object body overflow at offset %u (cap=%zu)", offset, kMaxAcc);
+      pdfLogErr("PdfObject::readAt object body overflow");
       return false;
     }
     const size_t toRead = std::min(remaining, sizeof(chunk));
     const int n = file.read(chunk, toRead);
     if (n <= 0) break;
     if (!bodyStr.append(reinterpret_cast<const char*>(chunk), static_cast<size_t>(n))) {
-      LOG_ERR("PDF", "PdfObject::readAt object body overflow at offset %u (cap=%zu)", offset, kMaxAcc);
+      pdfLogErr("PdfObject::readAt object body overflow");
       return false;
     }
 

@@ -2,6 +2,7 @@
 
 #include "PdfObject.h"
 #include "StreamDecoder.h"
+#include "PdfLog.h"
 
 #include <Logging.h>
 
@@ -68,6 +69,26 @@ uint32_t readBe16(const uint8_t* p) {
 }
 
 static constexpr size_t kPackedOffsetBytes = 3;
+
+template <size_t N>
+bool appendUnsigned(PdfFixedString<N>& s, uint32_t value) {
+  char buf[16];
+  size_t len = 0;
+  do {
+    if (len >= sizeof(buf)) {
+      return false;
+    }
+    buf[len++] = static_cast<char>('0' + (value % 10U));
+    value /= 10U;
+  } while (value != 0U);
+  while (len > 0) {
+    if (!s.append(&buf[len - 1], 1)) {
+      return false;
+    }
+    --len;
+  }
+  return true;
+}
 
 uint32_t loadPackedOffset(const uint8_t* p) {
   return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16);
@@ -320,9 +341,9 @@ bool readClassicXrefMeta(FsFile& file, size_t fileSize, uint32_t xrefOff, Classi
 
   for (;;) {
     readLineFromFile(file, lineBuf, sizeof(lineBuf), lineLen);
-    if (lineLen == 0) {
-      if (file.position() >= fileSize) {
-        LOG_ERR("PDF", "xref: unexpected EOF before trailer");
+      if (lineLen == 0) {
+        if (file.position() >= fileSize) {
+        pdfLogErr("xref: unexpected EOF before trailer");
         return false;
       }
       continue;
@@ -337,7 +358,7 @@ bool readClassicXrefMeta(FsFile& file, size_t fileSize, uint32_t xrefOff, Classi
     skipWs(endp);
     const unsigned long count = strtoul(endp, &endp, 10);
     if (count > 100000 || firstObj + count > 2000000) {
-      LOG_ERR("PDF", "xref: bad subsection");
+      pdfLogErr("xref: bad subsection");
       return false;
     }
     if (count == 0) continue;
@@ -365,7 +386,7 @@ bool applyClassicXrefSection(FsFile& file, size_t fileSize, uint32_t xrefOff, Xr
     readLineFromFile(file, lineBuf, sizeof(lineBuf), lineLen);
     if (lineLen == 0) {
       if (file.position() >= fileSize) {
-        LOG_ERR("PDF", "xref: unexpected EOF before trailer");
+        pdfLogErr("xref: unexpected EOF before trailer");
         return false;
       }
       continue;
@@ -380,7 +401,7 @@ bool applyClassicXrefSection(FsFile& file, size_t fileSize, uint32_t xrefOff, Xr
     skipWs(endp);
     const unsigned long count = strtoul(endp, &endp, 10);
     if (count > 100000 || firstObj + count > 2000000) {
-      LOG_ERR("PDF", "xref: bad subsection");
+      pdfLogErr("xref: bad subsection");
       return false;
     }
     if (count == 0) continue;
@@ -389,11 +410,11 @@ bool applyClassicXrefSection(FsFile& file, size_t fileSize, uint32_t xrefOff, Xr
       char row[kRowLen];
       const int rd = file.read(reinterpret_cast<uint8_t*>(row), kRowLen);
       if (rd != static_cast<int>(kRowLen)) {
-        LOG_ERR("PDF", "xref: short read entries");
+        pdfLogErr("xref: short read entries");
         return false;
       }
       if (row[10] != ' ' || row[16] != ' ') {
-        LOG_ERR("PDF", "xref: bad entry row");
+        pdfLogErr("xref: bad entry row");
         return false;
       }
       char offStr[11];
@@ -418,7 +439,7 @@ bool mergeClassicXrefChain(FsFile& file, size_t fileSize, uint32_t xrefOff, Xref
       return false;
     }
     if (!chain.push_back(cur)) {
-      LOG_ERR("PDF", "xref: /Prev chain too deep");
+      pdfLogErr("xref: /Prev chain too deep");
       return false;
     }
     if (meta.prev == 0 || meta.prev >= fileSize) {
@@ -600,7 +621,7 @@ bool XrefTable::parseXrefStream(FsFile& file, size_t /*fileSize*/, uint32_t xref
   st.recBytes = recBytes;
 
   if (!StreamDecoder::flateDecodeChunks(file, so, sl, takeXrefStreamChunk, &st)) {
-    LOG_ERR("PDF", "xref: xref stream decode failed");
+    pdfLogErr("xref: xref stream decode failed");
     return false;
   }
 
@@ -621,11 +642,11 @@ bool XrefTable::parseXrefStream(FsFile& file, size_t /*fileSize*/, uint32_t xref
     }
   }
   if (!any && !anyInline) {
-    LOG_ERR("PDF", "xref: no objects after xref stream");
+    pdfLogErr("xref: no objects after xref stream");
     return false;
   }
   if (rootObjId_ == 0) {
-    LOG_ERR("PDF", "xref: missing /Root");
+    pdfLogErr("xref: missing /Root");
     return false;
   }
   return true;
@@ -666,10 +687,14 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
   if (!storage.ensureDirectoryExists("/.crosspoint/pdf")) {
     return false;
   }
-  char tempPath[96];
-  std::snprintf(tempPath, sizeof(tempPath), "/.crosspoint/pdf/objstm_%u.tmp", static_cast<unsigned>(stmObjId));
+  constexpr size_t kTempPrefixLen = sizeof("/.crosspoint/pdf/objstm_") - 1;
+  PdfFixedString<96> tempPath;
+  if (!tempPath.assign("/.crosspoint/pdf/objstm_", kTempPrefixLen) || !appendUnsigned(tempPath, stmObjId) ||
+      !tempPath.append(".tmp", 4)) {
+    return false;
+  }
   FsFile spill;
-  if (!storage.openFileForWrite("PDF", tempPath, spill)) {
+  if (!storage.openFileForWrite("PDF", tempPath.c_str(), spill)) {
     return false;
   }
   StreamToFileCtx ctx{&spill};
@@ -677,39 +702,39 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
   spill.flush();
   spill.close();
   if (!decoded) {
-    storage.remove(tempPath);
+    storage.remove(tempPath.c_str());
     return false;
   }
-  if (!storage.openFileForRead("PDF", tempPath, spill)) {
-    storage.remove(tempPath);
+  if (!storage.openFileForRead("PDF", tempPath.c_str(), spill)) {
+    storage.remove(tempPath.c_str());
     return false;
   }
 
   const size_t spillSize = spill.fileSize();
   if (static_cast<size_t>(first) > spillSize) {
     spill.close();
-    storage.remove(tempPath);
+    storage.remove(tempPath.c_str());
     return false;
   }
 
   uint32_t targetRel = 0;
   if (!scanObjStmHeaderForTarget(spill, static_cast<size_t>(first), nObj, targetObjId, targetRel)) {
     spill.close();
-    storage.remove(tempPath);
+    storage.remove(tempPath.c_str());
     return false;
   }
 
   uint32_t nextRel = 0;
   if (!scanObjStmHeaderForNext(spill, static_cast<size_t>(first), nObj, targetRel, nextRel)) {
     spill.close();
-    storage.remove(tempPath);
+    storage.remove(tempPath.c_str());
     return false;
   }
 
   const size_t start = static_cast<size_t>(first) + static_cast<size_t>(targetRel);
   if (start > spillSize) {
     spill.close();
-    storage.remove(tempPath);
+    storage.remove(tempPath.c_str());
     return false;
   }
 
@@ -725,7 +750,7 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
   char buf[kChunk];
   if (!spill.seek(start)) {
     spill.close();
-    storage.remove(tempPath);
+    storage.remove(tempPath.c_str());
     return false;
   }
   std::string slice;
@@ -742,7 +767,7 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
     left -= static_cast<size_t>(rd);
   }
   spill.close();
-  storage.remove(tempPath);
+  storage.remove(tempPath.c_str());
   if (slice.empty()) {
     return false;
   }
@@ -849,7 +874,7 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
 
 bool XrefTable::setOffset(uint32_t objId, uint32_t off) {
   if (objId >= PDF_MAX_OBJECTS) {
-    LOG_ERR("PDF", "xref: object id overflow");
+    pdfLogErr("xref: object id overflow");
     return false;
   }
   const size_t base = static_cast<size_t>(objId) * kPackedOffsetBytes;
@@ -906,7 +931,7 @@ bool XrefTable::parse(FsFile& file) {
 
   const size_t fileSize = file.fileSize();
   if (fileSize < 32) {
-    LOG_ERR("PDF", "xref: file too small");
+    pdfLogErr("xref: file too small");
     return false;
   }
 
@@ -914,13 +939,13 @@ bool XrefTable::parse(FsFile& file) {
   const size_t tailStart = fileSize - tailSize;
   uint8_t tailBuf[1024];
   if (!file.seek(tailStart) || file.read(tailBuf, tailSize) != static_cast<int>(tailSize)) {
-    LOG_ERR("PDF", "xref: read tail failed");
+    pdfLogErr("xref: read tail failed");
     return false;
   }
 
   const size_t sx = findStartXref(tailBuf, tailSize);
   if (sx == SIZE_MAX) {
-    LOG_ERR("PDF", "xref: startxref not found");
+    pdfLogErr("xref: startxref not found");
     return false;
   }
 
@@ -933,18 +958,18 @@ bool XrefTable::parse(FsFile& file) {
   }
   numBuf[nb] = '\0';
   if (nb == 0) {
-    LOG_ERR("PDF", "xref: bad startxref offset");
+    pdfLogErr("xref: bad startxref offset");
     return false;
   }
   const uint32_t xrefOffset = static_cast<uint32_t>(strtoul(numBuf, nullptr, 10));
 
   if (xrefOffset >= fileSize) {
-    LOG_ERR("PDF", "xref: startxref out of range");
+    pdfLogErr("xref: startxref out of range");
     return false;
   }
 
   if (!file.seek(xrefOffset)) {
-    LOG_ERR("PDF", "xref: seek failed");
+    pdfLogErr("xref: seek failed");
     return false;
   }
 
@@ -957,7 +982,7 @@ bool XrefTable::parse(FsFile& file) {
 
   rootObjId_ = 0;
   if (!mergeClassicXrefChain(file, fileSize, xrefOffset, *this, rootObjId_)) {
-    LOG_ERR("PDF", "xref: merge failed");
+    pdfLogErr("xref: merge failed");
     return false;
   }
 
@@ -969,11 +994,11 @@ bool XrefTable::parse(FsFile& file) {
     }
   }
   if (!any) {
-    LOG_ERR("PDF", "xref: no objects");
+    pdfLogErr("xref: no objects");
     return false;
   }
   if (rootObjId_ == 0) {
-    LOG_ERR("PDF", "xref: missing /Root");
+    pdfLogErr("xref: missing /Root");
     return false;
   }
   return true;

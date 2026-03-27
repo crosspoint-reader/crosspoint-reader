@@ -1,8 +1,7 @@
 #include "PageTree.h"
 
-#include <Logging.h>
-
 #include "PdfObject.h"
+#include "PdfLog.h"
 
 namespace {
 
@@ -84,13 +83,13 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
       parseKidsRefs(kidsStr.view(), kids);
       for (int ki = static_cast<int>(kids.size()) - 1; ki >= 0; --ki) {
         if (!stack.push_back(kids[static_cast<size_t>(ki)])) {
-          LOG_ERR("PDF", "PageTree: stack overflow");
+          pdfLogErr("PageTree: stack overflow");
           return false;
         }
       }
     } else if (typeIs(body.view(), "/Page")) {
       if (!pageOffsets.push_back(xref.getOffset(objId))) {
-        LOG_ERR("PDF", "PageTree: too many pages");
+        pdfLogErr("PageTree: too many pages");
         return false;
       }
       if (!pageObjectIds.push_back(objId)) {
@@ -100,7 +99,7 @@ bool PageTree::parse(FsFile& file, const XrefTable& xref, uint32_t pagesObjId) {
   }
 
   if (pageOffsets.empty()) {
-    LOG_ERR("PDF", "PageTree: no pages");
+    pdfLogErr("PageTree: no pages");
     return false;
   }
   return true;

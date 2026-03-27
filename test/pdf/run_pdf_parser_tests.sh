@@ -13,6 +13,8 @@ STD="${CXXSTD:--std=c++20}"
 # Stub HalStorage must appear before lib/hal on the include path.
 INCLUDES=(
   -I "test/pdf/stubs"
+  -I "lib"
+  -I "lib/Serialization"
   -I "lib/Pdf"
   -I "lib/Pdf/Pdf"
   -I "src/activities/reader"
@@ -25,6 +27,7 @@ $CC -c -O2 -I "lib/uzlib/src" "lib/uzlib/src/tinflate.c" -o "$OUT_DIR/tinflate.o
 $CC -c -O2 "test/pdf/stubs/uzlib_checksum_stubs.c" -o "$OUT_DIR/uzlib_checksum_stubs.o"
 
 SOURCES=(
+  "lib/Pdf/Pdf/PdfCachedPageReader.cpp"
   "lib/Pdf/Pdf/XrefTable.cpp"
   "lib/Pdf/Pdf/PdfObject.cpp"
   "lib/Pdf/Pdf/PageTree.cpp"

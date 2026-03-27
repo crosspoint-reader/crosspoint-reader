@@ -1,13 +1,13 @@
 #include "Pdf.h"
 
 #include <HalStorage.h>
-#include <Logging.h>
 
 #include <algorithm>
 #include <cstring>
 
 #include "Pdf/ContentStream.h"
 #include "Pdf/PdfObject.h"
+#include "Pdf/PdfLog.h"
 
 namespace {
 
@@ -64,6 +64,7 @@ void Pdf::close() {
   pages_ = 0;
   outlineEntries_.clear();
   path_.clear();
+  streamScratch_.clear();
 }
 
 bool Pdf::open(const char* path) {
@@ -72,22 +73,22 @@ bool Pdf::open(const char* path) {
     return false;
   }
   if (!path_.assign(path, std::strlen(path))) {
-    LOG_ERR("PDF", "Path too long");
+    pdfLogErr("Path too long");
     return false;
   }
 
   if (!Storage.exists(path_.c_str())) {
-    LOG_ERR("PDF", "File does not exist: %s", path_.c_str());
+    pdfLogErrPath("File does not exist: ", path_.c_str());
     return false;
   }
 
   if (!Storage.openFileForRead("PDF", path_.c_str(), file_)) {
-    LOG_ERR("PDF", "Cannot open: %s", path_.c_str());
+    pdfLogErrPath("Cannot open: ", path_.c_str());
     return false;
   }
 
   if (!xref_.parse(file_)) {
-    LOG_ERR("PDF", "Failed to parse xref: %s", path_.c_str());
+    pdfLogErrPath("Failed to parse xref: ", path_.c_str());
     file_.close();
     return false;
   }
@@ -95,13 +96,13 @@ bool Pdf::open(const char* path) {
   const uint32_t rootId = xref_.rootObjId();
   CatalogInfo catalogInfo;
   if (!loadCatalogInfo(file_, xref_, rootId, catalogInfo)) {
-    LOG_ERR("PDF", "Bad catalog");
+    pdfLogErr("Bad catalog");
     file_.close();
     return false;
   }
 
   if (!pageTree_.parse(file_, xref_, catalogInfo.pagesObjId)) {
-    LOG_ERR("PDF", "Failed to parse page tree");
+    pdfLogErr("Failed to parse page tree");
     file_.close();
     return false;
   }
@@ -148,7 +149,7 @@ bool Pdf::getPage(uint32_t pageNum, PdfPage& out) {
 
   const uint32_t contentId = contentsObjectId(pageBody.view());
   if (contentId == 0) {
-    LOG_ERR("PDF", "No /Contents for page %u", static_cast<unsigned>(pageNum));
+    pdfLogErr("No /Contents for page");
     return false;
   }
 
@@ -156,21 +157,20 @@ bool Pdf::getPage(uint32_t pageNum, PdfPage& out) {
   uint32_t streamLength = 0;
   bool compressed = false;
   if (!xref_.readStreamMetaForObject(file_, contentId, contentDict, streamOffset, streamLength, compressed)) {
-    PdfByteBuffer streamPayload;
-    if (!xref_.readStreamForObject(file_, contentId, contentDict, streamPayload, compressed)) {
+    if (!xref_.readStreamForObject(file_, contentId, contentDict, streamScratch_, compressed)) {
       return false;
     }
-    if (streamPayload.len == 0) {
+    if (streamScratch_.len == 0) {
       return false;
     }
-    if (!ContentStream::parseBuffer(streamPayload.ptr(), streamPayload.len, compressed, file_, xref_, pageBody.view(),
+    if (!ContentStream::parseBuffer(streamScratch_.ptr(), streamScratch_.len, compressed, file_, xref_, pageBody.view(),
                                     out)) {
-      LOG_ERR("PDF", "Failed to parse page %u", static_cast<unsigned>(pageNum));
+      pdfLogErr("Failed to parse page");
       return false;
     }
   } else {
     if (!ContentStream::parse(file_, streamOffset, streamLength, compressed, xref_, pageBody.view(), out)) {
-      LOG_ERR("PDF", "Failed to parse page %u", static_cast<unsigned>(pageNum));
+      pdfLogErr("Failed to parse page");
       return false;
     }
   }

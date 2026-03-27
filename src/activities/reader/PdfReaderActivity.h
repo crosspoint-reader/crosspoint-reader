@@ -4,6 +4,7 @@
 
 #include "../Activity.h"
 #include "PdfPageNavigation.h"
+#include "Pdf/PdfCachedPageReader.h"
 
 class PdfReaderActivity final : public Activity {
   struct PdfRenderCursor {
@@ -17,7 +18,7 @@ class PdfReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
   uint32_t lastSavedPage = UINT32_MAX;
   uint32_t loadedPage = UINT32_MAX;
-  PdfPage pageBuffer;
+  PdfCachedPageReader pageReader;
   PdfFixedVector<PdfRenderCursor, PDF_MAX_PAGE_SLICES> pageSliceStarts;
   PdfPageNavigationState navigationState;
 
@@ -30,10 +31,10 @@ class PdfReaderActivity final : public Activity {
   bool layoutReady = false;
 
   void ensureLayout();
-  bool renderPageSlice(const PdfPage& page, const PdfRenderCursor& start, PdfRenderCursor& next, bool draw) const;
+  bool renderPageSlice(PdfCachedPageReader& page, const PdfRenderCursor& start, PdfRenderCursor& next, bool draw);
   void rebuildPageSlices();
   bool loadPage(uint32_t page);
-  void renderContents(const PdfPage& page);
+  void renderContents(PdfCachedPageReader& page);
   void renderStatusBar() const;
   void saveProgressNow();
 

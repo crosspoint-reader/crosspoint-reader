@@ -2,9 +2,19 @@
 
 #include "ActivityManager.h"
 
-void Activity::onEnter() { LOG_DBG("ACT", "Entering activity: %s", name.c_str()); }
+void Activity::onEnter() {
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
+  logSerial.print("[DBG] [ACT] Entering activity: ");
+  logSerial.println(name.c_str());
+#endif
+}
 
-void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }
+void Activity::onExit() {
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
+  logSerial.print("[DBG] [ACT] Exiting activity: ");
+  logSerial.println(name.c_str());
+#endif
+}
 
 void Activity::requestUpdate(bool immediate) { activityManager.requestUpdate(immediate); }
 

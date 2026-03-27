@@ -57,8 +57,16 @@ bool PdfReaderActivity::loadPage(uint32_t page) {
   if (!pdf) {
     return false;
   }
-  if (!pdf->getPage(page, pageBuffer)) {
-    return false;
+  pageReader.close();
+  if (!pageReader.open(pdf->cacheDirectory().c_str(), page)) {
+    PdfPage tempPage;
+    if (!pdf->getPage(page, tempPage)) {
+      return false;
+    }
+    tempPage.clear();
+    if (!pageReader.open(pdf->cacheDirectory().c_str(), page)) {
+      return false;
+    }
   }
   loadedPage = page;
   navigationState.page = page;
@@ -67,8 +75,8 @@ bool PdfReaderActivity::loadPage(uint32_t page) {
   return !pageSliceStarts.empty();
 }
 
-bool PdfReaderActivity::renderPageSlice(const PdfPage& page, const PdfRenderCursor& start, PdfRenderCursor& next,
-                                        bool draw) const {
+bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRenderCursor& start, PdfRenderCursor& next,
+                                        bool draw) {
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   int y = marginTop;
   const int bottomLimit = renderer.getScreenHeight() - marginBottom - lineHeight;
@@ -85,31 +93,26 @@ bool PdfReaderActivity::renderPageSlice(const PdfPage& page, const PdfRenderCurs
   };
 
   auto getStep = [&](size_t stepIndex, bool& isImage, uint32_t& index) -> bool {
-    if (!page.drawOrder.empty()) {
-      if (stepIndex >= page.drawOrder.size()) {
-        return false;
-      }
-      isImage = page.drawOrder[stepIndex].isImage;
-      index = page.drawOrder[stepIndex].index;
-      return true;
+    if (stepIndex >= page.drawCount()) {
+      return false;
     }
-
-    if (stepIndex < page.textBlocks.size()) {
-      isImage = false;
-      index = static_cast<uint32_t>(stepIndex);
-      return true;
+    PdfDrawStep step{};
+    if (!page.loadDrawStep(static_cast<uint32_t>(stepIndex), step)) {
+      return false;
     }
-
-    const size_t imageIndex = stepIndex - page.textBlocks.size();
-    if (imageIndex < page.images.size()) {
-      isImage = true;
-      index = static_cast<uint32_t>(imageIndex);
-      return true;
-    }
-    return false;
+    isImage = step.isImage;
+    index = step.index;
+    return true;
   };
 
-  auto drawTextBlock = [&](const PdfTextBlock& block, size_t stepIndex, size_t startLine) -> bool {
+  auto drawTextBlock = [&](uint32_t textIndex, size_t stepIndex, size_t startLine) -> bool {
+    PdfTextBlock block;
+    if (!page.loadTextBlock(textIndex, block)) {
+      next.stepIndex = stepIndex;
+      next.lineIndex = 0;
+      return false;
+    }
+
     if (block.text.empty()) {
       next.stepIndex = stepIndex + 1;
       next.lineIndex = 0;
@@ -174,14 +177,14 @@ bool PdfReaderActivity::renderPageSlice(const PdfPage& page, const PdfRenderCurs
     }
 
     if (isImage) {
-      if (!pdf) {
+      PdfImageDescriptor img{};
+      if (!page.loadImage(index, img)) {
         next.stepIndex = stepIndex;
         next.lineIndex = 0;
         return false;
       }
       const auto dir = pdf->cacheDirectory().view();
-      const char* name = index < page.images.size() && page.images[index].format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
-      const auto& img = page.images[index];
+      const char* name = img.format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
       if (y > bottomLimit) {
         next.stepIndex = stepIndex;
         next.lineIndex = 0;
@@ -251,9 +254,9 @@ bool PdfReaderActivity::renderPageSlice(const PdfPage& page, const PdfRenderCurs
       continue;
     }
 
-    if (index < page.textBlocks.size()) {
+    if (index < page.textCount()) {
       const size_t startLine = (stepIndex == start.stepIndex) ? start.lineIndex : 0;
-      if (!drawTextBlock(page.textBlocks[index], stepIndex, startLine)) {
+      if (!drawTextBlock(index, stepIndex, startLine)) {
         return false;
       }
       continue;
@@ -273,7 +276,7 @@ void PdfReaderActivity::rebuildPageSlices() {
 
   while (pageSliceStarts.size() < PDF_MAX_PAGE_SLICES) {
     PdfRenderCursor next{};
-    const bool finished = renderPageSlice(pageBuffer, cursor, next, false);
+    const bool finished = renderPageSlice(pageReader, cursor, next, false);
     if (finished) {
       return;
     }
@@ -294,7 +297,7 @@ void PdfReaderActivity::onEnter() {
   navigationState = {};
   pageSliceStarts.clear();
   ensureLayout();
-  pageBuffer.clear();
+  pageReader.close();
 
   totalPages = pdf->pageCount();
   currentPage = 0;
@@ -321,6 +324,7 @@ void PdfReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   lastSavedPage = UINT32_MAX;
+  pageReader.close();
   pdf.reset();
   layoutReady = false;
 }
@@ -365,14 +369,14 @@ void PdfReaderActivity::loop() {
                                saveProgressNow();
                                onGoHome();
                              } else if (menu.action == PdfReaderMenuActivity::ACTION_OUTLINE) {
-                                startActivityForResult(std::make_unique<PdfReaderChapterSelectionActivity>(
-                                                          renderer, mappedInput, pdf->outline(), currentPage),
-                                                      [this](const ActivityResult& res) {
-                                                        if (!res.isCancelled) {
-                                                          const uint32_t p = std::get<PageResult>(res.data).page;
-                                                          jumpToPage(p);
-                                                        }
-                                                      });
+                               startActivityForResult(std::make_unique<PdfReaderChapterSelectionActivity>(
+                                                         renderer, mappedInput, pdf->outline(), currentPage),
+                                                     [this](const ActivityResult& res) {
+                                                       if (!res.isCancelled) {
+                                                         const uint32_t p = std::get<PageResult>(res.data).page;
+                                                         jumpToPage(p);
+                                                       }
+                                                     });
                              }
                            });
     return;
@@ -426,7 +430,7 @@ void PdfReaderActivity::renderStatusBar() const {
   GUI.drawStatusBar(renderer, progress, static_cast<int>(currentPage + 1), static_cast<int>(totalPages), title);
 }
 
-void PdfReaderActivity::renderContents(const PdfPage& page) {
+void PdfReaderActivity::renderContents(PdfCachedPageReader& page) {
   if (pageSliceStarts.empty()) {
     return;
   }
@@ -451,13 +455,13 @@ void PdfReaderActivity::render(RenderLock&&) {
     }
   }
 
-  renderContents(pageBuffer);
+  renderContents(pageReader);
   renderStatusBar();
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
   if (SETTINGS.textAntiAliasing) {
     ReaderUtils::renderAntiAliased(renderer, [&, this]() {
-      renderContents(pageBuffer);
+      renderContents(pageReader);
       renderStatusBar();
     });
   }
