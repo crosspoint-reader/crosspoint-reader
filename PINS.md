@@ -7,7 +7,7 @@ This document lists the pins explicitly used by the firmware source (`main`, HAL
 | Pin | Signal / Function | Module | Config / Mode | Pull | Active sense | Connected to / purpose |
 |---|---|---|---|---|---|---|
 | GPIO0 | `BAT_GPIO0` (battery voltage ADC) | `BatteryMonitor` + `HalPowerManager::getBatteryPercentage()` | `INPUT` | none (no explicit pull) | N/A (analog read only) | Analog divider from battery sense network; read via `analogReadMilliVolts` or calibrated `analogRead` |
-| GPIO1 | `BUTTON_ADC_PIN_1` | `InputManager` | `INPUT` | none (no explicit pull) | Analog thresholds map to front buttons | Front button ladder network (Back/Confirm/Left/Right ADC thresholds) |
+| GPIO1 | `BUTTON_ADC_PIN_1` | `InputManager` | `INPUT` | none (no explicit pull) | Analog thresholds map to front buttons | Front button ladder network (Back/Confirm/Left/Right ADC thresholds). In Rust MVP experiments, reliable `Back` detection required `PULLDOWN` on GPIO1 for this board sample. |
 | GPIO2 | `BUTTON_ADC_PIN_2` | `InputManager` | `INPUT` | none (no explicit pull) | Analog thresholds map to front buttons | Front button ladder network (Up/Down ADC thresholds) |
 | GPIO3 | `POWER_BUTTON_PIN` | `InputManager` | `INPUT_PULLUP` | `INPUT_PULLUP` | Active LOW (`digitalRead(...) == LOW`) | Physical power button input |
 | GPIO4 | `EPD_DC` | `EInkDisplay` | `OUTPUT` | n/a | HIGH = data, LOW = command | Display Data/Command line |
@@ -67,3 +67,11 @@ This document lists the pins explicitly used by the firmware source (`main`, HAL
 - GPIO6 is used by display BUSY **and** is also listed as `EPD_BUSY` in the display docs.
 - No explicit UART pin remapping is done in code for `UART0_RXD`/`TX`; only RX is sampled for USB presence.
 - No additional GPIOs are configured in firmware beyond those listed in this table.
+
+## Experimental notes (GPIO1 analog/idle-bias)
+
+- In the Rust MVP pull-mode sweep (ESP32-C3), missing-button behavior reproduced only on `GPIO1` channel reads.
+- Holding the previously unreliable Back-side buttons while running the 5-second per-combo test showed:
+  - `GPIO1` in `float` or `pull_up` -> `adc1_detected=0`, `pin1_raw[min=max=4095]`.
+  - `GPIO1` in `pull_down` -> `adc1_detected` rises (e.g. 7–13/20 samples in a 5s window with no manual tap/noise filter), with `pin1_raw[min≈3751..3755, max=4095)` and decoded as `Back`.
+- This strongly indicates an idle-bias dependence on GPIO1 for this channel; `GPIO1` can be too floating/high without explicit down-bias for deterministic button decoding.
