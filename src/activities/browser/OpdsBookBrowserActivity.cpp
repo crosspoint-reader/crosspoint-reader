@@ -316,12 +316,18 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL
   std::string downloadUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
 
-  // Create sanitized filename: "Title - Author.epub" or just "Title.epub" if no author
+  // Determine file extension from MIME type
+  std::string ext = ".epub";
+  if (book.mimeType == "application/x-xtc+zip") {
+    ext = ".xtc";
+  }
+
+  // Create sanitized filename: "Title - Author.ext" or just "Title.ext" if no author
   std::string baseName = book.title;
   if (!book.author.empty()) {
     baseName += " - " + book.author;
   }
-  std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + ".epub";
+  std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + ext;
 
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
