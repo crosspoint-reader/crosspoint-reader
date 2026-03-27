@@ -2,7 +2,7 @@
 
 ## Entry point
 
-`Pdf::open(path)` (`lib/Pdf/Pdf.cpp`) opens the file via `HalStorage`, parses the cross-reference data, loads the catalog and page tree, optionally rebuilds the outline from the file (or from `PdfCache` metadata), and returns a handle used to fetch pages.
+`Pdf::open(path)` (`lib/Pdf/Pdf.cpp`) opens the file via `HalStorage`, parses the cross-reference data, loads the catalog and page tree, configures the on-device cache, and loads outline metadata from cache when possible. If the cached outline does not match the parsed page count, it rebuilds the outline from the file and saves it back to cache.
 
 ## Cross-reference (`lib/Pdf/Pdf/XrefTable.*`)
 
@@ -30,13 +30,13 @@ Optional `/Outlines` tree is walked using `readDictForObject`. Titles and destin
 
 ## Content streams (`lib/Pdf/Pdf/ContentStream.*`, `StreamDecoder.*`)
 
-Page `/Contents` (and similar) stream bytes are optionally **FlateDecode**d (`StreamDecoder`, uzlib-backed `InflateReader`). Operators are scanned in a small subset: text (`Tj`, `TJ`, positioning), image `Do` with `/Resources` → `/XObject` (file-offset images only), etc. Output is a `PdfPage`: text blocks (rough reading order), image descriptors, and a simple draw order list.
+Page `/Contents` (and similar) stream bytes are optionally **FlateDecode**d (`StreamDecoder`, uzlib-backed `InflateReader`). Operators are scanned in a small subset: text placement and emission (`BT`/`ET`, `Tf`, `Tm`, `Td`, `TD`, `T*`, `Tj`, `TJ`, `'`, `"`), and image `Do` via `/Resources` → `/XObject` (file-offset images only). Output is a `PdfPage`: text blocks in rough reading order, image descriptors, and a simple draw order list.
 
-**Text extraction** is intentionally limited: string literals and hex strings are mapped with a WinAnsi-style table and UTF-16 BOM handling. **CID fonts, CMaps, and glyph-index `TJ` arrays** are not fully interpreted, so some PDFs show little or no text even when the pipeline succeeds.
+**Text extraction** is intentionally limited: string literals and hex strings are mapped with a WinAnsi-style table and UTF-16 BOM handling, plus partial `/ToUnicode` CMap support for common Identity-H fonts. **CID fonts and glyph-index `TJ` arrays** are still not fully interpreted, so some PDFs show little or no text even when the pipeline succeeds.
 
 ## Cache (`lib/Pdf/Pdf/PdfCache.*`)
 
-Rendered `PdfPage` data and outline metadata can be stored on the device to avoid re-parsing; progress (last page) is persisted separately.
+Rendered `PdfPage` data, outline metadata, and progress state are cached under `/.crosspoint/pdf_<hash>/` so reopening the same file can skip most parsing work.
 
 ## Host tests (`test/pdf/`)
 
