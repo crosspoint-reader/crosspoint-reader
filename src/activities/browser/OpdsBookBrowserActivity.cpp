@@ -321,6 +321,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   std::string ext = ".epub";
   if (book.mimeType == "application/x-xtc+zip") {
     ext = ".xtc";
+  } else if (book.mimeType == "application/x-xtch+zip") {
+    ext = ".xtch";
   }
 
   // Create sanitized filename: "Title - Author.ext" or just "Title.ext" if no author
@@ -343,7 +345,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
 
     // Invalidate cache for the corresponding format
-    if (ext == ".xtc") {
+    if (ext == ".xtc" || ext == ".xtch") {
       Xtc xtc(filename, "/.crosspoint");
       xtc.clearCache();
       LOG_DBG("OPDS", "Cleared XTC cache for: %s", filename.c_str());
