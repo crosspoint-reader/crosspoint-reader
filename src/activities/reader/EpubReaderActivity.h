@@ -27,6 +27,7 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  uint8_t fontPrewarmSuppressPages = 0;
   int lastSavedSpineIndex = -1;
   int lastSavedPage = -1;
 

@@ -30,6 +30,9 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+constexpr uint32_t MIN_HEAP_FOR_PREWARM = 36000;
+constexpr uint32_t MAX_PREWARM_DELTA = 12000;
+constexpr uint8_t PREWARM_COOLDOWN_PAGES = 3;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -707,13 +710,38 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   auto* fcm = renderer.getFontCacheManager();
   fcm->resetStats();
 
-  // Font prewarm: scan pass accumulates text, then prewarm, then real render
+  // Font prewarm: scan pass accumulates text, then prewarm, then real render.
+  // If heap is already low, prewarm is temporarily disabled to preserve long-session headroom.
   const uint32_t heapBefore = esp_get_free_heap_size();
+  bool suppressPrewarm = (fontPrewarmSuppressPages > 0) || (heapBefore < MIN_HEAP_FOR_PREWARM);
+  if (fontPrewarmSuppressPages > 0) {
+    fontPrewarmSuppressPages--;
+  }
+
+  uint32_t heapAfter = heapBefore;
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
-  scope.endScanAndPrewarm();
-  const uint32_t heapAfter = esp_get_free_heap_size();
-  fcm->logStats("prewarm");
+  if (!suppressPrewarm) {
+    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
+    scope.endScanAndPrewarm();
+    const uint32_t heapAfterPrewarm = esp_get_free_heap_size();
+    fcm->logStats("prewarm");
+    const int32_t prewarmDelta = static_cast<int32_t>(heapAfterPrewarm) - static_cast<int32_t>(heapBefore);
+    heapAfter = heapAfterPrewarm;
+
+    if (fontPrewarmSuppressPages == 0 && (heapAfterPrewarm < MIN_HEAP_FOR_PREWARM || prewarmDelta < -static_cast<int32_t>(MAX_PREWARM_DELTA))) {
+      fontPrewarmSuppressPages = PREWARM_COOLDOWN_PAGES;
+      LOG_DBG("ERS", "Prewarm suppressed for %u pages (heapAfter=%lu, delta=%ld)", PREWARM_COOLDOWN_PAGES,
+              heapAfterPrewarm, prewarmDelta);
+    }
+  } else {
+    fcm->logStats("prewarm_off");
+    if (fontPrewarmSuppressPages > 0) {
+      LOG_DBG("ERS", "Prewarm skipped due to cooldown (%u pages left)", fontPrewarmSuppressPages);
+    } else {
+      LOG_DBG("ERS", "Prewarm skipped (heap low: %lu)", heapBefore);
+    }
+  }
+
   const auto tPrewarm = millis();
 
   LOG_DBG("ERS", "Heap: before=%lu after=%lu delta=%ld", heapBefore, heapAfter,
