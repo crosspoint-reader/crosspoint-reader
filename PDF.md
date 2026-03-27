@@ -20,7 +20,13 @@ The xref tells us where each object starts in the file, or that it lives inside 
 
 ## PDF objects (`lib/Pdf/Pdf/PdfObject.*`)
 
-`readAt` skips the `id gen obj` header and returns the dictionary body, or locates `stream` / `endstream` for stream objects. **`/Length` may be indirect** (`n g R`); when an `XrefTable*` is passed in, the length is read from that object’s stream (not from the first integer of the reference alone).
+`readAt` skips the `id gen obj` header and returns the dictionary body, or locates `stream` / `endstream` for stream objects. Parsing is intentionally bounded to fixed-size buffers and does not recurse through objects for stream length resolution.
+
+Stream metadata is resolved as follows:
+- `/Length` is first parsed from the current dict value.
+- If `/Length` is a direct number, it is used directly.
+- If `/Length` is indirect (`n g R`), `resolveIndirectStreamLength` reads the referenced object via `PdfObject::readAt`, validates `obj gen obj`, and extracts the numeric length.
+- A small bounded recovery pass (`recoverStreamLengthFromNearbyEndstream`) can correct the declared length if it is off by a few bytes by finding the nearest nearby `endstream` marker. This is a parser-level recovery path, not a test-only or external fallback.
 
 ## Page tree and navigation (`lib/Pdf/Pdf/PageTree.*`)
 
