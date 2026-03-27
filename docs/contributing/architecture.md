@@ -181,7 +181,7 @@ When editing related source assets, regenerate via normal build steps/scripts.
 - `src/components/`: theming and shared UI components
 - `lib/Epub/`: EPUB parser, layout, CSS handling, and hyphenation
 - `lib/`: supporting libraries (fonts, text, filesystem helpers, etc.)
-- `open-x4-sdk/`: hardware SDK submodule (display, input, storage, battery)
+- `open-x4-sdk/`: vendored hardware SDK (display, input, storage, battery)
 - `docs/`: user and technical documentation
 
 ## Embedded constraints that shape design

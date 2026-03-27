@@ -1,0 +1,14 @@
+{
+  "name": "InputManager",
+  "version": "1.1.0",
+  "description": "Button inputs",
+  "authors": [
+    {
+      "name": "CidVonHighwind",
+      "url": "https://github.com/CidVonHighwind"
+    }
+  ],
+  "dependencies": {},
+  "platforms": "espressif32",
+  "frameworks": ["arduino", "espidf"]
+}

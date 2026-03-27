@@ -87,10 +87,7 @@ See [Development](#development) below.
 CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
 
 ```
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
-
-# Or, if you've already cloned without --recursive:
-git submodule update --init --recursive
+git clone https://github.com/crosspoint-reader/crosspoint-reader
 ```
 
 ### Flashing your device

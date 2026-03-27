@@ -1,0 +1,20 @@
+{
+  "name": "SDCardManager",
+  "version": "2.0.0",
+  "description": "SD card file system utilities",
+  "authors": [
+    {
+      "name": "CidVonHighwind",
+      "url": "https://github.com/CidVonHighwind"
+    },
+    {
+      "name": "Dave Allie",
+      "url": "https://github.com/daveallie"
+    }
+  ],
+  "dependencies": {
+    "greiman/SdFat": "^2.3.1"
+  },
+  "platforms": "espressif32",
+  "frameworks": ["arduino", "espidf"]
+}

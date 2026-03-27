@@ -1,0 +1,15 @@
+{
+  "name": "BatteryMonitor",
+  "version": "1.0.0",
+  "description": "Get battery voltage and percentage",
+  "authors": [
+    {
+      "name": "Serge Baranov",
+      "email": "sbaranov@gmail.com",
+      "url": "https://github.com/CrazyCoder"
+    }
+  ],
+  "dependencies": {},
+  "platforms": "espressif32",
+  "frameworks": ["arduino", "espidf"]
+}

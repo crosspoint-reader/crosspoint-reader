@@ -7,15 +7,12 @@ CrossPoint Reader is an open-source, minimalist firmware specifically designed f
 ### Prerequisites
 - **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
 - Python 3.8+
-- Git (for submodules)
+- Git
 
 ### Cloning and Setup
 ```bash
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
+git clone https://github.com/crosspoint-reader/crosspoint-reader
 cd crosspoint-reader
-
-# If submodules were missed:
-git submodule update --init --recursive
 ```
 
 ### Building Firmware
