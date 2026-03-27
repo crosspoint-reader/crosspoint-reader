@@ -317,12 +317,17 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL
   std::string downloadUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
 
-  // Determine file extension from MIME type
-  std::string ext = ".epub";
-  if (book.mimeType == "application/x-xtc+zip") {
-    ext = ".xtc";
-  } else if (book.mimeType == "application/x-xtch+zip") {
-    ext = ".xtch";
+  // Determine file extension from acquisition type
+  const char* ext = ".epub";
+  switch (book.acquisitionType) {
+    case OpdsAcquisitionType::XTC:
+      ext = ".xtc";
+      break;
+    case OpdsAcquisitionType::XTCH:
+      ext = ".xtch";
+      break;
+    default:
+      break;
   }
 
   // Create sanitized filename: "Title - Author.ext" or just "Title.ext" if no author
@@ -345,20 +350,18 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
 
     // Invalidate cache for the corresponding format
-    if (ext == ".xtc" || ext == ".xtch") {
+    bool cacheCleared;
+    if (book.acquisitionType == OpdsAcquisitionType::XTC || book.acquisitionType == OpdsAcquisitionType::XTCH) {
       Xtc xtc(filename, "/.crosspoint");
-      if (!xtc.clearCache()) {
-        LOG_ERR("OPDS", "Failed to clear XTC cache for: %s", filename.c_str());
-      } else {
-        LOG_DBG("OPDS", "Cleared XTC cache for: %s", filename.c_str());
-      }
+      cacheCleared = xtc.clearCache();
     } else {
       Epub epub(filename, "/.crosspoint");
-      if (!epub.clearCache()) {
-        LOG_ERR("OPDS", "Failed to clear EPUB cache for: %s", filename.c_str());
-      } else {
-        LOG_DBG("OPDS", "Cleared EPUB cache for: %s", filename.c_str());
-      }
+      cacheCleared = epub.clearCache();
+    }
+    if (!cacheCleared) {
+      LOG_ERR("OPDS", "Failed to clear cache for: %s", filename.c_str());
+    } else {
+      LOG_DBG("OPDS", "Cleared cache for: %s", filename.c_str());
     }
 
     state = BrowserState::BROWSING;

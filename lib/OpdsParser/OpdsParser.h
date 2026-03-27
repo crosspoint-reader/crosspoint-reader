@@ -14,14 +14,23 @@ enum class OpdsEntryType {
 };
 
 /**
+ * Acquisition format for downloadable books.
+ */
+enum class OpdsAcquisitionType {
+  EPUB,  // application/epub+zip
+  XTC,   // application/x-xtc+zip
+  XTCH   // application/x-xtch+zip
+};
+
+/**
  * Represents an entry from an OPDS feed (either a navigation link or a book).
  */
 struct OpdsEntry {
   OpdsEntryType type = OpdsEntryType::NAVIGATION;
   std::string title;
-  std::string author;    // Only for books
-  std::string href;      // Navigation URL or book download URL
-  std::string mimeType;  // MIME type of the acquisition link (e.g. "application/epub+zip")
+  std::string author;  // Only for books
+  std::string href;    // Navigation URL or book download URL
+  OpdsAcquisitionType acquisitionType = OpdsAcquisitionType::EPUB;
   std::string id;
 };
 
