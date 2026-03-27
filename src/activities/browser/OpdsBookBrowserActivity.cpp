@@ -1,6 +1,7 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <Epub.h>
+#include <Xtc.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -341,10 +342,16 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   if (result == HttpDownloader::OK) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
 
-    // Invalidate any existing cache for this file to prevent stale metadata issues
-    Epub epub(filename, "/.crosspoint");
-    epub.clearCache();
-    LOG_DBG("OPDS", "Cleared cache for: %s", filename.c_str());
+    // Invalidate cache for the corresponding format
+    if (ext == ".xtc") {
+      Xtc xtc(filename, "/.crosspoint");
+      xtc.clearCache();
+      LOG_DBG("OPDS", "Cleared XTC cache for: %s", filename.c_str());
+    } else {
+      Epub epub(filename, "/.crosspoint");
+      epub.clearCache();
+      LOG_DBG("OPDS", "Cleared EPUB cache for: %s", filename.c_str());
+    }
 
     state = BrowserState::BROWSING;
     requestUpdate();
