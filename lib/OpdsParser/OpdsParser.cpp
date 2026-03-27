@@ -154,7 +154,8 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     if (href) {
       // Check for acquisition link with a supported book type
       if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-          (strcmp(type, "application/epub+zip") == 0 || strcmp(type, "application/x-xtc+zip") == 0 || strcmp(type, "application/x-xtch+zip") == 0)) {
+          (strcmp(type, "application/epub+zip") == 0 || strcmp(type, "application/x-xtc+zip") == 0 ||
+           strcmp(type, "application/x-xtch+zip") == 0)) {
         self->currentEntry.type = OpdsEntryType::BOOK;
         self->currentEntry.href = href;
         self->currentEntry.mimeType = type;

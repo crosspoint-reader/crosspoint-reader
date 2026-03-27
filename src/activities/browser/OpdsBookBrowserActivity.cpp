@@ -1,12 +1,12 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <Epub.h>
-#include <Xtc.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
+#include <Xtc.h>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -347,12 +347,18 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     // Invalidate cache for the corresponding format
     if (ext == ".xtc" || ext == ".xtch") {
       Xtc xtc(filename, "/.crosspoint");
-      xtc.clearCache();
-      LOG_DBG("OPDS", "Cleared XTC cache for: %s", filename.c_str());
+      if (!xtc.clearCache()) {
+        LOG_ERR("OPDS", "Failed to clear XTC cache for: %s", filename.c_str());
+      } else {
+        LOG_DBG("OPDS", "Cleared XTC cache for: %s", filename.c_str());
+      }
     } else {
       Epub epub(filename, "/.crosspoint");
-      epub.clearCache();
-      LOG_DBG("OPDS", "Cleared EPUB cache for: %s", filename.c_str());
+      if (!epub.clearCache()) {
+        LOG_ERR("OPDS", "Failed to clear EPUB cache for: %s", filename.c_str());
+      } else {
+        LOG_DBG("OPDS", "Cleared EPUB cache for: %s", filename.c_str());
+      }
     }
 
     state = BrowserState::BROWSING;
