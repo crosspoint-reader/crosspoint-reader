@@ -138,19 +138,13 @@ fn main() -> ! {
     // - GPIO3: INPUT_PULLUP
     // - ADC attenuation: 11dB
     let mut power_button = Input::new(peripherals.GPIO3, InputConfig::default().with_pull(Pull::Up));
+    // Next experiment: isolate GPIO1 state impact while keeping other pins at baseline behavior.
     let combos = [
         PinCombination {
-            name: "baseline-cpp-match",
+            name: "g1-float-g2-float-g3-up",
             adc_pin1: ResistorState::Floating,
             adc_pin2: ResistorState::Floating,
             power_pin3: ResistorState::PullUp,
-            usb_pin20: ResistorState::Floating,
-        },
-        PinCombination {
-            name: "g3-down-g20-float",
-            adc_pin1: ResistorState::Floating,
-            adc_pin2: ResistorState::Floating,
-            power_pin3: ResistorState::PullDown,
             usb_pin20: ResistorState::Floating,
         },
         PinCombination {
@@ -161,53 +155,11 @@ fn main() -> ! {
             usb_pin20: ResistorState::Floating,
         },
         PinCombination {
-            name: "g1-float-g2-up-g3-up",
-            adc_pin1: ResistorState::Floating,
-            adc_pin2: ResistorState::PullUp,
-            power_pin3: ResistorState::PullUp,
-            usb_pin20: ResistorState::Floating,
-        },
-        PinCombination {
             name: "g1-down-g2-float-g3-up",
             adc_pin1: ResistorState::PullDown,
             adc_pin2: ResistorState::Floating,
             power_pin3: ResistorState::PullUp,
             usb_pin20: ResistorState::Floating,
-        },
-        PinCombination {
-            name: "g1-float-g2-down-g3-up",
-            adc_pin1: ResistorState::Floating,
-            adc_pin2: ResistorState::PullDown,
-            power_pin3: ResistorState::PullUp,
-            usb_pin20: ResistorState::Floating,
-        },
-        PinCombination {
-            name: "safe-random-1: g1-up-g2-down-g3-down",
-            adc_pin1: ResistorState::PullUp,
-            adc_pin2: ResistorState::PullDown,
-            power_pin3: ResistorState::PullDown,
-            usb_pin20: ResistorState::Floating,
-        },
-        PinCombination {
-            name: "usb-pullup-only",
-            adc_pin1: ResistorState::Floating,
-            adc_pin2: ResistorState::Floating,
-            power_pin3: ResistorState::PullUp,
-            usb_pin20: ResistorState::PullUp,
-        },
-        PinCombination {
-            name: "usb-pulldown-only",
-            adc_pin1: ResistorState::Floating,
-            adc_pin2: ResistorState::Floating,
-            power_pin3: ResistorState::PullUp,
-            usb_pin20: ResistorState::PullDown,
-        },
-        PinCombination {
-            name: "all-pullups",
-            adc_pin1: ResistorState::PullUp,
-            adc_pin2: ResistorState::PullUp,
-            power_pin3: ResistorState::PullUp,
-            usb_pin20: ResistorState::PullUp,
         },
     ];
 
