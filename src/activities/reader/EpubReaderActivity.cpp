@@ -31,7 +31,6 @@ constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
 constexpr uint32_t MIN_HEAP_FOR_PREWARM = 36000;
-constexpr uint32_t MAX_PREWARM_DELTA = 12000;
 constexpr uint8_t PREWARM_COOLDOWN_PAGES = 3;
 
 int clampPercent(int percent) {
@@ -725,13 +724,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     scope.endScanAndPrewarm();
     const uint32_t heapAfterPrewarm = esp_get_free_heap_size();
     fcm->logStats("prewarm");
-    const int32_t prewarmDelta = static_cast<int32_t>(heapAfterPrewarm) - static_cast<int32_t>(heapBefore);
     heapAfter = heapAfterPrewarm;
 
-    if (fontPrewarmSuppressPages == 0 && (heapAfterPrewarm < MIN_HEAP_FOR_PREWARM || prewarmDelta < -static_cast<int32_t>(MAX_PREWARM_DELTA))) {
+    if (fontPrewarmSuppressPages == 0 && heapAfterPrewarm < MIN_HEAP_FOR_PREWARM) {
       fontPrewarmSuppressPages = PREWARM_COOLDOWN_PAGES;
-      LOG_DBG("ERS", "Prewarm suppressed for %u pages (heapAfter=%lu, delta=%ld)", PREWARM_COOLDOWN_PAGES,
-              heapAfterPrewarm, prewarmDelta);
+      LOG_DBG("ERS", "Prewarm suppressed for %u pages (heapAfter=%lu)", PREWARM_COOLDOWN_PAGES, heapAfterPrewarm);
     }
   } else {
     scope.endScanAndPrewarm();
