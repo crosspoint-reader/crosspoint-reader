@@ -74,6 +74,15 @@ pub mod pin_config {
     pub const fn pin_setup_spec() -> ButtonPinConfig {
         ButtonPinConfig::new([1, 2], AtLeast::Input, 11, 3, AtLeast::InputPullUp, true)
     }
+
+    /// C3 button pin constants mirrored from open-x4 InputManager.
+    pub const BUTTON_ADC_PIN_1: u8 = 1;
+    pub const BUTTON_ADC_PIN_2: u8 = 2;
+    pub const POWER_BUTTON_PIN: u8 = 3;
+
+    /// Same debounce/threshold tables used by the firmware's InputManager.
+    pub const ADC_RANGES_1: [i32; 5] = [3800, 3100, 2090, 750, i32::MIN];
+    pub const ADC_RANGES_2: [i32; 3] = [3800, 1120, i32::MIN];
 }
 
 pub use pin_config::{AtLeast, ButtonPinConfig, pin_setup_spec};
