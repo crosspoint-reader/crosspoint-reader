@@ -9,10 +9,13 @@
 
 namespace {
 
-size_t findStreamKeywordSv(std::string_view s) {
+size_t findStreamKeywordSv(std::string_view s, size_t start) {
   static const char pat[] = "\nstream";
   constexpr size_t plen = 7;
-  size_t pos = 0;
+  if (start >= s.size()) {
+    return std::string_view::npos;
+  }
+  size_t pos = start;
   while (pos + plen <= s.size()) {
     if (std::memcmp(s.data() + pos, pat, plen) == 0) {
       return pos + 1;
@@ -26,8 +29,12 @@ size_t findStreamKeywordSv(std::string_view s) {
   return std::string_view::npos;
 }
 
-size_t findEndobjKeywordSv(std::string_view s) {
+size_t findEndobjKeywordSv(std::string_view s, size_t start) {
   size_t p = 0;
+  if (start >= s.size()) {
+    return std::string_view::npos;
+  }
+  p = start;
   while (p < s.size()) {
     const size_t f = s.find("endobj", p);
     if (f == std::string_view::npos) return std::string_view::npos;
@@ -56,8 +63,12 @@ void trimTrailingWsFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& s) {
   }
 }
 
-bool locateObjKeywordFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& acc, size_t& outEraseTo) {
-  for (size_t i = 0; i + 3 <= acc.size(); ++i) {
+bool locateObjKeywordFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& acc, size_t& outEraseTo, size_t startFrom) {
+  if (startFrom >= acc.size()) return false;
+  if (startFrom + 3 > acc.size()) {
+    return false;
+  }
+  for (size_t i = startFrom; i + 3 <= acc.size(); ++i) {
     if (std::memcmp(acc.data() + i, "obj", 3) != 0) continue;
     if (i >= 3 && acc[i - 1] == 'b' && acc[i - 2] == 'd' && acc[i - 3] == 'n') continue;
     if (i > 0) {
@@ -139,6 +150,9 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
   constexpr size_t kMaxAcc = PDF_OBJECT_BODY_MAX;
 
   bool strippedHeader = false;
+  size_t objSearchFrom = 0;
+  size_t streamSearchFrom = 0;
+  size_t endObjSearchFrom = 0;
   while (bodyStr.size() < kMaxAcc) {
     const size_t remaining = kMaxAcc - bodyStr.size() - 1;
     if (remaining == 0) {
@@ -155,13 +169,22 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
 
     if (!strippedHeader) {
       size_t eraseTo = 0;
-      if (locateObjKeywordFs(bodyStr, eraseTo)) {
+      const size_t objStart = (objSearchFrom > 3 ? objSearchFrom - 3 : 0);
+      if (locateObjKeywordFs(bodyStr, eraseTo, objStart)) {
         bodyStr.erase_prefix(eraseTo);
         while (bodyStr.size() > 0 && (bodyStr[0] == ' ' || bodyStr[0] == '\t' || bodyStr[0] == '\r' ||
                                       bodyStr[0] == '\n')) {
           bodyStr.erase_prefix(1);
         }
         strippedHeader = true;
+        streamSearchFrom = 0;
+        endObjSearchFrom = 0;
+      } else {
+        if (bodyStr.size() > 3) {
+          objSearchFrom = bodyStr.size() - 3;
+        } else {
+          objSearchFrom = bodyStr.size();
+        }
       }
     }
 
@@ -171,7 +194,8 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
 
     if (streamOffset != nullptr) {
       const std::string_view acc = bodyStr.view();
-      const size_t sp = findStreamKeywordSv(acc);
+      const size_t streamStart = (streamSearchFrom > 7 ? streamSearchFrom - 7 : 0);
+      const size_t sp = findStreamKeywordSv(acc, streamStart);
       if (sp != std::string_view::npos) {
         PdfFixedString<PDF_OBJECT_BODY_MAX> dictPart;
         if (!dictPart.assign(acc.data(), sp)) {
@@ -195,10 +219,13 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
         *streamLength = resolveStreamLength(file, xrefForIndirectLength, bodyStr.view());
         return bodyStr.size() > 0 && *streamLength > 0;
       }
+      streamSearchFrom = acc.size();
     }
 
-    const size_t ep = findEndobjKeywordSv(bodyStr.view());
-    if (ep != std::string_view::npos && streamOffset == nullptr) {
+    const std::string_view acc = bodyStr.view();
+    const size_t endScanFrom = (endObjSearchFrom > 6 ? endObjSearchFrom - 6 : 0);
+    const size_t ep = streamOffset == nullptr ? findEndobjKeywordSv(acc, endScanFrom) : std::string_view::npos;
+    if (ep != std::string_view::npos) {
       PdfFixedString<PDF_OBJECT_BODY_MAX> only;
       if (!only.assign(bodyStr.view().data(), ep)) {
         return false;
@@ -210,10 +237,12 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
       }
       return bodyStr.size() > 0;
     }
+    endObjSearchFrom = acc.size();
   }
 
   if (strippedHeader && streamOffset == nullptr) {
-    const size_t ep = findEndobjKeywordSv(bodyStr.view());
+    const size_t endScanFrom = (endObjSearchFrom > 6 ? endObjSearchFrom - 6 : 0);
+    const size_t ep = findEndobjKeywordSv(bodyStr.view(), endScanFrom);
     if (ep != std::string_view::npos) {
       PdfFixedString<PDF_OBJECT_BODY_MAX> only;
       if (!only.assign(bodyStr.view().data(), ep)) {

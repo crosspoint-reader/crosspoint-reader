@@ -9,6 +9,9 @@
 class PageTree {
   PdfFixedVector<uint32_t, PDF_MAX_PAGES> pageOffsets;
   PdfFixedVector<uint32_t, PDF_MAX_PAGES> pageObjectIds;
+  uint16_t pageIndexByObjectId_[PDF_MAX_OBJECTS]{};
+  bool pageIndexMapReady_ = false;
+  static constexpr uint16_t kInvalidPageIndex = 0xFFFF;
 
  public:
   bool parse(FsFile& file, const XrefTable& xref, uint32_t rootObjId);

@@ -33,6 +33,15 @@ size_t findStartXref(const uint8_t* buf, size_t len) {
   return SIZE_MAX;
 }
 
+void rebuildObjStmContainerList(uint16_t* ids, uint16_t& count, const uint8_t* bits) {
+  count = 0;
+  for (uint32_t objId = 0; objId < PDF_MAX_OBJECTS; ++objId) {
+    if ((bits[objId >> 3U] & static_cast<uint8_t>(1U << (objId & 7U))) != 0U) {
+      ids[count++] = static_cast<uint16_t>(objId);
+    }
+  }
+}
+
 bool isSpace(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\0'; }
 
 void skipWs(const char*& p) {
@@ -260,11 +269,14 @@ bool scanObjStmHeaderFromBytes(const uint8_t* bytes, size_t len, size_t first, i
   return haveDigit;
 }
 
-[[maybe_unused]] bool scanObjStmHeaderForTarget(FsFile& file, size_t first, int nObj, uint32_t targetObjId,
-                                                uint32_t& targetRel) {
-  if (!file.seek(0)) {
+[[maybe_unused]] bool scanObjStmHeaderForTargetAndNext(FsFile& file, size_t first, int nObj, uint32_t targetObjId,
+                                                      uint32_t& targetRel, uint32_t& nextRel) {
+  if (!file.seek(first)) {
     return false;
   }
+  targetRel = 0;
+  nextRel = UINT32_MAX;
+  bool targetFound = false;
   for (int i = 0; i < nObj; ++i) {
     uint32_t oid = 0;
     uint32_t rel = 0;
@@ -272,30 +284,13 @@ bool scanObjStmHeaderFromBytes(const uint8_t* bytes, size_t len, size_t first, i
       return false;
     }
     if (oid == targetObjId) {
+      targetFound = true;
       targetRel = rel;
-      return true;
-    }
-  }
-  return false;
-}
-
-[[maybe_unused]] bool scanObjStmHeaderForNext(FsFile& file, size_t first, int nObj, uint32_t targetRel,
-                                              uint32_t& nextRel) {
-  if (!file.seek(0)) {
-    return false;
-  }
-  nextRel = 0;
-  for (int i = 0; i < nObj; ++i) {
-    [[maybe_unused]] uint32_t oid = 0;
-    uint32_t rel = 0;
-    if (!readObjStmUnsignedToken(file, first, oid) || !readObjStmUnsignedToken(file, first, rel)) {
-      return false;
-    }
-    if (rel > targetRel && (nextRel == 0 || rel < nextRel)) {
+    } else if (targetFound && rel > targetRel && rel < nextRel) {
       nextRel = rel;
     }
   }
-  return true;
+  return targetFound;
 }
 
 struct StreamToFileCtx {
@@ -750,6 +745,7 @@ bool XrefTable::parseXrefStream(FsFile& file, size_t /*fileSize*/, uint32_t xref
   }
 
   std::memcpy(objStmContainers_, st.objStmBits, sizeof(objStmContainers_));
+  rebuildObjStmContainerList(objStmContainerIds_, objStmContainerCount_, objStmContainers_);
 
   bool any = false;
   for (uint32_t i = 0; i < offsetCount_; ++i) {
@@ -842,14 +838,8 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
   }
 
   uint32_t targetRel = 0;
-  if (!scanObjStmHeaderForTarget(spill, static_cast<size_t>(first), nObj, targetObjId, targetRel)) {
-    spill.close();
-    storage.remove(tempPath.c_str());
-    return false;
-  }
-
   uint32_t nextRel = 0;
-  if (!scanObjStmHeaderForNext(spill, static_cast<size_t>(first), nObj, targetRel, nextRel)) {
+  if (!scanObjStmHeaderForTargetAndNext(spill, static_cast<size_t>(first), nObj, targetObjId, targetRel, nextRel)) {
     spill.close();
     storage.remove(tempPath.c_str());
     return false;
@@ -1047,6 +1037,7 @@ bool XrefTable::parse(FsFile& file) {
     e = InlineEntry{};
   }
   std::memset(objStmContainers_, 0, sizeof(objStmContainers_));
+  objStmContainerCount_ = 0;
 
   const size_t fileSize = file.fileSize();
   if (fileSize < 32) {
@@ -1131,10 +1122,8 @@ bool XrefTable::readDictForObject(FsFile& file, uint32_t objId, PdfFixedString<P
   }
   const uint32_t off = getOffset(objId);
   if (off == 0) {
-    for (uint32_t sid = 0; sid < PDF_MAX_OBJECTS; ++sid) {
-      if ((objStmContainers_[sid >> 3U] & static_cast<uint8_t>(1U << (sid & 7U))) == 0) {
-        continue;
-      }
+    for (uint32_t i = 0; i < static_cast<uint32_t>(objStmContainerCount_); ++i) {
+      const uint32_t sid = static_cast<uint32_t>(objStmContainerIds_[i]);
       if (const_cast<XrefTable*>(this)->loadObjStreamForTarget(file, sid, objId)) {
         const InlineEntry* loaded = findInline(objId);
         if (loaded) {
