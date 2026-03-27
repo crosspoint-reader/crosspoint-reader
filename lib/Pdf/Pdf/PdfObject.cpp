@@ -55,12 +55,63 @@ size_t findEndobjKeywordSv(std::string_view s, size_t start) {
   return std::string_view::npos;
 }
 
-void trimTrailingWsFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& s) {
-  while (s.size() > 0) {
-    const char c = s[s.size() - 1];
-    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break;
-    s.resize(s.size() - 1);
+uint32_t recoverStreamLengthFromNearbyEndstream(FsFile& file, uint32_t streamOffset, uint32_t declaredLen) {
+  constexpr size_t kSlack = 32;
+  constexpr size_t kMarkerLen = 9;  // "endstream"
+  if (declaredLen == 0) {
+    return 0;
   }
+  const uint64_t start = (declaredLen > kSlack) ? (declaredLen - kSlack) : 0;
+  const uint32_t startAbs = streamOffset + static_cast<uint32_t>(start);
+  const uint64_t windowLen = kSlack + declaredLen - start + kSlack + kMarkerLen + 2;
+  if (windowLen == 0 || windowLen > 2048) {
+    return declaredLen;
+  }
+  if (!file.seek(startAbs)) {
+    return declaredLen;
+  }
+
+  char window[2048];
+  int n = file.read(reinterpret_cast<uint8_t*>(window), static_cast<size_t>(windowLen));
+  if (n <= 0) {
+    return declaredLen;
+  }
+  const size_t available = static_cast<size_t>(n);
+  static const char marker[kMarkerLen + 1] = "endstream";
+
+  uint32_t bestLen = declaredLen;
+  uint32_t bestDistance = UINT32_MAX;
+  for (size_t i = 0; i + kMarkerLen <= available; ++i) {
+    bool isMarker = true;
+    for (size_t j = 0; j < kMarkerLen; ++j) {
+      if (window[i + j] != marker[j]) {
+        isMarker = false;
+        break;
+      }
+    }
+    if (!isMarker) {
+      continue;
+    }
+    const size_t markerAbs = start + i;
+    const size_t next = i + kMarkerLen;
+    if (markerAbs < (declaredLen > kSlack ? declaredLen - kSlack : 0) ||
+        markerAbs > static_cast<size_t>(declaredLen + kSlack)) {
+      continue;
+    }
+    if (i > 0 && (window[i - 1] != ' ' && window[i - 1] != '\r' && window[i - 1] != '\n' && window[i - 1] != '\t')) {
+      continue;
+    }
+    if (next >= available || (window[next] != ' ' && window[next] != '\r' && window[next] != '\n' && window[next] != '\t')) {
+      continue;
+    }
+    const uint32_t candidate = static_cast<uint32_t>(markerAbs);
+    const uint32_t distance = candidate > declaredLen ? candidate - declaredLen : declaredLen - candidate;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestLen = candidate;
+    }
+  }
+  return bestLen;
 }
 
 bool locateObjKeywordFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& acc, size_t& outEraseTo, size_t startFrom) {
@@ -85,6 +136,60 @@ bool locateObjKeywordFs(PdfFixedString<PDF_OBJECT_BODY_MAX>& acc, size_t& outEra
     return true;
   }
   return false;
+}
+
+uint32_t resolveIndirectStreamLength(FsFile& file, const XrefTable* xref, uint32_t lenObjId, uint32_t gen) {
+  if (!xref || lenObjId == 0) {
+    return 0;
+  }
+  const uint32_t lenObjOff = xref->getOffset(lenObjId);
+  if (lenObjOff == 0) {
+    return 0;
+  }
+  PdfFixedString<PDF_OBJECT_BODY_MAX> lenBody;
+  if (!PdfObject::readAt(file, lenObjOff, lenBody, nullptr, nullptr, nullptr)) {
+    return 0;
+  }
+  const char* p = lenBody.c_str();
+  char* end = nullptr;
+  const auto isWs = [](const char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+  };
+
+  while (isWs(*p)) ++p;
+  const unsigned long first = std::strtoul(p, &end, 10);
+  if (end == p) return 0;
+
+  const char* q = end;
+  while (isWs(*q)) ++q;
+  if (*q == '\0') {
+    return static_cast<uint32_t>(first);
+  }
+  if (std::isdigit(static_cast<unsigned char>(*q))) {
+    char* e2 = nullptr;
+    const unsigned long second = std::strtoul(q, &e2, 10);
+    if (e2 == q) return 0;
+    const char* afterSecond = e2;
+    while (isWs(*afterSecond)) ++afterSecond;
+    if (afterSecond[0] != 'o' || afterSecond[1] != 'b' || afterSecond[2] != 'j') {
+      return 0;
+    }
+    if (first != static_cast<unsigned long>(lenObjId) || second != static_cast<unsigned long>(gen)) {
+      return 0;
+    }
+    const char* value = afterSecond + 3;
+    while (isWs(*value)) ++value;
+    if (*value == '\0') {
+      return 0;
+    }
+    const unsigned long len = std::strtoul(value, &end, 10);
+    return end == value ? 0 : static_cast<uint32_t>(len);
+  }
+  if (q[0] != 'o' || q[1] != 'b' || q[2] != 'j') {
+    // Fallback: treat as raw numeric payload.
+    return static_cast<uint32_t>(first);
+  }
+  return 0;
 }
 
 uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, std::string_view dictPart) {
@@ -120,17 +225,7 @@ uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, std::string_vi
     return 0;
   }
   const uint32_t lenObjId = static_cast<uint32_t>(num);
-  const uint32_t loff = xref->getOffset(lenObjId);
-  if (loff == 0) {
-    return 0;
-  }
-  static PdfFixedString<PDF_OBJECT_BODY_MAX> lenBody;
-  if (!PdfObject::readAt(file, loff, lenBody, nullptr, nullptr, nullptr)) {
-    return 0;
-  }
-  p = lenBody.c_str();
-  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
-  return static_cast<uint32_t>(std::strtoul(p, nullptr, 10));
+  return resolveIndirectStreamLength(file, xref, lenObjId, static_cast<uint32_t>(gen));
 }
 
 }  // namespace
@@ -197,15 +292,13 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
       const size_t streamStart = (streamSearchFrom > 7 ? streamSearchFrom - 7 : 0);
       const size_t sp = findStreamKeywordSv(acc, streamStart);
       if (sp != std::string_view::npos) {
-        PdfFixedString<PDF_OBJECT_BODY_MAX> dictPart;
-        if (!dictPart.assign(acc.data(), sp)) {
-          return false;
+        size_t dictEnd = sp;
+        while (dictEnd > 0 &&
+               (bodyStr[dictEnd - 1] == ' ' || bodyStr[dictEnd - 1] == '\t' || bodyStr[dictEnd - 1] == '\r' ||
+                bodyStr[dictEnd - 1] == '\n')) {
+          --dictEnd;
         }
-        trimTrailingWsFs(dictPart);
-        bodyStr.clear();
-        if (!bodyStr.assign(dictPart.view())) {
-          return false;
-        }
+        bodyStr.resize(dictEnd);
         size_t dataIdx = sp + 6;
         while (dataIdx < acc.size() && (acc[dataIdx] == '\r' || acc[dataIdx] == '\n')) {
           ++dataIdx;
@@ -217,6 +310,10 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
         const uint32_t acc0File = static_cast<uint32_t>(curPos - acc.size());
         *streamOffset = acc0File + static_cast<uint32_t>(dataIdx);
         *streamLength = resolveStreamLength(file, xrefForIndirectLength, bodyStr.view());
+        if (*streamLength > 0) {
+          const uint32_t repaired = recoverStreamLengthFromNearbyEndstream(file, *streamOffset, *streamLength);
+          *streamLength = repaired;
+        }
         return bodyStr.size() > 0 && *streamLength > 0;
       }
       streamSearchFrom = acc.size();
@@ -226,15 +323,12 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
     const size_t endScanFrom = (endObjSearchFrom > 6 ? endObjSearchFrom - 6 : 0);
     const size_t ep = streamOffset == nullptr ? findEndobjKeywordSv(acc, endScanFrom) : std::string_view::npos;
     if (ep != std::string_view::npos) {
-      PdfFixedString<PDF_OBJECT_BODY_MAX> only;
-      if (!only.assign(bodyStr.view().data(), ep)) {
-        return false;
+      size_t end = ep;
+      while (end > 0 && (bodyStr[end - 1] == ' ' || bodyStr[end - 1] == '\t' || bodyStr[end - 1] == '\r' ||
+                         bodyStr[end - 1] == '\n')) {
+        --end;
       }
-      trimTrailingWsFs(only);
-      bodyStr.clear();
-      if (!bodyStr.assign(only.view())) {
-        return false;
-      }
+      bodyStr.resize(end);
       return bodyStr.size() > 0;
     }
     endObjSearchFrom = acc.size();
@@ -244,15 +338,12 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
     const size_t endScanFrom = (endObjSearchFrom > 6 ? endObjSearchFrom - 6 : 0);
     const size_t ep = findEndobjKeywordSv(bodyStr.view(), endScanFrom);
     if (ep != std::string_view::npos) {
-      PdfFixedString<PDF_OBJECT_BODY_MAX> only;
-      if (!only.assign(bodyStr.view().data(), ep)) {
-        return false;
+      size_t end = ep;
+      while (end > 0 && (bodyStr[end - 1] == ' ' || bodyStr[end - 1] == '\t' || bodyStr[end - 1] == '\r' ||
+                         bodyStr[end - 1] == '\n')) {
+        --end;
       }
-      trimTrailingWsFs(only);
-      bodyStr.clear();
-      if (!bodyStr.assign(only.view())) {
-        return false;
-      }
+      bodyStr.resize(end);
       return bodyStr.size() > 0;
     }
   }
