@@ -5,9 +5,9 @@
 
 namespace {
 // Keep the deflate history window intentionally small to avoid large transient RAM use
-// in the PDF/image paths. This is a compromise: some highly-compressed streams may fail
-// closed instead of exhausting the device heap.
-constexpr size_t INFLATE_DICT_SIZE = 16384;
+// in the PDF/image paths while still supporting full DEFLATE distance range.
+// ZIP/deflate streams can require up to 32KiB back-references.
+constexpr size_t INFLATE_DICT_SIZE = 32768;
 }
 
 // Guarantee the cast pattern in the header comment is valid.

@@ -39,7 +39,7 @@ SOURCES=(
 )
 
 $CXX $STD -Wall -Wextra -O2 "${INCLUDES[@]}" "${SOURCES[@]}" "$OUT_DIR/tinflate.o" "$OUT_DIR/uzlib_checksum_stubs.o" \
-  -o "$OUT_DIR/pdf_parser_host_test"
+  -lz -o "$OUT_DIR/pdf_parser_host_test"
 
 if [[ $# -eq 0 ]]; then
   set -- "$ROOT/test/pdf/sample.pdf" "$ROOT/test/pdf/EE-366.pdf" "$ROOT/test/pdf/esp32-c6_datasheet_en.pdf" \

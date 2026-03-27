@@ -13,10 +13,12 @@
 #include "XrefTable.h"
 
 #include <HalStorage.h>
+#include <InflateReader.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <zlib.h>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -227,6 +229,69 @@ void testPdfCachedPageReader() {
   REQUIRE(loadedStep.index == 0);
 }
 
+struct InflateStreamCtx {
+  InflateReader reader;  // must be first for callback context cast
+  const uint8_t* compressed = nullptr;
+  size_t compressedLen = 0;
+  size_t readOffset = 0;
+  uint8_t readBuf[256]{};
+};
+
+static int inflateStreamCallback(uzlib_uncomp* uncomp) {
+  auto* ctx = reinterpret_cast<InflateStreamCtx*>(uncomp);
+  if (ctx->readOffset >= ctx->compressedLen) return -1;
+
+  const size_t remaining = ctx->compressedLen - ctx->readOffset;
+  const size_t toRead = remaining < sizeof(ctx->readBuf) ? remaining : sizeof(ctx->readBuf);
+  std::memcpy(ctx->readBuf, ctx->compressed + ctx->readOffset, toRead);
+  ctx->readOffset += toRead;
+  uncomp->source = ctx->readBuf + 1;
+  uncomp->source_limit = ctx->readBuf + toRead;
+  return ctx->readBuf[0];
+}
+
+void testInflateReaderLongWindowStreaming() {
+  const size_t plainLen = 70000;
+  std::string plain(plainLen, 'A');
+  for (size_t i = 0; i < plainLen; ++i) {
+    plain[i] = static_cast<char>('A' + (i % 26));
+  }
+
+  uLongf compressedBound = compressBound(plain.size());
+  REQUIRE(compressedBound > 0);
+  std::vector<uint8_t> compressed(compressedBound);
+  const auto zret = compress2(
+      reinterpret_cast<Bytef*>(compressed.data()), &compressedBound, reinterpret_cast<const Bytef*>(plain.data()), plain.size(),
+      Z_BEST_COMPRESSION);
+  REQUIRE(zret == Z_OK);
+  compressed.resize(compressedBound);
+
+  InflateStreamCtx ctx;
+  ctx.compressed = compressed.data();
+  ctx.compressedLen = compressed.size();
+  REQUIRE(ctx.reader.init(true));
+  ctx.reader.setReadCallback(inflateStreamCallback);
+
+  std::vector<uint8_t> out;
+  out.resize(plainLen);
+  size_t producedTotal = 0;
+  while (producedTotal < plainLen) {
+    size_t produced = 0;
+    const auto status = ctx.reader.readAtMost(out.data() + producedTotal, plainLen - producedTotal, &produced);
+    producedTotal += produced;
+    if (status == InflateStatus::Error) {
+      REQUIRE(status != InflateStatus::Error);
+      return;
+    }
+    if (status == InflateStatus::Done) {
+      break;
+    }
+  }
+
+  REQUIRE(producedTotal == plainLen);
+  REQUIRE(std::memcmp(out.data(), plain.data(), plainLen) == 0);
+}
+
 void collapseAsciiWhitespace(std::string& s) {
   std::string out;
   out.reserve(s.size());
@@ -397,6 +462,7 @@ bool runOnePdf(const char* path) {
 int main(int argc, char** argv) {
   testPdfPageNavigationPolicy();
   testPdfCachedPageReader();
+  testInflateReaderLongWindowStreaming();
   std::vector<const char*> paths;
   if (argc > 1) {
     for (int i = 1; i < argc; ++i) paths.push_back(argv[i]);

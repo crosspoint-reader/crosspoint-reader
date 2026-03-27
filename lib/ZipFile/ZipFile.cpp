@@ -501,11 +501,17 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
   FileStatSlim fileStat = {};
   if (!loadFileStatSlim(filename, &fileStat)) {
+    if (!wasOpen) {
+      close();
+    }
     return false;
   }
 
   const long fileOffset = getDataOffset(fileStat);
   if (fileOffset < 0) {
+    if (!wasOpen) {
+      close();
+    }
     return false;
   }
 
@@ -617,7 +623,8 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       }
 
       if (status == InflateStatus::Error) {
-        LOG_ERR("ZIP", "Decompression failed");
+        LOG_ERR("ZIP", "Decompression failed after producing %zu of %zu output bytes", totalProduced,
+                static_cast<size_t>(inflatedDataSize));
         break;
       }
       // InflateStatus::Ok: output buffer full, continue
