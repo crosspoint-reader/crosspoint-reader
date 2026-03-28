@@ -90,6 +90,7 @@ class HalFile : public Print {
   void rewindDirectory();
   bool close();
   HalFile openNextFile();
+  bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime);
   bool isOpen() const;
   operator bool() const;
 };

@@ -155,5 +155,8 @@ HalFile HalFile::openNextFile() {
   assert(impl != nullptr);
   return HalFile(std::make_unique<Impl>(impl->file.openNextFile()));
 }
+bool HalFile::getModifyDateTime(uint16_t* pdate, uint16_t* ptime) {
+  HAL_FILE_WRAPPED_CALL(getModifyDateTime, pdate, ptime);
+}
 bool HalFile::isOpen() const { return impl != nullptr && impl->file.isOpen(); }  // already thread-safe, no need to wrap
 HalFile::operator bool() const { return isOpen(); }
