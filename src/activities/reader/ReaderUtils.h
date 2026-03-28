@@ -42,8 +42,8 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   // Returns true when the button should count as a page-turn trigger this frame.
   auto navTurn = [&](MappedInputManager::Button btn) -> bool {
     if (useRelease) {
-      return input.wasReleased(btn) && !input.isLongPressHandled(btn) &&
-             !input.isDoublePressHandled(btn) && !input.isDoublePressArmed(btn);
+      return input.wasReleased(btn) && !input.isLongPressHandled(btn) && !input.isDoublePressHandled(btn) &&
+             !input.isDoublePressArmed(btn);
     }
     return input.wasPressed(btn);
   };
