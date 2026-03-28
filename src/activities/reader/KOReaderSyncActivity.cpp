@@ -201,6 +201,7 @@ void KOReaderSyncActivity::performUpload() {
   {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;
+    uploadCompleteTime = millis();
   }
   requestUpdate(true);
 }
@@ -350,6 +351,13 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
 void KOReaderSyncActivity::loop() {
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
+    if (state == UPLOAD_COMPLETE && millis() - uploadCompleteTime >= 3000) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
+      return;
+    }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult result;
       result.isCancelled = true;

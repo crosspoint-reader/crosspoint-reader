@@ -78,6 +78,9 @@ class KOReaderSyncActivity final : public Activity {
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
 
+  // Timestamp when UPLOAD_COMPLETE state was entered (for auto-close)
+  unsigned long uploadCompleteTime = 0;
+
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
