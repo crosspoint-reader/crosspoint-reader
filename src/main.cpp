@@ -314,7 +314,10 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  gpio.update();
+  // Update input: MappedInputManager calls gpio.update() internally and also
+  // handles the deferred long-press reset (longPressFired_ cleared one frame
+  // after release so isLongPressHandled() stays true during the release frame).
+  mappedInputManager.update();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 
