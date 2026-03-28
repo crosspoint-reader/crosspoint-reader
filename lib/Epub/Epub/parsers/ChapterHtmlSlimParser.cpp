@@ -583,6 +583,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (strcmp(name, "li") == 0) {
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
       } else if (strcmp(name, "pre") == 0) {
+        // Record depth so characterData can treat \n as a hard line break inside <pre>.
+        // depth has not been incremented yet here; it will be after startElement returns.
         self->preUntilDepth = std::min(self->preUntilDepth, self->depth);
       }
     }
@@ -711,10 +713,16 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   for (int i = 0; i < len; i++) {
     if (isWhitespace(s[i])) {
-      // Inside <pre>: treat newline as a hard line break
+      // Inside <pre>: treat \n as a hard line break.
       if (s[i] == '\n' && self->preUntilDepth < self->depth) {
         if (self->partWordBufferIndex > 0) {
           self->flushPartWordBuffer();
+        }
+        // Blank line: the current block is empty, but we still need to emit a visible
+        // empty line.  Add a single space so the block is non-empty and makePages()
+        // will produce a line of the correct height instead of reusing the empty block.
+        if (self->currentTextBlock->isEmpty()) {
+          self->currentTextBlock->addWord(" ", EpdFontFamily::REGULAR);
         }
         self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
         self->nextWordContinues = false;
@@ -1166,8 +1174,11 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY += blockStyle.paddingBottom;
   }
 
-  // Extra paragraph spacing if enabled (default behavior)
-  if (extraParagraphSpacing) {
+  // Extra paragraph spacing if enabled (default behavior).
+  // Suppressed between lines within a <pre> block so code/preformatted text is not
+  // double-spaced; the last line of the block is flushed after </pre> is closed and
+  // preUntilDepth has already been reset, so it still receives normal paragraph spacing.
+  if (extraParagraphSpacing && preUntilDepth == INT_MAX) {
     currentPageNextY += lineHeight / 2;
   }
 }
