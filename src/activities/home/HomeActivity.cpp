@@ -10,6 +10,7 @@
 #include <Xtc.h>
 
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -19,6 +20,28 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+// ---------------------------------------------------------------------------
+// Static carousel frame cache — survives HomeActivity re-creation so that
+// returning to home (e.g. after settings) doesn't re-read covers from SD.
+// Freed explicitly in onSelectBook() before entering the reader.
+// ---------------------------------------------------------------------------
+namespace {
+uint8_t* gCachedFrames[HomeActivity::kCarouselFrameCount] = {};
+int gCachedFrameCount = 0;
+std::string gCacheKey;
+
+void invalidateCarouselCache() {
+  for (int i = 0; i < HomeActivity::kCarouselFrameCount; ++i) {
+    if (gCachedFrames[i]) {
+      free(gCachedFrames[i]);
+      gCachedFrames[i] = nullptr;
+    }
+  }
+  gCachedFrameCount = 0;
+  gCacheKey.clear();
+}
+}  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
@@ -179,18 +202,34 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::freeCarouselFrames() {
-  for (int i = 0; i < kCarouselFrameCount; ++i) {
-    if (carouselFrames[i]) {
-      free(carouselFrames[i]);
-      carouselFrames[i] = nullptr;
-    }
-  }
+  // Instance pointers are aliases into the static cache — do not free here.
+  for (int i = 0; i < kCarouselFrameCount; ++i) carouselFrames[i] = nullptr;
   carouselFramesReady = false;
 }
 
 void HomeActivity::preRenderCarouselFrames() {
   const int bookCount = static_cast<int>(recentBooks.size());
   if (bookCount == 0) return;
+
+  // Build cache key from book paths in order
+  std::string newKey;
+  newKey.reserve(128);
+  for (const auto& b : recentBooks) {
+    newKey += b.path;
+    newKey += '\0';
+  }
+
+  // Cache hit: same books in same order — reuse without any SD reads
+  if (newKey == gCacheKey && gCachedFrameCount > 0) {
+    for (int i = 0; i < gCachedFrameCount; ++i) carouselFrames[i] = gCachedFrames[i];
+    carouselFramesReady = true;
+    coverRendered = false;
+    coverBufferStored = false;
+    return;
+  }
+
+  // Cache miss: free old cache and re-render
+  invalidateCarouselCache();
 
   uint8_t* frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer) return;
@@ -199,21 +238,18 @@ void HomeActivity::preRenderCarouselFrames() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
 
-  // Free coverBuffer first to reclaim 48KB before allocating 3 frames
-  freeCoverBuffer();
-  freeCarouselFrames();
+  freeCoverBuffer();  // reclaim 48KB before allocating frames
 
   const int frameCount = std::min(bookCount, kCarouselFrameCount);
   for (int i = 0; i < frameCount; ++i) {
-    carouselFrames[i] = static_cast<uint8_t*>(malloc(bufferSize));
-    if (!carouselFrames[i]) {
+    gCachedFrames[i] = static_cast<uint8_t*>(malloc(bufferSize));
+    if (!gCachedFrames[i]) {
       LOG_ERR("HOME", "preRenderCarouselFrames: malloc failed for frame %d", i);
-      freeCarouselFrames();
+      invalidateCarouselCache();
       return;
     }
   }
 
-  // Render each carousel arrangement (no selection border) into its frame
   bool dummy1 = false, dummy2 = false, dummy3 = false;
   for (int i = 0; i < frameCount; ++i) {
     LyraCarouselTheme::setPreRenderIndex(i);
@@ -224,12 +260,15 @@ void HomeActivity::preRenderCarouselFrames() {
     renderer.clearScreen();
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
     GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                            recentBooks, bookCount,  // bookCount → icon row mode, no border
+                            recentBooks, bookCount,
                             dummy1, dummy2, dummy3, []() { return true; });
 
-    memcpy(carouselFrames[i], frameBuffer, bufferSize);
+    memcpy(gCachedFrames[i], frameBuffer, bufferSize);
+    carouselFrames[i] = gCachedFrames[i];
   }
 
+  gCachedFrameCount = frameCount;
+  gCacheKey = newKey;
   carouselFramesReady = true;
   coverRendered = false;
   coverBufferStored = false;
@@ -405,7 +444,11 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onSelectBook(const std::string& path) {
+  invalidateCarouselCache();
+  freeCarouselFrames();
+  activityManager.goToReader(path);
+}
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 

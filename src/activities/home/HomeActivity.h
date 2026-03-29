@@ -10,6 +10,10 @@ struct RecentBook;
 struct Rect;
 
 class HomeActivity final : public Activity {
+ public:
+  static constexpr int kCarouselFrameCount = 3;
+
+ private:
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   int lastCarouselBookIndex = 0;  // remembered position when leaving carousel row
@@ -21,7 +25,6 @@ class HomeActivity final : public Activity {
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
 
-  static constexpr int kCarouselFrameCount = 3;
   uint8_t* carouselFrames[kCarouselFrameCount] = {nullptr, nullptr, nullptr};
   bool carouselFramesReady = false;
 
