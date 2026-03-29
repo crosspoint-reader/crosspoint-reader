@@ -245,35 +245,38 @@ void XtcReaderActivity::renderPage() {
       pagesUntilFullRefresh--;
     }
 
-    // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
-    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
-    renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) == 1) {  // Dark grey only
-          renderer.drawPixel(x, y, false);
+    // Grayscale passes: skip when dark mode is active (inverted LUT produces artifacts)
+    if (!SETTINGS.readerDarkMode) {
+      // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
+      // In LUT: 0 bit = apply gray effect, 1 bit = untouched
+      renderer.clearScreen(0x00);
+      for (uint16_t y = 0; y < pageHeight; y++) {
+        for (uint16_t x = 0; x < pageWidth; x++) {
+          if (getPixelValue(x, y) == 1) {  // Dark grey only
+            renderer.drawPixel(x, y, false);
+          }
         }
       }
-    }
-    renderer.copyGrayscaleLsbBuffers();
+      renderer.copyGrayscaleLsbBuffers();
 
-    // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
-    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
-    renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        const uint8_t pv = getPixelValue(x, y);
-        if (pv == 1 || pv == 2) {  // Dark grey or Light grey
-          renderer.drawPixel(x, y, false);
+      // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
+      // In LUT: 0 bit = apply gray effect, 1 bit = untouched
+      renderer.clearScreen(0x00);
+      for (uint16_t y = 0; y < pageHeight; y++) {
+        for (uint16_t x = 0; x < pageWidth; x++) {
+          const uint8_t pv = getPixelValue(x, y);
+          if (pv == 1 || pv == 2) {  // Dark grey or Light grey
+            renderer.drawPixel(x, y, false);
+          }
         }
       }
+      renderer.copyGrayscaleMsbBuffers();
+
+      // Display grayscale overlay
+      renderer.displayGrayBuffer();
     }
-    renderer.copyGrayscaleMsbBuffers();
 
-    // Display grayscale overlay
-    renderer.displayGrayBuffer();
-
-    // Pass 4: Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
+    // Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
     renderer.clearScreen();
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
