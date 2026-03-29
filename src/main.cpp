@@ -332,7 +332,8 @@ void loop() {
       String cmd = line.substring(4);
       cmd.trim();
       if (cmd == "SCREENSHOT") {
-        logSerial.printf("SCREENSHOT_START:%d\n", HalDisplay::BUFFER_SIZE);
+        logSerial.printf("SCREENSHOT_START:%d:%d:%d:%d\n", HalDisplay::BUFFER_SIZE, HalDisplay::DISPLAY_WIDTH,
+                         HalDisplay::DISPLAY_HEIGHT, static_cast<int>(renderer.getOrientation()));
         uint8_t* buf = display.getFrameBuffer();
         logSerial.write(buf, HalDisplay::BUFFER_SIZE);
         logSerial.printf("SCREENSHOT_END\n");

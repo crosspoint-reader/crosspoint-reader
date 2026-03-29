@@ -179,6 +179,7 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     Format: Free: N bytes, Total: N bytes, Min Free: N bytes, MaxAlloc: N bytes
     Returns: (free_bytes, total_bytes, max_alloc_bytes)
     """
+
     def _find(pattern: str) -> int | None:
         m = re.search(pattern, line)
         if m:
@@ -221,6 +222,9 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
     expecting_screenshot = False
     screenshot_size = 0
+    screenshot_width = 0
+    screenshot_height = 0
+    screenshot_orientation = 0
     screenshot_data = b""
 
     try:
@@ -232,9 +236,18 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                 screenshot_data += data
                 if len(screenshot_data) == screenshot_size:
                     if Image:
-                        img = Image.frombytes("1", (800, 480), screenshot_data)
-                        # We need to rotate the image because the raw data is in landscape mode
-                        img = img.transpose(Image.ROTATE_270)
+                        img = Image.frombytes(
+                            "1", (screenshot_width, screenshot_height), screenshot_data
+                        )
+                        # Rotate raw framebuffer to match the selected display orientation
+                        # 0=Portrait, 1=LandscapeCW, 2=PortraitInverted, 3=LandscapeCCW
+                        if screenshot_orientation == 0:
+                            img = img.transpose(Image.Transpose.ROTATE_270)
+                        elif screenshot_orientation == 1:
+                            img = img.transpose(Image.Transpose.ROTATE_180)
+                        elif screenshot_orientation == 2:
+                            img = img.transpose(Image.Transpose.ROTATE_90)
+                        # 3 = LandscapeCCW = native panel orientation, no rotation needed
                         img.save("screenshot.bmp")
                         print(
                             f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}"
@@ -259,7 +272,11 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                         continue
 
                     if clean_line.startswith("SCREENSHOT_START:"):
-                        screenshot_size = int(clean_line.split(":")[1])
+                        parts = clean_line.split(":")
+                        screenshot_size = int(parts[1])
+                        screenshot_width = int(parts[2]) if len(parts) > 2 else 800
+                        screenshot_height = int(parts[3]) if len(parts) > 3 else 480
+                        screenshot_orientation = int(parts[4]) if len(parts) > 4 else 0
                         expecting_screenshot = True
                         continue
                     elif clean_line == "SCREENSHOT_END":
@@ -271,7 +288,9 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
                     # Check for Memory Line
                     if "[MEM]" in formatted_line:
-                        free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
+                        free_val, total_val, max_alloc_val = parse_memory_line(
+                            formatted_line
+                        )
                         if free_val is not None and total_val is not None:
                             with data_lock:
                                 time_data.append(pc_time)
