@@ -33,6 +33,7 @@ from typing import List, Dict, Tuple
 # YAML file reading (simple key: "value" format, no PyYAML dependency)
 # ---------------------------------------------------------------------------
 
+
 def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str:
     """
     Process escape sequences in a YAML value string.
@@ -51,9 +52,7 @@ def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str
             elif nxt == "n":
                 result.append("\n")
             else:
-                raise ValueError(
-                    f"{filepath}:{line_num}: unknown escape '\\{nxt}'"
-                )
+                raise ValueError(f"{filepath}:{line_num}: unknown escape '\\{nxt}'")
             i += 2
         else:
             result.append(raw[i])
@@ -102,6 +101,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 # Load all languages from a directory of YAML files
 # ---------------------------------------------------------------------------
+
 
 def load_translations(
     translations_dir: str,
@@ -207,23 +207,37 @@ def load_translations(
 
 LANG_ABBREVIATIONS = {
     "english": "EN",
-    "español": "ES", "espanol": "ES",
+    "español": "ES",
+    "espanol": "ES",
     "italiano": "IT",
     "svenska": "SV",
-    "français": "FR", "francais": "FR",
-    "deutsch": "DE", "german": "DE",
+    "français": "FR",
+    "francais": "FR",
+    "deutsch": "DE",
+    "german": "DE",
     "polski": "PL",
-    "português": "PT", "portugues": "PT", "português (brasil)": "PO",
-    "中文": "ZH", "chinese": "ZH",
-    "日本語": "JA", "japanese": "JA",
-    "한국어": "KO", "korean": "KO",
-    "русский": "RU", "russian": "RU",
-    "العربية": "AR", "arabic": "AR",
-    "עברית": "HE", "hebrew": "HE",
-    "فارسی": "FA", "persian": "FA",
+    "português": "PT",
+    "portugues": "PT",
+    "português (brasil)": "PO",
+    "中文": "ZH",
+    "chinese": "ZH",
+    "日本語": "JA",
+    "japanese": "JA",
+    "한국어": "KO",
+    "korean": "KO",
+    "русский": "RU",
+    "russian": "RU",
+    "العربية": "AR",
+    "arabic": "AR",
+    "עברית": "HE",
+    "hebrew": "HE",
+    "فارسی": "FA",
+    "persian": "FA",
     "čeština": "CS",
-    "türkçe": "TR", "turkish": "TR",
-    "Қазақша": "KK", "kazakh": "KK",
+    "türkçe": "TR",
+    "turkish": "TR",
+    "Қазақша": "KK",
+    "kazakh": "KK",
 }
 
 
@@ -267,12 +281,12 @@ def escape_cpp_string(s: str) -> List[str]:
 
         if ch == "\\" and i + 1 < len(s):
             nxt = s[i + 1]
-            if nxt in "ntr\"\\":
+            if nxt in 'ntr"\\':
                 current.append(ch + nxt)
                 i += 2
             elif nxt == "x" and i + 3 < len(s):
                 current.append(s[i : i + 4])
-                _flush()                       # segment break after hex
+                _flush()  # segment break after hex
                 i += 4
             else:
                 current.append("\\\\")
@@ -286,7 +300,7 @@ def escape_cpp_string(s: str) -> List[str]:
         else:
             for byte in ch.encode("utf-8"):
                 current.append(f"\\x{byte:02X}")
-                _flush()                       # segment break after hex
+                _flush()  # segment break after hex
             i += 1
 
     # Flush remaining content
@@ -321,11 +335,11 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
             last_space = -1
             idx = 0
             while idx <= MAX_CONTENT_LEN and idx < len(current):
-                if current[idx] == ' ':
+                if current[idx] == " ":
                     last_space = idx
 
                 # Handle escapes to step correctly
-                if current[idx] == '\\':
+                if current[idx] == "\\":
                     idx += 2
                 else:
                     idx += 1
@@ -340,7 +354,7 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
                 # No space, forced break at MAX_CONTENT_LEN (or slightly less)
                 cut_at = MAX_CONTENT_LEN
                 # Don't cut in the middle of an escape sequence
-                if current[cut_at - 1] == '\\':
+                if current[cut_at - 1] == "\\":
                     cut_at -= 1
 
                 lines.append(f'{indent}"{current[:cut_at]}"')
@@ -356,6 +370,7 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
 # Character-set computation
 # ---------------------------------------------------------------------------
 
+
 def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
     """Return a sorted string of every unique character used in a language."""
     chars = set()
@@ -368,6 +383,7 @@ def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -
 # ---------------------------------------------------------------------------
 # Code generators
 # ---------------------------------------------------------------------------
+
 
 def generate_keys_header(
     languages: List[str],
@@ -451,9 +467,15 @@ def generate_keys_header(
         key=lambda i: languages[i],
     )
     sorted_indices = [english_idx] + rest
-    comment_names = ", ".join(language_names[i] for i in sorted_indices)
+    names = [language_names[i] for i in sorted_indices]
+    comment_names = ", ".join(names)
     lines.append("// Sorted language indices by code (auto-generated by gen_i18n.py)")
-    lines.append(f"// Order: {comment_names}")
+    if len(f"// Order: {comment_names}") <= 100:
+        lines.append(f"// Order: {comment_names}")
+    else:
+        lines.append("// Order: " + names[0] + ",")
+        rest_line = ", ".join(names[1:])
+        lines.append("// " + rest_line)
     lines.append(
         "constexpr uint8_t SORTED_LANGUAGE_INDICES[] = {"
         f"{', '.join(str(i) for i in sorted_indices)}"
@@ -463,9 +485,7 @@ def generate_keys_header(
     lines.append(
         "static_assert(sizeof(SORTED_LANGUAGE_INDICES) / sizeof(SORTED_LANGUAGE_INDICES[0]) == getLanguageCount(),"
     )
-    lines.append(
-        '              "SORTED_LANGUAGE_INDICES size mismatch");'
-    )
+    lines.append('              "SORTED_LANGUAGE_INDICES size mismatch");')
 
     _write_file(output_path, lines)
 
@@ -478,7 +498,7 @@ def generate_strings_header(
     """Generate I18nStrings.h."""
     lines: List[str] = [
         "#pragma once",
-        '#include <string>',
+        "#include <string>",
         "",
         '#include "I18nKeys.h"',
         "",
@@ -565,9 +585,8 @@ def generate_strings_cpp(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _append_string_entry(
-    lines: List[str], text: str, comment: str = ""
-) -> None:
+
+def _append_string_entry(lines: List[str], text: str, comment: str = "") -> None:
     """Escape *text*, format as indented C++ lines, append comma (and optional comment)."""
     segments = escape_cpp_string(text)
     formatted = format_cpp_string_literal(segments)
@@ -587,6 +606,7 @@ def _write_file(path: str, lines: List[str]) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main(translations_dir=None, output_dir=None) -> None:
     # Default paths (relative to project root)
     default_translations_dir = "lib/I18n/translations"
@@ -600,7 +620,6 @@ def main(translations_dir=None, output_dir=None) -> None:
             # Default for no arguments or weird arguments (e.g. SCons)
             translations_dir = default_translations_dir
             output_dir = default_output_dir
-
 
     if not os.path.isdir(translations_dir):
         print(f"Error: Translations directory not found: {translations_dir}")
@@ -620,10 +639,16 @@ def main(translations_dir=None, output_dir=None) -> None:
         )
 
         out = Path(output_dir)
-        generate_keys_header(languages, language_names, string_keys, str(out / "I18nKeys.h"))
+        generate_keys_header(
+            languages, language_names, string_keys, str(out / "I18nKeys.h")
+        )
         generate_strings_header(languages, language_names, str(out / "I18nStrings.h"))
         generate_strings_cpp(
-            languages, language_names, string_keys, translations, str(out / "I18nStrings.cpp")
+            languages,
+            language_names,
+            string_keys,
+            translations,
+            str(out / "I18nStrings.cpp"),
         )
 
         print()
