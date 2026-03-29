@@ -172,17 +172,48 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
-  const int menuCount = getMenuItemCount();
+  const bool isCarousel = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) ==
+                          CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
 
-  buttonNavigator.onNext([this, menuCount] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
-    requestUpdate();
-  });
+  if (isCarousel) {
+    const int bookCount = static_cast<int>(recentBooks.size());
+    const int menuItemCount = 4 + (hasOpdsUrl ? 1 : 0);
+    const bool inCarouselRow = (selectorIndex < bookCount);
+    const int menuIdx = inCarouselRow ? 0 : (selectorIndex - bookCount);
 
-  buttonNavigator.onPrevious([this, menuCount] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
-    requestUpdate();
-  });
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      if (inCarouselRow && bookCount > 0)
+        selectorIndex = (selectorIndex + 1) % bookCount;
+      else if (!inCarouselRow)
+        selectorIndex = bookCount + (menuIdx + 1) % menuItemCount;
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      if (inCarouselRow && bookCount > 0)
+        selectorIndex = (selectorIndex + bookCount - 1) % bookCount;
+      else if (!inCarouselRow)
+        selectorIndex = bookCount + (menuIdx + menuItemCount - 1) % menuItemCount;
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      selectorIndex = inCarouselRow ? bookCount : 0;
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+      selectorIndex = inCarouselRow ? bookCount : 0;
+      requestUpdate();
+    }
+  } else {
+    const int menuCount = getMenuItemCount();
+    buttonNavigator.onNext([this, menuCount] {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+      requestUpdate();
+    });
+    buttonNavigator.onPrevious([this, menuCount] {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+      requestUpdate();
+    });
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Calculate dynamic indices based on which options are available
@@ -244,7 +275,11 @@ void HomeActivity::render(RenderLock&&) {
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const bool isCarouselTheme = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) ==
+                               CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
+  const auto labels = isCarouselTheme
+                          ? mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT))
+                          : mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
