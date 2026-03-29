@@ -224,9 +224,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       cacheKey += '|';
       cacheKey += classAttr;
       auto it = self->cssStyleCache_.find(cacheKey);
-      if (it == self->cssStyleCache_.end())
-        it = self->cssStyleCache_.emplace(cacheKey, self->cssParser->resolveStyle(name, classAttr)).first;
-      cssStyle = it->second;
+      if (it != self->cssStyleCache_.end()) {
+        cssStyle = it->second;
+      } else {
+        CssStyle resolved = self->cssParser->resolveStyle(name, classAttr);
+        if (resolved.defined.anySet())
+          cssStyle = self->cssStyleCache_.emplace(cacheKey, resolved).first->second;
+        else
+          cssStyle = resolved;  // transient fallback: skip cache so future calls can re-resolve
+      }
     }
     if (!styleAttr.empty()) {
       auto it = self->inlineStyleCache_.find(styleAttr);
