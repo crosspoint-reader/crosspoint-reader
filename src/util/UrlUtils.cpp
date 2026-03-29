@@ -41,7 +41,7 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path) {
   std::string base = urlWithProtocol;
   const size_t queryPos = base.find('?');
   if (queryPos != std::string::npos) {
-    base = base.substr(0, queryPos);
+    base.resize(queryPos);
   }
   if (base.back() == '/') {
     return base + path;
