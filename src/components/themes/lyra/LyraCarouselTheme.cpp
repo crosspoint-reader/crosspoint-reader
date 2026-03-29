@@ -103,8 +103,13 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
       if (Storage.openFileForRead("HOME", thumbPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          // Fit within tile at original aspect ratio — no cropping, no stretching.
-          renderer.drawBitmap(bitmap, x, y, maxW, maxH, 0.0f, 0.0f);
+          // Height always fills the tile. Only crop horizontally if the cover is
+          // wider than the tile; narrow covers get white space on the sides.
+          const float bmpRatio =
+              static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+          const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
+          const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
+          renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
           hasCover = true;
         }
         file.close();
