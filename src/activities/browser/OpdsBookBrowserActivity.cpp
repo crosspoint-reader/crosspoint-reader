@@ -225,7 +225,10 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
-  currentPath = entry.href;
+  // Resolve to a full URL so sub-sub-navigation retains parent path context
+  const std::string feedUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, currentPath);
+  currentPath = UrlUtils::buildUrl(feedUrl, entry.href);
+
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
   entries.clear();
