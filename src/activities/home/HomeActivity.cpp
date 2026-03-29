@@ -196,11 +196,21 @@ void HomeActivity::loop() {
       requestUpdate();
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      selectorIndex = inCarouselRow ? bookCount : 0;
+      if (inCarouselRow) {
+        lastCarouselBookIndex = selectorIndex;
+        selectorIndex = bookCount;
+      } else {
+        selectorIndex = lastCarouselBookIndex;
+      }
       requestUpdate();
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-      selectorIndex = inCarouselRow ? bookCount : 0;
+      if (inCarouselRow) {
+        lastCarouselBookIndex = selectorIndex;
+        selectorIndex = bookCount;
+      } else {
+        selectorIndex = lastCarouselBookIndex;
+      }
       requestUpdate();
     }
   } else {
