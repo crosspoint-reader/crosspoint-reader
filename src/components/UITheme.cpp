@@ -127,7 +127,7 @@ int UITheme::getStatusBarHeight() {
   // Add status bar margin
   const bool showStatusBar = SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
                              SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
-                             SETTINGS.statusBarBattery;
+                             SETTINGS.statusBarBattery || (SETTINGS.useClock && SETTINGS.statusBarClock);
   const bool showProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   return (showStatusBar ? (metrics.statusBarVerticalMargin) : 0) +

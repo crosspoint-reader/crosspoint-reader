@@ -15,6 +15,7 @@ enum class SettingAction {
   None,
   RemapFrontButtons,
   CustomiseStatusBar,
+  ClockSettings,
   KOReaderSync,
   OPDSBrowser,
   Network,
@@ -22,6 +23,8 @@ enum class SettingAction {
   CheckForUpdates,
   Language,
   SystemInfo,
+  DetectTimezone,
+  SyncTime,
 };
 
 struct SettingInfo {

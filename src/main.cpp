@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -184,6 +185,7 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+  HalClock::saveBeforeSleep(SETTINGS.useClock);
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();
@@ -192,7 +194,7 @@ void enterDeepSleep() {
   LOG_DBG("MAIN", "Power button press calibration value: %lu ms", t2 - t1);
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio);
+  powerManager.startDeepSleep(gpio, SETTINGS.useClock);
 }
 
 void setupDisplayAndFonts() {
@@ -258,6 +260,7 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  HalClock::applyTimezone(SETTINGS.timeZone);
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
@@ -289,6 +292,7 @@ void setup() {
   activityManager.goToBoot();
 
   APP_STATE.loadFromFile();
+  HalClock::restore();
   RECENT_BOOKS.loadFromFile();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
@@ -315,6 +319,7 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+  HalClock::updatePeriodic();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

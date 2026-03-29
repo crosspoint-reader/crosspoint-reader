@@ -1,6 +1,7 @@
 #include "LyraTheme.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -149,6 +150,13 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   drawBatteryRight(renderer,
                    Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
+
+  // Draw clock in header
+  if (SETTINGS.useClock) {
+    char clockStr[16];
+    HalClock::formatTime(clockStr, sizeof(clockStr), !SETTINGS.clockFormat12h);
+    renderer.drawText(SMALL_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding, rect.y + 5, clockStr);
+  }
 
   int maxTitleWidth =
       rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);

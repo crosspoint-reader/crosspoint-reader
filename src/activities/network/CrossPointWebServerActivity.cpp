@@ -3,6 +3,7 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
@@ -86,15 +87,12 @@ void CrossPointWebServerActivity::onExit() {
   if (isApMode) {
     LOG_DBG("WEBACT", "Stopping WiFi AP...");
     WiFi.softAPdisconnect(true);
+    delay(30);
+    WiFi.mode(WIFI_OFF);
+    delay(30);
   } else {
-    LOG_DBG("WEBACT", "Disconnecting WiFi (graceful)...");
-    WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
+    HalClock::wifiOff();
   }
-  delay(30);  // Allow disconnect frame to be sent
-
-  LOG_DBG("WEBACT", "Setting WiFi mode OFF...");
-  WiFi.mode(WIFI_OFF);
-  delay(30);  // Allow WiFi hardware to power down
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }

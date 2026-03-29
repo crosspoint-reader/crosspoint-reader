@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
@@ -39,8 +40,7 @@ void OpdsBookBrowserActivity::onEnter() {
 void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
 
-  // Turn off WiFi when exiting
-  WiFi.mode(WIFI_OFF);
+  HalClock::wifiOff();
 
   entries.clear();
   navigationHistory.clear();

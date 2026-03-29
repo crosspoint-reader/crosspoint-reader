@@ -1,6 +1,7 @@
 #include "KOReaderAuthActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -93,11 +94,7 @@ void KOReaderAuthActivity::onEnter() {
 void KOReaderAuthActivity::onExit() {
   Activity::onExit();
 
-  // Turn off wifi
-  WiFi.disconnect(false);
-  delay(100);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
+  HalClock::wifiOff();
 }
 
 void KOReaderAuthActivity::render(RenderLock&&) {

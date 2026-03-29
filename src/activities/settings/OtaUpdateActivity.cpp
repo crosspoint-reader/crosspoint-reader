@@ -1,6 +1,7 @@
 #include "OtaUpdateActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -66,11 +67,7 @@ void OtaUpdateActivity::onEnter() {
 void OtaUpdateActivity::onExit() {
   Activity::onExit();
 
-  // Turn off wifi
-  WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
-  delay(100);              // Allow disconnect frame to be sent
-  WiFi.mode(WIFI_OFF);
-  delay(100);  // Allow WiFi hardware to fully power down
+  HalClock::wifiOff();
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {
