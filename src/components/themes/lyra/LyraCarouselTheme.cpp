@@ -9,6 +9,7 @@
 
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 #include "components/icons/book.h"
 #include "components/icons/cover.h"
 #include "components/icons/folder.h"
@@ -19,11 +20,15 @@
 namespace {
 // Cover layout — centre cover dominates, sides slide kOverlap px behind it
 constexpr int kCenterCoverMaxW = 340;
-constexpr int kCenterCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight;
+constexpr int kCenterCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight - 50;  // 550; frees 50px for title+dots
 constexpr int kSideCoverMaxW = 200;
-constexpr int kSideCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight - 210;
-constexpr int kOverlap = 60;   // px each side cover hides behind centre
+constexpr int kSideCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight - 210;  // 390
+constexpr int kOverlap = 60;
 constexpr int kCoverTopPad = 10;
+
+constexpr int kTitleFontId = UI_12_FONT_ID;
+constexpr int kDotSize = 8;    // px square dot
+constexpr int kDotGap = 6;     // px between dots
 
 constexpr int kCornerRadius = 6;
 constexpr int kSelectionLineW = 2;
@@ -136,13 +141,35 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
       const int prevIdx = (centerIdx + bookCount - 1) % bookCount;
       const int nextIdx = (centerIdx + 1) % bookCount;
       drawCover(prevIdx, leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH);
+      renderer.drawRect(leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
       drawCover(nextIdx, rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH);
+      renderer.drawRect(rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
     }
     // Clear a white outline ring around the centre cover, then draw the cover
     // inside it. The white ring always separates the centre from the sides.
     renderer.fillRect(centerX - kCenterOutlineW, centerTileY - kCenterOutlineW,
                       kCenterCoverMaxW + 2 * kCenterOutlineW, kCenterCoverMaxH + 2 * kCenterOutlineW, false);
     drawCover(centerIdx, centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH);
+
+    // Title below centre cover
+    const int titleY = centerTileY + kCenterCoverMaxH + 8;
+    const std::string titleTrunc =
+        renderer.truncatedText(kTitleFontId, recentBooks[centerIdx].title.c_str(), kCenterCoverMaxW);
+    const int titleW = renderer.getTextWidth(kTitleFontId, titleTrunc.c_str());
+    renderer.drawText(kTitleFontId, centerX + (kCenterCoverMaxW - titleW) / 2, titleY, titleTrunc.c_str(), true);
+
+    // Dot indicator — filled square for current book, outlined for others
+    const int dotsY = titleY + renderer.getLineHeight(kTitleFontId) + 4;
+    const int totalDotsW = bookCount * kDotSize + (bookCount - 1) * kDotGap;
+    int dotX = centerX + (kCenterCoverMaxW - totalDotsW) / 2;
+    for (int i = 0; i < bookCount; ++i) {
+      if (i == centerIdx) {
+        renderer.fillRect(dotX, dotsY, kDotSize, kDotSize, true);
+      } else {
+        renderer.drawRect(dotX, dotsY, kDotSize, kDotSize, true);
+      }
+      dotX += kDotSize + kDotGap;
+    }
 
     coverBufferStored = storeCoverBuffer();
     coverRendered = coverBufferStored;
