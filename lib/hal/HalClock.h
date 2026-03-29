@@ -51,6 +51,14 @@ time_t now();
 /// True if the clock has been set at least once (NTP or restore).
 bool isSynced();
 
+/// Periodic callback (called from main loop) to compensate temperature-induced
+/// RTC drift while the device is awake.  Runs at a 10-minute interval.
+/// Computes the drift delta since the last baseline using the temperature
+/// model and nudges the system clock by only that delta (the kernel clock
+/// already advanced the raw amount).  Drift state is persisted to NVS only
+/// in saveBeforeSleep() to minimise flash wear.
+void updatePeriodic();
+
 /// True if the last restore was from a backup (not NTP) — i.e. the clock
 /// may have drifted.  Cleared on NTP sync.
 bool isApproximate();

@@ -319,6 +319,7 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+  HalClock::updatePeriodic();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 
