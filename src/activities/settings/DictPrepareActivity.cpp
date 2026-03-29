@@ -446,6 +446,13 @@ bool DictPrepareActivity::generateOft(const char* srcPath, const char* oftPath, 
   }
 
 done:
+  if (!error) {
+    const uint32_t sentinel = static_cast<uint32_t>(step.total);
+    if (oft.write(&sentinel, 4) != 4) {
+      LOG_ERR("DICT_PREP", "Sentinel write failed: %s", oftPath);
+      error = true;
+    }
+  }
   src.close();
   oft.close();
 

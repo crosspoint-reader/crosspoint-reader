@@ -45,10 +45,14 @@ Format references:
   .ifo   : key=value text; version=stardict-2.4.2 (or 2.4.2)
   .idx   : [word\\0][uint32 offset BE][uint32 size BE], sorted lexicographically
   .syn   : [synonym\\0][uint32 idx_ordinal BE], sorted lexicographically
-  .oft   : 38-byte header + LE uint32 offsets at stride=32
+  .oft   : 38-byte header + LE uint32 offsets at stride=32, plus sentinel
            header = b"StarDict's Cache, Version: 0.2" (30 bytes)
                   + b"\\xc1\\xd1\\xa4\\x51\\x00\\x00\\x00\\x00" (8 bytes)
-           entry N = byte offset of entry N*32 in .idx (or .syn); entry 0 not stored
+           offset[0]   = byte offset of entry 32 in .idx (or .syn)
+           offset[1]   = byte offset of entry 64
+           ...
+           offset[N-1] = byte offset of entry N*32
+           offset[N]   = total byte size of the .idx (or .syn) file  ← sentinel
   sametypesequence=m : plain text; size from .idx (no null terminator)
   sametypesequence=h : HTML;       size from .idx (no null terminator)
 """
@@ -92,6 +96,7 @@ def _build_oft(binary: bytes, skip_bytes_after_null: int) -> bytes:
         entry_count += 1
         if entry_count % STRIDE == 0:
             offsets.append(pos)
+    offsets.append(len(binary))  # sentinel: total byte size of the source file
     data = OFT_HEADER
     for off in offsets:
         data += struct.pack("<I", off)

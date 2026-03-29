@@ -36,6 +36,7 @@ def _build_oft(data: bytes, skip_bytes_after_null: int) -> bytes:
         entry_count += 1
         if entry_count % _STRIDE == 0:
             offsets.append(pos)
+    offsets.append(len(data))  # sentinel: total byte size of the source file
     result = _OFT_HEADER
     for off in offsets:
         result += struct.pack("<I", off)
