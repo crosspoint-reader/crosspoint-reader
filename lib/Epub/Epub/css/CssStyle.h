@@ -52,7 +52,7 @@ enum class CssFontStyle : uint8_t { Normal = 0, Italic = 1 };
 enum class CssFontWeight : uint8_t { Normal = 0, Bold = 1 };
 
 // Text decoration options
-enum class CssTextDecoration : uint8_t { None = 0, Underline = 1 };
+enum class CssTextDecoration : uint8_t { None = 0, Underline = 1, StrikeThrough = 2, Overline = 3 };
 
 // Display options - only None and Block are relevant for e-ink rendering
 enum class CssDisplay : uint8_t { Block = 0, None = 1 };

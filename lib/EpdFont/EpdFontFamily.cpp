@@ -1,5 +1,7 @@
 #include "EpdFontFamily.h"
 
+const uint8_t DECORATION_MASK = 0b000111000;
+
 const EpdFont* EpdFontFamily::getFont(const Style style) const {
   // Extract font style bits (ignore UNDERLINE bit for font selection)
   const bool hasBold = (style & BOLD) != 0;
@@ -35,3 +37,5 @@ int8_t EpdFontFamily::getKerning(const uint32_t leftCp, const uint32_t rightCp, 
 uint32_t EpdFontFamily::applyLigatures(const uint32_t cp, const char*& text, const Style style) const {
   return getFont(style)->applyLigatures(cp, text);
 }
+
+Style EpdFontFamily::getDecorationStyle(const Style style) const { return static_cast<Style>(DECORATION_MASK & style); }
