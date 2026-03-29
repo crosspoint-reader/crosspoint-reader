@@ -93,7 +93,7 @@ void SleepActivity::renderCustomSleepScreen() const {
         delay(100);
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
+          renderBitmapSleepScreen(bitmap, BookOverlayInfo{});
           file.close();
           dir.close();
           return;
@@ -111,7 +111,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, BookOverlayInfo{});
       file.close();
       return;
     }
@@ -247,7 +247,7 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
   return info;
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOverlayInfo& overlayInfo) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -300,7 +300,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   }
 
   const uint8_t overlayMode = SETTINGS.sleepCoverOverlay;
-  const BookOverlayInfo overlayInfo = overlayMode < 3 ? getBookOverlayInfo(APP_STATE.openEpubPath) : BookOverlayInfo{};
   const auto drawOverlay = [&]() {
     const bool hasTitle = !overlayInfo.title.empty();
     const bool hasProgress = !overlayInfo.progressText.empty();
@@ -476,7 +475,10 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap);
+      const uint8_t overlayMode = SETTINGS.sleepCoverOverlay;
+      const BookOverlayInfo coverOverlayInfo =
+          overlayMode < 3 ? getBookOverlayInfo(APP_STATE.openEpubPath) : BookOverlayInfo{};
+      renderBitmapSleepScreen(bitmap, coverOverlayInfo);
       file.close();
       return;
     }
