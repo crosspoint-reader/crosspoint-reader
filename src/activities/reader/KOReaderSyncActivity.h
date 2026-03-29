@@ -80,8 +80,10 @@ class KOReaderSyncActivity final : public Activity {
 
   // Timestamp when UPLOAD_COMPLETE state was entered (for auto-close)
   unsigned long uploadCompleteTime = 0;
+  bool closeRequested = false;
 
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
+  void closeCancelled();
 };
