@@ -505,6 +505,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+    ReaderUtils::applyDarkModeIfEnabled(renderer);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     return;
@@ -602,6 +603,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar();
+    ReaderUtils::applyDarkModeIfEnabled(renderer);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     return;
@@ -611,6 +613,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
     renderStatusBar();
+    ReaderUtils::applyDarkModeIfEnabled(renderer);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     return;
@@ -729,13 +732,16 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
+      ReaderUtils::applyDarkModeIfEnabled(renderer);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
       page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      ReaderUtils::applyDarkModeIfEnabled(renderer);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
+      ReaderUtils::applyDarkModeIfEnabled(renderer);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
     // Double FAST_REFRESH handles ghosting for image pages; don't count toward full refresh cadence
@@ -750,7 +756,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   // grayscale rendering
   // TODO: Only do this if font supports it
-  if (SETTINGS.textAntiAliasing) {
+  if (SETTINGS.textAntiAliasing && !SETTINGS.readerDarkMode) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
