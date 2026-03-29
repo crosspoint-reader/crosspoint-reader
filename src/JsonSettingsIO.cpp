@@ -163,6 +163,19 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     applyLegacyStatusBarSettings(s);
   }
 
+  // Legacy migration: sleepCoverOverlay was a Toggle (0=off, 1=on). Now it's a 4-way Enum:
+  // {WHITE(0), GRAY(1), BLACK(2), OFF(3)}. Translate old values before the generic loop clamps.
+  if (!doc["sleepCoverOverlay"].isNull()) {
+    uint8_t legacyOverlay = doc["sleepCoverOverlay"] | (uint8_t)0;
+    if (legacyOverlay == 0) {
+      s.sleepCoverOverlay = 3;  // OFF
+      doc["sleepCoverOverlay"] = 3;
+      if (needsResave) *needsResave = true;
+    } else if (legacyOverlay == 1) {
+      s.sleepCoverOverlay = 1;  // GRAY (old "on" = gray dither)
+    }
+  }
+
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.

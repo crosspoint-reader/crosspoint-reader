@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Serialization.h>
 #include <Txt.h>
 #include <Xtc.h>
 
@@ -159,8 +160,8 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
           uint32_t totalPages = xtc.getPageCount();
           float progress = xtc.calculateProgress(currentPage) * 100.0f;
           char buf[64];
-          snprintf(buf, sizeof(buf), "Reading progress: Page %lu/%u - %.0f%%", (unsigned long)currentPage + 1,
-                   totalPages, progress);
+          snprintf(buf, sizeof(buf), tr(STR_OVERLAY_READING_PROGRESS), (unsigned long)currentPage + 1, totalPages,
+                   progress);
           info.progressText = buf;
         }
         f.close();
@@ -180,8 +181,15 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
           uint32_t totalPages = 0;
           FsFile indexFile;
           if (Storage.openFileForRead("SLP", txt.getCachePath() + "/index.bin", indexFile)) {
-            indexFile.seek(32);
-            if (indexFile.read(reinterpret_cast<uint8_t*>(&totalPages), sizeof(totalPages)) == sizeof(totalPages)) {
+            uint32_t magic;
+            serialization::readPod(indexFile, magic);
+            uint8_t version;
+            serialization::readPod(indexFile, version);
+            static constexpr uint32_t INDEX_CACHE_MAGIC = 0x54585449;  // "TXTI"
+            static constexpr uint8_t INDEX_CACHE_VERSION = 2;
+            if (magic == INDEX_CACHE_MAGIC && version == INDEX_CACHE_VERSION) {
+              indexFile.seek(32);
+              serialization::readPod(indexFile, totalPages);
             }
             indexFile.close();
           }
@@ -189,12 +197,12 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
           if (totalPages > 0) {
             float progress = (currentPage + 1) * 100.0f / totalPages;
             char buf[64];
-            snprintf(buf, sizeof(buf), "Reading progress: Page %lu/%u - %.0f%%", (unsigned long)currentPage + 1,
-                     totalPages, progress);
+            snprintf(buf, sizeof(buf), tr(STR_OVERLAY_READING_PROGRESS), (unsigned long)currentPage + 1, totalPages,
+                     progress);
             info.progressText = buf;
           } else {
             char buf[64];
-            snprintf(buf, sizeof(buf), "Reading progress: Page %lu", (unsigned long)currentPage + 1);
+            snprintf(buf, sizeof(buf), tr(STR_OVERLAY_READING_PROGRESS_NO_TOTAL), (unsigned long)currentPage + 1);
             info.progressText = buf;
           }
         }
@@ -223,13 +231,14 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
               const auto tocItem = epub.getTocItem(tocIndex);
               info.chapterName = tocItem.title;
               char suffix[64];
-              snprintf(suffix, sizeof(suffix), " - Page %d/%d - %.0f%%", currentPage + 1, pageCount, bookProgress);
+              snprintf(suffix, sizeof(suffix), tr(STR_OVERLAY_CHAPTER_PAGE_SUFFIX), currentPage + 1, pageCount,
+                       bookProgress);
               info.progressSuffix = suffix;
-              info.progressText = "Chapter: " + info.chapterName + info.progressSuffix;
+              info.progressText = std::string(tr(STR_CHAPTER_PREFIX)) + info.chapterName + info.progressSuffix;
             } else {
               char buf[80];
-              snprintf(buf, sizeof(buf), "Reading progress: Page %d/%d - %.0f%%", currentPage + 1, pageCount,
-                       bookProgress);
+              snprintf(buf, sizeof(buf), tr(STR_OVERLAY_READING_PROGRESS), (unsigned long)currentPage + 1,
+                       (unsigned)pageCount, bookProgress);
               info.progressText = buf;
             }
           }
@@ -345,7 +354,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     if (hasProgress) {
       std::string progressStr;
       if (!overlayInfo.chapterName.empty()) {
-        const std::string prefix = "Chapter: ";
+        const std::string prefix = tr(STR_CHAPTER_PREFIX);
         const int prefixWidth = renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
         const int suffixWidth = renderer.getTextWidth(UI_10_FONT_ID, overlayInfo.progressSuffix.c_str());
         const int maxChapterWidth = availableWidth - prefixWidth - suffixWidth;

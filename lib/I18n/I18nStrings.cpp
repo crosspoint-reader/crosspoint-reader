@@ -137,7 +137,7 @@ const char* const CHARACTER_SETS[] = {
     "\xC3"
     "\xBA"
     "",  // Español
-    " !%'()*+,./012345:=?ABCDEFGHIJKLMNOPQRSTUVW[]abcdefghijklmnopqrstuvwxyz|\xC2"
+    " !%'()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVW[]abcdefghijklmnopqrstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
     "\x89"
@@ -185,7 +185,7 @@ const char* const CHARACTER_SETS[] = {
     "\x80"
     "\xA6"
     "",  // Deutsch
-    " !%()*+,./012345:=?ABCDEFGHIJKLMNOPQRSTUVWYZ[]abcdefghijklmnoprstuvwxyz|\xC2"
+    " !%()*+,-./012345:=?ABCDEFGHIJKLMNOPQRSTUVWYZ[]abcdefghijklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
     "\x81"
@@ -758,7 +758,7 @@ const char* const CHARACTER_SETS[] = {
     "\xC3"
     "\xBC"
     "",  // Nederlands
-    " !\"%'()*+,./012345:=?ABCDEFGHIKLMNOPQRSTUVWYZ[]abcdefghiklmnoprstuvwxyz|\xC2"
+    " !\"%'()*+,-./012345:=?ABCDEFGHIKLMNOPQRSTUVWYZ[]abcdefghiklmnoprstuvwxyz|\xC2"
     "\xAB"
     "\xC3"
     "\x87"
@@ -781,7 +781,7 @@ const char* const CHARACTER_SETS[] = {
     "\xC5"
     "\x9F"
     "",  // Türkçe
-    " !\"%()*+,-./012345:=?ABCDFGHIKLMNOPQRSUW[]abcdefhiklnoprstuvwxyz|\xC2"
+    " !\"%()*+,-./012345:=?ABCDFGHIKLMNOPQRSUW[]abcdefghiklnoprstuvwxyz|\xC2"
     "\xAB"
     "\xD0"
     "\x86"
@@ -1214,6 +1214,9 @@ const char* const STRINGS_EN[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_ES[] = {
@@ -1746,6 +1749,9 @@ const char* const STRINGS_ES[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_FR[] = {
@@ -2382,6 +2388,9 @@ const char* const STRINGS_FR[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_DE[] = {
@@ -2826,6 +2835,9 @@ const char* const STRINGS_DE[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_CS[] = {
@@ -4187,6 +4199,9 @@ const char* const STRINGS_CS[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_PO[] = {
@@ -4753,6 +4768,9 @@ const char* const STRINGS_PO[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_RU[] = {
@@ -11975,6 +11993,9 @@ const char* const STRINGS_RU[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_SV[] = {
@@ -12700,6 +12721,9 @@ const char* const STRINGS_SV[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_RO[] = {
@@ -13554,6 +13578,9 @@ const char* const STRINGS_RO[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_CA[] = {
@@ -14138,6 +14165,9 @@ const char* const STRINGS_CA[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_UK[] = {
@@ -22374,6 +22404,9 @@ const char* const STRINGS_UK[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_BE[] = {
@@ -29284,6 +29317,9 @@ const char* const STRINGS_BE[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_IT[] = {
@@ -29622,6 +29658,9 @@ const char* const STRINGS_IT[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_PL[] = {
@@ -30498,6 +30537,9 @@ const char* const STRINGS_PL[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_FI[] = {
@@ -31192,6 +31234,9 @@ const char* const STRINGS_FI[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_DA[] = {
@@ -31684,6 +31729,9 @@ const char* const STRINGS_DA[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_NL[] = {
@@ -31992,6 +32040,9 @@ const char* const STRINGS_NL[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_TR[] = {
@@ -33176,6 +33227,9 @@ const char* const STRINGS_TR[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 const char* const STRINGS_KK[] = {
@@ -40892,6 +40946,9 @@ const char* const STRINGS_KK[] = {
     "Gray",
     "Black",
     "Off",
+    "Reading progress: Page %lu/%u - %.0f%%",
+    "Reading progress: Page %lu",
+    " - Page %d/%d - %.0f%%",
 };
 
 }  // namespace i18n_strings
