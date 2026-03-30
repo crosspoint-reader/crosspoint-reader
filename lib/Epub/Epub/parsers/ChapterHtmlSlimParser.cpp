@@ -133,7 +133,21 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // Merge with existing block style to accumulate CSS styling from parent block elements.
       // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
       // div's margin should be preserved, even though it has no direct text content.
-      currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
+      BlockStyle incoming = blockStyle;
+      const bool brGapPending = currentTextBlock->getBlockStyle().fromBrElement;
+      if (brGapPending) {
+        // The empty block was created by a <br> section separator. Inject a full line of
+        // blank space before the following paragraph so the scene/section break is visible.
+        // This only fires when the <br> block stayed empty (i.e. no inline text was added).
+        const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
+        incoming.marginTop = static_cast<int16_t>(incoming.marginTop + lineHeight);
+      }
+
+      BlockStyle merged = currentTextBlock->getBlockStyle().getCombinedBlockStyle(incoming);
+      // Preserve only whether the current empty block still represents <br> separators.
+      // This lets consecutive <br> accumulate one line each without leaking the flag to real content blocks.
+      merged.fromBrElement = blockStyle.fromBrElement;
+      currentTextBlock->setBlockStyle(merged);
 
       if (!pendingAnchorId.empty()) {
         anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
@@ -574,7 +588,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
+      // Build a neutral <br> style that keeps inline alignment/indent context but avoids
+      // carrying cumulative margins from previous empty blocks (which can force spurious page breaks).
+      const BlockStyle& currentStyle = self->currentTextBlock->getBlockStyle();
+      BlockStyle brStyle;
+      brStyle.alignment = currentStyle.alignment;
+      brStyle.textAlignDefined = currentStyle.textAlignDefined;
+      brStyle.textIndent = currentStyle.textIndent;
+      brStyle.textIndentDefined = currentStyle.textIndentDefined;
+      brStyle.fromBrElement = true;
+      self->startNewTextBlock(brStyle);
     } else {
       self->currentCssStyle = cssStyle;
       self->startNewTextBlock(userAlignmentBlockStyle);
@@ -986,11 +1009,15 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     // Margins/padding are preserved so parent element spacing still accumulates correctly.
     if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
       auto style = self->currentTextBlock->getBlockStyle();
-      style.textAlignDefined = false;
-      style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                            ? CssTextAlign::Justify
-                            : static_cast<CssTextAlign>(self->paragraphAlignment);
-      self->currentTextBlock->setBlockStyle(style);
+      // Keep alignment for synthetic empty <br> separator blocks so following inline
+      // text after <br/> inside centered/right-aligned containers preserves alignment.
+      if (!style.fromBrElement) {
+        style.textAlignDefined = false;
+        style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                              ? CssTextAlign::Justify
+                              : static_cast<CssTextAlign>(self->paragraphAlignment);
+        self->currentTextBlock->setBlockStyle(style);
+      }
     }
   }
 }
