@@ -29,7 +29,17 @@ struct KOReaderProgress {
  */
 class KOReaderSyncClient {
  public:
-  enum Error { OK = 0, NO_CREDENTIALS, NETWORK_ERROR, AUTH_FAILED, SERVER_ERROR, JSON_ERROR, NOT_FOUND };
+  enum Error {
+    OK = 0,
+    NO_CREDENTIALS,
+    NETWORK_ERROR,
+    AUTH_FAILED,
+    SERVER_ERROR,
+    JSON_ERROR,
+    NOT_FOUND,
+    USER_EXISTS,
+    REGISTRATION_DISABLED
+  };
 
   /**
    * Authenticate with the sync server (validate credentials).
@@ -51,6 +61,14 @@ class KOReaderSyncClient {
    * @return OK on success, error code on failure
    */
   static Error updateProgress(const KOReaderProgress& progress);
+
+  /**
+   * Register a new user account on the sync server.
+   * Calls POST /users/create with the current credentials.
+   * Supports kosync, korrosync, and Calibre Web Automated server variants.
+   * @return OK on success, USER_EXISTS if already registered, REGISTRATION_DISABLED if server disallows it
+   */
+  static Error registerUser();
 
   /**
    * Get human-readable error message.

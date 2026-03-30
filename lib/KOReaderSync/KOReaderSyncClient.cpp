@@ -179,6 +179,55 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   return SERVER_ERROR;
 }
 
+KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
+  if (!KOREADER_STORE.hasCredentials()) {
+    LOG_DBG("KOSync", "No credentials configured");
+    return NO_CREDENTIALS;
+  }
+
+  std::string url = KOREADER_STORE.getBaseUrl() + "/users/create";
+  LOG_DBG("KOSync", "Registering user: %s", url.c_str());
+
+  HTTPClient http;
+  std::unique_ptr<WiFiClientSecure> secureClient;
+  WiFiClient plainClient;
+
+  if (isHttpsUrl(url)) {
+    secureClient.reset(new WiFiClientSecure);
+    secureClient->setInsecure();
+    http.begin(*secureClient, url.c_str());
+  } else {
+    http.begin(plainClient, url.c_str());
+  }
+  addAuthHeaders(http);
+  http.addHeader("Content-Type", "application/json");
+
+  // POST with empty body; credentials are sent via auth headers
+  const int httpCode = http.POST("");
+  const String responseBody = http.getString();
+  http.end();
+
+  LOG_DBG("KOSync", "Register response: %d", httpCode);
+
+  if (httpCode == 201) {
+    return OK;
+  } else if (httpCode == 200 || httpCode == 409) {
+    // 200: korrosync returns 200 for existing user
+    // 409: standard conflict response for duplicate user
+    return USER_EXISTS;
+  } else if (httpCode == 402) {
+    // Some server variants return 402 for either "user exists" or "registration disabled".
+    // Disambiguate by inspecting the response body.
+    if (responseBody.indexOf("disabled") >= 0 || responseBody.indexOf("not allowed") >= 0) {
+      return REGISTRATION_DISABLED;
+    }
+    return USER_EXISTS;
+  } else if (httpCode < 0) {
+    return NETWORK_ERROR;
+  }
+  return SERVER_ERROR;
+}
+
 const char* KOReaderSyncClient::errorString(Error error) {
   switch (error) {
     case OK:
@@ -195,6 +244,10 @@ const char* KOReaderSyncClient::errorString(Error error) {
       return "JSON parse error";
     case NOT_FOUND:
       return "No progress found";
+    case USER_EXISTS:
+      return "Username already taken";
+    case REGISTRATION_DISABLED:
+      return "Registration is disabled on this server";
     default:
       return "Unknown error";
   }

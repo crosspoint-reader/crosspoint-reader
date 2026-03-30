@@ -22,14 +22,23 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  {
-    RenderLock lock(*this);
-    state = AUTHENTICATING;
-    statusMessage = tr(STR_AUTHENTICATING);
+  if (mode == Mode::REGISTER) {
+    {
+      RenderLock lock(*this);
+      state = REGISTERING;
+      statusMessage = tr(STR_REGISTERING);
+    }
+    requestUpdate();
+    performRegistration();
+  } else {
+    {
+      RenderLock lock(*this);
+      state = AUTHENTICATING;
+      statusMessage = tr(STR_AUTHENTICATING);
+    }
+    requestUpdate();
+    performAuthentication();
   }
-  requestUpdate();
-
-  performAuthentication();
 }
 
 void KOReaderAuthActivity::performAuthentication() {
@@ -40,6 +49,25 @@ void KOReaderAuthActivity::performAuthentication() {
     if (result == KOReaderSyncClient::OK) {
       state = SUCCESS;
       statusMessage = tr(STR_AUTH_SUCCESS);
+    } else {
+      state = FAILED;
+      errorMessage = KOReaderSyncClient::errorString(result);
+    }
+  }
+  requestUpdate();
+}
+
+void KOReaderAuthActivity::performRegistration() {
+  const auto result = KOReaderSyncClient::registerUser();
+
+  {
+    RenderLock lock(*this);
+    if (result == KOReaderSyncClient::OK) {
+      state = SUCCESS;
+      statusMessage = tr(STR_REGISTER_SUCCESS);
+    } else if (result == KOReaderSyncClient::USER_EXISTS) {
+      state = USER_EXISTS;
+      errorMessage = tr(STR_USERNAME_TAKEN);
     } else {
       state = FAILED;
       errorMessage = KOReaderSyncClient::errorString(result);
@@ -79,17 +107,24 @@ void KOReaderAuthActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_AUTH));
+  const char* headerTitle = (mode == Mode::REGISTER) ? tr(STR_REGISTER) : tr(STR_KOREADER_AUTH);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerTitle);
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
-  if (state == AUTHENTICATING) {
+  if (state == AUTHENTICATING || state == REGISTERING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str());
   } else if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
+    renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    if (mode == Mode::LOGIN) {
+      renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
+    }
+  } else if (state == USER_EXISTS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_REGISTER_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
   } else if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    const char* failedTitle = (mode == Mode::REGISTER) ? tr(STR_REGISTER_FAILED) : tr(STR_AUTH_FAILED);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, failedTitle, true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
   }
 
@@ -99,7 +134,7 @@ void KOReaderAuthActivity::render(RenderLock&&) {
 }
 
 void KOReaderAuthActivity::loop() {
-  if (state == SUCCESS || state == FAILED) {
+  if (state == SUCCESS || state == FAILED || state == USER_EXISTS) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       finish();
