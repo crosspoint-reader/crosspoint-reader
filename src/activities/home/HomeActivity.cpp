@@ -77,6 +77,7 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
   bool showingLoading = false;
+  bool anyThumbnailGenerated = false;
   Rect popupRect;
 
   int progress = 0;
@@ -100,6 +101,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
+          } else {
+            anyThumbnailGenerated = true;
           }
           coverRendered = false;
           requestUpdate();
@@ -117,6 +120,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
+            } else {
+              anyThumbnailGenerated = true;
             }
             coverRendered = false;
             requestUpdate();
@@ -130,7 +135,11 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoaded = true;
   recentsLoading = false;
 
-  if (static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL) {
+  // Re-render carousel frames only if new thumbnails were generated (cache is stale).
+  // Otherwise, onEnter() already pre-rendered the frames before the first display update.
+  if (anyThumbnailGenerated &&
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL) {
+    invalidateCarouselCache();
     preRenderCarouselFrames();
     requestUpdate();
   }
@@ -148,7 +157,13 @@ void HomeActivity::onEnter() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
-  // Trigger first update
+  // Pre-render carousel frames before the first display update so the fast
+  // path is active from render #1. Cache hit = instant. Cache miss = SD reads
+  // here, but the E-ink is still refreshing from the previous activity anyway.
+  if (static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL) {
+    preRenderCarouselFrames();
+  }
+
   requestUpdate();
 }
 
