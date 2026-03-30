@@ -14,7 +14,10 @@ void WordSelectionMode::extractWords(const Page& page, const GfxRenderer& render
   const int lineHeight = renderer.getLineHeight(fontId);
   int16_t lastY = -1;
 
+  bool exhausted = false;
+
   for (const auto& element : page.elements) {
+    if (exhausted) break;
     if (element->getTag() != TAG_PageLine) continue;
 
     const auto& pageLine = static_cast<const PageLine&>(*element);
@@ -26,19 +29,25 @@ void WordSelectionMode::extractWords(const Page& page, const GfxRenderer& render
     if (wordTexts.empty()) continue;
 
     const int16_t lineY = static_cast<int16_t>(pageLine.yPos + marginTop);
-
-    // Start a new line if Y changed
-    if (lineY != lastY) {
-      if (lineCount >= MAX_LINES) break;
-      lineStarts[lineCount] = wordCount;
-      lineCount++;
-      lastY = lineY;
-    }
+    bool lineRecorded = (lineY == lastY);
 
     const size_t wc = wordTexts.size();
     for (size_t i = 0; i < wc; ++i) {
-      if (wordCount >= MAX_WORDS) break;
-      if (arenaUsed + static_cast<int>(wordTexts[i].size()) + 1 > ARENA_SIZE) break;
+      if (wordCount >= MAX_WORDS || arenaUsed + static_cast<int>(wordTexts[i].size()) + 1 > ARENA_SIZE) {
+        exhausted = true;
+        break;
+      }
+
+      // Record new line only when we know we have at least one word to add
+      if (!lineRecorded) {
+        if (lineCount >= MAX_LINES) {
+          exhausted = true;
+          break;
+        }
+        lineStarts[lineCount++] = wordCount;
+        lastY = lineY;
+        lineRecorded = true;
+      }
 
       const auto& text = wordTexts[i];
 
@@ -217,10 +226,10 @@ bool WordSelectionMode::isHyphenated() const {
   const int idx = getGlobalWordIndex();
   if (idx < 0 || idx >= wordCount) return false;
   const WordInfo& w = words[idx];
-  // Check if the word contains a hyphen
+  // Check if the word contains a hyphen with non-empty components on both sides
   const char* text = arena + w.textOffset;
-  for (int i = 0; i < w.textLen; ++i) {
-    if (text[i] == '-') return true;
+  for (int i = 1; i + 1 < w.textLen; ++i) {
+    if (text[i] == '-' && text[i - 1] != '-' && text[i + 1] != '-') return true;
   }
   return false;
 }
@@ -230,13 +239,20 @@ void WordSelectionMode::enterSubSelection() {
   const int idx = getGlobalWordIndex();
   if (idx < 0 || idx >= wordCount) return;
 
-  // Count components
+  // Count non-empty components (skip runs of hyphens and leading/trailing hyphens)
   const WordInfo& w = words[idx];
   const char* text = arena + w.textOffset;
-  subSelectCount = 1;
+  subSelectCount = 0;
+  bool inComponent = false;
   for (int i = 0; i < w.textLen; ++i) {
-    if (text[i] == '-') subSelectCount++;
+    if (text[i] == '-') {
+      inComponent = false;
+    } else {
+      if (!inComponent) subSelectCount++;
+      inComponent = true;
+    }
   }
+  if (subSelectCount <= 1) return;
 
   subSelectionActive = true;
   subSelectIndex = 0;
@@ -269,19 +285,25 @@ bool WordSelectionMode::getSubSelectedWord(char* outBuf, int outSize) const {
   const WordInfo& w = words[idx];
   const char* text = arena + w.textOffset;
 
-  // Find the sub-selected component (without trailing hyphen)
+  // Find the sub-selected non-empty component (without trailing hyphen)
   int compIdx = 0;
-  const char* compStart = text;
+  const char* compStart = nullptr;
+  bool inComponent = false;
   for (const char* p = text;; ++p) {
     if (*p == '-' || *p == '\0') {
-      if (compIdx == subSelectIndex) {
-        const int len = std::min(static_cast<int>(p - compStart), outSize - 1);
-        memcpy(outBuf, compStart, len);
-        outBuf[len] = '\0';
-        return true;
+      if (inComponent) {
+        if (compIdx == subSelectIndex) {
+          const int len = std::min(static_cast<int>(p - compStart), outSize - 1);
+          memcpy(outBuf, compStart, len);
+          outBuf[len] = '\0';
+          return true;
+        }
+        compIdx++;
       }
-      compIdx++;
-      compStart = p + 1;
+      inComponent = false;
+    } else {
+      if (!inComponent) compStart = p;
+      inComponent = true;
     }
     if (*p == '\0') break;
   }

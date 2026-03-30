@@ -151,12 +151,21 @@ bool DictionaryIndex::validateIndex(const char* dictPath, const char* idxPath) {
   HalFile idxFile;
   if (!Storage.openFileForRead("DICT", idxPath, idxFile)) return false;
 
+  uint32_t idxSize = static_cast<uint32_t>(idxFile.size());
+
   DictIndexHeader header;
   if (idxFile.read(&header, sizeof(header)) != static_cast<int>(sizeof(header))) {
     idxFile.close();
     return false;
   }
   idxFile.close();
+
+  // Verify index file size matches expected: header + entryCount * entry size
+  uint32_t expectedSize = DICT_INDEX_HEADER_SIZE + header.entryCount * static_cast<uint32_t>(sizeof(DictIndexEntry));
+  if (header.entryCount == 0 || idxSize != expectedSize) {
+    LOG_INF("DICT", "Index file size mismatch: expected %u, got %u", expectedSize, idxSize);
+    return false;
+  }
 
   if (header.dictFileSize != dictSize) {
     LOG_INF("DICT", "Index size mismatch: expected %u, got %u", dictSize, header.dictFileSize);
@@ -380,7 +389,8 @@ int32_t DictionaryIndex::binarySearchIndex(HalFile& idxFile, uint32_t entryCount
     }
     entry.word[DICT_WORD_MAX - 1] = '\0';  // safety
 
-    int cmp = strcasecmp(word, entry.word);
+    // Compare using prefix length (index words are truncated to DICT_WORD_MAX - 1)
+    int cmp = strncasecmp(word, entry.word, DICT_WORD_MAX - 1);
     if (cmp == 0) {
       bestMatch = mid;
       hi = mid - 1;  // find first match (leftmost)
@@ -398,7 +408,10 @@ int32_t DictionaryIndex::binarySearchIndex(HalFile& idxFile, uint32_t entryCount
 // lookup — binary search in index, then read definition from dict file
 // ---------------------------------------------------------------------------
 bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDef, int outDefSize) {
-  if (outDefSize <= 0) return false;
+  if (outDefSize < 4) {
+    if (outDefSize > 0) outDef[0] = '\0';
+    return false;
+  }
   outDef[0] = '\0';
 
   char idxPath[128];
@@ -420,68 +433,67 @@ bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDe
     return false;
   }
 
-  // Read the matched entry to get the byte offset
-  size_t entryOffset = DICT_INDEX_HEADER_SIZE + static_cast<size_t>(idx) * sizeof(DictIndexEntry);
-  idxFile.seekSet(entryOffset);
-  DictIndexEntry entry;
-  if (idxFile.read(&entry, sizeof(entry)) != static_cast<int>(sizeof(entry))) {
+  // Open the dict file for full-word verification
+  HalFile dictFile;
+  if (!Storage.openFileForRead("DICT", dictPath, dictFile)) {
     idxFile.close();
     return false;
   }
-  idxFile.close();
 
-  // Open the dict file and seek to the entry offset
-  HalFile dictFile;
-  if (!Storage.openFileForRead("DICT", dictPath, dictFile)) return false;
-
-  dictFile.seekSet(entry.byteOffset);
   static constexpr int LOOKUP_BUF_SIZE = 1280;
   auto* lineBuf = static_cast<char*>(malloc(LOOKUP_BUF_SIZE));
   if (!lineBuf) {
     LOG_ERR("DICT", "malloc failed for lookup buffer");
     dictFile.close();
-    return false;
-  }
-  int len = readLine(dictFile, lineBuf, LOOKUP_BUF_SIZE);
-  dictFile.close();
-
-  if (len == 0) {
-    free(lineBuf);
+    idxFile.close();
     return false;
   }
 
-  // Verify full word match — the index word may have been truncated
-  const char* tab = strchr(lineBuf, '\t');
-  if (!tab) {
-    free(lineBuf);
-    return false;
-  }
+  // Walk adjacent entries sharing the same prefix (handles words > 31 chars)
+  bool found = false;
+  for (int32_t candidate = idx; candidate < static_cast<int32_t>(header.entryCount); ++candidate) {
+    size_t entryOffset = DICT_INDEX_HEADER_SIZE + static_cast<size_t>(candidate) * sizeof(DictIndexEntry);
+    idxFile.seekSet(entryOffset);
+    DictIndexEntry entry;
+    if (idxFile.read(&entry, sizeof(entry)) != static_cast<int>(sizeof(entry))) break;
+    entry.word[DICT_WORD_MAX - 1] = '\0';
 
-  int lineWordLen = static_cast<int>(tab - lineBuf);
-  // Case-insensitive comparison of the full word from the line
-  char lineWord[256];
-  if (lineWordLen >= static_cast<int>(sizeof(lineWord))) lineWordLen = static_cast<int>(sizeof(lineWord)) - 1;
-  memcpy(lineWord, lineBuf, lineWordLen);
-  lineWord[lineWordLen] = '\0';
+    // Stop once prefix no longer matches
+    if (strncasecmp(word, entry.word, DICT_WORD_MAX - 1) != 0) break;
 
-  if (strcasecmp(word, lineWord) != 0) {
-    free(lineBuf);
-    return false;
-  }
+    // Read the full line from .dict to verify full word match
+    dictFile.seekSet(entry.byteOffset);
+    int len = readLine(dictFile, lineBuf, LOOKUP_BUF_SIZE);
+    if (len == 0) continue;
 
-  // Extract definition (everything after the tab)
-  const char* def = tab + 1;
-  int defLen = len - (static_cast<int>(def - lineBuf));
+    const char* tab = strchr(lineBuf, '\t');
+    if (!tab) continue;
 
-  if (defLen >= outDefSize) {
-    // Truncate and add "..."
-    memcpy(outDef, def, outDefSize - 4);
-    memcpy(outDef + outDefSize - 4, "...", 4);  // includes null
-  } else {
-    memcpy(outDef, def, defLen + 1);  // includes null
+    int lineWordLen = static_cast<int>(tab - lineBuf);
+    char lineWord[256];
+    if (lineWordLen >= static_cast<int>(sizeof(lineWord))) lineWordLen = static_cast<int>(sizeof(lineWord)) - 1;
+    memcpy(lineWord, lineBuf, lineWordLen);
+    lineWord[lineWordLen] = '\0';
+
+    if (strcasecmp(word, lineWord) != 0) continue;
+
+    // Match found — extract definition
+    const char* def = tab + 1;
+    int defLen = len - static_cast<int>(def - lineBuf);
+
+    if (defLen >= outDefSize) {
+      memcpy(outDef, def, outDefSize - 4);
+      memcpy(outDef + outDefSize - 4, "...", 4);  // includes null
+    } else {
+      memcpy(outDef, def, defLen + 1);  // includes null
+    }
+    found = true;
+    break;
   }
 
   free(lineBuf);
-  return true;
+  dictFile.close();
+  idxFile.close();
+  return found;
 }
 

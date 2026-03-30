@@ -54,10 +54,11 @@ void DictionaryManager::scan() {
     info.corrupt = false;
     info.readOnly = false;
 
-    // Strip extension for filename
+    // Strip extension for filename — skip if too long to store
     int baseLen = nameLen - 5;
     if (baseLen >= static_cast<int>(sizeof(info.filename))) {
-      baseLen = static_cast<int>(sizeof(info.filename)) - 1;
+      LOG_ERR("DICTM", "Dictionary filename too long, skipping: %s", name);
+      continue;
     }
     memcpy(info.filename, name, baseLen);
     info.filename[baseLen] = '\0';
@@ -107,7 +108,8 @@ void DictionaryManager::loadEnabledState() {
     return;
   }
 
-  char buf[512];
+  // Buffer sized for MAX_DICTIONARIES × max filename (64) + JSON overhead
+  char buf[1536];
   size_t bytesRead = Storage.readFileToBuffer(ENABLED_FILE, buf, sizeof(buf));
   if (bytesRead == 0) {
     LOG_ERR("DICTM", "Failed to read enabled.json");
@@ -154,7 +156,8 @@ void DictionaryManager::saveEnabledState() {
     }
   }
 
-  char buf[512];
+  // Buffer sized for MAX_DICTIONARIES × max filename (64) + JSON overhead
+  char buf[1536];
   size_t written = serializeJson(doc, buf, sizeof(buf));
   if (written == 0 || written >= sizeof(buf)) {
     LOG_ERR("DICTM", "Failed to serialize enabled.json");
@@ -182,7 +185,7 @@ void DictionaryManager::setEnabled(int idx, bool enabled) {
 // ---------------------------------------------------------------------------
 bool DictionaryManager::hasEnabledDictionaries() const {
   for (int i = 0; i < dictCount; ++i) {
-    if (dictionaries[i].enabled && !dictionaries[i].corrupt) return true;
+    if (dictionaries[i].enabled && !dictionaries[i].corrupt && !dictionaries[i].readOnly) return true;
   }
   return false;
 }
@@ -271,7 +274,7 @@ int DictionaryManager::lookup(const char* word, DictResult* results, int maxResu
   char fullPath[192];
 
   for (int i = 0; i < dictCount && found < maxResults; ++i) {
-    if (!dictionaries[i].enabled || dictionaries[i].corrupt) continue;
+    if (!dictionaries[i].enabled || dictionaries[i].corrupt || dictionaries[i].readOnly) continue;
 
     snprintf(fullPath, sizeof(fullPath), "%s/%s.dict", DICT_DIR, dictionaries[i].filename);
 

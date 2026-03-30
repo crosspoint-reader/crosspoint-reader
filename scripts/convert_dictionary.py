@@ -169,9 +169,9 @@ def compute_spot_check_hash(dict_bytes: bytes) -> int:
         remaining = dict_bytes[nl + 1:]
         last_lines = remaining.split(b'\n')
         last_line = b''
-        for l in last_lines:
-            if l:
-                last_line = l
+        for line_bytes in last_lines:
+            if line_bytes:
+                last_line = line_bytes
         hash_input.extend(truncate(last_line))
 
     return fnv1a(bytes(hash_input))
