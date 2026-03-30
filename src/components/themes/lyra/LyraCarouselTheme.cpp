@@ -11,7 +11,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "components/icons/book.h"
-#include "components/icons/cover.h"
 #include "components/icons/folder.h"
 #include "components/icons/recent.h"
 #include "components/icons/settings2.h"
@@ -20,7 +19,7 @@
 namespace {
 // Cover layout — centre cover dominates, sides slide kOverlap px behind it
 constexpr int kCenterCoverMaxW = 340;
-constexpr int kCenterCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight - 50;  // 550; frees 50px for title+dots
+constexpr int kCenterCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight - 60;  // 540; frees 60px for dots+author+title
 constexpr int kSideCoverMaxW = 200;
 constexpr int kSideCoverMaxH = LyraCarouselMetrics::values.homeCoverHeight - 210;  // 390
 constexpr int kOverlap = 60;
@@ -107,10 +106,10 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   const int leftX = centerX - kSideCoverMaxW + kOverlap;
   const int rightX = centerX + kCenterCoverMaxW - kOverlap;
 
-  auto drawCover = [&](int bookIdx, int x, int y, int maxW, int maxH) {
-    if (bookIdx < 0 || bookIdx >= bookCount) return;
+  // Returns true if a cover image was rendered (no placeholder — empty slot stays blank)
+  auto drawCover = [&](int bookIdx, int x, int y, int maxW, int maxH) -> bool {
+    if (bookIdx < 0 || bookIdx >= bookCount) return false;
     const RecentBook& book = recentBooks[bookIdx];
-    bool hasCover = false;
     if (!book.coverBmpPath.empty()) {
       const std::string thumbPath =
           UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselMetrics::values.homeCoverHeight);
@@ -125,16 +124,13 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
-          hasCover = true;
+          file.close();
+          return true;
         }
         file.close();
       }
     }
-    if (!hasCover) {
-      renderer.drawRect(x, y, maxW, maxH, true);
-      renderer.fillRect(x, y + maxH / 3, maxW, 2 * maxH / 3, true);
-      renderer.drawIcon(CoverIcon, x + maxW / 2 - 16, y + 8, 32, 32);
-    }
+    return false;
   };
 
   if (!coverRendered) {
@@ -144,40 +140,48 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
     // don't persist (drawBitmap only sets black pixels, never clears).
     renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
-    // Sides first so centre renders on top
-    if (bookCount >= 2) {
-      const int prevIdx = (centerIdx + bookCount - 1) % bookCount;
-      const int nextIdx = (centerIdx + 1) % bookCount;
-      drawCover(prevIdx, leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH);
-      renderer.drawRect(leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
-      drawCover(nextIdx, rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH);
-      renderer.drawRect(rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
+    // Sides first so centre renders on top.
+    // Left side only when there are 3+ books; right side when there are 2+ books.
+    // Border only drawn if a cover image was actually rendered (no placeholders).
+    const int prevIdx = (centerIdx + bookCount - 1) % bookCount;
+    const int nextIdx = (centerIdx + 1) % bookCount;
+    if (bookCount >= 3) {
+      if (drawCover(prevIdx, leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH))
+        renderer.drawRect(leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
     }
+    if (bookCount >= 2) {
+      if (drawCover(nextIdx, rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH))
+        renderer.drawRect(rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
+    }
+
     // Clear a white outline ring around the centre cover, then draw the cover
     // inside it. The white ring always separates the centre from the sides.
     renderer.fillRect(centerX - kCenterOutlineW, centerTileY - kCenterOutlineW,
                       kCenterCoverMaxW + 2 * kCenterOutlineW, kCenterCoverMaxH + 2 * kCenterOutlineW, false);
     drawCover(centerIdx, centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH);
 
-    // Title below centre cover
-    const int titleY = centerTileY + kCenterCoverMaxH + 8;
+    // Dots — centred over the cover tile, count = actual book count
+    const int dotsY = centerTileY + kCenterCoverMaxH + 8;
+    const int totalDotsW = bookCount * kDotSize + (bookCount - 1) * kDotGap;
+    int dotX = centerX + (kCenterCoverMaxW - totalDotsW) / 2;
+    for (int i = 0; i < bookCount; ++i) {
+      if (i == centerIdx) renderer.fillRect(dotX, dotsY, kDotSize, kDotSize, true);
+      else renderer.drawRect(dotX, dotsY, kDotSize, kDotSize, true);
+      dotX += kDotSize + kDotGap;
+    }
+
+    // Author then title below dots
+    const int authorY = dotsY + kDotSize + 6;
+    const std::string authorTrunc =
+        renderer.truncatedText(kTitleFontId, recentBooks[centerIdx].author.c_str(), kCenterCoverMaxW);
+    const int authorW = renderer.getTextWidth(kTitleFontId, authorTrunc.c_str());
+    renderer.drawText(kTitleFontId, centerX + (kCenterCoverMaxW - authorW) / 2, authorY, authorTrunc.c_str(), true);
+
+    const int titleY = authorY + renderer.getLineHeight(kTitleFontId) + 2;
     const std::string titleTrunc =
         renderer.truncatedText(kTitleFontId, recentBooks[centerIdx].title.c_str(), kCenterCoverMaxW);
     const int titleW = renderer.getTextWidth(kTitleFontId, titleTrunc.c_str());
     renderer.drawText(kTitleFontId, centerX + (kCenterCoverMaxW - titleW) / 2, titleY, titleTrunc.c_str(), true);
-
-    // Dot indicator — filled square for current book, outlined for others
-    const int dotsY = titleY + renderer.getLineHeight(kTitleFontId) + 4;
-    const int totalDotsW = bookCount * kDotSize + (bookCount - 1) * kDotGap;
-    int dotX = centerX + (kCenterCoverMaxW - totalDotsW) / 2;
-    for (int i = 0; i < bookCount; ++i) {
-      if (i == centerIdx) {
-        renderer.fillRect(dotX, dotsY, kDotSize, kDotSize, true);
-      } else {
-        renderer.drawRect(dotX, dotsY, kDotSize, kDotSize, true);
-      }
-      dotX += kDotSize + kDotGap;
-    }
 
     coverBufferStored = storeCoverBuffer();
     coverRendered = coverBufferStored;
