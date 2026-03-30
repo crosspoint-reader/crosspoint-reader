@@ -354,7 +354,9 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
     while (xOuter > 0 && (xOuter * xOuter + dy * dy) > outerRadiusSq) {
       --xOuter;
     }
-    while (xInner > 0 && (xInner * xInner + dy * dy) > innerRadiusSq) {
+    // Keep the smallest x that still lies outside/at the inner radius,
+    // i.e. (x^2 + y^2) >= innerRadiusSq.
+    while (xInner > 0 && ((xInner - 1) * (xInner - 1) + dy * dy) >= innerRadiusSq) {
       --xInner;
     }
 
