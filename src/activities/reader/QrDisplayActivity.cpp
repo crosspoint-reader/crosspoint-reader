@@ -7,6 +7,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/QrUtils.h"
+#include "ReaderUtils.h"
 
 void QrDisplayActivity::onEnter() {
   Activity::onEnter();
@@ -41,5 +42,6 @@ void QrDisplayActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
+  ReaderUtils::applyDarkModeIfEnabled(renderer);
   renderer.displayBuffer();
 }
