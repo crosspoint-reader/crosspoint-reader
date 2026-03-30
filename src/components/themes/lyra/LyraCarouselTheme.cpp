@@ -11,6 +11,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "components/icons/book.h"
+#include "components/icons/cover.h"
 #include "components/icons/folder.h"
 #include "components/icons/recent.h"
 #include "components/icons/settings2.h"
@@ -106,10 +107,12 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   const int leftX = centerX - kSideCoverMaxW + kOverlap;
   const int rightX = centerX + kCenterCoverMaxW - kOverlap;
 
-  // Returns true if a cover image was rendered (no placeholder — empty slot stays blank)
+  // Returns true if a book exists at bookIdx (cover image or placeholder drawn).
+  // Returns false only when the slot has no book — caller skips the border too.
   auto drawCover = [&](int bookIdx, int x, int y, int maxW, int maxH) -> bool {
     if (bookIdx < 0 || bookIdx >= bookCount) return false;
     const RecentBook& book = recentBooks[bookIdx];
+    bool hasCover = false;
     if (!book.coverBmpPath.empty()) {
       const std::string thumbPath =
           UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselMetrics::values.homeCoverHeight);
@@ -124,13 +127,17 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
-          file.close();
-          return true;
+          hasCover = true;
         }
         file.close();
       }
     }
-    return false;
+    if (!hasCover) {
+      renderer.drawRect(x, y, maxW, maxH, true);
+      renderer.fillRect(x, y + maxH / 3, maxW, 2 * maxH / 3, true);
+      renderer.drawIcon(CoverIcon, x + maxW / 2 - 16, y + 8, 32, 32);
+    }
+    return true;
   };
 
   if (!coverRendered) {
