@@ -42,6 +42,8 @@ class HomeActivity final : public Activity {
   void freeCoverBuffer();        // Free the stored cover buffer
   void preRenderCarouselFrames();
   void freeCarouselFrames();
+  void renderCarouselFrame(int bookIdx, int slotIdx);
+  void updateSlidingWindowCache(int centerIdx, int bookCount);
   void loadRecentBooks(int maxBooks);
   void loadRecentCovers(int coverHeight);
 

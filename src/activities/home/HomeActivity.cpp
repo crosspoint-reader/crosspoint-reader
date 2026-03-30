@@ -28,8 +28,16 @@
 // ---------------------------------------------------------------------------
 namespace {
 uint8_t* gCachedFrames[HomeActivity::kCarouselFrameCount] = {};
+int gCachedFrameBookIdx[HomeActivity::kCarouselFrameCount] = {-1, -1, -1};
 int gCachedFrameCount = 0;
 std::string gCacheKey;
+
+int findFrameSlot(int bookIdx) {
+  for (int i = 0; i < HomeActivity::kCarouselFrameCount; ++i) {
+    if (gCachedFrameBookIdx[i] == bookIdx && gCachedFrames[i] != nullptr) return i;
+  }
+  return -1;
+}
 
 void invalidateCarouselCache() {
   for (int i = 0; i < HomeActivity::kCarouselFrameCount; ++i) {
@@ -37,6 +45,7 @@ void invalidateCarouselCache() {
       free(gCachedFrames[i]);
       gCachedFrames[i] = nullptr;
     }
+    gCachedFrameBookIdx[i] = -1;
   }
   gCachedFrameCount = 0;
   gCacheKey.clear();
@@ -310,9 +319,6 @@ void HomeActivity::preRenderCarouselFrames() {
   if (!frameBuffer) return;
 
   const size_t bufferSize = GfxRenderer::getBufferSize();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-
   freeCoverBuffer();  // reclaim 48KB before allocating frames
 
   const int frameCount = std::min(bookCount, kCarouselFrameCount);
@@ -325,21 +331,11 @@ void HomeActivity::preRenderCarouselFrames() {
     }
   }
 
-  bool dummy1 = false, dummy2 = false, dummy3 = false;
+  // Initial window centred on book 0: slots hold [book0, book1, book(bookCount-1)]
+  // so left and right navigation from the start position are both instant.
+  const int booksToRender[kCarouselFrameCount] = {0, 1 % bookCount, bookCount - 1};
   for (int i = 0; i < frameCount; ++i) {
-    LyraCarouselTheme::setPreRenderIndex(i);
-    dummy1 = false;
-    dummy2 = false;
-    dummy3 = false;
-
-    renderer.clearScreen();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
-    GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                            recentBooks, bookCount,
-                            dummy1, dummy2, dummy3, []() { return true; });
-
-    memcpy(gCachedFrames[i], frameBuffer, bufferSize);
-    carouselFrames[i] = gCachedFrames[i];
+    renderCarouselFrame(booksToRender[i], i);
   }
 
   gCachedFrameCount = frameCount;
@@ -439,10 +435,11 @@ void HomeActivity::render(RenderLock&&) {
     uint8_t* frameBuffer = renderer.getFrameBuffer();
     const int bookCount = static_cast<int>(recentBooks.size());
     const bool inCarouselRow = (selectorIndex < bookCount);
-    const int frameIdx = inCarouselRow ? selectorIndex : lastCarouselBookIndex;
+    const int centerIdx = inCarouselRow ? selectorIndex : lastCarouselBookIndex;
+    const int slotIdx = findFrameSlot(centerIdx);
 
-    if (frameBuffer && frameIdx >= 0 && frameIdx < kCarouselFrameCount && carouselFrames[frameIdx]) {
-      memcpy(frameBuffer, carouselFrames[frameIdx], GfxRenderer::getBufferSize());
+    if (frameBuffer && slotIdx >= 0 && carouselFrames[slotIdx]) {
+      memcpy(frameBuffer, carouselFrames[slotIdx], GfxRenderer::getBufferSize());
 
       GUI.drawCarouselBorder(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                              inCarouselRow);
@@ -468,6 +465,8 @@ void HomeActivity::render(RenderLock&&) {
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       renderer.displayBuffer();
+      // E-ink refresh complete — pre-render the missing adjacent frame while idle.
+      updateSlidingWindowCache(centerIdx, bookCount);
       return;
     }
   }
@@ -516,6 +515,66 @@ void HomeActivity::render(RenderLock&&) {
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);
+  }
+}
+
+void HomeActivity::renderCarouselFrame(int bookIdx, int slotIdx) {
+  uint8_t* frameBuffer = renderer.getFrameBuffer();
+  if (!frameBuffer || !gCachedFrames[slotIdx]) return;
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int bookCount = static_cast<int>(recentBooks.size());
+  bool dummy1 = false, dummy2 = false, dummy3 = false;
+
+  // selectorIndex = bookCount → drawRecentBookCover uses lastCarouselSelectorIndex (set below)
+  // and draws no selection border.
+  LyraCarouselTheme::setPreRenderIndex(bookIdx);
+  renderer.clearScreen();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+                          recentBooks, bookCount, dummy1, dummy2, dummy3, []() { return true; });
+
+  memcpy(gCachedFrames[slotIdx], frameBuffer, GfxRenderer::getBufferSize());
+  gCachedFrameBookIdx[slotIdx] = bookIdx;
+  carouselFrames[slotIdx] = gCachedFrames[slotIdx];
+}
+
+void HomeActivity::updateSlidingWindowCache(int centerIdx, int bookCount) {
+  // No sliding needed when all books already fit in the cache.
+  if (bookCount <= kCarouselFrameCount || !carouselFramesReady) return;
+
+  const int prevIdx = (centerIdx + bookCount - 1) % bookCount;
+  const int nextIdx = (centerIdx + 1) % bookCount;
+
+  const bool hasPrev = findFrameSlot(prevIdx) >= 0;
+  const bool hasNext = findFrameSlot(nextIdx) >= 0;
+  if (hasPrev && hasNext) return;  // window already complete
+
+  const int missingIdx = !hasPrev ? prevIdx : nextIdx;
+
+  // Evict the slot whose book is furthest from centerIdx (never evict center itself,
+  // nor the adjacent that is already cached).
+  int evictSlot = -1;
+  int maxDist = -1;
+  for (int i = 0; i < kCarouselFrameCount; ++i) {
+    if (!gCachedFrames[i]) continue;
+    const int bookInSlot = gCachedFrameBookIdx[i];
+    if (bookInSlot == centerIdx) continue;
+    if (hasPrev && bookInSlot == prevIdx) continue;
+    if (hasNext && bookInSlot == nextIdx) continue;
+    const int diff = std::abs(bookInSlot - centerIdx);
+    const int dist = std::min(diff, bookCount - diff);
+    if (dist > maxDist) {
+      maxDist = dist;
+      evictSlot = i;
+    }
+  }
+
+  if (evictSlot >= 0) {
+    LOG_DBG("HOME", "carousel: evict slot %d (book %d) -> book %d", evictSlot, gCachedFrameBookIdx[evictSlot],
+            missingIdx);
+    renderCarouselFrame(missingIdx, evictSlot);
   }
 }
 
