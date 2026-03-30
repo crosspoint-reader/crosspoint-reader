@@ -1104,11 +1104,15 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     // Margins/padding are preserved so parent element spacing still accumulates correctly.
     if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
       auto style = self->currentTextBlock->getBlockStyle();
-      style.textAlignDefined = false;
-      style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                            ? CssTextAlign::Justify
-                            : static_cast<CssTextAlign>(self->paragraphAlignment);
-      self->currentTextBlock->setBlockStyle(style);
+      // Keep alignment for synthetic empty <br> separator blocks so following inline
+      // text after <br/> inside centered/right-aligned containers preserves alignment.
+      if (!style.fromBrElement) {
+        style.textAlignDefined = false;
+        style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                              ? CssTextAlign::Justify
+                              : static_cast<CssTextAlign>(self->paragraphAlignment);
+        self->currentTextBlock->setBlockStyle(style);
+      }
     }
   }
 }
