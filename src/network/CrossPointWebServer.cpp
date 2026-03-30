@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -342,12 +343,14 @@ void CrossPointWebServer::handleNotFound() const {
 void CrossPointWebServer::handleStatus() const {
   // Get correct IP based on AP vs STA mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  const uint16_t batteryPercentage = powerManager.getBatteryPercentage();
 
   JsonDocument doc;
   doc["version"] = CROSSPOINT_VERSION;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
+  doc["batteryPercentage"] = batteryPercentage;
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
 
