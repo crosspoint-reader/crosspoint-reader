@@ -3,7 +3,7 @@
 // full entry to renderer.render() — exactly as on-device code would.
 // Checks the complete span output against expected values.
 //
-// Build and run via test/run_dict_html_renderer_test.sh.
+// Build and run via test/run_dict_html_renderer.sh.
 // Exit code: 0 = all pass, 1 = any failure or unexpected unknown tags.
 // DICT_HTML_RENDERER_TRACK_UNKNOWN is defined by the build script via -D flag.
 

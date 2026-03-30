@@ -7,7 +7,7 @@ produces correct `StyledSpan` output for all 6 tag categories in the
 ## Build and run
 
 ```bash
-bash test/run_dict_html_renderer_test.sh
+bash test/run_dict_html_renderer.sh
 ```
 
 Requires `gcc` and `g++` (via `build-essential`). The script compiles the
