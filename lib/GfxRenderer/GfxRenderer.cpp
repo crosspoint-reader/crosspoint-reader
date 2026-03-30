@@ -172,7 +172,6 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
   // Bounds checking against physical panel dimensions
   if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) {
-    LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
     return;
   }
 
@@ -270,17 +269,21 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
+  const int sw = getScreenWidth();
+  const int sh = getScreenHeight();
   if (x1 == x2) {
-    if (y2 < y1) {
-      std::swap(y1, y2);
-    }
+    if (x1 < 0 || x1 >= sw) return;
+    if (y2 < y1) std::swap(y1, y2);
+    y1 = std::max(y1, 0);
+    y2 = std::min(y2, sh - 1);
     for (int y = y1; y <= y2; y++) {
       drawPixel(x1, y, state);
     }
   } else if (y1 == y2) {
-    if (x2 < x1) {
-      std::swap(x1, x2);
-    }
+    if (y1 < 0 || y1 >= sh) return;
+    if (x2 < x1) std::swap(x1, x2);
+    x1 = std::max(x1, 0);
+    x2 = std::min(x2, sw - 1);
     for (int x = x1; x <= x2; x++) {
       drawPixel(x, y1, state);
     }
@@ -450,16 +453,23 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
     fillRect(x, y, width, height, true);
   } else if (color == Color::White) {
     fillRect(x, y, width, height, false);
-  } else if (color == Color::LightGray) {
-    for (int fillY = y; fillY < y + height; fillY++) {
-      for (int fillX = x; fillX < x + width; fillX++) {
-        drawPixelDither<Color::LightGray>(fillX, fillY);
+  } else if (color == Color::LightGray || color == Color::DarkGray) {
+    const int x0 = std::max(x, 0);
+    const int y0 = std::max(y, 0);
+    const int x1 = std::min(x + width, getScreenWidth());
+    const int y1 = std::min(y + height, getScreenHeight());
+    if (x0 >= x1 || y0 >= y1) return;
+    if (color == Color::LightGray) {
+      for (int fillY = y0; fillY < y1; fillY++) {
+        for (int fillX = x0; fillX < x1; fillX++) {
+          drawPixelDither<Color::LightGray>(fillX, fillY);
+        }
       }
-    }
-  } else if (color == Color::DarkGray) {
-    for (int fillY = y; fillY < y + height; fillY++) {
-      for (int fillX = x; fillX < x + width; fillX++) {
-        drawPixelDither<Color::DarkGray>(fillX, fillY);
+    } else {
+      for (int fillY = y0; fillY < y1; fillY++) {
+        for (int fillX = x0; fillX < x1; fillX++) {
+          drawPixelDither<Color::DarkGray>(fillX, fillY);
+        }
       }
     }
   }
