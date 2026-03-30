@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <picojpeg.h>
 
 #include <cstdio>
@@ -278,39 +279,10 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
-  uint8_t* rowBuffer = nullptr;
-  uint8_t* mcuRowBuffer = nullptr;
-  AtkinsonDitherer* atkinsonDitherer = nullptr;
-  FloydSteinbergDitherer* fsDitherer = nullptr;
-  Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
-  uint32_t* rowAccum = nullptr;  // Accumulator for each output X (32-bit for larger sums)
-  uint32_t* rowCount = nullptr;  // Count of source pixels accumulated per output X
-
-  // RAII guard: frees all heap resources on any return path, including early exits.
-  // Holds references so it always sees the latest pointer values assigned below.
-  struct Cleanup {
-    uint8_t*& rowBuffer;
-    uint8_t*& mcuRowBuffer;
-    AtkinsonDitherer*& atkinsonDitherer;
-    FloydSteinbergDitherer*& fsDitherer;
-    Atkinson1BitDitherer*& atkinson1BitDitherer;
-    uint32_t*& rowAccum;
-    uint32_t*& rowCount;
-    ~Cleanup() {
-      delete[] rowAccum;
-      delete[] rowCount;
-      delete atkinsonDitherer;
-      delete fsDitherer;
-      delete atkinson1BitDitherer;
-      free(mcuRowBuffer);
-      free(rowBuffer);
-    }
-  } cleanup{rowBuffer, mcuRowBuffer, atkinsonDitherer, fsDitherer, atkinson1BitDitherer, rowAccum, rowCount};
-
   // Allocate row buffer
-  rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
+  const auto rowBuffer = makeUniqueNoThrow<uint8_t[]>(bytesPerRow);
   if (!rowBuffer) {
-    LOG_ERR("JPG", "Failed to allocate row buffer");
+    LOG_ERR("JPG", "OOM row buffer (%d bytes)", bytesPerRow);
     return false;
   }
 
@@ -325,35 +297,56 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
-  mcuRowBuffer = static_cast<uint8_t*>(malloc(mcuRowPixels));
+  const auto mcuRowBuffer = makeUniqueNoThrow<uint8_t[]>(mcuRowPixels);
   if (!mcuRowBuffer) {
-    LOG_ERR("JPG", "Failed to allocate MCU row buffer (%d bytes)", mcuRowPixels);
+    LOG_ERR("JPG", "OOM MCU row buffer (%d bytes)", mcuRowPixels);
     return false;
   }
 
   // Create ditherer if enabled
   // Use OUTPUT dimensions for dithering (after prescaling)
+  std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
+  std::unique_ptr<FloydSteinbergDitherer> fsDitherer;
+  std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
   if (oneBit) {
     // For 1-bit output, use Atkinson dithering for better quality
-    atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
+    atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(outWidth);
+    if (!atkinson1BitDitherer || !atkinson1BitDitherer->isValid()) {
+      LOG_ERR("JPG", "OOM Atkinson1BitDitherer");
+      return false;
+    }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(outWidth);
+      atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
+      if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
+        LOG_ERR("JPG", "OOM AtkinsonDitherer");
+        return false;
+      }
     } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = new FloydSteinbergDitherer(outWidth);
+      fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
+      if (!fsDitherer || !fsDitherer->isValid()) {
+        LOG_ERR("JPG", "OOM FloydSteinbergDitherer");
+        return false;
+      }
     }
   }
 
   // For scaling: accumulate source rows into scaled output rows
   // We need to track which source Y maps to which output Y
   // Using fixed-point: srcY_fp = outY * scaleY_fp (gives source Y in 16.16 format)
-  int currentOutY = 0;             // Current output row being accumulated
-  uint32_t nextOutY_srcStart = 0;  // Source Y where next output row starts (16.16 fixed point)
+  std::unique_ptr<uint32_t[]> rowAccum;  // Accumulator for each output X (32-bit for larger sums)
+  std::unique_ptr<uint16_t[]> rowCount;  // Count of source pixels accumulated per output X
+  int currentOutY = 0;                   // Current output row being accumulated
+  uint32_t nextOutY_srcStart = 0;        // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
-    rowAccum = new uint32_t[outWidth]();
-    rowCount = new uint32_t[outWidth]();
+    rowAccum = makeUniqueNoThrow<uint32_t[]>(outWidth);
+    rowCount = makeUniqueNoThrow<uint16_t[]>(outWidth);
     nextOutY_srcStart = scaleY_fp;  // First boundary is at scaleY_fp (source Y for outY=1)
+    if (!rowAccum || !rowCount) {
+      LOG_ERR("JPG", "OOM row accumulators (%d bytes)", outWidth);
+      return false;
+    }
   }
 
   // Process MCUs row-by-row and write to BMP as we go (top-down)
@@ -361,7 +354,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   for (int mcuY = 0; mcuY < imageInfo.m_MCUSPerCol; mcuY++) {
     // Clear the MCU row buffer
-    memset(mcuRowBuffer, 0, mcuRowPixels);
+    memset(mcuRowBuffer.get(), 0, mcuRowPixels);
 
     // Decode one row of MCUs
     for (int mcuX = 0; mcuX < imageInfo.m_MCUSPerRow; mcuX++) {
@@ -415,7 +408,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
       if (!needsScaling) {
         // No scaling - direct output (1:1 mapping)
-        memset(rowBuffer, 0, bytesPerRow);
+        memset(rowBuffer.get(), 0, bytesPerRow);
 
         if (USE_8BIT_OUTPUT && !oneBit) {
           for (int x = 0; x < outWidth; x++) {
@@ -455,12 +448,12 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           else if (fsDitherer)
             fsDitherer->nextRow();
         }
-        bmpOut.write(rowBuffer, bytesPerRow);
+        bmpOut.write(rowBuffer.get(), bytesPerRow);
       } else {
         // Fixed-point area averaging for exact fit scaling
         // For each output pixel X, accumulate source pixels that map to it
         // srcX range for outX: [outX * scaleX_fp >> 16, (outX+1) * scaleX_fp >> 16)
-        const uint8_t* srcRow = mcuRowBuffer + bufferY * imageInfo.m_width;
+        const uint8_t* srcRow = mcuRowBuffer.get() + bufferY * imageInfo.m_width;
 
         for (int outX = 0; outX < outWidth; outX++) {
           // Calculate source X range for this output pixel
@@ -492,7 +485,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
         // Output all rows whose boundaries we've crossed (handles both up and downscaling)
         // For upscaling, one source row may produce multiple output rows
         while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
-          memset(rowBuffer, 0, bytesPerRow);
+          memset(rowBuffer.get(), 0, bytesPerRow);
 
           if (USE_8BIT_OUTPUT && !oneBit) {
             for (int x = 0; x < outWidth; x++) {
@@ -533,7 +526,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
               fsDitherer->nextRow();
           }
 
-          bmpOut.write(rowBuffer, bytesPerRow);
+          bmpOut.write(rowBuffer.get(), bytesPerRow);
           currentOutY++;
 
           // Update boundary for next output row
@@ -546,8 +539,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             continue;
           }
           // Moving to next source row - reset accumulators
-          memset(rowAccum, 0, outWidth * sizeof(uint32_t));
-          memset(rowCount, 0, outWidth * sizeof(uint32_t));
+          memset(rowAccum.get(), 0, outWidth * sizeof(uint32_t));
+          memset(rowCount.get(), 0, outWidth * sizeof(uint16_t));
         }
       }
     }

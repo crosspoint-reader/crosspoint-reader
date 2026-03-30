@@ -3,8 +3,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
-
-#include <memory>
+#include <Memory.h>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -32,19 +31,22 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");
-      currentTheme = std::make_unique<BaseTheme>();
+      currentTheme = makeUniqueNoThrow<BaseTheme>();
       currentMetrics = &BaseMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA:
       LOG_DBG("UI", "Using Lyra theme");
-      currentTheme = std::make_unique<LyraTheme>();
+      currentTheme = makeUniqueNoThrow<LyraTheme>();
       currentMetrics = &LyraMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
       LOG_DBG("UI", "Using Lyra 3 Covers theme");
-      currentTheme = std::make_unique<Lyra3CoversTheme>();
+      currentTheme = makeUniqueNoThrow<Lyra3CoversTheme>();
       currentMetrics = &Lyra3CoversMetrics::values;
       break;
+  }
+  if (!currentTheme) {
+    LOG_ERR("UI", "OOM setTheme");
   }
 }
 

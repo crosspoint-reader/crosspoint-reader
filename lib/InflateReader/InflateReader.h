@@ -3,6 +3,7 @@
 #include <uzlib.h>
 
 #include <cstddef>
+#include <memory>
 
 // Return value for readAtMost().
 enum class InflateStatus {
@@ -81,5 +82,5 @@ class InflateReader {
 
  private:
   uzlib_uncomp decomp = {};
-  uint8_t* ringBuffer = nullptr;
+  std::unique_ptr<uint8_t[]> ringBuffer;
 };

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 
 #include <cstdlib>
@@ -25,8 +26,6 @@ void FontDecompressor::clearCache() {
 
 void FontDecompressor::freePageBuffer() {
   for (uint8_t s = 0; s < pageSlotCount; s++) {
-    free(pageSlots[s].buffer);
-    free(pageSlots[s].glyphs);
     pageSlots[s] = {};
   }
   pageSlotCount = 0;
@@ -315,12 +314,10 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   stats.uniqueGroupsAccessed = groupCount;
 
   // Step 3: Allocate page buffer and lookup table for this slot
-  slot.buffer = static_cast<uint8_t*>(malloc(totalBytes));
-  slot.glyphs = static_cast<PageGlyphEntry*>(malloc(glyphCount * sizeof(PageGlyphEntry)));
+  slot.buffer = makeUniqueNoThrow<uint8_t[]>(totalBytes);
+  slot.glyphs = makeUniqueNoThrow<PageGlyphEntry[]>(glyphCount);
   if (!slot.buffer || !slot.glyphs) {
-    LOG_ERR("FDC", "Failed to allocate page buffer (%u bytes, %u glyphs)", totalBytes, glyphCount);
-    free(slot.buffer);
-    free(slot.glyphs);
+    LOG_ERR("FDC", "OOM page buffer (%u bytes, %u glyphs)", totalBytes, glyphCount);
     slot = {};
     return glyphCount;
   }
@@ -425,9 +422,9 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
     uint16_t groupIdx = neededGroups[g];
     const EpdFontGroup& group = fontData->groups[groupIdx];
 
-    auto* tempBuf = static_cast<uint8_t*>(malloc(group.uncompressedSize));
+    const auto tempBuf = makeUniqueNoThrow<uint8_t[]>(group.uncompressedSize);
     if (!tempBuf) {
-      LOG_ERR("FDC", "Failed to allocate temp buffer (%u bytes) for group %u", group.uncompressedSize, groupIdx);
+      LOG_ERR("FDC", "OOM temp buffer (%u bytes) group %u", group.uncompressedSize, groupIdx);
       missed++;
       continue;
     }
@@ -435,8 +432,7 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       stats.peakTempBytes = group.uncompressedSize;
     }
 
-    if (!decompressGroup(fontData, groupIdx, tempBuf, group.uncompressedSize)) {
-      free(tempBuf);
+    if (!decompressGroup(fontData, groupIdx, tempBuf.get(), group.uncompressedSize)) {
       missed++;
       continue;
     }
@@ -452,8 +448,6 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       slot.glyphs[i].bufferOffset = writeOffset;
       writeOffset += glyph.dataLength;
     }
-
-    free(tempBuf);
   }
 
   LOG_DBG("FDC", "Prewarm: %u glyphs in %u bytes from %u groups (%d missed)", glyphCount, writeOffset, groupCount,

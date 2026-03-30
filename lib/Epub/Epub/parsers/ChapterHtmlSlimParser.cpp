@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <expat.h>
 
@@ -149,7 +150,10 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
     pendingAnchorId.clear();
   }
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
+  currentTextBlock = makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, blockStyle);
+  if (!currentTextBlock) {
+    LOG_ERR("EHP", "OOM startNewTextBlock");
+  }
   wordsExtractedInBlock = 0;
 }
 
@@ -429,16 +433,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
                   self->completePageFn(std::move(self->currentPage));
                   self->completedPageCount++;
-                  self->currentPage.reset(new Page());
+                  self->currentPage = makeUniqueNoThrow<Page>();
                   if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create new page");
+                    LOG_ERR("EHP", "OOM create new page");
                     return;
                   }
                   self->currentPageNextY = 0;
                 } else if (!self->currentPage) {
-                  self->currentPage.reset(new Page());
+                  self->currentPage = makeUniqueNoThrow<Page>();
                   if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create initial page");
+                    LOG_ERR("EHP", "OOM create initial page");
                     return;
                   }
                   self->currentPageNextY = 0;
@@ -1075,14 +1079,20 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
-    currentPage.reset(new Page());
+    currentPage = makeUniqueNoThrow<Page>();
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM addLineToPage");
+    }
     currentPageNextY = 0;
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage));
     completedPageCount++;
-    currentPage.reset(new Page());
+    currentPage = makeUniqueNoThrow<Page>();
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM addLineToPage");
+    }
     currentPageNextY = 0;
   }
 
@@ -1108,7 +1118,10 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   if (!currentPage) {
-    currentPage.reset(new Page());
+    currentPage = makeUniqueNoThrow<Page>();
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM makePages");
+    }
     currentPageNextY = 0;
   }
 

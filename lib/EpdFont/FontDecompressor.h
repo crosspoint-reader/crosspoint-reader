@@ -2,6 +2,7 @@
 
 #include <InflateReader.h>
 
+#include <memory>
 #include <vector>
 
 #include "EpdFontData.h"
@@ -57,9 +58,9 @@ class FontDecompressor {
     uint32_t alignedOffset;  // byte-aligned offset within its decompressed group (set during prewarm pre-scan)
   };
   struct PageSlot {
-    uint8_t* buffer = nullptr;
+    std::unique_ptr<uint8_t[]> buffer;
     const EpdFontData* fontData = nullptr;
-    PageGlyphEntry* glyphs = nullptr;
+    std::unique_ptr<PageGlyphEntry[]> glyphs;
     uint16_t glyphCount = 0;
   };
   PageSlot pageSlots[MAX_PAGE_SLOTS] = {};

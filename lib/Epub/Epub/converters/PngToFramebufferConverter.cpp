@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PNGdec.h>
 
 #include <cstdlib>
@@ -19,43 +20,33 @@ namespace {
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
 // The file I/O callbacks receive the FsFile* via pFile->fHandle (set by pngOpen()).
 struct PngContext {
-  GfxRenderer* renderer;
-  const RenderConfig* config;
-  int screenWidth;
-  int screenHeight;
+  GfxRenderer* renderer{nullptr};
+  const RenderConfig* config{nullptr};
+  int screenWidth{0};
+  int screenHeight{0};
 
   // Scaling state
-  float scale;
-  int srcWidth;
-  int srcHeight;
-  int dstWidth;
-  int dstHeight;
-  int lastDstY;  // Track last rendered destination Y to avoid duplicates
+  float scale{1.f};
+  int srcWidth{0};
+  int srcHeight{0};
+  int dstWidth{0};
+  int dstHeight{0};
+  int lastDstY{-1};  // Track last rendered destination Y to avoid duplicates
 
   PixelCache cache;
-  bool caching;
+  bool caching{false};
 
-  uint8_t* grayLineBuffer;
-
-  PngContext()
-      : renderer(nullptr),
-        config(nullptr),
-        screenWidth(0),
-        screenHeight(0),
-        scale(1.0f),
-        srcWidth(0),
-        srcHeight(0),
-        dstWidth(0),
-        dstHeight(0),
-        lastDstY(-1),
-        caching(false),
-        grayLineBuffer(nullptr) {}
+  std::unique_ptr<uint8_t[]> grayLineBuffer;
 };
 
 // File I/O callbacks use pFile->fHandle to access the FsFile*,
 // avoiding the need for global file state.
 void* pngOpenWithHandle(const char* filename, int32_t* size) {
-  FsFile* f = new FsFile();
+  FsFile* f = new (std::nothrow) FsFile();
+  if (!f) {
+    LOG_ERR("PNG", "OOM PNG open");
+    return nullptr;
+  }
   if (!Storage.openFileForRead("PNG", std::string(filename), *f)) {
     delete f;
     return nullptr;
@@ -198,7 +189,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   if (outY >= ctx->screenHeight) return 1;
 
   // Convert entire source line to grayscale (improves cache locality)
-  convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->pPalette,
+  convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer.get(), srcWidth, pDraw->iPixelType, pDraw->pPalette,
                     pDraw->iHasAlpha);
 
   // Render scaled row using Bresenham-style integer stepping (no floating-point division)
@@ -258,9 +249,9 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
     return false;
   }
 
-  PNG* png = new (std::nothrow) PNG();
+  const auto png = makeUniqueNoThrow<PNG>();
   if (!png) {
-    LOG_ERR("PNG", "Failed to allocate PNG decoder for dimensions");
+    LOG_ERR("PNG", "OOM PNG decoder for dimensions");
     return false;
   }
 
@@ -269,7 +260,6 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
 
   if (rc != 0) {
     LOG_ERR("PNG", "Failed to open PNG for dimensions: %d", rc);
-    delete png;
     return false;
   }
 
@@ -277,7 +267,6 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
   out.height = png->getHeight();
 
   png->close();
-  delete png;
   return true;
 }
 
@@ -292,9 +281,9 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   }
 
   // Heap-allocate PNG decoder (~42 KB) - freed at end of function
-  PNG* png = new (std::nothrow) PNG();
+  const auto png = makeUniqueNoThrow<PNG>();
   if (!png) {
-    LOG_ERR("PNG", "Failed to allocate PNG decoder");
+    LOG_ERR("PNG", "OOM PNG decoder");
     return false;
   }
 
@@ -308,13 +297,11 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
                      pngDrawCallback);
   if (rc != PNG_SUCCESS) {
     LOG_ERR("PNG", "Failed to open PNG: %d", rc);
-    delete png;
     return false;
   }
 
   if (!validateImageDimensions(png->getWidth(), png->getHeight(), "PNG")) {
     png->close();
-    delete png;
     return false;
   }
 
@@ -350,7 +337,6 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
             requiredInternal, ctx.srcWidth, pixelType, PNG_MAX_BUFFERED_PIXELS);
     LOG_ERR("PNG", "Aborting decode to avoid PNGdec internal buffer overflow");
     png->close();
-    delete png;
     return false;
   }
 
@@ -360,11 +346,10 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   // Allocate grayscale line buffer on demand (~3.2 KB) - freed after decode
   const size_t grayBufSize = PNG_MAX_BUFFERED_PIXELS / 2;
-  ctx.grayLineBuffer = static_cast<uint8_t*>(malloc(grayBufSize));
+  ctx.grayLineBuffer = makeUniqueNoThrow<uint8_t[]>(grayBufSize);
   if (!ctx.grayLineBuffer) {
-    LOG_ERR("PNG", "Failed to allocate gray line buffer");
+    LOG_ERR("PNG", "OOM gray line buffer %d", grayBufSize);
     png->close();
-    delete png;
     return false;
   }
 
@@ -389,18 +374,13 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   rc = png->decode(&ctx, 0);
   unsigned long decodeTime = millis() - decodeStart;
 
-  free(ctx.grayLineBuffer);
-  ctx.grayLineBuffer = nullptr;
-
   if (rc != PNG_SUCCESS) {
     LOG_ERR("PNG", "Decode failed: %d", rc);
     png->close();
-    delete png;
     return false;
   }
 
   png->close();
-  delete png;
   LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 
   // Write cache file if caching was enabled and buffer was allocated

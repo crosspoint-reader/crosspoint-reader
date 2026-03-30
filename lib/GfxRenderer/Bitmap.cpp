@@ -1,5 +1,8 @@
 #include "Bitmap.h"
 
+#include <Logging.h>
+#include <Memory.h>
+
 #include <cstdlib>
 #include <cstring>
 
@@ -13,13 +16,7 @@
 constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-Steinberg
 // ============================================================================
 
-Bitmap::~Bitmap() {
-  delete[] errorCurRow;
-  delete[] errorNextRow;
-
-  delete atkinsonDitherer;
-  delete fsDitherer;
-}
+Bitmap::~Bitmap() = default;
 
 uint16_t Bitmap::readLE16(FsFile& f) {
   const int c0 = f.read();
@@ -74,8 +71,8 @@ const char* Bitmap::errorToString(BmpReaderError err) {
     case BmpReaderError::BufferTooSmall:
       return "BufferTooSmall";
 
-    case BmpReaderError::OomRowBuffer:
-      return "OomRowBuffer";
+    case BmpReaderError::OomError:
+      return "OomError";
     case BmpReaderError::ShortReadRow:
       return "ShortReadRow";
   }
@@ -168,9 +165,17 @@ BmpReaderError Bitmap::parseHeaders() {
   const bool highColor = !nativePalette;
   if (highColor && dithering) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width);
+      atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(width);
+      if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
+        LOG_ERR("BMP", "OOM AtkinsonDitherer");
+        return BmpReaderError::OomError;
+      }
     } else {
-      fsDitherer = new FloydSteinbergDitherer(width);
+      fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(width);
+      if (!fsDitherer || !fsDitherer->isValid()) {
+        LOG_ERR("BMP", "OOM FloydSteinbergDitherer");
+        return BmpReaderError::OomError;
+      }
     }
   }
 
