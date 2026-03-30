@@ -4,10 +4,10 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/QrUtils.h"
-#include "ReaderUtils.h"
 
 void QrDisplayActivity::onEnter() {
   Activity::onEnter();

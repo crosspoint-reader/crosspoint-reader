@@ -6,9 +6,9 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "ReaderUtils.h"
 
 void EpubReaderFootnotesActivity::onEnter() {
   Activity::onEnter();
