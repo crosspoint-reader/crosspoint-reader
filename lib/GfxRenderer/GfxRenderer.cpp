@@ -344,14 +344,15 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
   const int innerRadius = std::max(maxRadius - stroke, 0);
   const int outerRadiusSq = maxRadius * maxRadius;
   const int innerRadiusSq = innerRadius * innerRadius;
+  const int sw = getScreenWidth();
+  const int sh = getScreenHeight();
   for (int dy = 0; dy <= maxRadius; ++dy) {
     for (int dx = 0; dx <= maxRadius; ++dx) {
       const int distSq = dx * dx + dy * dy;
-      if (distSq > outerRadiusSq || distSq < innerRadiusSq) {
-        continue;
-      }
+      if (distSq > outerRadiusSq || distSq < innerRadiusSq) continue;
       const int px = cx + xDir * dx;
       const int py = cy + yDir * dy;
+      if (px < 0 || px >= sw || py < 0 || py >= sh) continue;
       drawPixel(px, py, state);
     }
   }
@@ -479,14 +480,16 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
 template <Color color>
 void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir) const {
   const int radiusSq = maxRadius * maxRadius;
+  const int sw = getScreenWidth();
+  const int sh = getScreenHeight();
   for (int dy = 0; dy <= maxRadius; ++dy) {
     for (int dx = 0; dx <= maxRadius; ++dx) {
       const int distSq = dx * dx + dy * dy;
+      if (distSq > radiusSq) continue;
       const int px = cx + xDir * dx;
       const int py = cy + yDir * dy;
-      if (distSq <= radiusSq) {
-        drawPixelDither<color>(px, py);
-      }
+      if (px < 0 || px >= sw || py < 0 || py >= sh) continue;
+      drawPixelDither<color>(px, py);
     }
   }
 }
