@@ -199,6 +199,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Dictionary lookup feature (1 = enabled, 0 = disabled)
+  uint8_t dictionaryEnabled = 1;
 
   ~CrossPointSettings() = default;
 

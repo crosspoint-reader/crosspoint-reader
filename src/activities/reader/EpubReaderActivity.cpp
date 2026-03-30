@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryDefinitionActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
@@ -109,6 +110,107 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // --- Word selection mode input handling ---
+  if (wordSelection && wordSelection->isActive()) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (wordSelection->isInSubSelection()) {
+        wordSelection->exitSubSelection();
+      } else {
+        wordSelection->exit();
+        confirmLongPressConsumed = false;
+      }
+      ignoreNextBackRelease = true;
+      requestUpdate();
+      return;
+    }
+
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      // Look up whatever is currently highlighted (full word or sub-component)
+      char wordBuf[64];
+      bool hasWord = false;
+      if (wordSelection->isInSubSelection()) {
+        hasWord = wordSelection->getSubSelectedWord(wordBuf, sizeof(wordBuf));
+      } else {
+        hasWord = wordSelection->getSelectedWord(wordBuf, sizeof(wordBuf));
+      }
+      if (hasWord) {
+        launchDictionaryLookup(wordBuf);
+      }
+      return;
+    }
+
+    // Remap navigation buttons based on orientation so that physical button
+    // directions match the on-screen text flow in all orientations.
+    enum class NavDir { Up, Down, Left, Right };
+    auto navPressed = [&](NavDir dir) -> bool {
+      using B = MappedInputManager::Button;
+      const auto o = renderer.getOrientation();
+      // In landscape/inverted modes, swap axes so physical buttons match screen directions.
+      switch (dir) {
+        case NavDir::Up:
+          if (o == GfxRenderer::Orientation::LandscapeClockwise) return mappedInput.wasPressed(B::Left);
+          if (o == GfxRenderer::Orientation::LandscapeCounterClockwise) return mappedInput.wasPressed(B::Right);
+          if (o == GfxRenderer::Orientation::PortraitInverted) return mappedInput.wasPressed(B::Down);
+          return mappedInput.wasPressed(B::Up);
+        case NavDir::Down:
+          if (o == GfxRenderer::Orientation::LandscapeClockwise) return mappedInput.wasPressed(B::Right);
+          if (o == GfxRenderer::Orientation::LandscapeCounterClockwise) return mappedInput.wasPressed(B::Left);
+          if (o == GfxRenderer::Orientation::PortraitInverted) return mappedInput.wasPressed(B::Up);
+          return mappedInput.wasPressed(B::Down);
+        case NavDir::Left:
+          if (o == GfxRenderer::Orientation::LandscapeClockwise) return mappedInput.wasPressed(B::Down);
+          if (o == GfxRenderer::Orientation::LandscapeCounterClockwise) return mappedInput.wasPressed(B::Up);
+          if (o == GfxRenderer::Orientation::PortraitInverted) return mappedInput.wasPressed(B::Right);
+          return mappedInput.wasPressed(B::Left);
+        case NavDir::Right:
+          if (o == GfxRenderer::Orientation::LandscapeClockwise) return mappedInput.wasPressed(B::Up);
+          if (o == GfxRenderer::Orientation::LandscapeCounterClockwise) return mappedInput.wasPressed(B::Down);
+          if (o == GfxRenderer::Orientation::PortraitInverted) return mappedInput.wasPressed(B::Left);
+          return mappedInput.wasPressed(B::Right);
+      }
+      return false;
+    };
+
+    if (navPressed(NavDir::Up)) {
+      wordSelection->exitSubSelection();
+      wordSelection->moveUp();
+      requestUpdate();
+      return;
+    }
+    if (navPressed(NavDir::Down)) {
+      wordSelection->exitSubSelection();
+      wordSelection->moveDown();
+      requestUpdate();
+      return;
+    }
+    if (navPressed(NavDir::Left)) {
+      if (wordSelection->isInSubSelection()) {
+        if (!wordSelection->subSelectLeft()) {
+          wordSelection->exitSubSelection();
+        }
+      } else {
+        wordSelection->moveLeft();
+      }
+      requestUpdate();
+      return;
+    }
+    if (navPressed(NavDir::Right)) {
+      if (wordSelection->isInSubSelection()) {
+        if (!wordSelection->subSelectRight()) {
+          wordSelection->exitSubSelection();
+          wordSelection->moveRight();
+        }
+      } else if (wordSelection->isHyphenated()) {
+        wordSelection->enterSubSelection();
+      } else {
+        wordSelection->moveRight();
+      }
+      requestUpdate();
+      return;
+    }
+    return;  // In selection mode, consume all other input
+  }
+
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -135,8 +237,26 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Enter reader menu activity.
+  // Long-press Confirm (1.5s) enters word selection mode
+  if (!automaticPageTurnActive && isDictionaryAvailable() && wordSelection && wordSelection->hasWords() &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS &&
+      !confirmLongPressConsumed) {
+    confirmLongPressConsumed = true;
+    wordSelection->enter();
+    requestUpdate();
+    return;
+  }
+
+  // Enter reader menu activity (only on short Confirm release).
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (ignoreNextConfirmRelease) {
+      ignoreNextConfirmRelease = false;
+      return;
+    }
+    if (confirmLongPressConsumed) {
+      confirmLongPressConsumed = false;
+      return;
+    }
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -153,6 +273,9 @@ void EpubReaderActivity::loop() {
                              const auto& menu = std::get<MenuResult>(result.data);
                              applyOrientation(menu.orientation);
                              toggleAutoPageTurn(menu.pageTurnOption);
+                             // Invalidate dictionary cache — user may have changed settings
+                             dictAvailableChecked = false;
+                             if (dictManager) dictManager->rescan();
                              if (!result.isCancelled) {
                                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
                              }
@@ -168,6 +291,10 @@ void EpubReaderActivity::loop() {
   // Short press BACK goes directly to home (or restores position if viewing footnote)
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+    if (ignoreNextBackRelease) {
+      ignoreNextBackRelease = false;
+      return;
+    }
     if (footnoteDepth > 0) {
       restoreSavedPosition();
       return;
@@ -408,6 +535,14 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   // No-op if the selected orientation matches current settings.
   if (SETTINGS.orientation == orientation) {
     return;
+  }
+
+  // Exit word selection mode — positions are invalid after reflow
+  if (wordSelection) {
+    if (wordSelection->isActive()) {
+      wordSelection->exit();
+    }
+    wordSelection->clear();
   }
 
   // Preserve current reading position so we can restore after reflow.
@@ -716,6 +851,20 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+
+  // Extract word positions for dictionary word selection (before page is consumed)
+  if (isDictionaryAvailable()) {
+    if (!wordSelection) {
+      wordSelection = std::make_unique<WordSelectionMode>();
+    }
+    wordSelection->extractWords(*page, renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  }
+
+  // Render highlight if in word selection mode (after normal page render, before display)
+  if (wordSelection && wordSelection->isActive()) {
+    wordSelection->renderHighlight(renderer, SETTINGS.getReaderFontId());
+  }
+
   renderStatusBar();
   fcm->logStats("bw_render");
   const auto tBwRender = millis();
@@ -887,4 +1036,46 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+bool EpubReaderActivity::isDictionaryAvailable() {
+  if (!SETTINGS.dictionaryEnabled) return false;
+  if (dictAvailableChecked) return dictAvailableCached;
+  if (!dictManager) {
+    dictManager = std::make_unique<DictionaryManager>();
+  }
+  dictManager->scan();
+  dictAvailableCached = dictManager->hasEnabledDictionaries();
+  dictAvailableChecked = true;
+  return dictAvailableCached;
+}
+
+void EpubReaderActivity::launchDictionaryLookup(const char* word) {
+  if (!dictManager) return;
+
+  // Search all enabled dictionaries
+  auto* results = static_cast<DictResult*>(malloc(sizeof(DictResult) * DictionaryManager::MAX_RESULTS));
+  if (!results) {
+    LOG_ERR("ERS", "malloc failed for dictionary results");
+    return;
+  }
+  const int resultCount = dictManager->lookup(word, results, DictionaryManager::MAX_RESULTS);
+
+  if (wordSelection) wordSelection->exit();
+
+  // Transfer ownership of results to DictionaryDefinitionActivity
+  startActivityForResult(
+      std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, word, results, resultCount),
+      [this](const ActivityResult&) {
+        // The sub-activity consumed a button press, but the physical release
+        // will fire in a later frame.  Only flag the button that's still held.
+        if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
+          ignoreNextBackRelease = true;
+        }
+        if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+          ignoreNextConfirmRelease = true;
+        }
+        confirmLongPressConsumed = false;
+        requestUpdate();
+      });
 }

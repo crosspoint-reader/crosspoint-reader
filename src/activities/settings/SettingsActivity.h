@@ -21,6 +21,7 @@ enum class SettingAction {
   ClearCache,
   CheckForUpdates,
   Language,
+  ManageDictionaries,
 };
 
 struct SettingInfo {

@@ -3,7 +3,9 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include "DictionaryManager.h"
 #include "EpubReaderMenuActivity.h"
+#include "WordSelectionMode.h"
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
@@ -25,8 +27,16 @@ class EpubReaderActivity final : public Activity {
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
-  bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  bool ignoreNextBackRelease = false;     // Absorb the Back release after returning from a sub-activity
+  bool ignoreNextConfirmRelease = false;  // Absorb the Confirm release after returning from a sub-activity
   bool automaticPageTurnActive = false;
+
+  // Dictionary / word selection (lazily allocated to save ~9KB when unused)
+  std::unique_ptr<WordSelectionMode> wordSelection;
+  std::unique_ptr<DictionaryManager> dictManager;
+  bool confirmLongPressConsumed = false;
+  bool dictAvailableCached = false;
+  bool dictAvailableChecked = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -53,6 +63,10 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+
+  // Dictionary
+  void launchDictionaryLookup(const char* word);
+  bool isDictionaryAvailable();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
