@@ -96,13 +96,13 @@ void DictionarySettingsActivity::render(RenderLock&&) {
           } else {
             snprintf(label, sizeof(label), "%s", dict.displayName);
           }
-          return std::string(label);
+          return std::string(label);  // std::string required by BaseTheme::drawList API
         },
         nullptr, nullptr,
         [this](int index) {
           const auto& dict = dictManager.getDictionary(index);
           if (dict.corrupt) return std::string("");
-          return std::string(dict.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
+          return std::string(dict.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));  // drawList API
         },
         true);
   }

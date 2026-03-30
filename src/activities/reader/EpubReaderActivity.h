@@ -67,6 +67,7 @@ class EpubReaderActivity final : public Activity {
   // Dictionary
   void launchDictionaryLookup(const char* word);
   bool isDictionaryAvailable();
+  bool extractWordsFromCurrentPage();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)

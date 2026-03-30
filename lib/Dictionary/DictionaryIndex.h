@@ -7,7 +7,6 @@ class DictionaryIndex {
  public:
   bool ensureIndex(const char* dictPath, bool& outCorrupt, bool& outReadOnly);
   bool lookup(const char* dictPath, const char* word, char* outDef, int outDefSize);
-  bool linearScan(const char* dictPath, const char* word, char* outDef, int outDefSize);
 
  private:
   bool generateIndex(const char* dictPath, const char* idxPath, bool& outCorrupt);

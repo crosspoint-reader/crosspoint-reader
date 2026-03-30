@@ -99,6 +99,8 @@ void EpubReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+  wordSelection.reset();
+  dictManager.reset();
   section.reset();
   epub.reset();
 }
@@ -237,13 +239,15 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Long-press Confirm (1.5s) enters word selection mode
-  if (!automaticPageTurnActive && isDictionaryAvailable() && wordSelection && wordSelection->hasWords() &&
+  // Long-press Confirm enters word selection mode (extract words on demand)
+  if (!automaticPageTurnActive && isDictionaryAvailable() && section &&
       mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS &&
       !confirmLongPressConsumed) {
     confirmLongPressConsumed = true;
-    wordSelection->enter();
-    requestUpdate();
+    if (extractWordsFromCurrentPage()) {
+      wordSelection->enter();
+      requestUpdate();
+    }
     return;
   }
 
@@ -852,14 +856,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
 
-  // Extract word positions for dictionary word selection (before page is consumed)
-  if (isDictionaryAvailable()) {
-    if (!wordSelection) {
-      wordSelection = std::make_unique<WordSelectionMode>();
-    }
-    wordSelection->extractWords(*page, renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
-  }
-
   // Render highlight if in word selection mode (after normal page render, before display)
   if (wordSelection && wordSelection->isActive()) {
     wordSelection->renderHighlight(renderer, SETTINGS.getReaderFontId());
@@ -1036,6 +1032,28 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+bool EpubReaderActivity::extractWordsFromCurrentPage() {
+  if (!section) return false;
+
+  auto page = section->loadPageFromSectionFile();
+  if (!page) {
+    LOG_ERR("ERS", "Failed to reload page for word extraction");
+    return false;
+  }
+
+  // Recompute margins (same logic as render())
+  int mTop, mRight, mBottom, mLeft;
+  renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
+  mTop += SETTINGS.screenMargin;
+  mLeft += SETTINGS.screenMargin;
+
+  if (!wordSelection) {
+    wordSelection = std::make_unique<WordSelectionMode>();
+  }
+  wordSelection->extractWords(*page, renderer, SETTINGS.getReaderFontId(), mLeft, mTop);
+  return wordSelection->hasWords();
 }
 
 bool EpubReaderActivity::isDictionaryAvailable() {

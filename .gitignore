@@ -15,3 +15,6 @@ build
 .history/
 /.venv
 *.local*
+*.dict
+*.dict.idx
+dictionary.txt
