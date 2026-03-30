@@ -206,7 +206,12 @@ static double computeCorrectedElapsedSec(uint64_t lpNow, float tempNow) {
   // faster/slower than nominal, so the true elapsed wall-clock time
   // differs from the raw LP-derived time by that factor.
   float avgTemp = (rtcTemperatureC + tempNow) * 0.5f;
-  float tempDelta = avgTemp - rtcTemperatureC;  // = (tempNow - rtcTemperatureC) / 2
+  // Positive when COOLED DOWN relative to capture temperature.
+  // ESP32 RC oscillator has a positive temperature coefficient: it runs faster
+  // when hotter, causing the LP timer to over-count. To recover true elapsed
+  // time we must REDUCE the raw LP-derived seconds when the device is warmer
+  // than at capture (and INCREASE them when cooler). Hence the sign inversion.
+  float tempDelta = rtcTemperatureC - avgTemp;  // = (rtcTemperatureC - tempNow) / 2
   float tempFactor = 1.0f + tempDelta * CLOCK_TEMP_DRIFT_SECONDS_PER_SECOND_PER_DEG * rtcDriftScale;
   if (tempFactor < 0.5f) {
     tempFactor = 0.5f;
@@ -218,7 +223,7 @@ static double computeCorrectedElapsedSec(uint64_t lpNow, float tempNow) {
   double correctedSec = elapsedSec * (double)tempFactor;
 
   LOG_DBG("CLK", "Drift calc: startT=%.1fC nowT=%.1fC dT=%.3f factor=%.6f raw=%.3fs corr=%.3fs", rtcTemperatureC,
-          tempNow, tempDelta, tempFactor, elapsedSec, correctedSec);
+          tempNow, rtcTemperatureC - avgTemp, tempFactor, elapsedSec, correctedSec);
 
   return correctedSec;
 }
@@ -281,8 +286,8 @@ bool syncNtp() {
   if (prevSyncTime > 0 && preSyncTime > 0 && rtcEpoch > prevSyncTime) {
     float interval = (float)(rtcEpoch - prevSyncTime);
     // error = how far the local clock was off before NTP corrected it.
-    // Positive means local clock was behind (NTP jumped us forward).
-    // Negative means local clock was ahead (NTP pulled us back).
+    // Negative means local clock was behind (NTP jumped us forward).
+    // Positive means local clock was ahead (NTP pulled us back).
     float error = (float)(preSyncTime - rtcEpoch);
     if (interval >= 60.0f) {
       // Convert to seconds-of-drift per day.
