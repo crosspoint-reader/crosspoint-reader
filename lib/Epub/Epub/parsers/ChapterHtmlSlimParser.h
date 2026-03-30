@@ -29,6 +29,7 @@ class ChapterHtmlSlimParser {
   std::function<void()> popupFn;  // Popup callback
   int depth = 0;
   int skipUntilDepth = INT_MAX;
+  int skipTextUntilDepth = INT_MAX;  // skip character data inside synthetic zero-height spacer <p>
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
