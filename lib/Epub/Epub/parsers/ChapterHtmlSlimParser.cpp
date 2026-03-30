@@ -33,7 +33,8 @@ constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr int NUM_UNDERLINE_TAGS = sizeof(UNDERLINE_TAGS) / sizeof(UNDERLINE_TAGS[0]);
 
-// TODO: Add strike-through overline tags
+const char* LINETHROUGH_TAGS[] = {"del", "s", "strike"};
+constexpr int NUM_LINETHROUGH_TAGS = sizeof(LINETHROUGH_TAGS) / sizeof(LINETHROUGH_TAGS[0]);
 
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
@@ -84,8 +85,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   // Start with block-level styles
   effectiveBold = currentCssStyle.hasFontWeight() && currentCssStyle.fontWeight == CssFontWeight::Bold;
   effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
-  effectiveUnderline =
-      currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
+  effectiveTextDecoration =
+      currentCssStyle.hasTextDecoration() ? currentCssStyle.textDecoration : CssTextDecoration::None;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -95,8 +96,10 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasItalic) {
       effectiveItalic = entry.italic;
     }
-    if (entry.hasUnderline) {
-      effectiveUnderline = entry.underline;
+    // Note: line decorators are propagated to children regardless conflicting styling
+    // https://www.w3.org/TR/css-text-decor-3/#line-decoration
+    if (entry.hasTextDecoration) {
+      effectiveTextDecoration = effectiveTextDecoration | entry.textDecoration;
     }
   }
 }
@@ -106,7 +109,6 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   // Determine font style from depth-based tracking and CSS effective style
   const bool isBold = boldUntilDepth < depth || effectiveBold;
   const bool isItalic = italicUntilDepth < depth || effectiveItalic;
-  const bool isUnderline = underlineUntilDepth < depth || effectiveUnderline;
 
   // Combine style flags using bitwise OR
   EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
@@ -116,9 +118,8 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   if (isItalic) {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::ITALIC);
   }
-  if (isUnderline) {
-    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::UNDERLINE);
-  }
+  fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | static_cast<uint8_t>(effectiveTextDecoration)
+                                                                << EpdFontFamily::DECORATION_MASK_SHIFT);
 
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
@@ -250,8 +251,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     headerStyle.bold = false;
     headerStyle.hasItalic = true;
     headerStyle.italic = true;
-    headerStyle.hasUnderline = true;
-    headerStyle.underline = false;
+    headerStyle.hasTextDecoration = true;
+    headerStyle.textDecoration = CssTextDecoration::None;
     self->inlineStyleStack.push_back(headerStyle);
     self->updateEffectiveInlineStyle();
     self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
@@ -543,11 +544,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->currentFootnoteLinkTextLen = 0;
 
       // Apply underline style to visually indicate the link
-      self->underlineUntilDepth = std::min(self->underlineUntilDepth, self->depth);
       StyleStackEntry entry;
       entry.depth = self->depth;
-      entry.hasUnderline = true;
-      entry.underline = true;
+      // Note: Maintain underline despite author-styling cascade rules as link has no other visual indicator
+      entry.hasTextDecoration = true;
+      entry.textDecoration = entry.textDecoration | CssTextDecoration::Underline;
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
 
@@ -593,12 +594,42 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->flushPartWordBuffer();
       self->nextWordContinues = true;
     }
-    self->underlineUntilDepth = std::min(self->underlineUntilDepth, self->depth);
+
     // Push inline style entry for underline tag
     StyleStackEntry entry;
     entry.depth = self->depth;  // Track depth for matching pop
-    entry.hasUnderline = true;
-    entry.underline = true;
+    entry.hasTextDecoration = true;
+
+    // Note: user-defined text-decorator overrides user-agent styling (TODO: precedence reversed w !important)
+    // https://www.w3.org/TR/css-cascade-5/#cascade-sort
+    entry.textDecoration = cssStyle.hasTextDecoration() ? cssStyle.textDecoration : CssTextDecoration::Underline;
+
+    if (cssStyle.hasFontWeight()) {
+      entry.hasBold = true;
+      entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+    }
+    if (cssStyle.hasFontStyle()) {
+      entry.hasItalic = true;
+      entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+  } else if (matches(name, LINETHROUGH_TAGS, NUM_LINETHROUGH_TAGS)) {
+    // Flush buffer before style change so preceding text gets current style
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
+
+    // Push inline style entry for linethrough tag
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    entry.hasTextDecoration = true;
+
+    // Note: user-defined text-decorator overrides user-agent styling (TODO: precedence reversed w !important)
+    // https://www.w3.org/TR/css-cascade-5/#cascade-sort
+    entry.textDecoration = cssStyle.hasTextDecoration() ? cssStyle.textDecoration : CssTextDecoration::LineThrough;
+
     if (cssStyle.hasFontWeight()) {
       entry.hasBold = true;
       entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
@@ -626,8 +657,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
     }
     if (cssStyle.hasTextDecoration()) {
-      entry.hasUnderline = true;
-      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+      entry.hasTextDecoration = true;
+      entry.textDecoration = entry.textDecoration | cssStyle.textDecoration;
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
@@ -648,8 +679,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
     }
     if (cssStyle.hasTextDecoration()) {
-      entry.hasUnderline = true;
-      entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+      entry.hasTextDecoration = true;
+      entry.textDecoration = entry.textDecoration | cssStyle.textDecoration;
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
@@ -672,8 +703,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
       }
       if (cssStyle.hasTextDecoration()) {
-        entry.hasUnderline = true;
-        entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+        entry.hasTextDecoration = true;
+        entry.textDecoration = cssStyle.textDecoration;
       }
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
@@ -876,9 +907,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       !self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth - 1;
   const bool willClearBold = self->boldUntilDepth == self->depth - 1;
   const bool willClearItalic = self->italicUntilDepth == self->depth - 1;
-  const bool willClearUnderline = self->underlineUntilDepth == self->depth - 1;
 
-  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic || willClearUnderline;
+  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic;
   const bool headerOrBlockTag = isHeaderOrBlock(name);
   const bool tableStructuralTag = isTableStructuralTag(name);
 
@@ -897,7 +927,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         !headerOrBlockTag && !tableStructuralTag && !matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) && self->depth != 1;
     const bool shouldFlush = styleWillChange || headerOrBlockTag || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
                              matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
-                             matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) || tableStructuralTag ||
+                             matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) ||
+                             matches(name, LINETHROUGH_TAGS, NUM_LINETHROUGH_TAGS) || tableStructuralTag ||
                              matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
 
     if (shouldFlush) {
@@ -954,11 +985,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving italic tag
   if (self->italicUntilDepth == self->depth) {
     self->italicUntilDepth = INT_MAX;
-  }
-
-  // Leaving underline tag
-  if (self->underlineUntilDepth == self->depth) {
-    self->underlineUntilDepth = INT_MAX;
   }
 
   // Pop from inline style stack if we pushed an entry at this depth

@@ -3,14 +3,17 @@
 
 class EpdFontFamily {
  public:
+  static constexpr uint8_t DECORATION_MASK_SHIFT = 2;
+  static constexpr uint8_t DECORATION_MASK = 0b111 << DECORATION_MASK_SHIFT;
   enum Style : uint8_t {
+    // Font Style bitmask (bits 0-1)
     REGULAR = 0,
     BOLD = 1,
     ITALIC = 2,
     BOLD_ITALIC = 3,
-    // Text-Decorators
+    // Text Decoration bitmask (bits 2-4) - Maps to CssTextDecoration
     UNDERLINE = 1 << 2,
-    STRIKETHROUGH = 1 << 3,
+    LINETHROUGH = 1 << 3,
     OVERLINE = 1 << 4,
   };
 
@@ -23,7 +26,7 @@ class EpdFontFamily {
   const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
   int8_t getKerning(uint32_t leftCp, uint32_t rightCp, Style style = REGULAR) const;
   uint32_t applyLigatures(uint32_t cp, const char*& text, Style style = REGULAR) const;
-  Style getDecorationStyle() const;
+  static constexpr bool hasDecoration(const Style style) { return DECORATION_MASK & style; }
 
  private:
   const EpdFont* regular;
