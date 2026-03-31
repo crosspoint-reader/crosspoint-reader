@@ -496,4 +496,3 @@ bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDe
   idxFile.close();
   return found;
 }
-

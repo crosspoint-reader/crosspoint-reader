@@ -241,8 +241,8 @@ void EpubReaderActivity::loop() {
 
   // Long-press Confirm enters word selection mode (extract words on demand)
   if (!automaticPageTurnActive && isDictionaryAvailable() && section &&
-      mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS &&
-      !confirmLongPressConsumed) {
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS && !confirmLongPressConsumed) {
     confirmLongPressConsumed = true;
     if (extractWordsFromCurrentPage()) {
       wordSelection->enter();

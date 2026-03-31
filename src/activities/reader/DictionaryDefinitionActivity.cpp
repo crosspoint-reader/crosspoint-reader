@@ -139,8 +139,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     snprintf(header, sizeof(header), "< %s - %s >", searchedWord, r.dictionaryName);
   }
 
-  GUI.drawHeader(renderer,
-                 Rect{contentX, metrics.topPadding + hintGutterHeight, availableWidth, metrics.headerHeight}, header);
+  GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding + hintGutterHeight, availableWidth, metrics.headerHeight},
+                 header);
 
   const int contentTop = metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
@@ -155,7 +155,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 }
 
 void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLeft, int contentWidth,
-                                                   int contentHeight) {
+                                                  int contentHeight) {
   if (currentResult < 0 || currentResult >= resultCount || !results) return;
 
   const auto& r = results[currentResult];

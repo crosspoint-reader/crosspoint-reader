@@ -34,7 +34,7 @@ def generate_inflections(word, definition):
     if ' ' in word or '-' in word or len(word) < 3 or not word[0].isalpha():
         return []
     # Skip words ending in common suffixes that are already inflected
-    if word.endswith(('ing', 'tion', 'sion', 'ness', 'ment', 'ment', 'ous', 'ible', 'able')):
+    if word.endswith(('ing', 'tion', 'sion', 'ness', 'ment', 'ous', 'ible', 'able')):
         return []
 
     forms = []
@@ -212,6 +212,8 @@ def generate_index(dict_path: str):
         # Entries
         for word, byte_offset in entries:
             word_bytes = word.encode('utf-8')[:DICT_WORD_MAX - 1]
+            # Ensure truncation doesn't split a multi-byte UTF-8 character
+            word_bytes = word_bytes.decode('utf-8', 'ignore').encode('utf-8')
             padded = word_bytes + b'\x00' * (DICT_WORD_MAX - len(word_bytes))
             f.write(padded)
             f.write(struct.pack('<I', byte_offset))

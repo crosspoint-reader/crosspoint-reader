@@ -10,6 +10,12 @@ void DictionarySettingsActivity::onEnter() {
   Activity::onEnter();
   dictManager.scan();
   selectedIndex = 0;
+  // Skip to first non-corrupt dictionary if possible
+  const int count = dictManager.getDictionaryCount();
+  for (int i = 0; i < count; ++i) {
+    if (!dictManager.getDictionary(selectedIndex).corrupt) break;
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, count);
+  }
   requestUpdate();
 }
 
