@@ -17,4 +17,4 @@ build
 *.local*
 *.dict
 *.dict.idx
-dictionary.txt
+WebstersEnglishDictionary.txt
