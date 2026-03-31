@@ -31,12 +31,14 @@ constexpr int kDotSize = 8;    // px square dot
 constexpr int kDotGap = 6;     // px between dots
 
 constexpr int kCornerRadius = 6;
-constexpr int kSelectionLineW = 2;
-constexpr int kCenterOutlineW = 4;  // white ring around centre cover; black border overlays when selected
+constexpr int kThinOutlineW = 1;    // always-visible outline around centre cover
+constexpr int kSelectionLineW = 3;  // thicker outline when centre cover is selected
+constexpr int kCenterOutlineW = 4;  // white ring around centre cover
 
 // Icon row — icons are 32×32 bitmaps; drawIcon does NOT scale
-constexpr int kMenuIconSize = 32;  // must match actual bitmap dimensions
-constexpr int kMenuIconPad = 14;   // symmetric vertical padding → tile height = 60
+constexpr int kMenuIconSize = 32;   // must match actual bitmap dimensions
+constexpr int kMenuIconPad = 14;    // symmetric vertical padding → tile height = 60
+constexpr int kHighlightPad = 12;   // horizontal padding around the icon on each side
 // Row is anchored to the bottom of the screen, just above button hints
 constexpr int kButtonHintsH = LyraCarouselMetrics::values.buttonHintsHeight;
 
@@ -70,9 +72,8 @@ void LyraCarouselTheme::drawCarouselBorder(GfxRenderer& renderer, Rect coverRect
   const int screenW = renderer.getScreenWidth();
   const int centerX = (screenW - kCenterCoverMaxW) / 2;
   const int centerTileY = coverRect.y + kCoverTopPad;
-  renderer.drawRoundedRect(centerX - kCenterOutlineW, centerTileY - kCenterOutlineW,
-                           kCenterCoverMaxW + 2 * kCenterOutlineW, kCenterCoverMaxH + 2 * kCenterOutlineW,
-                           kSelectionLineW, kCornerRadius + 2, true);
+  renderer.drawRoundedRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, kSelectionLineW, kCornerRadius,
+                           true);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,12 +194,10 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
     coverRendered = coverBufferStored;
   }
 
-  // Selection border on top of centre cover when carousel row is active
-  if (selectorIndex < bookCount) {
-    renderer.drawRoundedRect(centerX - kCenterOutlineW, centerTileY - kCenterOutlineW,
-                             kCenterCoverMaxW + 2 * kCenterOutlineW, kCenterCoverMaxH + 2 * kCenterOutlineW,
-                             kSelectionLineW, kCornerRadius + 2, true);
-  }
+  // Always outline the centre cover at its own edge (white ring sits outside the black line);
+  // thicker when the carousel row is active
+  const int outlineW = inCarouselRow ? kSelectionLineW : kThinOutlineW;
+  renderer.drawRoundedRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, outlineW, kCornerRadius, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,8 +213,6 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
   // Anchor row just above button hints, ignoring rect.y which may be off-screen
   // for large cover tiles
   const int rowY = renderer.getScreenHeight() - kButtonHintsH - tileH;
-
-  constexpr int kHighlightPad = 12;  // horizontal padding around the icon on each side
 
   for (int i = 0; i < buttonCount; ++i) {
     const int tileX = i * tileW;
@@ -235,3 +232,4 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
     }
   }
 }
+
