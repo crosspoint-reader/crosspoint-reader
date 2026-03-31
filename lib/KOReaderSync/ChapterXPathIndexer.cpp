@@ -62,12 +62,12 @@ std::string normalizeXPath(const std::string& input) {
     out.push_back(static_cast<char>(std::tolower(uc)));
   }
 
-  // Strip /text() and any optional character offset suffix (e.g. /text().327).
+  // Strip /text() and any optional suffix: /text().327, /text()[94], /text()[94].152.
   const std::string textTag = "/text()";
   const size_t textPos = out.rfind(textTag);
   if (textPos != std::string::npos) {
     const size_t afterText = textPos + textTag.size();
-    if (afterText == out.size() || out[afterText] == '.') {
+    if (afterText == out.size() || out[afterText] == '.' || out[afterText] == '[') {
       out.erase(textPos);
     }
   }
@@ -409,27 +409,110 @@ struct ReverseState : StackState {
   std::string targetNorm;
   std::string targetNoIndex;
 
+  // Text-node targeting: set when the xpath ends with /text()[N] or /text()[N].M.
+  // targetTextNodeIndex > 0 activates this mode; the parser then counts direct
+  // text children of the targetNorm element and matches at the Nth one.
+  int targetTextNodeIndex = 0;
+  int targetCharOffset = 0;
+  bool inParentTextNode = false;
+  size_t bytesInCurrentTextNode = 0;
+  int currentTextNodeCount = 0;
+
   MatchTier bestTier = MatchTier::NONE;
   int bestDepth = -1;
   size_t bestOffset = 0;
   bool bestExact = false;
   const char* bestTierName = nullptr;
 
-  ReverseState(const int spineIndex, const std::string& xpath)
-      : spineIndex(spineIndex), targetNorm(normalizeXPath(xpath)), targetNoIndex(removeIndices(targetNorm)) {}
+  ReverseState(const int spineIndex, const std::string& xpath) : spineIndex(spineIndex) {
+    // Parse /text()[N] or /text()[N].M from the raw xpath before normalization.
+    std::string raw = xpath;
+    for (char& c : raw) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::string tnPat = "/text()[";
+    const size_t tnPos = raw.rfind(tnPat);
+    if (tnPos != std::string::npos) {
+      const size_t numStart = tnPos + tnPat.size();
+      size_t numEnd = numStart;
+      while (numEnd < raw.size() && std::isdigit(static_cast<unsigned char>(raw[numEnd]))) {
+        numEnd++;
+      }
+      if (numEnd > numStart && numEnd < raw.size() && raw[numEnd] == ']') {
+        const long nodeIdx = std::strtol(raw.substr(numStart, numEnd - numStart).c_str(), nullptr, 10);
+        if (nodeIdx >= 1) {
+          targetTextNodeIndex = static_cast<int>(nodeIdx);
+          size_t after = numEnd + 1;  // skip ']'
+          if (after < raw.size() && raw[after] == '.') {
+            after++;
+            size_t charEnd = after;
+            while (charEnd < raw.size() && std::isdigit(static_cast<unsigned char>(raw[charEnd]))) {
+              charEnd++;
+            }
+            if (charEnd > after) {
+              const long charOff = std::strtol(raw.substr(after, charEnd - after).c_str(), nullptr, 10);
+              if (charOff >= 0) {
+                targetCharOffset = static_cast<int>(charOff);
+              }
+            }
+          }
+        }
+      }
+    }
+    targetNorm = normalizeXPath(xpath);
+    targetNoIndex = removeIndices(targetNorm);
+  }
+
+  // Shadow base-class element handlers to reset inParentTextNode on stack changes.
+  void pushElement(const XML_Char* rawName) {
+    inParentTextNode = false;
+    StackState::pushElement(rawName);
+  }
+
+  void popElement() {
+    inParentTextNode = false;
+    StackState::popElement();
+  }
 
   void onChar(const XML_Char* text, const int len) {
     if (shouldSkipText(len) || isWhitespaceOnly(text, len)) {
       return;
     }
+    const size_t visible = countVisibleBytes(text, len);
 
-    // Check match once per element (at first text).
+    // Text-node targeting: count direct text children of targetNorm element.
+    if (targetTextNodeIndex > 0 && !stack.empty()) {
+      const std::string xpath = normalizeXPath(currentXPath(spineIndex));
+      if (xpath == targetNorm) {
+        // Mark element as having text so revEnd won't fire checkMatch() for it.
+        stack.back().hasText = true;
+        if (!inParentTextNode) {
+          inParentTextNode = true;
+          currentTextNodeCount++;
+          bytesInCurrentTextNode = 0;
+        }
+        if (currentTextNodeCount == targetTextNodeIndex && bestTier < MatchTier::EXACT) {
+          const size_t charOff = static_cast<size_t>(targetCharOffset);
+          if (charOff >= bytesInCurrentTextNode && charOff < bytesInCurrentTextNode + visible) {
+            const size_t pos = totalTextBytes + (charOff - bytesInCurrentTextNode);
+            bestTier = MatchTier::EXACT;
+            bestDepth = pathDepth(xpath);
+            bestOffset = pos;
+            bestExact = true;
+            bestTierName = "text-node-exact";
+          }
+        }
+        bytesInCurrentTextNode += visible;
+        totalTextBytes += visible;
+        return;
+      }
+    }
+
+    // Standard: check match once per element (at first text).
     if (!stack.empty() && !stack.back().hasText) {
       stack.back().hasText = true;
       checkMatch();
     }
 
-    totalTextBytes += countVisibleBytes(text, len);
+    totalTextBytes += visible;
   }
 
   void checkMatch() {
