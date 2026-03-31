@@ -69,4 +69,7 @@ class LyraTheme : public BaseTheme {
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const override;
   void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const override;
   bool showsFileIcons() const override { return true; }
+
+ protected:
+  static const uint8_t* iconForName(UIIcon icon, int size);
 };

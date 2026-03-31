@@ -594,6 +594,29 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
+void GfxRenderer::drawIconInverted(const uint8_t bitmap[], const int x, const int y, const int width,
+                                   const int height) const {
+  // Same portrait-mode coordinate transform as drawIcon (x↔y swap).
+  // OR with ~srcByte: sets framebuffer bits to 1 (white) wherever the icon
+  // bitmap is 0 (black), making the icon appear white on a black background.
+  const int physX = y;
+  const int physY = getScreenWidth() - width - x;
+  const int imgW = height;  // dimensions swapped by portrait transform
+  const int imgH = width;
+  const int imageWidthBytes = imgW / 8;
+
+  for (int row = 0; row < imgH; ++row) {
+    const int destY = physY + row;
+    if (destY < 0 || destY >= HalDisplay::DISPLAY_HEIGHT) continue;
+    const int destOffset = destY * HalDisplay::DISPLAY_WIDTH_BYTES + (physX / 8);
+    const int srcOffset = row * imageWidthBytes;
+    for (int col = 0; col < imageWidthBytes; ++col) {
+      if ((physX / 8 + col) >= HalDisplay::DISPLAY_WIDTH_BYTES) break;
+      frameBuffer[destOffset + col] |= ~bitmap[srcOffset + col];
+    }
+  }
+}
+
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;

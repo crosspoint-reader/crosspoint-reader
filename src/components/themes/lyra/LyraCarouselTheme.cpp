@@ -10,11 +10,19 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/book.h"
+#include "components/icons/book24.h"
 #include "components/icons/cover.h"
+#include "components/icons/file24.h"
 #include "components/icons/folder.h"
+#include "components/icons/folder24.h"
+#include "components/icons/hotspot.h"
+#include "components/icons/image24.h"
+#include "components/icons/library.h"
 #include "components/icons/recent.h"
 #include "components/icons/settings2.h"
+#include "components/icons/text24.h"
 #include "components/icons/transfer.h"
+#include "components/icons/wifi.h"
 #include "fontIds.h"
 
 namespace {
@@ -219,16 +227,146 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
     const int iconX = tileX + (tileW - kMenuIconSize) / 2;
     const int iconY = rowY + kMenuIconPad;
 
-    if (selectedIndex == i) {
-      renderer.fillRoundedRect(iconX - kHighlightPad, rowY + 4, kMenuIconSize + 2 * kHighlightPad, tileH - 8,
-                               kCornerRadius, Color::LightGray);
+    const bool selected = (selectedIndex == i);
+    if (selected) {
+      renderer.fillRect(iconX - kHighlightPad, rowY + 4, kMenuIconSize + 2 * kHighlightPad, tileH - 8, true);
     }
 
     if (rowIcon != nullptr) {
       const uint8_t* bmp = iconBitmapFor(rowIcon(i));
       if (bmp != nullptr) {
-        renderer.drawIcon(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
+        if (selected)
+          renderer.drawIconInverted(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
+        else
+          renderer.drawIcon(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// List — solid black highlight, inverted text and icons on selected row
+// ---------------------------------------------------------------------------
+void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                                 const std::function<std::string(int index)>& rowTitle,
+                                 const std::function<std::string(int index)>& rowSubtitle,
+                                 const std::function<UIIcon(int index)>& rowIcon,
+                                 const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+  constexpr int hPad = 8;
+  constexpr int listIconSz = 24;
+  constexpr int mainMenuIconSz = 32;
+  constexpr int maxValWidth = 200;
+  constexpr int cornerRadius = 6;
+
+  const int rowHeight = (rowSubtitle != nullptr) ? LyraCarouselMetrics::values.listWithSubtitleRowHeight
+                                                 : LyraCarouselMetrics::values.listRowHeight;
+  const int pageItems = rect.height / rowHeight;
+  const int totalPages = (itemCount + pageItems - 1) / pageItems;
+
+  if (totalPages > 1) {
+    const int scrollAreaHeight = rect.height;
+    const int scrollBarHeight = (scrollAreaHeight * pageItems) / itemCount;
+    const int currentPage = selectedIndex / pageItems;
+    const int scrollBarY = rect.y + ((scrollAreaHeight - scrollBarHeight) * currentPage) / (totalPages - 1);
+    const int scrollBarX = rect.x + rect.width - LyraCarouselMetrics::values.scrollBarRightOffset;
+    renderer.drawLine(scrollBarX, rect.y, scrollBarX, rect.y + scrollAreaHeight, true);
+    renderer.fillRect(scrollBarX - LyraCarouselMetrics::values.scrollBarWidth, scrollBarY,
+                      LyraCarouselMetrics::values.scrollBarWidth, scrollBarHeight, true);
+  }
+
+  int contentWidth =
+      rect.width -
+      (totalPages > 1 ? (LyraCarouselMetrics::values.scrollBarWidth + LyraCarouselMetrics::values.scrollBarRightOffset)
+                      : 1);
+
+  // Solid black highlight bar
+  if (selectedIndex >= 0) {
+    renderer.fillRect(LyraCarouselMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
+                      contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2, rowHeight, true);
+  }
+
+  int textX = rect.x + LyraCarouselMetrics::values.contentSidePadding + hPad;
+  int textWidth = contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2 - hPad * 2;
+  int iconSize = 0;
+  if (rowIcon != nullptr) {
+    iconSize = (rowSubtitle != nullptr) ? mainMenuIconSz : listIconSz;
+    textX += iconSize + hPad;
+    textWidth -= iconSize + hPad;
+  }
+
+  const auto pageStartIndex = selectedIndex / pageItems * pageItems;
+  const int iconY = (rowSubtitle != nullptr) ? 16 : 10;
+  for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
+    const int itemY = rect.y + (i % pageItems) * rowHeight;
+    const bool sel = (i == selectedIndex);
+    int rowTextWidth = textWidth;
+
+    int valueWidth = 0;
+    std::string valueText;
+    if (rowValue != nullptr) {
+      valueText = rowValue(i);
+      valueText = renderer.truncatedText(UI_10_FONT_ID, valueText.c_str(), maxValWidth);
+      valueWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str()) + hPad;
+      rowTextWidth -= valueWidth;
+    }
+
+    auto itemName = rowTitle(i);
+    auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
+    renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), !sel);
+
+    if (rowIcon != nullptr) {
+      const uint8_t* iconBitmap = iconForName(rowIcon(i), iconSize);
+      if (iconBitmap != nullptr) {
+        const int ix = rect.x + LyraCarouselMetrics::values.contentSidePadding + hPad;
+        if (sel)
+          renderer.drawIconInverted(iconBitmap, ix, itemY + iconY, iconSize, iconSize);
+        else
+          renderer.drawIcon(iconBitmap, ix, itemY + iconY, iconSize, iconSize);
+      }
+    }
+
+    if (rowSubtitle != nullptr) {
+      std::string subtitleText = rowSubtitle(i);
+      auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
+      renderer.drawText(SMALL_FONT_ID, textX, itemY + 30, subtitle.c_str(), !sel);
+    }
+
+    if (!valueText.empty()) {
+      if (sel && highlightValue) {
+        renderer.fillRoundedRect(contentWidth - LyraCarouselMetrics::values.contentSidePadding - hPad - valueWidth,
+                                 itemY, valueWidth + hPad, rowHeight, cornerRadius, Color::Black);
+      }
+      renderer.drawText(UI_10_FONT_ID,
+                        rect.x + contentWidth - LyraCarouselMetrics::values.contentSidePadding - valueWidth, itemY + 6,
+                        valueText.c_str(), !(sel && highlightValue));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tab bar — solid black background + solid black active tab, inverted text
+// ---------------------------------------------------------------------------
+void LyraCarouselTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
+                                   bool selected) const {
+  constexpr int hPad = 8;
+  int currentX = rect.x + LyraCarouselMetrics::values.contentSidePadding;
+
+  for (const auto& tab : tabs) {
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
+
+    if (tab.selected) {
+      if (selected) {
+        renderer.fillRect(currentX, rect.y + 1, textWidth + 2 * hPad, rect.height - 4, true);
+      } else {
+        renderer.drawRect(currentX, rect.y, textWidth + 2 * hPad, rect.height - 3, true);
+      }
+    }
+
+    renderer.drawText(UI_10_FONT_ID, currentX + hPad, rect.y + 6, tab.label, !(tab.selected && selected),
+                      EpdFontFamily::REGULAR);
+
+    currentX += textWidth + LyraCarouselMetrics::values.tabSpacing + 2 * hPad;
+  }
+
+  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
 }
