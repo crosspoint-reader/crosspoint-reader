@@ -65,6 +65,11 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, bool keepClockAlive) const {
   // at ~3-4 mA so the LP timer keeps running and RTC memory is preserved.
   // This allows HalClock to accurately compute elapsed sleep time on wake.
   constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
+  // Release any GPIO hold from a previous sleep cycle (keepClockAlive=true leaves GPIO13 held after wake).
+  // Without this, gpio_set_level() below silently fails and GPIO13 is stuck in its prior state,
+  // causing the device to enter a sleep/wake loop that requires a hardware reset to escape.
+  gpio_hold_dis(GPIO_SPIWP);
+  gpio_deep_sleep_hold_dis();
   gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
   gpio_set_level(GPIO_SPIWP, keepClockAlive ? 1 : 0);
   esp_sleep_config_gpio_isolate();
