@@ -55,39 +55,26 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  // Up/Down: scroll definition text (clamp in loop, not render)
+  // All directional buttons paginate definition text (scroll one full page at a time).
+  // ButtonNavigator maps {Down, Right} to next and {Up, Left} to previous.
   buttonNavigator.onNextRelease([this] {
-    const int maxScroll = std::max(0, totalLines - maxVisibleLines);
-    if (scrollOffset < maxScroll) {
-      scrollOffset++;
+    if (maxVisibleLines <= 0) return;
+    const int totalPages = (totalLines + maxVisibleLines - 1) / maxVisibleLines;
+    const int currentPage = scrollOffset / maxVisibleLines;
+    if (currentPage < totalPages - 1) {
+      scrollOffset = (currentPage + 1) * maxVisibleLines;
       requestUpdate();
     }
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    if (scrollOffset > 0) {
-      scrollOffset--;
+    if (maxVisibleLines <= 0) return;
+    const int currentPage = scrollOffset / maxVisibleLines;
+    if (currentPage > 0) {
+      scrollOffset = (currentPage - 1) * maxVisibleLines;
       requestUpdate();
     }
   });
-
-  // Left/Right: cycle between dictionary results
-  if (resultCount > 1) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      if (currentResult > 0) {
-        currentResult--;
-        scrollOffset = 0;
-        requestUpdate();
-      }
-    }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      if (currentResult < resultCount - 1) {
-        currentResult++;
-        scrollOffset = 0;
-        requestUpdate();
-      }
-    }
-  }
 }
 
 void DictionaryDefinitionActivity::render(RenderLock&&) {
@@ -163,7 +150,9 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
   if (lineHeight <= 0) return;
 
   const int margin = contentLeft;
-  this->maxVisibleLines = contentHeight / lineHeight;
+  // Reserve one line at bottom for scroll indicator so it doesn't overlap text
+  const int usableHeight = contentHeight - lineHeight;
+  this->maxVisibleLines = usableHeight / lineHeight;
 
   // Word-wrap the definition text into lines
   const char* text = r.definition;
@@ -224,10 +213,12 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
   // Store total lines for scroll clamping in loop()
   this->totalLines = lineIdx;
 
-  // Draw scroll indicator if content overflows
+  // Draw page indicator if content overflows
   if (totalLines > maxVisibleLines) {
+    const int totalPages = (totalLines + maxVisibleLines - 1) / maxVisibleLines;
+    const int currentPage = (scrollOffset / std::max(1, maxVisibleLines)) + 1;
     char indicator[32];
-    snprintf(indicator, sizeof(indicator), "%d/%d", scrollOffset + 1, std::max(1, totalLines - maxVisibleLines + 1));
+    snprintf(indicator, sizeof(indicator), "%d/%d", currentPage, totalPages);
     const int indicatorWidth = renderer.getTextWidth(UI_12_FONT_ID, indicator);
     renderer.drawText(UI_12_FONT_ID, renderer.getScreenWidth() - indicatorWidth - 10,
                       contentTop + contentHeight - lineHeight, indicator, true);

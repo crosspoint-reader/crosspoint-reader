@@ -221,20 +221,194 @@ def generate_index(dict_path: str):
     print(f'Generated index: {idx_path} ({entry_count} entries, {dict_size} bytes dict)')
 
 
-def convert(input_path, output_path):
+def is_headword_line(line):
+    """Check if a line is a Webster's ALL-CAPS headword (e.g., 'ABASE', 'AARD-VARK')."""
+    stripped = line.strip()
+    if not stripped or len(stripped) < 1:
+        return False
+    # Headwords are uppercase letters, hyphens, spaces, apostrophes, semicolons
+    # Must contain at least one letter and no lowercase letters
+    has_letter = False
+    for ch in stripped:
+        if ch.isupper():
+            has_letter = True
+        elif ch in " -';,&1234567890":
+            continue
+        else:
+            return False
+    return has_letter
+
+
+def parse_webster(input_path):
+    """Parse Webster's Unabridged Dictionary (Project Gutenberg format).
+
+    Format: headword in ALL CAPS on its own line, followed by pronunciation,
+    etymology, and definition lines. Entries separated by blank lines.
+    """
+    entries = []
+    with open(input_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    # Skip Gutenberg header — find "*** START OF" line
+    start_idx = 0
+    for i, line in enumerate(lines):
+        if '*** START OF' in line:
+            start_idx = i + 1
+            break
+
+    current_word = None
+    current_def_lines = []
+
+    def flush_entry():
+        nonlocal current_word, current_def_lines
+        if current_word and current_def_lines:
+            # Join definition lines, inserting \n before numbered definitions
+            # so they display as separate paragraphs on the device.
+            parts = []
+            for dl in current_def_lines:
+                dl = re.sub(r'\s+', ' ', dl).strip()
+                if not dl:
+                    continue
+                # Insert double newline before numbered definitions (e.g., "1.", "2.")
+                if re.match(r'^\d+\.', dl) and parts:
+                    parts.append('\\n\\n' + dl)
+                else:
+                    parts.append(dl)
+            definition = ' '.join(parts)
+            definition = definition.strip()
+            if definition:
+                # Handle multiple headwords separated by semicolons (e.g., "AARONIC; AARONICAL")
+                for hw in current_word.split(';'):
+                    hw = hw.strip().lower()
+                    if hw:
+                        entries.append((hw, definition))
+        current_word = None
+        current_def_lines = []
+
+    i = start_idx
+    while i < len(lines):
+        line = lines[i].rstrip('\n\r')
+        i += 1
+
+        if not line.strip():
+            continue
+
+        if is_headword_line(line):
+            flush_entry()
+            current_word = line.strip()
+            # Skip pronunciation/grammar line(s) — read until first blank or Defn:/numbered def
+            while i < len(lines):
+                next_line = lines[i].rstrip('\n\r')
+                if not next_line.strip():
+                    i += 1
+                    break
+                # If this looks like definition content, don't skip it
+                if next_line.strip().startswith(('Defn:', '1.', '2.')):
+                    break
+                i += 1
+            continue
+
+        if current_word is None:
+            continue
+
+        stripped = line.strip()
+        # Strip "Defn: " prefix
+        if stripped.startswith('Defn: '):
+            stripped = stripped[6:]
+        elif stripped.startswith('Defn:'):
+            stripped = stripped[5:]
+        # Skip lines that are just etym/note markers
+        if stripped.startswith(('Etym:', 'Note:', 'Syn.', '-- ')):
+            continue
+        # Skip subject markers like "(Mus.)", "(Bot.)", "(Arch.)" on their own
+        if re.match(r'^\(\w+\.?\)$', stripped):
+            continue
+
+        current_def_lines.append(stripped)
+
+    flush_entry()
+    return entries
+
+
+def parse_simple(input_path):
+    """Parse simple two-space-separated format: 'Word  definition text'."""
     entries = []
     with open(input_path, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.rstrip('\n\r')
             if not line.strip():
                 continue
-            # Original format: "Word  definition" (two+ spaces separate word from def)
             match = re.match(r'^(\S+(?:\s\S+)*?)\s{2,}(.+)$', line)
             if match:
                 word = match.group(1).strip().lower()
                 definition = match.group(2).strip()
                 if word and definition:
                     entries.append((word, definition))
+    return entries
+
+
+def detect_format(input_path):
+    """Auto-detect dictionary format by scanning first ~100 non-blank lines."""
+    with open(input_path, 'r', encoding='utf-8') as f:
+        headword_count = 0
+        twospace_count = 0
+        for i, line in enumerate(f):
+            if i > 200:
+                break
+            line = line.rstrip('\n\r')
+            if not line.strip():
+                continue
+            if is_headword_line(line):
+                headword_count += 1
+            if re.match(r'^(\S+(?:\s\S+)*?)\s{2,}(.+)$', line):
+                twospace_count += 1
+    if headword_count > twospace_count:
+        return 'webster'
+    return 'simple'
+
+
+def renumber_definitions(defn):
+    """Renumber all N. entries sequentially and ensure 1. is separated from pre-text.
+
+    Only renumbers entries that follow \\n\\n (the double-newline separator inserted
+    by flush_entry and the merge step) or appear at the very start of the definition.
+    This avoids false positives on numbers in flowing text (e.g., "Acts xvi. 29.").
+
+    Also ensures the first numbered entry has a double-newline before it if preceded
+    by other text (e.g., "See: account. 1. ..." becomes "See: account.\\n\\n1. ...").
+    """
+    SEP = '\\n\\n'  # literal 4-char separator in the dict string
+
+    # Step 1: Ensure first numbered entry is separated from pre-text.
+    # If the definition doesn't start with a number, find the first N.\s pattern
+    # and insert a separator before it (using string ops, not re.sub replacement,
+    # to avoid re.sub interpreting \n as a newline character).
+    m = re.match(r'^(.+?\S)\s+(1\.\s)', defn)
+    if m and SEP not in defn[:m.start(2)]:
+        defn = defn[:m.end(1)] + SEP + defn[m.start(2):]
+
+    # Step 2: Renumber all N. entries sequentially.
+    # Match \d+. only at the very start of the string or after the literal
+    # backslash-n-backslash-n separator.
+    counter = [0]
+
+    def repl(m):
+        counter[0] += 1
+        return m.group(1) + f'{counter[0]}.'
+
+    defn = re.sub(r'(^|\\n\\n)(\d+)\.', repl, defn)
+
+    return defn
+
+
+def convert(input_path, output_path):
+    fmt = detect_format(input_path)
+    print(f'Detected format: {fmt}')
+
+    if fmt == 'webster':
+        entries = parse_webster(input_path)
+    else:
+        entries = parse_simple(input_path)
 
     # Build set of existing words
     existing = {w for w, _ in entries}
@@ -251,16 +425,26 @@ def convert(input_path, output_path):
     # Sort case-insensitively
     entries.sort(key=lambda e: e[0].lower())
 
-    # Remove duplicates (keep first occurrence)
-    seen = set()
+    # Merge duplicates: combine definitions for the same word with double-newline separator
+    seen = {}
     unique = []
     for word, defn in entries:
         if word not in seen:
-            seen.add(word)
+            seen[word] = len(unique)
             unique.append((word, defn))
+        else:
+            idx = seen[word]
+            existing_word, existing_defn = unique[idx]
+            unique[idx] = (existing_word, existing_defn + '\\n\\n' + defn)
+
+    # Post-process: renumber definitions sequentially and ensure 1. is separated from pre-text
+    for i, (word, defn) in enumerate(unique):
+        unique[i] = (word, renumber_definitions(defn))
 
     with open(output_path, 'w', encoding='utf-8') as f:
         for word, defn in unique:
+            # Ensure no literal newlines in the definition (use \\n escape)
+            defn = defn.replace('\n', '\\n')
             f.write(f'{word}\t{defn}\n')
 
     base_count = len(existing) - inflection_count

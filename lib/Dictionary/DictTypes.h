@@ -29,7 +29,7 @@ static_assert(sizeof(DictIndexHeader) == DICT_INDEX_HEADER_SIZE,
 // Result from a single dictionary lookup
 struct DictResult {
   char dictionaryName[32];  // Title-cased display name
-  char definition[1024];    // Definition text, null-terminated, truncated if too long
+  char definition[2048];    // Definition text, null-terminated, truncated if too long
 };
 
 // Info about a discovered dictionary file

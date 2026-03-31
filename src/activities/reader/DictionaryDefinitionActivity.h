@@ -25,7 +25,7 @@ class DictionaryDefinitionActivity final : public Activity {
   DictResult* results = nullptr;  // Heap-allocated, owned
   int resultCount = 0;
   int currentResult = 0;
-  int scrollOffset = 0;     // Line offset for scrolling long definitions
+  int scrollOffset = 0;     // Line offset for paginated scrolling
   int totalLines = 0;       // Computed during render for scroll clamping
   int maxVisibleLines = 0;  // Computed during render for scroll clamping
   ButtonNavigator buttonNavigator;

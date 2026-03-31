@@ -5,6 +5,54 @@
 #include <algorithm>
 #include <cstring>
 
+// Check if position i in text is a dash separator (hyphen, double-hyphen, en-dash, em-dash).
+// Returns the number of bytes consumed by the dash (0 if not a dash).
+static int dashLen(const char* text, int i, int textLen) {
+  auto b = [](const char* s, int idx) { return static_cast<unsigned char>(s[idx]); };
+  // UTF-8 en-dash U+2013: E2 80 93, em-dash U+2014: E2 80 94
+  if (i + 2 < textLen && b(text, i) == 0xE2 && b(text, i + 1) == 0x80 &&
+      (b(text, i + 2) == 0x93 || b(text, i + 2) == 0x94)) {
+    return 3;
+  }
+  // Double-hyphen "--" (used as em-dash in plain text)
+  if (i + 1 < textLen && text[i] == '-' && text[i + 1] == '-') {
+    return 2;
+  }
+  // Single hyphen
+  if (text[i] == '-') {
+    return 1;
+  }
+  return 0;
+}
+
+// Find dash-separated components in text. Returns total component count.
+// If targetIdx >= 0, sets outStart/outLen to that component's position in text.
+static int findDashComponent(const char* text, int textLen, int targetIdx, const char** outStart, int* outLen) {
+  int count = 0;
+  const char* compStart = nullptr;
+  bool inComp = false;
+  int i = 0;
+  while (i <= textLen) {
+    int dl = (i < textLen) ? dashLen(text, i, textLen) : 0;
+    if (dl > 0 || i >= textLen) {
+      if (inComp) {
+        if (count == targetIdx && outStart && outLen) {
+          *outStart = compStart;
+          *outLen = static_cast<int>(text + i - compStart);
+        }
+        count++;
+      }
+      inComp = false;
+      i += (dl > 0) ? dl : 1;
+    } else {
+      if (!inComp) compStart = text + i;
+      inComp = true;
+      i++;
+    }
+  }
+  return count;
+}
+
 void WordSelectionMode::extractWords(const Page& page, const GfxRenderer& renderer, int fontId, int marginLeft,
                                      int marginTop) {
   wordCount = 0;
@@ -176,22 +224,9 @@ void WordSelectionMode::renderHighlight(GfxRenderer& renderer, int fontId) const
     memcpy(fullWord, arena + w.textOffset, fullLen);
     fullWord[fullLen] = '\0';
 
-    // Find the sub-selected hyphen component
-    int compIdx = 0;
-    const char* compStart = fullWord;
-    const char* compEnd = nullptr;
-    for (const char* p = fullWord;; ++p) {
-      if (*p == '-' || *p == '\0') {
-        if (compIdx == subSelectIndex) {
-          compEnd = (*p == '-') ? p + 1 : p;  // Include hyphen with the component
-          break;
-        }
-        compIdx++;
-        compStart = p + 1;
-      }
-      if (*p == '\0') break;
-    }
-    if (!compEnd) return;
+    const char* compStart = nullptr;
+    int compLen = 0;
+    if (findDashComponent(fullWord, fullLen, subSelectIndex, &compStart, &compLen) <= subSelectIndex) return;
 
     // Measure X offset to the component start
     char prefix[64];
@@ -200,9 +235,7 @@ void WordSelectionMode::renderHighlight(GfxRenderer& renderer, int fontId) const
     prefix[prefixLen] = '\0';
     const int prefixWidth = (prefixLen > 0) ? renderer.getTextWidth(fontId, prefix, w.style) : 0;
 
-    // Measure component width
     char comp[64];
-    const int compLen = static_cast<int>(compEnd - compStart);
     memcpy(comp, compStart, compLen);
     comp[compLen] = '\0';
     const int compWidth = renderer.getTextWidth(fontId, comp, w.style);
@@ -226,12 +259,7 @@ bool WordSelectionMode::isHyphenated() const {
   const int idx = getGlobalWordIndex();
   if (idx < 0 || idx >= wordCount) return false;
   const WordInfo& w = words[idx];
-  // Check if the word contains a hyphen with non-empty components on both sides
-  const char* text = arena + w.textOffset;
-  for (int i = 1; i + 1 < w.textLen; ++i) {
-    if (text[i] == '-' && text[i - 1] != '-' && text[i + 1] != '-') return true;
-  }
-  return false;
+  return findDashComponent(arena + w.textOffset, w.textLen, -1, nullptr, nullptr) >= 2;
 }
 
 void WordSelectionMode::enterSubSelection() {
@@ -239,19 +267,8 @@ void WordSelectionMode::enterSubSelection() {
   const int idx = getGlobalWordIndex();
   if (idx < 0 || idx >= wordCount) return;
 
-  // Count non-empty components (skip runs of hyphens and leading/trailing hyphens)
   const WordInfo& w = words[idx];
-  const char* text = arena + w.textOffset;
-  subSelectCount = 0;
-  bool inComponent = false;
-  for (int i = 0; i < w.textLen; ++i) {
-    if (text[i] == '-') {
-      inComponent = false;
-    } else {
-      if (!inComponent) subSelectCount++;
-      inComponent = true;
-    }
-  }
+  subSelectCount = findDashComponent(arena + w.textOffset, w.textLen, -1, nullptr, nullptr);
   if (subSelectCount <= 1) return;
 
   subSelectionActive = true;
@@ -283,29 +300,13 @@ bool WordSelectionMode::getSubSelectedWord(char* outBuf, int outSize) const {
   if (idx < 0 || idx >= wordCount) return false;
 
   const WordInfo& w = words[idx];
-  const char* text = arena + w.textOffset;
-
-  // Find the sub-selected non-empty component (without trailing hyphen)
-  int compIdx = 0;
   const char* compStart = nullptr;
-  bool inComponent = false;
-  for (const char* p = text;; ++p) {
-    if (*p == '-' || *p == '\0') {
-      if (inComponent) {
-        if (compIdx == subSelectIndex) {
-          const int len = std::min(static_cast<int>(p - compStart), outSize - 1);
-          memcpy(outBuf, compStart, len);
-          outBuf[len] = '\0';
-          return true;
-        }
-        compIdx++;
-      }
-      inComponent = false;
-    } else {
-      if (!inComponent) compStart = p;
-      inComponent = true;
-    }
-    if (*p == '\0') break;
+  int compLen = 0;
+  if (findDashComponent(arena + w.textOffset, w.textLen, subSelectIndex, &compStart, &compLen) <= subSelectIndex) {
+    return false;
   }
-  return false;
+  const int len = std::min(compLen, outSize - 1);
+  memcpy(outBuf, compStart, len);
+  outBuf[len] = '\0';
+  return true;
 }

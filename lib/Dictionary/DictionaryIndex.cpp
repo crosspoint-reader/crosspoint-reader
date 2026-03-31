@@ -440,7 +440,7 @@ bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDe
     return false;
   }
 
-  static constexpr int LOOKUP_BUF_SIZE = 1280;
+  static constexpr int LOOKUP_BUF_SIZE = 2560;
   auto* lineBuf = static_cast<char*>(malloc(LOOKUP_BUF_SIZE));
   if (!lineBuf) {
     LOG_ERR("DICT", "malloc failed for lookup buffer");
@@ -449,9 +449,12 @@ bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDe
     return false;
   }
 
-  // Walk adjacent entries sharing the same prefix (handles words > 31 chars)
+  // Walk adjacent entries sharing the same truncated prefix (handles words > 31 chars).
+  // Limit iterations to avoid pathological cases with many shared prefixes.
+  static constexpr int32_t MAX_PREFIX_WALK = 32;
   bool found = false;
-  for (int32_t candidate = idx; candidate < static_cast<int32_t>(header.entryCount); ++candidate) {
+  for (int32_t candidate = idx; candidate < static_cast<int32_t>(header.entryCount) && candidate < idx + MAX_PREFIX_WALK;
+       ++candidate) {
     size_t entryOffset = DICT_INDEX_HEADER_SIZE + static_cast<size_t>(candidate) * sizeof(DictIndexEntry);
     idxFile.seekSet(entryOffset);
     DictIndexEntry entry;
@@ -477,7 +480,7 @@ bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDe
 
     if (strcasecmp(word, lineWord) != 0) continue;
 
-    // Match found — extract definition
+    // Match found — extract definition and unescape \\n sequences to real newlines
     const char* def = tab + 1;
     int defLen = len - static_cast<int>(def - lineBuf);
 
@@ -487,6 +490,19 @@ bool DictionaryIndex::lookup(const char* dictPath, const char* word, char* outDe
     } else {
       memcpy(outDef, def, defLen + 1);  // includes null
     }
+
+    // In-place unescape: convert literal "\n" (two chars) to newline (one char)
+    int r = 0, w = 0;
+    while (outDef[r] != '\0') {
+      if (outDef[r] == '\\' && outDef[r + 1] == 'n') {
+        outDef[w++] = '\n';
+        r += 2;
+      } else {
+        outDef[w++] = outDef[r++];
+      }
+    }
+    outDef[w] = '\0';
+
     found = true;
     break;
   }
