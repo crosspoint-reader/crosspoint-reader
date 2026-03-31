@@ -68,6 +68,8 @@ void SettingsActivity::onEnter() {
     };
     readerSettings.push_back(std::move(dictSetting));
   }
+  readerSettings.push_back(SettingInfo::Value(StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
+                                              {50, 250, 50}, "lookupHistoryCap", StrId::STR_CAT_READER));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category
