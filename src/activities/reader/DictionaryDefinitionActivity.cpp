@@ -58,7 +58,7 @@ std::string DictionaryDefinitionActivity::buildPhraseFromRange(int fromIdx, int 
     const auto* w = navigator.getWordAt(i);
     if (!w) continue;
     if (!phrase.empty()) phrase += ' ';
-    phrase += w->text;
+    phrase += navigator.getDisplay(*w);
   }
   return Dictionary::cleanWord(phrase);
 }
@@ -93,7 +93,8 @@ void DictionaryDefinitionActivity::wrapText() {
   if (linesPerPage < 1) linesPerPage = 1;
 
   // Choose rendering path based on dictionary content type
-  const DictInfo info = Dictionary::readInfo(Dictionary::getActivePath());
+  const std::string folderPath = Dictionary::readDictPath(cachePath.empty() ? nullptr : cachePath.c_str());
+  const DictInfo info = Dictionary::readInfo(folderPath.c_str());
   if (info.valid && info.sametypesequence[0] == 'h') {
     wrapHtml();
   } else {
@@ -109,6 +110,7 @@ void DictionaryDefinitionActivity::wrapText() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::wrapHtml() {
+  std::vector<IpaTextSpan> ipaRuns;
   const int screenWidth = renderer.getScreenWidth();
   const int maxWidth = screenWidth - leftPadding - rightPadding;
 
@@ -147,16 +149,19 @@ void DictionaryDefinitionActivity::wrapHtml() {
   };
 
   // Measure and append a string that may contain mixed IPA/non-IPA runs.
-  auto getMixedWidth = [&](const std::string& text, EpdFontFamily::Style style) -> int {
-    const auto runs = splitIpaRuns(text);
-    return std::accumulate(runs.begin(), runs.end(), 0, [&](int sum, const IpaTextSpan& run) {
+  auto getMixedWidth = [&](const char* text, EpdFontFamily::Style style) -> int {
+    ipaRuns.clear();
+    splitIpaRuns(text, ipaRuns);
+    return std::accumulate(ipaRuns.begin(), ipaRuns.end(), 0, [&](int sum, const IpaTextSpan& run) {
       return sum +
              renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str(), style);
     });
   };
 
-  auto appendMixed = [&](const std::string& text, EpdFontFamily::Style style) {
-    for (const auto& run : splitIpaRuns(text)) {
+  auto appendMixed = [&](const char* text, EpdFontFamily::Style style) {
+    ipaRuns.clear();
+    splitIpaRuns(text, ipaRuns);
+    for (const auto& run : ipaRuns) {
       const int fontId = run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
       appendToLine(run.text, style, run.isIpa, renderer.getTextWidth(fontId, run.text.c_str(), style));
     }
@@ -190,7 +195,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
       const int fontId = isIpaCodepoint(cp) ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
       const int cpWidth = renderer.getTextWidth(fontId, cpStr.c_str(), style);
       if (!pending.empty() && currentX + pendingWidth + cpWidth > maxWidth) {
-        appendMixed(pending, style);
+        appendMixed(pending.c_str(), style);
         flushLine();
         startLine(indentLevel, false);
         pending.clear();
@@ -199,7 +204,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
       pending += cpStr;
       pendingWidth += cpWidth;
     }
-    if (!pending.empty()) appendMixed(pending, style);
+    if (!pending.empty()) appendMixed(pending.c_str(), style);
   };
 
   startLine(0, false);
@@ -224,10 +229,10 @@ void DictionaryDefinitionActivity::wrapHtml() {
       startLine(span.indentLevel, span.isListItem);
     }
 
-    const int spanWidth = getMixedWidth(std::string(span.text), style);
+    const int spanWidth = getMixedWidth(span.text, style);
     if (currentX + spanWidth <= maxWidth) {
       // Fast path: entire span fits on the current line.
-      appendMixed(std::string(span.text), style);
+      appendMixed(span.text, style);
     } else {
       // Word-wrap within the span.
       const char* p = span.text;
@@ -245,19 +250,19 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
         bool lineIsEmpty = currentLine.segments.empty();
         std::string candidate = (!lineIsEmpty && hadSpace) ? " " + tok : tok;
-        int candidateWidth = getMixedWidth(candidate, style);
+        int candidateWidth = getMixedWidth(candidate.c_str(), style);
 
         if (currentX + candidateWidth > maxWidth && !lineIsEmpty) {
           flushLine();
           startLine(span.indentLevel, false);
           candidate = tok;
-          candidateWidth = getMixedWidth(tok, style);
+          candidateWidth = getMixedWidth(tok.c_str(), style);
         }
 
         if (currentX + candidateWidth > maxWidth) {
           breakToken(candidate, style, span.indentLevel);
         } else {
-          appendMixed(candidate, style);
+          appendMixed(candidate.c_str(), style);
         }
       }
     }
@@ -272,6 +277,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::wrapPlain() {
+  std::vector<IpaTextSpan> ipaRuns;
   const int screenWidth = renderer.getScreenWidth();
   const int maxWidth = screenWidth - leftPadding - rightPadding;
   const int spaceWidth = renderer.getSpaceWidth(SETTINGS.getDefinitionFontId(), EpdFontFamily::REGULAR);
@@ -281,18 +287,19 @@ void DictionaryDefinitionActivity::wrapPlain() {
   int currentLineWidth = 0;
 
   auto getMixedWidthPlain = [&](const std::string& text) -> int {
-    const auto runs = splitIpaRuns(text);
-    int w = 0;
-    for (const auto& run : runs) {
-      w += renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str());
-    }
-    return w;
+    ipaRuns.clear();
+    splitIpaRuns(text.c_str(), ipaRuns);
+    return std::accumulate(ipaRuns.begin(), ipaRuns.end(), 0, [&](int sum, const IpaTextSpan& run) {
+      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str());
+    });
   };
 
   auto flushLine = [&]() {
     if (currentLineText.empty()) return;
     LayoutLine line;
-    for (const auto& run : splitIpaRuns(currentLineText)) {
+    ipaRuns.clear();
+    splitIpaRuns(currentLineText.c_str(), ipaRuns);
+    for (const auto& run : ipaRuns) {
       line.segments.push_back({run.text, EpdFontFamily::REGULAR, run.isIpa});
     }
     layoutLines.push_back(std::move(line));
@@ -347,6 +354,8 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
   words.reserve(64);
   std::vector<WordSelectNavigator::Row> rows;
   rows.reserve(16);
+  std::string textPool;
+  textPool.reserve(512);
 
   const int startLineIdx = currentPage * linesPerPage;
   for (int i = 0; i < linesPerPage && (startLineIdx + i) < static_cast<int>(layoutLines.size()); i++) {
@@ -371,15 +380,26 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 
         const char* tokStart = p;
         while (*p && *p != ' ') ++p;
-        std::string tok(tokStart, p - tokStart);
+        const size_t tokLen = static_cast<size_t>(p - tokStart);
+        std::string tok(tokStart, tokLen);
 
         const int tokVisualWidth = renderer.getTextWidth(segFontId, tok.c_str(), seg.style);
         const int tokAdvanceX = renderer.getTextAdvanceX(segFontId, tok.c_str(), seg.style);
         std::string cleaned = Dictionary::cleanWord(tok);
         if (!cleaned.empty()) {
-          words.push_back({tok, static_cast<int16_t>(x), lineY, static_cast<int16_t>(tokVisualWidth), 0, seg.style});
-          words.back().lookupText = cleaned;
-          words.back().isIpa = seg.isIpa;
+          uint16_t tokOff = WordSelectNavigator::poolAppend(textPool, tok.c_str(), tok.size());
+          uint16_t cleanedOff = WordSelectNavigator::poolAppend(textPool, cleaned.c_str(), cleaned.size());
+          WordSelectNavigator::WordInfo wi;
+          wi.textOffset = tokOff;
+          wi.textLen = static_cast<uint16_t>(tok.size());
+          wi.lookupOffset = cleanedOff;
+          wi.lookupLen = static_cast<uint16_t>(cleaned.size());
+          wi.screenX = static_cast<int16_t>(x);
+          wi.screenY = lineY;
+          wi.width = static_cast<int16_t>(tokVisualWidth);
+          wi.style = seg.style;
+          wi.isIpa = seg.isIpa;
+          words.push_back(wi);
         }
         x += tokAdvanceX;
       }
@@ -400,7 +420,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     }
   }
 
-  navigator.load(std::move(words), std::move(rows));
+  navigator.load(std::move(words), std::move(rows), std::move(textPool));
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +433,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::handleNotFound(const std::string& word) {
-  auto similar = Dictionary::findSimilar(word, 6);
+  auto similar = Dictionary::findSimilar(word, 6, cachePath.c_str());
   if (!similar.empty()) {
     startActivityForResult(std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
                            [this](const ActivityResult& result) {
@@ -517,8 +537,8 @@ void DictionaryDefinitionActivity::loop() {
       }
       const auto* sel = navigator.getSelected();
       if (!sel) return;
-      if (sel->lookupText.empty()) return;
-      controller.startLookup(sel->lookupText);
+      if (sel->lookupLen == 0) return;
+      controller.startLookup(navigator.getLookup(*sel));
       return;
     }
 
@@ -652,13 +672,13 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
         if (!w) continue;
         const int wFontId = w->isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
         renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-        renderer.drawText(wFontId, w->screenX, w->screenY, w->text.c_str(), false, w->style);
+        renderer.drawText(wFontId, w->screenX, w->screenY, navigator.getDisplay(*w), false, w->style);
       }
     } else {
       if (const auto* sel = navigator.getSelected()) {
         const int selFontId = sel->isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
         renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
-        renderer.drawText(selFontId, sel->screenX, sel->screenY, sel->text.c_str(), false, sel->style);
+        renderer.drawText(selFontId, sel->screenX, sel->screenY, navigator.getDisplay(*sel), false, sel->style);
       }
     }
     // Empty button hints in word-select mode (same convention as EPUB word-select)
@@ -674,8 +694,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     snprintf(pageInfo, sizeof(pageInfo), "%d/%d", currentPage + 1, totalPages);
     int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo);
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - rightPadding - textWidth,
-                      renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing,
-                      pageInfo);
+                      renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing, pageInfo);
   }
 
   const char* btn2 = showLookupButton ? tr(STR_LOOKUP_SHORT) : "";

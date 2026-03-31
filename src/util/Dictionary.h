@@ -31,22 +31,25 @@ struct DictInfo {
 
 class Dictionary {
  public:
+  // Returns the active dictionary folder base path by reading dictionary.bin from the SD card.
+  // If cachePath is non-null and non-empty, reads <cachePath>/dictionary.bin (per-book override).
+  // Otherwise reads /.crosspoint/dictionary.bin (global setting).
+  // Returns empty string if no dictionary is configured or the file cannot be read.
+  static std::string readDictPath(const char* cachePath = nullptr);
+
+  // Writes folderPath to /.crosspoint/dictionary.bin (global setting).
+  // Pass empty string to clear the global dictionary.
+  static void saveGlobalDictPath(const char* folderPath);
+
   // Returns true if a dictionary is configured and all required files exist.
-  static bool exists();
+  static bool exists(const char* cachePath = nullptr);
 
   // Returns true if a .syn file exists for the active dictionary.
   // Gates all alternate-form UI — checked at runtime against the physical file.
-  static bool hasAltForms();
+  static bool hasAltForms(const char* cachePath = nullptr);
 
-  // Set the active dictionary base path (e.g. "/dictionary/dict-en-en/dict-data").
-  static void setActivePath(const char* folderPath);
-
-  // Returns the active base path (empty string if none configured).
-  static const char* getActivePath();
-
-  // Validates the stored dictionary path in SETTINGS against the SD card.
-  // If the path is missing or the required files are gone, resets SETTINGS.dictionaryPath
-  // to empty, clears the active path, and saves settings. Returns true if valid.
+  // Validates the dictionary path stored in /.crosspoint/dictionary.bin against the SD card.
+  // If the path is missing or the required files are gone, clears the file. Returns true if valid.
   static bool isValidDictionary();
 
   // Parse the .ifo file in folderPath and return metadata.
@@ -54,41 +57,34 @@ class Dictionary {
   static DictInfo readInfo(const char* folderPath);
 
   // Look up word in .idx (via .idx.oft if present). Returns definition or empty string.
-  static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {});
+  static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {},
+                            const char* cachePath = nullptr);
 
   // Look up word in .syn (via .syn.oft if present).
   // Returns the canonical headword from .idx, or empty string if not found.
-  static std::string resolveAltForm(const std::string& word);
+  static std::string resolveAltForm(const std::string& word, const char* cachePath = nullptr);
 
   static std::string cleanWord(const std::string& word);
   static std::vector<std::string> getStemVariants(const std::string& word);
 
   // Returns up to maxResults words from .idx that are close in edit distance to word.
   // Requires .idx to be accessible; uses .idx.oft if present for neighbourhood search.
-  static std::vector<std::string> findSimilar(const std::string& word, int maxResults);
+  static std::vector<std::string> findSimilar(const std::string& word, int maxResults, const char* cachePath = nullptr);
 
  private:
-  static char activeFolderPath[500];
-  // Shared path construction buffer. Dictionary functions are always called
-  // sequentially; this avoids putting a 520-byte array on the stack in every caller.
-  static char pathBuf[520];
-
   // Shared word read buffer. Lookup functions are single-threaded; this avoids
   // putting a 256-byte array on the stack in every caller (and 512B peak when nested).
   static char wordBuf[256];
-
-  // Build full file paths from the active base path.
-  static void buildPath(const char* ext);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1 chars).
   // Returns the number of characters read (excluding null), or -1 on error.
   static int readWordInto(FsFile& file, char* buf, size_t bufSize);
 
-  // Read the word at ordinal `ordinal` in .idx using .idx.oft (if present).
-  // Returns the word string, or empty if not found.
-  static std::string wordAtOrdinal(uint32_t ordinal);
+  // Read the word at ordinal `ordinal` in .idx.
+  // folderPath is the dictionary base path (e.g. /dictionary/dict-en-en/dict-data).
+  static std::string wordAtOrdinal(const std::string& folderPath, uint32_t ordinal);
 
-  static std::string readDefinition(uint32_t offset, uint32_t size);
+  static std::string readDefinition(const std::string& folderPath, uint32_t offset, uint32_t size);
 
   // Binary search .oft to find the page boundary bytes in src containing target.
   // On return, *startByte and *endByte delimit the 32-word page to scan linearly.

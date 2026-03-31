@@ -228,8 +228,6 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
-  // Selected dictionary folder path (empty = no dictionary selected)
-  char dictionaryPath[500] = "";
   // Lookup history entry cap (index into LOOKUP_HISTORY_CAP enum)
   uint8_t lookupHistoryCap = HIST_100;
 

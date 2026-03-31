@@ -22,7 +22,7 @@ class DictionaryWordSelectActivity final : public Activity {
         marginTop(marginTop),
         cachePath(cachePath),
         nextPageFirstWord(nextPageFirstWord),
-        controller(renderer, mappedInput, *this) {}
+        controller(renderer, mappedInput, *this, cachePath) {}
 
   void onEnter() override;
   void onExit() override;
@@ -41,9 +41,10 @@ class DictionaryWordSelectActivity final : public Activity {
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
-  void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows);
+  void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows,
+                    std::string& textPool);
   void mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
-                            std::vector<WordSelectNavigator::Row>& rows);
+                            std::vector<WordSelectNavigator::Row>& rows, std::string& textPool);
   void handleNotFound(const std::string& word);
 
   // Multi-word select state

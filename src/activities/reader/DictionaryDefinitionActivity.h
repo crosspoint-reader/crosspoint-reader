@@ -28,7 +28,7 @@ class DictionaryDefinitionActivity final : public Activity {
         showLookupButton(showLookupButton),
         cachePath(std::move(cachePath)),
         chainStartIndex(chainStartIndex),
-        controller(renderer, mappedInput, *this) {}
+        controller(renderer, mappedInput, *this, cachePath) {}
 
   void onEnter() override;
   void onExit() override;

@@ -13,8 +13,8 @@
 #include "util/Dictionary.h"
 
 DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                       Activity& owner)
-    : renderer(renderer), mappedInput(mappedInput), owner(owner) {}
+                                                       Activity& owner, std::string cachePath)
+    : renderer(renderer), mappedInput(mappedInput), owner(owner), cachePath(std::move(cachePath)) {}
 
 void DictionaryLookupController::startLookup(const std::string& word) {
   lookupWord = word;
@@ -67,7 +67,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       // Try stem variants
       auto stems = Dictionary::getStemVariants(lookupWord);
       for (const auto& stem : stems) {
-        std::string stemDef = Dictionary::lookup(stem);
+        std::string stemDef = Dictionary::lookup(stem, {}, cachePath.c_str());
         if (!stemDef.empty()) {
           foundWord = stem;
           foundDefinition = stemDef;
@@ -78,7 +78,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       }
 
       // Try alt forms
-      if (Dictionary::hasAltForms()) {
+      if (Dictionary::hasAltForms(cachePath.c_str())) {
         altFormWord = lookupWord;
         state = LookupState::AltFormPrompt;
         return LookupEvent::None;
@@ -99,9 +99,9 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
   if (state == LookupState::AltFormPrompt) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       state = LookupState::Idle;
-      std::string canonical = Dictionary::resolveAltForm(altFormWord);
+      std::string canonical = Dictionary::resolveAltForm(altFormWord, cachePath.c_str());
       if (!canonical.empty()) {
-        std::string def = Dictionary::lookup(canonical);
+        std::string def = Dictionary::lookup(canonical, {}, cachePath.c_str());
         if (!def.empty()) {
           foundWord = canonical;
           foundDefinition = def;
@@ -194,7 +194,7 @@ void DictionaryLookupController::runLookup() {
   cbs.ctx = this;
   cbs.onProgress = &DictionaryLookupController::progressCallback;
   cbs.shouldCancel = &DictionaryLookupController::cancelCallback;
-  foundDefinition = Dictionary::lookup(lookupWord, cbs);
+  foundDefinition = Dictionary::lookup(lookupWord, cbs, cachePath.c_str());
   lookupCancelled = lookupCancelRequested;
   lookupDone = true;
   owner.requestUpdate(true);

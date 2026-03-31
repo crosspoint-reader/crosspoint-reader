@@ -35,9 +35,11 @@ void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
   std::vector<WordSelectNavigator::WordInfo> words;
   std::vector<WordSelectNavigator::Row> rows;
-  extractWords(words, rows);
-  mergeHyphenatedWords(words, rows);
-  navigator.load(std::move(words), std::move(rows));
+  std::string textPool;
+  textPool.reserve(512);
+  extractWords(words, rows, textPool);
+  mergeHyphenatedWords(words, rows, textPool);
+  navigator.load(std::move(words), std::move(rows), std::move(textPool));
   requestUpdate();
 }
 
@@ -47,7 +49,7 @@ void DictionaryWordSelectActivity::onExit() {
 }
 
 void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator::WordInfo>& words,
-                                                std::vector<WordSelectNavigator::Row>& rows) {
+                                                std::vector<WordSelectNavigator::Row>& rows, std::string& textPool) {
   words.clear();
   words.reserve(64);
   rows.clear();
@@ -100,7 +102,19 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
 
       if (splitStarts.size() <= 1 && partStart == 0) {
         int16_t wordWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), wordText.c_str(), wordStyle);
-        words.push_back({wordText, screenX, screenY, wordWidth, 0, wordStyle});
+        {
+          uint16_t off = WordSelectNavigator::poolAppend(textPool, wordText.c_str(), wordText.size());
+          WordSelectNavigator::WordInfo wi;
+          wi.textOffset = off;
+          wi.textLen = static_cast<uint16_t>(wordText.size());
+          wi.lookupOffset = off;
+          wi.lookupLen = wi.textLen;
+          wi.screenX = screenX;
+          wi.screenY = screenY;
+          wi.width = wordWidth;
+          wi.style = wordStyle;
+          words.push_back(wi);
+        }
       } else {
         for (size_t si = 0; si < splitStarts.size(); si++) {
           size_t start = splitStarts[si];
@@ -123,7 +137,19 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           int16_t offsetX =
               prefix.empty() ? 0 : renderer.getTextWidth(SETTINGS.getReaderFontId(), prefix.c_str(), wordStyle);
           int16_t partWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), part.c_str(), wordStyle);
-          words.push_back({part, static_cast<int16_t>(screenX + offsetX), screenY, partWidth, 0, wordStyle});
+          {
+            uint16_t off = WordSelectNavigator::poolAppend(textPool, part.c_str(), part.size());
+            WordSelectNavigator::WordInfo wi;
+            wi.textOffset = off;
+            wi.textLen = static_cast<uint16_t>(part.size());
+            wi.lookupOffset = off;
+            wi.lookupLen = wi.textLen;
+            wi.screenX = static_cast<int16_t>(screenX + offsetX);
+            wi.screenY = screenY;
+            wi.width = partWidth;
+            wi.style = wordStyle;
+            words.push_back(wi);
+          }
         }
       }
 
@@ -149,19 +175,21 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
 }
 
 void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
-                                                        std::vector<WordSelectNavigator::Row>& rows) {
+                                                        std::vector<WordSelectNavigator::Row>& rows,
+                                                        std::string& textPool) {
   for (size_t r = 0; r + 1 < rows.size(); r++) {
     if (rows[r].wordIndices.empty() || rows[r + 1].wordIndices.empty()) continue;
 
     int lastWordIdx = rows[r].wordIndices.back();
-    const std::string& lastWord = words[lastWordIdx].text;
-    if (lastWord.empty()) continue;
+    const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
+    uint16_t lastLen = words[lastWordIdx].textLen;
+    if (lastLen == 0) continue;
 
     bool endsWithHyphen = false;
-    if (lastWord.back() == '-') {
+    if (lastWord[lastLen - 1] == '-') {
       endsWithHyphen = true;
-    } else if (lastWord.size() >= 2 && static_cast<uint8_t>(lastWord[lastWord.size() - 2]) == 0xC2 &&
-               static_cast<uint8_t>(lastWord[lastWord.size() - 1]) == 0xAD) {
+    } else if (lastLen >= 2 && static_cast<uint8_t>(lastWord[lastLen - 2]) == 0xC2 &&
+               static_cast<uint8_t>(lastWord[lastLen - 1]) == 0xAD) {
       endsWithHyphen = true;
     }
     if (!endsWithHyphen) continue;
@@ -170,40 +198,48 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
     words[lastWordIdx].continuationIndex = nextWordIdx;
     words[nextWordIdx].continuationOf = lastWordIdx;
 
-    std::string firstPart = lastWord;
+    std::string firstPart(lastWord, lastLen);
     if (firstPart.back() == '-') {
       firstPart.pop_back();
     } else if (firstPart.size() >= 2 && static_cast<uint8_t>(firstPart[firstPart.size() - 2]) == 0xC2 &&
                static_cast<uint8_t>(firstPart[firstPart.size() - 1]) == 0xAD) {
       firstPart.erase(firstPart.size() - 2);
     }
-    std::string merged = firstPart + words[nextWordIdx].text;
-    words[lastWordIdx].lookupText = merged;
-    words[nextWordIdx].lookupText = merged;
+    const char* nextWord = textPool.data() + words[nextWordIdx].textOffset;
+    std::string merged = firstPart + nextWord;
+    uint16_t mergedOff = WordSelectNavigator::poolAppend(textPool, merged.c_str(), merged.size());
+    words[lastWordIdx].lookupOffset = mergedOff;
+    words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
+    words[nextWordIdx].lookupOffset = mergedOff;
+    words[nextWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
     words[nextWordIdx].continuationIndex = nextWordIdx;
   }
 
   // Cross-page hyphenation
   if (!nextPageFirstWord.empty() && !rows.empty()) {
     int lastWordIdx = rows.back().wordIndices.back();
-    const std::string& lastWord = words[lastWordIdx].text;
-    if (!lastWord.empty()) {
+    const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
+    uint16_t lastLen = words[lastWordIdx].textLen;
+    if (lastLen > 0) {
       bool endsWithHyphen = false;
-      if (lastWord.back() == '-') {
+      if (lastWord[lastLen - 1] == '-') {
         endsWithHyphen = true;
-      } else if (lastWord.size() >= 2 && static_cast<uint8_t>(lastWord[lastWord.size() - 2]) == 0xC2 &&
-                 static_cast<uint8_t>(lastWord[lastWord.size() - 1]) == 0xAD) {
+      } else if (lastLen >= 2 && static_cast<uint8_t>(lastWord[lastLen - 2]) == 0xC2 &&
+                 static_cast<uint8_t>(lastWord[lastLen - 1]) == 0xAD) {
         endsWithHyphen = true;
       }
       if (endsWithHyphen) {
-        std::string firstPart = lastWord;
+        std::string firstPart(lastWord, lastLen);
         if (firstPart.back() == '-') {
           firstPart.pop_back();
         } else if (firstPart.size() >= 2 && static_cast<uint8_t>(firstPart[firstPart.size() - 2]) == 0xC2 &&
                    static_cast<uint8_t>(firstPart[firstPart.size() - 1]) == 0xAD) {
           firstPart.erase(firstPart.size() - 2);
         }
-        words[lastWordIdx].lookupText = firstPart + nextPageFirstWord;
+        std::string merged = firstPart + nextPageFirstWord;
+        uint16_t off = WordSelectNavigator::poolAppend(textPool, merged.c_str(), merged.size());
+        words[lastWordIdx].lookupOffset = off;
+        words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
       }
     }
   }
@@ -215,7 +251,7 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
 
 // Shared helper: run findSimilar for `word` and launch suggestions activity, or show "not found" popup.
 void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
-  auto similar = Dictionary::findSimilar(word, 6);
+  auto similar = Dictionary::findSimilar(word, 6, cachePath.c_str());
   if (!similar.empty()) {
     startActivityForResult(
         std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
@@ -225,7 +261,7 @@ void DictionaryWordSelectActivity::handleNotFound(const std::string& word) {
             return;
           }
           const auto& wr = std::get<WordResult>(result.data);
-          std::string def = Dictionary::lookup(wr.word);
+          std::string def = Dictionary::lookup(wr.word, {}, cachePath.c_str());
           if (!def.empty()) {
             int chainStart = LookupHistory::addWord(cachePath, wr.word, LookupHistory::Status::Suggestion);
             startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, wr.word, def,
@@ -256,7 +292,7 @@ std::string DictionaryWordSelectActivity::buildPhraseFromRange(int fromIdx, int 
     const auto* w = navigator.getWordAt(i);
     if (!w) continue;
     if (!phrase.empty()) phrase += ' ';
-    phrase += w->text;
+    phrase += navigator.getDisplay(*w);
   }
   return Dictionary::cleanWord(phrase);
 }
@@ -350,7 +386,7 @@ void DictionaryWordSelectActivity::loop() {
 
     const auto* sel = navigator.getSelected();
     if (!sel) return;
-    std::string cleaned = Dictionary::cleanWord(sel->lookupText);
+    std::string cleaned = Dictionary::cleanWord(navigator.getLookup(*sel));
 
     if (cleaned.empty()) {
       GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
@@ -389,18 +425,18 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
       const auto* w = navigator.getWordAt(i);
       if (!w) continue;
       renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, w->text.c_str(), false, w->style);
+      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, navigator.getDisplay(*w), false, w->style);
     }
   } else {
     if (const auto* w = navigator.getSelected()) {
       renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, w->text.c_str(), false, w->style);
+      renderer.drawText(SETTINGS.getReaderFontId(), w->screenX, w->screenY, navigator.getDisplay(*w), false, w->style);
 
       // Highlight the other half of a hyphenated word
       if (const auto* other = navigator.getContinuation()) {
         renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
-        renderer.drawText(SETTINGS.getReaderFontId(), other->screenX, other->screenY, other->text.c_str(), false,
-                          other->style);
+        renderer.drawText(SETTINGS.getReaderFontId(), other->screenX, other->screenY, navigator.getDisplay(*other),
+                          false, other->style);
       }
     }
   }

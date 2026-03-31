@@ -45,12 +45,14 @@ void DictionarySelectActivity::onEnter() {
     Dictionary::isValidDictionary();
 
     selectedIndex = 0;  // default: None
-    const char* activePath = SETTINGS.dictionaryPath;
-    if (activePath[0] != '\0') {
-      for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
-        if (folderForIndex(i + 1) == activePath) {
-          selectedIndex = i + 1;
-          break;
+    {
+      const std::string activePath = Dictionary::readDictPath();
+      if (!activePath.empty()) {
+        for (int i = 0; i < static_cast<int>(dictFolders.size()); i++) {
+          if (folderForIndex(i + 1) == activePath) {
+            selectedIndex = i + 1;
+            break;
+          }
         }
       }
     }
@@ -59,11 +61,14 @@ void DictionarySelectActivity::onEnter() {
     currentBookDictPath = "";
     FsFile f;
     if (Storage.openFileForRead("DSEL", bookCachePath + "/dictionary.bin", f)) {
-      char buf[500];
-      int n = f.read(buf, sizeof(buf) - 1);
-      if (n > 0) {
-        buf[n] = '\0';
-        currentBookDictPath = std::string(buf);
+      const int sz = static_cast<int>(f.fileSize());
+      if (sz > 0) {
+        std::string path(sz, '\0');
+        const int n = f.read(&path[0], sz);
+        if (n > 0) {
+          path.resize(n);
+          currentBookDictPath = path;
+        }
       }
       f.close();
     }
@@ -80,19 +85,19 @@ void DictionarySelectActivity::onEnter() {
 
     // Build augmented "Use Global" label showing the active global dictionary name.
     // Path format: <dictRoot>/<folder>/<stem> — extract <folder>.
-    const char* globalPath = SETTINGS.dictionaryPath;
+    const std::string globalPath = Dictionary::readDictPath();
     std::string globalFolderName;
-    if (globalPath[0] == '\0') {
+    if (globalPath.empty()) {
       globalFolderName = tr(STR_DICT_NONE);
     } else {
-      std::string p(globalPath);
-      const size_t lastSlash = p.rfind('/');
+      const size_t lastSlash = globalPath.rfind('/');
       if (lastSlash != std::string::npos && lastSlash > 0) {
-        const size_t prevSlash = p.rfind('/', lastSlash - 1);
-        globalFolderName = (prevSlash != std::string::npos) ? p.substr(prevSlash + 1, lastSlash - prevSlash - 1)
-                                                            : p.substr(0, lastSlash);
+        const size_t prevSlash = globalPath.rfind('/', lastSlash - 1);
+        globalFolderName = (prevSlash != std::string::npos)
+                               ? globalPath.substr(prevSlash + 1, lastSlash - prevSlash - 1)
+                               : globalPath.substr(0, lastSlash);
       } else {
-        globalFolderName = p;
+        globalFolderName = globalPath;
       }
     }
     useGlobalLabel = std::string(tr(STR_DICT_USE_GLOBAL)) + " (" + globalFolderName + ")";
@@ -251,14 +256,11 @@ void DictionarySelectActivity::applySelection() {
   std::string folder = folderForIndex(selectedIndex);
 
   if (bookCachePath.empty()) {
-    // Settings mode: update global settings.
-    if (strcmp(SETTINGS.dictionaryPath, folder.c_str()) == 0 && Dictionary::getActivePath() == folder) return;
-    strncpy(SETTINGS.dictionaryPath, folder.c_str(), sizeof(SETTINGS.dictionaryPath) - 1);
-    SETTINGS.dictionaryPath[sizeof(SETTINGS.dictionaryPath) - 1] = '\0';
-    Dictionary::setActivePath(folder.empty() ? "" : folder.c_str());
-    SETTINGS.saveToFile();
+    // Settings mode: update global dictionary.bin.
+    if (Dictionary::readDictPath() == folder) return;
+    Dictionary::saveGlobalDictPath(folder.c_str());
   } else {
-    // Per-book mode: save to book cache, update active path.
+    // Per-book mode: save to book cache.
     FsFile f;
     if (Storage.openFileForWrite("DSEL", bookCachePath + "/dictionary.bin", f)) {
       f.write(reinterpret_cast<const uint8_t*>(folder.c_str()), folder.size());
@@ -266,8 +268,6 @@ void DictionarySelectActivity::applySelection() {
     } else {
       LOG_ERR("DSEL", "Could not save per-book dictionary");
     }
-    // If "Use Global" selected, restore global active path; otherwise use selected.
-    Dictionary::setActivePath(folder.empty() ? SETTINGS.dictionaryPath : folder.c_str());
     currentBookDictPath = folder;
   }
 }
@@ -307,20 +307,6 @@ void DictionarySelectActivity::loop() {
       selectedIndex > 0) {
     std::string folder = folderForIndex(selectedIndex);
     currentInfo = Dictionary::readInfo(folder.c_str());
-    // Pre-load raw .ifo content for the "View Raw" action within the metadata screen.
-    rawIfoContent = "";
-    char ifoPath[520];
-    snprintf(ifoPath, sizeof(ifoPath), "%s.ifo", folder.c_str());
-    FsFile ifoFile;
-    if (Storage.openFileForRead("DSEL", ifoPath, ifoFile)) {
-      char buf[512];
-      int n = ifoFile.read(buf, sizeof(buf) - 1);
-      ifoFile.close();
-      if (n > 0) {
-        buf[n] = '\0';
-        rawIfoContent = std::string(buf);
-      }
-    }
     showingInfo = true;
     showingRaw = false;
     requestUpdate();
@@ -426,41 +412,72 @@ void DictionarySelectActivity::render(RenderLock&&) {
     const int maxY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
     if (showingRaw) {
-      // --- Raw view: verbatim .ifo file text, character-wrapped per line ---
-      if (rawIfoContent.empty()) {
+      // --- Raw view: forward-only SD streaming, character-wrapped per line ---
+      char ifoPath[520];
+      snprintf(ifoPath, sizeof(ifoPath), "%s.ifo", folderForIndex(selectedIndex).c_str());
+      FsFile ifoFile;
+      if (!Storage.openFileForRead("DSEL", ifoPath, ifoFile)) {
         renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_DICT_NO_METADATA));
       } else {
-        // Single segBuf reused for both measurement and drawing.
         char segBuf[256];
-        const char* lineStart = rawIfoContent.c_str();
-        while (*lineStart && y + lineHeight <= maxY) {
-          const char* lineEnd = lineStart;
-          while (*lineEnd && *lineEnd != '\n') lineEnd++;
-          size_t lineLen = static_cast<size_t>(lineEnd - lineStart);
-          if (lineLen > 0 && lineStart[lineLen - 1] == '\r') lineLen--;
-
-          size_t pos = 0;
-          while (pos < lineLen && y + lineHeight <= maxY) {
-            size_t endPos = lineLen;
-            while (endPos > pos) {
-              size_t segLen = endPos - pos < sizeof(segBuf) - 1 ? endPos - pos : sizeof(segBuf) - 1;
-              memcpy(segBuf, lineStart + pos, segLen);
+        int segLen = 0;
+        while (y + lineHeight <= maxY) {
+          const int firstByte = ifoFile.read();
+          if (firstByte == -1) break;
+          if (firstByte == '\r') continue;
+          if (firstByte == '\n') {
+            if (segLen > 0) {
               segBuf[segLen] = '\0';
-              if (renderer.getTextWidth(UI_10_FONT_ID, segBuf) <= maxWidth) break;
-              endPos--;
+              renderer.drawText(UI_10_FONT_ID, x, y, segBuf);
+              segLen = 0;
             }
-            if (endPos == pos) endPos = pos + 1;
-            size_t segLen = endPos - pos < sizeof(segBuf) - 1 ? endPos - pos : sizeof(segBuf) - 1;
-            memcpy(segBuf, lineStart + pos, segLen);
+            y += lineHeight;
+            continue;
+          }
+          // Determine UTF-8 codepoint length from leading byte.
+          int cpLen = 1;
+          if ((firstByte & 0xE0) == 0xC0)
+            cpLen = 2;
+          else if ((firstByte & 0xF0) == 0xE0)
+            cpLen = 3;
+          else if ((firstByte & 0xF8) == 0xF0)
+            cpLen = 4;
+          char cpBuf[5];
+          cpBuf[0] = static_cast<char>(firstByte);
+          for (int i = 1; i < cpLen; i++) {
+            const int b = ifoFile.read();
+            if (b == -1) {
+              cpLen = i;
+              break;
+            }
+            cpBuf[i] = static_cast<char>(b);
+          }
+          // Flush segment if codepoint won't fit in segBuf.
+          if (segLen + cpLen >= static_cast<int>(sizeof(segBuf)) - 1) {
             segBuf[segLen] = '\0';
             renderer.drawText(UI_10_FONT_ID, x, y, segBuf);
             y += lineHeight;
-            pos = endPos;
+            segLen = 0;
           }
-
-          if (*lineEnd == '\0') break;
-          lineStart = lineEnd + 1;
+          memcpy(segBuf + segLen, cpBuf, cpLen);
+          segLen += cpLen;
+          segBuf[segLen] = '\0';
+          // If rendered width exceeds column, wrap before this codepoint.
+          if (renderer.getTextWidth(UI_10_FONT_ID, segBuf) > maxWidth) {
+            segBuf[segLen - cpLen] = '\0';
+            if (segLen - cpLen > 0) {
+              renderer.drawText(UI_10_FONT_ID, x, y, segBuf);
+              y += lineHeight;
+            }
+            memcpy(segBuf, cpBuf, cpLen);
+            segLen = cpLen;
+          }
         }
+        if (segLen > 0 && y + lineHeight <= maxY) {
+          segBuf[segLen] = '\0';
+          renderer.drawText(UI_10_FONT_ID, x, y, segBuf);
+        }
+        ifoFile.close();
       }
 
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
@@ -551,10 +568,9 @@ void DictionarySelectActivity::render(RenderLock&&) {
       [this](int index) { return std::string(nameForIndex(index)); }, nullptr, nullptr,
       [this](int index) -> std::string {
         // Show "Selected" marker for the currently active dictionary.
-        // In per-book mode compare against currentBookDictPath; in settings mode against SETTINGS.
+        // In per-book mode compare against currentBookDictPath; in settings mode against global.
         std::string folder = folderForIndex(index);
-        const std::string& activePath =
-            bookCachePath.empty() ? std::string(SETTINGS.dictionaryPath) : currentBookDictPath;
+        const std::string activePath = bookCachePath.empty() ? Dictionary::readDictPath() : currentBookDictPath;
         if (folder.empty() && activePath.empty()) return tr(STR_SELECTED);
         if (!folder.empty() && folder == activePath) return tr(STR_SELECTED);
         return "";

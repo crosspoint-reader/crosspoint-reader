@@ -77,21 +77,6 @@ void EpubReaderActivity::onEnter() {
     }
     f.close();
   }
-  // Load per-book dictionary override if one has been saved.
-  {
-    FsFile dictFile;
-    if (Storage.openFileForRead("ERS", epub->getCachePath() + "/dictionary.bin", dictFile)) {
-      char buf[500];
-      int n = dictFile.read(buf, sizeof(buf) - 1);
-      if (n > 0) {
-        buf[n] = '\0';
-        Dictionary::setActivePath(buf);
-        LOG_DBG("ERS", "Per-book dictionary: %s", buf);
-      }
-      dictFile.close();
-    }
-  }
-
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
   if (currentSpineIndex == 0) {
@@ -116,9 +101,6 @@ void EpubReaderActivity::onExit() {
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-
-  // Restore global dictionary (undo any per-book override).
-  Dictionary::setActivePath(SETTINGS.dictionaryPath);
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -298,25 +280,26 @@ void EpubReaderActivity::openReaderMenu() {
   // Extract the folder name from the active dictionary path for display in the menu.
   // Path format: /dictionary/<folder>/<stem> — we want <folder>.
   std::string activeDictName;
-  const char* rawDictPath = Dictionary::getActivePath();
-  if (rawDictPath == nullptr || rawDictPath[0] == '\0') {
-    activeDictName = tr(STR_DICT_NONE);
-  } else {
-    std::string p(rawDictPath);
-    const size_t lastSlash = p.rfind('/');
-    if (lastSlash != std::string::npos && lastSlash > 0) {
-      const size_t prevSlash = p.rfind('/', lastSlash - 1);
-      activeDictName = (prevSlash != std::string::npos) ? p.substr(prevSlash + 1, lastSlash - prevSlash - 1)
-                                                        : p.substr(0, lastSlash);
+  {
+    const std::string rawDictPath = Dictionary::readDictPath(epub->getCachePath().c_str());
+    if (rawDictPath.empty()) {
+      activeDictName = tr(STR_DICT_NONE);
     } else {
-      activeDictName = p;
+      const size_t lastSlash = rawDictPath.rfind('/');
+      if (lastSlash != std::string::npos && lastSlash > 0) {
+        const size_t prevSlash = rawDictPath.rfind('/', lastSlash - 1);
+        activeDictName = (prevSlash != std::string::npos) ? rawDictPath.substr(prevSlash + 1, lastSlash - prevSlash - 1)
+                                                          : rawDictPath.substr(0, lastSlash);
+      } else {
+        activeDictName = rawDictPath;
+      }
     }
   }
 
   startActivityForResult(
-      std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
-                                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                                               Dictionary::exists(), std::move(activeDictName)),
+      std::make_unique<EpubReaderMenuActivity>(
+          renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+          !currentPageFootnotes.empty(), Dictionary::exists(epub->getCachePath().c_str()), std::move(activeDictName)),
       [this](const ActivityResult& result) {
         // Always apply orientation change even if the menu was cancelled
         const auto& menu = std::get<MenuResult>(result.data);

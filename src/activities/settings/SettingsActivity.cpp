@@ -17,6 +17,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -56,14 +57,14 @@ void SettingsActivity::onEnter() {
   {
     auto dictSetting = SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::Dictionary);
     dictSetting.stringGetter = [] {
-      const char* path = SETTINGS.dictionaryPath;
-      if (path[0] == '\0') return std::string(tr(STR_DICT_NONE));
+      std::string path = Dictionary::readDictPath();
+      if (path.empty()) return std::string(tr(STR_DICT_NONE));
       // Path format: /dictionary/<folder>/<stem> — display the folder name.
-      const char* lastSlash = strrchr(path, '/');
-      if (lastSlash == nullptr || lastSlash == path) return std::string(path);
-      const std::string prefix(path, static_cast<size_t>(lastSlash - path));
-      const char* prevSlash = strrchr(prefix.c_str(), '/');
-      return std::string(prevSlash ? prevSlash + 1 : prefix.c_str());
+      const size_t lastSlash = path.rfind('/');
+      if (lastSlash == std::string::npos || lastSlash == 0) return path;
+      const size_t prevSlash = path.rfind('/', lastSlash - 1);
+      return (prevSlash != std::string::npos) ? path.substr(prevSlash + 1, lastSlash - prevSlash - 1)
+                                              : path.substr(0, lastSlash);
     };
     readerSettings.push_back(std::move(dictSetting));
   }

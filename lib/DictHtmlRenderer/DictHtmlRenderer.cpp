@@ -1,7 +1,7 @@
 #include "DictHtmlRenderer.h"
 
-#include <cstdio>
 #include <cstring>
+#include <string>
 
 // ---------------------------------------------------------------------------
 // Tag classification
@@ -91,7 +91,11 @@ const char* DictHtmlRenderer::findAttr(const XML_Char** atts, const char* name) 
 // Constructor / destructor / reset
 // ---------------------------------------------------------------------------
 
-DictHtmlRenderer::DictHtmlRenderer() { spans.reserve(64); }
+DictHtmlRenderer::DictHtmlRenderer() {
+  spans.reserve(64);
+  textBuf.reserve(512);
+  tagStack.reserve(8);
+}
 
 DictHtmlRenderer::~DictHtmlRenderer() {
   if (parser) {
@@ -102,9 +106,9 @@ DictHtmlRenderer::~DictHtmlRenderer() {
 
 void DictHtmlRenderer::reset() {
   spans.clear();
-  textBufPos = 0;
-  pendingLen = 0;
-  stackDepth = 0;
+  textBuf.clear();
+  pendingText.clear();
+  tagStack.clear();
   parseError = false;
   fmt = FormatState{};
   newlinePending = false;
@@ -126,18 +130,10 @@ void DictHtmlRenderer::reset() {
 // ---------------------------------------------------------------------------
 
 void DictHtmlRenderer::pushSpan() {
-  if (pendingLen == 0) return;
-
-  int spaceLeft = TEXT_BUF_SIZE - textBufPos - 1;
-  if (spaceLeft <= 0) {
-    pendingLen = 0;
-    return;
-  }
-
-  int toWrite = pendingLen < spaceLeft ? pendingLen : spaceLeft;
+  if (pendingText.empty()) return;
 
   StyledSpan span;
-  span.text = textBuf + textBufPos;
+  span.textOffset = static_cast<uint32_t>(textBuf.size());
   span.bold = fmt.bold;
   span.italic = fmt.italic;
   span.underline = fmt.underline;
@@ -146,11 +142,13 @@ void DictHtmlRenderer::pushSpan() {
   span.newlineBefore = newlinePending;
   span.isListItem = listItemPending;
 
-  memcpy(textBuf + textBufPos, pendingText, toWrite);
-  textBuf[textBufPos + toWrite] = '\0';
-  textBufPos += toWrite + 1;
+  if (textBuf.size() + pendingText.size() + 1 > textBuf.capacity()) {
+    textBuf.reserve(textBuf.capacity() + 512);
+  }
+  textBuf.insert(textBuf.end(), pendingText.begin(), pendingText.end());
+  textBuf.push_back('\0');
 
-  pendingLen = 0;
+  pendingText.clear();
   newlinePending = false;
   listItemPending = false;
 
@@ -169,8 +167,7 @@ void DictHtmlRenderer::emitText(const char* s, int len) {
       continue;
     }
     if (c == '\t') c = ' ';
-    if (pendingLen >= PENDING_SIZE - 1) pushSpan();
-    pendingText[pendingLen++] = c;
+    pendingText += c;
   }
 }
 
@@ -187,16 +184,16 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
   TagAction action = classify(name);
 
   // Propagate suppression from parent
-  bool parentSuppresses = self->stackDepth > 0 && self->stack[self->stackDepth - 1].suppressChildren;
+  bool parentSuppresses = !self->tagStack.empty() && self->tagStack.back().suppressChildren;
 
   StackEntry entry{};
   entry.action = action;
   entry.savedFmt = self->fmt;
   entry.suppressChildren = parentSuppresses;
-  entry.hasAbbrTitle = false;
-  entry.hasWikiText = false;
-  entry.pendingLenAtOpen = self->pendingLen;
+#ifdef DICT_HTML_RENDERER_TRACK_UNKNOWN
+  entry.pendingLenAtOpen = static_cast<int>(self->pendingText.size());
   entry.unknownTagName[0] = '\0';
+#endif
 
   if (!parentSuppresses) {
     switch (action) {
@@ -268,9 +265,7 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
         self->flushPending();  // Flush preceding text before body accumulates
         const char* title = findAttr(atts, "title");
         if (title) {
-          entry.hasAbbrTitle = true;
-          strncpy(entry.abbrTitle, title, sizeof(entry.abbrTitle) - 1);
-          entry.abbrTitle[sizeof(entry.abbrTitle) - 1] = '\0';
+          entry.abbrTitle = title;
         }
         break;
       }
@@ -278,9 +273,7 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
       case TagAction::WIKI_ANNOT: {
         const char* colon = strchr(name, ':');
         if (colon && colon[1] != '\0') {
-          entry.hasWikiText = true;
-          strncpy(entry.wikiText, colon + 1, sizeof(entry.wikiText) - 1);
-          entry.wikiText[sizeof(entry.wikiText) - 1] = '\0';
+          entry.wikiText = colon + 1;
         }
         break;
       }
@@ -289,7 +282,7 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
 #ifdef DICT_HTML_RENDERER_TRACK_UNKNOWN
         strncpy(entry.unknownTagName, name, sizeof(entry.unknownTagName) - 1);
         entry.unknownTagName[sizeof(entry.unknownTagName) - 1] = '\0';
-        entry.pendingLenAtOpen = self->pendingLen;
+        entry.pendingLenAtOpen = static_cast<int>(self->pendingText.size());
 #endif
         break;
 
@@ -298,18 +291,16 @@ void XMLCALL DictHtmlRenderer::onStart(void* ud, const XML_Char* name, const XML
     }
   }
 
-  if (self->stackDepth < MAX_STACK) {
-    self->stack[self->stackDepth++] = entry;
-  }
+  self->tagStack.push_back(entry);
 }
 
 void XMLCALL DictHtmlRenderer::onEnd(void* ud, const XML_Char* name) {
   (void)name;
   auto* self = static_cast<DictHtmlRenderer*>(ud);
   if (self->parseError) return;
-  if (self->stackDepth == 0) return;
+  if (self->tagStack.empty()) return;
 
-  StackEntry& entry = self->stack[self->stackDepth - 1];
+  StackEntry& entry = self->tagStack.back();
   bool suppressed = entry.suppressChildren || entry.action == TagAction::BLOCK_STRIP;
 
   if (!suppressed) {
@@ -351,21 +342,18 @@ void XMLCALL DictHtmlRenderer::onEnd(void* ud, const XML_Char* name) {
         break;
 
       case TagAction::ABBR:
-        if (entry.hasAbbrTitle) {
+        if (!entry.abbrTitle.empty()) {
           self->flushPending();
-          char buf[72];
-          int n = snprintf(buf, sizeof(buf), " (%s)", entry.abbrTitle);
-          if (n > 0 && n < static_cast<int>(sizeof(buf))) {
-            self->emitText(buf, n);
-          }
+          std::string expanded = " (" + entry.abbrTitle + ")";
+          self->emitText(expanded.c_str(), static_cast<int>(expanded.size()));
           self->flushPending();
         }
         break;
 
       case TagAction::WIKI_ANNOT:
-        if (entry.hasWikiText) {
+        if (!entry.wikiText.empty()) {
           self->flushPending();  // Flush preceding text before emitting wiki suffix
-          self->emitText(entry.wikiText, static_cast<int>(strlen(entry.wikiText)));
+          self->emitText(entry.wikiText.c_str(), static_cast<int>(entry.wikiText.size()));
           self->flushPending();
         }
         break;
@@ -379,9 +367,9 @@ void XMLCALL DictHtmlRenderer::onEnd(void* ud, const XML_Char* name) {
           // Extract tag contents: text accumulated between open and close
           char tagContents[64] = {};
           int contStart = entry.pendingLenAtOpen;
-          int contLen = self->pendingLen - contStart;
+          int contLen = static_cast<int>(self->pendingText.size()) - contStart;
           if (contLen > 0 && contLen < static_cast<int>(sizeof(tagContents))) {
-            memcpy(tagContents, self->pendingText + contStart, contLen);
+            memcpy(tagContents, self->pendingText.c_str() + contStart, contLen);
             tagContents[contLen] = '\0';
           }
           self->recordUnknownTag(entry.unknownTagName, wordBefore, tagContents, "");
@@ -398,15 +386,15 @@ void XMLCALL DictHtmlRenderer::onEnd(void* ud, const XML_Char* name) {
     self->fmt = entry.savedFmt;
   }
 
-  self->stackDepth--;
+  self->tagStack.pop_back();
 }
 
 void XMLCALL DictHtmlRenderer::onText(void* ud, const XML_Char* s, int len) {
   auto* self = static_cast<DictHtmlRenderer*>(ud);
   if (self->parseError) return;
 
-  if (self->stackDepth > 0) {
-    const StackEntry& top = self->stack[self->stackDepth - 1];
+  if (!self->tagStack.empty()) {
+    const StackEntry& top = self->tagStack.back();
     // Suppress text inside block-strip and for wiki-annot (emit from tag name, not body)
     if (top.suppressChildren || top.action == TagAction::WIKI_ANNOT || top.action == TagAction::BLOCK_STRIP) {
       return;
@@ -476,13 +464,12 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
 
   if (XML_Parse(parser, kOpen, static_cast<int>(sizeof(kOpen) - 1), 0) != XML_STATUS_OK) {
     parseError = true;
-    return spans;
   }
 
   // Walk the definition, feeding normal text runs directly to expat and
   // resolving HTML named entities inline. No heap allocation; entity names
   // compared in-place with strncmp — no copy, no extra stack buffer.
-  {
+  if (!parseError) {
     static const char* const kXmlBuiltins[] = {"amp", "lt", "gt", "quot", "apos"};
     int i = 0;
     while (i < len && !parseError) {
@@ -492,7 +479,7 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
       if (i > runStart) {
         if (XML_Parse(parser, html + runStart, i - runStart, 0) != XML_STATUS_OK) {
           parseError = true;
-          return spans;
+          break;
         }
       }
       if (i >= len) break;
@@ -517,39 +504,45 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
         }
 
         if (passThrough) {
-          // Feed entire &name; sequence to expat
           if (XML_Parse(parser, html + i, j - i + 1, 0) != XML_STATUS_OK) {
             parseError = true;
-            return spans;
+            break;
           }
         } else {
           const char* repl = lookupHtmlEntity(nameStart, nameLen);
           if (repl && repl[0] != '\0') {
             if (XML_Parse(parser, repl, static_cast<int>(strlen(repl)), 0) != XML_STATUS_OK) {
               parseError = true;
-              return spans;
+              break;
             }
           }
-          // else: zero-width (lrm/rlm) or unknown — silently drop
         }
         i = j + 1;
       } else {
         // Malformed entity — pass '&' through and continue
         if (XML_Parse(parser, html + i, 1, 0) != XML_STATUS_OK) {
           parseError = true;
-          return spans;
+          break;
         }
         i++;
       }
     }
   }
 
-  if (XML_Parse(parser, kClose, static_cast<int>(sizeof(kClose) - 1), 1) != XML_STATUS_OK) {
-    parseError = true;
-    return spans;
+  if (!parseError) {
+    if (XML_Parse(parser, kClose, static_cast<int>(sizeof(kClose) - 1), 1) != XML_STATUS_OK) {
+      parseError = true;
+    }
   }
 
   flushPending();
+
+  // textBuf is now stable — convert offsets to pointers.
+  // Done even on parse error so that partially accumulated spans are usable.
+  for (auto& s : spans) {
+    s.text = textBuf.data() + s.textOffset;
+  }
+
   return spans;
 }
 

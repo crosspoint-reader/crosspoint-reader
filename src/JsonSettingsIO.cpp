@@ -121,9 +121,6 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["frontButtonLeft"] = s.frontButtonLeft;
   doc["frontButtonRight"] = s.frontButtonRight;
 
-  // Dictionary path — managed by DictionarySelectActivity, not in SettingsList.
-  doc["dictionaryPath"] = s.dictionaryPath;
-
   String json;
   serializeJson(doc, json);
   return Storage.writeFile(path, json);
@@ -189,13 +186,6 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       }
       s.*(info.valuePtr) = v;
     }
-  }
-
-  // Dictionary path — managed by DictionarySelectActivity, not in SettingsList.
-  {
-    const std::string dictPath = doc["dictionaryPath"] | std::string("");
-    strncpy(s.dictionaryPath, dictPath.c_str(), sizeof(s.dictionaryPath) - 1);
-    s.dictionaryPath[sizeof(s.dictionaryPath) - 1] = '\0';
   }
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.

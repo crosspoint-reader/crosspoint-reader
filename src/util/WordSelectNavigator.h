@@ -17,8 +17,10 @@ class MappedInputManager;
 class WordSelectNavigator {
  public:
   struct WordInfo {
-    std::string text;
-    std::string lookupText;
+    uint16_t textOffset = 0;
+    uint16_t textLen = 0;
+    uint16_t lookupOffset = 0;
+    uint16_t lookupLen = 0;
     int16_t screenX = 0;
     int16_t screenY = 0;
     int16_t width = 0;
@@ -27,9 +29,6 @@ class WordSelectNavigator {
     int continuationOf = -1;     // index of hyphenated first half (EPUB only)
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool isIpa = false;
-    WordInfo(const std::string& t, int16_t x, int16_t y, int16_t w, int16_t r,
-             EpdFontFamily::Style s = EpdFontFamily::REGULAR)
-        : text(t), lookupText(t), screenX(x), screenY(y), width(w), row(r), style(s) {}
   };
 
   struct Row {
@@ -37,9 +36,18 @@ class WordSelectNavigator {
     std::vector<int> wordIndices;
   };
 
-  // Load pre-populated, pre-organised words and rows.
+  // Load pre-populated, pre-organised words, rows, and string pool.
   // Centres the initial selection on the middle row.
-  void load(std::vector<WordInfo> words, std::vector<Row> rows);
+  void load(std::vector<WordInfo> words, std::vector<Row> rows, std::string textPool);
+
+  // Access null-terminated display text from the pool.
+  const char* getDisplay(const WordInfo& w) const { return textPool.data() + w.textOffset; }
+  // Access null-terminated lookup text from the pool.
+  const char* getLookup(const WordInfo& w) const { return textPool.data() + w.lookupOffset; }
+
+  // Append a null-terminated string to a text pool. Returns the offset.
+  // Uses manual linear +256 growth to avoid std::string doubling.
+  static uint16_t poolAppend(std::string& pool, const char* s, size_t len);
 
   // Process navigation input for the current screen orientation.
   // Returns true if the selection changed (caller should requestUpdate).
@@ -69,6 +77,7 @@ class WordSelectNavigator {
  private:
   std::vector<WordInfo> words;
   std::vector<Row> rows;
+  std::string textPool;
   int currentRow = 0;
   int currentWordInRow = 0;
 

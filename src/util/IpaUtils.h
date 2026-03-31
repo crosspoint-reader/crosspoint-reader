@@ -21,18 +21,23 @@ struct IpaTextSpan {
 };
 
 /// Split a UTF-8 string into runs of IPA vs non-IPA codepoints.
-static inline std::vector<IpaTextSpan> splitIpaRuns(const std::string& text) {
-  std::vector<IpaTextSpan> result;
-  if (text.empty()) return result;
+/// Results are appended into `out`; caller must clear `out` before each call.
+///
+/// F-065 (future): Add getTextWidth(fontId, data, len, Style) and
+/// drawText(fontId, x, y, data, len, Style) overloads to GfxRenderer so that
+/// IpaTextSpan can become a non-owning view {const char* data, size_t len, bool isIpa},
+/// eliminating all per-run heap allocations here regardless of script or codepoint length.
+static inline void splitIpaRuns(const char* text, std::vector<IpaTextSpan>& out) {
+  if (!text || !text[0]) return;
   std::string current;
   bool currentIsIpa = false;
   bool first = true;
-  const auto* p = reinterpret_cast<const uint8_t*>(text.c_str());
+  const auto* p = reinterpret_cast<const uint8_t*>(text);
   uint32_t cp;
   while ((cp = utf8NextCodepoint(&p))) {
     const bool ipa = isIpaCodepoint(cp);
     if (!first && ipa != currentIsIpa) {
-      result.push_back({std::move(current), currentIsIpa});
+      out.push_back({std::move(current), currentIsIpa});
       current.clear();
     }
     currentIsIpa = ipa;
@@ -54,6 +59,5 @@ static inline std::vector<IpaTextSpan> splitIpaRuns(const std::string& text) {
       current += static_cast<char>(0x80 | (cp & 0x3F));
     }
   }
-  if (!current.empty()) result.push_back({std::move(current), currentIsIpa});
-  return result;
+  if (!current.empty()) out.push_back({std::move(current), currentIsIpa});
 }

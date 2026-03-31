@@ -28,7 +28,8 @@ class DictionaryLookupController {
   // How the word was ultimately resolved when FoundDefinition fires.
   enum class FoundStatus { Direct, Stem, AltForm, Suggestion };
 
-  DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput, Activity& owner);
+  DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput, Activity& owner,
+                             std::string cachePath = "");
 
   // Start a lookup.  Transitions Idle → LookingUp, spawns background task.
   void startLookup(const std::string& word);
@@ -65,6 +66,7 @@ class DictionaryLookupController {
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
   Activity& owner;
+  std::string cachePath;
 
   LookupState state = LookupState::Idle;
   FoundStatus foundStatus = FoundStatus::Direct;

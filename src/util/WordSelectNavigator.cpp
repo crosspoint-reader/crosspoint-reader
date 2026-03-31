@@ -6,18 +6,28 @@
 
 #include "MappedInputManager.h"
 
-void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r) {
+void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r, std::string pool) {
   words = std::move(w);
   rows = std::move(r);
+  textPool = std::move(pool);
   currentRow = static_cast<int>(rows.size()) / 2;
   currentWordInRow = (!rows.empty() && !rows[currentRow].wordIndices.empty())
                          ? static_cast<int>(rows[currentRow].wordIndices.size()) / 2
                          : 0;
 }
 
+uint16_t WordSelectNavigator::poolAppend(std::string& pool, const char* s, size_t len) {
+  uint16_t offset = static_cast<uint16_t>(pool.size());
+  if (pool.size() + len + 1 > pool.capacity()) pool.reserve(pool.capacity() + 256);
+  pool.append(s, len);
+  pool.push_back('\0');
+  return offset;
+}
+
 void WordSelectNavigator::reset() {
   words.clear();
   rows.clear();
+  textPool.clear();
   currentRow = 0;
   currentWordInRow = 0;
 }

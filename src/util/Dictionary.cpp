@@ -6,13 +6,15 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-
-#include "CrossPointSettings.h"
+#include <iterator>
 
 // Static member definitions
-char Dictionary::activeFolderPath[500] = "";
-char Dictionary::pathBuf[520] = "";
 char Dictionary::wordBuf[256] = "";
+
+namespace {
+constexpr char DICT_BIN[] = "dictionary.bin";
+constexpr char GLOBAL_DICT_DIR[] = "/.crosspoint";
+}  // namespace
 
 // OFT file constants (StarDict Cache format, verified against real files).
 // Header: 30-byte text + 8-byte fixed magic = 38 bytes total.
@@ -21,62 +23,94 @@ static constexpr uint32_t OFT_HEADER_SIZE = 38;
 static constexpr uint32_t OFT_STRIDE = 32;  // words per page
 
 // ---------------------------------------------------------------------------
-// Path helpers
+// Path management
 // ---------------------------------------------------------------------------
 
-void Dictionary::buildPath(const char* ext) {
-  // activeFolderPath is the full base path (e.g. /dictionary/dict-en-en/dict-data).
-  // Callers pass just the extension (e.g. "idx"), giving /dictionary/.../dict-data.idx.
-  // Result written into the shared static pathBuf.
-  snprintf(pathBuf, sizeof(pathBuf), "%s.%s", activeFolderPath, ext);
-}
+std::string Dictionary::readDictPath(const char* cachePath) {
+  char binPath[128];
 
-// ---------------------------------------------------------------------------
-// Active path management
-// ---------------------------------------------------------------------------
-
-void Dictionary::setActivePath(const char* folderPath) {
-  if (folderPath == nullptr || folderPath[0] == '\0') {
-    activeFolderPath[0] = '\0';
-  } else {
-    strncpy(activeFolderPath, folderPath, sizeof(activeFolderPath) - 1);
-    activeFolderPath[sizeof(activeFolderPath) - 1] = '\0';
+  // Try per-book dictionary.bin first when cachePath is provided.
+  if (cachePath && cachePath[0] != '\0') {
+    snprintf(binPath, sizeof(binPath), "%s/%s", cachePath, DICT_BIN);
+    FsFile f;
+    if (Storage.openFileForRead("DICT", binPath, f)) {
+      const int sz = static_cast<int>(f.fileSize());
+      if (sz > 0) {
+        std::string result(sz, '\0');
+        const int n = f.read(&result[0], sz);
+        f.close();
+        if (n > 0) {
+          result.resize(static_cast<size_t>(n));
+          return result;
+        }
+      } else {
+        f.close();
+      }
+    }
+    // Per-book file absent or empty ("Use Global") — fall through to global.
   }
+
+  // Read global dictionary.bin.
+  snprintf(binPath, sizeof(binPath), "%s/%s", GLOBAL_DICT_DIR, DICT_BIN);
+  FsFile f;
+  if (!Storage.openFileForRead("DICT", binPath, f)) return "";
+  const int sz = static_cast<int>(f.fileSize());
+  if (sz <= 0) {
+    f.close();
+    return "";
+  }
+  std::string result(sz, '\0');
+  const int n = f.read(&result[0], sz);
+  f.close();
+  if (n <= 0) return "";
+  result.resize(static_cast<size_t>(n));
+  return result;
 }
 
-const char* Dictionary::getActivePath() { return activeFolderPath; }
+void Dictionary::saveGlobalDictPath(const char* folderPath) {
+  char binPath[128];
+  snprintf(binPath, sizeof(binPath), "%s/%s", GLOBAL_DICT_DIR, DICT_BIN);
+  FsFile f;
+  if (!Storage.openFileForWrite("DICT", binPath, f)) {
+    LOG_ERR("DICT", "Could not write global dictionary path");
+    return;
+  }
+  if (folderPath && folderPath[0] != '\0') {
+    f.write(reinterpret_cast<const uint8_t*>(folderPath), strlen(folderPath));
+  }
+  f.close();
+}
 
 // ---------------------------------------------------------------------------
 // Validity checks
 // ---------------------------------------------------------------------------
 
-bool Dictionary::exists() {
-  if (activeFolderPath[0] == '\0') return false;
-  buildPath("idx");
-  if (!Storage.exists(pathBuf)) return false;
-  buildPath("dict");
-  return Storage.exists(pathBuf);
+bool Dictionary::exists(const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return false;
+  std::string p = folderPath + ".idx";
+  if (!Storage.exists(p.c_str())) return false;
+  p = folderPath + ".dict";
+  return Storage.exists(p.c_str());
 }
 
-bool Dictionary::hasAltForms() {
-  if (activeFolderPath[0] == '\0') return false;
-  buildPath("syn");
-  return Storage.exists(pathBuf);
+bool Dictionary::hasAltForms(const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return false;
+  std::string p = folderPath + ".syn";
+  return Storage.exists(p.c_str());
 }
 
 bool Dictionary::isValidDictionary() {
-  const char* folderPath = SETTINGS.dictionaryPath;
-  if (folderPath[0] == '\0') return false;
-  // .ifo is not required; a dictionary without metadata is still usable.
-  snprintf(pathBuf, sizeof(pathBuf), "%s.idx", folderPath);
-  const bool idxExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath);
-  const bool valid = idxExists && Storage.exists(pathBuf);
+  std::string folderPath = readDictPath(nullptr);
+  if (folderPath.empty()) return false;
+  std::string p = folderPath + ".idx";
+  const bool idxExists = Storage.exists(p.c_str());
+  p = folderPath + ".dict";
+  const bool valid = idxExists && Storage.exists(p.c_str());
   if (!valid) {
     LOG_DBG("DICT", "Stored dictionary path no longer valid, resetting");
-    SETTINGS.dictionaryPath[0] = '\0';
-    setActivePath("");
-    SETTINGS.saveToFile();
+    saveGlobalDictPath("");
   }
   return valid;
 }
@@ -89,10 +123,10 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
   DictInfo info;
   if (folderPath == nullptr || folderPath[0] == '\0') return info;
 
-  snprintf(pathBuf, sizeof(pathBuf), "%s.ifo", folderPath);
+  std::string ifoPath = std::string(folderPath) + ".ifo";
 
   FsFile file;
-  if (!Storage.openFileForRead("DICT", pathBuf, file)) return info;
+  if (!Storage.openFileForRead("DICT", ifoPath.c_str(), file)) return info;
 
   // Validate header line byte by byte — no line buffer needed.
   static constexpr const char HEADER[] = "StarDict's dict ifo file";
@@ -105,7 +139,11 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
     }
   }
   // Skip remainder of header line.
-  { int b; while ((b = file.read()) >= 0 && b != '\n') {} }
+  {
+    int b;
+    while ((b = file.read()) >= 0 && b != '\n') {
+    }
+  }
 
   // Serial key=value parse. State fits in ~50 bytes vs the old 512-byte slurp buffer.
   char keyBuf[24];  // longest key: "sametypesequence" = 16 chars
@@ -131,24 +169,48 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
       } else if (c == '=') {
         keyBuf[keyLen] = '\0';
         keyLen = 0;
-        valDst = nullptr; valCap = 0; valWritten = 0;
-        isNumField = false; valNum = nullptr; numAccum = 0;
-        if      (strcmp(keyBuf, "bookname") == 0)         { valDst = info.bookname;         valCap = sizeof(info.bookname) - 1; }
-        else if (strcmp(keyBuf, "sametypesequence") == 0) { valDst = info.sametypesequence; valCap = sizeof(info.sametypesequence) - 1; }
-        else if (strcmp(keyBuf, "website") == 0)          { valDst = info.website;          valCap = sizeof(info.website) - 1; }
-        else if (strcmp(keyBuf, "date") == 0)             { valDst = info.date;             valCap = sizeof(info.date) - 1; }
-        else if (strcmp(keyBuf, "description") == 0)      { valDst = info.description;      valCap = sizeof(info.description) - 1; }
-        else if (strcmp(keyBuf, "lang") == 0)             { valDst = info.lang;             valCap = sizeof(info.lang) - 1; }
-        else if (strcmp(keyBuf, "wordcount") == 0)        { isNumField = true; valNum = &info.wordcount; }
-        else if (strcmp(keyBuf, "idxfilesize") == 0)      { isNumField = true; valNum = &info.idxfilesize; }
-        else if (strcmp(keyBuf, "synwordcount") == 0)     { isNumField = true; valNum = &info.altFormCount; info.hasAltForms = true; }
+        valDst = nullptr;
+        valCap = 0;
+        valWritten = 0;
+        isNumField = false;
+        valNum = nullptr;
+        numAccum = 0;
+        if (strcmp(keyBuf, "bookname") == 0) {
+          valDst = info.bookname;
+          valCap = sizeof(info.bookname) - 1;
+        } else if (strcmp(keyBuf, "sametypesequence") == 0) {
+          valDst = info.sametypesequence;
+          valCap = sizeof(info.sametypesequence) - 1;
+        } else if (strcmp(keyBuf, "website") == 0) {
+          valDst = info.website;
+          valCap = sizeof(info.website) - 1;
+        } else if (strcmp(keyBuf, "date") == 0) {
+          valDst = info.date;
+          valCap = sizeof(info.date) - 1;
+        } else if (strcmp(keyBuf, "description") == 0) {
+          valDst = info.description;
+          valCap = sizeof(info.description) - 1;
+        } else if (strcmp(keyBuf, "lang") == 0) {
+          valDst = info.lang;
+          valCap = sizeof(info.lang) - 1;
+        } else if (strcmp(keyBuf, "wordcount") == 0) {
+          isNumField = true;
+          valNum = &info.wordcount;
+        } else if (strcmp(keyBuf, "idxfilesize") == 0) {
+          isNumField = true;
+          valNum = &info.idxfilesize;
+        } else if (strcmp(keyBuf, "synwordcount") == 0) {
+          isNumField = true;
+          valNum = &info.altFormCount;
+          info.hasAltForms = true;
+        }
         readingVal = true;
       } else if (keyLen < static_cast<int>(sizeof(keyBuf) - 1)) {
         keyBuf[keyLen++] = c;
       }
     } else {
       if (c == '\n') {
-        if (valDst)              valDst[valWritten] = '\0';
+        if (valDst) valDst[valWritten] = '\0';
         if (isNumField && valNum) *valNum = numAccum;
         readingVal = false;
         keyLen = 0;
@@ -162,11 +224,10 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
 
   file.close();
 
-  // Check for compressed .dict.dz (but no .dict) — reuse pathBuf.
-  snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath);
-  const bool dictExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.dict.dz", folderPath);
-  info.isCompressed = !dictExists && Storage.exists(pathBuf);
+  std::string p = std::string(folderPath) + ".dict";
+  const bool dictExists = Storage.exists(p.c_str());
+  p = std::string(folderPath) + ".dict.dz";
+  info.isCompressed = !dictExists && Storage.exists(p.c_str());
 
   info.valid = true;
   return info;
@@ -263,8 +324,6 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, 
     return val;
   };
 
-
-
   // Binary search: find the last page whose first word <= target
   uint32_t lo = 0, hi = numPages - 1;
   while (lo < hi) {
@@ -287,12 +346,10 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, 
 // Reading helpers
 // ---------------------------------------------------------------------------
 
-std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
-  if (!exists()) return "";
-
-  buildPath("dict");
+std::string Dictionary::readDefinition(const std::string& folderPath, uint32_t offset, uint32_t size) {
+  std::string p = folderPath + ".dict";
   FsFile dict;
-  if (!Storage.openFileForRead("DICT", pathBuf, dict)) return "";
+  if (!Storage.openFileForRead("DICT", p.c_str(), dict)) return "";
 
   dict.seekSet(offset);
 
@@ -309,20 +366,21 @@ std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
 // Lookup (zero persistent RAM — no static index)
 // ---------------------------------------------------------------------------
 
-std::string Dictionary::lookup(const std::string& word, const DictLookupCallbacks& cbs) {
-  if (!exists()) return "";
+std::string Dictionary::lookup(const std::string& word, const DictLookupCallbacks& cbs, const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return "";
 
-  buildPath("idx");
+  std::string p = folderPath + ".idx";
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", pathBuf, idx)) return "";
+  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return "";
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  buildPath("idx.oft");
+  p = folderPath + ".idx.oft";
   FsFile oft;
-  if (Storage.openFileForRead("DICT", pathBuf, oft)) {
+  if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
     oft.close();
   }
@@ -331,7 +389,6 @@ std::string Dictionary::lookup(const std::string& word, const DictLookupCallback
 
   // Linear scan within the identified page (≤ OFT_STRIDE entries)
   idx.seekSet(startByte);
-
 
   while (static_cast<uint32_t>(idx.position()) < endByte) {
     if (cbs.shouldCancel && cbs.shouldCancel(cbs.ctx)) {
@@ -354,7 +411,7 @@ std::string Dictionary::lookup(const std::string& word, const DictLookupCallback
                           (static_cast<uint32_t>(suffix[6]) << 8) | static_cast<uint32_t>(suffix[7]);
       idx.close();
       if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
-      return readDefinition(dictOffset, dictSize);
+      return readDefinition(folderPath, dictOffset, dictSize);
     }
 
     if (cmp > 0) break;  // Passed the target alphabetically — not found
@@ -370,19 +427,19 @@ std::string Dictionary::lookup(const std::string& word, const DictLookupCallback
 // ---------------------------------------------------------------------------
 
 // Resolve the word at 0-based ordinal in .idx using .idx.oft for fast page seek.
-std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
-  buildPath("idx");
+std::string Dictionary::wordAtOrdinal(const std::string& folderPath, uint32_t ordinal) {
+  std::string p = folderPath + ".idx";
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", pathBuf, idx)) return "";
+  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return "";
 
   const uint32_t pageNum = ordinal / OFT_STRIDE;
   const uint32_t withinPage = ordinal % OFT_STRIDE;
   uint32_t pageStartByte = 0;
 
   if (pageNum > 0) {
-    buildPath("idx.oft");
+    p = folderPath + ".idx.oft";
     FsFile oft;
-    if (Storage.openFileForRead("DICT", pathBuf, oft)) {
+    if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
       oft.seekSet(OFT_HEADER_SIZE + (pageNum - 1) * 4);
       uint8_t raw[4];
       if (oft.read(raw, 4) == 4) memcpy(&pageStartByte, raw, 4);  // LE uint32
@@ -391,8 +448,6 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
   }
 
   idx.seekSet(pageStartByte);
-
-
 
   // Skip `withinPage` entries to reach the target
   for (uint32_t i = 0; i < withinPage; i++) {
@@ -413,26 +468,28 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
   return std::string(wordBuf, static_cast<size_t>(len));
 }
 
-std::string Dictionary::resolveAltForm(const std::string& word) {
-  if (!hasAltForms()) return "";
+std::string Dictionary::resolveAltForm(const std::string& word, const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return "";
 
-  buildPath("syn");
+  std::string p = folderPath + ".syn";
+  if (!Storage.exists(p.c_str())) return "";
+
   FsFile syn;
-  if (!Storage.openFileForRead("DICT", pathBuf, syn)) return "";
+  if (!Storage.openFileForRead("DICT", p.c_str(), syn)) return "";
 
   const uint32_t synFileSize = static_cast<uint32_t>(syn.fileSize());
   uint32_t startByte = 0;
   uint32_t endByte = synFileSize;
 
-  buildPath("syn.oft");
+  p = folderPath + ".syn.oft";
   FsFile oft;
-  if (Storage.openFileForRead("DICT", pathBuf, oft)) {
+  if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
     findPageBounds(oft, syn, synFileSize, word.c_str(), &startByte, &endByte);
     oft.close();
   }
 
   syn.seekSet(startByte);
-
 
   while (static_cast<uint32_t>(syn.position()) < endByte) {
     int len = readWordInto(syn, wordBuf, sizeof(wordBuf));
@@ -447,7 +504,7 @@ std::string Dictionary::resolveAltForm(const std::string& word) {
       uint32_t originalIdx = (static_cast<uint32_t>(idxBuf[0]) << 24) | (static_cast<uint32_t>(idxBuf[1]) << 16) |
                              (static_cast<uint32_t>(idxBuf[2]) << 8) | static_cast<uint32_t>(idxBuf[3]);
       syn.close();
-      return wordAtOrdinal(originalIdx);
+      return wordAtOrdinal(folderPath, originalIdx);
     }
 
     if (cmp > 0) break;
@@ -627,11 +684,9 @@ std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
   // Deduplicate preserving insertion order
   std::vector<std::string> deduped;
   deduped.reserve(variants.size());
-  for (const auto& v : variants) {
-    if (std::find(deduped.begin(), deduped.end(), v) != deduped.end()) continue;
-    // cppcheck-suppress useStlAlgorithm
-    deduped.push_back(v);
-  }
+  std::copy_if(variants.begin(), variants.end(), std::back_inserter(deduped), [&deduped](const std::string& v) {
+    return std::find(deduped.begin(), deduped.end(), v) == deduped.end();
+  });
   return deduped;
 }
 
@@ -666,20 +721,21 @@ int Dictionary::editDistance(const std::string& a, const std::string& b, int max
   return dp[n];
 }
 
-std::vector<std::string> Dictionary::findSimilar(const std::string& word, int maxResults) {
-  if (!exists()) return {};
+std::vector<std::string> Dictionary::findSimilar(const std::string& word, int maxResults, const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return {};
 
-  buildPath("idx");
+  std::string p = folderPath + ".idx";
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", pathBuf, idx)) return {};
+  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return {};
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t centerStart = 0;
   uint32_t centerEnd = idxFileSize;
 
-  buildPath("idx.oft");
+  p = folderPath + ".idx.oft";
   FsFile oft;
-  const bool hasOft = Storage.openFileForRead("DICT", pathBuf, oft);
+  const bool hasOft = Storage.openFileForRead("DICT", p.c_str(), oft);
 
   if (hasOft) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &centerStart, &centerEnd);
@@ -729,8 +785,6 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
   };
   std::vector<Candidate> candidates;
   candidates.reserve(static_cast<size_t>(maxResults) * 4);
-
-
 
   while (static_cast<uint32_t>(idx.position()) < scanEnd) {
     int len = readWordInto(idx, wordBuf, sizeof(wordBuf));

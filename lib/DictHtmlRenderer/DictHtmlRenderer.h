@@ -3,6 +3,7 @@
 #include <expat.h>
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 /**
@@ -10,6 +11,7 @@
  */
 struct StyledSpan {
   const char* text = nullptr;  // Points into renderer-owned buffer; valid until next render() call
+  uint32_t textOffset = 0;     // Internal: byte offset into textBuf; converted to text after render()
   bool bold = false;
   bool italic = false;
   bool underline = false;
@@ -101,14 +103,14 @@ class DictHtmlRenderer {
     TagAction action;
     FormatState savedFmt;
     bool suppressChildren;
-    char abbrTitle[64];
-    bool hasAbbrTitle;
-    char wikiText[64];
-    bool hasWikiText;
+    std::string abbrTitle;
+    std::string wikiText;
+#ifdef DICT_HTML_RENDERER_TRACK_UNKNOWN
     // For unknown tag tracking: tag name recorded at open
     char unknownTagName[48];
     // Pending text length at the time unknown tag opened (to extract contents later)
     int pendingLenAtOpen;
+#endif
   };
 
   void reset();
@@ -116,9 +118,7 @@ class DictHtmlRenderer {
   void emitText(const char* s, int len);
   void flushPending();
 
-  static constexpr int MAX_STACK = 32;
-  StackEntry stack[MAX_STACK];
-  int stackDepth = 0;
+  std::vector<StackEntry> tagStack;
 
   FormatState fmt;
 
@@ -126,13 +126,9 @@ class DictHtmlRenderer {
   bool newlinePending = false;
   bool listItemPending = false;
 
-  static constexpr int TEXT_BUF_SIZE = 8192;
-  char textBuf[TEXT_BUF_SIZE];
-  int textBufPos = 0;
+  std::vector<char> textBuf;
 
-  static constexpr int PENDING_SIZE = 512;
-  char pendingText[PENDING_SIZE];
-  int pendingLen = 0;
+  std::string pendingText;
 
   std::vector<StyledSpan> spans;
 

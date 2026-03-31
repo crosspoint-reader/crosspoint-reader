@@ -39,9 +39,6 @@ class DictionarySelectActivity final : public Activity {
   bool showingRaw = false;
   // Parsed metadata from the .ifo file (populated on long-press).
   DictInfo currentInfo;
-  // Raw text content of the .ifo file; empty if no .ifo exists (populated on long-press).
-  std::string rawIfoContent;
-
   // Suppresses the Confirm release that bleeds through from the parent activity launch.
   bool ignoreNextConfirmRelease = false;
 
