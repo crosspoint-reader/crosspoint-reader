@@ -471,8 +471,8 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
   XML_SetCharacterDataHandler(parser, onText);
 
   // Wrap fragment in a synthetic root element so expat sees well-formed XML
-  static const char kOpen[] = "<_root>";
-  static const char kClose[] = "</_root>";
+  static constexpr const char kOpen[] = "<_root>";
+  static constexpr const char kClose[] = "</_root>";
 
   if (XML_Parse(parser, kOpen, static_cast<int>(sizeof(kOpen) - 1), 0) != XML_STATUS_OK) {
     parseError = true;

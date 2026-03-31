@@ -245,8 +245,8 @@ class CrossPointSettings {
   int getDefinitionFontId() const;
   float getDefinitionLineCompression() const;
   int getLookupHistoryCapValue() const {
-    static constexpr int vals[] = {25, 50, 100, 200, 500};
-    return lookupHistoryCap < LOOKUP_HISTORY_CAP_COUNT ? vals[lookupHistoryCap] : 100;
+    static constexpr int CAPACITY_VALS[] = {25, 50, 100, 200, 500};
+    return lookupHistoryCap < LOOKUP_HISTORY_CAP_COUNT ? CAPACITY_VALS[lookupHistoryCap] : 100;
   }
 
   // If count_only is true, returns the number of settings items that would be written.

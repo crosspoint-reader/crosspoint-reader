@@ -14,6 +14,7 @@ std::string LookupHistory::filePath(const std::string& cachePath) { return cache
 // Read all entries from the file (oldest first). Returns empty vector on error.
 std::vector<LookupHistory::Entry> LookupHistory::readAll(const std::string& path) {
   std::vector<Entry> entries;
+  entries.reserve(32);
 
   FsFile file;
   if (!Storage.openFileForRead("LH", path.c_str(), file)) return entries;

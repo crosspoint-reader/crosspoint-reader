@@ -97,8 +97,8 @@ void DictPrepareActivity::onEnter() {
 void DictPrepareActivity::detectSteps() {
   stepCount = 0;
 
-  // Single buffer reused for all path checks — 7 x char[520] simultaneously would waste 3120 bytes.
-  char pathBuf[520];
+  // Single buffer reused for all path checks — made static to keep it off the stack.
+  static char pathBuf[520];
 
   snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath.c_str());
   const bool dictExists = Storage.exists(pathBuf);

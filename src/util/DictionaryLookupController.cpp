@@ -179,14 +179,22 @@ void DictionaryLookupController::taskEntry(void* param) {
   vTaskDelete(nullptr);
 }
 
+void DictionaryLookupController::progressCallback(void* ctx, int percent) {
+  auto* self = static_cast<DictionaryLookupController*>(ctx);
+  self->lookupProgress = percent;
+  self->owner.requestUpdate(true);
+}
+
+bool DictionaryLookupController::cancelCallback(void* ctx) {
+  return static_cast<DictionaryLookupController*>(ctx)->lookupCancelRequested;
+}
+
 void DictionaryLookupController::runLookup() {
-  foundDefinition = Dictionary::lookup(
-      lookupWord,
-      [this](int percent) {
-        lookupProgress = percent;
-        owner.requestUpdate(true);
-      },
-      [this]() -> bool { return lookupCancelRequested; });
+  DictLookupCallbacks cbs;
+  cbs.ctx = this;
+  cbs.onProgress = &DictionaryLookupController::progressCallback;
+  cbs.shouldCancel = &DictionaryLookupController::cancelCallback;
+  foundDefinition = Dictionary::lookup(lookupWord, cbs);
   lookupCancelled = lookupCancelRequested;
   lookupDone = true;
   owner.requestUpdate(true);

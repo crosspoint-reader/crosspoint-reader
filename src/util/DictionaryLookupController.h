@@ -84,4 +84,6 @@ class DictionaryLookupController {
 
   void runLookup();
   static void taskEntry(void* param);
+  static void progressCallback(void* ctx, int percent);
+  static bool cancelCallback(void* ctx);
 };

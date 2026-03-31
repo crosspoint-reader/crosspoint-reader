@@ -2,9 +2,16 @@
 #include <HalStorage.h>
 
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <vector>
+
+// Plain-function-pointer callbacks for Dictionary::lookup.
+// Zero overhead: no heap allocation, no vtable, no std::function bloat.
+struct DictLookupCallbacks {
+  void* ctx = nullptr;
+  void (*onProgress)(void* ctx, int percent) = nullptr;
+  bool (*shouldCancel)(void* ctx) = nullptr;
+};
 
 // Metadata parsed from a StarDict .ifo file.
 struct DictInfo {
@@ -47,8 +54,7 @@ class Dictionary {
   static DictInfo readInfo(const char* folderPath);
 
   // Look up word in .idx (via .idx.oft if present). Returns definition or empty string.
-  static std::string lookup(const std::string& word, const std::function<void(int percent)>& onProgress = nullptr,
-                            const std::function<bool()>& shouldCancel = nullptr);
+  static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {});
 
   // Look up word in .syn (via .syn.oft if present).
   // Returns the canonical headword from .idx, or empty string if not found.
@@ -66,6 +72,10 @@ class Dictionary {
   // Shared path construction buffer. Dictionary functions are always called
   // sequentially; this avoids putting a 520-byte array on the stack in every caller.
   static char pathBuf[520];
+
+  // Shared word read buffer. Lookup functions are single-threaded; this avoids
+  // putting a 256-byte array on the stack in every caller (and 512B peak when nested).
+  static char wordBuf[256];
 
   // Build full file paths from the active base path.
   static void buildPath(const char* ext);

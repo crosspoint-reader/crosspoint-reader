@@ -49,7 +49,9 @@ void DictionaryWordSelectActivity::onExit() {
 void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator::WordInfo>& words,
                                                 std::vector<WordSelectNavigator::Row>& rows) {
   words.clear();
+  words.reserve(64);
   rows.clear();
+  rows.reserve(16);
 
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageLine) continue;
@@ -81,6 +83,7 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
 
       // Split on en-dash (U+2013: E2 80 93) and em-dash (U+2014: E2 80 94)
       std::vector<size_t> splitStarts;
+      splitStarts.reserve(4);
       size_t partStart = 0;
       for (size_t i = 0; i < wordText.size();) {
         if (i + 2 < wordText.size() && static_cast<uint8_t>(wordText[i]) == 0xE2 &&

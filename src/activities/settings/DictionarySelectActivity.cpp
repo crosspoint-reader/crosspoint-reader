@@ -112,7 +112,9 @@ void DictionarySelectActivity::onExit() { Activity::onExit(); }
 
 void DictionarySelectActivity::scanDictionaries() {
   dictFolders.clear();
+  dictFolders.reserve(16);
   dictStems.clear();
+  dictStems.reserve(16);
   dictRoot.clear();
 
   for (const auto* candidate : DICT_ROOT_CANDIDATES) {
@@ -215,7 +217,9 @@ void DictionarySelectActivity::scanDictionaries() {
                 return *s1 == '\0' && *s2 != '\0';
               });
     dictFolders.clear();
+    dictFolders.reserve(pairs.size());
     dictStems.clear();
+    dictStems.reserve(pairs.size());
     for (auto& p : pairs) {
       dictFolders.push_back(std::move(p.first));
       dictStems.push_back(std::move(p.second));
@@ -231,7 +235,7 @@ std::string DictionarySelectActivity::folderForIndex(int index) const {
   if (index <= 0 || index > static_cast<int>(dictFolders.size())) return "";
   // Returns the full base path: <dictRoot>/<folder>/<stem>
   // All file access appends an extension to this (e.g. basePath + ".idx").
-  char fullPath[520];
+  static char fullPath[520];
   snprintf(fullPath, sizeof(fullPath), "%s/%s/%s", dictRoot.c_str(), dictFolders[index - 1].c_str(),
            dictStems[index - 1].c_str());
   return std::string(fullPath);
@@ -248,6 +252,7 @@ void DictionarySelectActivity::applySelection() {
 
   if (bookCachePath.empty()) {
     // Settings mode: update global settings.
+    if (strcmp(SETTINGS.dictionaryPath, folder.c_str()) == 0 && Dictionary::getActivePath() == folder) return;
     strncpy(SETTINGS.dictionaryPath, folder.c_str(), sizeof(SETTINGS.dictionaryPath) - 1);
     SETTINGS.dictionaryPath[sizeof(SETTINGS.dictionaryPath) - 1] = '\0';
     Dictionary::setActivePath(folder.empty() ? "" : folder.c_str());

@@ -65,6 +65,7 @@ std::string DictionaryDefinitionActivity::buildPhraseFromRange(int fromIdx, int 
 
 void DictionaryDefinitionActivity::wrapText() {
   layoutLines.clear();
+  layoutLines.reserve(32);
   isWordSelectMode = false;
   inMultiSelectMode = false;
   anchorFlatIndex = -1;
@@ -113,7 +114,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
   // Indent step: 3 spaces worth of pixels at regular weight
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
-  const int bulletWidth = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "- ");
+  const int bulletWidth = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), tr(STR_DICT_LIST_BULLET));
 
   // Heap-allocate the renderer — textBuf[8192] is too large for the stack
   auto htmlRenderer = std::make_unique<DictHtmlRenderer>();
@@ -273,15 +274,19 @@ void DictionaryDefinitionActivity::wrapHtml() {
 void DictionaryDefinitionActivity::wrapPlain() {
   const int screenWidth = renderer.getScreenWidth();
   const int maxWidth = screenWidth - leftPadding - rightPadding;
+  const int spaceWidth = renderer.getSpaceWidth(SETTINGS.getDefinitionFontId(), EpdFontFamily::REGULAR);
 
   std::string currentWord;
   std::string currentLineText;
+  int currentLineWidth = 0;
 
   auto getMixedWidthPlain = [&](const std::string& text) -> int {
     const auto runs = splitIpaRuns(text);
-    return std::accumulate(runs.begin(), runs.end(), 0, [&](int sum, const IpaTextSpan& run) {
-      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str());
-    });
+    int w = 0;
+    for (const auto& run : runs) {
+      w += renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str());
+    }
+    return w;
   };
 
   auto flushLine = [&]() {
@@ -292,42 +297,37 @@ void DictionaryDefinitionActivity::wrapPlain() {
     }
     layoutLines.push_back(std::move(line));
     currentLineText.clear();
+    currentLineWidth = 0;
+  };
+
+  auto tryAppendWord = [&]() {
+    if (currentWord.empty()) return;
+    const int wordWidth = getMixedWidthPlain(currentWord);
+    if (currentLineText.empty()) {
+      currentLineText = currentWord;
+      currentLineWidth = wordWidth;
+    } else {
+      const int testWidth = currentLineWidth + spaceWidth + wordWidth;
+      if (testWidth <= maxWidth) {
+        currentLineText += ' ';
+        currentLineText += currentWord;
+        currentLineWidth = testWidth;
+      } else {
+        flushLine();
+        currentLineText = currentWord;
+        currentLineWidth = wordWidth;
+      }
+    }
+    currentWord.clear();
   };
 
   for (size_t i = 0; i <= definition.size(); i++) {
     char c = (i < definition.size()) ? definition[i] : '\0';
-
     if (c == '\n' || c == '\0') {
-      if (!currentWord.empty()) {
-        if (currentLineText.empty()) {
-          currentLineText = currentWord;
-        } else {
-          std::string test = currentLineText + " " + currentWord;
-          if (getMixedWidthPlain(test) <= maxWidth) {
-            currentLineText = test;
-          } else {
-            flushLine();
-            currentLineText = currentWord;
-          }
-        }
-        currentWord.clear();
-      }
+      tryAppendWord();
       flushLine();
     } else if (c == ' ') {
-      if (!currentWord.empty()) {
-        if (currentLineText.empty()) {
-          currentLineText = currentWord;
-        } else {
-          std::string test = currentLineText + " " + currentWord;
-          if (getMixedWidthPlain(test) <= maxWidth) {
-            currentLineText = test;
-          } else {
-            flushLine();
-            currentLineText = currentWord;
-          }
-        }
-        currentWord.clear();
-      }
+      tryAppendWord();
     } else {
       currentWord += c;
     }
@@ -344,7 +344,9 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
 
   std::vector<WordSelectNavigator::WordInfo> words;
+  words.reserve(64);
   std::vector<WordSelectNavigator::Row> rows;
+  rows.reserve(16);
 
   const int startLineIdx = currentPage * linesPerPage;
   for (int i = 0; i < linesPerPage && (startLineIdx + i) < static_cast<int>(layoutLines.size()); i++) {
@@ -353,7 +355,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     int x = leftPadding + line.indentLevel * indentStep;
 
     if (line.isListItem) {
-      x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "- ");
+      x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), tr(STR_DICT_LIST_BULLET));
     }
 
     for (const auto& seg : line.segments) {
@@ -621,8 +623,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       int x = leftPadding + line.indentLevel * indentStep;
 
       if (line.isListItem) {
-        renderer.drawText(SETTINGS.getDefinitionFontId(), x, y, "- ");
-        x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "- ");
+        renderer.drawText(SETTINGS.getDefinitionFontId(), x, y, tr(STR_DICT_LIST_BULLET));
+        x += renderer.getTextWidth(SETTINGS.getDefinitionFontId(), tr(STR_DICT_LIST_BULLET));
       }
 
       for (const auto& seg : line.segments) {
@@ -668,11 +670,12 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // View mode: pagination indicator and button hints
   if (totalPages > 1) {
-    std::string pageInfo = std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
-    int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo.c_str());
+    char pageInfo[16];
+    snprintf(pageInfo, sizeof(pageInfo), "%d/%d", currentPage + 1, totalPages);
+    int textWidth = renderer.getTextWidth(SMALL_FONT_ID, pageInfo);
     renderer.drawText(SMALL_FONT_ID, renderer.getScreenWidth() - rightPadding - textWidth,
                       renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing,
-                      pageInfo.c_str());
+                      pageInfo);
   }
 
   const char* btn2 = showLookupButton ? tr(STR_LOOKUP_SHORT) : "";

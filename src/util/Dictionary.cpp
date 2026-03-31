@@ -12,6 +12,7 @@
 // Static member definitions
 char Dictionary::activeFolderPath[500] = "";
 char Dictionary::pathBuf[520] = "";
+char Dictionary::wordBuf[256] = "";
 
 // OFT file constants (StarDict Cache format, verified against real files).
 // Header: 30-byte text + 8-byte fixed magic = 38 bytes total.
@@ -93,74 +94,75 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
   FsFile file;
   if (!Storage.openFileForRead("DICT", pathBuf, file)) return info;
 
-  // Read entire .ifo into a stack buffer (these files are tiny, < 512 bytes)
-  char buf[512];
-  int bytesRead = file.read(buf, sizeof(buf) - 1);
+  // Validate header line byte by byte — no line buffer needed.
+  static constexpr const char HEADER[] = "StarDict's dict ifo file";
+  for (size_t i = 0; i < sizeof(HEADER) - 1; i++) {
+    int b = file.read();
+    if (b < 0 || static_cast<char>(b) != HEADER[i]) {
+      LOG_ERR("DICT", "Invalid .ifo header in %s", folderPath);
+      file.close();
+      return info;
+    }
+  }
+  // Skip remainder of header line.
+  { int b; while ((b = file.read()) >= 0 && b != '\n') {} }
+
+  // Serial key=value parse. State fits in ~50 bytes vs the old 512-byte slurp buffer.
+  char keyBuf[24];  // longest key: "sametypesequence" = 16 chars
+  int keyLen = 0;
+  bool readingVal = false;
+  char* valDst = nullptr;
+  size_t valCap = 0;
+  size_t valWritten = 0;
+  bool isNumField = false;
+  uint32_t* valNum = nullptr;
+  uint32_t numAccum = 0;
+
+  while (file.available()) {
+    int b = file.read();
+    if (b < 0) break;
+    const char c = static_cast<char>(b);
+
+    if (c == '\r') continue;
+
+    if (!readingVal) {
+      if (c == '\n') {
+        keyLen = 0;
+      } else if (c == '=') {
+        keyBuf[keyLen] = '\0';
+        keyLen = 0;
+        valDst = nullptr; valCap = 0; valWritten = 0;
+        isNumField = false; valNum = nullptr; numAccum = 0;
+        if      (strcmp(keyBuf, "bookname") == 0)         { valDst = info.bookname;         valCap = sizeof(info.bookname) - 1; }
+        else if (strcmp(keyBuf, "sametypesequence") == 0) { valDst = info.sametypesequence; valCap = sizeof(info.sametypesequence) - 1; }
+        else if (strcmp(keyBuf, "website") == 0)          { valDst = info.website;          valCap = sizeof(info.website) - 1; }
+        else if (strcmp(keyBuf, "date") == 0)             { valDst = info.date;             valCap = sizeof(info.date) - 1; }
+        else if (strcmp(keyBuf, "description") == 0)      { valDst = info.description;      valCap = sizeof(info.description) - 1; }
+        else if (strcmp(keyBuf, "lang") == 0)             { valDst = info.lang;             valCap = sizeof(info.lang) - 1; }
+        else if (strcmp(keyBuf, "wordcount") == 0)        { isNumField = true; valNum = &info.wordcount; }
+        else if (strcmp(keyBuf, "idxfilesize") == 0)      { isNumField = true; valNum = &info.idxfilesize; }
+        else if (strcmp(keyBuf, "synwordcount") == 0)     { isNumField = true; valNum = &info.altFormCount; info.hasAltForms = true; }
+        readingVal = true;
+      } else if (keyLen < static_cast<int>(sizeof(keyBuf) - 1)) {
+        keyBuf[keyLen++] = c;
+      }
+    } else {
+      if (c == '\n') {
+        if (valDst)              valDst[valWritten] = '\0';
+        if (isNumField && valNum) *valNum = numAccum;
+        readingVal = false;
+        keyLen = 0;
+      } else if (isNumField) {
+        if (c >= '0' && c <= '9') numAccum = numAccum * 10 + static_cast<uint32_t>(c - '0');
+      } else if (valDst && valWritten < valCap) {
+        valDst[valWritten++] = c;
+      }
+    }
+  }
+
   file.close();
-  if (bytesRead <= 0) return info;
-  buf[bytesRead] = '\0';
 
-  // Validate header line
-  static const char* HEADER = "StarDict's dict ifo file";
-  if (strncmp(buf, HEADER, strlen(HEADER)) != 0) {
-    LOG_ERR("DICT", "Invalid .ifo header in %s", folderPath);
-    return info;
-  }
-
-  // Parse key=value lines
-  char* line = buf;
-  while ((line = strchr(line, '\n')) != nullptr) {
-    line++;  // move past '\n'
-    char* eq = strchr(line, '=');
-    if (eq == nullptr) continue;
-
-    *eq = '\0';
-    const char* key = line;
-    const char* val = eq + 1;
-
-    // Strip trailing \r and \n from value, saving both so the outer loop's
-    // strchr(line, '\n') can still find the next line's newline.
-    char* cr = const_cast<char*>(strchr(val, '\r'));
-    char savedCr = '\0';
-    if (cr) {
-      savedCr = *cr;
-      *cr = '\0';
-    }
-    char* nl = const_cast<char*>(strchr(val, '\n'));
-    char savedNl = '\0';
-    if (nl) {
-      savedNl = *nl;
-      *nl = '\0';
-    }
-
-    if (strcmp(key, "bookname") == 0) {
-      strncpy(info.bookname, val, sizeof(info.bookname) - 1);
-    } else if (strcmp(key, "wordcount") == 0) {
-      info.wordcount = static_cast<uint32_t>(atol(val));
-    } else if (strcmp(key, "synwordcount") == 0) {
-      info.altFormCount = static_cast<uint32_t>(atol(val));
-      info.hasAltForms = true;
-    } else if (strcmp(key, "idxfilesize") == 0) {
-      info.idxfilesize = static_cast<uint32_t>(atol(val));
-    } else if (strcmp(key, "sametypesequence") == 0) {
-      strncpy(info.sametypesequence, val, sizeof(info.sametypesequence) - 1);
-    } else if (strcmp(key, "website") == 0) {
-      strncpy(info.website, val, sizeof(info.website) - 1);
-    } else if (strcmp(key, "date") == 0) {
-      strncpy(info.date, val, sizeof(info.date) - 1);
-    } else if (strcmp(key, "description") == 0) {
-      strncpy(info.description, val, sizeof(info.description) - 1);
-    } else if (strcmp(key, "lang") == 0) {
-      strncpy(info.lang, val, sizeof(info.lang) - 1);
-    }
-
-    // Restore all modified characters so the outer loop can continue correctly.
-    if (nl) *nl = savedNl;
-    if (cr) *cr = savedCr;
-    *eq = '=';  // restore for next iteration
-  }
-
-  // Check for compressed .dict.dz (but no .dict) — reuse pathBuf from above.
+  // Check for compressed .dict.dz (but no .dict) — reuse pathBuf.
   snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath);
   const bool dictExists = Storage.exists(pathBuf);
   snprintf(pathBuf, sizeof(pathBuf), "%s.dict.dz", folderPath);
@@ -261,7 +263,7 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, 
     return val;
   };
 
-  char wordBuf[256];
+
 
   // Binary search: find the last page whose first word <= target
   uint32_t lo = 0, hi = numPages - 1;
@@ -307,8 +309,7 @@ std::string Dictionary::readDefinition(uint32_t offset, uint32_t size) {
 // Lookup (zero persistent RAM — no static index)
 // ---------------------------------------------------------------------------
 
-std::string Dictionary::lookup(const std::string& word, const std::function<void(int percent)>& onProgress,
-                               const std::function<bool()>& shouldCancel) {
+std::string Dictionary::lookup(const std::string& word, const DictLookupCallbacks& cbs) {
   if (!exists()) return "";
 
   buildPath("idx");
@@ -326,14 +327,14 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
     oft.close();
   }
 
-  if (onProgress) onProgress(70);
+  if (cbs.onProgress) cbs.onProgress(cbs.ctx, 70);
 
   // Linear scan within the identified page (≤ OFT_STRIDE entries)
   idx.seekSet(startByte);
-  char wordBuf[256];
+
 
   while (static_cast<uint32_t>(idx.position()) < endByte) {
-    if (shouldCancel && shouldCancel()) {
+    if (cbs.shouldCancel && cbs.shouldCancel(cbs.ctx)) {
       idx.close();
       return "";
     }
@@ -352,7 +353,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
       uint32_t dictSize = (static_cast<uint32_t>(suffix[4]) << 24) | (static_cast<uint32_t>(suffix[5]) << 16) |
                           (static_cast<uint32_t>(suffix[6]) << 8) | static_cast<uint32_t>(suffix[7]);
       idx.close();
-      if (onProgress) onProgress(100);
+      if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
       return readDefinition(dictOffset, dictSize);
     }
 
@@ -360,7 +361,7 @@ std::string Dictionary::lookup(const std::string& word, const std::function<void
   }
 
   idx.close();
-  if (onProgress) onProgress(100);
+  if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
   return "";
 }
 
@@ -391,7 +392,7 @@ std::string Dictionary::wordAtOrdinal(uint32_t ordinal) {
 
   idx.seekSet(pageStartByte);
 
-  char wordBuf[256];
+
 
   // Skip `withinPage` entries to reach the target
   for (uint32_t i = 0; i < withinPage; i++) {
@@ -431,7 +432,7 @@ std::string Dictionary::resolveAltForm(const std::string& word) {
   }
 
   syn.seekSet(startByte);
-  char wordBuf[256];
+
 
   while (static_cast<uint32_t>(syn.position()) < endByte) {
     int len = readWordInto(syn, wordBuf, sizeof(wordBuf));
@@ -462,6 +463,7 @@ std::string Dictionary::resolveAltForm(const std::string& word) {
 
 std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
   std::vector<std::string> variants;
+  variants.reserve(8);
   size_t len = word.size();
   if (len < 3) return variants;
 
@@ -624,6 +626,7 @@ std::vector<std::string> Dictionary::getStemVariants(const std::string& word) {
 
   // Deduplicate preserving insertion order
   std::vector<std::string> deduped;
+  deduped.reserve(variants.size());
   for (const auto& v : variants) {
     if (std::find(deduped.begin(), deduped.end(), v) != deduped.end()) continue;
     // cppcheck-suppress useStlAlgorithm
@@ -725,8 +728,9 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
     int distance;
   };
   std::vector<Candidate> candidates;
+  candidates.reserve(static_cast<size_t>(maxResults) * 4);
 
-  char wordBuf[256];
+
 
   while (static_cast<uint32_t>(idx.position()) < scanEnd) {
     int len = readWordInto(idx, wordBuf, sizeof(wordBuf));
