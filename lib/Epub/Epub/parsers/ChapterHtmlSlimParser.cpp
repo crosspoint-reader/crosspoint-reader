@@ -157,20 +157,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // Merge with existing block style to accumulate CSS styling from parent block elements.
       // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
       // div's margin should be preserved, even though it has no direct text content.
-      BlockStyle incoming = blockStyle;
-      const bool brGapPending = currentTextBlock->getBlockStyle().fromBrElement;
-      if (brGapPending) {
-        // The empty block was created by a <br> section separator. Inject a full line of
-        // blank space before the following paragraph so the scene/section break is visible.
-        // This only fires when the <br> block stayed empty (i.e. no inline text was added).
-        const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
-        incoming.marginTop = static_cast<int16_t>(incoming.marginTop + lineHeight);
-      }
-
-      BlockStyle merged = currentTextBlock->getBlockStyle().getCombinedBlockStyle(incoming);
-      // Preserve only whether the current empty block still represents <br> separators.
-      // This lets consecutive <br> accumulate one line each without leaking the flag to real content blocks.
-      merged.fromBrElement = blockStyle.fromBrElement;
+      BlockStyle merged = currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle);
       currentTextBlock->setBlockStyle(merged);
 
       if (!pendingAnchorId.empty()) {
@@ -598,8 +585,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Block/header boundaries must flush any buffered trailing word first.
   // Otherwise tags like ..."item?"<p ...> can carry the final word into the next paragraph.
-  if (self->partWordBufferIndex > 0 && ((matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) ||
-                                        (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) && strcmp(name, "br") != 0))) {
+  if (self->partWordBufferIndex > 0 &&
+      (matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS))) {
     self->flushPartWordBuffer();
   }
 
@@ -625,33 +612,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       return;
     }
 
-    if (strcmp(name, "br") == 0) {
-      if (self->partWordBufferIndex > 0) {
-        // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
-        self->flushPartWordBuffer();
-      }
-      // Build a neutral <br> style that keeps inline alignment/indent context but avoids
-      // carrying cumulative margins from previous empty blocks (which can force spurious page breaks).
-      const BlockStyle& currentStyle = self->currentTextBlock->getBlockStyle();
-      BlockStyle brStyle;
-      brStyle.alignment = currentStyle.alignment;
-      brStyle.textAlignDefined = currentStyle.textAlignDefined;
-      brStyle.textIndent = currentStyle.textIndent;
-      brStyle.textIndentDefined = currentStyle.textIndentDefined;
-      brStyle.fromBrElement = true;
-      self->startNewTextBlock(brStyle);
-    } else {
-      self->currentCssStyle = cssStyle;
-      self->startNewTextBlock(userAlignmentBlockStyle);
-      self->updateEffectiveInlineStyle();
+    self->currentCssStyle = cssStyle;
+    self->startNewTextBlock(userAlignmentBlockStyle);
+    self->updateEffectiveInlineStyle();
 
-      if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
-      } else if (strcmp(name, "pre") == 0) {
-        // Record depth so characterData can treat \n as a hard line break inside <pre>.
-        // depth has not been incremented yet here; it will be after startElement returns.
-        self->preUntilDepth = std::min(self->preUntilDepth, self->depth);
-      }
+    if (strcmp(name, "li") == 0) {
+      self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+    } else if (strcmp(name, "pre") == 0) {
+      // Record depth so characterData can treat \n as a hard line break inside <pre>.
+      // depth has not been incremented yet here; it will be after startElement returns.
+      self->preUntilDepth = std::min(self->preUntilDepth, self->depth);
     }
   } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
     // Flush buffer before style change so preceding text gets current style
@@ -1061,17 +1031,16 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     // Margins/padding are preserved so parent element spacing still accumulates correctly.
     if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
       auto style = self->currentTextBlock->getBlockStyle();
-      // Keep alignment only when closing the <br> separator itself so subsequent text
-      // within the same block container stays aligned. Reset alignment when closing
-      // other block tags (e.g. div/p) to avoid leaking centered/right alignment globally.
-      const bool preserveForBrClose = style.fromBrElement && strcmp(name, "br") == 0;
-      if (!preserveForBrClose) {
-        style.textAlignDefined = false;
-        style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                              ? CssTextAlign::Justify
-                              : static_cast<CssTextAlign>(self->paragraphAlignment);
-        self->currentTextBlock->setBlockStyle(style);
-      }
+      // Reset alignment on empty text blocks to prevent stale alignment from bleeding
+      // into the next sibling element. This fixes issue #1026 where an empty <h1> (default
+      // Center) followed by an image-only <p> causes Center to persist through the chain
+      // of empty block reuse into subsequent text paragraphs.
+      // Margins/padding are preserved so parent element spacing still accumulates correctly.
+      style.textAlignDefined = false;
+      style.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                            ? CssTextAlign::Justify
+                            : static_cast<CssTextAlign>(self->paragraphAlignment);
+      self->currentTextBlock->setBlockStyle(style);
     }
   }
 }

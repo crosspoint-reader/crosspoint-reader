@@ -44,6 +44,14 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  // Returns true if the block contains only whitespace tokens (e.g. a bare &nbsp; spacer paragraph).
+  // Used to suppress extraParagraphSpacing on spacer paragraphs that are already visual separators.
+  bool isWhitespaceOnly() const {
+    for (const auto& w : words) {
+      if (w != " ") return false;
+    }
+    return !words.empty();
+  }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);
