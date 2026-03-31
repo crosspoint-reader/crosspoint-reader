@@ -18,6 +18,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.6 Settings](#36-settings)
       - [3.6.1 Display](#361-display)
       - [3.6.2 Reader](#362-reader)
+      - [Dictionary Setup](#dictionary-setup)
       - [3.6.3 Controls](#363-controls)
       - [3.6.4 System](#364-system)
       - [3.6.5 KOReader Sync Quick Setup](#365-koreader-sync-quick-setup)
@@ -25,6 +26,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
+    - [Dictionary Lookup](#dictionary-lookup)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
@@ -165,6 +167,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
+- **Enable Dictionary**: Whether to enable dictionary lookup while reading; options are "ON" (default) or "OFF". See [Dictionary Setup](#dictionary-setup) and [Dictionary Lookup](#dictionary-lookup) for details.
+- **Manage Dictionaries**: View and toggle installed dictionaries on or off. Shows the list of `.dict` files found on the SD card and their status. If no dictionaries are installed, instructions for setup are shown.
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
@@ -174,6 +178,56 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "ON" - Vertical space will be added between paragraphs in Reading Mode
   - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
+
+##### Dictionary Setup
+
+CrossPoint includes a built-in dictionary lookup feature. To use it, you need to place dictionary files on your SD card.
+
+**Step 1: Get dictionary files**
+
+CrossPoint uses `.dict` files — a simple tab-separated text format.
+
+**Option A: Download pre-built files (easiest)**
+
+Download `english-dict-files.zip` from the [pull request](https://github.com/crosspoint-reader/crosspoint-reader/pull/) that introduced this feature. Extract it to get `english.dict` and `english.dict.idx`, ready to copy to your SD card.
+
+**Option B: Build from source**
+
+Download [`WebstersEnglishDictionary.txt`](https://github.com/matthewreagan/WebstersEnglishDictionary/blob/master/WebstersEnglishDictionary.txt) and convert it using the included script:
+
+```bash
+python3 scripts/convert_dictionary.py WebstersEnglishDictionary.txt english.dict
+```
+
+This generates two files:
+- `english.dict` — the dictionary data (~35 MB)
+- `english.dict.idx` — the binary search index
+
+> [!NOTE]
+> The `.dict.idx` index file is optional when copying to the device. If it's missing, CrossPoint will generate it automatically on first use (this may take a few seconds for large dictionaries).
+
+**Step 2: Copy to the SD card**
+
+1. Remove the SD card from the device (or connect via File Transfer mode).
+2. Create the directory `/.crosspoint/dictionaries/` on the SD card if it doesn't exist.
+3. Copy the `.dict` file (and optionally the `.dict.idx` file) into that directory.
+
+```
+SD Card Root/
+  .crosspoint/
+    dictionaries/
+      english.dict
+      english.dict.idx    (optional — auto-generated if missing)
+```
+
+**Step 3: Enable on the device**
+
+1. Go to **Settings > Reader > Manage Dictionaries**.
+2. Your dictionary should appear in the list. Use **Confirm** to toggle it on.
+3. The dictionary is now ready to use while reading.
+
+> [!TIP]
+> You can install multiple dictionaries. Each `.dict` file appears as a separate entry in the Manage Dictionaries screen. When looking up a word, all enabled dictionaries are searched.
 
 #### 3.6.3 Controls
 
@@ -360,6 +414,20 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 
 This feature can be disabled in the **[Controls Settings](#363-controls)** to help avoid changing chapters by mistake.
 
+
+### Dictionary Lookup
+
+If you have a dictionary installed (see [Dictionary Setup](#dictionary-setup)), you can look up any word while reading:
+
+1. **Enter word selection mode**: Press and hold **Confirm** for 1.5 seconds. A highlight cursor appears at the middle of the page.
+2. **Navigate to a word**: Use **Left**/**Right** to move between words on the same line, and **Up**/**Down** to move between lines.
+3. **Look up the word**: Press **Confirm** to look up the highlighted word. A full-screen definition appears.
+4. **Read the definition**: If the definition is longer than one screen, use **Up**/**Down**/**Left**/**Right** to scroll through pages. A page indicator (e.g. "1/3") appears at the bottom right when the definition overflows.
+5. **Dismiss**: Press **Back** or **Confirm** to close the definition and return to reading.
+
+**Hyphenated words**: If the highlighted word contains a hyphen or dash (e.g. "well-known"), press and hold **Confirm** to enter sub-selection mode. Use **Left**/**Right** to select individual parts of the word (e.g. "well" or "known"), then press **Confirm** to look up just that part.
+
+**Cancel selection**: Press **Back** at any time to exit word selection mode without looking up a word.
 
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
