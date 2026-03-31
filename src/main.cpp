@@ -236,6 +236,7 @@ void setup() {
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();
+  gpio_deep_sleep_hold_dis();  // Release deep sleep GPIO hold state from previous sleep cycle
 
   // Only start serial if USB connected
   if (gpio.isUsbConnected()) {
