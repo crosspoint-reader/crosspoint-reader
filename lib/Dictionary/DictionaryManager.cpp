@@ -7,7 +7,7 @@
 #include <cstring>
 
 // ---------------------------------------------------------------------------
-// scan — discover .dict files in DICT_DIR, validate indexes
+// scan — discover StarDict .ifo files in DICT_DIR and subdirectories
 // ---------------------------------------------------------------------------
 void DictionaryManager::scan() {
   if (scanned) return;
@@ -19,30 +19,47 @@ void DictionaryManager::scan() {
     return;
   }
 
-  auto dir = Storage.open(DICT_DIR);
+  // Recursively scan DICT_DIR and all subdirectories for .ifo files
+  scanDirectory(DICT_DIR);
+
+  loadEnabledState();
+
+  LOG_INF("DICTM", "Scan complete: %d dictionaries found", dictCount);
+}
+
+// ---------------------------------------------------------------------------
+// scanDirectory — find .ifo files in a single directory
+// ---------------------------------------------------------------------------
+void DictionaryManager::scanDirectory(const char* dirPath) {
+  auto dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) {
-    LOG_ERR("DICTM", "Failed to open dictionary directory");
     if (dir) dir.close();
     return;
   }
 
   char name[128];
   for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
-    if (file.isDirectory()) {
-      file.close();
-      continue;
-    }
-
+    bool isDir = file.isDirectory();
     file.getName(name, sizeof(name));
     file.close();
 
-    // Skip hidden files
+    // Skip hidden entries
     if (name[0] == '.') continue;
 
-    // Check for .dict extension
+    // Recurse into subdirectories
+    if (isDir) {
+      if (dictCount < MAX_DICTIONARIES) {
+        char subPath[192];
+        snprintf(subPath, sizeof(subPath), "%s/%s", dirPath, name);
+        scanDirectory(subPath);
+      }
+      continue;
+    }
+
+    // Check for .ifo extension
     int nameLen = static_cast<int>(strlen(name));
-    if (nameLen < 6) continue;  // minimum: "x.dict"
-    if (strcasecmp(name + nameLen - 5, ".dict") != 0) continue;
+    if (nameLen < 5) continue;  // minimum: "x.ifo"
+    if (strcasecmp(name + nameLen - 4, ".ifo") != 0) continue;
 
     if (dictCount >= MAX_DICTIONARIES) {
       LOG_INF("DICTM", "Max dictionaries reached (%d), skipping rest", MAX_DICTIONARIES);
@@ -54,37 +71,69 @@ void DictionaryManager::scan() {
     info.corrupt = false;
     info.readOnly = false;
 
-    // Strip extension for filename — skip if too long to store
-    int baseLen = nameLen - 5;
-    if (baseLen >= static_cast<int>(sizeof(info.filename))) {
+    // Strip .ifo extension for base filename
+    int baseLen = nameLen - 4;
+    char baseFilename[64];
+    if (baseLen >= static_cast<int>(sizeof(baseFilename))) {
       LOG_ERR("DICTM", "Dictionary filename too long, skipping: %s", name);
       continue;
     }
-    memcpy(info.filename, name, baseLen);
-    info.filename[baseLen] = '\0';
+    memcpy(baseFilename, name, baseLen);
+    baseFilename[baseLen] = '\0';
 
-    // Title-case for display name
-    titleCaseDictName(info.filename, info.displayName, sizeof(info.displayName));
+    // Build base path (without extension) for StarDict operations
+    char basePath[192];
+    snprintf(basePath, sizeof(basePath), "%s/%s", dirPath, baseFilename);
 
-    // Build full path and validate/generate index
-    char fullPath[192];
-    snprintf(fullPath, sizeof(fullPath), "%s/%s", DICT_DIR, name);
+    // Store path relative to DICT_DIR in filename (e.g., "wordnet-en/wordnet")
+    // so lookup() can reconstruct the full path later
+    int dictDirLen = static_cast<int>(strlen(DICT_DIR));
+    const char* relPath = basePath + dictDirLen + 1;  // skip DICT_DIR + '/'
+    if (strlen(relPath) >= sizeof(info.filename)) {
+      LOG_ERR("DICTM", "Dictionary path too long, skipping: %s", relPath);
+      continue;
+    }
+    strncpy(info.filename, relPath, sizeof(info.filename) - 1);
+    info.filename[sizeof(info.filename) - 1] = '\0';
 
+    // Verify companion .idx and .dict files exist
+    char companionPath[200];
+    snprintf(companionPath, sizeof(companionPath), "%s.idx", basePath);
+    if (!Storage.exists(companionPath)) {
+      LOG_ERR("DICTM", "Missing .idx for %s, skipping", info.filename);
+      continue;
+    }
+    snprintf(companionPath, sizeof(companionPath), "%s.dict", basePath);
+    if (!Storage.exists(companionPath)) {
+      LOG_ERR("DICTM", "Missing .dict for %s, skipping", info.filename);
+      continue;
+    }
+
+    // Parse .ifo for display name (bookname), fall back to title-cased filename
+    char ifoPath[200];
+    snprintf(ifoPath, sizeof(ifoPath), "%s.ifo", basePath);
+    char bookname[64] = {};
+    if (StarDictIndex::parseIfo(ifoPath, bookname, sizeof(bookname), nullptr, nullptr, nullptr, 0) &&
+        bookname[0] != '\0') {
+      strncpy(info.displayName, bookname, sizeof(info.displayName) - 1);
+      info.displayName[sizeof(info.displayName) - 1] = '\0';
+    } else {
+      titleCaseDictName(baseFilename, info.displayName, sizeof(info.displayName));
+    }
+
+    // Validate/generate secondary index (.idx.cp)
     bool corrupt = false;
     bool readOnly = false;
-    index.ensureIndex(fullPath, corrupt, readOnly);
+    index.ensureIndex(basePath, corrupt, readOnly);
     info.corrupt = corrupt;
     info.readOnly = readOnly;
 
-    LOG_INF("DICTM", "Found dictionary: %s (corrupt=%d, readOnly=%d)", info.displayName, info.corrupt, info.readOnly);
+    LOG_INF("DICTM", "Found dictionary: %s (corrupt=%d, readOnly=%d)", info.displayName, info.corrupt,
+            info.readOnly);
 
     dictCount++;
   }
   dir.close();
-
-  loadEnabledState();
-
-  LOG_INF("DICTM", "Scan complete: %d dictionaries found", dictCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,38 +319,43 @@ int DictionaryManager::lookup(const char* word, DictResult* results, int maxResu
   if (!scanned) scan();
   if (!word || word[0] == '\0' || maxResults <= 0) return 0;
 
+  const unsigned long startMs = millis();
   int found = 0;
-  char fullPath[192];
+  char basePath[192];
+  const char* matchType = nullptr;
 
   for (int i = 0; i < dictCount && found < maxResults; ++i) {
     if (!dictionaries[i].enabled || dictionaries[i].corrupt || dictionaries[i].readOnly) continue;
 
-    snprintf(fullPath, sizeof(fullPath), "%s/%s.dict", DICT_DIR, dictionaries[i].filename);
+    snprintf(basePath, sizeof(basePath), "%s/%s", DICT_DIR, dictionaries[i].filename);
 
     DictResult& result = results[found];
 
     // Try exact word first
-    bool matched = index.lookup(fullPath, word, result.definition, sizeof(result.definition));
+    bool matched = index.lookup(basePath, word, result.definition, sizeof(result.definition));
+    if (matched && !matchType) matchType = "direct match";
 
     // If not found, try normalized word (only if normalization changes something)
     if (!matched) {
       char normalized[DICT_WORD_MAX];
       if (normalizeWord(word, normalized, sizeof(normalized)) && strcmp(normalized, word) != 0) {
-        matched = index.lookup(fullPath, normalized, result.definition, sizeof(result.definition));
+        matched = index.lookup(basePath, normalized, result.definition, sizeof(result.definition));
+        if (matched && !matchType) matchType = "normalized";
       }
     }
 
     if (matched) {
-      // Copy dictionary display name
       strncpy(result.dictionaryName, dictionaries[i].displayName, sizeof(result.dictionaryName) - 1);
       result.dictionaryName[sizeof(result.dictionaryName) - 1] = '\0';
       found++;
-      LOG_INF("DICTM", "Found '%s' in %s", word, dictionaries[i].displayName);
     }
   }
 
-  if (found == 0) {
-    LOG_INF("DICTM", "No results for '%s'", word);
+  const unsigned long elapsedMs = millis() - startMs;
+  if (found > 0) {
+    LOG_INF("DICT", "Lookup '%s' -> %s in %lu ms", word, matchType, elapsedMs);
+  } else {
+    LOG_INF("DICT", "Lookup '%s' -> not found in %lu ms", word, elapsedMs);
   }
 
   return found;

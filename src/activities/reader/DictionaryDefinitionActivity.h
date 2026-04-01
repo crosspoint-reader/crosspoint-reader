@@ -4,7 +4,6 @@
 
 #include "../Activity.h"
 #include "DictTypes.h"
-#include "util/ButtonNavigator.h"
 
 class MappedInputManager;
 
@@ -28,7 +27,6 @@ class DictionaryDefinitionActivity final : public Activity {
   int scrollOffset = 0;     // Line offset for paginated scrolling
   int totalLines = 0;       // Computed during render for scroll clamping
   int maxVisibleLines = 0;  // Computed during render for scroll clamping
-  ButtonNavigator buttonNavigator;
 
-  void drawDefinition(int contentTop, int contentLeft, int contentWidth, int contentHeight);
+  void drawDefinition(int contentTop, int contentLeft, int contentWidth, int contentHeight, int rightGutter);
 };

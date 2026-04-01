@@ -3,42 +3,53 @@
 #include <cstdint>
 #include <cstring>
 
-// On-disk index entry: fixed 36 bytes for O(1) random access during binary search.
+// Max word length stored in secondary index (including null terminator).
+static constexpr int DICT_WORD_MAX = 32;
+
+// ---------------------------------------------------------------------------
+// Secondary index (.idx.cp) — generated from StarDict .idx for O(1) binary search.
 // NOTE: Do NOT use __attribute__((packed)) — ESP32-C3 RISC-V faults on unaligned access.
 // These structs are naturally aligned (char[] + uint32_t).
 // Read/write via memcpy to be safe when reading from file buffers.
-static constexpr int DICT_INDEX_ENTRY_SIZE = 36;   // char[32] + uint32_t
-static constexpr int DICT_INDEX_HEADER_SIZE = 12;  // 3 x uint32_t
-static constexpr int DICT_WORD_MAX = 32;           // Max word length in index (including null)
+// ---------------------------------------------------------------------------
+static constexpr uint32_t SD_INDEX_MAGIC = 0x43504958;  // "CPIX"
+static constexpr uint32_t SD_INDEX_VERSION = 1;
+static constexpr int SD_INDEX_HEADER_SIZE = 16;
+static constexpr int SD_INDEX_ENTRY_SIZE = 44;
 
-struct DictIndexEntry {
-  char word[DICT_WORD_MAX];  // Null-terminated, truncated if > 31 chars
-  uint32_t byteOffset;       // Offset into source .dict file
+struct SdIndexHeader {
+  uint32_t magic;
+  uint32_t version;
+  uint32_t idxFileSize;  // StarDict .idx file size (for invalidation)
+  uint32_t entryCount;
 };
-static_assert(sizeof(DictIndexEntry) == DICT_INDEX_ENTRY_SIZE,
-              "DictIndexEntry size mismatch — update DICT_INDEX_ENTRY_SIZE");
+static_assert(sizeof(SdIndexHeader) == SD_INDEX_HEADER_SIZE,
+              "SdIndexHeader size mismatch — update SD_INDEX_HEADER_SIZE");
 
-struct DictIndexHeader {
-  uint32_t dictFileSize;   // Size of source .dict file
-  uint32_t spotCheckHash;  // FNV-1a of first + middle + last lines
-  uint32_t entryCount;     // Number of entries in index
+struct SdIndexEntry {
+  char word[DICT_WORD_MAX];  // 32 bytes, truncated for binary search comparison
+  uint32_t dictOffset;        // Byte offset into .dict (little-endian, converted from BE)
+  uint32_t dictSize;          // Byte size of definition in .dict
+  uint32_t idxWordOffset;     // Byte offset of full word in StarDict .idx (for >31 char verification)
 };
-static_assert(sizeof(DictIndexHeader) == DICT_INDEX_HEADER_SIZE,
-              "DictIndexHeader size mismatch — update DICT_INDEX_HEADER_SIZE");
+static_assert(sizeof(SdIndexEntry) == SD_INDEX_ENTRY_SIZE,
+              "SdIndexEntry size mismatch — update SD_INDEX_ENTRY_SIZE");
 
+// ---------------------------------------------------------------------------
 // Result from a single dictionary lookup
+// ---------------------------------------------------------------------------
 struct DictResult {
-  char dictionaryName[32];  // Title-cased display name
+  char dictionaryName[32];  // Display name from .ifo bookname
   char definition[2048];    // Definition text, null-terminated, truncated if too long
 };
 
-// Info about a discovered dictionary file
+// Info about a discovered dictionary (one per .ifo file found)
 struct DictFileInfo {
-  char filename[64];     // e.g., "english" (no extension)
-  char displayName[64];  // e.g., "English" (title-cased)
+  char filename[64];     // Path relative to DICT_DIR without extension, e.g., "english" or "wordnet-en/wordnet"
+  char displayName[64];  // From .ifo bookname, or title-cased filename as fallback
   bool enabled = false;
-  bool corrupt = false;   // Failed validation
-  bool readOnly = false;  // Index generation failed
+  bool corrupt = false;   // Failed validation (missing .idx/.dict, bad format)
+  bool readOnly = false;  // Secondary index generation failed (SD write error)
 };
 
 // Title-case a dictionary filename into a display name.
@@ -66,14 +77,4 @@ inline void titleCaseDictName(const char* filename, char* out, int outSize) {
     }
   }
   out[j] = '\0';
-}
-
-// FNV-1a hash for spot-check validation
-inline uint32_t fnv1aHash(const char* data, int len) {
-  uint32_t hash = 2166136261u;
-  for (int i = 0; i < len; ++i) {
-    hash ^= static_cast<uint8_t>(data[i]);
-    hash *= 16777619u;
-  }
-  return hash;
 }

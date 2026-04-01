@@ -16,5 +16,7 @@ build
 /.venv
 *.local*
 *.dict
-*.dict.idx
+*.idx
+*.idx.cp
+*.ifo
 WebstersEnglishDictionary.txt

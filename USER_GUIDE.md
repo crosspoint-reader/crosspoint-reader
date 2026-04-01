@@ -168,7 +168,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
 - **Enable Dictionary**: Whether to enable dictionary lookup while reading; options are "ON" (default) or "OFF". See [Dictionary Setup](#dictionary-setup) and [Dictionary Lookup](#dictionary-lookup) for details.
-- **Manage Dictionaries**: View and toggle installed dictionaries on or off. Shows the list of `.dict` files found on the SD card and their status. If no dictionaries are installed, instructions for setup are shown.
+- **Manage Dictionaries**: View and toggle installed dictionaries on or off. Shows the list of StarDict dictionaries found on the SD card and their status. If no dictionaries are installed, instructions for setup are shown.
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
@@ -185,49 +185,53 @@ CrossPoint includes a built-in dictionary lookup feature. To use it, you need to
 
 **Step 1: Get dictionary files**
 
-CrossPoint uses `.dict` files — a simple tab-separated text format.
+CrossPoint uses the [StarDict](https://en.wikipedia.org/wiki/StarDict) dictionary format — a widely-used open format with thousands of freely available dictionaries. Each dictionary consists of three files: `.ifo` (metadata), `.idx` (word index), and `.dict` (definitions).
 
 **Option A: Download pre-built files (easiest)**
 
-Download `english-dict-files.zip` from the [pull request](https://github.com/crosspoint-reader/crosspoint-reader/pull/) that introduced this feature. Extract it to get `english.dict` and `english.dict.idx`, ready to copy to your SD card.
+Download `english-dict-files.zip` from the [pull request](https://github.com/crosspoint-reader/crosspoint-reader/pull/) that introduced this feature. Extract it to get the StarDict files (`english.ifo`, `english.idx`, `english.dict`), ready to copy to your SD card.
 
-**Option B: Build from source**
+**Option B: Use existing StarDict dictionaries**
+
+Many StarDict dictionaries are available online. Search for "StarDict dictionary download" to find dictionaries in various languages. Ensure you get the three required files (`.ifo`, `.idx`, `.dict`). Note: compressed `.dict.dz` files are not currently supported — use uncompressed `.dict` files.
+
+**Option C: Build from source**
 
 Download [`WebstersEnglishDictionary.txt`](https://github.com/matthewreagan/WebstersEnglishDictionary/blob/master/WebstersEnglishDictionary.txt) and convert it using the included script:
 
 ```bash
-python3 scripts/convert_dictionary.py WebstersEnglishDictionary.txt english.dict
+python3 scripts/convert_dictionary.py WebstersEnglishDictionary.txt english
 ```
 
-This generates two files:
-- `english.dict` — the dictionary data (~35 MB)
-- `english.dict.idx` — the binary search index
-
-> [!NOTE]
-> The `.dict.idx` index file is optional when copying to the device. If it's missing, CrossPoint will generate it automatically on first use (this may take a few seconds for large dictionaries).
+This generates the StarDict files:
+- `english.ifo` — dictionary metadata
+- `english.idx` — word index
+- `english.dict` — definition data (~35 MB)
+- `english.idx.cp` — secondary index for fast lookup (optional, auto-generated on device)
 
 **Step 2: Copy to the SD card**
 
 1. Remove the SD card from the device (or connect via File Transfer mode).
-2. Create the directory `/.crosspoint/dictionaries/` on the SD card if it doesn't exist.
-3. Copy the `.dict` file (and optionally the `.dict.idx` file) into that directory.
+2. Create the directory `/.dictionaries/` on the SD card if it doesn't exist.
+3. Copy all three StarDict files (`.ifo`, `.idx`, `.dict`) into that directory. Optionally include the `.idx.cp` file to skip first-boot index generation.
 
 ```
 SD Card Root/
-  .crosspoint/
-    dictionaries/
-      english.dict
-      english.dict.idx    (optional — auto-generated if missing)
+  .dictionaries/
+    english.ifo
+    english.idx
+    english.dict
+    english.idx.cp    (optional — auto-generated if missing)
 ```
 
 **Step 3: Enable on the device**
 
 1. Go to **Settings > Reader > Manage Dictionaries**.
-2. Your dictionary should appear in the list. Use **Confirm** to toggle it on.
+2. Your dictionary should appear in the list (using the bookname from the `.ifo` file). Use **Confirm** to toggle it on.
 3. The dictionary is now ready to use while reading.
 
 > [!TIP]
-> You can install multiple dictionaries. Each `.dict` file appears as a separate entry in the Manage Dictionaries screen. When looking up a word, all enabled dictionaries are searched.
+> You can install multiple dictionaries. Each `.ifo` file appears as a separate entry in the Manage Dictionaries screen. When looking up a word, all enabled dictionaries are searched.
 
 #### 3.6.3 Controls
 

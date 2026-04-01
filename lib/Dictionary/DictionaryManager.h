@@ -2,14 +2,14 @@
 #include <HalStorage.h>
 
 #include "DictTypes.h"
-#include "DictionaryIndex.h"
+#include "StarDictIndex.h"
 
 class DictionaryManager {
  public:
   static constexpr int MAX_DICTIONARIES = 16;
   static constexpr int MAX_RESULTS = 8;
-  static constexpr const char* DICT_DIR = "/.crosspoint/dictionaries";
-  static constexpr const char* ENABLED_FILE = "/.crosspoint/dictionaries/enabled.json";
+  static constexpr const char* DICT_DIR = "/.dictionaries";
+  static constexpr const char* ENABLED_FILE = "/.dictionaries/enabled.json";
 
   void scan();
   void rescan() {
@@ -27,9 +27,10 @@ class DictionaryManager {
  private:
   DictFileInfo dictionaries[MAX_DICTIONARIES] = {};
   int dictCount = 0;
-  DictionaryIndex index;
+  StarDictIndex index;
   bool scanned = false;
 
+  void scanDirectory(const char* dirPath);
   void loadEnabledState();
 
  public:

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Convert dictionary.txt to sorted .dict format with inflected forms.
+"""Convert dictionary.txt to StarDict format with inflected forms.
 
-Usage: python3 scripts/convert_dictionary.py dictionary.txt output.dict
+Usage: python3 scripts/convert_dictionary.py dictionary.txt english
 
 Input format (dictionary.txt):
   Word  definition text here
   (blank lines between entries, two-space separator)
 
-Output format (.dict):
-  word\tdefinition text here
-  (sorted alphabetically, no blank lines, tab separator, lowercase keys)
+Output files (StarDict format):
+  <name>.ifo  — metadata (bookname, wordcount, idxfilesize, sametypesequence)
+  <name>.idx  — binary index: [word\\0][uint32 offset BE][uint32 size BE], sorted
+  <name>.dict — raw definition data at byte offsets
 
-Also generates output.dict.idx — the binary index file used by the device for
-binary search lookups. This avoids slow on-device index generation.
+Also generates <name>.idx.cp — a secondary index for fast binary search on the
+ESP32-C3 device (avoids slow on-device index generation at first boot).
 
 Inflected forms (e.g., "walks", "walked", "walking") are generated from base
 words and point to "See: <base word>" definitions. Only forms not already in
@@ -115,110 +116,84 @@ def generate_inflections(word, definition):
 
 DICT_WORD_MAX = 32  # Must match DictTypes.h
 
-
-def fnv1a(data: bytes) -> int:
-    """FNV-1a hash matching the device implementation."""
-    h = 2166136261
-    for b in data:
-        h ^= b
-        h = (h * 16777619) & 0xFFFFFFFF
-    return h
+# Secondary index (.idx.cp) constants — must match DictTypes.h
+SD_INDEX_MAGIC = 0x43504958  # "CPIX"
+SD_INDEX_VERSION = 1
+SD_INDEX_HEADER_SIZE = 16
+SD_INDEX_ENTRY_SIZE = 44
 
 
-def compute_spot_check_hash(dict_bytes: bytes) -> int:
-    """Replicate DictionaryIndex::computeSpotCheckHash exactly.
+def write_stardict(entries, base_path, bookname):
+    """Write StarDict .ifo/.idx/.dict files and secondary .idx.cp index.
 
-    Hashes the first line, the line after the midpoint, and the last non-empty
-    line (found by seeking to max(0, size-512) and reading forward).
-    Lines are truncated to 255 chars (matching the 256-byte lineBuf on device).
+    Args:
+        entries: list of (word, definition) tuples, already sorted
+        base_path: output path without extension (e.g., "english")
+        bookname: display name for .ifo bookname field
     """
-    lines_raw = dict_bytes.split(b'\n')
-    # Remove trailing empty element from final newline
-    if lines_raw and lines_raw[-1] == b'':
-        lines_raw = lines_raw[:-1]
+    dict_path = base_path + '.dict'
+    idx_path = base_path + '.idx'
+    ifo_path = base_path + '.ifo'
+    cp_idx_path = base_path + '.idx.cp'
 
-    def truncate(line: bytes) -> bytes:
-        return line[:255]
+    # --- Write .dict: concatenated raw definitions ---
+    # Convert escaped \\n to real newlines for StarDict format
+    offsets = []  # (word, dict_offset, dict_size) for each entry
+    with open(dict_path, 'wb') as f:
+        for word, defn in entries:
+            # Convert literal \\n sequences to real newlines
+            raw_defn = defn.replace('\\n', '\n')
+            defn_bytes = raw_defn.encode('utf-8')
+            offset = f.tell()
+            f.write(defn_bytes)
+            offsets.append((word, offset, len(defn_bytes)))
 
-    hash_input = bytearray()
+    dict_size = sum(size for _, _, size in offsets)
+    print(f'Wrote {dict_path} ({dict_size} bytes)')
 
-    # First line
-    if lines_raw:
-        hash_input.extend(truncate(lines_raw[0]))
-
-    # Middle line — find line after the byte midpoint
-    if len(dict_bytes) > 2:
-        mid = len(dict_bytes) // 2
-        # Find the end of the partial line at the midpoint
-        nl = dict_bytes.find(b'\n', mid)
-        if nl >= 0 and nl + 1 < len(dict_bytes):
-            # Next full line starts at nl+1
-            end = dict_bytes.find(b'\n', nl + 1)
-            if end < 0:
-                end = len(dict_bytes)
-            hash_input.extend(truncate(dict_bytes[nl + 1:end]))
-
-    # Last non-empty line — seek to max(0, size-512), skip partial, read last
-    if len(dict_bytes) > 2:
-        near_end = max(0, len(dict_bytes) - 512)
-        # Skip partial line at near_end
-        nl = dict_bytes.find(b'\n', near_end)
-        if nl < 0:
-            nl = near_end - 1
-        # Read remaining lines, keep last non-empty one
-        remaining = dict_bytes[nl + 1:]
-        last_lines = remaining.split(b'\n')
-        last_line = b''
-        for line_bytes in last_lines:
-            if line_bytes:
-                last_line = line_bytes
-        hash_input.extend(truncate(last_line))
-
-    return fnv1a(bytes(hash_input))
-
-
-def generate_index(dict_path: str):
-    """Generate a .dict.idx binary index file matching the device format.
-
-    Index format (little-endian):
-      Header (12 bytes): dictFileSize(u32) + spotCheckHash(u32) + entryCount(u32)
-      Entries (36 bytes each): word(char[32]) + byteOffset(u32)
-    """
-    with open(dict_path, 'rb') as f:
-        dict_bytes = f.read()
-
-    dict_size = len(dict_bytes)
-    spot_hash = compute_spot_check_hash(dict_bytes)
-
-    # Build entries: parse each line for word and byte offset
-    entries = []
-    offset = 0
-    for line in dict_bytes.split(b'\n'):
-        if line:
-            tab = line.find(b'\t')
-            if tab > 0:
-                word = line[:tab].decode('utf-8', errors='replace')
-                if len(word) >= DICT_WORD_MAX:
-                    word = word[:DICT_WORD_MAX - 1]
-                entries.append((word, offset))
-        offset += len(line) + 1  # +1 for the newline
-
-    entry_count = len(entries)
-
-    idx_path = dict_path + '.idx'
+    # --- Write .idx: [word\0][uint32 offset BE][uint32 size BE] per entry ---
     with open(idx_path, 'wb') as f:
-        # Header
-        f.write(struct.pack('<III', dict_size, spot_hash, entry_count))
-        # Entries
-        for word, byte_offset in entries:
-            word_bytes = word.encode('utf-8')[:DICT_WORD_MAX - 1]
-            # Ensure truncation doesn't split a multi-byte UTF-8 character
-            word_bytes = word_bytes.decode('utf-8', 'ignore').encode('utf-8')
-            padded = word_bytes + b'\x00' * (DICT_WORD_MAX - len(word_bytes))
-            f.write(padded)
-            f.write(struct.pack('<I', byte_offset))
+        for word, offset, size in offsets:
+            word_bytes = word.encode('utf-8')
+            f.write(word_bytes + b'\x00')
+            f.write(struct.pack('>II', offset, size))
+        idx_size = f.tell()
+    print(f'Wrote {idx_path} ({idx_size} bytes, {len(offsets)} entries)')
 
-    print(f'Generated index: {idx_path} ({entry_count} entries, {dict_size} bytes dict)')
+    # --- Write .ifo: StarDict metadata ---
+    with open(ifo_path, 'w', encoding='utf-8') as f:
+        f.write('StarDict\'s dict ifo file\n')
+        f.write('version=2.4.2\n')
+        f.write(f'wordcount={len(offsets)}\n')
+        f.write(f'idxfilesize={idx_size}\n')
+        f.write(f'bookname={bookname}\n')
+        f.write('sametypesequence=m\n')
+    print(f'Wrote {ifo_path} (bookname="{bookname}", wordcount={len(offsets)})')
+
+    # --- Write .idx.cp: secondary index for fast binary search on device ---
+    # This saves the device from having to generate it on first boot.
+    idx_word_offset = 0  # Track byte offset of each word within .idx
+    with open(cp_idx_path, 'wb') as f:
+        # Header: magic, version, idxFileSize, entryCount (all little-endian)
+        f.write(struct.pack('<IIII', SD_INDEX_MAGIC, SD_INDEX_VERSION, idx_size, len(offsets)))
+        for word, offset, size in offsets:
+            # Truncate word to DICT_WORD_MAX-1 chars, null-padded to DICT_WORD_MAX bytes
+            word_bytes = word.encode('utf-8')
+            current_idx_word_offset = idx_word_offset
+            idx_word_offset += len(word_bytes) + 1 + 8  # word\0 + offset(4) + size(4)
+
+            truncated = word_bytes[:DICT_WORD_MAX - 1]
+            # Ensure truncation doesn't split a multi-byte UTF-8 character
+            truncated = truncated.decode('utf-8', 'ignore').encode('utf-8')
+            padded = truncated + b'\x00' * (DICT_WORD_MAX - len(truncated))
+
+            f.write(padded)  # 32 bytes
+            f.write(struct.pack('<I', offset))  # dictOffset (LE)
+            f.write(struct.pack('<I', size))  # dictSize (LE)
+            f.write(struct.pack('<I', current_idx_word_offset))  # idxWordOffset (LE)
+
+    cp_size = SD_INDEX_HEADER_SIZE + len(offsets) * SD_INDEX_ENTRY_SIZE
+    print(f'Wrote {cp_idx_path} ({cp_size} bytes, {len(offsets)} entries)')
 
 
 def is_headword_line(line):
@@ -401,7 +376,7 @@ def renumber_definitions(defn):
     return defn
 
 
-def convert(input_path, output_path):
+def convert(input_path, base_name):
     fmt = detect_format(input_path)
     print(f'Detected format: {fmt}')
 
@@ -441,21 +416,19 @@ def convert(input_path, output_path):
     for i, (word, defn) in enumerate(unique):
         unique[i] = (word, renumber_definitions(defn))
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for word, defn in unique:
-            # Ensure no literal newlines in the definition (use \\n escape)
-            defn = defn.replace('\n', '\\n')
-            f.write(f'{word}\t{defn}\n')
+    # Title-case the base name for the bookname (e.g., "english" → "English")
+    bookname = base_name.replace('_', ' ').title()
 
     base_count = len(existing) - inflection_count
-    print(f'Converted {base_count} base entries + {inflection_count} inflections = {len(unique)} total to {output_path}')
+    print(f'Converted {base_count} base entries + {inflection_count} inflections = {len(unique)} total')
 
-    # Generate binary index file
-    generate_index(output_path)
+    write_stardict(unique, base_name, bookname)
 
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        print(f'Usage: {sys.argv[0]} <input.txt> <output.dict>')
+        print(f'Usage: {sys.argv[0]} <input.txt> <base_name>')
+        print(f'  Example: {sys.argv[0]} WebstersEnglishDictionary.txt english')
+        print(f'  Produces: english.ifo, english.idx, english.dict, english.idx.cp')
         sys.exit(1)
     convert(sys.argv[1], sys.argv[2])
