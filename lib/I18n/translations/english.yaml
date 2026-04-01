@@ -297,6 +297,7 @@ STR_DICTIONARY_INSTRUCTIONS: "Place StarDict files (.ifo, .idx, .dict) in /.dict
 STR_NO_DEFINITION_FOUND: "No definition found"
 STR_DICTIONARY_READ_ONLY: "(read-only)"
 STR_DICTIONARY_INVALID: "(invalid format)"
+STR_DICTIONARY_LOOKUP: "Dictionary Lookup"
 STR_LOOKUP_HISTORY: "Lookup History"
 STR_CLEAR_ALL_HISTORY: "Clear All History"
 STR_NO_LOOKUP_HISTORY: "No lookup history"

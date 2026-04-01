@@ -15,6 +15,12 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+static void toUpperInPlace(char* s) {
+  for (int i = 0; s[i] != '\0'; ++i) {
+    s[i] = static_cast<char>(toupper(static_cast<unsigned char>(s[i])));
+  }
+}
+
 DictionaryDefinitionActivity::DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                            const char* word, DictResult* results, int resultCount)
     : Activity("DictionaryDefinition", renderer, mappedInput) {
@@ -22,9 +28,7 @@ DictionaryDefinitionActivity::DictionaryDefinitionActivity(GfxRenderer& renderer
   if (!DictionaryManager::normalizeWord(word, searchedWord, sizeof(searchedWord))) {
     snprintf(searchedWord, sizeof(searchedWord), "%s", word);
   }
-  for (int i = 0; searchedWord[i] != '\0'; ++i) {
-    searchedWord[i] = static_cast<char>(toupper(static_cast<unsigned char>(searchedWord[i])));
-  }
+  toUpperInPlace(searchedWord);
 
   // Takes ownership of the heap-allocated results array
   if (resultCount > 0 && results) {
@@ -143,10 +147,43 @@ void DictionaryDefinitionActivity::loop() {
   }
 
   // === Selection mode: cursor navigation ===
+  // Logical buttons are remapped per orientation so physical button positions
+  // match the user's visual perspective (see docs/dictionary-button-mapping.md).
   if (selectionMode) {
     if (defWordCount == 0) return;
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    const auto orientation = renderer.getOrientation();
+    const bool isCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+    const bool isCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+    const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+
+    // Map physical buttons to cursor actions based on orientation.
+    // Portrait:  Left→Left, Right→Right, Up→Up,    Down→Down
+    // Inverted:  Left→Right, Right→Left, Up→Down,  Down→Up
+    // CW:        Left→Up,   Right→Down,  Up→Right, Down→Left
+    // CCW:       Left→Down, Right→Up,    Up→Left,  Down→Right
+    using Btn = MappedInputManager::Button;
+    Btn cursorLeftBtn = Btn::Left, cursorRightBtn = Btn::Right;
+    Btn cursorUpBtn = Btn::Up, cursorDownBtn = Btn::Down;
+
+    if (isInverted) {
+      cursorLeftBtn = Btn::Right;
+      cursorRightBtn = Btn::Left;
+      cursorUpBtn = Btn::Down;
+      cursorDownBtn = Btn::Up;
+    } else if (isCw) {
+      cursorLeftBtn = Btn::Down;
+      cursorRightBtn = Btn::Up;
+      cursorUpBtn = Btn::Left;
+      cursorDownBtn = Btn::Right;
+    } else if (isCcw) {
+      cursorLeftBtn = Btn::Up;
+      cursorRightBtn = Btn::Down;
+      cursorUpBtn = Btn::Right;
+      cursorDownBtn = Btn::Left;
+    }
+
+    if (mappedInput.wasPressed(cursorRightBtn)) {
       if (selectedWordIndex < defWordCount - 1) {
         selectedWordIndex++;
       } else {
@@ -154,7 +191,7 @@ void DictionaryDefinitionActivity::loop() {
       }
       requestUpdate();
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (mappedInput.wasPressed(cursorLeftBtn)) {
       if (selectedWordIndex > 0) {
         selectedWordIndex--;
       } else {
@@ -162,14 +199,14 @@ void DictionaryDefinitionActivity::loop() {
       }
       requestUpdate();
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    if (mappedInput.wasPressed(cursorDownBtn)) {
       const int currentY = defWords[selectedWordIndex].y;
       const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
       const int targetY = currentY + lineHeight;
       selectedWordIndex = findWordOnAdjacentLine(selectedWordIndex, targetY);
       requestUpdate();
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    if (mappedInput.wasPressed(cursorUpBtn)) {
       const int currentY = defWords[selectedWordIndex].y;
       const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
       const int targetY = currentY - lineHeight;
@@ -300,28 +337,59 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     headerPos = snprintf(header, sizeof(header), "[%d] ", stackDepth);
   }
 
-  if (resultCount > 1) {
-    snprintf(header + headerPos, sizeof(header) - headerPos, "(%d/%d) %s - %s", currentResult + 1, resultCount,
-             searchedWord, r.dictionaryName);
-  } else {
-    snprintf(header + headerPos, sizeof(header) - headerPos, "%s - %s", searchedWord, r.dictionaryName);
-  }
+  snprintf(header + headerPos, sizeof(header) - headerPos, "%s - %s", searchedWord, r.dictionaryName);
 
-  GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding + hintGutterHeight, availableWidth, metrics.headerHeight},
-                 header);
+  const int headerY = metrics.topPadding + hintGutterHeight;
+  GUI.drawHeader(renderer, Rect{contentX, headerY, availableWidth, metrics.headerHeight}, header);
 
-  const int contentTop = metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop = headerY + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   drawDefinition(contentTop, contentX + margin, contentWidth, contentHeight, rightGutter);
 
   if (selectionMode) {
-    // Selection mode: all four directions for cursor, Back=exit, Confirm=lookup
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+    // Selection mode: labels match orientation-remapped cursor directions.
+    // See docs/dictionary-button-mapping.md for the full mapping table.
+    const bool isLandscape = isLandscapeCw || isLandscapeCcw;
+
+    const char* leftLabel;    // label at physical Left button position
+    const char* rightLabel;   // label at physical Right button position
+    const char* topLabel;     // label at physical BTN_UP position
+    const char* bottomLabel;  // label at physical BTN_DOWN position
+
+    if (isLandscapeCw) {
+      leftLabel = tr(STR_DIR_UP);
+      rightLabel = tr(STR_DIR_DOWN);
+      topLabel = tr(STR_DIR_RIGHT);
+      bottomLabel = tr(STR_DIR_LEFT);
+    } else if (isLandscapeCcw) {
+      leftLabel = tr(STR_DIR_DOWN);
+      rightLabel = tr(STR_DIR_UP);
+      topLabel = tr(STR_DIR_LEFT);
+      bottomLabel = tr(STR_DIR_RIGHT);
+    } else if (isPortraitInverted) {
+      leftLabel = tr(STR_DIR_RIGHT);
+      rightLabel = tr(STR_DIR_LEFT);
+      topLabel = tr(STR_DIR_DOWN);
+      bottomLabel = tr(STR_DIR_UP);
+    } else {
+      // Portrait (default)
+      leftLabel = tr(STR_DIR_LEFT);
+      rightLabel = tr(STR_DIR_RIGHT);
+      topLabel = tr(STR_DIR_UP);
+      bottomLabel = tr(STR_DIR_DOWN);
+    }
+
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), leftLabel, rightLabel);
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-    // Side buttons show Up/Down in selection mode
-    GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    if (isLandscape || isPortraitInverted) {
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      GUI.drawSideButtonHints(renderer, topLabel, bottomLabel);
+      renderer.setOrientation(orientation);
+    } else {
+      GUI.drawSideButtonHints(renderer, topLabel, bottomLabel);
+    }
   } else {
     // Button roles depend on orientation (see loop() for matching input logic).
     // drawSideButtonHints only works in portrait coordinate space, so we force
@@ -646,9 +714,7 @@ void DictionaryDefinitionActivity::performChainedLookup(const char* word) {
 
   // Update searchedWord (uppercased for header display)
   snprintf(searchedWord, sizeof(searchedWord), "%s", normalized);
-  for (int i = 0; searchedWord[i] != '\0'; ++i) {
-    searchedWord[i] = static_cast<char>(toupper(static_cast<unsigned char>(searchedWord[i])));
-  }
+  toUpperInPlace(searchedWord);
 
   requestUpdate();
 }
