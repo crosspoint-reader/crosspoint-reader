@@ -245,9 +245,12 @@ void EpubReaderActivity::loop() {
       mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS && !confirmLongPressConsumed) {
     confirmLongPressConsumed = true;
-    if (extractWordsFromCurrentPage()) {
-      wordSelection->enter();
-      requestUpdate();
+    {
+      RenderLock lock(*this);
+      if (extractWordsFromCurrentPage()) {
+        wordSelection->enter();
+        requestUpdate();
+      }
     }
     return;
   }
@@ -514,6 +517,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY_LOOKUP: {
+      RenderLock lock(*this);
       if (isDictionaryAvailable() && extractWordsFromCurrentPage()) {
         wordSelection->enter();
       }

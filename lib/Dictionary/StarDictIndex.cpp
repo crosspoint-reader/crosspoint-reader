@@ -213,7 +213,7 @@ bool StarDictIndex::validateIndex(const char* idxPath, const char* cpIdxPath) {
     LOG_INF("DICT", "Secondary index .idx size mismatch: expected %u, got %u", idxSize, header.idxFileSize);
     return false;
   }
-  uint32_t expectedSize = SD_INDEX_HEADER_SIZE + header.entryCount * static_cast<uint32_t>(sizeof(SdIndexEntry));
+  uint64_t expectedSize = SD_INDEX_HEADER_SIZE + static_cast<uint64_t>(header.entryCount) * sizeof(SdIndexEntry);
   if (header.entryCount == 0 || cpSize != expectedSize) {
     LOG_INF("DICT", "Secondary index file size mismatch: expected %u, got %u", expectedSize, cpSize);
     return false;
@@ -412,10 +412,9 @@ bool StarDictIndex::lookup(const char* basePath, const char* word, char* outDef,
   }
 
   // Walk adjacent entries sharing the same truncated prefix (handles words > 31 chars).
-  static constexpr int32_t MAX_PREFIX_WALK = 32;
+  // The strncasecmp check below stops iteration once the prefix no longer matches.
   bool found = false;
-  for (int32_t candidate = idx;
-       candidate < static_cast<int32_t>(header.entryCount) && candidate < idx + MAX_PREFIX_WALK; ++candidate) {
+  for (int32_t candidate = idx; candidate < static_cast<int32_t>(header.entryCount); ++candidate) {
     size_t entryOffset = SD_INDEX_HEADER_SIZE + static_cast<size_t>(candidate) * sizeof(SdIndexEntry);
     cpIdxFile.seekSet(entryOffset);
     SdIndexEntry entry;

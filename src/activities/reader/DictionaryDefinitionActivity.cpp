@@ -596,7 +596,7 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
     char indicator[32];
     snprintf(indicator, sizeof(indicator), "%d/%d", currentPage, totalPages);
     const int indicatorWidth = renderer.getTextWidth(UI_12_FONT_ID, indicator);
-    renderer.drawText(UI_12_FONT_ID, renderer.getScreenWidth() - indicatorWidth - 10 - rightGutter,
+    renderer.drawText(UI_12_FONT_ID, contentLeft + contentWidth - indicatorWidth,
                       contentTop + contentHeight - lineHeight, indicator, true);
   }
 }

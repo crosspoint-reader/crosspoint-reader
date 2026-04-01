@@ -189,7 +189,7 @@ CrossPoint uses the [StarDict](https://en.wikipedia.org/wiki/StarDict) dictionar
 
 **Option A: Download pre-built files (easiest)**
 
-Download `english-dict-files.zip` from the [pull request](https://github.com/crosspoint-reader/crosspoint-reader/pull/) that introduced this feature. Extract it to get the StarDict files (`english.ifo`, `english.idx`, `english.dict`), ready to copy to your SD card.
+Download `english-dict-files.zip` from the [pull request](https://github.com/crosspoint-reader/crosspoint-reader/pull/1542) that introduced this feature. Extract it to get the StarDict files (`english.ifo`, `english.idx`, `english.dict`), ready to copy to your SD card.
 
 **Option B: Use existing StarDict dictionaries**
 
@@ -215,7 +215,7 @@ This generates the StarDict files:
 2. Create the directory `/.dictionaries/` on the SD card if it doesn't exist.
 3. Copy all three StarDict files (`.ifo`, `.idx`, `.dict`) into that directory. Optionally include the `.idx.cp` file to skip first-boot index generation.
 
-```
+```text
 SD Card Root/
   .dictionaries/
     english.ifo
