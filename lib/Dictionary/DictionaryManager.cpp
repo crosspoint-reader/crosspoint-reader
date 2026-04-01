@@ -319,10 +319,8 @@ int DictionaryManager::lookup(const char* word, DictResult* results, int maxResu
   if (!scanned) scan();
   if (!word || word[0] == '\0' || maxResults <= 0) return 0;
 
-  const unsigned long startMs = millis();
   int found = 0;
   char basePath[192];
-  const char* matchType = nullptr;
 
   for (int i = 0; i < dictCount && found < maxResults; ++i) {
     if (!dictionaries[i].enabled || dictionaries[i].corrupt || dictionaries[i].readOnly) continue;
@@ -333,14 +331,12 @@ int DictionaryManager::lookup(const char* word, DictResult* results, int maxResu
 
     // Try exact word first
     bool matched = index.lookup(basePath, word, result.definition, sizeof(result.definition));
-    if (matched && !matchType) matchType = "direct match";
 
     // If not found, try normalized word (only if normalization changes something)
     if (!matched) {
       char normalized[DICT_WORD_MAX];
       if (normalizeWord(word, normalized, sizeof(normalized)) && strcmp(normalized, word) != 0) {
         matched = index.lookup(basePath, normalized, result.definition, sizeof(result.definition));
-        if (matched && !matchType) matchType = "normalized";
       }
     }
 
@@ -349,13 +345,6 @@ int DictionaryManager::lookup(const char* word, DictResult* results, int maxResu
       result.dictionaryName[sizeof(result.dictionaryName) - 1] = '\0';
       found++;
     }
-  }
-
-  const unsigned long elapsedMs = millis() - startMs;
-  if (found > 0) {
-    LOG_INF("DICT", "Lookup '%s' -> %s in %lu ms", word, matchType, elapsedMs);
-  } else {
-    LOG_INF("DICT", "Lookup '%s' -> not found in %lu ms", word, elapsedMs);
   }
 
   return found;
