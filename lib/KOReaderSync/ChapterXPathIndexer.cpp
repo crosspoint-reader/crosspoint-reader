@@ -44,6 +44,68 @@ size_t countVisibleBytes(const XML_Char* text, const int len) {
   return count;
 }
 
+size_t countUtf8Codepoints(const XML_Char* text, const int len) {
+  size_t count = 0;
+  for (int i = 0; i < len; i++) {
+    if ((static_cast<unsigned char>(text[i]) & 0xC0) != 0x80) {
+      count++;
+    }
+  }
+  return count;
+}
+
+// Map a visible-byte index within a UTF-8 chunk to a 0-based codepoint offset.
+// Returns the codepoint index of the character that contains the targetVisibleByte-th
+// visible (non-whitespace) byte.
+size_t codepointAtVisibleByte(const XML_Char* text, const int len, const size_t targetVisibleByte) {
+  size_t codepoints = 0;
+  size_t visibleBytes = 0;
+  for (int i = 0; i < len; i++) {
+    const unsigned char uc = static_cast<unsigned char>(text[i]);
+    const bool isLeadByte = (uc & 0xC0) != 0x80;
+    if (isLeadByte) {
+      codepoints++;
+    }
+    if (!std::isspace(uc)) {
+      if (visibleBytes == targetVisibleByte) {
+        return codepoints - 1;
+      }
+      visibleBytes++;
+    }
+  }
+  return codepoints;
+}
+
+// Count visible (non-whitespace) bytes before the target codepoint index.
+// targetCodepointOffset is 0-based and measured in Unicode codepoints.
+size_t visibleBytesBeforeCodepoint(const XML_Char* text, const int len, const size_t targetCodepointOffset) {
+  size_t visibleBytes = 0;
+  size_t codepointIndex = 0;
+
+  int i = 0;
+  while (i < len) {
+    if (codepointIndex >= targetCodepointOffset) {
+      break;
+    }
+
+    const int cpStart = i;
+    i++;
+    while (i < len && (static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) {
+      i++;
+    }
+
+    for (int j = cpStart; j < i; j++) {
+      if (!std::isspace(static_cast<unsigned char>(text[j]))) {
+        visibleBytes++;
+      }
+    }
+
+    codepointIndex++;
+  }
+
+  return visibleBytes;
+}
+
 // Canonicalize a KOReader XPath for comparison:
 // - remove whitespace, lowercase, strip /text() with optional char offset,
 //   strip trailing .N text-child-index suffix on the last segment (e.g. br.0 → br).
@@ -356,16 +418,57 @@ struct ForwardState : StackState {
   bool found = false;
   XML_Parser parser = nullptr;
 
+  // Body-level text-node tracking for text()[N].M XPath emission.
+  // crengine counts ALL text nodes (including whitespace-only) and uses
+  // 0-based Unicode codepoint offsets for .M.
+  int bodyTextNodeCount = 0;
+  size_t codepointsInBodyTextNode = 0;
+  bool inBodyTextNode = false;
+
   ForwardState(const int spineIndex, const size_t targetOffset) : spineIndex(spineIndex), targetOffset(targetOffset) {}
 
+  void pushElement(const XML_Char* rawName) {
+    inBodyTextNode = false;
+    StackState::pushElement(rawName);
+  }
+
+  void popElement() {
+    inBodyTextNode = false;
+    StackState::popElement();
+  }
+
   void onChar(const XML_Char* text, const int len) {
-    if (shouldSkipText(len) || isWhitespaceOnly(text, len) || found) {
+    if (shouldSkipText(len) || found) {
+      return;
+    }
+
+    // Track body-level text nodes: count ALL text nodes (including whitespace-only)
+    // to match crengine's DOM text-node indexing.
+    const bool atBodyLevel = bodyIdx() + 1 == static_cast<int>(stack.size());
+    if (atBodyLevel && !inBodyTextNode) {
+      inBodyTextNode = true;
+      bodyTextNodeCount++;
+      codepointsInBodyTextNode = 0;
+    }
+
+    if (isWhitespaceOnly(text, len)) {
+      if (atBodyLevel) {
+        codepointsInBodyTextNode += countUtf8Codepoints(text, len);
+      }
       return;
     }
 
     const size_t visible = countVisibleBytes(text, len);
     if (totalTextBytes + visible >= targetOffset) {
-      result = currentXPath(spineIndex);
+      if (atBodyLevel && bodyTextNodeCount > 0) {
+        const size_t targetVisibleByteInChunk = targetOffset - totalTextBytes;
+        const size_t cpInChunk = codepointAtVisibleByte(text, len, targetVisibleByteInChunk);
+        const size_t charOff = codepointsInBodyTextNode + cpInChunk;
+        result =
+            currentXPath(spineIndex) + "/text()[" + std::to_string(bodyTextNodeCount) + "]." + std::to_string(charOff);
+      } else {
+        result = currentXPath(spineIndex);
+      }
       found = true;
       if (parser) {
         XML_StopParser(parser, XML_FALSE);
@@ -373,6 +476,9 @@ struct ForwardState : StackState {
       return;
     }
     totalTextBytes += visible;
+    if (atBodyLevel) {
+      codepointsInBodyTextNode += countUtf8Codepoints(text, len);
+    }
   }
 };
 
@@ -415,7 +521,7 @@ struct ReverseState : StackState {
   int targetTextNodeIndex = 0;
   int targetCharOffset = 0;
   bool inParentTextNode = false;
-  size_t bytesInCurrentTextNode = 0;
+  size_t codepointsInCurrentTextNode = 0;
   int currentTextNodeCount = 0;
 
   MatchTier bestTier = MatchTier::NONE;
@@ -473,10 +579,12 @@ struct ReverseState : StackState {
   }
 
   void onChar(const XML_Char* text, const int len) {
-    if (shouldSkipText(len) || isWhitespaceOnly(text, len)) {
+    if (shouldSkipText(len)) {
       return;
     }
+
     const size_t visible = countVisibleBytes(text, len);
+    const size_t codepoints = countUtf8Codepoints(text, len);
 
     // Text-node targeting: count direct text children of targetNorm element.
     if (targetTextNodeIndex > 0 && !stack.empty()) {
@@ -487,12 +595,13 @@ struct ReverseState : StackState {
         if (!inParentTextNode) {
           inParentTextNode = true;
           currentTextNodeCount++;
-          bytesInCurrentTextNode = 0;
+          codepointsInCurrentTextNode = 0;
         }
         if (currentTextNodeCount == targetTextNodeIndex && bestTier < MatchTier::EXACT) {
           const size_t charOff = static_cast<size_t>(targetCharOffset);
-          if (charOff >= bytesInCurrentTextNode && charOff < bytesInCurrentTextNode + visible) {
-            const size_t pos = totalTextBytes + (charOff - bytesInCurrentTextNode);
+          if (charOff >= codepointsInCurrentTextNode && charOff <= codepointsInCurrentTextNode + codepoints) {
+            const size_t cpInChunk = charOff - codepointsInCurrentTextNode;
+            const size_t pos = totalTextBytes + visibleBytesBeforeCodepoint(text, len, cpInChunk);
             bestTier = MatchTier::EXACT;
             bestDepth = pathDepth(xpath);
             bestOffset = pos;
@@ -500,10 +609,14 @@ struct ReverseState : StackState {
             bestTierName = "text-node-exact";
           }
         }
-        bytesInCurrentTextNode += visible;
+        codepointsInCurrentTextNode += codepoints;
         totalTextBytes += visible;
         return;
       }
+    }
+
+    if (isWhitespaceOnly(text, len)) {
+      return;
     }
 
     // Standard: check match once per element (at first text).
@@ -672,8 +785,8 @@ bool ChapterXPathIndexer::findProgressForXPath(const std::shared_ptr<Epub>& epub
     outIntraSpineProgress = std::max(0.0f, std::min(1.0f, outIntraSpineProgress));
   }
 
-  LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f for '%s'", spineIndex, state.bestTierName,
-          state.bestOffset, state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
+  LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f for '%s'", spineIndex,
+          state.bestTierName, state.bestOffset, state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
   return true;
 }
 
