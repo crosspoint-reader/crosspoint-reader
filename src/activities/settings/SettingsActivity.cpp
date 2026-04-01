@@ -68,8 +68,10 @@ void SettingsActivity::onEnter() {
     };
     readerSettings.push_back(std::move(dictSetting));
   }
-  readerSettings.push_back(SettingInfo::Value(StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
-                                              {50, 250, 50}, "lookupHistoryCap", StrId::STR_CAT_READER));
+  readerSettings.push_back(SettingInfo::Value(
+      StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
+      {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},
+      "lookupHistoryCap", StrId::STR_CAT_READER));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Reset selection to first category
@@ -176,7 +178,8 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
+    // uint8_t: int8_t overflows above 127, breaking dictionary history cap rollover
+    const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
       SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
     } else {

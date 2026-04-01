@@ -263,6 +263,12 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  // Clamp lookup history cap to valid range
+  if (SETTINGS.lookupHistoryCap < CrossPointSettings::HIST_CAP_MIN ||
+      SETTINGS.lookupHistoryCap > CrossPointSettings::HIST_CAP_MAX ||
+      SETTINGS.lookupHistoryCap % CrossPointSettings::HIST_CAP_STEP != 0) {
+    SETTINGS.lookupHistoryCap = CrossPointSettings::HIST_CAP_DEFAULT;
+  }
   I18N.loadSettings();
   // Validate the stored dictionary path still exists on the SD card.
   Dictionary::isValidDictionary();

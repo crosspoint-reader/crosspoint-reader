@@ -218,8 +218,12 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
-  // Lookup history entry cap (direct value, range 50–250)
-  uint8_t lookupHistoryCap = 100;
+  // Lookup history entry cap (direct value)
+  static constexpr uint8_t HIST_CAP_MIN = 25;
+  static constexpr uint8_t HIST_CAP_MAX = 225;
+  static constexpr uint8_t HIST_CAP_STEP = 25;
+  static constexpr uint8_t HIST_CAP_DEFAULT = 100;
+  uint8_t lookupHistoryCap = HIST_CAP_DEFAULT;
 
   ~CrossPointSettings() = default;
 
