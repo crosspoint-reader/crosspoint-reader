@@ -4,7 +4,7 @@
 #include <Logging.h>
 #include <Serialization.h>
 
-#include "../converters/DitherUtils.h"
+#include "../converters/DirectPixelWriter.h"
 #include "../converters/ImageDecoderFactory.h"
 
 // Cache file format:
@@ -66,6 +66,9 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     return false;
   }
 
+  DirectPixelWriter pw;
+  pw.init(renderer);
+
   for (int row = 0; row < cachedHeight; row++) {
     if (cacheFile.read(rowBuffer, bytesPerRow) != bytesPerRow) {
       LOG_ERR("IMG", "Cache read error at row %d", row);
@@ -74,13 +77,14 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
       return false;
     }
 
-    int destY = y + row;
+    const int destY = y + row;
+    pw.beginRow(destY);
     for (int col = 0; col < cachedWidth; col++) {
-      int byteIdx = col / 4;
-      int bitShift = 6 - (col % 4) * 2;  // MSB first within byte
+      const int byteIdx = col >> 2;            // col / 4
+      const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
       uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
 
-      drawPixelWithRenderMode(renderer, x + col, destY, pixelValue);
+      pw.writePixel(x + col, pixelValue);
     }
   }
 
