@@ -248,6 +248,7 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
 bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path) {
   JsonDocument doc;
   doc["lastConnectedSsid"] = store.getLastConnectedSsid();
+  doc["lastKnownMacAddress"] = store.getLastKnownMacAddress();
 
   JsonArray arr = doc["credentials"].to<JsonArray>();
   for (const auto& cred : store.getCredentials()) {
@@ -271,6 +272,7 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
   }
 
   store.lastConnectedSsid = doc["lastConnectedSsid"] | std::string("");
+  store.lastKnownMacAddress = doc["lastKnownMacAddress"] | std::string("");
 
   store.credentials.clear();
   JsonArray arr = doc["credentials"].as<JsonArray>();

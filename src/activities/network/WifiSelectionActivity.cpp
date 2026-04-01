@@ -13,6 +13,27 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+
+bool isLikelyValidMac(const uint8_t mac[6]) {
+  bool allZero = true;
+  bool allFF = true;
+  for (int i = 0; i < 6; i++) {
+    allZero = allZero && (mac[i] == 0x00);
+    allFF = allFF && (mac[i] == 0xFF);
+  }
+  return !allZero && !allFF;
+}
+
+std::string formatMacLabel(const uint8_t mac[6]) {
+  char macStr[64];
+  snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
+           mac[3], mac[4], mac[5]);
+  return std::string(macStr);
+}
+
+}  // namespace
+
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
 
@@ -21,6 +42,13 @@ void WifiSelectionActivity::onEnter() {
   {
     RenderLock lock(*this);
     WIFI_STORE.loadFromFile();
+  }
+
+  // Show persisted MAC immediately so UI doesn't briefly display a bogus value.
+  if (!WIFI_STORE.getLastKnownMacAddress().empty()) {
+    cachedMacAddress = std::string(tr(STR_MAC_ADDRESS)) + " " + WIFI_STORE.getLastKnownMacAddress();
+  } else {
+    cachedMacAddress = std::string(tr(STR_MAC_ADDRESS)) + " --";
   }
 
   // Reset state
@@ -36,13 +64,19 @@ void WifiSelectionActivity::onEnter() {
   forgetPromptSelection = 0;
   autoConnecting = false;
 
-  // Cache MAC address for display
+  // Refresh displayed MAC from live hardware value when valid.
   uint8_t mac[6];
   WiFi.macAddress(mac);
-  char macStr[64];
-  snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
-           mac[3], mac[4], mac[5]);
-  cachedMacAddress = std::string(macStr);
+  if (isLikelyValidMac(mac)) {
+    cachedMacAddress = formatMacLabel(mac);
+    char persistedMac[18];
+    snprintf(persistedMac, sizeof(persistedMac), "%02x-%02x-%02x-%02x-%02x-%02x", mac[0], mac[1], mac[2], mac[3],
+             mac[4], mac[5]);
+    if (WIFI_STORE.getLastKnownMacAddress() != persistedMac) {
+      RenderLock lock(*this);
+      WIFI_STORE.setLastKnownMacAddress(persistedMac);
+    }
+  }
 
   // Trigger first update to show scanning message
   requestUpdate();
