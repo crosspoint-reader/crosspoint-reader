@@ -148,8 +148,17 @@ struct ReverseState : StackState {
     const std::string xpath = normalizeXPath(currentXPath(spineIndex));
     const int depth = pathDepth(xpath);
 
+    const bool targetIsTextSelector = targetTextNodeIndex > 0;
+
     if (xpath == targetNorm) {
-      tryUpdate(MatchTier::EXACT, depth, "exact", true);
+      // For /text()[N].M targets, the normalized parent element path is equal to
+      // targetNorm. Treat that as an ancestor-level anchor so text-node exact
+      // matching can still determine the real intra-node offset.
+      if (targetIsTextSelector) {
+        tryUpdate(MatchTier::ANCESTOR, depth, "text-parent", false);
+      } else {
+        tryUpdate(MatchTier::EXACT, depth, "exact", true);
+      }
       return;
     }
     if (isAncestorPath(xpath, targetNorm)) {
@@ -225,8 +234,15 @@ bool findProgressForXPathInternal(const std::shared_ptr<Epub>& epub, const int s
     outIntraSpineProgress = std::max(0.0f, std::min(1.0f, outIntraSpineProgress));
   }
 
-  LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f for '%s'", spineIndex, state.bestTierName,
-          state.bestOffset, state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
+  if (state.targetTextNodeIndex > 0) {
+    LOG_DBG("KOX",
+            "Reverse: spine=%d %s match textNode=%d char=%d offset=%zu/%zu -> progress=%.3f for '%s'",
+            spineIndex, state.bestTierName, state.targetTextNodeIndex, state.targetCharOffset, state.bestOffset,
+            state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
+  } else {
+    LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f for '%s'", spineIndex,
+            state.bestTierName, state.bestOffset, state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
+  }
   return true;
 }
 
