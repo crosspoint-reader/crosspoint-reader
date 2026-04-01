@@ -145,3 +145,44 @@ The history list is capped at the **Dictionary History Limit** value in Settings
 Dictionary definitions containing IPA phonetic transcriptions (pronunciation symbols like /ˈæp.əl/) are rendered using a dedicated built-in font that covers all standard IPA characters. IPA symbols appear automatically in this font regardless of your chosen reading font or size.
 
 If you see a filled diamond where a pronunciation symbol should appear, that character is outside the supported IPA range.
+
+---
+
+## Offline Dictionary Tools
+
+A command-line tool is included for working with StarDict dictionaries on your computer, without the device. It requires Python 3 and has no external dependencies.
+
+### Pre-processing
+
+Replicate the on-device preparation steps (decompression and index generation) on your computer:
+
+```bash
+python3 scripts/dictionary_tools.py prep /path/to/dictionary-folder
+```
+
+This is useful for pre-processing large dictionaries before copying them to the SD card, avoiding the longer on-device preparation time.
+
+### Looking Up a Word
+
+Look up a word from the command line:
+
+```bash
+python3 scripts/dictionary_tools.py lookup /path/to/dictionary-folder apple
+```
+
+Prints the definition to stdout. The dictionary must be prepared first (either on-device or via `prep`).
+
+### Merging Dictionaries
+
+Combine two or more StarDict dictionaries into a single monolithic dictionary:
+
+```bash
+python3 scripts/dictionary_tools.py merge \
+  --source /path/to/dict-a \
+  --source /path/to/dict-b \
+  --output /path/to/merged-dict
+```
+
+Specify `--source` once per dictionary to include. The merged output contains the full union of all headwords and synonyms. When the same word appears in multiple sources, definitions are concatenated in source order.
+
+Source dictionaries must be prepared (decompressed `.dict` files) before merging. The output is a complete, ready-to-use StarDict dictionary that can be copied directly to the SD card.

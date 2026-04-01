@@ -5,8 +5,9 @@ dict_tools.py — Offline StarDict dictionary tools for CrossPoint Reader.
 Subcommands:
   prep   — Pre-process a dictionary (decompress, generate offset files)
   lookup — Look up a word in a prepared dictionary
+  merge  — Merge multiple StarDict dictionaries into one
 
-Run 'python3 scripts/dict_tools.py <subcommand> --help' for details.
+Run 'python3 scripts/dictionary_tools.py <subcommand> --help' for details.
 """
 
 import argparse

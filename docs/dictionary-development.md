@@ -38,7 +38,7 @@ test/
     README.md
 
 scripts/
-  dictionary_tools.py                  # standalone CLI: prep, lookup
+  dictionary_tools.py                  # standalone CLI: prep, lookup, merge
   dictionary_coverage_check.py         # standalone CLI: word coverage audit
 ```
 
@@ -176,7 +176,7 @@ These live in `scripts/` and work independently of the test infrastructure.
 
 ### dictionary_tools.py
 
-Offline pre-processing and lookup (replicates on-device behavior):
+Offline pre-processing, lookup, and merging for StarDict dictionaries:
 
 ```bash
 # Pre-process a dictionary (decompress + generate offset files)
@@ -184,7 +184,33 @@ python3 scripts/dictionary_tools.py prep test/dictionaries/english-full
 
 # Look up a word
 python3 scripts/dictionary_tools.py lookup test/dictionaries/english-full apple
+
+# Merge multiple dictionaries into one
+python3 scripts/dictionary_tools.py merge \
+  --source /path/to/dict-a \
+  --source /path/to/dict-b \
+  --output /path/to/merged-dict
 ```
+
+#### Subcommands
+
+| Subcommand | Purpose |
+|------------|---------|
+| `prep` | Decompress `.dict.dz`/`.syn.dz` and generate `.idx.oft`/`.syn.oft` offset files. Replicates on-device `DictPrepareActivity` behavior. |
+| `lookup` | Exact-match word lookup in a prepared dictionary. Prints the definition to stdout. |
+| `merge` | Combine two or more StarDict dictionaries into a single monolithic dictionary. |
+
+#### merge details
+
+`merge` reads `.idx`, `.dict`, `.syn`, and `.ifo` from each `--source` folder and writes a complete StarDict dictionary to `--output`. The output folder name becomes the file stem (e.g. `--output /tmp/merged` produces `merged.idx`, `merged.dict`, etc.).
+
+Behavior:
+- **Headwords**: Full union of all source headwords, sorted case-insensitively.
+- **Definitions**: When the same headword appears in multiple sources, definitions are concatenated in source order.
+- **Synonyms**: Full union -- all synonyms from all sources are preserved, with target indices remapped to the merged headword index.
+- **sametypesequence**: Inherited from the first source. A warning is printed if sources disagree.
+- **Generated files**: `.idx.oft` and `.syn.oft` are produced automatically.
+- **Requirements**: Source dictionaries must have decompressed `.dict` files (run `prep` first if needed). No external dependencies -- stdlib only.
 
 ### dictionary_coverage_check.py
 
