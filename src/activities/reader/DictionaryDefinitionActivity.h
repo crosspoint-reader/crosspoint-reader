@@ -41,12 +41,12 @@ class DictionaryDefinitionActivity final : public Activity {
 
   // --- Chained lookup word stack ---
   static constexpr int MAX_CHAIN_DEPTH = 25;
-  char wordStack[MAX_CHAIN_DEPTH][DICT_WORD_MAX];  // ~800 bytes
+  char wordStack[MAX_CHAIN_DEPTH][DICT_WORD_MAX] = {};  // ~800 bytes
   int stackDepth = 0;
 
   // --- Word selection mode ---
   static constexpr int MAX_DEF_WORDS = 200;
-  DefWordInfo defWords[MAX_DEF_WORDS];
+  DefWordInfo defWords[MAX_DEF_WORDS] = {};
   int defWordCount = 0;
   bool selectionMode = false;
   int selectedWordIndex = 0;
