@@ -2,6 +2,8 @@
 
 This note documents how CrossPoint maps reading positions to and from KOReader sync payloads.
 
+Related architecture overview: [koreader-synchronization.md](koreader-synchronization.md)
+
 ## Problem
 
 CrossPoint internally stores position as:
