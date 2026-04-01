@@ -439,14 +439,16 @@ void DictionaryDefinitionActivity::loop() {
       }
 
       // Long press Back: exit-all (fire at threshold).
-      if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
+      if (mappedInput.isPressed(MappedInputManager::Button::Back) &&
+          mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
         setResult(ActivityResult{});
         finish();
         return;
       }
 
       // Short press Back: exit word-select mode.
-      if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+          mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS) {
         isWordSelectMode = false;
         navigator.reset();
         requestUpdate();

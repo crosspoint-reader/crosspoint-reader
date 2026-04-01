@@ -7,9 +7,9 @@
 
 #include "DictionaryDefinitionActivity.h"
 #include "MappedInputManager.h"
-#include "util/Dictionary.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
 #include "util/LookupHistory.h"
 
 const char* LookedUpWordsActivity::glyphFor(LookupHistory::Status s) {
