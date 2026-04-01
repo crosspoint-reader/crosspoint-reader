@@ -15,6 +15,7 @@ namespace ChapterXPathIndexerInternal {
 struct StackNode {
   std::string tag;
   int index = 1;
+  // Reserved for future text-node heuristics; intentionally unused for now.
   bool hasText = false;
 };
 

@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cctype>
 #include <unordered_map>
 #include <vector>
@@ -10,9 +11,8 @@
 namespace ChapterXPathIndexerInternal {
 
 std::string toLowerStr(std::string value) {
-  for (char& c : value) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
 }
 
@@ -186,7 +186,7 @@ std::string decompressToTempFile(const std::shared_ptr<Epub>& epub, const int sp
     return "";
   }
 
-  const std::string tmpPath = epub->getCachePath() + "/.tmp_kox.html";
+  const std::string tmpPath = epub->getCachePath() + "/.tmp_kox_" + std::to_string(spineIndex) + ".html";
   if (Storage.exists(tmpPath.c_str())) {
     Storage.remove(tmpPath.c_str());
   }

@@ -520,6 +520,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
+                  self->paragraphIndexPerPage.push_back(self->xpathParagraphIndex);
                   self->completePageFn(std::move(self->currentPage));
                   self->completedPageCount++;
                   self->currentPage.reset(new Page());

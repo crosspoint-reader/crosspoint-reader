@@ -99,6 +99,13 @@ std::string makeSpineCacheKey(const std::shared_ptr<Epub>& epub, const int spine
 
 size_t getTotalTextBytesCached(const std::shared_ptr<Epub>& epub, const int spineIndex, const std::string& tmpPath) {
   static std::unordered_map<std::string, size_t> sTotalBytesBySpine;
+  static std::string sCachedBookPath;
+
+  const std::string currentBookPath = epub ? epub->getCachePath() : std::string();
+  if (currentBookPath != sCachedBookPath) {
+    sTotalBytesBySpine.clear();
+    sCachedBookPath = currentBookPath;
+  }
 
   const std::string key = makeSpineCacheKey(epub, spineIndex);
   if (!key.empty()) {
