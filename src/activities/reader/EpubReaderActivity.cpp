@@ -18,6 +18,7 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "LookupHistoryActivity.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
@@ -509,6 +510,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         pendingScreenshot = true;
       }
       requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
+      startActivityForResult(std::make_unique<LookupHistoryActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) {
+                               if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
+                                 ignoreNextBackRelease = true;
+                               }
+                               if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+                                 ignoreNextConfirmRelease = true;
+                               }
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
@@ -1078,6 +1092,13 @@ void EpubReaderActivity::launchDictionaryLookup(const char* word) {
     return;
   }
   const int resultCount = dictManager->lookup(word, results, DictionaryManager::MAX_RESULTS);
+
+  // Record all lookups in history (even if no results found)
+  {
+    lookupHistory.load();
+    lookupHistory.addWord(word);
+    lookupHistory.save();
+  }
 
   if (wordSelection) wordSelection->exit();
 

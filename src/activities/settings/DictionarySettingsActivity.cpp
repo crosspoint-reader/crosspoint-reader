@@ -3,19 +3,14 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "../reader/LookupHistoryActivity.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
 void DictionarySettingsActivity::onEnter() {
   Activity::onEnter();
   dictManager.scan();
-  selectedIndex = 0;
-  // Skip to first non-corrupt dictionary if possible
-  const int count = dictManager.getDictionaryCount();
-  for (int i = 0; i < count; ++i) {
-    if (!dictManager.getDictionary(selectedIndex).corrupt) break;
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, count);
-  }
+  selectedIndex = 0;  // Starts on "Lookup History" item
   requestUpdate();
 }
 
@@ -30,42 +25,56 @@ void DictionarySettingsActivity::loop() {
     return;
   }
 
+  const int dictCount = dictManager.getDictionaryCount();
+  const int totalItems = dictListOffset() + dictCount;
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    toggleSelected();
+    if (selectedIndex == HISTORY_ITEM_INDEX) {
+      // Flush enabled state so LookupHistoryActivity sees current toggles
+      dictManager.saveEnabledState();
+      startActivityForResult(std::make_unique<LookupHistoryActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { requestUpdate(); });
+    } else {
+      toggleSelected();
+    }
     return;
   }
 
-  buttonNavigator.onNextRelease([this] {
-    const int count = dictManager.getDictionaryCount();
-    if (count == 0) return;
-    // Skip corrupt (unselectable) dictionaries when navigating forward
-    for (int i = 0; i < count; ++i) {
-      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, count);
-      if (!dictManager.getDictionary(selectedIndex).corrupt) break;
+  buttonNavigator.onNextRelease([this, dictCount, totalItems] {
+    if (totalItems == 0) return;
+    // Navigate forward, skipping corrupt dictionaries
+    for (int i = 0; i < totalItems; ++i) {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalItems);
+      // History item is always selectable
+      if (selectedIndex == HISTORY_ITEM_INDEX) break;
+      // Check if this dictionary is corrupt
+      const int dictIdx = selectedIndex - dictListOffset();
+      if (dictIdx >= 0 && dictIdx < dictCount && !dictManager.getDictionary(dictIdx).corrupt) break;
     }
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this] {
-    const int count = dictManager.getDictionaryCount();
-    if (count == 0) return;
-    // Skip corrupt (unselectable) dictionaries when navigating backward
-    for (int i = 0; i < count; ++i) {
-      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, count);
-      if (!dictManager.getDictionary(selectedIndex).corrupt) break;
+  buttonNavigator.onPreviousRelease([this, dictCount, totalItems] {
+    if (totalItems == 0) return;
+    for (int i = 0; i < totalItems; ++i) {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalItems);
+      if (selectedIndex == HISTORY_ITEM_INDEX) break;
+      const int dictIdx = selectedIndex - dictListOffset();
+      if (dictIdx >= 0 && dictIdx < dictCount && !dictManager.getDictionary(dictIdx).corrupt) break;
     }
     requestUpdate();
   });
 }
 
 void DictionarySettingsActivity::toggleSelected() {
+  const int dictIdx = selectedIndex - dictListOffset();
   const int count = dictManager.getDictionaryCount();
-  if (count == 0 || selectedIndex < 0 || selectedIndex >= count) return;
+  if (dictIdx < 0 || dictIdx >= count) return;
 
-  const auto& dict = dictManager.getDictionary(selectedIndex);
-  if (dict.corrupt) return;  // Corrupt dictionaries are unselectable
+  const auto& dict = dictManager.getDictionary(dictIdx);
+  if (dict.corrupt) return;
 
-  dictManager.setEnabled(selectedIndex, !dict.enabled);
+  dictManager.setEnabled(dictIdx, !dict.enabled);
   requestUpdate();
 }
 
@@ -80,20 +89,31 @@ void DictionarySettingsActivity::render(RenderLock&&) {
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int count = dictManager.getDictionaryCount();
+  const int dictCount = dictManager.getDictionaryCount();
+  const int totalItems = dictListOffset() + dictCount;
 
-  if (count == 0) {
-    // No dictionaries found - show instructions
+  if (dictCount == 0) {
+    // No dictionaries found — show "Lookup History" as the only list item, plus instructions below
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, 1, selectedIndex,
+        [](int) -> std::string { return std::string(tr(STR_LOOKUP_HISTORY)); }, nullptr, nullptr,
+        [](int) -> std::string { return std::string(">"); }, false);
+    // Instructions below the single-item list
     const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int centerY = contentTop + contentHeight / 2 - lineHeight;
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, centerY, tr(STR_NO_DICTIONARIES_FOUND), true);
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, centerY + lineHeight * 2,
+    const int instructionY = contentTop + metrics.listRowHeight + lineHeight;
+    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, instructionY, tr(STR_NO_DICTIONARIES_FOUND), true);
+    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, instructionY + lineHeight * 2,
                       tr(STR_DICTIONARY_INSTRUCTIONS), true);
   } else {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, count, selectedIndex,
-        [this](int index) {
-          const auto& dict = dictManager.getDictionary(index);
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
+        [this, dictCount](int index) -> std::string {
+          if (index == HISTORY_ITEM_INDEX) {
+            return std::string(tr(STR_LOOKUP_HISTORY));
+          }
+          const int dictIdx = index - dictListOffset();
+          if (dictIdx < 0 || dictIdx >= dictCount) return "";
+          const auto& dict = dictManager.getDictionary(dictIdx);
           char label[96];
           if (dict.corrupt) {
             snprintf(label, sizeof(label), "%s %s", dict.displayName, tr(STR_DICTIONARY_INVALID));
@@ -102,20 +122,28 @@ void DictionarySettingsActivity::render(RenderLock&&) {
           } else {
             snprintf(label, sizeof(label), "%s", dict.displayName);
           }
-          return std::string(label);  // std::string required by BaseTheme::drawList API
+          return std::string(label);
         },
         nullptr, nullptr,
-        [this](int index) {
-          const auto& dict = dictManager.getDictionary(index);
+        [this, dictCount](int index) -> std::string {
+          if (index == HISTORY_ITEM_INDEX) {
+            return std::string(">");  // Visual indicator that it's a navigable item
+          }
+          const int dictIdx = index - dictListOffset();
+          if (dictIdx < 0 || dictIdx >= dictCount) return "";
+          const auto& dict = dictManager.getDictionary(dictIdx);
           if (dict.corrupt) return std::string("");
-          return std::string(dict.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));  // drawList API
+          return std::string(dict.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
         },
         true);
   }
 
-  // Button hints
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), count > 0 ? tr(STR_TOGGLE) : "", tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Button hints — Confirm label changes based on selected item
+  const char* confirmLabel = "";
+  if (totalItems > 0) {
+    confirmLabel = (selectedIndex == HISTORY_ITEM_INDEX) ? tr(STR_SELECT) : tr(STR_TOGGLE);
+  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

@@ -2,8 +2,10 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 
@@ -39,16 +41,23 @@ DictionaryDefinitionActivity::~DictionaryDefinitionActivity() { free(results); }
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  dictManager.scan();
+  lookupHistory.load();
   currentResult = 0;
   scrollOffset = 0;
+  stackDepth = 0;
+  selectionMode = false;
+  ignoreNextConfirmRelease = true;  // Absorb stale release from launching activity
   requestUpdate();
 }
 
 void DictionaryDefinitionActivity::onExit() { Activity::onExit(); }
 
 void DictionaryDefinitionActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  // === Long-press Back: exit entirely (fires immediately at threshold) ===
+  if (!backLongPressConsumed && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    backLongPressConsumed = true;
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
@@ -56,14 +65,128 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  // === Long-press Confirm: enter selection mode (fires immediately at threshold) ===
+  if (!selectionMode && !confirmLongPressConsumed && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    confirmLongPressConsumed = true;
+    if (defWordCount > 0) {
+      selectionMode = true;
+      selectedWordIndex = 0;
+      requestUpdate();
+    }
+    return;
+  }
+
+  // === Handle Back release ===
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (backLongPressConsumed) {
+      backLongPressConsumed = false;
+      return;
+    }
+    if (ignoreNextBackRelease) {
+      ignoreNextBackRelease = false;
+      return;
+    }
+
+    if (selectionMode) {
+      // Exit selection mode only
+      selectionMode = false;
+      requestUpdate();
+      return;
+    }
+
+    if (stackDepth > 0) {
+      // Pop stack and re-lookup previous word
+      popStack();
+      return;
+    }
+
+    // At bottom of stack — close definition (original behavior)
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
+
+  // === Handle Confirm release ===
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (confirmLongPressConsumed) {
+      confirmLongPressConsumed = false;
+      return;
+    }
+    if (ignoreNextConfirmRelease) {
+      ignoreNextConfirmRelease = false;
+      return;
+    }
+
+    if (selectionMode) {
+      // Look up highlighted word (chained lookup)
+      if (selectedWordIndex >= 0 && selectedWordIndex < defWordCount) {
+        const auto& w = defWords[selectedWordIndex];
+        const auto& r = results[currentResult];
+        char wordBuf[256];
+        const int len = std::min(static_cast<int>(w.textLen), static_cast<int>(sizeof(wordBuf) - 1));
+        memcpy(wordBuf, r.definition + w.textOffset, len);
+        wordBuf[len] = '\0';
+        performChainedLookup(wordBuf);
+      }
+      return;
+    }
+
+    // Normal mode: Confirm closes definition (original behavior)
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
+
+  // === Selection mode: cursor navigation ===
+  if (selectionMode) {
+    if (defWordCount == 0) return;
+
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      if (selectedWordIndex < defWordCount - 1) {
+        selectedWordIndex++;
+      } else {
+        selectedWordIndex = 0;  // Wrap to first word
+      }
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      if (selectedWordIndex > 0) {
+        selectedWordIndex--;
+      } else {
+        selectedWordIndex = defWordCount - 1;  // Wrap to last word
+      }
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      const int currentY = defWords[selectedWordIndex].y;
+      const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+      const int targetY = currentY + lineHeight;
+      selectedWordIndex = findWordOnAdjacentLine(selectedWordIndex, targetY);
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+      const int currentY = defWords[selectedWordIndex].y;
+      const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+      const int targetY = currentY - lineHeight;
+      selectedWordIndex = findWordOnAdjacentLine(selectedWordIndex, targetY);
+      requestUpdate();
+    }
+
+    // Scrolling is disabled in selection mode
+    return;
+  }
+
+  // === Normal mode: orientation-dependent scroll and dict-switch ===
   const auto orientation = renderer.getOrientation();
   const bool isCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
 
-  // Button roles depend on orientation because the physical buttons rotate with the device.
-  // Use Button::Up/Down directly (not PageBack/PageForward) for landscape dict switching
-  // to match EpubReaderActivity's nav mapping and avoid sideButtonLayout swap interference.
   using Btn = MappedInputManager::Button;
 
   Btn scrollBackBtn = Btn::PageBack;
@@ -73,20 +196,16 @@ void DictionaryDefinitionActivity::loop() {
   if (isCw) {
     scrollBackBtn = Btn::Left;
     scrollFwdBtn = Btn::Right;
-    // CW: BTN_DOWN = user's LEFT (prev), BTN_UP = user's RIGHT (next)
     dictPrevBtn = Btn::Down;
     dictNextBtn = Btn::Up;
   } else if (isCcw) {
     scrollBackBtn = Btn::Right;
     scrollFwdBtn = Btn::Left;
-    // CCW: BTN_UP = user's LEFT (prev), BTN_DOWN = user's RIGHT (next)
     dictPrevBtn = Btn::Up;
     dictNextBtn = Btn::Down;
   } else if (isInverted) {
-    // Inverted: physical Left = user's RIGHT, physical Right = user's LEFT
     dictPrevBtn = Btn::Right;
     dictNextBtn = Btn::Left;
-    // BTN_DOWN = user's upper-left → scroll back, BTN_UP = user's lower-left → scroll forward
     scrollBackBtn = Btn::Down;
     scrollFwdBtn = Btn::Up;
   }
@@ -174,10 +293,18 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   const auto& r = results[currentResult];
   char header[128];
+  int headerPos = 0;
+
+  // Show stack depth indicator when chained
+  if (stackDepth > 0) {
+    headerPos = snprintf(header, sizeof(header), "[%d] ", stackDepth);
+  }
+
   if (resultCount > 1) {
-    snprintf(header, sizeof(header), "(%d/%d) %s - %s", currentResult + 1, resultCount, searchedWord, r.dictionaryName);
+    snprintf(header + headerPos, sizeof(header) - headerPos, "(%d/%d) %s - %s", currentResult + 1, resultCount,
+             searchedWord, r.dictionaryName);
   } else {
-    snprintf(header, sizeof(header), "%s - %s", searchedWord, r.dictionaryName);
+    snprintf(header + headerPos, sizeof(header) - headerPos, "%s - %s", searchedWord, r.dictionaryName);
   }
 
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding + hintGutterHeight, availableWidth, metrics.headerHeight},
@@ -188,71 +315,83 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   drawDefinition(contentTop, contentX + margin, contentWidth, contentHeight, rightGutter);
 
-  // Button roles depend on orientation (see loop() for matching input logic).
-  // drawSideButtonHints only works in portrait coordinate space, so we force
-  // portrait orientation before calling it in landscape/inverted modes.
-  const bool isLandscape = isLandscapeCw || isLandscapeCcw;
-  const bool multiResult = resultCount > 1;
-  const bool canScroll = totalLines > maxVisibleLines;
-  const bool swapped = SETTINGS.sideButtonLayout == CrossPointSettings::NEXT_PREV;
-
-  if (isLandscape) {
-    // Front Left/Right: scroll pages (CW: Left=up, Right=down; CCW: reversed)
-    const char* upLabel = canScroll ? tr(STR_DIR_UP) : "";
-    const char* downLabel = canScroll ? tr(STR_DIR_DOWN) : "";
-    const char* leftLabel = isLandscapeCw ? upLabel : downLabel;
-    const char* rightLabel = isLandscapeCw ? downLabel : upLabel;
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+  if (selectionMode) {
+    // Selection mode: all four directions for cursor, Back=exit, Confirm=lookup
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-    // Side buttons: switch dictionaries (using Up/Down directly, no swap).
-    // CW: topBtn (BTN_UP) drawn on RIGHT = next, bottomBtn (BTN_DOWN) drawn on LEFT = prev.
-    // CCW: topBtn (BTN_UP) drawn on LEFT = prev, bottomBtn (BTN_DOWN) drawn on RIGHT = next.
-    if (multiResult) {
-      const char* topLabel;
-      const char* bottomLabel;
-      if (isLandscapeCw) {
-        topLabel = (currentResult < resultCount - 1) ? ">" : "";
-        bottomLabel = (currentResult > 0) ? "<" : "";
-      } else {
-        // CCW: physical positions are swapped from CW — swap conditions, keep symbols.
-        topLabel = (currentResult > 0) ? ">" : "";
-        bottomLabel = (currentResult < resultCount - 1) ? "<" : "";
-      }
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      GUI.drawSideButtonHints(renderer, topLabel, bottomLabel);
-      renderer.setOrientation(orientation);
-    }
-  } else if (isPortraitInverted) {
-    // drawButtonHints forces Portrait, so labels land at physical button positions.
-    // In inverted, physical Left = Dict Next, physical Right = Dict Prev.
-    // Swap conditions (not symbols) to match the inverted function mapping.
-    const char* leftLabel = (multiResult && currentResult < resultCount - 1) ? "<" : "";
-    const char* rightLabel = (multiResult && currentResult > 0) ? ">" : "";
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-    // Side buttons: scroll pages (using Up/Down directly, no swap).
-    // BTN_UP (topBtn) = user's lower-left → scroll forward (Down).
-    // BTN_DOWN (bottomBtn) = user's upper-left → scroll back (Up).
-    // Force Portrait so drawSideButtonHints draws at the correct physical edge (user's left).
-    if (canScroll) {
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-      GUI.drawSideButtonHints(renderer, tr(STR_DIR_DOWN), tr(STR_DIR_UP));
-      renderer.setOrientation(orientation);
-    }
+    // Side buttons show Up/Down in selection mode
+    GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   } else {
-    const char* leftLabel = (multiResult && currentResult > 0) ? "<" : "";
-    const char* rightLabel = (multiResult && currentResult < resultCount - 1) ? ">" : "";
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    // Button roles depend on orientation (see loop() for matching input logic).
+    // drawSideButtonHints only works in portrait coordinate space, so we force
+    // portrait orientation before calling it in landscape/inverted modes.
+    const bool isLandscape = isLandscapeCw || isLandscapeCcw;
+    const bool multiResult = resultCount > 1;
+    const bool canScroll = totalLines > maxVisibleLines;
+    const bool swapped = SETTINGS.sideButtonLayout == CrossPointSettings::NEXT_PREV;
 
-    if (canScroll) {
-      const char* topLabel = swapped ? tr(STR_DIR_DOWN) : tr(STR_DIR_UP);
-      const char* bottomLabel = swapped ? tr(STR_DIR_UP) : tr(STR_DIR_DOWN);
-      GUI.drawSideButtonHints(renderer, topLabel, bottomLabel);
+    if (isLandscape) {
+      // Front Left/Right: scroll pages (CW: Left=up, Right=down; CCW: reversed)
+      const char* upLabel = canScroll ? tr(STR_DIR_UP) : "";
+      const char* downLabel = canScroll ? tr(STR_DIR_DOWN) : "";
+      const char* leftLabel = isLandscapeCw ? upLabel : downLabel;
+      const char* rightLabel = isLandscapeCw ? downLabel : upLabel;
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+      // Side buttons: switch dictionaries (using Up/Down directly, no swap).
+      // CW: topBtn (BTN_UP) drawn on RIGHT = next, bottomBtn (BTN_DOWN) drawn on LEFT = prev.
+      // CCW: topBtn (BTN_UP) drawn on LEFT = prev, bottomBtn (BTN_DOWN) drawn on RIGHT = next.
+      if (multiResult) {
+        const char* topLabel;
+        const char* bottomLabel;
+        if (isLandscapeCw) {
+          topLabel = (currentResult < resultCount - 1) ? ">" : "";
+          bottomLabel = (currentResult > 0) ? "<" : "";
+        } else {
+          // CCW: physical positions are swapped from CW — swap conditions, keep symbols.
+          topLabel = (currentResult > 0) ? ">" : "";
+          bottomLabel = (currentResult < resultCount - 1) ? "<" : "";
+        }
+        renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+        GUI.drawSideButtonHints(renderer, topLabel, bottomLabel);
+        renderer.setOrientation(orientation);
+      }
+    } else if (isPortraitInverted) {
+      // drawButtonHints forces Portrait, so labels land at physical button positions.
+      // In inverted, physical Left = Dict Next, physical Right = Dict Prev.
+      // Swap conditions (not symbols) to match the inverted function mapping.
+      const char* leftLabel = (multiResult && currentResult < resultCount - 1) ? "<" : "";
+      const char* rightLabel = (multiResult && currentResult > 0) ? ">" : "";
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+      // Side buttons: scroll pages (using Up/Down directly, no swap).
+      // BTN_UP (topBtn) = user's lower-left → scroll forward (Down).
+      // BTN_DOWN (bottomBtn) = user's upper-left → scroll back (Up).
+      // Force Portrait so drawSideButtonHints draws at the correct physical edge (user's left).
+      if (canScroll) {
+        renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+        GUI.drawSideButtonHints(renderer, tr(STR_DIR_DOWN), tr(STR_DIR_UP));
+        renderer.setOrientation(orientation);
+      }
+    } else {
+      const char* leftLabel = (multiResult && currentResult > 0) ? "<" : "";
+      const char* rightLabel = (multiResult && currentResult < resultCount - 1) ? ">" : "";
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+      if (canScroll) {
+        const char* topLabel = swapped ? tr(STR_DIR_DOWN) : tr(STR_DIR_UP);
+        const char* bottomLabel = swapped ? tr(STR_DIR_UP) : tr(STR_DIR_DOWN);
+        GUI.drawSideButtonHints(renderer, topLabel, bottomLabel);
+      }
     }
-  }
+  }  // end selection mode else
+
+  // Draw selection highlight if in selection mode
+  renderSelectionHighlight();
 
   renderer.displayBuffer();
 }
@@ -270,12 +409,14 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
   const int usableHeight = contentHeight - lineHeight;
   this->maxVisibleLines = usableHeight / lineHeight;
 
+  // Reset word extraction for selection mode
+  defWordCount = 0;
+
   // Word-wrap the definition text into lines
   const char* text = r.definition;
   const int textLen = static_cast<int>(strlen(text));
 
   // Word-by-word wrap: measure incrementally by adding words, not characters.
-  // This reduces getTextWidth calls from O(chars_per_line) to O(words_per_line).
   int lineIdx = 0;
   int pos = 0;
   while (pos < textLen) {
@@ -284,7 +425,6 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
     char lineBuf[256];
 
     while (lineEnd < textLen && text[lineEnd] != '\n') {
-      // Advance to end of next word (or end of text/line)
       int wordEnd = lineEnd;
       while (wordEnd < textLen && text[wordEnd] != ' ' && text[wordEnd] != '\n') wordEnd++;
 
@@ -299,15 +439,12 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
       }
       if (wordEnd < textLen && text[wordEnd] == ' ') lastSpace = wordEnd;
       lineEnd = wordEnd;
-      // Skip the space to start measuring the next word
       if (lineEnd < textLen && text[lineEnd] == ' ') lineEnd++;
     }
 
-    // Handle newline
     if (lineEnd < textLen && text[lineEnd] == '\n') {
       // Include up to but not including the newline
     } else if (lineEnd == pos && pos < textLen) {
-      // Single word too wide, advance by one character to avoid infinite loop
       lineEnd = pos + 1;
     }
 
@@ -318,15 +455,55 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
       memcpy(lineBuf, text + pos, segLen);
       lineBuf[segLen] = '\0';
       renderer.drawText(UI_12_FONT_ID, margin, drawY, lineBuf, true);
+
+      // Extract individual words from this rendered line for selection mode
+      if (defWordCount < MAX_DEF_WORDS) {
+        int wordStart = pos;
+        while (wordStart < pos + segLen) {
+          // Skip spaces
+          while (wordStart < pos + segLen && text[wordStart] == ' ') wordStart++;
+          if (wordStart >= pos + segLen) break;
+
+          // Find word end
+          int wEnd = wordStart;
+          while (wEnd < pos + segLen && text[wEnd] != ' ') wEnd++;
+
+          const int wordLen = wEnd - wordStart;
+          if (wordLen > 0 && defWordCount < MAX_DEF_WORDS) {
+            // Measure x-position: width of text from line start to word start
+            int wordX = margin;
+            if (wordStart > pos) {
+              char prefixBuf[256];
+              const int prefixLen = std::min(wordStart - pos, static_cast<int>(sizeof(prefixBuf) - 1));
+              memcpy(prefixBuf, text + pos, prefixLen);
+              prefixBuf[prefixLen] = '\0';
+              wordX = margin + renderer.getTextWidth(UI_12_FONT_ID, prefixBuf);
+            }
+
+            // Measure word width
+            char wordBuf[256];
+            const int wbLen = std::min(wordLen, static_cast<int>(sizeof(wordBuf) - 1));
+            memcpy(wordBuf, text + wordStart, wbLen);
+            wordBuf[wbLen] = '\0';
+            const int wordWidth = renderer.getTextWidth(UI_12_FONT_ID, wordBuf);
+
+            defWords[defWordCount].x = static_cast<int16_t>(wordX);
+            defWords[defWordCount].y = static_cast<int16_t>(drawY);
+            defWords[defWordCount].width = static_cast<int16_t>(wordWidth);
+            defWords[defWordCount].textOffset = static_cast<int16_t>(wordStart);
+            defWords[defWordCount].textLen = static_cast<int16_t>(wordLen);
+            defWordCount++;
+          }
+          wordStart = wEnd;
+        }
+      }
     }
 
     lineIdx++;
     pos = lineEnd;
-    // Skip space or newline at the break point
     if (pos < textLen && (text[pos] == ' ' || text[pos] == '\n')) pos++;
   }
 
-  // Store total lines for scroll clamping in loop()
   this->totalLines = lineIdx;
 
   // Draw page indicator if content overflows
@@ -339,4 +516,126 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
     renderer.drawText(UI_12_FONT_ID, renderer.getScreenWidth() - indicatorWidth - 10 - rightGutter,
                       contentTop + contentHeight - lineHeight, indicator, true);
   }
+}
+
+int DictionaryDefinitionActivity::findWordOnAdjacentLine(int currentIdx, int targetY) const {
+  if (currentIdx < 0 || currentIdx >= defWordCount) return currentIdx;
+
+  const int currentX = defWords[currentIdx].x;
+  int bestIdx = -1;
+  int bestDist = INT_MAX;
+
+  for (int i = 0; i < defWordCount; ++i) {
+    if (defWords[i].y != targetY) continue;
+    const int dist = abs(defWords[i].x - currentX);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i;
+    }
+  }
+  return bestIdx >= 0 ? bestIdx : currentIdx;
+}
+
+void DictionaryDefinitionActivity::renderSelectionHighlight() {
+  if (!selectionMode || defWordCount == 0) return;
+  if (selectedWordIndex < 0 || selectedWordIndex >= defWordCount) return;
+
+  const auto& w = defWords[selectedWordIndex];
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int padding = 2;
+
+  // Draw inverted rectangle behind the word
+  renderer.fillRect(w.x - padding, w.y, w.width + padding * 2, lineHeight, 0);  // Black rect
+
+  // Draw word text in white (inverted)
+  const auto& r = results[currentResult];
+  char wordBuf[256];
+  const int len = std::min(static_cast<int>(w.textLen), static_cast<int>(sizeof(wordBuf) - 1));
+  memcpy(wordBuf, r.definition + w.textOffset, len);
+  wordBuf[len] = '\0';
+  renderer.drawText(UI_12_FONT_ID, w.x, w.y, wordBuf, false);  // false = white text
+}
+
+void DictionaryDefinitionActivity::performChainedLookup(const char* word) {
+  // Don't push if stack is full
+  if (stackDepth >= MAX_CHAIN_DEPTH) return;
+
+  // Normalize the word for lookup
+  char normalized[DICT_WORD_MAX];
+  if (!DictionaryManager::normalizeWord(word, normalized, sizeof(normalized))) {
+    snprintf(normalized, sizeof(normalized), "%.*s", DICT_WORD_MAX - 1, word);
+  }
+
+  // Record to lookup history
+  lookupHistory.addWord(normalized);
+  lookupHistory.save();
+
+  // Allocate results for the new lookup
+  auto* newResults = static_cast<DictResult*>(malloc(sizeof(DictResult) * DictionaryManager::MAX_RESULTS));
+  if (!newResults) {
+    LOG_ERR("DICT", "malloc failed for chained lookup results");
+    return;
+  }
+
+  const int newResultCount = dictManager.lookup(normalized, newResults, DictionaryManager::MAX_RESULTS);
+
+  if (newResultCount == 0) {
+    free(newResults);
+    // Show "no definition found" popup without modifying the stack
+    GUI.drawPopup(renderer, tr(STR_NO_DEFINITION_FOUND));
+    renderer.displayBuffer();
+    delay(1500);
+    requestUpdate();
+    return;
+  }
+
+  // Push current word onto stack
+  strncpy(wordStack[stackDepth], searchedWord, DICT_WORD_MAX - 1);
+  wordStack[stackDepth][DICT_WORD_MAX - 1] = '\0';
+  stackDepth++;
+
+  // Replace current state with new lookup
+  free(results);
+  results = newResults;
+  resultCount = newResultCount;
+  currentResult = 0;
+  scrollOffset = 0;
+  selectionMode = false;
+
+  // Update searchedWord (uppercased for header display)
+  snprintf(searchedWord, sizeof(searchedWord), "%s", normalized);
+  for (int i = 0; searchedWord[i] != '\0'; ++i) {
+    searchedWord[i] = static_cast<char>(toupper(static_cast<unsigned char>(searchedWord[i])));
+  }
+
+  requestUpdate();
+}
+
+void DictionaryDefinitionActivity::popStack() {
+  if (stackDepth <= 0) return;
+
+  const char* prevWord = wordStack[stackDepth - 1];  // Peek, don't pop yet
+
+  // Allocate before decrementing — if malloc fails, state stays consistent
+  auto* newResults = static_cast<DictResult*>(malloc(sizeof(DictResult) * DictionaryManager::MAX_RESULTS));
+  if (!newResults) {
+    LOG_ERR("DICT", "malloc failed for pop lookup results");
+    return;
+  }
+
+  stackDepth--;  // Only decrement after successful allocation
+
+  const int newResultCount = dictManager.lookup(prevWord, newResults, DictionaryManager::MAX_RESULTS);
+
+  // Replace current state
+  free(results);
+  results = newResults;
+  resultCount = newResultCount;
+  currentResult = 0;
+  scrollOffset = 0;
+
+  // Restore searchedWord
+  snprintf(searchedWord, sizeof(searchedWord), "%s", prevWord);
+
+  requestUpdate();
 }

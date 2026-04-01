@@ -5,6 +5,7 @@
 
 #include "DictionaryManager.h"
 #include "EpubReaderMenuActivity.h"
+#include "LookupHistory.h"
 #include "WordSelectionMode.h"
 #include "activities/Activity.h"
 
@@ -34,6 +35,7 @@ class EpubReaderActivity final : public Activity {
   // Dictionary / word selection (lazily allocated to save ~9KB when unused)
   std::unique_ptr<WordSelectionMode> wordSelection;
   std::unique_ptr<DictionaryManager> dictManager;
+  LookupHistory lookupHistory;
   bool confirmLongPressConsumed = false;
   bool dictAvailableCached = false;
   bool dictAvailableChecked = false;

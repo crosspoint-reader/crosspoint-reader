@@ -5,6 +5,7 @@
 
 #include "../Activity.h"
 #include "DictionaryManager.h"
+#include "LookupHistory.h"
 #include "components/UITheme.h"
 #include "util/ButtonNavigator.h"
 
@@ -26,4 +27,9 @@ class DictionarySettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   DictionaryManager dictManager;
   int selectedIndex = 0;
+  // The first item in the list is "Lookup History" (not a dictionary).
+  // Dictionary indices are offset by 1 in the list.
+  static constexpr int HISTORY_ITEM_INDEX = 0;
+  bool hasHistoryItem() const { return true; }
+  int dictListOffset() const { return 1; }
 };
