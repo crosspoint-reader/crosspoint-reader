@@ -257,8 +257,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLeft, int contentWidth,
-                                                  int contentHeight, int rightGutter) {
+void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLeft, int contentWidth, int contentHeight,
+                                                  int rightGutter) {
   if (currentResult < 0 || currentResult >= resultCount || !results) return;
 
   const auto& r = results[currentResult];

@@ -128,8 +128,7 @@ void DictionaryManager::scanDirectory(const char* dirPath) {
     info.corrupt = corrupt;
     info.readOnly = readOnly;
 
-    LOG_INF("DICTM", "Found dictionary: %s (corrupt=%d, readOnly=%d)", info.displayName, info.corrupt,
-            info.readOnly);
+    LOG_INF("DICTM", "Found dictionary: %s (corrupt=%d, readOnly=%d)", info.displayName, info.corrupt, info.readOnly);
 
     dictCount++;
   }

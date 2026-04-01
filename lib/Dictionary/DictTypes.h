@@ -28,12 +28,11 @@ static_assert(sizeof(SdIndexHeader) == SD_INDEX_HEADER_SIZE,
 
 struct SdIndexEntry {
   char word[DICT_WORD_MAX];  // 32 bytes, truncated for binary search comparison
-  uint32_t dictOffset;        // Byte offset into .dict (little-endian, converted from BE)
-  uint32_t dictSize;          // Byte size of definition in .dict
-  uint32_t idxWordOffset;     // Byte offset of full word in StarDict .idx (for >31 char verification)
+  uint32_t dictOffset;       // Byte offset into .dict (little-endian, converted from BE)
+  uint32_t dictSize;         // Byte size of definition in .dict
+  uint32_t idxWordOffset;    // Byte offset of full word in StarDict .idx (for >31 char verification)
 };
-static_assert(sizeof(SdIndexEntry) == SD_INDEX_ENTRY_SIZE,
-              "SdIndexEntry size mismatch — update SD_INDEX_ENTRY_SIZE");
+static_assert(sizeof(SdIndexEntry) == SD_INDEX_ENTRY_SIZE, "SdIndexEntry size mismatch — update SD_INDEX_ENTRY_SIZE");
 
 // ---------------------------------------------------------------------------
 // Result from a single dictionary lookup
