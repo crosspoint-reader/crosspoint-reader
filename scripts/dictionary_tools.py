@@ -120,15 +120,9 @@ def prep(source_folder: Path) -> None:
         sys.exit(1)
 
     stem = _find_stem(source_folder)
+    out_dir = source_folder
 
-    project_root = Path(__file__).parent.parent
-    out_dir = project_root / "dictionaries" / stem
-
-    # Copy source files into output directory.
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    shutil.copytree(source_folder, out_dir)
-    print(f"Copied {source_folder} -> {out_dir}")
+    print(f"Preparing {source_folder}")
 
     steps_run = 0
 

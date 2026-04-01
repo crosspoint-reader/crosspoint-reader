@@ -39,7 +39,6 @@ test/
 
 scripts/
   dictionary_tools.py                  # standalone CLI: prep, lookup, merge
-  dictionary_coverage_check.py         # standalone CLI: word coverage audit
 ```
 
 ## Test Dictionaries
@@ -211,18 +210,6 @@ Behavior:
 - **sametypesequence**: Inherited from the first source. A warning is printed if sources disagree.
 - **Generated files**: `.idx.oft` and `.syn.oft` are produced automatically.
 - **Requirements**: Source dictionaries must have decompressed `.dict` files (run `prep` first if needed). No external dependencies -- stdlib only.
-
-### dictionary_coverage_check.py
-
-Audit which words in an EPUB are covered by a dictionary:
-
-```bash
-# Check coverage (headwords only)
-python3 scripts/dictionary_coverage_check.py test/dictionaries/english-full test/epubs/test_dictionary.epub
-
-# Include synonym coverage
-python3 scripts/dictionary_coverage_check.py --syn test/dictionaries/english-full test/epubs/test_dictionary.epub
-```
 
 ## Known Limitations
 
