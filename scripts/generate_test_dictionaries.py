@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-gen_dict.py — Unified StarDict dictionary generator.
+generate_test_dictionaries.py — Unified StarDict dictionary generator.
 
 Reads a YAML data file from scripts/dicts/ and produces all StarDict binary files.
 
 Usage:
-    python3 scripts/gen_dict.py scripts/dicts/en_es.yaml        # one dict
-    python3 scripts/gen_dict.py --all                            # all dicts in scripts/dicts/
+    python3 scripts/generate_test_dictionaries.py scripts/dicts/en_es.yaml   # one dict
+    python3 scripts/generate_test_dictionaries.py --all                      # all dicts in scripts/dicts/
 
 YAML schemas:
 
