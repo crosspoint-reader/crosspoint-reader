@@ -18,6 +18,7 @@
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
+#include "components/themes/lyra/LyraCarouselTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -51,6 +52,15 @@ void XtcReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+
+  // Generate carousel thumbnails while XTC is still loaded so the home screen
+  // can display the cover on the very first render without a loading popup.
+  if (xtc &&
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL) {
+    xtc->generateThumbBmp(LyraCarouselTheme::kCenterCoverW, LyraCarouselTheme::kCenterCoverH);
+    xtc->generateThumbBmp(LyraCarouselTheme::kSideCoverW, LyraCarouselTheme::kSideCoverH);
+  }
+
   xtc.reset();
 }
 
