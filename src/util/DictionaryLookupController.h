@@ -18,14 +18,7 @@ class MappedInputManager;
 class DictionaryLookupController {
  public:
   enum class LookupState { Idle, LookingUp, AltFormPrompt, NotFound };
-  enum class LookupEvent {
-    None,
-    FoundDefinition,
-    LookupFailed,
-    NotFoundDismissedBack,
-    NotFoundDismissedDone,
-    Cancelled
-  };
+  enum class LookupEvent { None, FoundDefinition, NotFoundDismissedBack, NotFoundDismissedDone, Cancelled };
 
   // How the word was ultimately resolved when FoundDefinition fires.
   enum class FoundStatus { Direct, Stem, AltForm, Suggestion };
@@ -103,6 +96,7 @@ class DictionaryLookupController {
   TaskHandle_t taskHandle = nullptr;
 
   void runLookup();
+  void handleLookupFailed();
   static void taskEntry(void* param);
   static void progressCallback(void* ctx, int percent);
   static bool cancelCallback(void* ctx);

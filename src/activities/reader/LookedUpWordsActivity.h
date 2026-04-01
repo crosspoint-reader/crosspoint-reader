@@ -9,10 +9,10 @@
 
 class LookedUpWordsActivity final : public Activity {
  public:
-  explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string cachePath)
+  explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookCachePath)
       : Activity("LookedUpWords", renderer, mappedInput),
-        cachePath(std::move(cachePath)),
-        controller(renderer, mappedInput, *this) {}
+        cachePath(std::move(bookCachePath)),
+        controller(renderer, mappedInput, *this, cachePath) {}
 
   void onEnter() override;
   void onExit() override;

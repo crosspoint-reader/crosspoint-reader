@@ -11,7 +11,6 @@
 #include <numeric>
 
 #include "CrossPointSettings.h"
-#include "DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
@@ -398,35 +397,6 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 }
 
 // ---------------------------------------------------------------------------
-// Background lookup (for definition word-select)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Not-found helper: findSimilar → suggestions activity, or controller.setNotFound()
-// On suggestion selected: re-trigger lookup via controller (in-place replace on FoundDefinition).
-// ---------------------------------------------------------------------------
-
-void DictionaryDefinitionActivity::handleNotFound(const std::string& word) {
-  auto similar = Dictionary::findSimilar(word, 6, cachePath.c_str());
-  if (!similar.empty()) {
-    startActivityForResult(std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
-                           [this](const ActivityResult& result) {
-                             if (result.isCancelled) {
-                               controller.setNotFound();
-                               return;
-                             }
-                             const auto& wr = std::get<WordResult>(result.data);
-                             controller.startLookupAsSuggestion(wr.word);  // in-place replace on FoundDefinition
-                           });
-    return;
-  }
-  if (!cachePath.empty()) {
-    LookupHistory::addWord(cachePath, word, LookupHistory::Status::NotFound);
-  }
-  controller.setNotFound();
-}
-
-// ---------------------------------------------------------------------------
 // Input loop
 // ---------------------------------------------------------------------------
 
@@ -438,7 +408,7 @@ void DictionaryDefinitionActivity::loop() {
         if (!cachePath.empty() && !chainBackNavInProgress) {
           LookupHistory::addWord(cachePath, controller.getLookupWord(),
                                  DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
-          chainDepth++;
+          chainWords.push_back(headword);
         }
         chainBackNavInProgress = false;
         headword = controller.getFoundWord();
@@ -447,9 +417,6 @@ void DictionaryDefinitionActivity::loop() {
         currentPage = 0;
         isWordSelectMode = false;
         requestUpdate();
-        break;
-      case DictionaryLookupController::LookupEvent::LookupFailed:
-        handleNotFound(controller.getLookupWord());
         break;
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
         requestUpdate();
@@ -561,16 +528,12 @@ void DictionaryDefinitionActivity::loop() {
       finish();
       return;
     }
-    if (!cachePath.empty() && chainDepth > 0) {
-      chainDepth--;
-      const int fileIdx = chainStartIndex - 1 + chainDepth;
-      const std::string prevWord = LookupHistory::getWordAt(cachePath, fileIdx);
-      if (!prevWord.empty()) {
-        chainBackNavInProgress = true;
-        controller.startLookup(prevWord);
-        return;
-      }
-      // File read failed — fall through to normal exit
+    if (!cachePath.empty() && !chainWords.empty()) {
+      std::string prevWord = chainWords.back();
+      chainWords.pop_back();
+      chainBackNavInProgress = true;
+      controller.startLookup(prevWord);
+      return;
     }
     ActivityResult r;
     r.isCancelled = true;

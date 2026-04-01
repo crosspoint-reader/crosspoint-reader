@@ -45,5 +45,4 @@ class DictionaryWordSelectActivity final : public Activity {
                     std::string& textPool);
   void mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
                             std::vector<WordSelectNavigator::Row>& rows, std::string& textPool);
-  void handleNotFound(const std::string& word);
 };

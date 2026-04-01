@@ -20,14 +20,12 @@ class DictionaryDefinitionActivity final : public Activity {
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         const std::string& headword, const std::string& definition,
-                                        bool showLookupButton = false, std::string cachePath = "",
-                                        int chainStartIndex = 0)
+                                        bool showLookupButton = false, std::string bookCachePath = "")
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         definition(definition),
         showLookupButton(showLookupButton),
-        cachePath(std::move(cachePath)),
-        chainStartIndex(chainStartIndex),
+        cachePath(std::move(bookCachePath)),
         controller(renderer, mappedInput, *this, cachePath) {}
 
   void onEnter() override;
@@ -40,8 +38,7 @@ class DictionaryDefinitionActivity final : public Activity {
   std::string definition;
   bool showLookupButton;
   std::string cachePath;
-  int chainStartIndex = 0;
-  int chainDepth = 0;
+  std::vector<std::string> chainWords;  // previous headwords for back-nav
   bool chainBackNavInProgress = false;
 
   // A single styled run within a display line.
@@ -82,5 +79,4 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapHtml();
   void wrapPlain();
   void extractWordsFromLayout();
-  void handleNotFound(const std::string& word);
 };

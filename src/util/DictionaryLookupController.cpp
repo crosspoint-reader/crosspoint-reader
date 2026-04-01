@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 
 #include "../activities/Activity.h"
+#include "../activities/reader/DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -84,8 +85,8 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         return LookupEvent::None;
       }
 
-      nextIsSuggestion = false;
-      return LookupEvent::LookupFailed;
+      handleLookupFailed();
+      return LookupEvent::None;
     }
 
     // Task still running — check for cancel
@@ -110,8 +111,8 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
           return LookupEvent::FoundDefinition;
         }
       }
-      nextIsSuggestion = false;
-      return LookupEvent::LookupFailed;
+      handleLookupFailed();
+      return LookupEvent::None;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = LookupState::Idle;
@@ -170,6 +171,28 @@ bool DictionaryLookupController::render() {
   }
 
   return false;
+}
+
+void DictionaryLookupController::handleLookupFailed() {
+  auto similar = Dictionary::findSimilar(lookupWord, 6, cachePath.c_str());
+  if (!similar.empty()) {
+    owner.startActivityForResult(
+        std::make_unique<DictionarySuggestionsActivity>(renderer, mappedInput, std::move(similar)),
+        [this](const ActivityResult& result) {
+          if (result.isCancelled) {
+            setNotFound();
+            return;
+          }
+          const auto& wr = std::get<WordResult>(result.data);
+          startLookupAsSuggestion(wr.word);
+        });
+    return;
+  }
+  if (!cachePath.empty()) {
+    LookupHistory::addWord(cachePath, lookupWord, LookupHistory::Status::NotFound);
+  }
+  nextIsSuggestion = false;
+  setNotFound();
 }
 
 void DictionaryLookupController::taskEntry(void* param) {

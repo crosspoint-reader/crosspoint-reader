@@ -43,29 +43,24 @@ void LookedUpWordsActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        const int chainStart =
-            LookupHistory::addWord(cachePath, controller.getLookupWord(),
-                                   DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
-        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
-                                   renderer, mappedInput, controller.getFoundWord(), controller.getFoundDefinition(),
-                                   true, cachePath, chainStart),
-                               [this](const ActivityResult& result) {
-                                 entries = LookupHistory::load(cachePath);
-                                 if (!result.isCancelled) {
-                                   setResult(ActivityResult{});
-                                   finish();
-                                 } else {
-                                   requestUpdate();
-                                 }
-                               });
+        LookupHistory::addWord(cachePath, controller.getLookupWord(),
+                               DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
+        startActivityForResult(
+            std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
+                                                           controller.getFoundDefinition(), true, cachePath),
+            [this](const ActivityResult& result) {
+              entries = LookupHistory::load(cachePath);
+              if (!result.isCancelled) {
+                setResult(ActivityResult{});
+                finish();
+              } else {
+                requestUpdate();
+              }
+            });
         break;
       }
-      case DictionaryLookupController::LookupEvent::LookupFailed:
-        LookupHistory::addWord(cachePath, controller.getLookupWord(), LookupHistory::Status::NotFound);
-        entries = LookupHistory::load(cachePath);
-        controller.setNotFound();
-        break;
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
+        entries = LookupHistory::load(cachePath);
         requestUpdate();
         break;
       case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
