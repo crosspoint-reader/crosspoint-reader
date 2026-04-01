@@ -317,7 +317,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   if (selectionMode) {
     // Selection mode: all four directions for cursor, Back=exit, Confirm=lookup
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
     // Side buttons show Up/Down in selection mode
@@ -337,7 +337,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       const char* downLabel = canScroll ? tr(STR_DIR_DOWN) : "";
       const char* leftLabel = isLandscapeCw ? upLabel : downLabel;
       const char* rightLabel = isLandscapeCw ? downLabel : upLabel;
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_HOLD_SELECT), leftLabel, rightLabel);
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       // Side buttons: switch dictionaries (using Up/Down directly, no swap).
@@ -364,7 +364,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       // Swap conditions (not symbols) to match the inverted function mapping.
       const char* leftLabel = (multiResult && currentResult < resultCount - 1) ? "<" : "";
       const char* rightLabel = (multiResult && currentResult > 0) ? ">" : "";
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_HOLD_SELECT), leftLabel, rightLabel);
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       // Side buttons: scroll pages (using Up/Down directly, no swap).
@@ -379,7 +379,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     } else {
       const char* leftLabel = (multiResult && currentResult > 0) ? "<" : "";
       const char* rightLabel = (multiResult && currentResult < resultCount - 1) ? ">" : "";
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", leftLabel, rightLabel);
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_HOLD_SELECT), leftLabel, rightLabel);
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       if (canScroll) {
@@ -544,8 +544,8 @@ void DictionaryDefinitionActivity::renderSelectionHighlight() {
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int padding = 2;
 
-  // Draw inverted rectangle behind the word
-  renderer.fillRect(w.x - padding, w.y, w.width + padding * 2, lineHeight, 0);  // Black rect
+  // Draw inverted rectangle behind the word (true = black fill)
+  renderer.fillRect(w.x - padding, w.y, w.width + padding * 2, lineHeight, true);
 
   // Draw word text in white (inverted)
   const auto& r = results[currentResult];
