@@ -188,15 +188,14 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     }
   }
 
-    LOG_DBG("ProgressMapper", "Resolved KOReader position: spine=%d intra=%.3f hasPIdx=%s pIdx=%u",
-      result.spineIndex, resolvedIntraSpineProgress, result.hasParagraphIndex ? "yes" : "no",
-      result.paragraphIndex);
+  LOG_DBG("ProgressMapper", "Resolved KOReader position: spine=%d intra=%.3f hasPIdx=%s pIdx=%u", result.spineIndex,
+          resolvedIntraSpineProgress, result.hasParagraphIndex ? "yes" : "no", result.paragraphIndex);
 
-    const char* mappingSource = usedXPathMapping ? (usedPercentageReconcile ? "xpath+percentage" : "xpath")
-                   : "percentage";
-    LOG_DBG("ProgressMapper", "KOReader -> CrossPoint: %.2f%% at %s -> spine=%d, page=%d (%s, exact=%s)",
-      koPos.percentage * 100, koPos.xpath.c_str(), result.spineIndex, result.pageNumber, mappingSource,
-      xpathExactMatch ? "yes" : "no");
+  const char* mappingSource =
+      usedXPathMapping ? (usedPercentageReconcile ? "xpath+percentage" : "xpath") : "percentage";
+  LOG_DBG("ProgressMapper", "KOReader -> CrossPoint: %.2f%% at %s -> spine=%d, page=%d (%s, exact=%s)",
+          koPos.percentage * 100, koPos.xpath.c_str(), result.spineIndex, result.pageNumber, mappingSource,
+          xpathExactMatch ? "yes" : "no");
 
   return result;
 }

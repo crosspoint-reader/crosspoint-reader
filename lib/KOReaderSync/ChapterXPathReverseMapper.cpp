@@ -235,8 +235,7 @@ bool findProgressForXPathInternal(const std::shared_ptr<Epub>& epub, const int s
   }
 
   if (state.targetTextNodeIndex > 0) {
-    LOG_DBG("KOX",
-            "Reverse: spine=%d %s match textNode=%d char=%d offset=%zu/%zu -> progress=%.3f for '%s'",
+    LOG_DBG("KOX", "Reverse: spine=%d %s match textNode=%d char=%d offset=%zu/%zu -> progress=%.3f for '%s'",
             spineIndex, state.bestTierName, state.targetTextNodeIndex, state.targetCharOffset, state.bestOffset,
             state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
   } else {
