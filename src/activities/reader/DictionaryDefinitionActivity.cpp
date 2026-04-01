@@ -337,7 +337,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       const char* downLabel = canScroll ? tr(STR_DIR_DOWN) : "";
       const char* leftLabel = isLandscapeCw ? upLabel : downLabel;
       const char* rightLabel = isLandscapeCw ? downLabel : upLabel;
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_HOLD_SELECT), leftLabel, rightLabel);
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT_PAREN), leftLabel, rightLabel);
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       // Side buttons: switch dictionaries (using Up/Down directly, no swap).
@@ -364,7 +364,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       // Swap conditions (not symbols) to match the inverted function mapping.
       const char* leftLabel = (multiResult && currentResult < resultCount - 1) ? "<" : "";
       const char* rightLabel = (multiResult && currentResult > 0) ? ">" : "";
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_HOLD_SELECT), leftLabel, rightLabel);
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT_PAREN), leftLabel, rightLabel);
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       // Side buttons: scroll pages (using Up/Down directly, no swap).
@@ -379,7 +379,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     } else {
       const char* leftLabel = (multiResult && currentResult > 0) ? "<" : "";
       const char* rightLabel = (multiResult && currentResult < resultCount - 1) ? ">" : "";
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_HOLD_SELECT), leftLabel, rightLabel);
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT_PAREN), leftLabel, rightLabel);
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
       if (canScroll) {
@@ -456,31 +456,46 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
       lineBuf[segLen] = '\0';
       renderer.drawText(UI_12_FONT_ID, margin, drawY, lineBuf, true);
 
-      // Extract individual words from this rendered line for selection mode
+      // Extract word positions for selection mode.
+      // getTextWidth returns visual bounding box width, so a prefix ending with
+      // a space (e.g. "hello ") won't include the space's advance.  To get the
+      // correct x of a word we measure "prefix-through-first-char-of-word" and
+      // subtract the first character's visual contribution.
       if (defWordCount < MAX_DEF_WORDS) {
         int wordStart = pos;
         while (wordStart < pos + segLen) {
-          // Skip spaces
           while (wordStart < pos + segLen && text[wordStart] == ' ') wordStart++;
           if (wordStart >= pos + segLen) break;
 
-          // Find word end
           int wEnd = wordStart;
           while (wEnd < pos + segLen && text[wEnd] != ' ') wEnd++;
 
           const int wordLen = wEnd - wordStart;
           if (wordLen > 0 && defWordCount < MAX_DEF_WORDS) {
-            // Measure x-position: width of text from line start to word start
-            int wordX = margin;
-            if (wordStart > pos) {
+            int wordX;
+            if (wordStart == pos) {
+              // First word on the line — starts at margin
+              wordX = margin;
+            } else {
+              // Measure prefix through the first char of this word.
+              // This captures the space advance because it's followed by a
+              // non-space character whose glyph extends maxX in getTextBounds.
               char prefixBuf[256];
-              const int prefixLen = std::min(wordStart - pos, static_cast<int>(sizeof(prefixBuf) - 1));
+              const int prefixLen = std::min(wordStart - pos + 1, static_cast<int>(sizeof(prefixBuf) - 1));
               memcpy(prefixBuf, text + pos, prefixLen);
               prefixBuf[prefixLen] = '\0';
-              wordX = margin + renderer.getTextWidth(UI_12_FONT_ID, prefixBuf);
+              const int prefixWidth = renderer.getTextWidth(UI_12_FONT_ID, prefixBuf);
+
+              // Measure just the first character to subtract its contribution
+              char firstChar[8];
+              const int fcLen = 1;  // ASCII assumption OK for definition text
+              memcpy(firstChar, text + wordStart, fcLen);
+              firstChar[fcLen] = '\0';
+              const int firstCharWidth = renderer.getTextWidth(UI_12_FONT_ID, firstChar);
+
+              wordX = margin + prefixWidth - firstCharWidth;
             }
 
-            // Measure word width
             char wordBuf[256];
             const int wbLen = std::min(wordLen, static_cast<int>(sizeof(wordBuf) - 1));
             memcpy(wordBuf, text + wordStart, wbLen);
@@ -521,12 +536,39 @@ void DictionaryDefinitionActivity::drawDefinition(int contentTop, int contentLef
 int DictionaryDefinitionActivity::findWordOnAdjacentLine(int currentIdx, int targetY) const {
   if (currentIdx < 0 || currentIdx >= defWordCount) return currentIdx;
 
+  const int currentY = defWords[currentIdx].y;
   const int currentX = defWords[currentIdx].x;
-  int bestIdx = -1;
-  int bestDist = INT_MAX;
+  const bool goingDown = targetY > currentY;
+
+  // Find the nearest line with words in the given direction.
+  // This handles blank lines (newlines with no words) by skipping past them.
+  int nearestLineY = -1;
+  int nearestLineDist = INT_MAX;
 
   for (int i = 0; i < defWordCount; ++i) {
-    if (defWords[i].y != targetY) continue;
+    const int wy = defWords[i].y;
+    if (goingDown && wy > currentY) {
+      const int dist = wy - currentY;
+      if (dist < nearestLineDist) {
+        nearestLineDist = dist;
+        nearestLineY = wy;
+      }
+    } else if (!goingDown && wy < currentY) {
+      const int dist = currentY - wy;
+      if (dist < nearestLineDist) {
+        nearestLineDist = dist;
+        nearestLineY = wy;
+      }
+    }
+  }
+
+  if (nearestLineY < 0) return currentIdx;  // No line found in that direction
+
+  // Find the word on that line closest to the current x position
+  int bestIdx = -1;
+  int bestDist = INT_MAX;
+  for (int i = 0; i < defWordCount; ++i) {
+    if (defWords[i].y != nearestLineY) continue;
     const int dist = abs(defWords[i].x - currentX);
     if (dist < bestDist) {
       bestDist = dist;
