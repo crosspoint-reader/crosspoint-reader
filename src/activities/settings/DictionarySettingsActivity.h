@@ -30,6 +30,5 @@ class DictionarySettingsActivity final : public Activity {
   // The first item in the list is "Lookup History" (not a dictionary).
   // Dictionary indices are offset by 1 in the list.
   static constexpr int HISTORY_ITEM_INDEX = 0;
-  bool hasHistoryItem() const { return true; }
   int dictListOffset() const { return 1; }
 };
