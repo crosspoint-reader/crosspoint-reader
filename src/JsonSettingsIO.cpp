@@ -232,7 +232,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
 
   // Legacy migration: if old key "sleepScreenCoverMode" exists, or sleepScreen value is out of new enum range,
   // this is a pre-unification settings file.
-  if (!doc["sleepScreenCoverMode"].isNull() ||
+  if (!doc["sleepScreenCoverMode"].isNull() || !doc["sleepScreen"].isNull() ||
       s.sleepScreen >= CrossPointSettings::SLEEP_SCREEN_MODE::SLEEP_SCREEN_MODE_COUNT) {
     uint8_t oldSleepScreen =
         doc["sleepScreen"] | doc["sleepScreenMode"] | (uint8_t)CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
