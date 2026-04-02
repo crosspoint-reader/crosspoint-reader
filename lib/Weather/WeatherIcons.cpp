@@ -4,11 +4,11 @@
 
 // Weather icon glyph source attribution:
 // https://github.com/erikflowers/weather-icons
-// 48x48 monochrome icon bitmaps in this file are adapted from that icon set.
+// 64x64 monochrome icon bitmaps in this file are adapted from that icon set.
 
 // ============================================================================
-// 48x48 Large Weather Icons (1-bit, MSB-first, row-major)
-// Each row = 48 pixels = 6 bytes. Total = 48 * 6 = 288 bytes per icon.
+// 64x64 Large Weather Icons (1-bit, MSB-first, row-major)
+// Each row = 64 pixels = 8 bytes. Total = 64 * 8 = 512 bytes per icon.
 // Pixel ON (1) = white/clear, Pixel OFF (0) = black/drawn.
 // These are "inverted" bitmaps - 0 bits are drawn as black pixels.
 // ============================================================================

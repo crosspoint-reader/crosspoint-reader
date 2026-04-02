@@ -346,17 +346,17 @@ void WeatherActivity::render(RenderLock&&) {
     return;
   }
 
-  // DISPLAY state - Landscape layout (800x480)
+  // DISPLAY state - Landscape layout (800x480 logical)
   //
   // +------------------+------------------------------------+
   // |  Current weather  |    Daily forecast cards            |
   // |  (icon, temp,     |    [Day1] [Day2] [Day3] ...       |
   // |   details)        |                                    |
-  // |  ~200px wide      |    ~600px wide                     |
+  // | leftPanelWidth=220| right panel = contentWidth-220    |
   // +------------------+------------------------------------+
   // |                                                        |
-  // |   48-hour temperature + precipitation graph            |
-  // |   ~full width, ~200px high                             |
+  // | hourly temperature + precipitation graph               |
+  // | height = graphHeight (currently 240)                  |
   // +--------------------------------------------------------+
   // |   [Back]  [Settings]  [Refresh]  Button hints          |
   // +--------------------------------------------------------+
@@ -415,11 +415,11 @@ void WeatherActivity::renderCurrentConditions(int x, int y, int w, int h) {
     textY += 15;
   }
 
-  // Weather icon (48x48)
+  // Weather icon (WEATHER_ICON_LARGE x WEATHER_ICON_LARGE)
   auto iconType = getWeatherIconType(cur.weatherCode, cur.isDay);
   const uint8_t* icon = getWeatherIconLarge(iconType);
   int iconX = x + (w - WEATHER_ICON_LARGE) / 2;
-  drawWeatherIconWithOrientation(renderer, icon, iconX, textY, WEATHER_ICON_LARGE);
+  drawWeatherIconWithOrientation(renderer, icon, iconX, textY + 2, WEATHER_ICON_LARGE);
   textY += WEATHER_ICON_LARGE + 5;
 
   // Temperature (large)
@@ -533,7 +533,7 @@ void WeatherActivity::renderDailyForecast(int x, int y, int w, int h) {
     renderer.drawText(SMALL_FONT_ID, cardX + (cardWidth - dateWidth) / 2, textY, dateBuf);
     textY += 18;
 
-    // Weather icon (48x48 for all days)
+    // Weather icon (WEATHER_ICON_LARGE for all days)
     auto iconType = getWeatherIconType(day.weatherCode, true);
     const uint8_t* icon = getWeatherIconLarge(iconType);
     int iconX = cardX + (cardWidth - WEATHER_ICON_LARGE) / 2;

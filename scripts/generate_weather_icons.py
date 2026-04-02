@@ -25,9 +25,11 @@ except Exception:
     cairosvg = None
 
 
-SIZE = 48
-THRESHOLD = 128
-CONTENT_MARGIN = 1
+SIZE = 64
+# Higher threshold slightly thickens dark icon strokes after antialiasing.
+THRESHOLD = 160
+# Keep zero margin so rendered glyphs can use the full 48x48 canvas.
+CONTENT_MARGIN = 0
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SVG_DIR = PROJECT_ROOT / "assets" / "weather-icons" / "svg"
 DEFAULT_OUT = PROJECT_ROOT / "lib" / "Weather" / "WeatherIcons48.h"

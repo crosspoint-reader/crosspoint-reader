@@ -8,7 +8,7 @@
 #endif
 
 // Weather icon size constants
-constexpr int WEATHER_ICON_LARGE = 48;  // Large icon for current weather
+constexpr int WEATHER_ICON_LARGE = 64;  // Large icon for current weather
 constexpr int WEATHER_ICON_SMALL = 24;  // Small icon for daily forecast
 
 // WMO weather code to icon category mapping
@@ -75,7 +75,7 @@ inline WeatherIconType getWeatherIconType(int wmoCode, bool isDay) {
 // Get human-readable description for WMO weather code
 const char* getWeatherDescription(int wmoCode);
 
-// Get the appropriate large icon bitmap (48x48, 1-bit, MSB first)
+// Get the appropriate large icon bitmap (64x64, 1-bit, MSB first)
 const uint8_t* getWeatherIconLarge(WeatherIconType type);
 
 // Get the appropriate small icon bitmap (24x24, 1-bit, MSB first)
