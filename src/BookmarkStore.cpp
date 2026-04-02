@@ -131,14 +131,6 @@ bool BookmarkStore::addBookmark(const std::string& bookPath, const BookmarkEntry
 
   auto entries = loadBookmarks(bookPath);
 
-  // Skip duplicate (same exact position)
-  if (std::any_of(entries.begin(), entries.end(), [&entry](const BookmarkEntry& existing) {
-        return existing.spineIndex == entry.spineIndex && existing.pageIndex == entry.pageIndex;
-      })) {
-    LOG_DBG(TAG, "Bookmark already exists at spine %d page %d", entry.spineIndex, entry.pageIndex);
-    return true;
-  }
-
   // Reject if at capacity (uint8_t count field supports max 255)
   if (entries.size() >= LIMIT) {
     LOG_DBG(TAG, "Bookmark limit reached (%d)", LIMIT);
