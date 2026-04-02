@@ -1,5 +1,11 @@
 #include "WeatherIcons.h"
 
+#include "WeatherIcons48.h"
+
+// Weather icon glyph source attribution:
+// https://github.com/erikflowers/weather-icons
+// 48x48 monochrome icon bitmaps in this file are adapted from that icon set.
+
 // ============================================================================
 // 48x48 Large Weather Icons (1-bit, MSB-first, row-major)
 // Each row = 48 pixels = 6 bytes. Total = 48 * 6 = 288 bytes per icon.
@@ -178,6 +184,8 @@ static const uint8_t ICON_FOG_48[] = {
 // Each row = 24 pixels = 3 bytes. Total = 24 * 3 = 72 bytes per icon.
 // ============================================================================
 
+#if WEATHER_ENABLE_SMALL_ICONS
+
 // clang-format off
 
 // Small Clear Day - Sun
@@ -262,6 +270,8 @@ static const uint8_t ICON_FOG_24[] = {
 
 // clang-format on
 
+#endif  // WEATHER_ENABLE_SMALL_ICONS
+
 // ============================================================================
 // Lookup functions
 // ============================================================================
@@ -269,30 +279,32 @@ static const uint8_t ICON_FOG_24[] = {
 const uint8_t* getWeatherIconLarge(WeatherIconType type) {
   switch (type) {
     case WeatherIconType::CLEAR_DAY:
-      return ICON_CLEAR_DAY_48;
+      return WI48_CLEAR_DAY;
     case WeatherIconType::CLEAR_NIGHT:
-      return ICON_CLEAR_NIGHT_48;
+      return WI48_CLEAR_NIGHT;
     case WeatherIconType::PARTLY_CLOUDY_DAY:
-      return ICON_PARTLY_CLOUDY_DAY_48;
+      return WI48_PARTLY_CLOUDY_DAY;
     case WeatherIconType::PARTLY_CLOUDY_NIGHT:
-      return ICON_PARTLY_CLOUDY_NIGHT_48;
+      return WI48_PARTLY_CLOUDY_NIGHT;
     case WeatherIconType::OVERCAST:
-      return ICON_OVERCAST_48;
+      return WI48_OVERCAST;
     case WeatherIconType::FOG:
-      return ICON_FOG_48;
+      return WI48_FOG;
     case WeatherIconType::DRIZZLE:
+      return WI48_DRIZZLE;
     case WeatherIconType::RAIN:
     case WeatherIconType::SHOWERS:
-      return ICON_RAIN_48;
+      return WI48_RAIN;
     case WeatherIconType::SNOW:
-      return ICON_SNOW_48;
+      return WI48_SNOW;
     case WeatherIconType::THUNDERSTORM:
-      return ICON_THUNDERSTORM_48;
+      return WI48_THUNDERSTORM;
     default:
-      return ICON_OVERCAST_48;
+      return WI48_OVERCAST;
   }
 }
 
+#if WEATHER_ENABLE_SMALL_ICONS
 const uint8_t* getWeatherIconSmall(WeatherIconType type) {
   switch (type) {
     case WeatherIconType::CLEAR_DAY:
@@ -318,6 +330,7 @@ const uint8_t* getWeatherIconSmall(WeatherIconType type) {
       return ICON_OVERCAST_24;
   }
 }
+#endif  // WEATHER_ENABLE_SMALL_ICONS
 
 const char* getWeatherDescription(int wmoCode) {
   switch (wmoCode) {

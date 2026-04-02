@@ -55,37 +55,52 @@ class FileWriteStream final : public Stream {
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
   std::unique_ptr<NetworkClient> client;
+  LOG_DBG("HTTP", "fetchUrl[1] start (https=%d)", UrlUtils::isHttpsUrl(url) ? 1 : 0);
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
+    LOG_DBG("HTTP", "fetchUrl[2] created NetworkClientSecure");
     secureClient->setInsecure();
+    LOG_DBG("HTTP", "fetchUrl[3] setInsecure done");
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
+    LOG_DBG("HTTP", "fetchUrl[2] created NetworkClient");
   }
   HTTPClient http;
 
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
 
+  LOG_DBG("HTTP", "fetchUrl[4] begin() before");
   http.begin(*client, url.c_str());
+  LOG_DBG("HTTP", "fetchUrl[5] begin() after");
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  LOG_DBG("HTTP", "fetchUrl[6] redirects configured");
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  LOG_DBG("HTTP", "fetchUrl[7] user-agent header added");
 
   // Add Basic HTTP auth if credentials are configured
   if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
     std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
+    LOG_DBG("HTTP", "fetchUrl[8] auth header added");
   }
 
+  LOG_DBG("HTTP", "fetchUrl[9] GET() before");
   const int httpCode = http.GET();
+  LOG_DBG("HTTP", "fetchUrl[10] GET() after code=%d", httpCode);
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Fetch failed: %d", httpCode);
+    LOG_DBG("HTTP", "fetchUrl[11] end() after GET failure");
     http.end();
     return false;
   }
 
+  LOG_DBG("HTTP", "fetchUrl[12] writeToStream() before");
   http.writeToStream(&outContent);
+  LOG_DBG("HTTP", "fetchUrl[13] writeToStream() after");
 
+  LOG_DBG("HTTP", "fetchUrl[14] end() before success return");
   http.end();
 
   LOG_DBG("HTTP", "Fetch success");
@@ -105,30 +120,41 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              ProgressCallback progress) {
   // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
   std::unique_ptr<NetworkClient> client;
+  LOG_DBG("HTTP", "downloadToFile[1] start (https=%d)", UrlUtils::isHttpsUrl(url) ? 1 : 0);
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
+    LOG_DBG("HTTP", "downloadToFile[2] created NetworkClientSecure");
     secureClient->setInsecure();
+    LOG_DBG("HTTP", "downloadToFile[3] setInsecure done");
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
+    LOG_DBG("HTTP", "downloadToFile[2] created NetworkClient");
   }
   HTTPClient http;
 
   LOG_DBG("HTTP", "Downloading: %s", url.c_str());
   LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
 
+  LOG_DBG("HTTP", "downloadToFile[4] begin() before");
   http.begin(*client, url.c_str());
+  LOG_DBG("HTTP", "downloadToFile[5] begin() after");
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  LOG_DBG("HTTP", "downloadToFile[6] redirects configured");
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  LOG_DBG("HTTP", "downloadToFile[7] user-agent header added");
 
   // Add Basic HTTP auth if credentials are configured
   if (strlen(SETTINGS.opdsUsername) > 0 && strlen(SETTINGS.opdsPassword) > 0) {
     std::string credentials = std::string(SETTINGS.opdsUsername) + ":" + SETTINGS.opdsPassword;
     String encoded = base64::encode(credentials.c_str());
     http.addHeader("Authorization", "Basic " + encoded);
+    LOG_DBG("HTTP", "downloadToFile[8] auth header added");
   }
 
+  LOG_DBG("HTTP", "downloadToFile[9] GET() before");
   const int httpCode = http.GET();
+  LOG_DBG("HTTP", "downloadToFile[10] GET() after code=%d", httpCode);
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Download failed: %d", httpCode);
     http.end();
@@ -158,10 +184,14 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   // Let HTTPClient handle chunked decoding and stream body bytes into the file.
   FileWriteStream fileStream(file, contentLength, progress);
+  LOG_DBG("HTTP", "downloadToFile[11] writeToStream() before");
   const int writeResult = http.writeToStream(&fileStream);
+  LOG_DBG("HTTP", "downloadToFile[12] writeToStream() after result=%d", writeResult);
 
   file.close();
+  LOG_DBG("HTTP", "downloadToFile[13] file closed");
   http.end();
+  LOG_DBG("HTTP", "downloadToFile[14] http end done");
 
   if (writeResult < 0) {
     LOG_ERR("HTTP", "writeToStream error: %d", writeResult);

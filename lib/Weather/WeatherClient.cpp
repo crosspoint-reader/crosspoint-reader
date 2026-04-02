@@ -12,7 +12,9 @@ namespace {
 constexpr char WEATHER_CACHE_FILE[] = "/.crosspoint/weather_cache.json";
 
 std::string buildForecastUrl(const WeatherSettingsStore& settings) {
-  std::string url = "https://api.open-meteo.com/v1/forecast?";
+  // Open-Meteo supports plain HTTP. Using HTTP here avoids TLS handshake
+  // instability observed on some ESP32-C3 builds.
+  std::string url = "http://api.open-meteo.com/v1/forecast?";
   url += "latitude=" + std::to_string(settings.getLatitude());
   url += "&longitude=" + std::to_string(settings.getLongitude());
   url +=
@@ -50,7 +52,15 @@ WeatherData WeatherClient::getWeather(const WeatherSettingsStore& settings, bool
         return cached;
       }
       LOG_DBG("WEA", "Cache expired (age: %ld s)", (long)(now - cached.fetchedAt));
+      // Cache-first behavior: return stale cache and let the caller decide
+      // whether/when to perform a network refresh.
+      return cached;
     }
+
+    LOG_DBG("WEA", "No cache available; caller should establish network and force refresh");
+    WeatherData data;
+    data.errorMessage = "No cache";
+    return data;
   }
 
   return fetchFromApi(settings);
@@ -59,24 +69,30 @@ WeatherData WeatherClient::getWeather(const WeatherSettingsStore& settings, bool
 WeatherData WeatherClient::fetchFromApi(const WeatherSettingsStore& settings) {
   WeatherData data;
   std::string url = buildForecastUrl(settings);
+  LOG_DBG("WEA", "fetchFromApi[1] start");
+  LOG_DBG("WEA", "fetchFromApi[2] url length=%zu", url.size());
   LOG_DBG("WEA", "Fetching weather from API");
 
   std::string response;
+  LOG_DBG("WEA", "fetchFromApi[3] HttpDownloader::fetchUrl before");
   if (!HttpDownloader::fetchUrl(url, response)) {
     data.errorMessage = "Network error";
     LOG_ERR("WEA", "Failed to fetch weather data");
     return data;
   }
+  LOG_DBG("WEA", "fetchFromApi[4] HttpDownloader::fetchUrl after; bytes=%zu", response.size());
 
+  LOG_DBG("WEA", "fetchFromApi[5] parseWeatherJson before");
   if (!parseWeatherJson(response, data)) {
     LOG_ERR("WEA", "Failed to parse weather JSON");
     return data;
   }
+  LOG_DBG("WEA", "fetchFromApi[6] parseWeatherJson after");
 
   data.valid = true;
   time(&data.fetchedAt);
   saveCache(data);
-  LOG_DBG("WEA", "Weather data fetched and cached");
+  LOG_DBG("WEA", "fetchFromApi[7] Weather data fetched and cached");
   return data;
 }
 

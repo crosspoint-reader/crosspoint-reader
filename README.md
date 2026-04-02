@@ -177,3 +177,7 @@ CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 
 
 Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
 was making CrossPoint.
+
+## Third-Party Attribution
+
+- Weather icon artwork used by the Weather activity is adapted from [weather-icons by Erik Flowers](https://github.com/erikflowers/weather-icons).

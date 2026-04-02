@@ -35,6 +35,8 @@ class WeatherActivity final : public Activity {
   WeatherData weatherData;
   std::string errorMessage;
   bool forceRefresh = false;
+  bool showRefreshPopup = false;
+  uint32_t wifiWaitStartedAtMs = 0;
 
   void loadAndDisplay();
   void checkAndConnectWifi();
