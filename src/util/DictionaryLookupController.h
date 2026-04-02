@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "Dictionary.h"
 #include "LookupHistory.h"
 #include "WordSelectNavigator.h"
 
@@ -81,7 +82,7 @@ class DictionaryLookupController {
 
   const std::string& getLookupWord() const { return lookupWord; }
   const std::string& getFoundWord() const { return foundWord; }
-  const std::string& getFoundDefinition() const { return foundDefinition; }
+  const DictLocation& getFoundLocation() const { return foundLocation; }
   FoundStatus getFoundStatus() const { return foundStatus; }
 
  private:
@@ -96,7 +97,7 @@ class DictionaryLookupController {
 
   std::string lookupWord;
   std::string foundWord;
-  std::string foundDefinition;
+  DictLocation foundLocation;
   std::string altFormWord;
 
   volatile int lookupProgress = 0;

@@ -19,11 +19,11 @@ class DictionaryDefinitionActivity final : public Activity {
   // showLookupButton=false:
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::string& headword, const std::string& definition,
+                                        const std::string& headword, const DictLocation& location,
                                         bool showLookupButton = false, std::string bookCachePath = "")
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
-        definition(definition),
+        foundLocation(location),
         showLookupButton(showLookupButton),
         cachePath(std::move(bookCachePath)),
         controller(renderer, mappedInput, *this, cachePath) {}
@@ -35,7 +35,7 @@ class DictionaryDefinitionActivity final : public Activity {
 
  private:
   std::string headword;
-  std::string definition;
+  DictLocation foundLocation;
   bool showLookupButton;
   std::string cachePath;
   std::vector<std::string> chainWords;  // previous headwords for back-nav

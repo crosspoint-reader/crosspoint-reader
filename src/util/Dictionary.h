@@ -29,6 +29,14 @@ struct DictInfo {
   bool valid = false;
 };
 
+// Result of an index search — file location of a definition without reading it.
+struct DictLocation {
+  std::string folderPath;  // dictionary base path (e.g. /dictionary/dict-en-en/dict-data)
+  uint32_t offset = 0;     // byte offset in .dict file
+  uint32_t size = 0;       // byte length in .dict file
+  bool found = false;
+};
+
 class Dictionary {
  public:
   static constexpr unsigned long LONG_PRESS_MS = 600;
@@ -57,6 +65,10 @@ class Dictionary {
   // Parse the .ifo file in folderPath and return metadata.
   // Also checks for .syn and .dict.dz presence.
   static DictInfo readInfo(const char* folderPath);
+
+  // Search .idx for word (via .idx.oft if present). Returns file location without reading content.
+  static DictLocation locate(const std::string& word, const DictLookupCallbacks& cbs = {},
+                             const char* cachePath = nullptr);
 
   // Look up word in .idx (via .idx.oft if present). Returns definition or empty string.
   static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {},

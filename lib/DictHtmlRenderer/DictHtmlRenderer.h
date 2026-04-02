@@ -42,6 +42,11 @@ class DictHtmlRenderer {
 
   const std::vector<StyledSpan>& render(const char* html, int len);
 
+  // Stream-render from an open file. Reads definition in 512-byte chunks — the full
+  // definition is never held in RAM. Entity resolution handles cross-chunk boundaries.
+  // The file must be open for reading; caller is responsible for close.
+  const std::vector<StyledSpan>& renderFromFile(const char* dictPath, uint32_t offset, uint32_t size);
+
 #ifdef DICT_HTML_RENDERER_TRACK_UNKNOWN
   bool hasUnknownTags() const { return unknownTagCount > 0; }
 
@@ -117,6 +122,11 @@ class DictHtmlRenderer {
   void pushSpan();
   void emitText(const char* s, int len);
   void flushPending();
+
+  // Feed a buffer through the entity resolver into expat. If the buffer ends mid-entity,
+  // the partial entity is written to carry/carryLen for prepending to the next chunk.
+  // Set isLast=true for the final chunk (no carryover possible).
+  void feedEntityResolved(const char* buf, int len, bool isLast, char* carry, int* carryLen);
 
   std::vector<StackEntry> tagStack;
 

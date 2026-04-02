@@ -363,22 +363,23 @@ std::string Dictionary::readDefinition(const std::string& folderPath, uint32_t o
 }
 
 // ---------------------------------------------------------------------------
-// Lookup (zero persistent RAM — no static index)
+// Locate (index search only — no definition read, zero RAM growth)
 // ---------------------------------------------------------------------------
 
-std::string Dictionary::lookup(const std::string& word, const DictLookupCallbacks& cbs, const char* cachePath) {
-  std::string folderPath = readDictPath(cachePath);
-  if (folderPath.empty()) return "";
+DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbacks& cbs, const char* cachePath) {
+  DictLocation result;
+  result.folderPath = readDictPath(cachePath);
+  if (result.folderPath.empty()) return result;
 
-  std::string p = folderPath + ".idx";
+  std::string p = result.folderPath + ".idx";
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return "";
+  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return result;
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  p = folderPath + ".idx.oft";
+  p = result.folderPath + ".idx.oft";
   FsFile oft;
   if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
@@ -387,13 +388,12 @@ std::string Dictionary::lookup(const std::string& word, const DictLookupCallback
 
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 70);
 
-  // Linear scan within the identified page (≤ OFT_STRIDE entries)
   idx.seekSet(startByte);
 
   while (static_cast<uint32_t>(idx.position()) < endByte) {
     if (cbs.shouldCancel && cbs.shouldCancel(cbs.ctx)) {
       idx.close();
-      return "";
+      return result;
     }
 
     int len = readWordInto(idx, wordBuf, sizeof(wordBuf));
@@ -404,22 +404,32 @@ std::string Dictionary::lookup(const std::string& word, const DictLookupCallback
 
     int cmp = cistrcmp(wordBuf, word.c_str());
     if (cmp == 0) {
-      // Big-endian offset and size in .idx
-      uint32_t dictOffset = (static_cast<uint32_t>(suffix[0]) << 24) | (static_cast<uint32_t>(suffix[1]) << 16) |
-                            (static_cast<uint32_t>(suffix[2]) << 8) | static_cast<uint32_t>(suffix[3]);
-      uint32_t dictSize = (static_cast<uint32_t>(suffix[4]) << 24) | (static_cast<uint32_t>(suffix[5]) << 16) |
-                          (static_cast<uint32_t>(suffix[6]) << 8) | static_cast<uint32_t>(suffix[7]);
+      result.offset = (static_cast<uint32_t>(suffix[0]) << 24) | (static_cast<uint32_t>(suffix[1]) << 16) |
+                      (static_cast<uint32_t>(suffix[2]) << 8) | static_cast<uint32_t>(suffix[3]);
+      result.size = (static_cast<uint32_t>(suffix[4]) << 24) | (static_cast<uint32_t>(suffix[5]) << 16) |
+                    (static_cast<uint32_t>(suffix[6]) << 8) | static_cast<uint32_t>(suffix[7]);
+      result.found = true;
       idx.close();
       if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
-      return readDefinition(folderPath, dictOffset, dictSize);
+      return result;
     }
 
-    if (cmp > 0) break;  // Passed the target alphabetically — not found
+    if (cmp > 0) break;
   }
 
   idx.close();
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 100);
-  return "";
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Lookup (convenience wrapper — locate + read into string)
+// ---------------------------------------------------------------------------
+
+std::string Dictionary::lookup(const std::string& word, const DictLookupCallbacks& cbs, const char* cachePath) {
+  auto loc = locate(word, cbs, cachePath);
+  if (!loc.found) return "";
+  return readDefinition(loc.folderPath, loc.offset, loc.size);
 }
 
 // ---------------------------------------------------------------------------

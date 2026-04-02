@@ -2,6 +2,7 @@
 
 #include <DictHtmlRenderer.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
 #include <freertos/FreeRTOS.h>
@@ -64,8 +65,7 @@ void DictionaryDefinitionActivity::wrapText() {
   if (linesPerPage < 1) linesPerPage = 1;
 
   // Choose rendering path based on dictionary content type
-  const std::string folderPath = Dictionary::readDictPath(cachePath.empty() ? nullptr : cachePath.c_str());
-  const DictInfo info = Dictionary::readInfo(folderPath.c_str());
+  const DictInfo info = Dictionary::readInfo(foundLocation.folderPath.c_str());
   if (info.valid && info.sametypesequence[0] == 'h') {
     wrapHtml();
   } else {
@@ -89,9 +89,11 @@ void DictionaryDefinitionActivity::wrapHtml() {
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
   const int bulletWidth = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), kBullet);
 
-  // Heap-allocate the renderer — textBuf[8192] is too large for the stack
+  // Heap-allocate the renderer — internal buffers are too large for the stack.
+  // Stream from .dict file — the full definition is never held in RAM.
   auto htmlRenderer = std::make_unique<DictHtmlRenderer>();
-  const auto& spans = htmlRenderer->render(definition.c_str(), static_cast<int>(definition.size()));
+  const std::string dictPath = foundLocation.folderPath + ".dict";
+  const auto& spans = htmlRenderer->renderFromFile(dictPath.c_str(), foundLocation.offset, foundLocation.size);
 
   LayoutLine currentLine;
   int currentX = 0;
@@ -299,17 +301,37 @@ void DictionaryDefinitionActivity::wrapPlain() {
     currentWord.clear();
   };
 
-  for (size_t i = 0; i <= definition.size(); i++) {
-    char c = (i < definition.size()) ? definition[i] : '\0';
-    if (c == '\n' || c == '\0') {
-      tryAppendWord();
-      flushLine();
-    } else if (c == ' ') {
-      tryAppendWord();
-    } else {
-      currentWord += c;
+  // Stream from .dict file — the full definition is never held in RAM.
+  const std::string dictPath = foundLocation.folderPath + ".dict";
+  FsFile dictFile;
+  if (!Storage.openFileForRead("DICT", dictPath.c_str(), dictFile)) return;
+  dictFile.seekSet(foundLocation.offset);
+
+  uint32_t remaining = foundLocation.size;
+  char chunk[512];
+
+  while (remaining > 0) {
+    uint32_t toRead = remaining < sizeof(chunk) ? remaining : static_cast<uint32_t>(sizeof(chunk));
+    int n = dictFile.read(reinterpret_cast<uint8_t*>(chunk), static_cast<int>(toRead));
+    if (n <= 0) break;
+    remaining -= static_cast<uint32_t>(n);
+
+    for (int ci = 0; ci < n; ci++) {
+      char c = chunk[ci];
+      if (c == '\n') {
+        tryAppendWord();
+        flushLine();
+      } else if (c == ' ') {
+        tryAppendWord();
+      } else {
+        currentWord += c;
+      }
     }
   }
+
+  tryAppendWord();
+  flushLine();
+  dictFile.close();
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +420,7 @@ void DictionaryDefinitionActivity::loop() {
         }
         chainBackNavInProgress = false;
         headword = controller.getFoundWord();
-        definition = controller.getFoundDefinition();
+        foundLocation = controller.getFoundLocation();
         wrapText();
         currentPage = 0;
         isWordSelectMode = false;

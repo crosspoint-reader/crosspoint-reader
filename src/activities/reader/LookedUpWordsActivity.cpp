@@ -48,7 +48,7 @@ void LookedUpWordsActivity::loop() {
                                DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
         startActivityForResult(
             std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
-                                                           controller.getFoundDefinition(), true, cachePath),
+                                                           controller.getFoundLocation(), true, cachePath),
             [this](const ActivityResult& result) {
               entries = LookupHistory::load(cachePath);
               if (!result.isCancelled) {

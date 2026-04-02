@@ -20,7 +20,7 @@ DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, Ma
 void DictionaryLookupController::startLookup(const std::string& word) {
   lookupWord = word;
   foundWord.clear();
-  foundDefinition.clear();
+  foundLocation = DictLocation{};
   lookupProgress = 0;
   lookupDone = false;
   lookupCancelled = false;
@@ -58,20 +58,20 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         return LookupEvent::Cancelled;
       }
 
-      if (!foundDefinition.empty()) {
+      if (foundLocation.found) {
         foundWord = lookupWord;
         foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Direct;
         nextIsSuggestion = false;
         return LookupEvent::FoundDefinition;
       }
 
-      // Try stem variants
+      // Try stem variants (locate only — no definition loaded into RAM)
       auto stems = Dictionary::getStemVariants(lookupWord);
       for (const auto& stem : stems) {
-        std::string stemDef = Dictionary::lookup(stem, {}, cachePath.c_str());
-        if (!stemDef.empty()) {
+        auto loc = Dictionary::locate(stem, {}, cachePath.c_str());
+        if (loc.found) {
           foundWord = stem;
-          foundDefinition = stemDef;
+          foundLocation = std::move(loc);
           foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Stem;
           nextIsSuggestion = false;
           return LookupEvent::FoundDefinition;
@@ -102,10 +102,10 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       state = LookupState::Idle;
       std::string canonical = Dictionary::resolveAltForm(altFormWord, cachePath.c_str());
       if (!canonical.empty()) {
-        std::string def = Dictionary::lookup(canonical, {}, cachePath.c_str());
-        if (!def.empty()) {
+        auto loc = Dictionary::locate(canonical, {}, cachePath.c_str());
+        if (loc.found) {
           foundWord = canonical;
-          foundDefinition = def;
+          foundLocation = std::move(loc);
           foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::AltForm;
           nextIsSuggestion = false;
           return LookupEvent::FoundDefinition;
@@ -250,7 +250,7 @@ void DictionaryLookupController::runLookup() {
   cbs.ctx = this;
   cbs.onProgress = &DictionaryLookupController::progressCallback;
   cbs.shouldCancel = &DictionaryLookupController::cancelCallback;
-  foundDefinition = Dictionary::lookup(lookupWord, cbs, cachePath.c_str());
+  foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
   lookupCancelled = lookupCancelRequested;
   lookupDone = true;
   owner.requestUpdate(true);

@@ -1,5 +1,8 @@
 #include "DictHtmlRenderer.h"
 
+#include <HalStorage.h>
+#include <Logging.h>
+
 #include <cstring>
 #include <string>
 
@@ -539,6 +542,155 @@ const std::vector<StyledSpan>& DictHtmlRenderer::render(const char* html, int le
 
   // textBuf is now stable — convert offsets to pointers.
   // Done even on parse error so that partially accumulated spans are usable.
+  for (auto& s : spans) {
+    s.text = textBuf.data() + s.textOffset;
+  }
+
+  return spans;
+}
+
+// ---------------------------------------------------------------------------
+// Chunked entity resolution (shared by render() and renderFromFile())
+// ---------------------------------------------------------------------------
+
+void DictHtmlRenderer::feedEntityResolved(const char* buf, int len, bool isLast, char* carry, int* carryLen) {
+  static const char* const kXmlBuiltins[] = {"amp", "lt", "gt", "quot", "apos"};
+  int i = 0;
+  while (i < len && !parseError) {
+    int runStart = i;
+    while (i < len && buf[i] != '&') i++;
+    if (i > runStart) {
+      if (XML_Parse(parser, buf + runStart, i - runStart, 0) != XML_STATUS_OK) {
+        parseError = true;
+        return;
+      }
+    }
+    if (i >= len) break;
+
+    // buf[i] == '&' — scan for ';'
+    int j = i + 1;
+    while (j < len && buf[j] != ';' && buf[j] != '&' && buf[j] != '<' && (j - i) < 33) j++;
+
+    if (j >= len && !isLast) {
+      // Entity spans chunk boundary — carry remainder for next chunk
+      if (carry && carryLen) {
+        int remaining = len - i;
+        if (remaining > 63) remaining = 63;  // safety cap
+        memcpy(carry, buf + i, remaining);
+        *carryLen = remaining;
+      }
+      return;
+    }
+
+    if (j < len && buf[j] == ';') {
+      int nameLen = j - i - 1;
+      const char* nameStart = buf + i + 1;
+
+      bool passThrough = (nameLen > 0 && nameStart[0] == '#');
+      if (!passThrough) {
+        for (const auto* b : kXmlBuiltins) {
+          if (static_cast<int>(strlen(b)) == nameLen && strncmp(nameStart, b, nameLen) == 0) {
+            passThrough = true;
+            break;
+          }
+        }
+      }
+
+      if (passThrough) {
+        if (XML_Parse(parser, buf + i, j - i + 1, 0) != XML_STATUS_OK) {
+          parseError = true;
+          return;
+        }
+      } else {
+        const char* repl = lookupHtmlEntity(nameStart, nameLen);
+        if (repl && repl[0] != '\0') {
+          if (XML_Parse(parser, repl, static_cast<int>(strlen(repl)), 0) != XML_STATUS_OK) {
+            parseError = true;
+            return;
+          }
+        }
+      }
+      i = j + 1;
+    } else {
+      // Malformed entity — pass '&' through
+      if (XML_Parse(parser, buf + i, 1, 0) != XML_STATUS_OK) {
+        parseError = true;
+        return;
+      }
+      i++;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stream-render from .dict file (definition never held in RAM)
+// ---------------------------------------------------------------------------
+
+const std::vector<StyledSpan>& DictHtmlRenderer::renderFromFile(const char* dictPath, uint32_t offset, uint32_t size) {
+  reset();
+
+  if (!parser) {
+    parseError = true;
+    return spans;
+  }
+
+  FsFile file;
+  if (!Storage.openFileForRead("DICT", dictPath, file)) {
+    LOG_ERR("DHTML", "Failed to open: %s", dictPath);
+    parseError = true;
+    return spans;
+  }
+  file.seekSet(offset);
+
+  XML_SetUserData(parser, this);
+  XML_SetElementHandler(parser, onStart, onEnd);
+  XML_SetCharacterDataHandler(parser, onText);
+
+  static constexpr const char kOpen[] = "<_root>";
+  static constexpr const char kClose[] = "</_root>";
+
+  if (XML_Parse(parser, kOpen, static_cast<int>(sizeof(kOpen) - 1), 0) != XML_STATUS_OK) {
+    parseError = true;
+  }
+
+  if (!parseError) {
+    char chunk[512];
+    char carry[64];
+    int carryLen = 0;
+    uint32_t remaining = size;
+
+    while (remaining > 0 && !parseError) {
+      // Prepend carryover from previous chunk
+      uint32_t space = static_cast<uint32_t>(sizeof(chunk) - carryLen);
+      uint32_t toRead = remaining < space ? remaining : space;
+      if (carryLen > 0) {
+        memmove(chunk + carryLen, chunk, 0);  // no-op, just reserving layout
+        memcpy(chunk, carry, carryLen);
+      }
+      int n = file.read(reinterpret_cast<uint8_t*>(chunk + carryLen), static_cast<int>(toRead));
+      if (n <= 0) break;
+      remaining -= static_cast<uint32_t>(n);
+      int bufLen = carryLen + n;
+      carryLen = 0;
+
+      feedEntityResolved(chunk, bufLen, remaining == 0, carry, &carryLen);
+    }
+
+    // Flush any trailing carryover (e.g. malformed entity at end of file)
+    if (carryLen > 0 && !parseError) {
+      feedEntityResolved(carry, carryLen, true, nullptr, nullptr);
+    }
+  }
+
+  if (!parseError) {
+    if (XML_Parse(parser, kClose, static_cast<int>(sizeof(kClose) - 1), 1) != XML_STATUS_OK) {
+      parseError = true;
+    }
+  }
+
+  flushPending();
+  file.close();
+
   for (auto& s : spans) {
     s.text = textBuf.data() + s.textOffset;
   }
