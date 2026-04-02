@@ -242,8 +242,7 @@ void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::ve
 }
 
 int LyraTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
-  int rowHeight =
-      (hasSubtitle) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
+  int rowHeight = (hasSubtitle) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
   return contentHeight / rowHeight;
 }
 
