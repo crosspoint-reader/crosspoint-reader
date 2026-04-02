@@ -30,6 +30,17 @@ void EpubReaderBookmarksActivity::onEnter() {
 
 void EpubReaderBookmarksActivity::onExit() { Activity::onExit(); }
 
+int EpubReaderBookmarksActivity::getGutterBottom(const GfxRenderer& renderer) {
+  const auto orientation = renderer.getOrientation();
+  const bool isPortrait = orientation == GfxRenderer::Orientation::Portrait;
+  return isPortrait ? 75 : 40;  // Reserve vertical space for button hints at the bottom
+}
+
+int EpubReaderBookmarksActivity::getListHeight(const GfxRenderer& renderer) {
+  const auto pageHeight = renderer.getScreenHeight();
+  return pageHeight - getGutterBottom(renderer) - LINE_HEIGHT;  // Reserve vertical space for title and button hints
+}
+
 void EpubReaderBookmarksActivity::loop() {
   // Delete confirmation mode
   if (confirmingDelete) {
@@ -81,6 +92,18 @@ void EpubReaderBookmarksActivity::loop() {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, bookmarks.size());
     requestUpdate();
   });
+
+  buttonNavigator.onNextContinuous([this] {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, bookmarks.size(),
+                                                   GUI.getListPageItems(getListHeight(renderer), true));
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousContinuous([this] {
+    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, bookmarks.size(),
+                                                       GUI.getListPageItems(getListHeight(renderer), true));
+    requestUpdate();
+  });
 }
 
 void EpubReaderBookmarksActivity::render(RenderLock&&) {
@@ -100,11 +123,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int contentWidth = pageWidth - hintGutterWidth;
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int hintGutterBottom = isPortrait ? 75 : 40;  // Reserve vertical space for button hints at the bottom
+  const int hintGutterBottom = getGutterBottom(renderer);
   const int contentY = hintGutterHeight;
   const int listY = contentY + LINE_HEIGHT;  // Reserve vertical space for title
-  const int listHeight =
-      pageHeight - hintGutterBottom - LINE_HEIGHT;  // Reserve vertical space for title and button hints
+  const int listHeight = getListHeight(renderer);
   const int numBookmarks = bookmarks.size();
 
   // Manual centering to honor content gutters.
@@ -148,7 +170,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   }
 
   const auto backLabel = confirmingDelete ? tr(STR_CANCEL) : tr(STR_BACK);
-  const auto confirmLabel = confirmingDelete ? tr(STR_DELETE) : tr(STR_OPEN);
+  const auto confirmLabel = bookmarks.size() > 0 ? (confirmingDelete ? tr(STR_DELETE) : tr(STR_OPEN)) : "";
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

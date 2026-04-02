@@ -23,4 +23,11 @@ class EpubReaderBookmarksActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+
+ private:
+  // Calculate the vertical space to reserve for button hints based on orientation
+  int getGutterBottom(const GfxRenderer& renderer);
+
+  // Calculate the height available for the bookmark list based on orientation
+  int getListHeight(const GfxRenderer& renderer);
 };
