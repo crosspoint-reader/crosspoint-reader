@@ -302,6 +302,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
       if (self->imageRendering == 2) {
+        // Suppressing an image should not leak accumulated wrapper block spacing
+        // (e.g. figure/h1 margins) into the next text paragraph.
+        if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
+          BlockStyle resetStyle;
+          resetStyle.textAlignDefined = true;
+          const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                                 ? CssTextAlign::Justify
+                                 : static_cast<CssTextAlign>(self->paragraphAlignment);
+          resetStyle.alignment = align;
+          self->currentTextBlock->setBlockStyle(resetStyle);
+          LOG_DBG("EHP", "Image suppressed: pending empty block style reset");
+        }
         self->skipUntilDepth = self->depth;
         self->depth += 1;
         return;
@@ -314,6 +326,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           imgDisplayStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
         }
         if (imgDisplayStyle.hasDisplay() && imgDisplayStyle.display == CssDisplay::None) {
+          // CSS-hidden images should behave like suppressed images for spacing.
+          if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
+            BlockStyle resetStyle;
+            resetStyle.textAlignDefined = true;
+            const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                                   ? CssTextAlign::Justify
+                                   : static_cast<CssTextAlign>(self->paragraphAlignment);
+            resetStyle.alignment = align;
+            self->currentTextBlock->setBlockStyle(resetStyle);
+            LOG_DBG("EHP", "Image hidden via CSS display:none: pending empty block style reset");
+          }
           self->skipUntilDepth = self->depth;
           self->depth += 1;
           return;
@@ -449,9 +472,31 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->startNewTextBlock(parentBlockStyle);
                 }
 
+                // If the current text block is still empty, it may carry accumulated parent
+                // block spacing (e.g. div/figure/h1 wrappers). Apply that spacing around the
+                // image itself so it doesn't leak into the next text paragraph.
+                BlockStyle pendingImageBlockStyle;
+                if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
+                  pendingImageBlockStyle = self->currentTextBlock->getBlockStyle();
+                }
+
+                const int imageSpacingTop = std::max(0, static_cast<int>(pendingImageBlockStyle.marginTop)) +
+                                            std::max(0, static_cast<int>(pendingImageBlockStyle.paddingTop));
+                const int imageSpacingBottom = std::max(0, static_cast<int>(pendingImageBlockStyle.marginBottom)) +
+                                               std::max(0, static_cast<int>(pendingImageBlockStyle.paddingBottom));
+                const int totalImageHeightWithSpacing = imageSpacingTop + displayHeight + imageSpacingBottom;
+
+                LOG_DBG("EHP",
+                        "Image layout prep: src=%s dims=%dx%d display=%dx%d y=%d spacing(top=%d,bottom=%d,total=%d)",
+                        src.c_str(), dims.width, dims.height, displayWidth, displayHeight, self->currentPageNextY,
+                        imageSpacingTop, imageSpacingBottom, totalImageHeightWithSpacing);
+
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
-                    (self->currentPageNextY + displayHeight > self->viewportHeight)) {
+                    (self->currentPageNextY + totalImageHeightWithSpacing > self->viewportHeight)) {
+                  LOG_DBG("EHP", "Image page break: currentY=%d needed=%d viewportH=%d", self->currentPageNextY,
+                          totalImageHeightWithSpacing, self->viewportHeight);
+                  self->paragraphIndexPerPage.push_back(self->xpathParagraphIndex);
                   self->completePageFn(std::move(self->currentPage));
                   self->completedPageCount++;
                   self->currentPage.reset(new Page());
@@ -469,6 +514,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPageNextY = 0;
                 }
 
+                self->currentPageNextY += imageSpacingTop;
+
                 // Create ImageBlock and add to page
                 auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
                 if (!imageBlock) {
@@ -483,6 +530,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 }
                 self->currentPage->elements.push_back(pageImage);
                 self->currentPageNextY += displayHeight;
+                self->currentPageNextY += imageSpacingBottom;
+
+                LOG_DBG("EHP", "Image placed: x=%d y=%d w=%d h=%d nextY=%d", xPos, pageImage->yPos, displayWidth,
+                        displayHeight, self->currentPageNextY);
+
+                // Reset empty pending block style after consuming spacing around the image.
+                // This prevents figure/header wrapper margins from being applied again to the
+                // next paragraph block.
+                if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
+                  BlockStyle resetStyle;
+                  resetStyle.textAlignDefined = true;
+                  const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                                         ? CssTextAlign::Justify
+                                         : static_cast<CssTextAlign>(self->paragraphAlignment);
+                  resetStyle.alignment = align;
+                  self->currentTextBlock->setBlockStyle(resetStyle);
+                  LOG_DBG("EHP", "Image spacing consumed; pending empty block style reset for following text");
+                }
 
                 self->depth += 1;
                 return;
