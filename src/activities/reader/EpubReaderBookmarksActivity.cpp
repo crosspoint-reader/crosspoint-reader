@@ -55,6 +55,9 @@ void EpubReaderBookmarksActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
     if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
+      if (bookmarks.empty()) {
+        return;
+      }
       confirmingDelete = true;
       requestUpdate();
     } else {
