@@ -4,7 +4,7 @@
 
 #include <algorithm>
 #include <string>
-#include <vector>
+#include <deque>
 
 class BookMetadataCache {
  public:
@@ -61,7 +61,7 @@ class BookMetadataCache {
     uint16_t hrefLen;   // length for collision reduction
     int16_t spineIndex;
   };
-  std::vector<SpineHrefIndexEntry> spineHrefIndex;
+  std::deque<SpineHrefIndexEntry> spineHrefIndex;
   bool useSpineHrefIndex = false;
 
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
