@@ -124,8 +124,8 @@ void WeatherActivity::onEnter() {
 void WeatherActivity::onExit() {
   Activity::onExit();
 
-  // Restore orientation from settings
-  renderer.setOrientation(static_cast<GfxRenderer::Orientation>(SETTINGS.orientation));
+  // Weather screen is always landscape; restore app UI to portrait on exit.
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   WiFi.mode(WIFI_OFF);
 }
@@ -405,12 +405,12 @@ void WeatherActivity::renderCurrentConditions(int x, int y, int w, int h) {
     textY += 15;
   }
 
-  // Weather icon (WEATHER_ICON_LARGE x WEATHER_ICON_LARGE)
+  // Weather icon (WEATHER_ICON_SIZE x WEATHER_ICON_SIZE)
   auto iconType = getWeatherIconType(cur.weatherCode, cur.isDay);
   const uint8_t* icon = getWeatherIconLarge(iconType);
-  int iconX = x + (w - WEATHER_ICON_LARGE) / 2;
-  drawWeatherIconWithOrientation(renderer, icon, iconX, textY + 2, WEATHER_ICON_LARGE);
-  textY += WEATHER_ICON_LARGE + 5;
+  int iconX = x + (w - WEATHER_ICON_SIZE) / 2;
+  drawWeatherIconWithOrientation(renderer, icon, iconX, textY + 2, WEATHER_ICON_SIZE);
+  textY += WEATHER_ICON_SIZE + 5;
 
   // Temperature (large)
   char tempBuf[16];
@@ -528,12 +528,12 @@ void WeatherActivity::renderDailyForecast(int x, int y, int w, int h) {
     renderer.drawText(SMALL_FONT_ID, cardX + (cardWidth - dateWidth) / 2, textY, dateBuf);
     textY += 18;
 
-    // Weather icon (WEATHER_ICON_LARGE for all days)
+    // Weather icon (WEATHER_ICON_SIZE for all days)
     auto iconType = getWeatherIconType(day.weatherCode, true);
     const uint8_t* icon = getWeatherIconLarge(iconType);
-    int iconX = cardX + (cardWidth - WEATHER_ICON_LARGE) / 2;
-    drawWeatherIconWithOrientation(renderer, icon, iconX, textY, WEATHER_ICON_LARGE);
-    textY += WEATHER_ICON_LARGE + 8;
+    int iconX = cardX + (cardWidth - WEATHER_ICON_SIZE) / 2;
+    drawWeatherIconWithOrientation(renderer, icon, iconX, textY, WEATHER_ICON_SIZE);
+    textY += WEATHER_ICON_SIZE + 8;
 
     // Weather description (short)
     const char* desc = I18N.get(getWeatherDescriptionStrId(day.weatherCode));

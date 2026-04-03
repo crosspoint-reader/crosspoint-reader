@@ -24,13 +24,15 @@ class WeatherSettingsActivity final : public Activity {
 
  private:
   ButtonNavigator buttonNavigator;
-  size_t selectedIndex = 0;
+  int selectedIndex = 0;
 
   // City search results (populated when user searches)
   std::vector<GeocodingResult> searchResults;
   bool showingSearchResults = false;
+  bool searchInProgress = false;
+  std::string searchQuery;
 
-  static constexpr size_t MENU_ITEMS = 6;  // Location, Lat, Lon, TempUnit, WindUnit, PrecipUnit
+  static constexpr int MENU_ITEMS = 6;  // Location, Lat, Lon, TempUnit, WindUnit, PrecipUnit
 
   void handleSelection();
   void launchCitySearch();

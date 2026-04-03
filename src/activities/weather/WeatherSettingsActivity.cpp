@@ -55,12 +55,15 @@ void WeatherSettingsActivity::loop() {
     }
 
     buttonNavigator.onNext([this] {
-      selectedIndex = (selectedIndex + 1) % searchResults.size();
+      if (searchResults.empty()) return;
+      selectedIndex = (selectedIndex + 1) % static_cast<int>(searchResults.size());
       requestUpdate();
     });
 
     buttonNavigator.onPrevious([this] {
-      selectedIndex = (selectedIndex + searchResults.size() - 1) % searchResults.size();
+      if (searchResults.empty()) return;
+      const int size = static_cast<int>(searchResults.size());
+      selectedIndex = (selectedIndex + size - 1) % size;
       requestUpdate();
     });
     return;

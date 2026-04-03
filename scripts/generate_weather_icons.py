@@ -29,11 +29,11 @@ except ImportError:
 SIZE = 64
 # Higher threshold slightly thickens dark icon strokes after antialiasing.
 THRESHOLD = 160
-# Keep zero margin so rendered glyphs can use the full 48x48 canvas.
+# Keep zero margin so rendered glyphs can use the full 64x64 canvas.
 CONTENT_MARGIN = 0
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SVG_DIR = PROJECT_ROOT / "assets" / "weather-icons" / "svg"
-DEFAULT_OUT = PROJECT_ROOT / "lib" / "Weather" / "WeatherIcons48.h"
+DEFAULT_OUT = PROJECT_ROOT / "lib" / "Weather" / "WeatherIconsLarge.h"
 UPSTREAM_BASE = "https://raw.githubusercontent.com/erikflowers/weather-icons/master/svg"
 RESVG_ZIP_URL = (
     "https://github.com/linebender/resvg/releases/latest/download/resvg-win64.zip"
@@ -41,17 +41,18 @@ RESVG_ZIP_URL = (
 RESVG_EXE = PROJECT_ROOT / ".cache" / "resvg" / "resvg.exe"
 
 ICON_SOURCES = {
-    "WI48_CLEAR_DAY": "wi-day-sunny.svg",
-    "WI48_CLEAR_NIGHT": "wi-night-clear.svg",
-    "WI48_PARTLY_CLOUDY_DAY": "wi-day-cloudy.svg",
-    "WI48_PARTLY_CLOUDY_NIGHT": "wi-night-alt-cloudy.svg",
-    "WI48_OVERCAST": "wi-cloudy.svg",
-    "WI48_FOG": "wi-fog.svg",
-    "WI48_DRIZZLE": "wi-sprinkle.svg",
-    "WI48_RAIN": "wi-rain.svg",
-    "WI48_SNOW": "wi-snow.svg",
-    "WI48_THUNDERSTORM": "wi-thunderstorm.svg",
+    "WI_LARGE_CLEAR_DAY": "wi-day-sunny.svg",
+    "WI_LARGE_CLEAR_NIGHT": "wi-night-clear.svg",
+    "WI_LARGE_PARTLY_CLOUDY_DAY": "wi-day-cloudy.svg",
+    "WI_LARGE_PARTLY_CLOUDY_NIGHT": "wi-night-alt-cloudy.svg",
+    "WI_LARGE_OVERCAST": "wi-cloudy.svg",
+    "WI_LARGE_FOG": "wi-fog.svg",
+    "WI_LARGE_DRIZZLE": "wi-sprinkle.svg",
+    "WI_LARGE_RAIN": "wi-rain.svg",
+    "WI_LARGE_SNOW": "wi-snow.svg",
+    "WI_LARGE_THUNDERSTORM": "wi-thunderstorm.svg",
 }
+
 
 def ensure_resvg_binary():
     if shutil.which("resvg"):
@@ -194,9 +195,10 @@ def generate(svg_dir, output_path, fetch):
         "#include <cstdint>",
         "",
         "// Generated from erikflowers/weather-icons SVGs.",
-        "// 48x48, 1-bit, MSB-first, row-major.",
+        f"// {SIZE}x{SIZE}, 1-bit, MSB-first, row-major.",
         "// Regenerate with: python scripts/generate_weather_icons.py --fetch",
         "// clang-format off",
+        f"constexpr int WEATHER_ICON_SIZE = {SIZE};  // Large icons for weather",
         "",
     ]
     header.extend(arrays)
@@ -207,7 +209,7 @@ def generate(svg_dir, output_path, fetch):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate WeatherIcons48.h from SVG files"
+        description="Generate WeatherIconsLarge.h from SVG files"
     )
     parser.add_argument(
         "--svg-dir",

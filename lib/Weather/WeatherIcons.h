@@ -1,15 +1,8 @@
 #pragma once
 #include <cstdint>
 
-// Set to 1 (for example via build flag -DWEATHER_ENABLE_SMALL_ICONS=1)
-// to include 24x24 weather icon assets and API.
-#ifndef WEATHER_ENABLE_SMALL_ICONS
-#define WEATHER_ENABLE_SMALL_ICONS 0
-#endif
-
 // Weather icon size constants
-constexpr int WEATHER_ICON_LARGE = 64;  // Large icon for current weather
-constexpr int WEATHER_ICON_SMALL = 24;  // Small icon for daily forecast
+#include "WeatherIconsLarge.h"
 
 // WMO weather code to icon category mapping
 enum class WeatherIconType {

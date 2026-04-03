@@ -33,6 +33,21 @@ std::string buildForecastUrl(const WeatherSettingsStore& settings) {
   return url;
 }
 
+std::string urlEncode(const std::string& value) {
+  std::string out;
+  out.reserve(value.size() * 3);
+  for (unsigned char c : value) {
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      out.push_back(c);
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", c);
+      out.append(buf);
+    }
+  }
+  return out;
+}
+
 std::string buildRequestSignature(const WeatherSettingsStore& settings) {
   char latitude[24];
   char longitude[24];
@@ -340,19 +355,7 @@ bool WeatherClient::loadCache(WeatherData& data) {
 std::vector<GeocodingResult> WeatherClient::searchCity(const std::string& query) {
   std::vector<GeocodingResult> results;
 
-  std::string url = "https://geocoding-api.open-meteo.com/v1/search?name=";
-  // Simple URL encoding for the query
-  for (char c : query) {
-    if (c == ' ') {
-      url += "%20";
-    } else if (isalnum(c) || c == '-' || c == '_' || c == '.') {
-      url += c;
-    } else {
-      char buf[4];
-      snprintf(buf, sizeof(buf), "%%%02X", (unsigned char)c);
-      url += buf;
-    }
-  }
+  std::string url = "https://geocoding-api.open-meteo.com/v1/search?name=" + urlEncode(query);
   url += "&count=5&language=en";
 
   std::string response;
