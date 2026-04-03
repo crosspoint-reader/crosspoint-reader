@@ -70,7 +70,7 @@ void XtcReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
+    goToLibrary(xtc ? xtc->getPath() : "");
     return;
   }
 

@@ -60,7 +60,7 @@ void TxtReaderActivity::onExit() {
 void TxtReaderActivity::loop() {
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    activityManager.goToFileBrowser(txt ? txt->getPath() : "");
+    goToLibrary(txt ? txt->getPath() : "");
     return;
   }
 
