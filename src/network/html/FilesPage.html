@@ -278,14 +278,26 @@
       border-color: var(--accent-color);
       box-shadow: inset 0 0 0 3px var(--accent-color-10);
     }
+    .image-fit-crop-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
     .image-fit-crop-row .setting-title {
       font-size: 0.85em;
       color: var(--label-color);
       margin-bottom: 6px;
+      min-width: 100px;
+    }
+    .fit-crop-left {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
     .fit-crop-controls {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 4px;
     }
     .fit-crop-btn {
       padding: 4px 16px;
@@ -297,6 +309,7 @@
       font-size: 0.85em;
       font-weight: 600;
       transition: all 0.15s;
+      text-align: center;
     }
     .fit-crop-btn.active {
       background-color: var(--accent-color);
@@ -305,6 +318,10 @@
     }
     .image-optimizer-preview {
       text-align: center;
+    }
+    .fit-crop-preview {
+      flex: 1;
+      min-width: 0;
     }
     .image-optimizer-preview canvas {
       width: 120px;
@@ -650,32 +667,17 @@
     .advanced-settings-content {
       display: none;
       margin-top: 10px;
-      border-top: 1px solid var(--border-color);
-      padding-top: 4px;
     }
     .advanced-settings-content.visible {
       display: block;
     }
-    .advanced-section-label {
-      font-size: 0.72em;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--label-color);
-      padding: 6px 2px 2px;
-      opacity: 0.7;
-    }
+
     .advanced-setting-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       padding: 8px 0;
-      border-top: 1px solid var(--border-color);
-    }
-    .advanced-setting-row:first-of-type {
-      border-top: none;
-      padding-top: 4px;
     }
     .quality-row {
       flex-wrap: wrap;
@@ -792,7 +794,7 @@
       background: var(--border-color);
       border-radius: 6px;
       padding: 3px;
-      width: fit-content;
+      width: 100%;
     }
     .quality-preset {
       padding: 6px 14px;
@@ -806,6 +808,7 @@
       cursor: pointer;
       transition: all 0.15s;
       white-space: nowrap;
+      flex: 1;
     }
     .quality-preset:hover {
       background: var(--accent-color-10);
@@ -1191,7 +1194,6 @@
     .summary-inline {
       color: var(--label-color);
       font-size: 0.9em;
-      white-space: nowrap;
     }
     #progress-container {
       display: none;
@@ -1842,12 +1844,8 @@
             <span>JPEG 85%</span>
             <span>SVG fix</span>
           </div>
-          <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
-            ⚠️ Converting modifies files and may break hash-based sync — back up or disable sync first.
-          </div>
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
-          <div class="advanced-section-label">⚙ Advanced</div>
           <!-- JPEG Quality -->
           <div class="advanced-setting-row quality-row">
             <div class="setting-title">📦 JPEG Quality</div>
@@ -1952,6 +1950,9 @@
         <div class="image-grid" id="imageGrid"></div>
       </div>
       </div><!-- end picker-columns -->
+      <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
+        ⚠️ Converting modifies files and may break hash-based sync — back up or disable sync first.
+      </div>
       <!-- Image Optimizer Section (for standalone images -> sleep screen) -->
       <div class="convert-options" id="imageOptimizerOptions" style="display:none;">
         <div class="convert-row">
@@ -1966,14 +1967,16 @@
           <span>JPEG 85%</span>
           <span>Auto-rotate</span>
         </div>
-        <div id="imageFitCropRow" class="image-fit-crop-row" style="display:none; margin-top: 10px; padding-left: 4px;">
-          <div class="setting-title">📐 Resize Mode</div>
-          <div class="fit-crop-controls">
-            <button class="fit-crop-btn active" data-value="fit" onclick="setImageResizeMode('fit')">FIT</button>
-            <button class="fit-crop-btn" data-value="crop" onclick="setImageResizeMode('crop')">CROP</button>
+        <div id="imageFitCropRow" class="image-fit-crop-row" style="display:none; margin-top: 10px;">
+          <div class="fit-crop-left">
+            <div class="setting-title">📐 Resize Mode</div>
+            <div class="fit-crop-controls">
+              <button class="fit-crop-btn active" data-value="fit" onclick="setImageResizeMode('fit')">FIT</button>
+              <button class="fit-crop-btn" data-value="crop" onclick="setImageResizeMode('crop')">CROP</button>
+            </div>
           </div>
+          <div id="imageOptimizerPreview" style="display:none;" class="fit-crop-preview"></div>
         </div>
-        <div id="imageOptimizerPreview" style="display:none; margin-top: 10px;"></div>
         <div id="imageOptimizerWarning" style="display:none;" class="convert-warning"></div>
       </div>
       <!-- Optimize & Upload button - shown when picker is visible, replaces Upload -->
