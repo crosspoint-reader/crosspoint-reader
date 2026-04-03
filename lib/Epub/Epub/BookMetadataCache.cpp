@@ -187,7 +187,19 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
   if (spineCount >= LARGE_SPINE_THRESHOLD) {
     LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
+    {
+      uint32_t required_mem_spine = sizeof(spineSizes[0]) * spineCount;
+      uint32_t required_mem_sizes = sizeof(ZipFile::SizeTarget) * spineCount;
+      // While not perfectly accurate due to min allocation sizes etc, its at least a metric
+      uint32_t max_available_mem = ESP.getFreeHeap(); 
+      if (required_mem_sizes + required_mem_sizes > max_available_mem) {
+        LOG_ERR("BMC", "Low memory situation detected for %d spine items: %d (%d for spines, %d for sizes) required for %d available. This may be fatal", spineCount, required_mem_sizes + required_mem_spine, required_mem_spine, required_mem_sizes, max_available_mem);
+      }
+    }
 
+    // Resize spineSizes early to run into OOM earlier
+    spineSizes.resize(spineCount, 0);
+    // Followed by targets
     std::deque<ZipFile::SizeTarget> targets(spineCount);
 
     spineFile.seek(0);
@@ -206,7 +218,6 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
     });
 
-    spineSizes.resize(spineCount, 0);
     int matched = zip.fillUncompressedSizes(targets, spineSizes);
     LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
 
