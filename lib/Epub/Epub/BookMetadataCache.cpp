@@ -192,7 +192,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       uint32_t required_mem_sizes = sizeof(ZipFile::SizeTarget) * spineCount;
       // While not perfectly accurate due to min allocation sizes etc, its at least a metric
       uint32_t max_available_mem = ESP.getFreeHeap(); 
-      if (required_mem_sizes + required_mem_sizes > max_available_mem) {
+      if (required_mem_sizes + required_mem_spine > max_available_mem) {
         LOG_ERR("BMC", "Low memory situation detected for %d spine items: %d (%d for spines, %d for sizes) required for %d available. This may be fatal", spineCount, required_mem_sizes + required_mem_spine, required_mem_spine, required_mem_sizes, max_available_mem);
       }
     }
