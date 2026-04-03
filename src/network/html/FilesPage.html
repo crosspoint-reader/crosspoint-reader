@@ -100,6 +100,7 @@
       border-color: var(--accent-color);
     }
     .path-bar .path-icon { flex-shrink: 0; }
+    .path-bar a.path-icon { text-decoration: none !important; }
     .path-bar a {
       color: var(--accent-color);
       text-decoration: none;
@@ -533,7 +534,7 @@
       cursor: pointer;
       font-size: 1em;
       width: 100%;
-      margin-top: 24px;
+      margin-top: 16px;
     }
     .upload-btn:hover {
       background-color: #219a52;
@@ -550,7 +551,6 @@
     }
     /* Convert options */
     .convert-options {
-      margin-bottom: 10px;
       padding: 12px;
       border-radius: 6px;
       border: 1px solid #27ae60;
@@ -576,14 +576,9 @@
       box-shadow: none;
     }
     .convert-warning {
-      font-size: 0.85em;
+      font-size: 0.8em;
       color: #d68910;
-      background-color: rgba(214, 137, 16, 0.1);
-      border: 1px solid #d68910;
-      border-radius: 4px;
-      padding: 8px 12px;
       margin-top: 8px;
-      margin-bottom: 12px;
       line-height: 1.4;
       text-align: center;
     }
@@ -594,16 +589,23 @@
       line-height: 1.4;
     }
     .convert-settings {
-      font-size: 0.8em;
-      color: var(--label-color);
-      margin-top: 6px;
-      padding: 0 4px;
+      margin-top: 8px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
+      flex-wrap: nowrap;
+      justify-content: center;
+      gap: 6px;
+      overflow: hidden;
     }
     .convert-settings span {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      background: var(--accent-color-10);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 3px 9px;
+      font-size: 0.78em;
+      color: var(--label-color);
     }
     /* Convert row - compact layout with checkbox and advanced options toggle */
     .convert-row {
@@ -647,21 +649,33 @@
     /* Settings content - hidden by default, shown when expanded */
     .advanced-settings-content {
       display: none;
-      margin-top: 12px;
-      padding-left: 4px;
+      margin-top: 10px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 4px;
     }
     .advanced-settings-content.visible {
       display: block;
+    }
+    .advanced-section-label {
+      font-size: 0.72em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--label-color);
+      padding: 6px 2px 2px;
+      opacity: 0.7;
     }
     .advanced-setting-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      margin-top: 12px;
+      padding: 8px 0;
+      border-top: 1px solid var(--border-color);
     }
-    .advanced-setting-row:first-child {
-      margin-top: 10px;
+    .advanced-setting-row:first-of-type {
+      border-top: none;
+      padding-top: 4px;
     }
     .quality-row {
       flex-wrap: wrap;
@@ -675,9 +689,9 @@
     }
     .setting-controls {
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
+      align-items: center;
       gap: 8px;
+      flex-shrink: 0;
     }
     .setting-row-header {
       display: flex;
@@ -686,9 +700,9 @@
       margin-bottom: 8px;
     }
     .setting-title {
-      font-size: 0.85em;
+      font-size: 0.875em;
       color: var(--title-color);
-      font-weight: 500;
+      font-weight: 600;
     }
     .setting-value {
       font-size: 0.8em;
@@ -1177,6 +1191,7 @@
     .summary-inline {
       color: var(--label-color);
       font-size: 0.9em;
+      white-space: nowrap;
     }
     #progress-container {
       display: none;
@@ -1822,13 +1837,17 @@
           </div>
 
           <div class="convert-settings" id="convertSettings">
-            <span>📏 480×800px</span>
-            <span>⚫ True-Grayscale</span>
-            <span>📦 JPEG 85%</span>
-            <span>🔧 Fix SVG</span>
+            <span>480×800px</span>
+            <span>True-Grayscale</span>
+            <span>JPEG 85%</span>
+            <span>SVG fix</span>
+          </div>
+          <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
+            ⚠️ Converting modifies files and may break hash-based sync — back up or disable sync first.
           </div>
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
+          <div class="advanced-section-label">⚙ Advanced</div>
           <!-- JPEG Quality -->
           <div class="advanced-setting-row quality-row">
             <div class="setting-title">📦 JPEG Quality</div>
@@ -1848,7 +1867,7 @@
           <div class="advanced-setting-row" style="display:none;">
             <div class="setting-toggle">
               <div>
-                <div class="setting-title">⚫ True-Grayscale</div>
+                <div class="setting-title">True-Grayscale</div>
                 <div class="setting-desc">BT.601 luminance formula (recommended for e-ink)</div>
               </div>
               <label class="toggle-switch">
@@ -1933,11 +1952,6 @@
         <div class="image-grid" id="imageGrid"></div>
       </div>
       </div><!-- end picker-columns -->
-      <!-- Sync compatibility warning - outside picker-columns -->
-      <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
-        ⚠️ Converting will modify files and can break hash‑based sync. ⚠️<br>
-        Please back up or disable sync before proceeding.
-      </div>
       <!-- Image Optimizer Section (for standalone images -> sleep screen) -->
       <div class="convert-options" id="imageOptimizerOptions" style="display:none;">
         <div class="convert-row">
@@ -1947,10 +1961,10 @@
           </label>
         </div>
         <div class="convert-settings" id="imageOptimizerSettings">
-          <span>📏 480×800px</span>
-          <span>⚫ True-Grayscale</span>
-          <span>📦 JPEG 85%</span>
-          <span>↻ Auto-rotate</span>
+          <span>480×800px</span>
+          <span>True-Grayscale</span>
+          <span>JPEG 85%</span>
+          <span>Auto-rotate</span>
         </div>
         <div id="imageFitCropRow" class="image-fit-crop-row" style="display:none; margin-top: 10px; padding-left: 4px;">
           <div class="setting-title">📐 Resize Mode</div>
@@ -2173,7 +2187,7 @@
     if (currentPath === '/') {
       pathContent = '<span class="path-current">🏠 root</span>';
     } else {
-      pathContent = '<span class="path-icon">📁</span>';
+      pathContent = '<a href="/files?path=%2F" class="path-icon" title="Go to root">🏠</a>';
       const segments = currentPath.split('/').filter(Boolean);
       let builtPath = '';
       segments.forEach(function(segment, i) {
@@ -2500,7 +2514,6 @@
     
     content.classList.toggle('visible');
     arrow.classList.toggle('expanded');
-    
     // When expanding, show image picker if an EPUB is selected
     if (isExpanding) {
       const fileInput = document.getElementById('fileInput');
