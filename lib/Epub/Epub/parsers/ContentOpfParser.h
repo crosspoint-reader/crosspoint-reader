@@ -34,7 +34,6 @@ class ContentOpfParser final : public Print {
   // Index for fast idref→href lookup (used only for large EPUBs)
   struct ItemIndexEntry {
     uint32_t idHash;      // FNV-1a hash of itemId
-    uint16_t idLen;       // length for collision reduction
     uint32_t fileOffset;  // offset in .items.bin
   };
   std::deque<ItemIndexEntry> itemIndex;
