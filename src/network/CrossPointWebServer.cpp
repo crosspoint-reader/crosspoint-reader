@@ -1143,9 +1143,9 @@ void CrossPointWebServer::handleSettingsPage() const {
 void CrossPointWebServer::handleGetSettings() const {
   const auto& settings = getSettingsList();
 
-  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server->send(200, "application/json", "");
-  server->sendContent("[");
+  String result;
+  result.reserve(4096);
+  result += "[";
 
   char output[512];
   constexpr size_t outputSize = sizeof(output);
@@ -1211,15 +1211,15 @@ void CrossPointWebServer::handleGetSettings() const {
     }
 
     if (seenFirst) {
-      server->sendContent(",");
+      result += ",";
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    result += output;
   }
 
-  server->sendContent("]");
-  server->sendContent("");
+  result += "]";
+  server->send(200, "application/json", result);
   LOG_DBG("WEB", "Served settings API");
 }
 

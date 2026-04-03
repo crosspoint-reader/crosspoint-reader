@@ -16,17 +16,10 @@
       --accent-color: rgb(110, 154, 130);
       --accent-color-10: rgba(110, 154, 130, 0.1);
       --accent-hover-color: #5a8c73;
+      --accent-color-light: rgba(110, 154, 130, 0.15);
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        color-scheme: dark;
-      }
+    html {
+      scrollbar-gutter: stable;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -36,10 +29,6 @@
       padding: 20px;
       background-color: var(--bg);
       color: var(--font-color);
-    }
-    h1 {
-      color: var(--title-color);
-      margin-bottom: 5px;
     }
     h2 {
       color: var(--title-color);
@@ -52,61 +41,93 @@
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
-    .page-header {
+    .app-header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid var(--accent-color);
+      gap: 10px;
+      padding: 16px 0 0;
     }
-    .page-header-left {
+    .app-icon { font-size: 28px; line-height: 1; }
+    .app-title { font-size: 1.375rem; font-weight: 700; color: var(--title-color); margin: 0; }
+    .app-separator {
+      height: 3px;
+      background: linear-gradient(to right, var(--accent-color) 60%, transparent);
+      margin-top: 12px;
+    }
+    .app-nav {
       display: flex;
-      align-items: baseline;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 0;
+      padding: 0;
     }
-    .breadcrumb-inline {
+    .app-nav a {
+      padding: 8px 16px;
+      font-size: 14px;
       color: var(--label-color);
-      font-size: 1.1em;
-    }
-    .breadcrumb-inline a {
-      color: var(--accent-color);
       text-decoration: none;
+      border-radius: 0 0 7px 7px;
+      border: 1px solid transparent;
+      border-top: none;
+      white-space: nowrap;
     }
-    .breadcrumb-inline a:hover {
-      text-decoration: underline;
+    .app-nav a:not(.active):hover {
+      background: var(--card-bg);
+      color: var(--font-color);
+      border-color: var(--border-color);
+      border-top: none;
     }
-    .breadcrumb-inline .sep {
-      margin: 0 6px;
-      color: var(--border-color);
-    }
-    .breadcrumb-inline .current {
-      color: var(--title-color);
+    .app-nav a.active {
+      background: var(--accent-color);
+      color: white;
       font-weight: 500;
     }
-    .nav-links {
-      margin: 20px 0;
+    .path-bar {
       display: flex;
-      gap: 10px;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-color-10);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 7px 12px;
+      margin-bottom: 12px;
+      margin-top: 16px;
+      font-size: 13px;
+      overflow: hidden;
     }
-    .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
+    .path-bar .path-icon { flex-shrink: 0; }
+    .path-bar a {
+      color: var(--accent-color);
       text-decoration: none;
-      border-radius: 4px;
+      white-space: nowrap;
     }
-    .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
+    .path-bar a:hover { text-decoration: underline; }
+    .path-bar .path-current {
+      color: var(--title-color);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
-      color: white;
+    .path-bar .path-sep {
+      color: var(--label-color);
+      margin: 0 2px;
+      flex-shrink: 0;
     }
-    /* Action buttons */
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --font-color: #f5f5f5;
+        --bg: #333;
+        --title-color: #ecf0f1;
+        --card-bg: #444;
+        --label-color: #bdc3c7;
+        --border-color: #555;
+        color-scheme: dark;
+      }
+    }
     .action-buttons {
       display: flex;
       gap: 10px;
@@ -1286,24 +1307,12 @@
         padding: 12px;
         margin: 10px 0;
       }
-      .page-header {
-        gap: 10px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
+      .app-title {
+        font-size: 1.125rem;
       }
-      .page-header-left {
-        gap: 8px;
-      }
-      h1 {
-        font-size: 1.3em;
-      }
-      .breadcrumb-inline {
-        font-size: 0.95em;
-      }
-      .nav-links a {
-        padding: 8px 12px;
-        margin-right: 6px;
-        font-size: 0.9em;
+      .app-nav a {
+        padding: 7px 11px;
+        font-size: 13px;
       }
       .action-buttons {
         gap: 6px;
@@ -1518,24 +1527,27 @@
   </style>
 </head>
 <body>
-<div class="nav-links">
-  <a href="/">Home</a>
-  <a href="/files" class="active">File Manager</a>
-  <a href="/settings">Settings</a>
-</div>
+  <div class="app-header">
+    <span class="app-icon">📚</span>
+    <h1 class="app-title">CrossPoint Reader</h1>
+  </div>
+  <div class="app-separator"></div>
+  <nav class="app-nav">
+    <a href="/">Home</a>
+    <a href="/files" class="active">File Manager</a>
+    <a href="/settings">Settings</a>
+  </nav>
 
-<div class="page-header">
-  <div class="page-header-left">
-    <h1>📁 File Manager</h1>
-    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
+  <div class="path-bar" id="directory-breadcrumbs">
+    <span class="path-icon">📁</span>
+    <span class="path-current">Loading...</span>
   </div>
 
-  <div class="action-buttons">
+  <div class="toolbar action-buttons">
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
   </div>
-</div>
 
 <!-- Failed Uploads Banner -->
 <div class="failed-uploads-banner" id="failedUploadsBanner">
@@ -1931,19 +1943,19 @@
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
-    let breadcrumbContent = '<span class="sep">/</span>';
+    let pathContent = '<span class="path-icon">📁</span>';
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      pathContent += '<span class="path-current">🏠 root</span>';
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
+      pathContent += '<a href="/files">🏠 root</a>';
       const pathSegments = currentPath.split('/');
       pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
-        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
+        pathContent += '<span class="path-sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
       });
-      breadcrumbContent += '<span class="sep">/</span>';
-      breadcrumbContent += '<span class="current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
+      pathContent += '<span class="path-sep">/</span>';
+      pathContent += '<span class="path-current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
     }
-    breadcrumbs.innerHTML = breadcrumbContent;
+    breadcrumbs.innerHTML = pathContent;
 
     let files = [];
     try {

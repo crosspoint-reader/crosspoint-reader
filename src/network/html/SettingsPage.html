@@ -28,6 +28,9 @@
         color-scheme: dark;
       }
     }
+    html {
+      scrollbar-gutter: stable;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Oxygen, Ubuntu, sans-serif;
@@ -36,11 +39,6 @@
       padding: 20px;
       background-color: var(--bg);
       color: var(--font-color);
-    }
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
     }
     h2 {
       color: var(--title-color);
@@ -53,24 +51,44 @@
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
-    .nav-links {
-      margin: 20px 0;
+    .app-header {
       display: flex;
+      align-items: center;
       gap: 10px;
+      padding: 16px 0 0;
     }
-    .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
+    .app-icon { font-size: 28px; line-height: 1; }
+    .app-title { font-size: 1.375rem; font-weight: 700; color: var(--title-color); margin: 0; }
+    .app-separator {
+      height: 3px;
+      background: linear-gradient(to right, var(--accent-color) 60%, transparent);
+      margin-top: 12px;
+    }
+    .app-nav {
+      display: flex;
+      gap: 0;
+      padding: 0;
+    }
+    .app-nav a {
+      padding: 8px 16px;
+      font-size: 14px;
+      color: var(--label-color);
       text-decoration: none;
-      border-radius: 4px;
+      border-radius: 0 0 7px 7px;
+      border: 1px solid transparent;
+      border-top: none;
+      white-space: nowrap;
     }
-    .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
+    .app-nav a:not(.active):hover {
+      background: var(--card-bg);
+      color: var(--font-color);
+      border-color: var(--border-color);
+      border-top: none;
     }
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
+    .app-nav a.active {
+      background: var(--accent-color);
       color: white;
+      font-weight: 500;
     }
     .setting-row {
       display: flex;
@@ -216,10 +234,10 @@
         padding: 12px;
         margin: 10px 0;
       }
-      h1 {
-        font-size: 1.3em;
+      .app-title {
+        font-size: 1.125rem;
       }
-      .nav-links a {
+      .app-nav a {
         padding: 8px 12px;
         font-size: 0.9em;
       }
@@ -237,13 +255,16 @@
   </style>
 </head>
 <body>
-  <h1>⚙️ Settings</h1>
-
-  <div class="nav-links">
-    <a href="/">Home</a>
-    <a href="/files">File Manager</a>
-    <a href="/settings" class="active">Settings</a>
-  </div>
+    <div class="app-header">
+      <span class="app-icon">📚</span>
+      <h1 class="app-title">CrossPoint Reader</h1>
+    </div>
+    <div class="app-separator"></div>
+    <nav class="app-nav">
+      <a href="/">Home</a>
+      <a href="/files">File Manager</a>
+      <a href="/settings" class="active">Settings</a>
+    </nav>
 
   <div id="message" class="message"></div>
 

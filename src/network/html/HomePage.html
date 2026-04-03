@@ -26,85 +26,123 @@
           color-scheme: dark;
         }
       }
+    html {
+      scrollbar-gutter: stable;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Oxygen, Ubuntu, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: var(--bg);
+      color: var(--font-color);
+    }
+    h2 {
+      color: var(--title-color);
+      margin-top: 0;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .label {
+      font-weight: 600;
+      color: var(--label-color);
+    }
+    .value {
+      color: var(--title-color);
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background-color: #27ae60;
+      color: white;
+      font-size: 0.9em;
+    }
+    .app-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 0 0;
+    }
+    .app-icon { font-size: 28px; line-height: 1; }
+    .app-title { font-size: 1.375rem; font-weight: 700; color: var(--title-color); margin: 0; }
+    .app-separator {
+      height: 3px;
+      background: linear-gradient(to right, var(--accent-color) 60%, transparent);
+      margin-top: 12px;
+    }
+    .app-nav {
+      display: flex;
+      gap: 0;
+      padding: 0;
+    }
+    .app-nav a {
+      padding: 8px 16px;
+      font-size: 14px;
+      color: var(--label-color);
+      text-decoration: none;
+      border-radius: 0 0 7px 7px;
+      border: 1px solid transparent;
+      border-top: none;
+      white-space: nowrap;
+    }
+    .app-nav a:not(.active):hover {
+      background: var(--card-bg);
+      color: var(--font-color);
+      border-color: var(--border-color);
+      border-top: none;
+    }
+    .app-nav a.active {
+      background: var(--accent-color);
+      color: white;
+      font-weight: 500;
+    }
+    @media (max-width: 600px) {
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 {
-        color: var(--title-color);
-        margin-top: 0;
+        padding: 10px;
+        font-size: 14px;
       }
       .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 12px;
+        margin: 10px 0;
       }
-      .info-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 0;
-        border-bottom: 1px solid var(--border-color);
+      .app-title {
+        font-size: 1.125rem;
       }
-      .info-row:last-child {
-        border-bottom: none;
+      .app-nav a {
+        padding: 7px 11px;
+        font-size: 13px;
       }
-      .label {
-        font-weight: 600;
-        color: var(--label-color);
-      }
-      .value {
-        color: var(--title-color);
-      }
-      .status {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 12px;
-        background-color: #27ae60;
-        color: white;
-        font-size: 0.9em;
-      }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
-      }
+    }
     </style>
   </head>
   <body>
-    <h1>📚 CrossPoint Reader</h1>
-
-    <div class="nav-links">
+    <div class="app-header">
+      <span class="app-icon">📚</span>
+      <h1 class="app-title">CrossPoint Reader</h1>
+    </div>
+    <div class="app-separator"></div>
+    <nav class="app-nav">
       <a href="/" class="active">Home</a>
       <a href="/files">File Manager</a>
       <a href="/settings">Settings</a>
-    </div>
+    </nav>
 
     <div class="card">
       <h2>Device Status</h2>
