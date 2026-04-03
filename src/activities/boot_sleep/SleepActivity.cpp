@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
@@ -26,6 +27,8 @@ void SleepActivity::onEnter() {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_STATS):
+      return renderCoverStatsSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -288,6 +291,153 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   return (this->*renderNoCoverSleepScreen)();
+}
+
+void SleepActivity::renderCoverStatsSleepScreen() const {
+  if (APP_STATE.openEpubPath.empty() || !FsHelpers::hasEpubExtension(APP_STATE.openEpubPath)) {
+    return renderCoverSleepScreen();
+  }
+
+  Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
+  if (!epub.load(true, true)) {
+    return renderCoverSleepScreen();
+  }
+
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  // Draw cover into the buffer (without displaying yet)
+  renderer.clearScreen();
+  const bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  if (epub.generateCoverBmp(cropped)) {
+    const std::string coverBmpPath = epub.getCoverBmpPath(cropped);
+    FsFile file;
+    if (Storage.openFileForRead("SLP", coverBmpPath, file)) {
+      Bitmap bitmap(file);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        // Compute placement (same logic as renderBitmapSleepScreen)
+        int x, y;
+        float cropX = 0, cropY = 0;
+        if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+          float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+          const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
+          if (ratio > screenRatio) {
+            if (cropped) {
+              cropX = 1.0f - (screenRatio / ratio);
+              ratio = (1.0f - cropX) * static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+            }
+            x = 0;
+            y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+          } else {
+            if (cropped) {
+              cropY = 1.0f - (ratio / screenRatio);
+              ratio = static_cast<float>(bitmap.getWidth()) / ((1.0f - cropY) * static_cast<float>(bitmap.getHeight()));
+            }
+            x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
+            y = 0;
+          }
+        } else {
+          x = (pageWidth - bitmap.getWidth()) / 2;
+          y = (pageHeight - bitmap.getHeight()) / 2;
+        }
+        renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+
+        if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
+          renderer.invertScreen();
+        }
+      }
+      file.close();
+    }
+  }
+
+  // Read progress from cache
+  int spineIndex = 0;
+  int currentPage = 0;
+  int pageCount = 0;
+  {
+    FsFile f;
+    if (Storage.openFileForRead("SLP", epub.getCachePath() + "/progress.bin", f)) {
+      uint8_t data[6];
+      if (f.read(data, 6) == 6) {
+        spineIndex = data[0] | (data[1] << 8);
+        currentPage = data[2] | (data[3] << 8);
+        pageCount = data[4] | (data[5] << 8);
+      }
+      f.close();
+    }
+  }
+
+  // Calculate overall progress percentage
+  float intraSpineProgress = 0.0f;
+  if (pageCount > 0) {
+    intraSpineProgress = static_cast<float>(currentPage) / static_cast<float>(pageCount);
+  }
+  const float percentage = epub.calculateProgress(spineIndex, intraSpineProgress);
+  const int percentInt = static_cast<int>(percentage * 100);
+
+  // Get chapter name
+  const int tocIndex = epub.getTocIndexForSpineIndex(spineIndex);
+  std::string chapter;
+  if (tocIndex >= 0) {
+    chapter = epub.getTocItem(tocIndex).title;
+  }
+
+  // Get title and author
+  const std::string& title = epub.getTitle();
+  const std::string& author = epub.getAuthor();
+
+  // Draw stats overlay bar at the bottom
+  const int barHeight = author.empty() ? 60 : 75;
+  const int barY = pageHeight - barHeight;
+  const int margin = 10;
+  const int textMaxWidth = pageWidth - margin * 2;
+
+  // Dithered background for readability over the cover
+  renderer.fillRectDither(0, barY, pageWidth, barHeight, LightGray);
+
+  // Title (bold, truncated)
+  int textY = barY + 8;
+  if (!title.empty()) {
+    auto truncTitle = renderer.truncatedText(UI_10_FONT_ID, title.c_str(), textMaxWidth, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, margin, textY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
+    textY += 20;
+  }
+
+  // Author
+  if (!author.empty()) {
+    auto truncAuthor = renderer.truncatedText(SMALL_FONT_ID, author.c_str(), textMaxWidth);
+    renderer.drawText(SMALL_FONT_ID, margin, textY, truncAuthor.c_str(), true);
+    textY += 16;
+  }
+
+  // Progress bar + percentage + chapter
+  const int progressBarY = textY + 2;
+  const int progressBarHeight = 6;
+  const int progressBarWidth = pageWidth / 3;
+
+  // Progress bar outline and fill
+  renderer.drawRect(margin, progressBarY, progressBarWidth, progressBarHeight);
+  const int fillWidth = static_cast<int>(progressBarWidth * percentage);
+  if (fillWidth > 0) {
+    renderer.fillRect(margin, progressBarY, fillWidth, progressBarHeight);
+  }
+
+  // Percentage text next to bar
+  char percentStr[16];
+  snprintf(percentStr, sizeof(percentStr), "%d%%", percentInt);
+  renderer.drawText(SMALL_FONT_ID, margin + progressBarWidth + 8, progressBarY - 2, percentStr, true);
+
+  // Chapter name right-aligned
+  if (!chapter.empty()) {
+    const int chapterMaxWidth = pageWidth - margin * 2 - progressBarWidth - 60;
+    if (chapterMaxWidth > 40) {
+      auto truncChapter = renderer.truncatedText(SMALL_FONT_ID, chapter.c_str(), chapterMaxWidth);
+      const int chapterWidth = renderer.getTextWidth(SMALL_FONT_ID, truncChapter.c_str());
+      renderer.drawText(SMALL_FONT_ID, pageWidth - margin - chapterWidth, progressBarY - 2, truncChapter.c_str(), true);
+    }
+  }
+
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
