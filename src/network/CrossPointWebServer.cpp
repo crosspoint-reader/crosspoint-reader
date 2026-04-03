@@ -4,7 +4,9 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PngToBmpConverter.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
@@ -45,11 +47,60 @@ unsigned long wsLastCompleteAt = 0;
 
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
-  // Only clear cache for .epub files
   if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
   }
+}
+
+bool convertSleepImageToBmp(const String& filePath) {
+  if (!filePath.startsWith("/.sleep/") && filePath != "/.sleep") {
+    return true;
+  }
+
+  String lowerPath = filePath;
+  lowerPath.toLowerCase();
+
+  if (!lowerPath.endsWith(".jpg") && !lowerPath.endsWith(".jpeg") && !lowerPath.endsWith(".png")) {
+    return true;
+  }
+
+  LOG_DBG("WEB", "[SLEEP] Converting to BMP: %s", filePath.c_str());
+
+  FsFile srcFile = Storage.open(filePath.c_str());
+  if (!srcFile || srcFile.isDirectory()) {
+    LOG_DBG("WEB", "[SLEEP] Cannot open source: %s", filePath.c_str());
+    return false;
+  }
+
+  String bmpPath = filePath.substring(0, filePath.lastIndexOf('.')) + ".bmp";
+  Storage.ensureDirectoryExists("/.sleep");
+  FsFile bmpFile;
+  if (!Storage.openFileForWrite("SLEEP", bmpPath, bmpFile)) {
+    srcFile.close();
+    LOG_DBG("WEB", "[SLEEP] Cannot create BMP: %s", bmpPath.c_str());
+    return false;
+  }
+
+  bool success = false;
+  if (lowerPath.endsWith(".png")) {
+    success = PngToBmpConverter::pngFileToBmpStream(srcFile, bmpFile, false);
+  } else {
+    success = JpegToBmpConverter::jpegFileToBmpStream(srcFile, bmpFile, false);
+  }
+
+  bmpFile.close();
+  srcFile.close();
+
+  if (success) {
+    Storage.remove(filePath.c_str());
+    LOG_DBG("WEB", "[SLEEP] Conversion complete: %s", bmpPath.c_str());
+  } else {
+    Storage.remove(bmpPath.c_str());
+    LOG_DBG("WEB", "[SLEEP] Conversion failed for: %s", filePath.c_str());
+  }
+
+  return success;
 }
 
 String normalizeWebPath(const String& inputPath) {
@@ -708,6 +759,9 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearEpubCacheIfNeeded(filePath);
+
+        // Convert sleep screen images (JPG/PNG → BMP)
+        convertSleepImageToBmp(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1350,6 +1404,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearEpubCacheIfNeeded(filePath);
+            convertSleepImageToBmp(filePath);
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -1419,6 +1474,9 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
         clearEpubCacheIfNeeded(filePath);
+
+        // Convert sleep screen images (JPG/PNG → BMP)
+        convertSleepImageToBmp(filePath);
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;

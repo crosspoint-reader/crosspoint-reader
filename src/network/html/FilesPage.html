@@ -170,6 +170,58 @@
     .modal.picker-mode {
       max-width: 920px;
     }
+    .modal.drag-over {
+      border: 2px dashed var(--accent-color);
+      background-color: var(--accent-color-10);
+    }
+    .drag-drop-hint {
+      text-align: center;
+      color: var(--label-color);
+      font-size: 0.82em;
+      margin-top: 6px;
+      opacity: 0.6;
+    }
+    .image-fit-crop-row .setting-title {
+      font-size: 0.85em;
+      color: var(--label-color);
+      margin-bottom: 6px;
+    }
+    .fit-crop-controls {
+      display: flex;
+      gap: 8px;
+    }
+    .fit-crop-btn {
+      padding: 4px 16px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--card-bg);
+      color: var(--label-color);
+      cursor: pointer;
+      font-size: 0.85em;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .fit-crop-btn.active {
+      background-color: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+    .image-optimizer-preview {
+      text-align: center;
+    }
+    .image-optimizer-preview canvas {
+      width: 120px;
+      height: 200px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: #fff;
+    }
+    .image-optimizer-preview .preview-info {
+      font-size: 0.78em;
+      color: var(--label-color);
+      margin-top: 6px;
+      line-height: 1.3;
+    }
     .picker-columns.picker-active {
       display: flex;
       flex-direction: row;
@@ -1519,6 +1571,7 @@
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <input type="file" id="fileInput" onchange="validateFile()" multiple>
+      <div class="drag-drop-hint">or drag & drop files here</div>
       <div class="picker-columns" id="pickerColumns">
         <div class="convert-options" id="convertOptions" style="display:none;">
           <div class="convert-row">
@@ -1652,6 +1705,30 @@
       <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
         ⚠️ Converting will modify files and can break hash‑based sync. ⚠️<br>
         Please back up or disable sync before proceeding.
+      </div>
+      <!-- Image Optimizer Section (for standalone images -> sleep screen) -->
+      <div class="convert-options" id="imageOptimizerOptions" style="display:none;">
+        <div class="convert-row">
+          <label class="convert-checkbox">
+            <input type="checkbox" id="imageOptimizerEnabled" onchange="toggleImageOptimizer()">
+            <span>Optimize for Sleep Screen</span>
+          </label>
+        </div>
+        <div class="convert-settings" id="imageOptimizerSettings" style="display:none;">
+          <span>📏 480×800px</span>
+          <span>⚫ True-Grayscale</span>
+          <span>📦 JPEG 85%</span>
+          <span>↻ Auto-rotate</span>
+        </div>
+        <div id="imageFitCropRow" class="image-fit-crop-row" style="display:none; margin-top: 10px; padding-left: 4px;">
+          <div class="setting-title">📐 Resize Mode</div>
+          <div class="fit-crop-controls">
+            <button class="fit-crop-btn active" data-value="fit" onclick="setImageResizeMode('fit')">FIT</button>
+            <button class="fit-crop-btn" data-value="crop" onclick="setImageResizeMode('crop')">CROP</button>
+          </div>
+        </div>
+        <div id="imageOptimizerPreview" style="display:none; margin-top: 10px;"></div>
+        <div id="imageOptimizerWarning" style="display:none;" class="convert-warning"></div>
       </div>
       <!-- Optimize & Upload button - shown when picker is visible, replaces Upload -->
       <button id="startConversionBtn" class="upload-btn optimize" style="display:none;" onclick="startConversionWithImageStates()">Optimize & Upload</button>
@@ -2018,6 +2095,8 @@
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
+    document.getElementById('imageOptimizerOptions').style.display = 'none';
+    resetImageOptimizer();
     // Clear image picker cache and reset layout
     epubImagesCache = [];
     imageStates = {};
@@ -2760,6 +2839,41 @@
       advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
     }
 
+    // Drag & drop for upload modal
+    const uploadModal = document.getElementById('uploadModal');
+    if (uploadModal) {
+      let dragCounter = 0;
+      uploadModal.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter++;
+        if (!isUploadInProgress) uploadModal.querySelector('.modal').classList.add('drag-over');
+      });
+      uploadModal.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      uploadModal.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter--;
+        if (dragCounter <= 0) { dragCounter = 0; uploadModal.querySelector('.modal').classList.remove('drag-over'); }
+      });
+      uploadModal.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter = 0;
+        uploadModal.querySelector('.modal').classList.remove('drag-over');
+        if (isUploadInProgress) return;
+        const dt = e.dataTransfer;
+        if (!dt || !dt.files || dt.files.length === 0) return;
+        const fileInput = document.getElementById('fileInput');
+        fileInput.files = dt.files;
+        fileInput.classList.add('has-files');
+        validateFile();
+      });
+    }
+
     if (qualitySlider && qualityInput) {
       // Initialize converter variables with UI default values
       updateQualitySettings();
@@ -2926,36 +3040,61 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const files = fileInput.files;
     const convertOptions = document.getElementById('convertOptions');
+    const imageOptimizer = document.getElementById('imageOptimizerOptions');
     fileInput.classList.toggle('has-files', files.length > 0);
 
-    // Show/hide convert options based on file selection
-    if (files.length > 0) {
-      convertOptions.style.display = 'block';
-    } else {
+    if (files.length === 0) {
       clearImagePicker();
+      convertOptions.style.display = 'none';
+      imageOptimizer.style.display = 'none';
+      updateBatchModeUI(false);
+      uploadBtn.disabled = true;
+      resetImageOptimizer();
+      return;
     }
 
-    if (files.length > 0) {
-      // If advanced settings is expanded and single EPUB, show image picker
+    const fileList = Array.from(files);
+    const imageFiles = fileList.filter(f => f.type.startsWith('image/'));
+    const epubFiles = fileList.filter(f => f.name.toLowerCase().endsWith('.epub'));
+    const hasImages = imageFiles.length > 0;
+    const hasEpubs = epubFiles.length > 0;
+
+    if (hasImages && !hasEpubs) {
+      updateBatchModeUI(false);
+      const warningEl = document.getElementById('imageOptimizerWarning');
+      warningEl.style.display = 'none';
+      warningEl.innerHTML = '';
+      convertOptions.style.display = 'none';
+      imageOptimizer.style.display = 'block';
+      setupImageOptimizer(imageFiles);
+      const optChecked = document.getElementById('imageOptimizerEnabled').checked;
+      const pathDisplay = document.getElementById('uploadPathDisplay');
+      if (pathDisplay) pathDisplay.textContent = optChecked ? '.sleep/' : (currentPath === '/' ? '/ 🏠' : currentPath);
+      uploadBtn.textContent = optChecked ? 'Optimize & Upload' : 'Upload';
+      if (optChecked) uploadBtn.classList.add('optimize');
+      else uploadBtn.classList.remove('optimize');
+      uploadBtn.disabled = false;
+    } else if (hasEpubs) {
+      imageOptimizer.style.display = 'none';
+      resetImageOptimizer();
+      convertOptions.style.display = 'block';
       const advancedContent = document.getElementById('advancedSettingsContent');
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
       if (advancedContent.classList.contains('visible') && files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
         showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
       }
-
-      // If multiple files with conversion, inform user about batch mode
-      if (files.length > 1 && convertEnabled) {
-        const epubCount = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.epub')).length;
-        if (epubCount > 0) {
-          console.log(`Batch mode: ${epubCount} EPUB(s) will use auto settings`);
-        }
+      if (files.length > 1 && convertEnabled && epubFiles.length > 0) {
+        console.log(`Batch mode: ${epubFiles.length} EPUB(s) will use auto settings`);
       }
-
       updateBatchModeUI(files.length > 1);
       uploadBtn.disabled = false;
     } else {
-      updateBatchModeUI(false);
-      uploadBtn.disabled = true;
+      convertOptions.style.display = 'none';
+      imageOptimizer.style.display = 'none';
+      resetImageOptimizer();
+      uploadBtn.textContent = 'Upload';
+      uploadBtn.classList.remove('optimize');
+      uploadBtn.disabled = false;
     }
   }
 
@@ -2966,6 +3105,339 @@ let operationCancelled = false; // Set by Cancel to stop conversion loops and up
 let uploadGeneration = 0;       // Incremented each uploadFile() call; guards stale restoreAfterCancel()
 let currentUploadWs = null;     // Active WebSocket reference for external abort
 let currentUploadXhr = null;    // Active XHR reference for external abort
+// ============================================================================
+// Sleep Screen Image Optimizer
+// ============================================================================
+
+let imageResizeMode = 'fit'; // 'fit' or 'crop'
+let sleepImageFiles = [];     // Files to process for sleep screen
+
+let sleepPreviewImage = null;
+let sleepOrigW = 0, sleepOrigH = 0;
+let sleepNeedsRotation = false;
+let sleepAspectExact = false;
+const SLEEP_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const exifOrientationCache = new Map();
+
+function validateSleepImage(file) {
+  if (!file.type.startsWith('image/')) {
+    return { valid: false, reason: `Not an image (${file.type || 'unknown type'}).` };
+  }
+  if (file.size > SLEEP_MAX_FILE_SIZE) {
+    return { valid: false, reason: `File too large (${formatBytes(file.size)}). Maximum is ${formatBytes(SLEEP_MAX_FILE_SIZE)}.` };
+  }
+  if (file.size === 0) {
+    return { valid: false, reason: 'Empty file.' };
+  }
+  return { valid: true };
+}
+
+function readExifOrientation(file) {
+  const cacheKey = file.name + file.size;
+  if (exifOrientationCache.has(cacheKey)) {
+    return Promise.resolve(exifOrientationCache.get(cacheKey));
+  }
+  return new Promise((resolve) => {
+    const cacheAndResolve = (val) => { exifOrientationCache.set(cacheKey, val); resolve(val); };
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const view = new DataView(e.target.result);
+        if (view.getUint16(0, false) !== 0xFFD8) { cacheAndResolve(1); return; }
+        let offset = 2;
+        while (offset < view.byteLength - 4) {
+          const marker = view.getUint16(offset, false);
+          if (marker === 0xFFE1) {
+            const length = view.getUint16(offset + 2, false);
+            const tiffStart = offset + 4;
+            if (tiffStart + 8 > view.byteLength) { cacheAndResolve(1); return; }
+            const isLE = view.getUint16(tiffStart, false) === 0x4949;
+            const ifdOffset = view.getUint32(tiffStart + 4, isLE);
+            const ifdStart = tiffStart + ifdOffset;
+            if (ifdStart + 2 > view.byteLength) { cacheAndResolve(1); return; }
+            const numEntries = view.getUint16(ifdStart, isLE);
+            for (let i = 0; i < numEntries; i++) {
+              const entryOff = ifdStart + 2 + i * 12;
+              if (entryOff + 12 > view.byteLength) break;
+              if (view.getUint16(entryOff, isLE) === 0x0112) {
+                const val = view.getUint16(entryOff + 8, isLE);
+                cacheAndResolve(val >= 1 && val <= 8 ? val : 1);
+                return;
+              }
+            }
+            cacheAndResolve(1); return;
+          } else if ((marker & 0xFF00) === 0xFF00) {
+            const length = view.getUint16(offset + 2, false);
+            offset += 2 + length;
+          } else {
+            offset += 2;
+          }
+        }
+      } catch (ex) { /* ignore parse errors */ }
+      cacheAndResolve(1);
+    };
+    reader.onerror = () => cacheAndResolve(1);
+    reader.readAsArrayBuffer(file.slice(0, 65536));
+  });
+}
+
+const EXIF_ROTATION_MAP = { 1: 0, 2: 0, 3: 180, 4: 180, 5: 90, 6: 90, 7: 270, 8: 270 };
+const EXIF_FLIP_MAP = { 1: 'none', 2: 'h', 3: 'none', 4: 'h', 5: 'v', 6: 'none', 7: 'v', 8: 'none' };
+
+function needsRotation(origW, origH, exifOrientation) {
+  const rotation = EXIF_ROTATION_MAP[exifOrientation] || 0;
+  if (rotation === 90 || rotation === 270) return true;
+  if (origW > origH) return true;
+  return false;
+}
+
+function setImageResizeMode(mode) {
+  imageResizeMode = mode;
+  document.querySelectorAll('.fit-crop-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === mode);
+  });
+  if (sleepPreviewImage) renderSleepPreview();
+}
+
+function resetImageOptimizer() {
+  sleepImageFiles = [];
+  sleepPreviewImage = null;
+  sleepOrigW = 0; sleepOrigH = 0;
+  sleepNeedsRotation = false;
+  sleepAspectExact = false;
+  imageResizeMode = 'fit';
+  exifOrientationCache.clear();
+  document.querySelectorAll('.fit-crop-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === 'fit');
+  });
+  const fitCropRow = document.getElementById('imageFitCropRow');
+  if (fitCropRow) fitCropRow.style.display = 'none';
+  const preview = document.getElementById('imageOptimizerPreview');
+  if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  const warning = document.getElementById('imageOptimizerWarning');
+  if (warning) { warning.style.display = 'none'; warning.innerHTML = ''; }
+  const pathDisplay = document.getElementById('uploadPathDisplay');
+  if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+}
+
+function toggleImageOptimizer() {
+  const checked = document.getElementById('imageOptimizerEnabled').checked;
+  const uploadBtn = document.getElementById('uploadBtn');
+  const settingsEl = document.getElementById('imageOptimizerSettings');
+  const fitCropRow = document.getElementById('imageFitCropRow');
+  const preview = document.getElementById('imageOptimizerPreview');
+  const pathDisplay = document.getElementById('uploadPathDisplay');
+
+  if (checked) {
+    uploadBtn.textContent = 'Optimize & Upload';
+    uploadBtn.classList.add('optimize');
+    if (settingsEl) settingsEl.style.display = 'block';
+    if (pathDisplay) pathDisplay.textContent = '.sleep/';
+    if (sleepImageFiles.length === 1) {
+      if (fitCropRow && !sleepAspectExact) fitCropRow.style.display = 'block';
+      if (preview) renderSleepPreview();
+    }
+  } else {
+    uploadBtn.textContent = 'Upload';
+    uploadBtn.classList.remove('optimize');
+    if (settingsEl) settingsEl.style.display = 'none';
+    if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    if (fitCropRow) fitCropRow.style.display = 'none';
+    if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  }
+}
+
+async function setupImageOptimizer(imageFiles) {
+  sleepImageFiles = imageFiles;
+  const fitCropRow = document.getElementById('imageFitCropRow');
+  const preview = document.getElementById('imageOptimizerPreview');
+
+  if (imageFiles.length === 1) {
+    try {
+      const exifOrientation = await readExifOrientation(imageFiles[0]);
+      const url = URL.createObjectURL(imageFiles[0]);
+      const img = new Image();
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        sleepPreviewImage = img;
+        sleepOrigW = img.width;
+        sleepOrigH = img.height;
+        sleepNeedsRotation = needsRotation(img.width, img.height, exifOrientation);
+        const effW = sleepNeedsRotation ? sleepOrigH : sleepOrigW;
+        const effH = sleepNeedsRotation ? sleepOrigW : sleepOrigH;
+        sleepAspectExact = Math.abs(effW / effH - DEFAULT_MAX_WIDTH / DEFAULT_MAX_HEIGHT) < 0.01;
+        fitCropRow.style.display = sleepAspectExact ? 'none' : 'block';
+        if (sleepAspectExact) imageResizeMode = 'fit';
+        document.querySelectorAll('.fit-crop-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.value === 'fit');
+        });
+        renderSleepPreview();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); preview.style.display = 'none'; preview.innerHTML = ''; };
+      img.src = url;
+    } catch (ex) {
+      preview.style.display = 'none'; preview.innerHTML = '';
+    }
+  } else {
+    fitCropRow.style.display = 'none';
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+  }
+}
+
+function drawSleepImageOnCanvas(ctx, img, origW, origH, targetW, targetH, rotate) {
+  const effW = rotate ? origH : origW;
+  const effH = rotate ? origW : origH;
+  const scale = imageResizeMode === 'fit'
+    ? Math.min(targetW / effW, targetH / effH)
+    : Math.max(targetW / effW, targetH / effH);
+  const drawW = effW * scale, drawH = effH * scale;
+  const dx = (targetW - drawW) / 2;
+  const dy = (targetH - drawH) / 2;
+  if (rotate) {
+    ctx.translate(targetW, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, 0, 0, origW, origH, (targetH - drawH) / 2, (targetW - drawW) / 2, drawH, drawW);
+  } else {
+    ctx.drawImage(img, 0, 0, origW, origH, dx, dy, drawW, drawH);
+  }
+  return { drawW, drawH };
+}
+
+function renderSleepPreview() {
+  const preview = document.getElementById('imageOptimizerPreview');
+  if (!preview || !sleepPreviewImage) return;
+  preview.style.display = 'block';
+
+  const img = sleepPreviewImage;
+  const rotate = sleepNeedsRotation;
+  const effW = rotate ? sleepOrigH : sleepOrigW;
+  const effH = rotate ? sleepOrigW : sleepOrigH;
+
+  const PW = 120, PH = 200;
+  const c = document.createElement('canvas');
+  c.width = PW; c.height = PH;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, PW, PH);
+
+  const scale = imageResizeMode === 'fit'
+    ? Math.min(PW / effW, PH / effH)
+    : Math.max(PW / effW, PH / effH);
+  const drawW = effW * scale, drawH = effH * scale;
+
+  ctx.save();
+  drawSleepImageOnCanvas(ctx, img, sleepOrigW, sleepOrigH, PW, PH, rotate);
+  ctx.restore();
+
+  if (!sleepAspectExact && imageResizeMode === 'fit') {
+    ctx.fillStyle = 'rgba(100,100,100,0.3)';
+    if (drawW < PW) { ctx.fillRect(0, 0, (PW - drawW) / 2, PH); ctx.fillRect(PW - (PW - drawW) / 2, 0, (PW - drawW) / 2, PH); }
+    if (drawH < PH) { ctx.fillRect(0, 0, PW, (PH - drawH) / 2); ctx.fillRect(0, PH - (PH - drawH) / 2, PW, (PH - drawH) / 2); }
+  }
+  if (!sleepAspectExact && imageResizeMode === 'crop') {
+    ctx.strokeStyle = 'rgba(231,76,60,0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(1, 1, PW - 2, PH - 2);
+    ctx.setLineDash([]);
+  }
+
+  let info = `${effW}×${effH}`;
+  if (rotate) info += ' ↻';
+  if (sleepAspectExact) {
+    info += ` → 480×800, exact fit`;
+  } else {
+    if (imageResizeMode === 'fit') {
+      const scaleW = PW / effW, scaleH = PH / effH;
+      if (scaleW <= scaleH) {
+        const letterbox = Math.round((PH - effH * scaleW) / 2 / PH * 800);
+        if (letterbox > 0) info += ` → 480×800, letterbox ${letterbox}px`;
+        else info += ' → 480×800, exact fit';
+      } else {
+        const pillarbox = Math.round((PW - effW * scaleH) / 2 / PW * 480);
+        if (pillarbox > 0) info += ` → 480×800, pillarbox ${pillarbox}px`;
+        else info += ' → 480×800, exact fit';
+      }
+    } else {
+      const cropScaleW = PW / effW, cropScaleH = PH / effH;
+      if (cropScaleW >= cropScaleH) {
+        const cropPx = Math.round((effW * cropScaleH - PW) / 2 / PW * 480);
+        if (cropPx > 0) info += ` → 480×800, crops ${cropPx}px sides`;
+        else info += ' → 480×800, exact fit';
+      } else {
+        const cropPx = Math.round((effH * cropScaleW - PH) / 2 / PH * 800);
+        if (cropPx > 0) info += ` → 480×800, crops ${cropPx}px top/bottom`;
+        else info += ' → 480×800, exact fit';
+      }
+    }
+  }
+  preview.innerHTML = `<div class="image-optimizer-preview"><canvas></canvas><div class="preview-info">${info}</div></div>`;
+  const pc = preview.querySelector('canvas');
+  pc.width = PW; pc.height = PH;
+  pc.getContext('2d').drawImage(c, 0, 0);
+}
+
+async function processSleepImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    const timeoutId = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Image load timeout')); }, 30000);
+    img.onload = async function() {
+      clearTimeout(timeoutId);
+      URL.revokeObjectURL(url);
+      const exifOrientation = await readExifOrientation(file);
+      const rotation = EXIF_ROTATION_MAP[exifOrientation] || 0;
+      const rotate = (rotation === 90 || rotation === 270) || (rotation === 0 && img.width > img.height);
+      const origW = img.width, origH = img.height;
+      const outW = DEFAULT_MAX_WIDTH, outH = DEFAULT_MAX_HEIGHT;
+      const c = document.createElement('canvas');
+      c.width = outW; c.height = outH;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, outW, outH);
+      ctx.save();
+      drawSleepImageOnCanvas(ctx, img, origW, origH, outW, outH, rotate);
+      ctx.restore();
+
+      if (rotation === 180) {
+        ctx.translate(outW, outH);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(c, 0, 0);
+      }
+      const flip = EXIF_FLIP_MAP[exifOrientation];
+      if (flip === 'h') {
+        ctx.translate(outW, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(c, 0, 0);
+      } else if (flip === 'v') {
+        ctx.translate(0, outH);
+        ctx.scale(1, -1);
+        ctx.drawImage(c, 0, 0);
+      }
+
+      const imgData = ctx.getImageData(0, 0, outW, outH);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        d[i] = d[i + 1] = d[i + 2] = gray;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      c.toBlob(function(blob) {
+        if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        resolve(new File([blob], baseName + '.jpg', { type: 'image/jpeg' }));
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function() {
+      clearTimeout(timeoutId);
+      URL.revokeObjectURL(url);
+      reject(new Error('Image load failed'));
+    };
+    img.src = url;
+  });
+}
+
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 
@@ -4521,8 +4993,119 @@ function getWsUrl() {
   return `ws://${host}:${WS_PORT}/`;
 }
 
+// Upload sleep screen images to /.sleep/
+async function uploadSleepImages(files) {
+  isUploadInProgress = true;
+  uploadGeneration++;
+  const myGeneration = uploadGeneration;
+  document.getElementById('uploadModalClose').classList.add('disabled');
+
+  const progressContainer = document.getElementById('progress-container');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  const uploadBtn = document.getElementById('uploadBtn');
+
+  progressContainer.style.display = 'block';
+  uploadBtn.disabled = true;
+  progressFill.style.backgroundColor = '#9b59b6';
+
+  const failedFiles = [];
+  let processedCount = 0;
+  let useWebSocket = true;
+
+  for (let i = 0; i < files.length; i++) {
+    if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
+    const file = files[i];
+
+    progressFill.classList.add('no-transition');
+    progressFill.style.width = '0%';
+    setTimeout(() => progressFill.classList.remove('no-transition'), 50);
+
+    progressText.style.color = '';
+    progressText.textContent = `Processing ${file.name} (${i + 1}/${files.length})...`;
+
+    try {
+      const validation = validateSleepImage(file);
+      if (!validation.valid) {
+        failedFiles.push({ name: file.name, error: validation.reason, file: file });
+        progressText.style.color = '#e74c3c';
+        progressText.textContent = `Skipped: ${file.name} — ${validation.reason}`;
+        await new Promise(r => setTimeout(r, 1500));
+        continue;
+      }
+
+      const processedFile = await processSleepImage(file);
+
+      progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length})...`;
+      progressFill.style.backgroundColor = '#27ae60';
+
+      if (useWebSocket) {
+        await uploadFileWebSocket(processedFile,
+          (loaded, total) => {
+            progressFill.style.width = Math.round((loaded / total) * 100) + '%';
+            progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length}) [WS] — ${Math.round((loaded / total) * 100)}%`;
+          },
+          null, null, '/.sleep'
+        );
+      } else {
+        await uploadFileHTTP(processedFile,
+          (loaded, total) => {
+            progressFill.style.width = Math.round((loaded / total) * 100) + '%';
+            progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length}) [HTTP] — ${Math.round((loaded / total) * 100)}%`;
+          },
+          null, null, '/.sleep'
+        );
+      }
+      progressFill.style.width = '100%';
+      progressText.textContent = `Done: ${processedFile.name}`;
+      processedCount++;
+    } catch (error) {
+      if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
+      console.error(`Sleep image error for ${file.name}:`, error);
+      if (useWebSocket && (error.message === 'WebSocket connection failed' || error.message.includes('WebSocket'))) {
+        console.log('WebSocket failed, falling back to HTTP');
+        useWebSocket = false;
+        try {
+          const processedFile = await processSleepImage(file);
+          await uploadFileHTTP(processedFile,
+            (loaded, total) => {
+              progressFill.style.width = Math.round((loaded / total) * 100) + '%';
+            },
+            null, null, '/.sleep'
+          );
+          progressFill.style.width = '100%';
+        } catch (httpError) {
+          failedFiles.push({ name: file.name, error: httpError.message, file: file });
+        }
+      } else {
+        failedFiles.push({ name: file.name, error: error.message, file: file });
+      }
+    }
+  }
+
+  isUploadInProgress = false;
+  document.getElementById('uploadModalClose').classList.remove('disabled');
+
+  if (failedFiles.length === 0) {
+    const nonImageCount = files.length - processedCount;
+    let msg = `All ${processedCount} image(s) uploaded to /.sleep/!`;
+    if (nonImageCount > 0) msg += ` (${nonImageCount} non-image file(s) not optimized)`;
+    progressFill.style.backgroundColor = '#4caf50';
+    progressText.textContent = msg;
+    setTimeout(() => window.location.reload(), 1500);
+  } else {
+    progressFill.style.backgroundColor = '#e74c3c';
+    const failedList = failedFiles.map(f => f.name).join(', ');
+    progressText.textContent = `${processedCount}/${processedCount + failedFiles.length} uploaded. Failed: ${failedList}`;
+    failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
+    closeUploadModal();
+    showFailedUploadsBanner();
+  }
+}
+
 // Upload file via WebSocket (faster, binary protocol)
-function uploadFileWebSocket(file, onProgress, onComplete, onError) {
+function uploadFileWebSocket(file, onProgress, onComplete, onError, targetPath) {
+  const uploadTarget = targetPath || currentPath;
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(getWsUrl());
     currentUploadWs = ws;
@@ -4535,7 +5118,7 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
       // Send start message: START:<filename>:<size>:<path>
-      ws.send(`START:${file.name}:${file.size}:${currentPath}`);
+      ws.send(`START:${file.name}:${file.size}:${uploadTarget}`);
     };
 
     ws.onmessage = async function(event) {
@@ -4631,14 +5214,15 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 }
 
 // Upload file via HTTP (fallback method)
-function uploadFileHTTP(file, onProgress, onComplete, onError) {
+function uploadFileHTTP(file, onProgress, onComplete, onError, targetPath) {
+  const uploadTarget = targetPath || currentPath;
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
     currentUploadXhr = xhr;
-    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+    xhr.open('POST', '/upload?path=' + encodeURIComponent(uploadTarget), true);
 
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable && onProgress) {
@@ -4678,9 +5262,16 @@ function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+  const imageOptimizerEnabled = document.getElementById('imageOptimizerEnabled').checked;
+  const isSleepImageMode = sleepImageFiles.length > 0 && imageOptimizerEnabled;
 
   if (files.length === 0) {
     alert('Please select at least one file!');
+    return;
+  }
+
+  if (isSleepImageMode) {
+    uploadSleepImages(files);
     return;
   }
 
