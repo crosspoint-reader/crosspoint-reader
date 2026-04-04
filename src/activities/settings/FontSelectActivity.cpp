@@ -56,11 +56,6 @@ void FontSelectActivity::onExit() {
 }
 
 void FontSelectActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBack();
     return;

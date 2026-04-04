@@ -401,7 +401,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_STATUS_BAR: {
-      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput, [this] { finish(); }),
+      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput),
                              [this](const ActivityResult&) { requestUpdate(); });
       break;
     }

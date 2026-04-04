@@ -37,11 +37,6 @@ void LineSpacingSelectionActivity::adjustValue(const int delta) {
 }
 
 void LineSpacingSelectionActivity::loop() {
-  if (subActivity) {
-    subActivity->loop();
-    return;
-  }
-
   // This sub-page is opened from Settings on Confirm *press*.
   // Using release events here would consume the same key-up and immediately exit.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -60,7 +55,7 @@ void LineSpacingSelectionActivity::loop() {
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustValue(-kLargeStep); });
 }
 
-void LineSpacingSelectionActivity::render(Activity::RenderLock&&) {
+void LineSpacingSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto metrics = UITheme::getInstance().getMetrics();

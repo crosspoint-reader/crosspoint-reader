@@ -146,10 +146,12 @@ def load_translations(
     if language_filter:
         filter_upper = {code.upper() for code in language_filter}
         filter_upper.add("ENGLISH")  # Always include English
+        filter_upper.add("EN")  # Also match the _language_code "EN"
         filtered_parsed = {}
         for name, data in parsed.items():
             code = data.get("_language_code", "").upper()
-            if code in filter_upper:
+            fname_stem = Path(name).stem.upper()
+            if code in filter_upper or fname_stem in filter_upper:
                 filtered_parsed[name] = data
         print(f"  Language filter: {', '.join(sorted(filter_upper))}")
         print(f"  Filtered: {len(parsed)} -> {len(filtered_parsed)} languages")

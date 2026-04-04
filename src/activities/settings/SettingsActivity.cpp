@@ -133,7 +133,11 @@ void SettingsActivity::loop() {
       requestUpdate();
     } else {
       SETTINGS.saveToFile();
-      onGoHome();
+      if (onGoHome) {
+        onGoHome();
+      } else {
+        finish();
+      }
     }
     return;
   }
@@ -204,12 +208,13 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     // Font Family: open FontSelectActivity (combined built-in + external fonts)
     if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      exitActivity();
-      enterNewActivity(new FontSelectActivity(renderer, mappedInput, FontSelectActivity::SelectMode::Reader,
-                                              [this] {
-                                                exitActivity();
-                                                requestUpdate();
-                                              }));
+      startActivityForResult(
+          std::make_unique<FontSelectActivity>(renderer, mappedInput, FontSelectActivity::SelectMode::Reader,
+                                               [this] { finish(); }),
+          [this](const ActivityResult&) {
+            SETTINGS.saveToFile();
+            rebuildSettingsLists();
+          });
       return;
     }
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
@@ -237,19 +242,16 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     // Line spacing uses a slider activity (0.8x-2.5x) for finer control.
     if (setting.nameId == StrId::STR_LINE_SPACING) {
-      exitActivity();
-      enterNewActivity(new LineSpacingSelectionActivity(
-          renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
-          [this](const int selectedValue) {
-            SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
-            SETTINGS.saveToFile();
-            exitActivity();
-            requestUpdate();
-          },
-          [this] {
-            exitActivity();
-            requestUpdate();
-          }));
+      startActivityForResult(
+          std::make_unique<LineSpacingSelectionActivity>(
+              renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
+              [this](const int selectedValue) {
+                SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
+                SETTINGS.saveToFile();
+                finish();
+              },
+              [this] { finish(); }),
+          [this](const ActivityResult&) { requestUpdate(); });
       return;
     }
 
@@ -295,8 +297,13 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::SelectUiFont:
-        enterSubActivity(
-            new FontSelectActivity(renderer, mappedInput, FontSelectActivity::SelectMode::UI, onComplete));
+        startActivityForResult(
+            std::make_unique<FontSelectActivity>(renderer, mappedInput, FontSelectActivity::SelectMode::UI,
+                                                 [this] { finish(); }),
+            [this](const ActivityResult&) {
+              SETTINGS.saveToFile();
+              rebuildSettingsLists();
+            });
         break;
       case SettingAction::None:
         // Do nothing

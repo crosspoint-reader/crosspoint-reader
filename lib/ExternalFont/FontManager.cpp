@@ -21,21 +21,24 @@ FontManager& FontManager::getInstance() {
 void FontManager::scanFonts() {
   _fontCount = 0;
 
-  FsFile dir = Storage.open(FONTS_DIR, O_RDONLY);
+  HalFile dir = Storage.open(FONTS_DIR, O_RDONLY);
   if (!dir) {
     Serial.printf("[FONT_MGR] Cannot open fonts directory: %s\n", FONTS_DIR);
     return;
   }
 
-  if (!dir.isDir()) {
+  if (!dir.isDirectory()) {
     Serial.printf("[FONT_MGR] %s is not a directory\n", FONTS_DIR);
     dir.close();
     return;
   }
 
-  FsFile entry;
-  while (_fontCount < MAX_FONTS && entry.openNext(&dir, O_RDONLY)) {
-    if (entry.isDir()) {
+  while (_fontCount < MAX_FONTS) {
+    HalFile entry = dir.openNextFile();
+    if (!entry) {
+      break;
+    }
+    if (entry.isDirectory()) {
       entry.close();
       continue;
     }
@@ -196,7 +199,7 @@ ExternalFont* FontManager::getActiveUiFont() {
 void FontManager::saveSettings() {
   Storage.mkdir("/.crosspoint");
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForWrite("FONT_MGR", SETTINGS_FILE, file)) {
     Serial.printf("[FONT_MGR] Failed to save settings\n");
     return;
@@ -225,7 +228,7 @@ void FontManager::saveSettings() {
 }
 
 void FontManager::loadSettings() {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("FONT_MGR", SETTINGS_FILE, file)) {
     Serial.printf("[FONT_MGR] No settings file, using defaults\n");
     return;

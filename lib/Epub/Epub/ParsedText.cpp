@@ -456,7 +456,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     xpos = (spareSpace - static_cast<int>(nonCjkGapCount) * spaceWidth) / 2;
   }
 
-  std::vector<uint16_t> lineXPos;
+  std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {

@@ -170,7 +170,7 @@ class SettingsActivity final : public Activity {
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                            const std::function<void()>& onGoHome, int initialCategoryIndex = 0,
+                            const std::function<void()>& onGoHome = nullptr, int initialCategoryIndex = 0,
                             int initialSettingIndex = 0)
       : Activity("Settings", renderer, mappedInput),
         onGoHome(onGoHome),
