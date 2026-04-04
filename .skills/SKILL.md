@@ -870,3 +870,104 @@ struct PageLine {
 ---
 
 Philosophy: We are building a dedicated e-reader, not a Swiss Army knife. If a feature adds RAM pressure without significantly improving the reading experience, it is Out of Scope.
+
+---
+
+# 個人フォーク固有ガイド (personal/main ブランチ)
+
+本セクションは zrn-ns/crosspoint-reader フォークに固有の情報です。
+本家 crosspoint-reader/crosspoint-reader の v1.2.0 をベースに、以下を統合しています。
+
+## 統合元と構成
+
+| 統合元 | 内容 | 状態 |
+|--------|------|------|
+| 本家 v1.2.0 | カーニング/リガチャ、脚注ナビ、EPUBオプティマイザ | ベース |
+| PR #1392 (ドラフト) | SDカードフォント（22ファミリー、CJK含む、`.cpfont`形式） | 統合済み |
+| PR #875 | Xteink X3ハードウェアサポート | 統合済み |
+| aBER0724/crosspoint-reader-cjk | CJK文字間修正、段落インデント、ダークモード、ExternalFont | 統合済み |
+
+## リモート構成
+
+```
+origin   → zrn-ns/crosspoint-reader (フォーク)
+upstream → crosspoint-reader/crosspoint-reader (本家)
+cjk-fork → aBER0724/crosspoint-reader-cjk (CJKフォーク)
+```
+
+## 2つのフォントシステム
+
+本フォークには2つの独立したフォントシステムが共存しています。
+
+### SdCardFont (PR #1392由来)
+- **用途**: 読書用フォント（メイン）
+- **形式**: `.cpfont` (EpdGlyph互換、12.4固定小数点advanceX)
+- **配置**: `/.crosspoint/fonts/<FamilyName>/<FontName>_<size>.cpfont`
+- **ID**: 負の値（FNV-1aハッシュ）、`fontMap`に登録される
+- **ダウンロード**: Settings → Download Fonts（マニフェストURL: adriancaruana/crosspoint-reader のリリース）
+
+### ExternalFont (CJKフォーク由来)
+- **用途**: UIフォント（CJK文字表示）
+- **形式**: `.bin` (固定幅ビットマップ)
+- **配置**: `/fonts/<FontName>_<size>_<WxH>.bin`
+- **ID**: 負の値 `-(selectedIndex + 1000)`
+- **制約**: SDカードフォント使用時は `FontManager._sdCardFontActive = true` により読書用途が無効化される
+
+### フォントシステム間の排他制御
+
+SDカードフォントが選択されている場合:
+- `FontManager::isExternalFontEnabled()` が `false` を返す
+- GfxRenderer内の全ExternalFont分岐が自動的にスキップされる
+- 描画・レイアウト計算ともにSdCardFontのEpdGlyph/advanceTableを使用
+
+## 12.4固定小数点 (fp4) の注意事項
+
+v1.2.0でadvanceXが12.4固定小数点に変更されました。
+
+- **EpdGlyph::advanceX**: 12.4固定小数点（`fp4::toPixel()`で変換）
+- **renderChar**: `*x += fp4::toPixel(glyph->advanceX)` （ピクセル単位で累積）
+- **getTextAdvanceX**: SDカードフォントのadvance table fast-pathはFP累積→最後にfp4変換
+- **getTextWidth**: `getTextDimensions`経由で正しくFP変換済み
+
+CJKフォークのコードを修正する際は、advanceXが12.4 FPであることを常に意識すること。
+
+## SDカードフォントのスタイルフォールバック
+
+多くのCJKフォント（NotoSansCJKなど）はRegular（style 0）のみ。
+`SdCardFont::getAdvance()` はリクエストされたスタイルがなければRegularにフォールバックする。
+見出し（Bold要求）でadvanceが0になる問題を防ぐため。
+
+## ビルドとフラッシュ
+
+```bash
+# ビルド（default環境: 開発用、ログレベル2）
+pio run
+
+# デバイスにフラッシュ
+pio run -t upload --upload-port /dev/tty.usbmodem101
+
+# i18n言語フィルタ（platformio.iniで設定）
+# default環境: ENGLISH, CHINESE_SIMPLIFIED, CHINESE_TRADITIONAL, JAPANESE
+```
+
+### ビルド結果の目安
+- RAM: ~32% (104KB / 328KB)
+- Flash: ~85% (5.8MB / 6.8MB)
+
+## upstream追従
+
+```bash
+git fetch upstream
+git checkout personal/main
+git merge upstream/<新バージョンタグ>
+# コンフリクト解決: CJK変更・フォントシステム部分を優先
+```
+
+**rebaseではなくmergeを使用**（機能ごとのマージ履歴を保持するため）。
+
+## 既知の制限事項
+
+- X3のスクリーンショット機能が壊れている（X4の800x480解像度でBMPが保存される、X3は792x528）
+- ExternalFontのLRUハッシュテーブルはトゥームストーン方式で修正済みだが、`_accessCounter`のuint32_tオーバーフローは未対応
+- `ParsedText`の行分割がDP最適からgreedy方式に変更済み（Latin justification品質が若干低下）
+- シリアルモニタがデバイス動作中に切断されることがある（ESP32-C3 USB Serial/JTAG の制約）
