@@ -32,11 +32,16 @@ void QrDisplayActivity::render(RenderLock&&) {
                  tr(STR_DISPLAY_QR), nullptr);
 
   const int startY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int availableHeight = contentRect.height - startY - metrics.verticalSpacing;
+  constexpr int truncNoticeHeight = 16;
+  const int availableHeight = contentRect.height - startY - metrics.verticalSpacing - truncNoticeHeight;
 
   const Rect qrBounds(contentRect.x + metrics.contentSidePadding, startY,
                       contentRect.width - metrics.contentSidePadding * 2, availableHeight);
-  QrUtils::drawQrCode(renderer, qrBounds, textPayload);
+  const bool truncated = QrUtils::drawQrCode(renderer, qrBounds, textPayload);
+
+  if (truncated) {
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + availableHeight + 2, "...", true);
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
