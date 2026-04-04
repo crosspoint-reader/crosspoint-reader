@@ -1,6 +1,6 @@
 from ebooklib import epub
 
-book_sizes = [1000, 2000, 3000, 5000, 10000, 65530]
+book_sizes = [1000, 2000, 3000, 5000, 10000, 17000, 19000, 65530]
 
 # This script generates epubs with entirely too many toc and spine entries
 for x in book_sizes:
