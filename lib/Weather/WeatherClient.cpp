@@ -266,7 +266,7 @@ bool WeatherClient::saveCache(const WeatherData& data) {
     d["sunrise"] = day.sunrise;
     d["sunset"] = day.sunset;
     d["moonPhase"] = day.moonPhase;
-    d["moonPhaseApiName"] = "moon_phase"; // for compatibility/tracing
+    d["moonPhaseApiName"] = "moon_phase";  // for compatibility/tracing
   }
 
   // Hourly
