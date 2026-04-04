@@ -1,11 +1,22 @@
 #include "EpubReaderMenuActivity.h"
 
+#include <cstdio>
+#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+constexpr int kBuiltinReaderFontCount = 3;
+constexpr CrossPointSettings::FONT_FAMILY kBuiltinReaderFonts[kBuiltinReaderFontCount] = {
+    CrossPointSettings::BOOKERLY, CrossPointSettings::NOTOSANS, CrossPointSettings::OPENDYSLEXIC};
+constexpr StrId kBuiltinReaderFontLabels[kBuiltinReaderFontCount] = {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS,
+                                                                     StrId::STR_OPEN_DYSLEXIC};
+}  // namespace
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
@@ -21,11 +32,17 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
-  items.reserve(10);
+  items.reserve(16);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
+  items.push_back({MenuAction::READER_SETTINGS, StrId::STR_SETTINGS_TITLE});
+  items.push_back({MenuAction::STYLE_FIRST_LINE_INDENT, StrId::STR_FIRST_LINE_INDENT});
+  items.push_back({MenuAction::STYLE_FONT_FAMILY, StrId::STR_FONT_FAMILY});
+  items.push_back({MenuAction::STYLE_LINE_SPACING, StrId::STR_LINE_SPACING});
+  items.push_back({MenuAction::STYLE_INVERT_IMAGES, StrId::STR_INVERT_IMAGES});
+  items.push_back({MenuAction::STYLE_STATUS_BAR, StrId::STR_CUSTOMISE_STATUS_BAR});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -39,12 +56,25 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
+  skipNextButtonCheck = true;
   requestUpdate();
 }
 
 void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderMenuActivity::loop() {
+  if (skipNextButtonCheck) {
+    const bool confirmCleared = !mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+                                !mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    const bool backCleared = !mappedInput.isPressed(MappedInputManager::Button::Back) &&
+                             !mappedInput.wasReleased(MappedInputManager::Button::Back);
+    if (confirmCleared && backCleared) {
+      skipNextButtonCheck = false;
+    }
+    return;
+  }
+
+
   // Handle navigation
   buttonNavigator.onNext([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
@@ -117,7 +147,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, 45 + contentY, progressLine.c_str());
 
   // Menu Items
   const int startY = 75 + contentY;
@@ -134,11 +164,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
     renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, I18N.get(menuItems[i].labelId), !isSelected);
 
-    if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
-      // Render current orientation value on the right edge of the content area.
-      const char* value = I18N.get(orientationLabels[pendingOrientation]);
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    const std::string value = getMenuItemValue(menuItems[i].action);
+    if (!value.empty()) {
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value.c_str());
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value.c_str(), !isSelected);
     }
 
     if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
@@ -154,4 +183,41 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+}
+
+std::string EpubReaderMenuActivity::getCurrentFontLabel() const {
+  const int currentExternal = FontMgr.getSelectedIndex();
+  if (currentExternal >= 0) {
+    const FontInfo* info = FontMgr.getFontInfo(currentExternal);
+    return info ? std::string(info->name) : std::string(tr(STR_EXTERNAL_FONT));
+  }
+
+  for (int i = 0; i < kBuiltinReaderFontCount; ++i) {
+    if (SETTINGS.fontFamily == static_cast<uint8_t>(kBuiltinReaderFonts[i])) {
+      return std::string(I18N.get(kBuiltinReaderFontLabels[i]));
+    }
+  }
+  return std::string(I18N.get(kBuiltinReaderFontLabels[0]));
+}
+
+std::string EpubReaderMenuActivity::getMenuItemValue(const MenuAction action) const {
+  switch (action) {
+    case MenuAction::ROTATE_SCREEN:
+      return std::string(I18N.get(orientationLabels[pendingOrientation]));
+    case MenuAction::STYLE_FIRST_LINE_INDENT:
+      return SETTINGS.firstLineIndent ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
+    case MenuAction::STYLE_INVERT_IMAGES:
+      return SETTINGS.invertImages ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
+    case MenuAction::STYLE_FONT_FAMILY:
+      return getCurrentFontLabel();
+    case MenuAction::STYLE_LINE_SPACING: {
+      char spacingBuf[16];
+      snprintf(spacingBuf, sizeof(spacingBuf), "%.2fx", static_cast<float>(SETTINGS.lineSpacing) / 100.0f);
+      return spacingBuf;
+    }
+    case MenuAction::STYLE_STATUS_BAR:
+      return "";
+    default:
+      return "";
+  }
 }

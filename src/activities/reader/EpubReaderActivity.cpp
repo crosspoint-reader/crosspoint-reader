@@ -3,6 +3,7 @@
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
+#include <FontManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -18,9 +19,14 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "OrientationHelper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "activities/settings/FontSelectActivity.h"
+#include "activities/settings/LineSpacingSelectionActivity.h"
+#include "activities/settings/SettingsActivity.h"
+#include "activities/settings/StatusBarSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -50,9 +56,8 @@ void EpubReaderActivity::onEnter() {
     return;
   }
 
-  // Configure screen orientation based on settings
-  // NOTE: This affects layout math and must be applied before any render calls.
-  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+  // Screen orientation (both renderer and input) is already set by
+  // enterNewActivity() → OrientationHelper::applyOrientation() before onEnter().
 
   epub->setupCacheDir();
 
@@ -137,17 +142,29 @@ void EpubReaderActivity::loop() {
 
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const int currentPage = section ? section->currentPage + 1 : 0;
-    const int totalPages = section ? section->pageCount : 0;
+    // Snapshot reader state under render lock. This avoids racing with the
+    // render task while it may rebuild/reset the current section.
+    int menuSpineIndex = 0;
+    int menuCurrentPage = 0;
+    int menuTotalPages = 0;
+    {
+      RenderLock lock(*this);
+      menuSpineIndex = currentSpineIndex;
+      if (section) {
+        menuCurrentPage = section->currentPage + 1;
+        menuTotalPages = section->pageCount;
+      }
+    }
+
     float bookProgress = 0.0f;
-    if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-      bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+    if (epub && epub->getBookSize() > 0 && menuTotalPages > 0) {
+      const float chapterProgress = static_cast<float>(menuCurrentPage - 1) / static_cast<float>(menuTotalPages);
+      bookProgress = epub->calculateProgress(menuSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               renderer, mappedInput, epub->getTitle(), menuCurrentPage, menuTotalPages,
+                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty()),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -280,6 +297,16 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   }
 }
 
+void EpubReaderActivity::invalidateSectionPreservingPosition() {
+  RenderLock lock(*this);
+  if (section) {
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = section->pageCount;
+    nextPageNumber = section->currentPage;
+    section.reset();
+  }
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
@@ -322,6 +349,60 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::READER_SETTINGS: {
+      // Open settings directly on the Reader category and return to reader on back.
+      startActivityForResult(
+          std::make_unique<SettingsActivity>(renderer, mappedInput, [this] { finish(); }, 1, 1),
+          [this](const ActivityResult&) {
+            // Reader settings (font/line spacing/margins etc.) may change pagination.
+            invalidateSectionPreservingPosition();
+            requestUpdate();
+          });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STYLE_FIRST_LINE_INDENT: {
+      SETTINGS.firstLineIndent = !SETTINGS.firstLineIndent;
+      SETTINGS.saveToFile();
+      invalidateSectionPreservingPosition();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STYLE_INVERT_IMAGES: {
+      SETTINGS.invertImages = !SETTINGS.invertImages;
+      SETTINGS.saveToFile();
+      renderer.setInvertImagesInDarkMode(SETTINGS.invertImages);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STYLE_FONT_FAMILY: {
+      startActivityForResult(
+          std::make_unique<FontSelectActivity>(renderer, mappedInput, FontSelectActivity::SelectMode::Reader,
+                                              [this] { finish(); }),
+          [this](const ActivityResult&) {
+            invalidateSectionPreservingPosition();
+            requestUpdate();
+          });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STYLE_LINE_SPACING: {
+      startActivityForResult(
+          std::make_unique<LineSpacingSelectionActivity>(
+              renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
+              [this](const int selectedValue) {
+                SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
+                SETTINGS.saveToFile();
+                finish();
+              },
+              [this] { finish(); }),
+          [this](const ActivityResult&) {
+            invalidateSectionPreservingPosition();
+            requestUpdate();
+          });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STYLE_STATUS_BAR: {
+      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput, [this] { finish(); }),
+                             [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
@@ -423,8 +504,8 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     SETTINGS.orientation = orientation;
     SETTINGS.saveToFile();
 
-    // Update renderer orientation to match the new logical coordinate system.
-    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    // Update renderer and input orientation to match the new coordinate system.
+    OrientationHelper::applyOrientation(renderer, mappedInput, this);
 
     // Reset section to force re-layout in the new orientation.
     section.reset();
@@ -538,20 +619,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
 
-    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+    const float lineCompression = SETTINGS.getReaderLineCompression();
+    LOG_DBG("ERS", "Reflow params: lineSpacing=%u, compression=%.2f, viewport=%ux%u", SETTINGS.lineSpacing,
+            lineCompression, viewportWidth, viewportHeight);
+
+    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), lineCompression,
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
+                                  SETTINGS.embeddedStyle, SETTINGS.imageRendering)) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
 
-      if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+      if (!section->createSectionFile(SETTINGS.getReaderFontId(), lineCompression,
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                      SETTINGS.imageRendering, popupFn)) {
+                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
+                                      SETTINGS.embeddedStyle, SETTINGS.imageRendering, popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
+        // Show error to user instead of silent return
+        renderer.clearScreen();
+        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_MEMORY_ERROR), true, EpdFontFamily::BOLD);
+        renderer.displayBuffer();
         return;
       }
     } else {
@@ -662,16 +751,16 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   Section nextSection(epub, nextSpineIndex, renderer);
   if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering)) {
+                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
+                                  SETTINGS.embeddedStyle, SETTINGS.imageRendering)) {
     return;
   }
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d", nextSpineIndex);
   if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                     viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                     SETTINGS.imageRendering)) {
+                                     viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
+                                     SETTINGS.embeddedStyle, SETTINGS.imageRendering)) {
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
   }
 }
@@ -697,6 +786,20 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
+
+  // Preload external font glyphs: collect codepoints from page, sort them,
+  // and batch-read from SD sequentially. Much faster than random reads during render.
+  FontManager& fm = FontManager::getInstance();
+  if (fm.isExternalFontEnabled()) {
+    ExternalFont* extFont = fm.getActiveFont();
+    if (extFont) {
+      std::vector<uint32_t> codepoints;
+      page->collectCodepoints(codepoints, extFont->getCacheCapacity());
+      if (!codepoints.empty()) {
+        extFont->preloadGlyphs(codepoints.data(), codepoints.size());
+      }
+    }
+  }
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
@@ -740,9 +843,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   renderer.storeBwBuffer();
   const auto tBwStore = millis();
 
-  // grayscale rendering
-  // TODO: Only do this if font supports it
-  if (SETTINGS.textAntiAliasing) {
+  // Grayscale rendering - skip for external fonts (1-bit bitmap, no antialiasing benefit)
+  const bool useExternalFont = FontManager::getInstance().isExternalFontEnabled();
+  if (SETTINGS.textAntiAliasing && !useExternalFont) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);

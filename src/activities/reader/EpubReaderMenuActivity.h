@@ -14,6 +14,12 @@ class EpubReaderMenuActivity final : public Activity {
   enum class MenuAction {
     SELECT_CHAPTER,
     FOOTNOTES,
+    READER_SETTINGS,
+    STYLE_FIRST_LINE_INDENT,
+    STYLE_FONT_FAMILY,
+    STYLE_LINE_SPACING,
+    STYLE_INVERT_IMAGES,
+    STYLE_STATUS_BAR,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
@@ -43,7 +49,6 @@ class EpubReaderMenuActivity final : public Activity {
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;
-
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
@@ -56,4 +61,8 @@ class EpubReaderMenuActivity final : public Activity {
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;
+  bool skipNextButtonCheck = true;
+
+  std::string getMenuItemValue(MenuAction action) const;
+  std::string getCurrentFontLabel() const;
 };

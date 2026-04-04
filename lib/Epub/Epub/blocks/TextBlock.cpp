@@ -3,6 +3,34 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <Utf8.h>
+
+void TextBlock::collectCodepoints(std::vector<uint32_t>& out, size_t max) const {
+  if (max == 0 || out.size() >= max) {
+    return;
+  }
+
+  for (const auto& word : words) {
+    const unsigned char* ptr = reinterpret_cast<const unsigned char*>(word.c_str());
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(&ptr))) {
+      // Check if already exists (simple linear search, OK for small sets)
+      bool exists = false;
+      for (uint32_t existing : out) {
+        if (existing == cp) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) {
+        out.push_back(cp);
+        if (out.size() >= max) {
+          return;
+        }
+      }
+    }
+  }
+}
 
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   // Validate iterator bounds before rendering

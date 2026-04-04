@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CrossPoint</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;max-width:640px;margin:0 auto;padding:12px;background:#f5f5f5;color:#333}
+h1{font-size:1.2em;padding:8px 0;border-bottom:2px solid #333;margin-bottom:12px}
+.c{background:#fff;border-radius:8px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.c h2{font-size:1em;margin-bottom:8px}
+input[type=file]{width:100%;padding:8px 0}
+.btn{padding:6px 14px;background:#1a73e8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+.btn:active{opacity:.7}
+.bw{height:4px;background:#e0e0e0;border-radius:2px;margin:6px 0;display:none}
+.br{height:100%;background:#4caf50;border-radius:2px;width:0;transition:width .2s}
+.msg{font-size:13px;padding:6px;border-radius:4px;margin:6px 0;display:none}
+.msg.ok{display:block;background:#e8f5e9;color:#2e7d32}
+.msg.err{display:block;background:#ffebee;color:#c62828}
+.path{font-size:13px;color:#666;padding:4px 0;word-break:break-all}
+.path a{color:#1a73e8;cursor:pointer;text-decoration:underline}
+ul{list-style:none}
+li{padding:6px 0;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:8px}
+li:last-child{border:none}
+.fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.fn a{color:#333;text-decoration:none}
+.sz{color:#999;font-size:12px;white-space:nowrap}
+.empty{color:#999;font-size:13px;padding:12px 0;text-align:center}
+</style>
+</head><body>
+<h1>&#128218; CrossPoint</h1>
+<div class="c">
+<h2>Upload</h2>
+<form id="uf">
+<input type="file" name="file" id="fi">
+<div class="bw" id="bw"><div class="br" id="pb"></div></div>
+<div class="msg" id="um"></div>
+<button type="submit" class="btn">Upload</button>
+</form>
+</div>
+<div class="c">
+<h2>Files</h2>
+<div class="path" id="pp"></div>
+<div id="fl">Loading...</div>
+</div>
+<script>
+var P='/';
+function fmt(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'K';return(b/1048576).toFixed(1)+'M';}
+function nav(p){P=p;load();}
+function load(){
+var pp=document.getElementById('pp');
+if(P=='/'){pp.innerHTML='/';}
+else{var pts=P.split('/').filter(Boolean),h='<a onclick="nav(\'/\')">Home</a>',cp='';
+pts.forEach(function(p){cp+='/'+p;h+=' / <a onclick="nav(\''+cp+'\')">'+p+'</a>';});pp.innerHTML=h;}
+fetch('/api/files?path='+encodeURIComponent(P)).then(function(r){return r.json();}).then(function(fs){
+var fl=document.getElementById('fl');
+if(!fs.length){fl.innerHTML='<p class="empty">Empty</p>';return;}
+fs.sort(function(a,b){return a.isDirectory===b.isDirectory?a.name.localeCompare(b.name):a.isDirectory?-1:1;});
+var h='<ul>';
+fs.forEach(function(f){
+var ic=f.isDirectory?'\uD83D\uDCC1':'\uD83D\uDCC4',sz=f.isDirectory?'':fmt(f.size);
+if(f.isDirectory){var np=P==='/'?'/'+f.name:P+'/'+f.name;
+h+='<li><span class="fn"><a onclick="nav(\''+np+'\')">'+ic+' '+f.name+'</a></span><span class="sz">'+sz+'</span></li>';}
+else{h+='<li><span class="fn">'+ic+' '+f.name+'</span><span class="sz">'+sz+'</span></li>';}
+});
+h+='</ul>';fl.innerHTML=h;
+}).catch(function(){document.getElementById('fl').innerHTML='<p class="empty" style="color:red">Load failed</p>';});
+}
+document.getElementById('uf').onsubmit=function(e){
+e.preventDefault();
+var fi=document.getElementById('fi');if(!fi.files.length)return;
+var fd=new FormData();fd.append('file',fi.files[0]);
+var x=new XMLHttpRequest();x.open('POST','/upload?path='+encodeURIComponent(P));
+var bw=document.getElementById('bw'),pb=document.getElementById('pb'),um=document.getElementById('um');
+bw.style.display='block';um.className='msg';um.style.display='none';
+x.upload.onprogress=function(e){if(e.lengthComputable)pb.style.width=Math.round(e.loaded/e.total*100)+'%';};
+x.onload=function(){bw.style.display='none';pb.style.width='0';
+if(x.status==200){um.className='msg ok';um.textContent='\u2713 '+fi.files[0].name;um.style.display='block';load();fi.value='';}
+else{um.className='msg err';um.textContent='Error: '+x.responseText;um.style.display='block';}};
+x.onerror=function(){bw.style.display='none';um.className='msg err';um.textContent='Upload failed';um.style.display='block';};
+x.send(fd);};
+load();
+</script>
+</body></html>

@@ -3,12 +3,14 @@
 #include <ArduinoJson.h>
 #include <Logging.h>
 
+#include <cstring>
+
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_wifi.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/aBER0724/crosspoint-reader-cjk/releases/latest";
 
 /* This is buffer and size holder to keep upcoming data from latestReleaseUrl */
 char* local_buf;
@@ -21,6 +23,57 @@ int output_len;
  */
 extern "C" {
 extern esp_err_t esp_crt_bundle_attach(void* conf);
+}
+
+bool isTraditionalChineseBuild() { return strstr(CROSSPOINT_VERSION, "-tc") != nullptr; }
+
+bool parseSemver3(const char* version, int* major, int* minor, int* patch) {
+  if (!version || !major || !minor || !patch) {
+    return false;
+  }
+  const char* p = version;
+  if (*p == 'v' || *p == 'V') {
+    p++;
+  }
+  return sscanf(p, "%d.%d.%d", major, minor, patch) == 3;
+}
+
+bool isFirmwareAssetName(const char* name) {
+  if (!name) {
+    return false;
+  }
+  const size_t len = strlen(name);
+  if (len < 13) {  // "firmware-x.bin"
+    return false;
+  }
+  return strncmp(name, "firmware", 8) == 0 && strcmp(name + len - 4, ".bin") == 0;
+}
+
+bool pickAssetByName(const JsonArrayConst& assets, const char* targetName, std::string* outUrl, size_t* outSize) {
+  for (const JsonVariantConst asset : assets) {
+    const char* name = asset["name"] | "";
+    if (strcmp(name, targetName) == 0) {
+      *outUrl = asset["browser_download_url"] | "";
+      *outSize = asset["size"] | static_cast<size_t>(0);
+      return !outUrl->empty() && *outSize > 0;
+    }
+  }
+  return false;
+}
+
+bool pickAnyFirmwareAsset(const JsonArrayConst& assets, std::string* outUrl, size_t* outSize) {
+  for (const JsonVariantConst asset : assets) {
+    const char* name = asset["name"] | "";
+    if (!isFirmwareAssetName(name)) {
+      continue;
+    }
+    *outUrl = asset["browser_download_url"] | "";
+    *outSize = asset["size"] | static_cast<size_t>(0);
+    if (!outUrl->empty() && *outSize > 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
@@ -64,6 +117,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   JsonDocument filter;
   esp_err_t esp_err;
   JsonDocument doc;
+  updateAvailable = false;
+  latestVersion.clear();
+  otaUrl.clear();
+  otaSize = 0;
+  processedSize = 0;
+  totalSize = 0;
 
   esp_http_client_config_t client_config = {
       .url = latestReleaseUrl,
@@ -136,22 +195,21 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 
   latestVersion = doc["tag_name"].as<std::string>();
 
-  for (int i = 0; i < doc["assets"].size(); i++) {
-    if (doc["assets"][i]["name"] == "firmware.bin") {
-      otaUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
-      otaSize = doc["assets"][i]["size"].as<size_t>();
-      totalSize = otaSize;
-      updateAvailable = true;
-      break;
-    }
-  }
+  const JsonArrayConst assets = doc["assets"].as<JsonArrayConst>();
+  const char* preferredAssetName = isTraditionalChineseBuild() ? "firmware-tc.bin" : "firmware-sc.bin";
 
-  if (!updateAvailable) {
-    LOG_ERR("OTA", "No firmware.bin asset found");
+  if (!pickAssetByName(assets, preferredAssetName, &otaUrl, &otaSize) &&
+      !pickAssetByName(assets, "firmware.bin", &otaUrl, &otaSize) &&
+      !pickAnyFirmwareAsset(assets, &otaUrl, &otaSize)) {
+    LOG_ERR("OTA", "No firmware asset found (preferred: %s)", preferredAssetName);
     return NO_UPDATE;
   }
 
-  LOG_DBG("OTA", "Found update: %s", latestVersion.c_str());
+  totalSize = otaSize;
+  updateAvailable = true;
+
+  LOG_DBG("OTA", "Found update: %s, asset=%s, size=%u", latestVersion.c_str(), otaUrl.c_str(),
+          static_cast<unsigned int>(otaSize));
   return OK;
 }
 
@@ -166,8 +224,11 @@ bool OtaUpdater::isUpdateNewer() const {
   const auto currentVersion = CROSSPOINT_VERSION;
 
   // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+  if (!parseSemver3(latestVersion.c_str(), &latestMajor, &latestMinor, &latestPatch) ||
+      !parseSemver3(currentVersion, &currentMajor, &currentMinor, &currentPatch)) {
+    LOG_ERR("OTA", "Version parse failed: current=%s, latest=%s", currentVersion, latestVersion.c_str());
+    return false;
+  }
 
   /*
    * Compare major versions.

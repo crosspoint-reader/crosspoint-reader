@@ -7,6 +7,12 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 
+void PageLine::collectCodepoints(std::vector<uint32_t>& out, size_t max) const {
+  if (block) {
+    block->collectCodepoints(out, max);
+  }
+}
+
 bool PageLine::serialize(FsFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
@@ -51,6 +57,18 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   for (auto& element : elements) {
     element->render(renderer, fontId, xOffset, yOffset);
+  }
+}
+
+void Page::collectCodepoints(std::vector<uint32_t>& out, size_t max) const {
+  if (max == 0 || out.size() >= max) {
+    return;
+  }
+  for (const auto& element : elements) {
+    element->collectCodepoints(out, max);
+    if (out.size() >= max) {
+      return;
+    }
   }
 }
 

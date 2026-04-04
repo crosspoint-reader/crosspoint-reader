@@ -1,5 +1,7 @@
 #include "SettingsActivity.h"
 
+#include <cstdio>
+#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 
@@ -8,9 +10,11 @@
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
+#include "FontSelectActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
+#include "LineSpacingSelectionActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
 #include "SdCardFontGlobals.h"
@@ -56,6 +60,7 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_DOWNLOAD_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  displaySettings.push_back(SettingInfo::Action(StrId::STR_EXT_UI_FONT, SettingAction::SelectUiFont));
 
   // Update currentSettings pointer and count for the active category
   switch (selectedCategoryIndex) {
@@ -69,6 +74,7 @@ void SettingsActivity::rebuildSettingsLists() {
       currentSettings = &controlsSettings;
       break;
     case 3:
+    default:
       currentSettings = &systemSettings;
       break;
   }
@@ -78,11 +84,22 @@ void SettingsActivity::rebuildSettingsLists() {
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
-  // Reset selection to first category
-  selectedCategoryIndex = 0;
-  selectedSettingIndex = 0;
+  // Initialize selection based on caller hint.
+  if (initialCategoryIndex < 0 || initialCategoryIndex >= categoryCount) {
+    selectedCategoryIndex = 0;
+  } else {
+    selectedCategoryIndex = initialCategoryIndex;
+  }
 
   rebuildSettingsLists();
+
+  if (initialSettingIndex < 0) {
+    selectedSettingIndex = 0;
+  } else if (initialSettingIndex > settingsCount) {
+    selectedSettingIndex = settingsCount;
+  } else {
+    selectedSettingIndex = initialSettingIndex;
+  }
 
   // Trigger first update
   requestUpdate();
@@ -176,9 +193,32 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+    // Apply invert images change immediately
+    if (setting.nameId == StrId::STR_INVERT_IMAGES) {
+      renderer.setInvertImagesInDarkMode(SETTINGS.invertImages);
+    }
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    // Font Size: skip when external font is selected (fixed bitmap size)
+    if (setting.nameId == StrId::STR_FONT_SIZE && FontMgr.getSelectedIndex() >= 0) {
+      return;
+    }
+    // Font Family: open FontSelectActivity (combined built-in + external fonts)
+    if (setting.nameId == StrId::STR_FONT_FAMILY) {
+      exitActivity();
+      enterNewActivity(new FontSelectActivity(renderer, mappedInput, FontSelectActivity::SelectMode::Reader,
+                                              [this] {
+                                                exitActivity();
+                                                requestUpdate();
+                                              }));
+      return;
+    }
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+
+    // Apply dark mode change immediately (renderer needs explicit notification)
+    if (setting.nameId == StrId::STR_COLOR_MODE) {
+      renderer.setDarkMode(SETTINGS.colorMode == CrossPointSettings::COLOR_MODE::DARK_MODE);
+    }
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
     if (setting.nameId == StrId::STR_FONT_FAMILY) {
       // Launch font selection submenu instead of cycling
@@ -195,6 +235,24 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t cur = setting.valueGetter();
     setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+    // Line spacing uses a slider activity (0.8x-2.5x) for finer control.
+    if (setting.nameId == StrId::STR_LINE_SPACING) {
+      exitActivity();
+      enterNewActivity(new LineSpacingSelectionActivity(
+          renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
+          [this](const int selectedValue) {
+            SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
+            SETTINGS.saveToFile();
+            exitActivity();
+            requestUpdate();
+          },
+          [this] {
+            exitActivity();
+            requestUpdate();
+          }));
+      return;
+    }
+
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
       SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
@@ -236,11 +294,16 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::SelectUiFont:
+        enterSubActivity(
+            new FontSelectActivity(renderer, mappedInput, FontSelectActivity::SelectMode::UI, onComplete));
+        break;
       case SettingAction::None:
         // Do nothing
         break;
     }
-    return;  // Results will be handled in the result handler, so we can return early here
+    // Results will be handled in the result handler; also avoids concurrent SD card access.
+    return;
   } else {
     return;
   }
@@ -255,24 +318,29 @@ void SettingsActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const bool isPortraitInverted = renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterHeight = isPortraitInverted ? (metrics.buttonHintsHeight + metrics.verticalSpacing) : 0;
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding + hintGutterHeight, pageWidth, metrics.headerHeight},
+                 tr(STR_SETTINGS_TITLE), CROSSPOINT_VERSION);
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
   for (int i = 0; i < categoryCount; i++) {
     tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
   }
-  GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
+  GUI.drawTabBar(renderer,
+                 Rect{0, metrics.topPadding + hintGutterHeight + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                 tabs, selectedSettingIndex == 0);
 
   const auto& settings = *currentSettings;
   GUI.drawList(
       renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
+      Rect{0, metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing,
+           pageWidth,
+           pageHeight -
+               (metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.tabBarHeight +
+                metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
       settingsCount, selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {
@@ -282,8 +350,18 @@ void SettingsActivity::render(RenderLock&&) {
           const bool value = SETTINGS.*(setting.valuePtr);
           valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-          const uint8_t value = SETTINGS.*(setting.valuePtr);
-          valueText = I18N.get(setting.enumValues[value]);
+          // Font Family: show external font name when selected
+          if (setting.nameId == StrId::STR_FONT_FAMILY && FontMgr.getSelectedIndex() >= 0) {
+            const FontInfo* info = FontMgr.getFontInfo(FontMgr.getSelectedIndex());
+            valueText = info ? info->name : tr(STR_EXTERNAL_FONT);
+          // Font Size: show actual pixel size when external font is active
+          } else if (setting.nameId == StrId::STR_FONT_SIZE && FontMgr.getSelectedIndex() >= 0) {
+            const FontInfo* info = FontMgr.getFontInfo(FontMgr.getSelectedIndex());
+            valueText = info ? (std::to_string(info->size) + "pt") : "—";
+          } else {
+            const uint8_t value = SETTINGS.*(setting.valuePtr);
+            valueText = I18N.get(setting.enumValues[value]);
+          }
         } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
           const uint8_t value = setting.valueGetter();
           if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
@@ -292,7 +370,22 @@ void SettingsActivity::render(RenderLock&&) {
             valueText = I18N.get(setting.enumValues[value]);
           }
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          if (setting.nameId == StrId::STR_LINE_SPACING) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.2fx", static_cast<float>(SETTINGS.*(setting.valuePtr)) / 100.0f);
+            valueText = buf;
+          } else {
+            valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          }
+        } else if (setting.type == SettingType::ACTION && setting.nameId == StrId::STR_EXT_UI_FONT) {
+          // Show current UI font name or "Built-in"
+          if (FontMgr.isUiFontEnabled()) {
+            const int idx = FontMgr.getUiSelectedIndex();
+            const FontInfo* info = FontMgr.getFontInfo(idx);
+            valueText = info ? info->name : tr(STR_EXTERNAL_FONT);
+          } else {
+            valueText = tr(STR_BUILTIN_DISABLED);
+          }
         }
         return valueText;
       },

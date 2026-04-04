@@ -2,6 +2,7 @@
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
+#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
@@ -19,6 +20,7 @@
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "OrientationHelper.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
@@ -268,6 +270,15 @@ void setup() {
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+
+  // CJK: External font system
+  renderer.setReaderFallbackFontId(SETTINGS.getBuiltInReaderFontId());
+  FontManager::getInstance().scanFonts();
+  FontManager::getInstance().loadSettings();
+
+  // CJK: Dark mode
+  renderer.setDarkMode(SETTINGS.colorMode == CrossPointSettings::COLOR_MODE::DARK_MODE);
+  renderer.setInvertImagesInDarkMode(SETTINGS.invertImages);
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {

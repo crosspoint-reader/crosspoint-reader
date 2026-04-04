@@ -1,5 +1,6 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <Arduino.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -19,6 +20,9 @@ constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
+// Minimum free heap to continue parsing. Below this, stop gracefully
+// to prevent abort() from failed allocations (no C++ exceptions on ESP32).
+constexpr size_t MIN_FREE_HEAP_FOR_PARSING = 20 * 1024;  // 20KB
 
 const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
@@ -39,6 +43,78 @@ const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
+
+// Check if a Unicode codepoint is an invisible/zero-width character that should be skipped
+bool isInvisibleCodepoint(const uint32_t cp) {
+  if (cp == 0xFEFF) return true;                  // BOM / Zero Width No-Break Space
+  if (cp == 0x200B) return true;                  // Zero Width Space
+  if (cp == 0x200C) return true;                  // Zero Width Non-Joiner
+  if (cp == 0x200D) return true;                  // Zero Width Joiner
+  if (cp == 0x200E) return true;                  // Left-to-Right Mark
+  if (cp == 0x200F) return true;                  // Right-to-Left Mark
+  if (cp == 0x2060) return true;                  // Word Joiner
+  if (cp == 0x00AD) return true;                  // Soft Hyphen
+  if (cp == 0x034F) return true;                  // Combining Grapheme Joiner
+  if (cp == 0x061C) return true;                  // Arabic Letter Mark
+  if (cp >= 0x2066 && cp <= 0x2069) return true;  // Directional isolates
+  if (cp >= 0x202A && cp <= 0x202E) return true;  // Directional formatting
+  return false;
+}
+
+// Check if a Unicode codepoint is CJK (Chinese/Japanese/Korean)
+// CJK characters should be treated as individual "words" for line breaking
+bool isCjkCodepointForSplit(const uint32_t cp) {
+  // CJK Unified Ideographs: U+4E00 - U+9FFF
+  if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
+  // CJK Unified Ideographs Extension A: U+3400 - U+4DBF
+  if (cp >= 0x3400 && cp <= 0x4DBF) return true;
+  // CJK Punctuation: U+3000 - U+303F
+  if (cp >= 0x3000 && cp <= 0x303F) return true;
+  // Hiragana: U+3040 - U+309F
+  if (cp >= 0x3040 && cp <= 0x309F) return true;
+  // Katakana: U+30A0 - U+30FF
+  if (cp >= 0x30A0 && cp <= 0x30FF) return true;
+  // CJK Compatibility Ideographs: U+F900 - U+FAFF
+  if (cp >= 0xF900 && cp <= 0xFAFF) return true;
+  // Fullwidth forms: U+FF00 - U+FFEF
+  if (cp >= 0xFF00 && cp <= 0xFFEF) return true;
+  return false;
+}
+
+// Get UTF-8 byte length for a lead byte
+int getUtf8ByteLength(unsigned char leadByte) {
+  if ((leadByte & 0x80) == 0) return 1;     // ASCII: 0xxxxxxx
+  if ((leadByte & 0xE0) == 0xC0) return 2;  // 2-byte: 110xxxxx
+  if ((leadByte & 0xF0) == 0xE0) return 3;  // 3-byte: 1110xxxx
+  if ((leadByte & 0xF8) == 0xF0) return 4;  // 4-byte: 11110xxx
+  return 1;                                 // Invalid, treat as single byte
+}
+
+// Decode UTF-8 codepoint from bytes
+uint32_t decodeUtf8Codepoint(const char* s, int len) {
+  if (len <= 0) return 0;
+  unsigned char b0 = static_cast<unsigned char>(s[0]);
+
+  if ((b0 & 0x80) == 0) {
+    return b0;  // ASCII
+  }
+  if (len >= 2 && (b0 & 0xE0) == 0xC0) {
+    unsigned char b1 = static_cast<unsigned char>(s[1]);
+    return ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+  }
+  if (len >= 3 && (b0 & 0xF0) == 0xE0) {
+    unsigned char b1 = static_cast<unsigned char>(s[1]);
+    unsigned char b2 = static_cast<unsigned char>(s[2]);
+    return ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+  }
+  if (len >= 4 && (b0 & 0xF8) == 0xF0) {
+    unsigned char b1 = static_cast<unsigned char>(s[1]);
+    unsigned char b2 = static_cast<unsigned char>(s[2]);
+    unsigned char b3 = static_cast<unsigned char>(s[3]);
+    return ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+  }
+  return b0;  // Fallback
+}
 
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
@@ -149,7 +225,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
     pendingAnchorId.clear();
   }
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
+  currentTextBlock.reset(new ParsedText(hyphenationEnabled, blockStyle, firstLineIndent));
   wordsExtractedInBlock = 0;
 }
 
@@ -707,15 +783,17 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     }
   }
 
-  for (int i = 0; i < len; i++) {
+  int i = 0;
+  while (i < len) {
+    // Check for whitespace (ASCII only)
     if (isWhitespace(s[i])) {
-      // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
+      // Flush any buffered content as a word
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }
-      // Whitespace is a real word boundary — reset continuation state
+      // Whitespace is a real word boundary -- reset continuation state
       self->nextWordContinues = false;
-      // Skip the whitespace char
+      i++;
       continue;
     }
 
@@ -725,18 +803,6 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     // Both are rendered as a visible space but must never allow a line break around them.
     // We split the no-break space into its own word token and link the surrounding words
     // with continuation flags so the layout engine treats them as an indivisible group.
-    //
-    // Example: "200&#xA0;Quadratkilometer" or "200&#x202F;Quadratkilometer"
-    //   Input bytes:  "200\xC2\xA0Quadratkilometer"  (or 0xE2 0x80 0xAF for U+202F)
-    //   Tokens produced:
-    //     [0] "200"               continues=false
-    //     [1] " "                 continues=true   (attaches to "200", no gap)
-    //     [2] "Quadratkilometer"  continues=true   (attaches to " ", no gap)
-    //
-    //   The continuation flags prevent the line-breaker from inserting a line break
-    //   between "200" and "Quadratkilometer". However, "Quadratkilometer" is now a
-    //   standalone word for hyphenation purposes, so Liang patterns can produce
-    //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
     if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -754,7 +820,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
-    // U+202F (narrow no-break space) — identical logic to U+00A0 above.
+    // U+202F (narrow no-break space) -- identical logic to U+00A0 above.
     if (static_cast<uint8_t>(s[i]) == 0xE2 && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0x80 &&
         static_cast<uint8_t>(s[i + 2]) == 0xAF) {
       if (self->partWordBufferIndex > 0) {
@@ -773,53 +839,69 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
-    // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
-    const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
-    const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
-    const XML_Char FEFF_BYTE_3 = static_cast<XML_Char>(0xBF);
-
-    if (s[i] == FEFF_BYTE_1) {
-      // Check if the next two bytes complete the 3-byte sequence
-      if ((i + 2 < len) && (s[i + 1] == FEFF_BYTE_2) && (s[i + 2] == FEFF_BYTE_3)) {
-        // Sequence 0xEF 0xBB 0xBF found!
-        i += 2;    // Skip the next two bytes
-        continue;  // Move to the next iteration
+    // Determine UTF-8 character length
+    const unsigned char b0 = static_cast<unsigned char>(s[i]);
+    const int charLen = getUtf8ByteLength(b0);
+    if (i + charLen > len) {
+      // Incomplete UTF-8 sequence at end, just add the byte
+      if (self->partWordBufferIndex < MAX_WORD_SIZE) {
+        self->partWordBuffer[self->partWordBufferIndex++] = s[i];
       }
+      i++;
+      continue;
     }
 
-    // If we're about to run out of space, then cut the word off and start a new one.
-    // For CJK text (no spaces), this is the primary word-breaking mechanism.
-    // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
-    // otherwise the trailing bytes become orphaned continuation bytes that the
-    // decoder can't interpret.
-    if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      int safeLen = utf8SafeTruncateBuffer(self->partWordBuffer, self->partWordBufferIndex);
+    // Decode the codepoint to check if it's CJK or invisible
+    const uint32_t cp = decodeUtf8Codepoint(&s[i], charLen);
 
-      if (safeLen < self->partWordBufferIndex && safeLen > 0) {
-        // Incomplete UTF-8 sequence at the end — save it before flushing
-        int overflow = self->partWordBufferIndex - safeLen;
-        char saved[4];
-        for (int j = 0; j < overflow; j++) {
-          saved[j] = self->partWordBuffer[safeLen + j];
-        }
-        self->partWordBufferIndex = safeLen;
-        self->flushPartWordBuffer();
-        for (int j = 0; j < overflow; j++) {
-          self->partWordBuffer[j] = saved[j];
-        }
-        self->partWordBufferIndex = overflow;
-      } else {
-        self->flushPartWordBuffer();
-      }
+    // Skip invisible/zero-width Unicode characters that fonts can't render
+    if (isInvisibleCodepoint(cp)) {
+      i += charLen;
+      continue;
     }
 
-    self->partWordBuffer[self->partWordBufferIndex++] = s[i];
+    // Treat ideographic space (U+3000) as whitespace - flush buffer and skip
+    if (cp == 0x3000) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+      self->nextWordContinues = false;
+      i += charLen;
+      continue;
+    }
+
+    if (isCjkCodepointForSplit(cp)) {
+      // CJK character: flush any buffered content first
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+
+      // Add this CJK character as its own "word"
+      char cjkWord[5] = {0};  // Max 4 bytes for UTF-8 + null terminator
+      for (int j = 0; j < charLen && j < 4; j++) {
+        cjkWord[j] = s[i + j];
+      }
+      self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR);
+      i += charLen;
+      continue;
+    }
+
+    // Non-CJK character: buffer it
+    // If we're about to run out of space, flush the buffer first
+    if (self->partWordBufferIndex + charLen >= MAX_WORD_SIZE) {
+      self->flushPartWordBuffer();
+    }
+
+    // Add all bytes of this character to the buffer
+    for (int j = 0; j < charLen; j++) {
+      self->partWordBuffer[self->partWordBufferIndex++] = s[i + j];
+    }
+    i += charLen;
   }
 
   // If we have > 750 words buffered up, perform the layout and consume out all but the last line
   // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
   // memory.
-  // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
@@ -1041,6 +1123,17 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
               XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
+      XML_SetCharacterDataHandler(parser, nullptr);
+      XML_ParserFree(parser);
+      file.close();
+      return false;
+    }
+
+    // Periodic heap check during parsing to prevent abort() from failed allocations
+    if (!done && ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_PARSING) {
+      LOG_ERR("EHP", "Low heap during parsing (%u bytes), stopping gracefully", ESP.getFreeHeap());
+      XML_StopParser(parser, XML_FALSE);
+      XML_SetElementHandler(parser, nullptr, nullptr);
       XML_SetCharacterDataHandler(parser, nullptr);
       XML_ParserFree(parser);
       file.close();

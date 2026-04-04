@@ -5,6 +5,7 @@
 class MappedInputManager {
  public:
   enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward };
+  enum class Orientation { Portrait, PortraitInverted, LandscapeClockwise, LandscapeCounterClockwise };
 
   struct Labels {
     const char* btn1;
@@ -26,8 +27,15 @@ class MappedInputManager {
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
 
+  // Set the effective screen orientation (called by OrientationHelper when
+  // switching activities). Button mapping uses this instead of the raw
+  // SETTINGS.orientation so that UI pages in Portrait mode are not affected
+  // by a landscape setting.
+  void setEffectiveOrientation(Orientation o) { effectiveOrientation = o; }
+
  private:
   HalGPIO& gpio;
+  Orientation effectiveOrientation = Orientation::Portrait;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
 };
