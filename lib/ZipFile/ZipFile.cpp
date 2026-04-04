@@ -312,6 +312,9 @@ bool ZipFile::getInflatedFileSize(const char* filename, size_t* size) {
   return true;
 }
 
+/// This function iterates through the epub zip file to get the uncompressed size for every chapter in the spine (targets array)
+/// Sizes is filled via memory accesses at target->index positions, sizes therefore need to contain at least max(target->index) entries
+/// It is safe to call this function multiple times with the same sizes array and different targets
 int ZipFile::fillUncompressedSizes(std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes) {
   if (targets.empty()) {
     return 0;
@@ -337,9 +340,10 @@ int ZipFile::fillUncompressedSizes(std::deque<SizeTarget>& targets, std::deque<u
   char itemName[256];
 
   while (file.available()) {
+    // Check magic
     file.read(&sig, 4);
     if (sig != 0x02014b50) break;
-
+    // Read header
     file.seekCur(6);
     uint16_t method;
     file.read(&method, 2);
@@ -354,7 +358,8 @@ int ZipFile::fillUncompressedSizes(std::deque<SizeTarget>& targets, std::deque<u
     file.seekCur(8);
     uint32_t localHeaderOffset;
     file.read(&localHeaderOffset, 4);
-
+    // If the name is to EPUB spec, read the name, hash it and compare it with hashes in targets
+    // If match is found, insert decompressed size in appropriate sizes array position
     if (nameLen < 256) {
       file.read(itemName, nameLen);
       itemName[nameLen] = '\0';
