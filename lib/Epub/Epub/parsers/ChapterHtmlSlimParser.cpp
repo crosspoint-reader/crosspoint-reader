@@ -636,11 +636,31 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
     self->currentCssStyle = cssStyle;
-    auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
-    headerBlockStyle.textAlignDefined = true;
-    if (self->embeddedStyle && cssStyle.hasTextAlign()) {
-      headerBlockStyle.alignment = cssStyle.textAlign;
+    auto headerBlockStyle = BlockStyle::fromCssStyle(
+        cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
+
+    // Heading level (h1→1, h2→2, etc.)
+    const int level = name[1] - '0';
+
+    // Per-heading fontId override
+    if (level >= 1 && level <= 6) {
+      headerBlockStyle.fontId = self->headingFontIds[level - 1];
     }
+
+    // Default margins when CSS does not specify them
+    const int bodyLineHeight = self->renderer.getLineHeight(self->fontId);
+    if (!cssStyle.hasMarginTop()) {
+      headerBlockStyle.marginTop = static_cast<int16_t>(bodyLineHeight * 3 / 4);
+    }
+    if (!cssStyle.hasMarginBottom()) {
+      headerBlockStyle.marginBottom = static_cast<int16_t>(bodyLineHeight / 4);
+    }
+
+    // Separator line below h1/h2
+    if (level <= 2) {
+      headerBlockStyle.drawSeparatorBelow = true;
+    }
+
     self->startNewTextBlock(headerBlockStyle);
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
@@ -657,6 +677,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
+        self->currentTextBlock->getBlockStyle().isListItem = true;
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
       }
     }
@@ -1165,7 +1186,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  const int effectiveFontId = (line->getBlockStyle().fontId != 0) ? line->getBlockStyle().fontId : fontId;
+  const int lineHeight = renderer.getLineHeight(effectiveFontId) * lineCompression;
 
   if (!currentPage) {
     currentPage.reset(new Page());
@@ -1221,8 +1243,9 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
+  const int layoutFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
   currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, effectiveWidth,
+      renderer, layoutFontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
 
   // Fallback: transfer any remaining pending footnotes to current page.
@@ -1244,7 +1267,8 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   // Extra paragraph spacing if enabled (default behavior)
+  // List items get reduced spacing to avoid excessive gaps in TOC pages etc.
   if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
+    currentPageNextY += blockStyle.isListItem ? (lineHeight / 6) : (lineHeight / 2);
   }
 }

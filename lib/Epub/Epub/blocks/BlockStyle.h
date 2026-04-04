@@ -23,6 +23,13 @@ struct BlockStyle {
   bool textIndentDefined = false;  // true if text-indent was explicitly set in CSS
   bool textAlignDefined = false;   // true if text-align was explicitly set in CSS
 
+  // Per-block font override (0 = use page-level fontId)
+  int fontId = 0;
+  // Draw a full-width horizontal separator line below this block (used for h1/h2)
+  bool drawSeparatorBelow = false;
+  // True for <li> elements — reduces extraParagraphSpacing
+  bool isListItem = false;
+
   // Combined horizontal insets (margin + padding)
   [[nodiscard]] int16_t leftInset() const { return marginLeft + paddingLeft; }
   [[nodiscard]] int16_t rightInset() const { return marginRight + paddingRight; }
@@ -58,6 +65,11 @@ struct BlockStyle {
       combinedBlockStyle.alignment = alignment;
       combinedBlockStyle.textAlignDefined = textAlignDefined;
     }
+    // Font override: child takes precedence
+    combinedBlockStyle.fontId = (child.fontId != 0) ? child.fontId : fontId;
+    combinedBlockStyle.drawSeparatorBelow = child.drawSeparatorBelow || drawSeparatorBelow;
+    combinedBlockStyle.isListItem = child.isListItem;
+
     return combinedBlockStyle;
   }
 

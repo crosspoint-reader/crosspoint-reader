@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -344,6 +345,73 @@ int CrossPointSettings::getBuiltInReaderFontId() const {
       }
     case OPENDYSLEXIC:
       switch (fontSize) {
+        case SMALL:
+          return OPENDYSLEXIC_8_FONT_ID;
+        case MEDIUM:
+        default:
+          return OPENDYSLEXIC_10_FONT_ID;
+        case LARGE:
+          return OPENDYSLEXIC_12_FONT_ID;
+        case EXTRA_LARGE:
+          return OPENDYSLEXIC_14_FONT_ID;
+      }
+  }
+}
+
+int CrossPointSettings::getHeadingFontId(const int headingLevel) const {
+  // h3-h6: same size as body
+  uint8_t sizeStep = 0;
+  if (headingLevel == 1) {
+    sizeStep = 2;
+  } else if (headingLevel == 2) {
+    sizeStep = 1;
+  }
+  if (sizeStep == 0) return 0;  // 0 = use page-level fontId
+
+  const uint8_t headingSize = std::min<uint8_t>(fontSize + sizeStep, EXTRA_LARGE);
+  if (headingSize == fontSize) return 0;  // already at max size
+
+  // SD card font path
+  if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
+    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, headingSize);
+    if (id != 0) return id;
+  }
+
+  // CJK external font: fixed size, no differentiation possible
+  const FontManager& fm = FontManager::getInstance();
+  if (fm.isExternalFontEnabled()) {
+    return 0;
+  }
+
+  // Built-in font: resolve with heading size
+  switch (fontFamily) {
+    case BOOKERLY:
+    default:
+      switch (headingSize) {
+        case SMALL:
+          return BOOKERLY_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return BOOKERLY_14_FONT_ID;
+        case LARGE:
+          return BOOKERLY_16_FONT_ID;
+        case EXTRA_LARGE:
+          return BOOKERLY_18_FONT_ID;
+      }
+    case NOTOSANS:
+      switch (headingSize) {
+        case SMALL:
+          return NOTOSANS_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return NOTOSANS_14_FONT_ID;
+        case LARGE:
+          return NOTOSANS_16_FONT_ID;
+        case EXTRA_LARGE:
+          return NOTOSANS_18_FONT_ID;
+      }
+    case OPENDYSLEXIC:
+      switch (headingSize) {
         case SMALL:
           return OPENDYSLEXIC_8_FONT_ID;
         case MEDIUM:
