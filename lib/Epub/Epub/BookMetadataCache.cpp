@@ -72,7 +72,7 @@ bool BookMetadataCache::beginTocPass() {
         LOG_DBG("BMC", "Trying fast index in %d batches with %d elements", this->tocBatches, this->tocElementsPerBatch);
       }
     }
-    
+
     spineHrefIndex.resize(this->tocElementsPerBatch);
     spineFile.seek(0);
     LOG_DBG("BMC", "Using fast index for %d spine items", spineCount);
@@ -85,7 +85,7 @@ bool BookMetadataCache::beginTocPass() {
   return true;
 }
 
-/// Continues the Toc parsing by generating SpineHref entries 
+/// Continues the Toc parsing by generating SpineHref entries
 /// Returns true when new entries have been processed
 bool BookMetadataCache::continueTocPass() {
   // We are done with the ToC pass if we don't use spineHrefIndices or we have finished our batches
@@ -94,7 +94,8 @@ bool BookMetadataCache::continueTocPass() {
     spineFile.seek(0);
     return false;
   }
-  // Reset toc file position since we parse the entire toc file every time and want to write entries at the same position every time
+  // Reset toc file position since we parse the entire toc file every time and want to write entries at the same
+  // position every time
   tocFile.seek(0);
   // Also reset tocCount so we don't count entries multiple times
   tocCount = 0;
@@ -104,8 +105,9 @@ bool BookMetadataCache::continueTocPass() {
 
   uint16_t batchStartIndex = this->tocCurrentBatch * this->tocElementsPerBatch;
   // Indices end at next batch border or end of spine
-  uint16_t batchEndIndex = std::min(static_cast<uint16_t>((this->tocCurrentBatch + 1) * this->tocElementsPerBatch), spineCount);
- 
+  uint16_t batchEndIndex =
+      std::min(static_cast<uint16_t>((this->tocCurrentBatch + 1) * this->tocElementsPerBatch), spineCount);
+
   for (int i = batchStartIndex; i < batchEndIndex; i++) {
     auto entry = readSpineEntry(spineFile);
     SpineHrefIndexEntry idx;
@@ -118,7 +120,7 @@ bool BookMetadataCache::continueTocPass() {
             [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
               return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
             });
-  
+
   // We got new data => return true
   return true;
 }

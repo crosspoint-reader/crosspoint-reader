@@ -133,9 +133,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
     // Sort item index for binary search if we have enough items
     if (self->itemIndex.size() >= LARGE_SPINE_THRESHOLD) {
-      std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-        return a.idHash < b.idHash;
-      });
+      std::sort(self->itemIndex.begin(), self->itemIndex.end(),
+                [](const ItemIndexEntry& a, const ItemIndexEntry& b) { return a.idHash < b.idHash; });
       self->useItemIndex = true;
       LOG_DBG("COF", "Using fast index for %zu manifest items", self->itemIndex.size());
     }
@@ -251,11 +250,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             uint32_t targetHash = fnvHash(idref);
             uint16_t targetLen = static_cast<uint16_t>(idref.size());
 
-            auto it = std::lower_bound(self->itemIndex.begin(), self->itemIndex.end(),
-                                       ItemIndexEntry{targetHash, 0},
-                                       [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-                                         return a.idHash < b.idHash;
-                                       });
+            auto it =
+                std::lower_bound(self->itemIndex.begin(), self->itemIndex.end(), ItemIndexEntry{targetHash, 0},
+                                 [](const ItemIndexEntry& a, const ItemIndexEntry& b) { return a.idHash < b.idHash; });
 
             // Check for match (may need to check a few due to hash collisions)
             while (it != self->itemIndex.end() && it->idHash == targetHash) {

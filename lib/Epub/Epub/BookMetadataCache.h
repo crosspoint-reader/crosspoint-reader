@@ -3,8 +3,8 @@
 #include <HalStorage.h>
 
 #include <algorithm>
-#include <string>
 #include <deque>
+#include <string>
 
 class BookMetadataCache {
  public:
