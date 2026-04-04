@@ -187,40 +187,69 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
   if (spineCount >= LARGE_SPINE_THRESHOLD) {
     LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
+    uint16_t batches = 1;
+    uint16_t elementsPerBatch = spineCount;
     {
-      uint32_t required_mem_spine = sizeof(spineSizes[0]) * spineCount;
-      uint32_t required_mem_sizes = sizeof(ZipFile::SizeTarget) * spineCount;
+      uint16_t overestimatedSpineCount = spineCount + spineCount / 4;
+      // Approximate required memory
+      uint32_t approxSpineSizesMem = sizeof(spineSizes[0]) * overestimatedSpineCount;
+      uint32_t approxTargetsMem = sizeof(ZipFile::SizeTarget) * overestimatedSpineCount;
+      uint32_t maxAvailableMem = ESP.getFreeHeap();
+
       // While not perfectly accurate due to min allocation sizes etc, its at least a metric
-      uint32_t max_available_mem = ESP.getFreeHeap(); 
-      if (required_mem_sizes + required_mem_spine > max_available_mem) {
-        LOG_ERR("BMC", "Low memory situation detected for %d spine items: %d (%d for spines, %d for sizes) required for %d available. This may be fatal", spineCount, required_mem_sizes + required_mem_spine, required_mem_spine, required_mem_sizes, max_available_mem);
+      if (approxSpineSizesMem + approxTargetsMem > maxAvailableMem) {
+        LOG_ERR("BMC",
+                "Low memory situation detected for %d spine items: %d bytes (%d for spines, %d for sizes) required for "
+                "%d available. This may be fatal",
+                spineCount, approxSpineSizesMem + approxTargetsMem, approxSpineSizesMem, approxTargetsMem,
+                maxAvailableMem);
+        uint32_t memAfterSizes = maxAvailableMem - approxSpineSizesMem;
+        batches = (approxTargetsMem + memAfterSizes - 1) / memAfterSizes;
+        elementsPerBatch = (spineCount + batches - 1) / batches;
+        LOG_DBG("BMC", "Trying processing in %d batches with %d elements", batches, elementsPerBatch);
       }
     }
-
     // Resize spineSizes early to run into OOM earlier
     spineSizes.resize(spineCount, 0);
+
     // Followed by targets
-    std::deque<ZipFile::SizeTarget> targets(spineCount);
-
+    std::deque<ZipFile::SizeTarget> targets(elements_per_batch);
+    // Go to start of spine file
     spineFile.seek(0);
-    for (int i = 0; i < spineCount; i++) {
-      auto entry = readSpineEntry(spineFile);
-      std::string path = FsHelpers::normalisePath(entry.href);
 
-      ZipFile::SizeTarget t;
-      t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
-      t.len = static_cast<uint16_t>(path.size());
-      t.index = static_cast<uint16_t>(i);
-      targets[i] = t;
+    uint16_t total_matched = 0;
+    // Run main loop
+    for (uint16_t b = 0; b < batches; b++) {
+      // Indices start at last batch border
+      uint16_t batchStartIndex = b * elementsPerBatch;
+      // Indices end at next batch border or end of spine
+      uint16_t batchEndIndex = std::min(static_cast<uint16_t>((b + 1) * elementsPerBatch), spineCount);
+      // I have decided not to clear the targets array at this point
+      // Either we reallocate the array every batch or we just keep some old entries in the final batch
+      // ZipFile::fillUncompressedSizes is able to deal with these old entries anyways
+      for (int i = batchStartIndex; i < batchEndIndex; i++) {
+        // Read a spine entry
+        auto entry = readSpineEntry(spineFile);
+        std::string path = FsHelpers::normalisePath(entry.href);
+
+        ZipFile::SizeTarget t;
+        t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
+        t.len = static_cast<uint16_t>(path.size());
+        t.index = static_cast<uint16_t>(i);
+        // Insert at appropriate position in targets array
+        targets[i % elementsPerBatch] = t;
+      }
+      // Sort the targets array to speed up ZipFile::fillUncompressedSizes
+      std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+        return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+      });
+
+      // Partially fill the spineSizes array
+      total_matched += zip.fillUncompressedSizes(targets, spineSizes);
+      LOG_DBG("BMC", "Batch lookup matched %d/%d spine items after batch %d", total_matched, spineCount, b);
     }
 
-    std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
-      return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
-    });
-
-    int matched = zip.fillUncompressedSizes(targets, spineSizes);
-    LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
-
+    // Finally: clear targets array
     targets.clear();
     targets.shrink_to_fit();
 
