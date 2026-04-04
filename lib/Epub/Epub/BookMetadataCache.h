@@ -65,7 +65,7 @@ class BookMetadataCache {
   bool useSpineHrefIndex = false;
   uint16_t tocBatches;
   uint16_t tocElementsPerBatch;
-  uint16_t tocCurrentBatch = 0;
+  uint16_t tocCurrentBatch = -1;
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a 64-bit hash function
@@ -79,7 +79,7 @@ class BookMetadataCache {
   }
 
   uint32_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
-  uint32_t writeTocEntry(FsFile& file, const TocEntry& entry, bool overwrite) const;
+  uint32_t writeTocEntry(FsFile& file, const TocEntry& entry, const bool overwrite) const;
   SpineEntry readSpineEntry(FsFile& file) const;
   TocEntry readTocEntry(FsFile& file) const;
 

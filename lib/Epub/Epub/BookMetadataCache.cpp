@@ -89,13 +89,18 @@ bool BookMetadataCache::beginTocPass() {
 /// Returns true when new entries have been processed
 bool BookMetadataCache::continueTocPass() {
   // We are done with the ToC pass if we don't use spineHrefIndices or we have finished our batches
-  if (!useSpineHrefIndex || this->tocCurrentBatch == this->tocBatches) {
+  if (!useSpineHrefIndex || this->tocCurrentBatch == this->tocBatches - 1) {
     // If we're done we reset the spine seek position
     spineFile.seek(0);
     return false;
   }
-  // Reset toc file position since we parse the entire toc file every time and want to write entries at any position
+  // Reset toc file position since we parse the entire toc file every time and want to write entries at the same position every time
   tocFile.seek(0);
+  // Also reset tocCount so we don't count entries multiple times
+  tocCount = 0;
+
+  // Increment -1 initialized batch number
+  this->tocCurrentBatch++;
 
   uint16_t batchStartIndex = this->tocCurrentBatch * this->tocElementsPerBatch;
   // Indices end at next batch border or end of spine
@@ -114,8 +119,6 @@ bool BookMetadataCache::continueTocPass() {
               return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
             });
   
-  // Increment batch number
-  this->tocCurrentBatch++;
   // We got new data => return true
   return true;
 }
@@ -456,7 +459,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 
   const TocEntry entry(title, href, anchor, level, spineIndex);
   // Only overwrite existing entries if we are not in the first batch (or not batch processing at all)
-  writeTocEntry(tocFile, entry, this->tocCurrentBatch == 0);
+  writeTocEntry(tocFile, entry, this->tocCurrentBatch == 0 || this->tocCurrentBatch == -1);
   tocCount++;
 }
 
