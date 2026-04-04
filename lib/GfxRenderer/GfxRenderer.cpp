@@ -1444,7 +1444,11 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   }
 
   const EpdGlyph* spaceGlyph = fontMap.at(effectiveFontId).getGlyph(' ', style);
-  return spaceGlyph ? fp4::toPixel(spaceGlyph->advanceX) : 0;  // snap 12.4 fixed-point to nearest pixel
+  if (!spaceGlyph) return 0;
+  int adv = fp4::toPixel(spaceGlyph->advanceX);
+  const uint16_t scale = getSdCardFontScale(effectiveFontId);
+  if (scale != 256) adv = (adv * scale + 128) >> 8;
+  return adv;
 }
 
 int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
@@ -1454,7 +1458,12 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   // so we return just the space advance without kerning.
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    return fp4::toPixel(sdIt->second->getAdvance(' ', static_cast<uint8_t>(style)));
+    const int32_t advFP = sdIt->second->getAdvance(' ', static_cast<uint8_t>(style));
+    const uint16_t scale = getSdCardFontScale(fontId);
+    if (scale != 256) {
+      return fp4::toPixel(static_cast<int32_t>(static_cast<int64_t>(advFP) * scale / 256));
+    }
+    return fp4::toPixel(advFP);
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -1474,7 +1483,10 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const int kernFP = fontIt->second.getKerning(leftCp, rightCp, style);  // 4.4 fixed-point
-  return fp4::toPixel(kernFP);                                           // snap 4.4 fixed-point to nearest pixel
+  int kern = fp4::toPixel(kernFP);
+  const uint16_t scale = getSdCardFontScale(fontId);
+  if (scale != 256) kern = (kern * static_cast<int>(scale) + 128) >> 8;
+  return kern;
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
@@ -1487,6 +1499,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     const uint8_t styleIdx = static_cast<uint8_t>(style);
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
       widthFP += sdIt->second->getAdvance(cp, styleIdx);
+    }
+    const uint16_t scale = getSdCardFontScale(fontId);
+    if (scale != 256) {
+      return fp4::toPixel(static_cast<int32_t>(static_cast<int64_t>(widthFP) * scale / 256));
     }
     return fp4::toPixel(widthFP);
   }
@@ -2223,9 +2239,18 @@ void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBo
   }
 }
 
-// Check if fontId is a reader font (should use external Chinese font)
-// UI fonts (UI_10, UI_12, SMALL_FONT) should NOT use external font
-bool GfxRenderer::isReaderFont(const int fontId) {
+// Check if fontId is a reader font (should use external Chinese font or SD card font rendering path).
+// UI fonts (UI_10, UI_12, SMALL_FONT) should NOT use external font.
+bool GfxRenderer::isReaderFont(const int fontId) const {
+  // SD card fonts are always reader fonts — their IDs are computed via FNV-1a
+  // hash and can be positive or negative. Without this check, positive SD card
+  // font IDs fall through to the "UI font" branch in renderChar(), causing CJK
+  // characters to be drawn by CjkUiFont20 (fixed 20px) instead of the SD card
+  // font's own glyphs.
+  if (sdCardFonts_.count(fontId) > 0) {
+    return true;
+  }
+
   // First check if it's a UI font - UI fonts should NOT use external reader
   // font
   for (int i = 0; i < UI_FONT_COUNT; i++) {
