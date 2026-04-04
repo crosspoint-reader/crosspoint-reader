@@ -16,3 +16,21 @@
 #define UI_10_FONT_ID (-1246724383)
 #define UI_12_FONT_ID (-359249323)
 #define SMALL_FONT_ID (1073217904)
+
+// Font ID 0 is reserved as the "not found" sentinel.
+// Guard against any hash accidentally producing 0.
+static_assert(BOOKERLY_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(BOOKERLY_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(BOOKERLY_16_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(BOOKERLY_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_16_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_8_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");

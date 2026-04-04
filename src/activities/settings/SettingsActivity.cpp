@@ -7,10 +7,13 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "FontDownloadActivity.h"
+#include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OtaUpdateActivity.h"
+#include "SdCardFontGlobals.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -20,16 +23,13 @@
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
-void SettingsActivity::onEnter() {
-  Activity::onEnter();
-
-  // Build per-category vectors from the shared settings list
+void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   readerSettings.clear();
   controlsSettings.clear();
   systemSettings.clear();
 
-  for (const auto& setting : getSettingsList()) {
+  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
@@ -40,7 +40,6 @@ void SettingsActivity::onEnter() {
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
     }
-    // Web-only categories (KOReader Sync, OPDS Browser) are skipped for device UI
   }
 
   // Append device-only ACTION items
@@ -50,17 +49,40 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_DOWNLOAD_FONTS, SettingAction::DownloadFonts));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  // Insert "Download Fonts" right after the font family setting so users discover it naturally
+  readerSettings.insert(readerSettings.begin() + 1,
+                        SettingInfo::Action(StrId::STR_DOWNLOAD_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+
+  // Update currentSettings pointer and count for the active category
+  switch (selectedCategoryIndex) {
+    case 0:
+      currentSettings = &displaySettings;
+      break;
+    case 1:
+      currentSettings = &readerSettings;
+      break;
+    case 2:
+      currentSettings = &controlsSettings;
+      break;
+    case 3:
+      currentSettings = &systemSettings;
+      break;
+  }
+  settingsCount = static_cast<int>(currentSettings->size());
+}
+
+void SettingsActivity::onEnter() {
+  Activity::onEnter();
 
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
 
-  // Initialize with first category (Display)
-  currentSettings = &displaySettings;
-  settingsCount = static_cast<int>(displaySettings.size());
+  rebuildSettingsLists();
 
   // Trigger first update
   requestUpdate();
@@ -157,6 +179,21 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+  } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
+    if (setting.nameId == StrId::STR_FONT_FAMILY) {
+      // Launch font selection submenu instead of cycling
+      startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
+                             [this](const ActivityResult&) {
+                               SETTINGS.saveToFile();
+                               rebuildSettingsLists();
+                             });
+      return;
+    }
+    const uint8_t totalValues = setting.enumStringValues.empty()
+                                    ? static_cast<uint8_t>(setting.enumValues.size())
+                                    : static_cast<uint8_t>(setting.enumStringValues.size());
+    const uint8_t cur = setting.valueGetter();
+    setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -188,6 +225,13 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::DownloadFonts:
+        startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 rebuildSettingsLists();
+                               });
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
@@ -240,6 +284,13 @@ void SettingsActivity::render(RenderLock&&) {
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
           const uint8_t value = SETTINGS.*(setting.valuePtr);
           valueText = I18N.get(setting.enumValues[value]);
+        } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
+          const uint8_t value = setting.valueGetter();
+          if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
+            valueText = setting.enumStringValues[value];
+          } else if (value < setting.enumValues.size()) {
+            valueText = I18N.get(setting.enumValues[value]);
+          }
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(setting.valuePtr));
         }

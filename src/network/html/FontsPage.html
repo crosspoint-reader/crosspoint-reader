@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrossPoint Reader - Fonts</title>
+    <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+        --danger-color: #e74c3c;
+        --danger-hover: #c0392b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          color-scheme: dark;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: var(--bg);
+        color: var(--font-color);
+      }
+      h1 {
+        color: var(--title-color);
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+      }
+      h2 { color: var(--title-color); margin-top: 0; }
+      h3 { margin: 0 0 8px 0; }
+      .card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links {
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+      }
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .nav-links a.active {
+        background-color: var(--accent-color);
+        color: white;
+      }
+      .nav-links a:not(.active):hover {
+        background-color: var(--accent-hover-color);
+        color: white;
+      }
+      .family {
+        border-bottom: 1px solid var(--border-color);
+        padding: 12px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .family:last-child { border-bottom: none; }
+      .family-info { flex: 1; }
+      .family-meta { color: var(--label-color); font-size: 0.9em; }
+      .btn {
+        padding: 6px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+      }
+      .btn-danger {
+        background: var(--danger-color);
+        color: white;
+      }
+      .btn-danger:hover { background: var(--danger-hover); }
+      .btn-primary {
+        background: var(--accent-color);
+        color: white;
+      }
+      .btn-primary:hover { background: var(--accent-hover-color); }
+      .upload-form {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .upload-form input[type="text"] {
+        padding: 6px 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--bg);
+        color: var(--font-color);
+      }
+      .upload-form input[type="file"] { flex: 1; min-width: 200px; }
+      #status {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 4px;
+        display: none;
+      }
+      .status-ok { background: #d4edda; color: #155724; display: block !important; }
+      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
+      .empty { color: var(--label-color); text-align: center; padding: 20px; }
+    </style>
+  </head>
+  <body>
+    <h1>📚 CrossPoint Reader</h1>
+
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/files">File Manager</a>
+      <a href="/settings">Settings</a>
+      <a href="/fonts" class="active">Fonts</a>
+    </div>
+
+    <div class="card">
+      <h2>Installed Fonts</h2>
+      <div id="families"><p class="empty">Loading...</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Upload Font</h2>
+      <form class="upload-form" id="uploadForm">
+        <label>Family:
+          <input type="text" id="familyName" placeholder="e.g. Bookerly-SD" required pattern="[A-Za-z0-9_-]+" />
+        </label>
+        <input type="file" id="fontFile" accept=".cpfont" required />
+        <button type="submit" class="btn btn-primary">Upload</button>
+      </form>
+      <div id="status"></div>
+    </div>
+
+  <script>
+    function formatSize(bytes) {
+      if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+      return bytes + ' B';
+    }
+
+    async function loadFonts() {
+      try {
+        const res = await fetch('/api/fonts');
+        const data = await res.json();
+        const el = document.getElementById('families');
+        if (!data.families || data.families.length === 0) {
+          el.innerHTML = '<p class="empty">No fonts installed</p>';
+          return;
+        }
+        el.innerHTML = data.families.map(f => `
+          <div class="family">
+            <div class="family-info">
+              <h3>${f.name}</h3>
+              <span class="family-meta">
+                ${f.sizes.join(', ')}pt &middot;
+                ${f.files.map(fi => formatSize(fi.size)).join(' + ')}
+              </span>
+            </div>
+            <button class="btn btn-danger" onclick="deleteFamily('${f.name}')">Delete</button>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('families').innerHTML =
+          '<p class="empty">Failed to load font list</p>';
+      }
+    }
+
+    async function deleteFamily(name) {
+      if (!confirm('Delete font family "' + name + '"?')) return;
+      const res = await fetch('/api/fonts/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({family: name})
+      });
+      if (res.ok) loadFonts();
+      else alert('Delete failed');
+    }
+
+    // Auto-detect family name from filename
+    document.getElementById('fontFile').addEventListener('change', function() {
+      const name = this.files[0]?.name;
+      if (name && name.endsWith('.cpfont')) {
+        const parts = name.replace('.cpfont', '').split('_');
+        if (parts.length >= 2) {
+          parts.pop(); // remove size
+          document.getElementById('familyName').value = parts.join('_');
+        }
+      }
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const status = document.getElementById('status');
+      const family = document.getElementById('familyName').value;
+      const file = document.getElementById('fontFile').files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('family', family);
+      formData.append('file', file, file.name);
+
+      status.className = '';
+      status.style.display = 'block';
+      status.textContent = 'Uploading...';
+
+      try {
+        const res = await fetch('/api/fonts/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.ok) {
+          status.className = 'status-ok';
+          status.textContent = 'Upload successful!';
+          loadFonts();
+        } else {
+          status.className = 'status-err';
+          status.textContent = data.error || 'Upload failed';
+        }
+      } catch (err) {
+        status.className = 'status-err';
+        status.textContent = 'Upload error: ' + err.message;
+      }
+    });
+
+    loadFonts();
+  </script>
+  </body>
+</html>
