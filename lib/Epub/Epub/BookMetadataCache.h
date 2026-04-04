@@ -63,7 +63,9 @@ class BookMetadataCache {
   };
   std::deque<SpineHrefIndexEntry> spineHrefIndex;
   bool useSpineHrefIndex = false;
-
+  uint16_t tocBatches;
+  uint16_t tocElementsPerBatch;
+  uint16_t tocCurrentBatch = 0;
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a 64-bit hash function
@@ -77,7 +79,7 @@ class BookMetadataCache {
   }
 
   uint32_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
-  uint32_t writeTocEntry(FsFile& file, const TocEntry& entry) const;
+  uint32_t writeTocEntry(FsFile& file, const TocEntry& entry, bool overwrite) const;
   SpineEntry readSpineEntry(FsFile& file) const;
   TocEntry readTocEntry(FsFile& file) const;
 
@@ -94,6 +96,7 @@ class BookMetadataCache {
   void createSpineEntry(const std::string& href);
   bool endContentOpfPass();
   bool beginTocPass();
+  bool continueTocPass();
   void createTocEntry(const std::string& title, const std::string& href, const std::string& anchor, uint8_t level);
   bool endTocPass();
   bool endWrite();

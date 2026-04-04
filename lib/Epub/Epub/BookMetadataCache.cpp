@@ -49,29 +49,74 @@ bool BookMetadataCache::beginTocPass() {
   }
 
   if (spineCount >= LARGE_SPINE_THRESHOLD) {
+    useSpineHrefIndex = true;
     spineHrefIndex.clear();
     spineHrefIndex.shrink_to_fit();
-    spineHrefIndex.resize(spineCount);
-    spineFile.seek(0);
-    for (int i = 0; i < spineCount; i++) {
-      auto entry = readSpineEntry(spineFile);
-      SpineHrefIndexEntry idx;
-      idx.hrefHash = fnvHash64(entry.href);
-      idx.hrefLen = static_cast<uint16_t>(entry.href.size());
-      idx.spineIndex = static_cast<int16_t>(i);
-      spineHrefIndex[i] = idx;
+    this->tocBatches = 1;
+    this->tocElementsPerBatch = spineCount;
+    {
+      uint16_t overestimatedSpineCount = spineCount + spineCount / 4;
+      // Approximate required memory
+      uint32_t approxSpineHrefMem = sizeof(SpineHrefIndexEntry) * overestimatedSpineCount;
+      uint32_t maxAvailableMem = ESP.getFreeHeap();
+
+      // While not perfectly accurate due to min allocation sizes etc, its at least a metric
+      if (approxSpineHrefMem > maxAvailableMem) {
+        LOG_ERR("BMC",
+                "Low memory situation detected for %d spine items: %d bytes required for "
+                "%d available. This may be fatal",
+                spineCount, approxSpineHrefMem, maxAvailableMem);
+
+        this->tocBatches = (approxSpineHrefMem + maxAvailableMem - 1) / maxAvailableMem;
+        this->tocElementsPerBatch = (spineCount + this->tocBatches - 1) / this->tocBatches;
+        LOG_DBG("BMC", "Trying fast index in %d batches with %d elements", this->tocBatches, this->tocElementsPerBatch);
+      }
     }
-    std::sort(spineHrefIndex.begin(), spineHrefIndex.end(),
-              [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
-                return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
-              });
+    
+    spineHrefIndex.resize(this->tocElementsPerBatch);
     spineFile.seek(0);
-    useSpineHrefIndex = true;
     LOG_DBG("BMC", "Using fast index for %d spine items", spineCount);
+    // Initial tocPass
+    this->continueTocPass();
   } else {
     useSpineHrefIndex = false;
   }
 
+  return true;
+}
+
+/// Continues the Toc parsing by generating SpineHref entries 
+/// Returns true when new entries have been processed
+bool BookMetadataCache::continueTocPass() {
+  // We are done with the ToC pass if we don't use spineHrefIndices or we have finished our batches
+  if (!useSpineHrefIndex || this->tocCurrentBatch == this->tocBatches) {
+    // If we're done we reset the spine seek position
+    spineFile.seek(0);
+    return false;
+  }
+  // Reset toc file position since we parse the entire toc file every time and want to write entries at any position
+  tocFile.seek(0);
+
+  uint16_t batchStartIndex = this->tocCurrentBatch * this->tocElementsPerBatch;
+  // Indices end at next batch border or end of spine
+  uint16_t batchEndIndex = std::min(static_cast<uint16_t>((this->tocCurrentBatch + 1) * this->tocElementsPerBatch), spineCount);
+ 
+  for (int i = batchStartIndex; i < batchEndIndex; i++) {
+    auto entry = readSpineEntry(spineFile);
+    SpineHrefIndexEntry idx;
+    idx.hrefHash = fnvHash64(entry.href);
+    idx.hrefLen = static_cast<uint16_t>(entry.href.size());
+    idx.spineIndex = static_cast<int16_t>(i);
+    spineHrefIndex[i % this->tocElementsPerBatch] = idx;
+  }
+  std::sort(spineHrefIndex.begin(), spineHrefIndex.end(),
+            [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
+              return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
+            });
+  
+  // Increment batch number
+  this->tocCurrentBatch++;
+  // We got new data => return true
   return true;
 }
 
@@ -213,7 +258,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     spineSizes.resize(spineCount, 0);
 
     // Followed by targets
-    std::deque<ZipFile::SizeTarget> targets(elements_per_batch);
+    std::deque<ZipFile::SizeTarget> targets(elementsPerBatch);
     // Go to start of spine file
     spineFile.seek(0);
 
@@ -302,7 +347,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   tocFile.seek(0);
   for (int i = 0; i < tocCount; i++) {
     auto tocEntry = readTocEntry(tocFile);
-    writeTocEntry(bookFile, tocEntry);
+    writeTocEntry(bookFile, tocEntry, true);
   }
 
   bookFile.close();
@@ -333,8 +378,20 @@ uint32_t BookMetadataCache::writeSpineEntry(FsFile& file, const SpineEntry& entr
   return pos;
 }
 
-uint32_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry) const {
+uint32_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry, const bool overwrite) const {
   const uint32_t pos = file.position();
+  // Are we here to overwrite existing entries?
+  if (!overwrite) {
+    // If not, read the existing entry and check if the spineIndex is "invalid"
+    // If so this entry might or might not be a dud and we can overwrite it anyways
+    // Else skip
+    TocEntry existingEntry = readTocEntry(file);
+    if (existingEntry.spineIndex != -1) {
+      return pos;
+    }
+    // Reset seek position and overwrite
+    file.seek(pos);
+  }
   serialization::writeString(file, entry.title);
   serialization::writeString(file, entry.href);
   serialization::writeString(file, entry.anchor);
@@ -398,7 +455,8 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   }
 
   const TocEntry entry(title, href, anchor, level, spineIndex);
-  writeTocEntry(tocFile, entry);
+  // Only overwrite existing entries if we are not in the first batch (or not batch processing at all)
+  writeTocEntry(tocFile, entry, this->tocCurrentBatch == 0);
   tocCount++;
 }
 

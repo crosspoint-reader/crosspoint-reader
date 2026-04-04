@@ -396,29 +396,36 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   // TOC Pass - try EPUB 3 nav first, fall back to NCX
   const uint32_t tocStart = millis();
+
   if (!bookMetadataCache->beginTocPass()) {
     LOG_ERR("EBP", "Could not begin writing toc pass");
     return false;
   }
 
-  bool tocParsed = false;
+  // Do a ToC pass
+  // A toc pass reads as much of the spine as fits into memory and then reads the entire ToC
+  // An initial spine read is performed in beginTocPass
+  // After every pass the tocFile position is reset so the next pass may write in positions missed by the first
+  do {
+    bool tocParsed = false;
+    // Try EPUB 3 nav document first (preferred)
+    if (!tocNavItem.empty()) {
+      LOG_DBG("EBP", "Attempting to parse EPUB 3 nav document");
+      tocParsed = parseTocNavFile();
+    }
 
-  // Try EPUB 3 nav document first (preferred)
-  if (!tocNavItem.empty()) {
-    LOG_DBG("EBP", "Attempting to parse EPUB 3 nav document");
-    tocParsed = parseTocNavFile();
-  }
+    // Fall back to NCX if nav parsing failed or wasn't available
+    if (!tocParsed && !tocNcxItem.empty()) {
+      LOG_DBG("EBP", "Falling back to NCX TOC");
+      tocParsed = parseTocNcxFile();
+    }
 
-  // Fall back to NCX if nav parsing failed or wasn't available
-  if (!tocParsed && !tocNcxItem.empty()) {
-    LOG_DBG("EBP", "Falling back to NCX TOC");
-    tocParsed = parseTocNcxFile();
-  }
-
-  if (!tocParsed) {
-    LOG_ERR("EBP", "Warning: Could not parse any TOC format");
-    // Continue anyway - book will work without TOC
-  }
+    if (!tocParsed) {
+      LOG_ERR("EBP", "Warning: Could not parse any TOC format");
+      break;
+      // Continue anyway - book will work without TOC
+    }
+  } while (bookMetadataCache->continueTocPass());
 
   if (!bookMetadataCache->endTocPass()) {
     LOG_ERR("EBP", "Could not end writing toc pass");
