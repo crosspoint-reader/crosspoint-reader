@@ -139,7 +139,42 @@ std::string normalizeXPath(const std::string& input) {
     out.pop_back();
   }
 
-  return out;
+  // KOReader sometimes omits the [1] predicate for elements that are the sole
+  // child of their type (e.g. /body/div/p[55] instead of /body/div[1]/p[55]).
+  // In XPath, an unqualified name is equivalent to name[1] when there is only
+  // one sibling of that type, but our parser always generates explicit indices.
+  // Insert [1] for any bare element path segment so comparisons match.
+  std::string normalized;
+  normalized.reserve(out.size() + 16);
+  size_t i = 0;
+  while (i < out.size()) {
+    if (out[i] == '/') {
+      normalized.push_back('/');
+      i++;
+      // Copy element name (letters, digits, hyphens, underscores, dots)
+      const size_t nameStart = i;
+      while (i < out.size() && out[i] != '/' && out[i] != '[') {
+        i++;
+      }
+      normalized.append(out, nameStart, i - nameStart);
+      if (i < out.size() && out[i] == '[') {
+        // Already has a predicate – copy it verbatim
+        while (i < out.size() && out[i] != ']') {
+          normalized.push_back(out[i++]);
+        }
+        if (i < out.size()) {
+          normalized.push_back(out[i++]);  // ']'
+        }
+      } else if (i - nameStart > 0) {
+        // Bare element name – insert implicit [1]
+        normalized.append("[1]");
+      }
+    } else {
+      normalized.push_back(out[i++]);
+    }
+  }
+
+  return normalized;
 }
 
 std::string removeIndices(const std::string& xpath) {
