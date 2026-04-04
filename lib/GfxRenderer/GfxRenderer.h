@@ -53,6 +53,7 @@ class GfxRenderer {
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
   // fontCacheManager_ below.
   mutable std::map<int, SdCardFont*> sdCardFonts_;
+  std::map<int, uint16_t> sdCardFontScales_;  // fontId → 8.8固定小数点スケール (256=1.0x)
 
   // Mutable because drawText() is const but needs to delegate scan-mode
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
@@ -78,8 +79,8 @@ class GfxRenderer {
                            int advanceOverride = -1, int minX = 0) const;
   // Render CJK character using built-in UI font (from PROGMEM)
   void renderBuiltinCjkGlyph(uint32_t cp, int* x, int y, bool pixelState) const;
-  // Check if fontId is a reader font (should use external Chinese font)
-  static bool isReaderFont(int fontId);
+  // Check if fontId is a reader font (should use external Chinese font or SD card font rendering path)
+  bool isReaderFont(int fontId) const;
   // Get effective font ID, handling fallback for external reader font IDs
   int getEffectiveFontId(int fontId) const;
   void freeBwBufferChunks();
@@ -112,6 +113,12 @@ class GfxRenderer {
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
   void unregisterSdCardFont(int fontId) { sdCardFonts_.erase(fontId); }
   void clearSdCardFonts() { sdCardFonts_.clear(); }
+  void registerSdCardFontScale(int fontId, uint16_t scale) { sdCardFontScales_[fontId] = scale; }
+  void clearSdCardFontScales() { sdCardFontScales_.clear(); }
+  uint16_t getSdCardFontScale(int fontId) const {
+    auto it = sdCardFontScales_.find(fontId);
+    return (it != sdCardFontScales_.end()) ? it->second : 256;
+  }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
