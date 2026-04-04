@@ -13,6 +13,9 @@ class SdCardFont;
 
 #include "Bitmap.h"
 
+// Forward declaration for external font support
+class ExternalFont;
+
 // Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
 // 0 = transparent, 1-16 = gray levels (white to black)
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
@@ -24,9 +27,11 @@ class GfxRenderer {
   // Logical screen orientation from the perspective of callers
   enum Orientation {
     Portrait,                  // 480x800 logical coordinates (current default)
-    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap top/bottom)
+    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap
+                               // top/bottom)
     PortraitInverted,          // 480x800 logical coordinates, inverted
-    LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
+    LandscapeCounterClockwise  // 800x480 logical coordinates, native panel
+                               // orientation
   };
 
  private:
@@ -54,8 +59,29 @@ class GfxRenderer {
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
 
-  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
+  // Dark mode: true = black background, false = white background
+  bool darkMode = false;
+  // Whether to invert images in dark mode (user preference)
+  bool invertImagesInDarkMode = false;
+  // Extra spacing (in pixels) for ASCII letters/digits when using external reader font.
+  int8_t asciiLetterSpacing = 0;
+  int8_t asciiDigitSpacing = 0;
+  // Extra spacing (in pixels) for CJK characters when using external reader font.
+  int8_t cjkSpacing = 0;
+  // Built-in reader font to fall back to when external glyphs are missing.
+  int readerFallbackFontId = 0;
+  // Skip dark mode inversion for images (cover art should not be inverted)
+  mutable bool skipDarkModeForImages = false;
+  void renderChar(int fontId, const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
+  void renderExternalGlyph(const uint8_t* bitmap, ExternalFont* font, int* x, int y, bool pixelState,
+                           int advanceOverride = -1, int minX = 0) const;
+  // Render CJK character using built-in UI font (from PROGMEM)
+  void renderBuiltinCjkGlyph(uint32_t cp, int* x, int y, bool pixelState) const;
+  // Check if fontId is a reader font (should use external Chinese font)
+  static bool isReaderFont(int fontId);
+  // Get effective font ID, handling fallback for external reader font IDs
+  int getEffectiveFontId(int fontId) const;
   void freeBwBufferChunks();
   template <Color color>
   void drawPixelDither(int x, int y) const;
@@ -71,6 +97,10 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_RIGHT = 3;
   static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
+  static constexpr int BUTTON_HINT_WIDTH = 106;
+  static constexpr int BUTTON_HINT_HEIGHT = 40;
+  static constexpr int BUTTON_HINT_BOTTOM_INSET = 40;
+  static constexpr int BUTTON_HINT_TEXT_OFFSET = 7;
 
   // Setup
   void begin();  // must be called right after display.begin()
@@ -88,12 +118,33 @@ class GfxRenderer {
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   void ensureSdCardFontReady(int fontId, const char* utf8Text) const;
 
-  // Orientation control (affects logical width/height and coordinate transforms)
+  // Orientation control (affects logical width/height and coordinate
+  // transforms)
   void setOrientation(const Orientation o) { orientation = o; }
   Orientation getOrientation() const { return orientation; }
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+
+  // Dark mode control
+  void setDarkMode(bool darkMode) { this->darkMode = darkMode; }
+  bool isDarkMode() const { return darkMode; }
+  // When true, images are inverted along with text in dark mode.
+  // When false (default), image rendering skips dark mode inversion.
+  void setInvertImagesInDarkMode(bool invert) { invertImagesInDarkMode = invert; }
+  bool shouldInvertImagesInDarkMode() const { return invertImagesInDarkMode; }
+  // Called by image rendering code to skip dark mode pixel inversion.
+  // Must be paired: beginImageRender() ... endImageRender().
+  void beginImageRender() const { skipDarkModeForImages = true; }
+  void endImageRender() const { skipDarkModeForImages = false; }
+  void setAsciiLetterSpacing(int8_t spacing) { asciiLetterSpacing = spacing; }
+  void setAsciiDigitSpacing(int8_t spacing) { asciiDigitSpacing = spacing; }
+  void setCjkSpacing(int8_t spacing) { cjkSpacing = spacing; }
+  int8_t getAsciiLetterSpacing() const { return asciiLetterSpacing; }
+  int8_t getAsciiDigitSpacing() const { return asciiDigitSpacing; }
+  int8_t getCjkSpacing() const { return cjkSpacing; }
+  void setReaderFallbackFontId(int fontId) { readerFallbackFontId = fontId; }
+  int getReaderFallbackFontId() const { return readerFallbackFontId; }
 
   // Screen ops
   int getScreenWidth() const;
@@ -151,6 +202,10 @@ class GfxRenderer {
   std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
                                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
+  // UI Components
+  void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
+  void drawSideButtonHints(int fontId, const char* topBtn, const char* bottomBtn) const;
+
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
@@ -161,7 +216,7 @@ class GfxRenderer {
   RenderMode getRenderMode() const { return renderMode; }
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
-  void displayGrayBuffer() const;
+  void displayGrayBuffer(bool turnOffScreen = false, bool darkMode = false) const;
   bool storeBwBuffer();    // Returns true if buffer was stored successfully
   void restoreBwBuffer();  // Restore and free the stored buffer
   void cleanupGrayscaleWithFrameBuffer() const;

@@ -95,6 +95,64 @@
         background-color: var(--accent-hover-color);
         color: white;
       }
+      /* WiFi Setup styles */
+      .btn {
+        display: inline-block;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.95em;
+        color: white;
+        transition: background-color 0.2s;
+      }
+      .btn-primary { background-color: #3498db; }
+      .btn-primary:hover { background-color: #2980b9; }
+      .btn-success { background-color: #27ae60; }
+      .btn-success:hover { background-color: #219a52; }
+      .btn-danger { background-color: #e74c3c; font-size: 0.8em; padding: 5px 10px; }
+      .btn-danger:hover { background-color: #c0392b; }
+      .btn:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+      .wifi-network {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        margin: 4px 0;
+        border: 2px solid #eee;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .wifi-network:hover { border-color: #3498db; background-color: #f0f7ff; }
+      .wifi-network.selected { border-color: #3498db; background-color: #e8f4fd; }
+      .wifi-network .ssid { font-weight: 600; flex: 1; }
+      .wifi-network .meta { color: #7f8c8d; font-size: 0.85em; display: flex; gap: 8px; align-items: center; }
+      .signal-bars { display: inline-flex; gap: 1px; align-items: flex-end; height: 14px; }
+      .signal-bars .bar { width: 3px; background-color: #bdc3c7; border-radius: 1px; }
+      .signal-bars .bar.active { background-color: #27ae60; }
+      .wifi-form { margin-top: 15px; }
+      .wifi-form .form-group { margin-bottom: 12px; }
+      .wifi-form label { display: block; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; font-size: 0.9em; }
+      .wifi-form input[type="text"],
+      .wifi-form input[type="password"] {
+        width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px;
+        font-size: 1em; box-sizing: border-box; transition: border-color 0.2s;
+      }
+      .wifi-form input:focus { border-color: #3498db; outline: none; }
+      .wifi-form .btn-row { display: flex; gap: 10px; margin-top: 15px; }
+      .saved-item {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 12px; border-bottom: 1px solid #eee;
+      }
+      .saved-item:last-child { border-bottom: none; }
+      .msg { padding: 10px; border-radius: 4px; margin-top: 10px; display: none; }
+      .msg-ok { background-color: #d5f5e3; color: #1e8449; }
+      .msg-err { background-color: #fadbd8; color: #c0392b; }
+      .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd;
+        border-top-color: #3498db; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      #wifi-section { display: none; }
     </style>
   </head>
   <body>
@@ -127,30 +185,235 @@
       </div>
     </div>
 
+    <!-- WiFi Setup Section (only visible in AP mode) -->
+    <div id="wifi-section">
+      <div class="card">
+        <h2>📶 WiFi Setup</h2>
+        <p style="color:#7f8c8d;margin-top:0">Scan for nearby WiFi networks and save credentials. The device will use these when connecting via "Join Network" mode.</p>
+
+        <button class="btn btn-primary" id="scan-btn" onclick="scanWifi()">Scan Networks</button>
+        <div id="scan-status"></div>
+        <div id="network-list"></div>
+
+        <div class="wifi-form" id="wifi-form" style="display:none">
+          <div class="form-group">
+            <label for="ssid-input">Network Name (SSID)</label>
+            <input type="text" id="ssid-input" placeholder="Enter or select a network" />
+          </div>
+          <div class="form-group">
+            <label for="pass-input">Password</label>
+            <input type="password" id="pass-input" placeholder="Enter WiFi password" />
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-success" onclick="saveCredential()">Save</button>
+          </div>
+        </div>
+        <div id="save-msg" class="msg"></div>
+      </div>
+
+      <div class="card">
+        <h2>💾 Saved Networks</h2>
+        <div id="saved-list"><em style="color:#95a5a6">Loading...</em></div>
+      </div>
+    </div>
+
     <div class="card">
       <p style="text-align: center; color: #95a5a6; margin: 0">
-        CrossPoint E-Reader • Open Source
+        CrossPoint E-Reader &bull; Open Source
       </p>
     </div>
   <script>
+    let selectedSSID = '';
+
     async function fetchStatus() {
       try {
         const response = await fetch('/api/status');
-        if (!response.ok) {
-          throw new Error('Failed to fetch status: ' + response.status + ' ' + response.statusText);
-        }
+        if (!response.ok) throw new Error('Status fetch failed');
         const data = await response.json();
         document.getElementById('version').textContent = data.version || 'N/A';
         document.getElementById('ip-address').textContent = data.ip || 'N/A';
         document.getElementById('free-heap').textContent = data.freeHeap
-          ? data.freeHeap.toLocaleString() + ' bytes'
-          : 'N/A';
+          ? data.freeHeap.toLocaleString() + ' bytes' : 'N/A';
+
+        // Show WiFi setup section in AP mode
+        if (data.mode === 'AP') {
+          document.getElementById('wifi-section').style.display = 'block';
+          loadSavedNetworks();
+        }
       } catch (error) {
         console.error('Error fetching status:', error);
       }
     }
 
-    // Fetch status on page load
+    function signalBars(rssi) {
+      // Convert RSSI to 1-4 bars
+      let bars = 1;
+      if (rssi > -50) bars = 4;
+      else if (rssi > -65) bars = 3;
+      else if (rssi > -75) bars = 2;
+      const heights = [4, 7, 10, 14];
+      let html = '<span class="signal-bars">';
+      for (let i = 0; i < 4; i++) {
+        html += '<span class="bar' + (i < bars ? ' active' : '') + '" style="height:' + heights[i] + 'px"></span>';
+      }
+      return html + '</span>';
+    }
+
+    async function scanWifi() {
+      const btn = document.getElementById('scan-btn');
+      const status = document.getElementById('scan-status');
+      const list = document.getElementById('network-list');
+
+      btn.disabled = true;
+      btn.textContent = 'Scanning...';
+      status.innerHTML = '<span class="spinner"></span> Scanning for networks...';
+      list.innerHTML = '';
+
+      try {
+        const response = await fetch('/api/wifi/scan');
+        if (!response.ok) throw new Error('Scan failed');
+        const networks = await response.json();
+
+        if (networks.length === 0) {
+          status.textContent = 'No networks found. Try again.';
+          btn.disabled = false;
+          btn.textContent = 'Scan Networks';
+          return;
+        }
+
+        // Sort: saved first, then by signal strength
+        networks.sort(function(a, b) {
+          if (a.saved !== b.saved) return b.saved - a.saved;
+          return b.rssi - a.rssi;
+        });
+
+        status.textContent = networks.length + ' network(s) found:';
+        let html = '';
+        for (const net of networks) {
+          html += '<div class="wifi-network" onclick="selectNetwork(\'' + escapeHtml(net.ssid) + '\')">';
+          html += '<span class="ssid">' + escapeHtml(net.ssid) + '</span>';
+          html += '<span class="meta">';
+          if (net.saved) html += '<span style="color:#27ae60" title="Saved">&#10003;</span>';
+          if (net.encrypted) html += '🔒';
+          html += signalBars(net.rssi);
+          html += '</span></div>';
+        }
+        list.innerHTML = html;
+
+        // Show the form
+        document.getElementById('wifi-form').style.display = 'block';
+      } catch (error) {
+        status.textContent = 'Scan failed: ' + error.message;
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Scan Networks';
+    }
+
+    function selectNetwork(ssid) {
+      selectedSSID = ssid;
+      document.getElementById('ssid-input').value = ssid;
+      document.getElementById('pass-input').value = '';
+      document.getElementById('pass-input').focus();
+      document.getElementById('wifi-form').style.display = 'block';
+
+      // Highlight selected
+      document.querySelectorAll('.wifi-network').forEach(function(el) {
+        el.classList.toggle('selected', el.querySelector('.ssid').textContent === ssid);
+      });
+    }
+
+    async function saveCredential() {
+      const ssid = document.getElementById('ssid-input').value.trim();
+      const password = document.getElementById('pass-input').value;
+      const msg = document.getElementById('save-msg');
+
+      if (!ssid) {
+        showMsg(msg, 'Please enter a network name.', false);
+        return;
+      }
+      if (!password) {
+        showMsg(msg, 'Please enter a password.', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/wifi/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid: ssid, password: password })
+        });
+        const data = await response.json();
+        if (data.success) {
+          showMsg(msg, 'Saved! The device will use this credential when connecting via "Join Network".', true);
+          document.getElementById('ssid-input').value = '';
+          document.getElementById('pass-input').value = '';
+          loadSavedNetworks();
+        } else {
+          showMsg(msg, 'Failed: ' + (data.error || 'Unknown error'), false);
+        }
+      } catch (error) {
+        showMsg(msg, 'Error: ' + error.message, false);
+      }
+    }
+
+    async function loadSavedNetworks() {
+      const container = document.getElementById('saved-list');
+      try {
+        const response = await fetch('/api/wifi/list');
+        if (!response.ok) throw new Error('Failed to load');
+        const list = await response.json();
+
+        if (list.length === 0) {
+          container.innerHTML = '<em style="color:#95a5a6">No saved networks yet.</em>';
+          return;
+        }
+
+        let html = '';
+        for (const item of list) {
+          html += '<div class="saved-item">';
+          html += '<span>' + escapeHtml(item.ssid) + '</span>';
+          html += '<button class="btn btn-danger" onclick="deleteCredential(\'' + escapeHtml(item.ssid) + '\')">Delete</button>';
+          html += '</div>';
+        }
+        container.innerHTML = html;
+      } catch (error) {
+        container.innerHTML = '<em style="color:#e74c3c">Failed to load saved networks.</em>';
+      }
+    }
+
+    async function deleteCredential(ssid) {
+      if (!confirm('Delete saved credential for "' + ssid + '"?')) return;
+      try {
+        const response = await fetch('/api/wifi/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid: ssid })
+        });
+        const data = await response.json();
+        if (data.success) {
+          loadSavedNetworks();
+        } else {
+          alert('Failed to delete: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    function showMsg(el, text, ok) {
+      el.textContent = text;
+      el.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+      el.style.display = 'block';
+      setTimeout(function() { el.style.display = 'none'; }, 5000);
+    }
+
+    function escapeHtml(str) {
+      var d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
     window.onload = fetchStatus;
   </script>
   </body>

@@ -7,6 +7,8 @@ on:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -25,16 +27,79 @@ jobs:
       - name: Install PlatformIO Core
         run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
 
-      - name: Build CrossPoint
-        run: pio run -e gh_release
+      - name: Build CrossPoint (Simplified Chinese)
+        run: |
+          set -euo pipefail
+          pio run -e gh_release
+
+          sc_firmware="$(find .pio/build -maxdepth 3 -type f -path "*/firmware.bin" | grep "/gh_release/" | head -n1)"
+          sc_bootloader="$(find .pio/build -maxdepth 3 -type f -path "*/bootloader.bin" | grep "/gh_release/" | head -n1)"
+          sc_partitions="$(find .pio/build -maxdepth 3 -type f -path "*/partitions.bin" | grep "/gh_release/" | head -n1)"
+
+          if [ -z "${sc_firmware}" ] || [ -z "${sc_bootloader}" ] || [ -z "${sc_partitions}" ]; then
+            echo "Expected gh_release artifacts not found."
+            find .pio/build -maxdepth 4 -type f | sort || true
+            exit 1
+          fi
+
+          cp "${sc_firmware}" firmware-sc.bin
+          cp "${sc_bootloader}" bootloader.bin
+          cp "${sc_partitions}" partitions.bin
+
+      - name: Build CrossPoint (Traditional Chinese)
+        run: |
+          set -euo pipefail
+          pio run -e gh_release_tc
+
+          tc_firmware="$(find .pio/build -maxdepth 3 -type f -path "*/firmware.bin" | grep "/gh_release_tc/" | head -n1)"
+          if [ -z "${tc_firmware}" ]; then
+            echo "Expected gh_release_tc firmware not found."
+            find .pio/build -maxdepth 4 -type f | sort || true
+            exit 1
+          fi
+
+          cp "${tc_firmware}" firmware-tc.bin
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: CrossPoint-${{ github.ref_name }}
           path: |
-            .pio/build/gh_release/bootloader.bin
-            .pio/build/gh_release/firmware.bin
-            .pio/build/gh_release/firmware.elf
-            .pio/build/gh_release/firmware.map
-            .pio/build/gh_release/partitions.bin
+            bootloader.bin
+            partitions.bin
+            firmware-sc.bin
+            firmware-tc.bin
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: CrossPoint Reader CJK ${{ github.ref_name }}
+          files: |
+            firmware-sc.bin
+            firmware-tc.bin
+          body: |
+            ## CrossPoint Reader CJK ${{ github.ref_name }}
+
+            基于 [CrossPoint Reader](https://github.com/daveallie/crosspoint-reader) 的 CJK 适配版本。
+
+            ### 📦 固件版本
+
+            | 文件 | 语言 |
+            |------|------|
+            | `firmware-sc.bin` | 简体中文 / 日本語 / English |
+            | `firmware-tc.bin` | 繁體中文 / 日本語 / English |
+
+            ### 📥 安装方式
+
+            1. 使用 USB-C 连接设备到电脑
+            2. 访问 https://xteink-flasher-cjk.vercel.app/ 点击 **"Flash CrossPoint CJK firmware"** 一键刷入
+
+            > 也可下载下方固件文件后使用 "Flash firmware from file" 手动刷入
+
+            ### 📝 详细说明
+
+            - [README](https://github.com/aBER0724/crosspoint-reader-cjk)
+            - [完整变更日志](https://github.com/aBER0724/crosspoint-reader-cjk/commits/${{ github.ref_name }})
+          prerelease: ${{ contains(github.ref, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

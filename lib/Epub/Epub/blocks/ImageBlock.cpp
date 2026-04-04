@@ -28,6 +28,19 @@ std::string getCachePath(const std::string& imagePath) {
   return imagePath + ".pxc";
 }
 
+// RAII guard: conditionally set skipDarkModeForImages so drawPixel skips
+// dark-mode inversion for image pixels.  When active=false the guard is a no-op.
+struct ImageRenderScope {
+  GfxRenderer& r;
+  bool active;
+  ImageRenderScope(GfxRenderer& r, bool active) : r(r), active(active) {
+    if (active) r.beginImageRender();
+  }
+  ~ImageRenderScope() {
+    if (active) r.endImageRender();
+  }
+};
+
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight) {
   FsFile cacheFile;
@@ -107,6 +120,15 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     LOG_ERR("IMG", "Invalid render position: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
             screenHeight);
     return;
+  }
+
+  // When "Invert Images" is OFF (default), skip dark mode inversion for images
+  // and pre-fill with white so non-drawn pixels are visible on dark background.
+  // When ON, let dark mode invert image pixels normally (no guard, no pre-fill).
+  const bool skipInversion = renderer.isDarkMode() && !renderer.shouldInvertImagesInDarkMode();
+  ImageRenderScope guard(renderer, skipInversion);
+  if (skipInversion) {
+    renderer.fillRect(x, y, width, height, false);
   }
 
   // Try to render from cache first

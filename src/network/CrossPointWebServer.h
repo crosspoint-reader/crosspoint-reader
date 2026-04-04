@@ -11,10 +11,11 @@
 
 // Structure to hold file information
 struct FileInfo {
-  String name;
-  size_t size;
-  bool isEpub;
-  bool isDirectory;
+  static constexpr size_t NAME_BUFFER_SIZE = 500;
+  char name[NAME_BUFFER_SIZE] = {0};
+  size_t size = 0;
+  bool isEpub = false;
+  bool isDirectory = false;
 };
 
 class CrossPointWebServer {
@@ -84,7 +85,7 @@ class CrossPointWebServer {
   void abortWsUpload(const char* tag);
 
   // File scanning
-  void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
+  void scanFiles(const char* path, const std::function<void(const FileInfo&)>& callback) const;
   String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
 
@@ -128,4 +129,10 @@ class CrossPointWebServer {
 
     FontUploadState() { buffer.resize(BUFFER_SIZE); }
   } fontUpload;
+
+  // WiFi credential management (CJK)
+  void handleWifiScan() const;
+  void handleWifiSave() const;
+  void handleWifiList() const;
+  void handleWifiDelete() const;
 };

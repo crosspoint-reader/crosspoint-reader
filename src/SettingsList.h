@@ -117,14 +117,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                         StrId::STR_CAT_DISPLAY),
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                           StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_COLOR_MODE, &CrossPointSettings::colorMode, {StrId::STR_LIGHT, StrId::STR_DARK},
+                        "colorMode", StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_UI_ORIENTATION, &CrossPointSettings::uiOrientation,
+                        {StrId::STR_PORTRAIT, StrId::STR_INVERTED}, "uiOrientation", StrId::STR_CAT_DISPLAY),
 
       // --- Reader ---
       buildFontFamilySetting(registry),
       SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                         {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE}, "fontSize",
                         StrId::STR_CAT_READER),
-      SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
-                        {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE}, "lineSpacing", StrId::STR_CAT_READER),
+      SettingInfo::Value(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing, {80, 250, 1}, "lineSpacing",
+                         StrId::STR_CAT_READER),
       SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
                          StrId::STR_CAT_READER),
       SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
@@ -145,6 +149,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                         {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                         "imageRendering", StrId::STR_CAT_READER),
+      SettingInfo::Toggle(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndent, "firstLineIndent",
+                          StrId::STR_CAT_READER),
+      SettingInfo::Toggle(StrId::STR_INVERT_IMAGES, &CrossPointSettings::invertImages, "invertImages",
+                          StrId::STR_CAT_READER),
+
       // --- Controls ---
       SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV}, "sideButtonLayout", StrId::STR_CAT_CONTROLS),

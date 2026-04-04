@@ -18,17 +18,29 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
   GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
 
+  // Sleep screen has its own inversion logic (invertScreen), independent of
+  // the renderer's dark mode.  Disable dark mode here to prevent double
+  // inversion artifacts; restore afterwards in case the device doesn't sleep.
+  const bool wasDarkMode = renderer.isDarkMode();
+  renderer.setDarkMode(false);
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
-      return renderBlankSleepScreen();
+      renderBlankSleepScreen();
+      break;
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
-      return renderCustomSleepScreen();
+      renderCustomSleepScreen();
+      break;
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
-      return renderCoverSleepScreen();
+      renderCoverSleepScreen();
+      break;
     default:
-      return renderDefaultSleepScreen();
+      renderDefaultSleepScreen();
+      break;
   }
+
+  renderer.setDarkMode(wasDarkMode);
 }
 
 void SleepActivity::renderCustomSleepScreen() const {

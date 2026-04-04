@@ -25,7 +25,7 @@ usability over "swiss-army-knife" functionality.
 * **Library Management:** E.g. Simple, intuitive ways to organize and navigate a collection of books.
 * **Local Transfer:** E.g. Simple, "pull" based book loading via a basic web-server or public and widely-used standards.
 * **Language Support:** E.g. Support for multiple languages both in the reader and in the interfaces.
-* **Reference Tools:** E.g. Local dictionary lookup. Providing quick, offline definitions to enhance comprehension 
+* **Reference Tools:** E.g. Local dictionary lookup. Providing quick, offline definitions to enhance comprehension
   without breaking focus.
 
 ### Out-of-Scope

@@ -9,12 +9,17 @@
 #include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
+#include <map>
 
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
 #include "SdCardFontGlobals.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
+#include "WifiCredentialStore.h"
+#include <FontManager.h>
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -73,16 +78,129 @@ String normalizeWebPath(const String& inputPath) {
   return result;
 }
 
-bool isProtectedItemName(const String& name) {
-  if (name.startsWith(".")) {
+bool isProtectedItemName(const char* name) {
+  if (name == nullptr || name[0] == '\0') {
+    return false;
+  }
+  if (name[0] == '.') {
     return true;
   }
   for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (name.equals(HIDDEN_ITEMS[i])) {
+    if (strcmp(name, HIDDEN_ITEMS[i]) == 0) {
       return true;
     }
   }
   return false;
+}
+
+bool isProtectedItemName(const String& name) {
+  return isProtectedItemName(name.c_str());
+}
+
+bool endsWithIgnoreCase(const char* value, const char* suffix) {
+  if (value == nullptr || suffix == nullptr) {
+    return false;
+  }
+
+  const size_t valueLen = strlen(value);
+  const size_t suffixLen = strlen(suffix);
+  if (suffixLen > valueLen) {
+    return false;
+  }
+
+  const char* start = value + (valueLen - suffixLen);
+  for (size_t i = 0; i < suffixLen; i++) {
+    const unsigned char left = static_cast<unsigned char>(start[i]);
+    const unsigned char right = static_cast<unsigned char>(suffix[i]);
+    if (std::tolower(left) != std::tolower(right)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+size_t appendEscapedJsonString(char* output, const size_t outputSize, const char* input) {
+  if (output == nullptr || outputSize == 0) {
+    return 0;
+  }
+
+  size_t outPos = 0;
+  const char* src = input == nullptr ? "" : input;
+
+  while (*src != '\0') {
+    const unsigned char c = static_cast<unsigned char>(*src);
+    const char* replacement = nullptr;
+
+    switch (c) {
+      case '"':
+        replacement = "\\\"";
+        break;
+      case '\\':
+        replacement = "\\\\";
+        break;
+      case '\b':
+        replacement = "\\b";
+        break;
+      case '\f':
+        replacement = "\\f";
+        break;
+      case '\n':
+        replacement = "\\n";
+        break;
+      case '\r':
+        replacement = "\\r";
+        break;
+      case '\t':
+        replacement = "\\t";
+        break;
+      default:
+        break;
+    }
+
+    if (replacement != nullptr) {
+      const size_t replacementLen = strlen(replacement);
+      if (outPos + replacementLen >= outputSize) {
+        output[0] = '\0';
+        return 0;
+      }
+      memcpy(output + outPos, replacement, replacementLen);
+      outPos += replacementLen;
+    } else if (c < 0x20) {
+      if (outPos + 6 >= outputSize) {
+        output[0] = '\0';
+        return 0;
+      }
+      const int written = snprintf(output + outPos, outputSize - outPos, "\\u%04x", c);
+      if (written != 6) {
+        output[0] = '\0';
+        return 0;
+      }
+      outPos += 6;
+    } else {
+      if (outPos + 1 >= outputSize) {
+        output[0] = '\0';
+        return 0;
+      }
+      output[outPos++] = static_cast<char>(c);
+    }
+    src++;
+  }
+
+  output[outPos] = '\0';
+  return outPos;
+}
+
+bool isReaderFontFamilySetting(const SettingInfo& s) {
+  return s.key != nullptr && strcmp(s.key, "fontFamily") == 0;
+}
+
+bool isUiFontFamilyKey(const char* key) {
+  return key != nullptr && strcmp(key, "uiFontFamily") == 0;
+}
+
+bool isLanguageSettingKey(const char* key) {
+  return key != nullptr && strcmp(key, "language") == 0;
 }
 }  // namespace
 
@@ -168,6 +286,12 @@ void CrossPointWebServer::begin() {
   server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
   server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
   server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
+
+  // WiFi credential management endpoints (CJK)
+  server->on("/api/wifi/scan", HTTP_GET, [this] { handleWifiScan(); });
+  server->on("/api/wifi/save", HTTP_POST, [this] { handleWifiSave(); });
+  server->on("/api/wifi/list", HTTP_GET, [this] { handleWifiList(); });
+  server->on("/api/wifi/delete", HTTP_POST, [this] { handleWifiDelete(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -365,7 +489,7 @@ void CrossPointWebServer::handleStatus() const {
   server->send(200, "application/json", json);
 }
 
-void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
+void CrossPointWebServer::scanFiles(const char* path, const std::function<void(const FileInfo&)>& callback) const {
   FsFile root = Storage.open(path);
   if (!root) {
     LOG_DBG("WEB", "Failed to open directory: %s", path);
@@ -381,35 +505,25 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
   LOG_DBG("WEB", "Scanning files in: %s", path);
 
   FsFile file = root.openNextFile();
-  char name[500];
   while (file) {
-    file.getName(name, sizeof(name));
-    auto fileName = String(name);
-
-    // Skip hidden items (starting with ".")
-    bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
-
-    // Check against explicitly hidden items list
-    if (!shouldHide) {
-      for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-        if (fileName.equals(HIDDEN_ITEMS[i])) {
-          shouldHide = true;
-          break;
-        }
-      }
+    FileInfo info;
+    if (!file.getName(info.name, sizeof(info.name))) {
+      LOG_DBG("WEB", "Skipping file entry with invalid name in: %s", path);
+      file.close();
+      yield();
+      esp_task_wdt_reset();
+      file = root.openNextFile();
+      continue;
     }
 
-    if (!shouldHide) {
-      FileInfo info;
-      info.name = fileName;
+    if (!isProtectedItemName(info.name)) {
       info.isDirectory = file.isDirectory();
-
       if (info.isDirectory) {
         info.size = 0;
         info.isEpub = false;
       } else {
         info.size = file.size();
-        info.isEpub = isEpubFile(info.name);
+        info.isEpub = endsWithIgnoreCase(info.name, ".epub");
       }
 
       callback(info);
@@ -448,21 +562,22 @@ void CrossPointWebServer::handleFileListData() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
   char output[512];
+  char escapedName[FileInfo::NAME_BUFFER_SIZE * 2];
   constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
-  JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
-    doc.clear();
-    doc["name"] = info.name;
-    doc["size"] = info.size;
-    doc["isDirectory"] = info.isDirectory;
-    doc["isEpub"] = info.isEpub;
+  scanFiles(currentPath.c_str(), [this, &output, &escapedName, seenFirst](const FileInfo& info) mutable {
+    if (appendEscapedJsonString(escapedName, sizeof(escapedName), info.name) == 0 && info.name[0] != '\0') {
+      LOG_DBG("WEB", "Skipping file entry with oversized escaped JSON name");
+      return;
+    }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      // JSON output truncated; skip this entry to avoid sending malformed JSON
-      LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name.c_str());
+    const int written = snprintf(output, outputSize,
+                                 "{\"name\":\"%s\",\"size\":%llu,\"isDirectory\":%s,\"isEpub\":%s}",
+                                 escapedName, static_cast<unsigned long long>(info.size),
+                                 info.isDirectory ? "true" : "false", info.isEpub ? "true" : "false");
+    if (written < 0 || static_cast<size_t>(written) >= outputSize) {
+      LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name);
       return;
     }
 
@@ -1086,10 +1201,11 @@ void CrossPointWebServer::handleGetSettings() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
+  static char output[2048];
   constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
+  bool fontsScanned = false;
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
@@ -1109,17 +1225,52 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::ENUM: {
         doc["type"] = "enum";
-        if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
-        } else if (s.valueGetter) {
-          doc["value"] = static_cast<int>(s.valueGetter());
-        }
         JsonArray options = doc["options"].to<JsonArray>();
-        if (!s.enumStringValues.empty()) {
+
+        if (isReaderFontFamilySetting(s)) {
+          if (!fontsScanned) {
+            FontMgr.scanFonts();
+            fontsScanned = true;
+          }
+
+          const int builtinCount = static_cast<int>(s.enumValues.size());
+          const int selectedExternal = FontMgr.getSelectedIndex();
+          if (selectedExternal >= 0) {
+            doc["value"] = builtinCount + selectedExternal;
+          } else if (s.valuePtr) {
+            doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          } else {
+            doc["value"] = 0;
+          }
+
+          for (const auto& opt : s.enumValues) {
+            options.add(I18N.get(opt));
+          }
+
+          for (int i = 0; i < FontMgr.getFontCount(); i++) {
+            const FontInfo* info = FontMgr.getFontInfo(i);
+            if (!info) continue;
+            std::string label = std::string(info->name) + " (" + std::to_string(info->size) + "pt)";
+            if (!ExternalFont::canFitGlyph(info->width, info->height)) {
+              label += " [!]";
+            }
+            options.add(label);
+          }
+        } else if (!s.enumStringValues.empty()) {
+          if (s.valueGetter) {
+            doc["value"] = static_cast<int>(s.valueGetter());
+          } else if (s.valuePtr) {
+            doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          }
           for (const auto& opt : s.enumStringValues) {
             options.add(opt);
           }
         } else {
+          if (s.valuePtr) {
+            doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          } else if (s.valueGetter) {
+            doc["value"] = static_cast<int>(s.valueGetter());
+          }
           for (const auto& opt : s.enumValues) {
             options.add(I18N.get(opt));
           }
@@ -1163,6 +1314,66 @@ void CrossPointWebServer::handleGetSettings() const {
     server->sendContent(output);
   }
 
+  // Add UI font selector for web settings.
+  // Device UI already has a dedicated action page for this; web gets an enum list.
+  doc.clear();
+  doc["key"] = "uiFontFamily";
+  doc["name"] = I18N.get(StrId::STR_EXT_UI_FONT);
+  doc["category"] = I18N.get(StrId::STR_CAT_DISPLAY);
+  doc["type"] = "enum";
+  if (!fontsScanned) {
+    FontMgr.scanFonts();
+    fontsScanned = true;
+  }
+  const int selectedUiExternal = FontMgr.getUiSelectedIndex();
+  doc["value"] = selectedUiExternal >= 0 ? selectedUiExternal + 1 : 0;
+
+  JsonArray uiOptions = doc["options"].to<JsonArray>();
+  uiOptions.add(I18N.get(StrId::STR_BUILTIN_DISABLED));
+  for (int i = 0; i < FontMgr.getFontCount(); i++) {
+    const FontInfo* info = FontMgr.getFontInfo(i);
+    if (!info) continue;
+    std::string label = std::string(info->name) + " (" + std::to_string(info->size) + "pt)";
+    if (!ExternalFont::canFitGlyph(info->width, info->height)) {
+      label += " [!]";
+    }
+    uiOptions.add(label);
+  }
+
+  const size_t uiWritten = serializeJson(doc, output, outputSize);
+  if (uiWritten < outputSize) {
+    if (seenFirst) {
+      server->sendContent(",");
+    }
+    seenFirst = true;
+    server->sendContent(output);
+  } else {
+    LOG_DBG("WEB", "Skipping oversized setting JSON for: uiFontFamily");
+  }
+
+  // Add language selector for web settings.
+  doc.clear();
+  doc["key"] = "language";
+  doc["name"] = I18N.get(StrId::STR_LANGUAGE);
+  doc["category"] = I18N.get(StrId::STR_CAT_SYSTEM);
+  doc["type"] = "enum";
+  doc["value"] = static_cast<int>(I18N.getLanguage());
+
+  JsonArray languageOptions = doc["options"].to<JsonArray>();
+  for (int i = 0; i < static_cast<int>(getLanguageCount()); i++) {
+    languageOptions.add(I18N.getLanguageName(static_cast<Language>(i)));
+  }
+
+  const size_t langWritten = serializeJson(doc, output, outputSize);
+  if (langWritten < outputSize) {
+    if (seenFirst) {
+      server->sendContent(",");
+    }
+    server->sendContent(output);
+  } else {
+    LOG_DBG("WEB", "Skipping oversized setting JSON for: language");
+  }
+
   server->sendContent("]");
   server->sendContent("");
   LOG_DBG("WEB", "Served settings API");
@@ -1184,8 +1395,38 @@ void CrossPointWebServer::handlePostSettings() {
 
   const auto& settings = getSettingsList();
   int applied = 0;
+  bool fontsScanned = false;
+
+  if (doc["uiFontFamily"].is<JsonVariant>()) {
+    const int val = doc["uiFontFamily"].as<int>();
+    if (!fontsScanned) {
+      FontMgr.scanFonts();
+      fontsScanned = true;
+    }
+
+    if (val == 0) {
+      FontMgr.selectUiFont(-1);
+      applied++;
+    } else {
+      const int externalIndex = val - 1;
+      const FontInfo* info = FontMgr.getFontInfo(externalIndex);
+      if (info && ExternalFont::canFitGlyph(info->width, info->height)) {
+        FontMgr.selectUiFont(externalIndex);
+        applied++;
+      }
+    }
+  }
+
+  if (doc["language"].is<JsonVariant>()) {
+    const int val = doc["language"].as<int>();
+    if (val >= 0 && val < static_cast<int>(getLanguageCount())) {
+      I18N.setLanguage(static_cast<Language>(val));
+      applied++;
+    }
+  }
 
   for (const auto& s : settings) {
+    if (isUiFontFamilyKey(s.key) || isLanguageSettingKey(s.key)) continue;
     if (!s.key) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
@@ -1200,6 +1441,31 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
+        if (isReaderFontFamilySetting(s)) {
+          if (!fontsScanned) {
+            FontMgr.scanFonts();
+            fontsScanned = true;
+          }
+
+          const int builtinCount = static_cast<int>(s.enumValues.size());
+          if (val >= 0 && val < builtinCount) {
+            if (s.valuePtr) {
+              SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+            }
+            // Switch to built-in family selected in web UI.
+            FontMgr.selectFont(-1);
+            applied++;
+          } else {
+            const int externalIndex = val - builtinCount;
+            const FontInfo* info = FontMgr.getFontInfo(externalIndex);
+            if (info && ExternalFont::canFitGlyph(info->width, info->height)) {
+              FontMgr.selectFont(externalIndex);
+              applied++;
+            }
+          }
+          break;
+        }
+
         const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
                                                       : static_cast<int>(s.enumStringValues.size());
         if (val >= 0 && val < maxVal) {
@@ -1615,5 +1881,172 @@ void CrossPointWebServer::handleFontDelete() {
   } else {
     server->send(500, "application/json", "{\"error\":\"Delete failed\"}");
     LOG_ERR("WEB", "Failed to delete font family: %s", familyName);
+  }
+}
+
+// --- WiFi credential management API handlers (CJK) ---
+
+void CrossPointWebServer::handleWifiScan() const {
+  LOG_DBG("WEB", "WiFi scan requested");
+
+  // In AP mode we need to briefly enable STA to scan, without tearing down the AP.
+  const wifi_mode_t prevMode = WiFi.getMode();
+  if (apMode) {
+    WiFi.mode(WIFI_AP_STA);
+    delay(100);
+  }
+
+  // Use async scan to avoid long blocking calls that can trigger task watchdog resets.
+  const unsigned long scanStart = millis();
+  constexpr unsigned long SCAN_TIMEOUT_MS = 20000;
+  WiFi.scanNetworks(/*async=*/true, /*show_hidden=*/false);
+
+  int n = WIFI_SCAN_RUNNING;
+  while (n == WIFI_SCAN_RUNNING && (millis() - scanStart) < SCAN_TIMEOUT_MS) {
+    esp_task_wdt_reset();
+    delay(20);
+    n = WiFi.scanComplete();
+  }
+
+  // Restore previous WiFi mode after scan
+  if (apMode && prevMode != WIFI_AP_STA) {
+    WiFi.mode(prevMode);
+  }
+
+  if (n == WIFI_SCAN_RUNNING) {
+    WiFi.scanDelete();
+    server->send(500, "application/json", "{\"error\":\"Scan timeout\"}");
+    LOG_ERR("WEB", "WiFi scan timed out after %lu ms", millis() - scanStart);
+    return;
+  }
+
+  if (n < 0) {
+    server->send(500, "application/json", "{\"error\":\"Scan failed\"}");
+    LOG_ERR("WEB", "WiFi scan failed with code %d", n);
+    return;
+  }
+
+  // De-duplicate by SSID, keeping the strongest signal
+  std::map<String, int> bestIndex;
+  for (int i = 0; i < n; i++) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.isEmpty()) continue;  // Skip hidden networks
+    auto it = bestIndex.find(ssid);
+    if (it == bestIndex.end() || WiFi.RSSI(i) > WiFi.RSSI(it->second)) {
+      bestIndex[ssid] = i;
+    }
+  }
+
+  // Build JSON array
+  String json = "[";
+  bool first = true;
+  for (const auto& entry : bestIndex) {
+    const int i = entry.second;
+    if (!first) json += ",";
+    first = false;
+
+    JsonDocument doc;
+    doc["ssid"] = WiFi.SSID(i);
+    doc["rssi"] = WiFi.RSSI(i);
+    doc["encrypted"] = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+    doc["saved"] = WIFI_STORE.hasSavedCredential(WiFi.SSID(i).c_str());
+
+    char buf[256];
+    serializeJson(doc, buf, sizeof(buf));
+    json += buf;
+  }
+  json += "]";
+
+  WiFi.scanDelete();
+  server->send(200, "application/json", json);
+  LOG_DBG("WEB", "WiFi scan returned %d unique networks", bestIndex.size());
+}
+
+void CrossPointWebServer::handleWifiSave() const {
+  // Expect JSON body: {"ssid": "...", "password": "..."}
+  if (!server->hasArg("plain")) {
+    server->send(400, "application/json", "{\"error\":\"Missing request body\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, server->arg("plain"));
+  if (err) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  const char* ssid = doc["ssid"];
+  const char* password = doc["password"];
+
+  if (!ssid || strlen(ssid) == 0) {
+    server->send(400, "application/json", "{\"error\":\"SSID is required\"}");
+    return;
+  }
+  if (!password) {
+    server->send(400, "application/json", "{\"error\":\"Password is required\"}");
+    return;
+  }
+
+  // Load existing credentials, add/update, then save
+  WIFI_STORE.loadFromFile();
+  const bool ok = WIFI_STORE.addCredential(ssid, password);
+
+  if (ok) {
+    server->send(200, "application/json", "{\"success\":true}");
+    LOG_DBG("WEB", "WiFi credential saved for SSID: %s", ssid);
+  } else {
+    server->send(500, "application/json", "{\"error\":\"Failed to save credential\"}");
+    LOG_ERR("WEB", "Failed to save WiFi credential for SSID: %s", ssid);
+  }
+}
+
+void CrossPointWebServer::handleWifiList() const {
+  WIFI_STORE.loadFromFile();
+  const auto& creds = WIFI_STORE.getCredentials();
+
+  String json = "[";
+  for (size_t i = 0; i < creds.size(); i++) {
+    if (i > 0) json += ",";
+    // Only expose SSID, never the password
+    json += "{\"ssid\":\"";
+    // Escape any quotes in SSID
+    String escaped = creds[i].ssid.c_str();
+    escaped.replace("\"", "\\\"");
+    json += escaped;
+    json += "\"}";
+  }
+  json += "]";
+
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleWifiDelete() const {
+  if (!server->hasArg("plain")) {
+    server->send(400, "application/json", "{\"error\":\"Missing request body\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, server->arg("plain"));
+  if (err) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  const char* ssid = doc["ssid"];
+  if (!ssid || strlen(ssid) == 0) {
+    server->send(400, "application/json", "{\"error\":\"SSID is required\"}");
+    return;
+  }
+
+  WIFI_STORE.loadFromFile();
+  const bool ok = WIFI_STORE.removeCredential(ssid);
+
+  if (ok) {
+    server->send(200, "application/json", "{\"success\":true}");
+    LOG_DBG("WEB", "WiFi credential deleted for SSID: %s", ssid);
+  } else {
+    server->send(404, "application/json", "{\"error\":\"Credential not found\"}");
   }
 }

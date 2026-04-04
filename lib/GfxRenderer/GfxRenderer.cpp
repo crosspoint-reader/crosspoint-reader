@@ -1,12 +1,125 @@
 #include "GfxRenderer.h"
 
+#include <EpdFontFamily.h>
 #include <FontDecompressor.h>
+#include <FontManager.h>
 #include <HalGPIO.h>
 #include <Logging.h>
 #include <SdCardFont.h>
 #include <Utf8.h>
 
 #include "FontCacheManager.h"
+
+#include <algorithm>
+
+// Built-in CJK UI font (embedded in flash) - 20px only
+#include "cjk_ui_font_20.h"
+
+// Reader font IDs (from fontIds.h) - used to determine when to use external
+// Chinese font UI fonts should NOT use external font
+namespace {
+// UI font IDs that should NOT use external reader font
+// Values must match src/fontIds.h
+constexpr int UI_FONT_IDS[] = {
+    -1246724383,  // UI_10_FONT_ID - for status display (battery, page number,
+                  // etc.)
+    -359249323,   // UI_12_FONT_ID - for status display
+    -2089201234,  // UI_20_FONT_ID - primary UI font (menus, titles, settings)
+    1073217904    // SMALL_FONT_ID
+};
+constexpr int UI_FONT_COUNT = sizeof(UI_FONT_IDS) / sizeof(UI_FONT_IDS[0]);
+
+// Reader font IDs - values must match src/fontIds.h
+constexpr int READER_FONT_IDS[] = {
+    -1905494168,  // BOOKERLY_12_FONT_ID
+    1233852315,   // BOOKERLY_14_FONT_ID
+    1588566790,   // BOOKERLY_16_FONT_ID
+    681638548,    // BOOKERLY_18_FONT_ID
+    -1559651934,  // NOTOSANS_12_FONT_ID
+    -1014561631,  // NOTOSANS_14_FONT_ID
+    -1422711852,  // NOTOSANS_16_FONT_ID
+    1237754772,   // NOTOSANS_18_FONT_ID
+    1331369208,   // OPENDYSLEXIC_8_FONT_ID
+    -1374689004,  // OPENDYSLEXIC_10_FONT_ID
+    -795539541,   // OPENDYSLEXIC_12_FONT_ID
+    -1676627620   // OPENDYSLEXIC_14_FONT_ID
+};
+constexpr int READER_FONT_COUNT = sizeof(READER_FONT_IDS) / sizeof(READER_FONT_IDS[0]);
+
+// Check if a Unicode codepoint is CJK (Chinese/Japanese/Korean)
+// Only these characters should use the external font width
+bool isCjkCodepoint(const uint32_t cp) {
+  // CJK Unified Ideographs: U+4E00 - U+9FFF
+  if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
+  // CJK Unified Ideographs Extension A: U+3400 - U+4DBF
+  if (cp >= 0x3400 && cp <= 0x4DBF) return true;
+  // CJK Punctuation: U+3000 - U+303F
+  if (cp >= 0x3000 && cp <= 0x303F) return true;
+  // Hiragana: U+3040 - U+309F
+  if (cp >= 0x3040 && cp <= 0x309F) return true;
+  // Katakana: U+30A0 - U+30FF
+  if (cp >= 0x30A0 && cp <= 0x30FF) return true;
+  // CJK Compatibility Ideographs: U+F900 - U+FAFF
+  if (cp >= 0xF900 && cp <= 0xFAFF) return true;
+  // Fullwidth forms: U+FF00 - U+FFEF
+  if (cp >= 0xFF00 && cp <= 0xFFEF) return true;
+  // General Punctuation: U+2000 - U+206F (includes smart quotes, ellipsis,
+  // dashes)
+  if (cp >= 0x2000 && cp <= 0x206F) return true;
+  // Number Forms: U+2150 - U+218F (includes Roman numerals)
+  if (cp >= 0x2150 && cp <= 0x218F) return true;
+  // Enclosed Alphanumerics: U+2460 - U+24FF
+  if (cp >= 0x2460 && cp <= 0x24FF) return true;
+  // Enclosed CJK Letters and Months: U+3200 - U+32FF
+  if (cp >= 0x3200 && cp <= 0x32FF) return true;
+  // CJK Compatibility: U+3300 - U+33FF
+  if (cp >= 0x3300 && cp <= 0x33FF) return true;
+  return false;
+}
+
+bool isAsciiDigit(const uint32_t cp) { return cp >= '0' && cp <= '9'; }
+
+bool isAsciiLetter(const uint32_t cp) { return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z'); }
+
+int clampExternalAdvance(const int baseWidth, const int spacing) { return std::max(1, baseWidth + spacing); }
+
+bool hasUiGlyphForText(const char* text) {
+  if (text == nullptr || *text == '\0') {
+    return false;
+  }
+
+  const char* ptr = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+    if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Check if fontId is a UI font (UI_10, UI_12, UI_20, SMALL_FONT)
+// UI fonts may not be registered in fontMap if they use built-in CJK font only
+bool isUiFont(int fontId) {
+  for (int i = 0; i < UI_FONT_COUNT; i++) {
+    if (UI_FONT_IDS[i] == fontId) {
+      return true;
+    }
+  }
+  return false;
+}
+// Check if the font has at least one renderable glyph for any character in text
+bool fontHasPrintableChars(const EpdFontFamily& font, const char* text, EpdFontFamily::Style style) {
+  const char* ptr = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+    if (font.getGlyph(cp, style) != nullptr) {
+      return true;
+    }
+  }
+  return false;
+}
+}  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
   if (fontData->groups != nullptr) {
@@ -211,7 +324,15 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
   // Bounds checking against runtime panel dimensions
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
-    LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
+    // Limit log output to avoid performance issues (log only first few per session)
+    static int outsideRangeCount = 0;
+    if (outsideRangeCount < 5) {
+      LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
+      outsideRangeCount++;
+      if (outsideRangeCount == 5) {
+        LOG_ERR("GFX", "!! Suppressing further outside range warnings");
+      }
+    }
     return;
   }
 
@@ -219,22 +340,189 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   const uint32_t byteIndex = static_cast<uint32_t>(phyY) * panelWidthBytes + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
 
-  if (state) {
-    frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit
+  // In dark mode, invert the pixel state (black <-> white)
+  // But NOT in grayscale mode - grayscale rendering uses special pixel marking
+  // And NOT when skipDarkModeForImages is set - cover art should keep original
+  // colors
+  const bool shouldInvert = darkMode && !skipDarkModeForImages && renderMode == BW;
+  const bool actualState = shouldInvert ? !state : state;
+
+  if (actualState) {
+    frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit = black pixel
   } else {
-    frameBuffer[byteIndex] |= 1 << bitPosition;  // Set bit
+    frameBuffer[byteIndex] |= 1 << bitPosition;  // Set bit = white pixel
   }
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      if (text == nullptr || *text == '\0') {
+        return 0;
+      }
+
+      // Check if external UI font is enabled first
+      FontManager& fm = FontManager::getInstance();
+      ExternalFont* uiExtFont = nullptr;
+      bool hasExternalUiFont = false;
+
+      if (fm.isUiFontEnabled()) {
+        uiExtFont = fm.getActiveUiFont();
+        if (uiExtFont && uiExtFont->isLoaded()) {
+          hasExternalUiFont = true;
+        }
+      }
+
+      int width = 0;
+      const char* ptr = text;
+      uint32_t cp;
+      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+        bool hasChar = false;
+
+        // First check built-in CJK UI font (Flash access is fast)
+        if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+          width += CjkUiFont20::getCjkUiGlyphWidth(cp);
+          hasChar = true;
+        }
+
+        // Fall back to external UI font if enabled (SD card, slow)
+        if (!hasChar && hasExternalUiFont) {
+          if (uiExtFont->getGlyph(cp) != nullptr) {
+            width += uiExtFont->getCharWidth();
+            hasChar = true;
+          }
+        }
+
+        // Default width for unknown characters
+        if (!hasChar) {
+          width += 10;
+        }
+      }
+      return width;
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
+  FontManager& fm = FontManager::getInstance();
+
+  // Check if using external font for reader fonts
+  if (isReaderFont(fontId)) {
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont) {
+        int width = 0;
+        const char* ptr = text;
+        const EpdFontFamily& fontFamily = fontMap.at(effectiveFontId);
+        const int cjkAdvance = clampExternalAdvance(extFont->getCharWidth(), cjkSpacing);
+        uint32_t cp;
+        while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+          // Fast path: CJK characters always use charWidth - skip SD card read entirely
+          if (isCjkCodepoint(cp)) {
+            width += cjkAdvance;
+            continue;
+          }
+          const uint8_t* bitmap = extFont->getGlyph(cp);
+          if (bitmap) {
+            uint8_t advanceX = extFont->getCharWidth();
+            extFont->getGlyphMetrics(cp, nullptr, &advanceX);
+            int spacing = 0;
+            if (isAsciiDigit(cp)) {
+              spacing = asciiDigitSpacing;
+            } else if (isAsciiLetter(cp)) {
+              spacing = asciiLetterSpacing;
+            }
+            width += clampExternalAdvance(advanceX, spacing);
+          } else {
+            // Fall back to built-in reader font width
+            const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+            if (glyph) {
+              width += glyph->advanceX;
+            } else {
+              width += 10;
+            }
+          }
+        }
+        return width;
+      }
+    }
+  } else {
+    // UI font - calculate width with built-in UI font (includes CJK and
+    // English) Check if text contains any characters in our UI font or
+    // CJK characters that may use external font fallback
+    const char* checkPtr = text;
+    bool hasUiFontChar = false;
+    bool hasCjkChar = false;
+    uint32_t testCp;
+    while ((testCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&checkPtr)))) {
+      if (CjkUiFont20::hasCjkUiGlyph(testCp)) {
+        hasUiFontChar = true;
+      }
+      if (isCjkCodepoint(testCp)) {
+        hasCjkChar = true;
+      }
+    }
+
+    // Process if text contains UI font chars or CJK chars (for external font
+    // fallback)
+    if (hasUiFontChar || hasCjkChar) {
+      int width = 0;
+      const char* ptr = text;
+      const auto fontIt = fontMap.find(effectiveFontId);
+      if (fontIt == fontMap.end()) {
+        LOG_ERR("GFX", "Font %d not found in UI CJK path", effectiveFontId);
+        return 0;
+      }
+      const EpdFontFamily& fontFamily = fontIt->second;
+      FontManager& fmLocal = FontManager::getInstance();
+      uint32_t cp;
+      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+        // Check if character is in our UI font (includes CJK and English)
+        uint8_t actualWidth = CjkUiFont20::getCjkUiGlyphWidth(cp);
+
+        if (actualWidth > 0) {
+          // Character is in UI font: use actual proportional width
+          width += actualWidth;
+        } else if (isCjkCodepoint(cp)) {
+          // CJK character not in UI font: try UI external font, then reader
+          ExternalFont* uiExtFont = nullptr;
+          if (fmLocal.isUiFontEnabled()) {
+            uiExtFont = fmLocal.getActiveUiFont();
+          } else if (fmLocal.isExternalFontEnabled()) {
+            uiExtFont = fmLocal.getActiveFont();
+          }
+
+          if (uiExtFont) {
+            uint8_t minX, advanceX;
+            if (uiExtFont->getGlyphMetrics(cp, &minX, &advanceX)) {
+              width += advanceX;
+            } else {
+              // External font doesn't have this glyph either, use its charWidth
+              width += uiExtFont->getCharWidth();
+            }
+          } else {
+            // No external font, use built-in font width
+            const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+            if (glyph) {
+              width += glyph->advanceX;
+            }
+          }
+        } else {
+          // Character not in UI font: use built-in font width
+          const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+          if (glyph) {
+            width += glyph->advanceX;
+          }
+        }
+      }
+      return width;
+    }
+  }
+
   int w = 0, h = 0;
-  fontIt->second.getTextDimensions(text, &w, &h, style);
+  fontMap.at(effectiveFontId).getTextDimensions(text, &w, &h, style);
   return w;
 }
 
@@ -247,10 +535,7 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);
-  int32_t xPosFP = fp4::fromPixel(x);  // 12.4 fixed-point accumulator
-  int lastBaseX = x;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
-  int lastBaseTop = 0;
+  int xpos = x;
 
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
@@ -262,48 +547,116 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
-    return;
-  }
-  const auto& font = fontIt->second;
-  constexpr int MIN_COMBINING_GAP_PX = 1;
+  // For external reader font IDs (negative, but NOT UI fonts), use a default
+  // built-in font as fallback
+  const int effectiveFontId = getEffectiveFontId(fontId);
 
-  uint32_t cp;
-  uint32_t prevCp = 0;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp)) {
-      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      int raiseBy = 0;
-      if (combiningGlyph) {
-        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
-        if (currentGap < MIN_COMBINING_GAP_PX) {
-          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      // Check if external UI font is enabled (only used as fallback)
+      FontManager& fm = FontManager::getInstance();
+      bool hasExternalUiFont = false;
+      ExternalFont* uiExtFont = nullptr;
+
+      if (fm.isUiFontEnabled()) {
+        uiExtFont = fm.getActiveUiFont();
+        if (uiExtFont && uiExtFont->isLoaded()) {
+          hasExternalUiFont = true;
         }
       }
 
-      const int combiningX = lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2);
-      const int combiningY = yPos - raiseBy;
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
-      continue;
+      // Use the yPos already calculated at the start of drawText (includes
+      // ascender offset)
+      int xPos = x;
+      const char* ptr = text;
+      uint32_t cp;
+
+      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+        bool rendered = false;
+
+        // First check built-in CJK UI font (Flash access is fast)
+        if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+          const uint8_t* bitmap = CjkUiFont20::getCjkUiGlyph(cp);
+          uint8_t advanceWidth = CjkUiFont20::getCjkUiGlyphWidth(cp);
+          const uint8_t height = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+          const uint8_t bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
+          const uint8_t glyphWidth = CjkUiFont20::CJK_UI_FONT_WIDTH;
+
+          // Reduce spacing for CJK characters
+          if (advanceWidth >= 20) {
+            advanceWidth = 18;
+          }
+
+          for (uint8_t glyphY = 0; glyphY < height; glyphY++) {
+            for (uint8_t glyphX = 0; glyphX < glyphWidth; glyphX++) {
+              const uint8_t byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+              const uint8_t bitIndex = 7 - (glyphX % 8);
+              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
+              if ((byte >> bitIndex) & 1) {
+                drawPixel(xPos + glyphX, y + glyphY, black);
+              }
+            }
+          }
+          xPos += advanceWidth;
+          rendered = true;
+        }
+
+        // Fall back to external UI font if built-in doesn't have this glyph
+        if (!rendered && hasExternalUiFont) {
+          const uint8_t* bitmap = uiExtFont->getGlyph(cp);
+          if (bitmap) {
+            const uint8_t charWidth = uiExtFont->getCharWidth();
+            const uint8_t charHeight = uiExtFont->getCharHeight();
+            const uint8_t bytesPerRow = (charWidth + 7) / 8;
+
+            for (uint8_t glyphY = 0; glyphY < charHeight; glyphY++) {
+              for (uint8_t glyphX = 0; glyphX < charWidth; glyphX++) {
+                const uint8_t byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+                const uint8_t bitIndex = 7 - (glyphX % 8);
+                const uint8_t byte = bitmap[byteIndex];
+                if ((byte >> bitIndex) & 1) {
+                  drawPixel(xPos + glyphX, y + glyphY, black);
+                }
+              }
+            }
+            uint8_t advanceX = charWidth;
+            uiExtFont->getGlyphMetrics(cp, nullptr, &advanceX);
+            xPos += advanceX;
+            rendered = true;
+          }
+        }
+
+        // Default advance for unknown characters
+        if (!rendered) {
+          xPos += 10;
+        }
+      }
+      return;
     }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
+    return;
+  }
+  const auto& font = fontMap.at(effectiveFontId);
 
-    cp = font.applyLigatures(cp, text, style);
-    const int kernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
-    xPosFP += kernFP;
-
-    lastBaseX = fp4::toPixel(xPosFP);  // snap 12.4 fixed-point to nearest pixel
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
-    lastBaseTop = glyph ? glyph->top : 0;
-
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
-    if (glyph) {
-      xPosFP += glyph->advanceX;  // 12.4 fixed-point advance
+  // no printable characters
+  if (!fontHasPrintableChars(font, text, style)) {
+    FontManager& fm = FontManager::getInstance();
+    if (isReaderFont(fontId)) {
+      if (!fm.isExternalFontEnabled()) {
+        return;
+      }
+    } else {
+      const bool hasUiGlyph = hasUiGlyphForText(text);
+      if (!hasUiGlyph && !fm.isUiFontEnabled() && !fm.isExternalFontEnabled()) {
+        return;
+      }
     }
-    prevCp = cp;
+  }
+
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    renderChar(effectiveFontId, font, cp, &xpos, &yPos, black, style);
   }
 }
 
@@ -613,18 +966,57 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   }
   // TODO: Rotate bits
   display.drawImage(bitmap, rotatedX, rotatedY, width, height);
+
+  // In dark mode, invert the drawn region so icons adapt to dark background.
+  // drawImage bypasses drawPixel (raw memcpy), so we invert the bytes post-hoc.
+  if (darkMode && renderMode == BW) {
+    const int widthBytes = width / 8;
+    for (int row = 0; row < height; row++) {
+      const int bufY = rotatedY + row;
+      if (bufY < 0 || bufY >= HalDisplay::DISPLAY_HEIGHT) continue;
+      const int bufStart = bufY * HalDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
+      for (int b = 0; b < widthBytes; b++) {
+        const int idx = bufStart + b;
+        if (idx >= 0 && idx < HalDisplay::BUFFER_SIZE) {
+          frameBuffer[idx] = ~frameBuffer[idx];
+        }
+      }
+    }
+  }
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
+  // Icon bitmaps are authored to match the historical drawImageTransparent
+  // path used by UI themes (portrait physical placement with transposed axes).
+  // Recreate that logical mapping, then render through drawPixel() so current
+  // renderer orientation (including PortraitInverted/Landscape) is applied.
+  // For icon masks: 0 = black pixel, 1 = transparent.
+  const int rowBytes = (width + 7) / 8;
+  for (int row = 0; row < height; row++) {
+    for (int col = 0; col < width; col++) {
+      const int byteIndex = row * rowBytes + (col / 8);
+      const int bitIndex = 7 - (col % 8);
+      const bool transparent = ((bitmap[byteIndex] >> bitIndex) & 0x1) != 0;
+      if (!transparent) {
+        const int legacyX = x + width - 1 - row;
+        const int legacyY = y + col;
+        drawPixel(legacyX, legacyY, true);
+      }
+    }
+  }
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
+  // Cover art and images should keep their original colors in dark mode
+  skipDarkModeForImages = true;
+  auto cleanup = [this]() { skipDarkModeForImages = false; };
+
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
+    cleanup();
     return;
   }
 
@@ -656,6 +1048,14 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     isScaled = true;
   }
   LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
+
+  if (darkMode && renderMode == BW) {
+    const int sourceWidth = static_cast<int>((1.0f - cropX) * bitmap.getWidth() - cropPixX);
+    const int sourceHeight = static_cast<int>((1.0f - cropY) * bitmap.getHeight() - cropPixY);
+    const int scaledWidth = isScaled ? static_cast<int>(std::floor(sourceWidth * scale)) : sourceWidth;
+    const int scaledHeight = isScaled ? static_cast<int>(std::floor(sourceHeight * scale)) : sourceHeight;
+    fillRect(x, y, scaledWidth, scaledHeight, false);
+  }
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
   // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
@@ -725,10 +1125,15 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
   free(outputRow);
   free(rowBytes);
+  cleanup();
 }
 
 void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
                                  const int maxHeight) const {
+  // Cover art and images should keep their original colors in dark mode
+  skipDarkModeForImages = true;
+  auto cleanup = [this]() { skipDarkModeForImages = false; };
+
   float scale = 1.0f;
   bool isScaled = false;
   if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
@@ -738,6 +1143,14 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
     scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
     isScaled = true;
+  }
+
+  // In dark mode, pre-fill image area with white since white pixels are
+  // not explicitly drawn (they rely on clearScreen background).
+  if (darkMode && renderMode == BW) {
+    const int displayWidth = isScaled ? static_cast<int>(std::floor(bitmap.getWidth() * scale)) : bitmap.getWidth();
+    const int displayHeight = isScaled ? static_cast<int>(std::floor(bitmap.getHeight() * scale)) : bitmap.getHeight();
+    fillRect(x, y, displayWidth, displayHeight, false);
   }
 
   // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
@@ -794,6 +1207,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 
   free(outputRow);
   free(rowBytes);
+  cleanup();
 }
 
 void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
@@ -869,7 +1283,9 @@ static unsigned long start_ms = 0;
 
 void GfxRenderer::clearScreen(const uint8_t color) const {
   start_ms = millis();
-  display.clearScreen(color);
+  // Dark mode: invert the default white (0xFF) background to black (0x00).
+  // Grayscale prep passes clearScreen(0x00) and is not affected.
+  display.clearScreen((darkMode && color == 0xFF) ? 0x00 : color);
 }
 
 void GfxRenderer::invertScreen() const {
@@ -1004,13 +1420,30 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
     return fp4::toPixel(sdIt->second->getAdvance(' ', static_cast<uint8_t>(style)));
   }
 
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      return 10;  // Default space width for 20px UI font
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
-  const EpdGlyph* spaceGlyph = fontIt->second.getGlyph(' ', style);
+  // Use external font's space advance when active - keeps word/space metrics consistent
+  if (isReaderFont(fontId)) {
+    FontManager& fm = FontManager::getInstance();
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont && extFont->getGlyph(' ')) {
+        uint8_t advanceX = extFont->getCharWidth();
+        extFont->getGlyphMetrics(' ', nullptr, &advanceX);
+        return clampExternalAdvance(advanceX, 0);
+      }
+    }
+  }
+
+  const EpdGlyph* spaceGlyph = fontMap.at(effectiveFontId).getGlyph(' ', style);
   return spaceGlyph ? fp4::toPixel(spaceGlyph->advanceX) : 0;  // snap 12.4 fixed-point to nearest pixel
 }
 
@@ -1058,6 +1491,47 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     return fp4::toPixel(widthFP);
   }
 
+  // External reader font: compute advance using bitmap font metrics
+  if (isReaderFont(fontId)) {
+    FontManager& fm = FontManager::getInstance();
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont) {
+        int width = 0;
+        const int effectiveFontId = getEffectiveFontId(fontId);
+        const auto fallbackIt = fontMap.find(effectiveFontId);
+        const int cjkAdvance = clampExternalAdvance(extFont->getCharWidth(), cjkSpacing);
+        uint32_t cp;
+        while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+          if (utf8IsCombiningMark(cp)) continue;
+          // CJK: use charWidth directly (no SD card read needed)
+          if (isCjkCodepoint(cp)) {
+            width += cjkAdvance;
+            continue;
+          }
+          // Non-CJK: try external font glyph metrics
+          const uint8_t* bitmap = extFont->getGlyph(cp);
+          if (bitmap) {
+            uint8_t advanceX = extFont->getCharWidth();
+            extFont->getGlyphMetrics(cp, nullptr, &advanceX);
+            int spacing = 0;
+            if (isAsciiDigit(cp)) {
+              spacing = asciiDigitSpacing;
+            } else if (isAsciiLetter(cp)) {
+              spacing = asciiLetterSpacing;
+            }
+            width += clampExternalAdvance(advanceX, spacing);
+          } else if (fallbackIt != fontMap.end()) {
+            // Fall back to built-in reader font for missing glyphs
+            const EpdGlyph* glyph = fallbackIt->second.getGlyph(cp, style);
+            if (glyph) width += glyph->advanceX;
+          }
+        }
+        return width;
+      }
+    }
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -1084,32 +1558,68 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+  // Check if using external font for reader fonts
+  if (isReaderFont(fontId)) {
+    FontManager& fm = FontManager::getInstance();
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont) {
+        // For external fonts, use charHeight as ascender
+        return extFont->getCharHeight();
+      }
+    }
+  }
+
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      return CjkUiFont20::CJK_UI_FONT_HEIGHT;
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
-  return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
+  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+  // Check if using external font for reader fonts
+  if (isReaderFont(fontId)) {
+    FontManager& fm = FontManager::getInstance();
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont) {
+        // charHeight is the line spacing defined by the font
+        return extFont->getCharHeight();
+      }
+    }
+  }
+
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      return CjkUiFont20::CJK_UI_FONT_HEIGHT + 4;  // 20px + 4px spacing
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
-  return fontIt->second.getData(EpdFontFamily::REGULAR)->advanceY;
+  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->advanceY;
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      return CjkUiFont20::CJK_UI_FONT_HEIGHT;  // 20px for CJK UI font
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
-  return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
+  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
@@ -1119,55 +1629,296 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     return;
   }
 
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
-    return;
-  }
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      // Render using built-in CJK UI font directly (rotated)
+      int yPos = y;  // Current Y position (decreases as we draw characters)
+      const char* ptr = text;
+      uint32_t cp;
+      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+        if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+          const uint8_t* bitmap = CjkUiFont20::getCjkUiGlyph(cp);
+          const uint8_t width = CjkUiFont20::getCjkUiGlyphWidth(cp);
+          const uint8_t height = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+          const uint8_t bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
 
-  const auto& font = fontIt->second;
-
-  int32_t yPosFP = fp4::fromPixel(y);  // 12.4 fixed-point accumulator
-  int lastBaseY = y;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
-  int lastBaseTop = 0;
-  constexpr int MIN_COMBINING_GAP_PX = 1;
-
-  uint32_t cp;
-  uint32_t prevCp = 0;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    if (utf8IsCombiningMark(cp)) {
-      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      int raiseBy = 0;
-      if (combiningGlyph) {
-        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
-        if (currentGap < MIN_COMBINING_GAP_PX) {
-          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
+          // For 90 clockwise rotation: (glyphX, glyphY) -> (glyphY, -glyphX)
+          const int startX = x;
+          for (uint8_t glyphY = 0; glyphY < height; glyphY++) {
+            const int screenX = startX + glyphY;
+            for (uint8_t glyphX = 0; glyphX < width; glyphX++) {
+              const uint8_t byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+              const uint8_t bitIndex = 7 - (glyphX % 8);
+              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
+              if ((byte >> bitIndex) & 1) {
+                const int screenY = yPos - glyphX;
+                drawPixel(screenX, screenY, black);
+              }
+            }
+          }
+          yPos -= width;
+        } else {
+          yPos -= 10;  // Default width for unknown characters
         }
       }
+      return;
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
+    return;
+  }
+  const auto& font = fontMap.at(effectiveFontId);
 
-      const int combiningX = x - raiseBy;
-      const int combiningY = lastBaseY - fp4::toPixel(lastBaseAdvanceFP / 2);
-      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+  // No printable characters
+  if (!fontHasPrintableChars(font, text, style)) {
+    if (isReaderFont(fontId)) {
+      return;
+    }
+    if (!hasUiGlyphForText(text)) {
+      return;
+    }
+  }
+
+  // For 90 clockwise rotation:
+  // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
+  // Text reads from bottom to top
+
+  int yPos = y;  // Current Y position (decreases as we draw characters)
+
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    // For ASCII characters, prefer EPD font (better quality for Latin text)
+    // Only use CJK UI font for non-ASCII characters or when EPD font lacks the
+    // glyph
+    bool useEpdFont = (cp < 0x80) && font.getGlyph(cp, style) != nullptr;
+
+    if (!isReaderFont(fontId) && !useEpdFont) {
+      const uint8_t* bitmap = nullptr;
+      uint8_t fontWidth = 0;
+      uint8_t fontHeight = 0;
+      uint8_t bytesPerRow = 0;
+      uint8_t bytesPerChar = 0;
+      uint8_t advance = 0;
+
+      if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+        bitmap = CjkUiFont20::getCjkUiGlyph(cp);
+        fontWidth = CjkUiFont20::CJK_UI_FONT_WIDTH;
+        fontHeight = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+        bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
+        bytesPerChar = CjkUiFont20::CJK_UI_FONT_BYTES_PER_CHAR;
+        advance = CjkUiFont20::getCjkUiGlyphWidth(cp);
+      }
+
+      if (bitmap && advance > 0) {
+        bool hasContent = false;
+        for (int i = 0; i < bytesPerChar; i++) {
+          if (pgm_read_byte(&bitmap[i]) != 0) {
+            hasContent = true;
+            break;
+          }
+        }
+
+        if (hasContent) {
+          const int startX = x;
+
+          for (int glyphY = 0; glyphY < fontHeight; glyphY++) {
+            const int screenX = startX + glyphY;
+            for (int glyphX = 0; glyphX < fontWidth; glyphX++) {
+              const int byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+              const int bitIndex = 7 - (glyphX % 8);
+              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
+              if ((byte >> bitIndex) & 1) {
+                const int screenY = yPos - glyphX;
+                drawPixel(screenX, screenY, black);
+              }
+            }
+          }
+        }
+
+        yPos -= std::max(1, static_cast<int>(advance));
+        continue;
+      }
+    }
+
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      glyph = font.getGlyph('?', style);
+    }
+    if (!glyph) {
       continue;
     }
 
-    cp = font.applyLigatures(cp, text, style);
-    if (prevCp != 0) {
-      yPosFP -= font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern (subtract for rotated)
+    const EpdFontData* fontData = font.getData(style);
+    const int is2Bit = fontData->is2Bit;
+    const uint8_t width = glyph->width;
+    const uint8_t height = glyph->height;
+    const int left = glyph->left;
+    const int top = glyph->top;
+
+    const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+
+    if (bitmap != nullptr) {
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        for (int glyphX = 0; glyphX < width; glyphX++) {
+          const int pixelPosition = glyphY * width + glyphX;
+
+          // 90 clockwise rotation transformation:
+          // screenX = x + (ascender - top + glyphY)
+          // screenY = yPos - (left + glyphX)
+          const int screenX = x + (fontData->ascender - top + glyphY);
+          const int screenY = yPos - left - glyphX;
+
+          if (is2Bit) {
+            const uint8_t byte = bitmap[pixelPosition / 4];
+            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+            const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+
+            if (renderMode == BW && bmpVal < 3) {
+              drawPixel(screenX, screenY, black);
+            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+              drawPixel(screenX, screenY, false);
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+              drawPixel(screenX, screenY, false);
+            }
+          } else {
+            const uint8_t byte = bitmap[pixelPosition / 8];
+            const uint8_t bit_index = 7 - (pixelPosition % 8);
+
+            if ((byte >> bit_index) & 1) {
+              drawPixel(screenX, screenY, black);
+            }
+          }
+        }
+      }
     }
 
-    lastBaseY = fp4::toPixel(yPosFP);  // snap 12.4 fixed-point to nearest pixel
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    // Move to next character position (going up, so decrease Y)
+    yPos -= glyph->advanceX;
+  }
+}
 
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
-    lastBaseTop = glyph ? glyph->top : 0;
+void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
+                                  const char* btn4) {
+  const Orientation orientation = getOrientation();
+  const int pageHeight = getScreenHeight();
+  const int pageWidth = getScreenWidth();
+  constexpr int buttonWidth = BUTTON_HINT_WIDTH;
+  constexpr int buttonHeight = BUTTON_HINT_HEIGHT;
+  constexpr int buttonY = BUTTON_HINT_BOTTOM_INSET;  // Distance from bottom
+  constexpr int textYOffset = BUTTON_HINT_TEXT_OFFSET;
+  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  const char* labels[] = {btn1, btn2, btn3, btn4};
+  const bool isLandscape =
+      orientation == Orientation::LandscapeClockwise || orientation == Orientation::LandscapeCounterClockwise;
+  const bool placeAtTop = orientation == Orientation::PortraitInverted;
+  const int buttonTop = placeAtTop ? 0 : pageHeight - buttonY;
 
-    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
-    if (glyph) {
-      yPosFP -= glyph->advanceX;  // 12.4 fixed-point advance (subtract for rotated)
+  if (isLandscape) {
+    const bool placeLeft = orientation == Orientation::LandscapeClockwise;
+    const int buttonLeft = placeLeft ? 0 : pageWidth - buttonWidth;
+    if (orientation == Orientation::LandscapeCounterClockwise) {
+      const char* tmp = labels[0];
+      labels[0] = labels[3];
+      labels[3] = tmp;
+      tmp = labels[1];
+      labels[1] = labels[2];
+      labels[2] = tmp;
     }
-    prevCp = cp;
+    for (int i = 0; i < 4; i++) {
+      if (labels[i] != nullptr && labels[i][0] != '\0') {
+        const int y = buttonPositions[i];
+        fillRect(buttonLeft, y, buttonWidth, buttonHeight, false);
+        drawRect(buttonLeft, y, buttonWidth, buttonHeight);
+        const int textWidth = getTextWidth(fontId, labels[i]);
+        const int textX = buttonLeft + (buttonWidth - 1 - textWidth) / 2;
+        drawText(fontId, textX, y + textYOffset, labels[i]);
+      }
+    }
+    return;
+  }
+
+  for (int i = 0; i < 4; i++) {
+    // Only draw if the label is non-empty
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int x = buttonPositions[i];
+      fillRect(x, buttonTop, buttonWidth, buttonHeight, false);
+      drawRect(x, buttonTop, buttonWidth, buttonHeight);
+      const int textWidth = getTextWidth(fontId, labels[i]);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      drawText(fontId, textX, buttonTop + textYOffset, labels[i]);
+    }
+  }
+}
+
+void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, const char* bottomBtn) const {
+  const Orientation orientation = getOrientation();
+  const int screenWidth = getScreenWidth();
+  constexpr int buttonWidth = 40;   // Width on screen (height when rotated)
+  constexpr int buttonHeight = 80;  // Height on screen (width when rotated)
+  constexpr int buttonX = 5;        // Distance from right edge
+  // Position for the button group - buttons share a border so they're adjacent
+  constexpr int topButtonY = 345;  // Top button position
+
+  const char* labels[] = {topBtn, bottomBtn};
+
+  // Draw the shared border for both buttons as one unit
+  const bool placeLeft = orientation == Orientation::PortraitInverted;
+  const int x = placeLeft ? buttonX : screenWidth - buttonX - buttonWidth;
+  const int y = topButtonY;
+
+  // Draw top button outline (3 sides, bottom open)
+  if (topBtn != nullptr && topBtn[0] != '\0') {
+    drawLine(x, y, x + buttonWidth - 1, y);   // Top
+    drawLine(x, y, x, y + buttonHeight - 1);  // Left
+    drawLine(x + buttonWidth - 1, y, x + buttonWidth - 1,
+             y + buttonHeight - 1);  // Right
+  }
+
+  // Draw shared middle border
+  if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
+    drawLine(x, y + buttonHeight, x + buttonWidth - 1,
+             y + buttonHeight);  // Shared border
+  }
+
+  // Draw bottom button outline (3 sides, top is shared)
+  if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+    drawLine(x, y + buttonHeight, x,
+             y + 2 * buttonHeight - 1);  // Left
+    drawLine(x + buttonWidth - 1, y + buttonHeight, x + buttonWidth - 1,
+             y + 2 * buttonHeight - 1);  // Right
+    drawLine(x, y + 2 * buttonHeight - 1, x + buttonWidth - 1,
+             y + 2 * buttonHeight - 1);  // Bottom
+  }
+
+  // Draw text for each button
+  for (int i = 0; i < 2; i++) {
+    if (labels[i] != nullptr && labels[i][0] != '\0') {
+      const int yPos = y + i * buttonHeight;
+      const char* label = labels[i];
+
+      // Draw rotated text centered in the button
+      const int textWidth = getTextWidth(fontId, label);
+      int textHeight = getTextHeight(fontId);
+      bool hasCjk = false;
+      const char* scan = label;
+      uint32_t cp;
+      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&scan)))) {
+        if (isCjkCodepoint(cp)) {
+          hasCjk = true;
+          break;
+        }
+      }
+      if (hasCjk) {
+        textHeight = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+      }
+
+      // Center the rotated text in the button
+      const int textX = x + (buttonWidth - textHeight) / 2;
+      const int textY = yPos + (buttonHeight + textWidth) / 2;
+
+      drawTextRotated90CW(fontId, textX, textY, label);
+    }
   }
 }
 
@@ -1182,7 +1933,11 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuff
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
-void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
+void GfxRenderer::displayGrayBuffer(const bool turnOffScreen, const bool darkMode) const {
+  // Note: HalDisplay::displayGrayBuffer does not support darkMode parameter directly.
+  // Dark mode grayscale rendering is handled at the pixel level in renderChar.
+  display.displayGrayBuffer(turnOffScreen);
+}
 
 void GfxRenderer::freeBwBufferChunks() {
   for (auto& bwBufferChunk : bwBufferChunks) {
@@ -1269,6 +2024,176 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   }
 }
 
+void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
+                             const bool pixelState, const EpdFontFamily::Style style) const {
+  FontManager& fm = FontManager::getInstance();
+
+  // Cache character classification results to avoid repeated calls (perf opt)
+  const bool isCjk = isCjkCodepoint(cp);
+
+  // Prefer external reader font when enabled; fall back to built-in only if missing
+  if (isReaderFont(fontId)) {
+    if (fm.isExternalFontEnabled()) {
+      ExternalFont* extFont = fm.getActiveFont();
+      if (extFont) {
+        const uint8_t* bitmap = extFont->getGlyph(cp);
+        if (bitmap) {
+          uint8_t minX = 0, advanceX = extFont->getCharWidth();
+          extFont->getGlyphMetrics(cp, &minX, &advanceX);
+          int spacing = 0;
+          if (isCjk) {
+            spacing = cjkSpacing;
+          } else if (isAsciiDigit(cp)) {
+            spacing = asciiDigitSpacing;
+          } else if (isAsciiLetter(cp)) {
+            spacing = asciiLetterSpacing;
+          }
+          int advance = clampExternalAdvance(advanceX, spacing);
+          renderExternalGlyph(bitmap, extFont, x, *y, pixelState, advance, minX);
+          return;
+        }
+        // Missing glyph in external font - try built-in CJK UI font for CJK
+        if (isCjk && CjkUiFont20::hasCjkUiGlyph(cp)) {
+          renderBuiltinCjkGlyph(cp, x, *y, pixelState);
+          return;
+        }
+        // Fall through to built-in reader font rendering below
+      }
+    }
+  } else {
+    // UI font - for CJK characters, prioritize built-in UI font (Flash, fast)
+    // Only fall back to external font if built-in doesn't have the glyph
+    if (isCjk) {
+      // First check built-in CJK UI font (Flash access is fast)
+      if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+        renderBuiltinCjkGlyph(cp, x, *y, pixelState);
+        return;
+      }
+
+      // Built-in doesn't have this glyph - try external UI font (SD card, slow)
+      if (fm.isUiFontEnabled()) {
+        ExternalFont* uiExtFont = fm.getActiveUiFont();
+        if (uiExtFont) {
+          const uint8_t* bitmap = uiExtFont->getGlyph(cp);
+          if (bitmap) {
+            uint8_t minX = 0, advanceX = 0;
+            uiExtFont->getGlyphMetrics(cp, &minX, &advanceX);
+            renderExternalGlyph(bitmap, uiExtFont, x, *y, pixelState, advanceX, minX);
+            return;
+          }
+        }
+      }
+
+      // Last resort: try reader font if UI font doesn't have this glyph
+      if (fm.isExternalFontEnabled()) {
+        ExternalFont* extFont = fm.getActiveFont();
+        if (extFont) {
+          const uint8_t* bitmap = extFont->getGlyph(cp);
+          if (bitmap) {
+            uint8_t minX = 0, advanceX = 0;
+            extFont->getGlyphMetrics(cp, &minX, &advanceX);
+            renderExternalGlyph(bitmap, extFont, x, *y, pixelState, advanceX, minX);
+            return;
+          }
+        }
+      }
+    } else {
+      // Non-CJK characters in UI - check built-in UI font first
+      if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+        renderBuiltinCjkGlyph(cp, x, *y, pixelState);
+        return;
+      }
+      // Then try external UI font if enabled
+      if (fm.isUiFontEnabled()) {
+        ExternalFont* uiExtFont = fm.getActiveUiFont();
+        if (uiExtFont) {
+          const uint8_t* bitmap = uiExtFont->getGlyph(cp);
+          if (bitmap) {
+            uint8_t minX = 0, advanceX = 0;
+            uiExtFont->getGlyphMetrics(cp, &minX, &advanceX);
+            renderExternalGlyph(bitmap, uiExtFont, x, *y, pixelState, advanceX, minX);
+            return;
+          }
+        }
+      }
+      // Fall through to EPD font rendering below
+    }
+  }
+
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) {
+    glyph = fontFamily.getGlyph('?', style);
+  }
+
+  // no glyph? Still advance cursor to prevent overlap
+  if (!glyph) {
+    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
+    if (isCjk) {
+      *x += 20;  // Full-width character default
+    } else {
+      *x += 10;  // Half-width character default
+    }
+    return;
+  }
+
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const bool is2Bit = fontData->is2Bit;
+  const uint8_t width = glyph->width;
+  const uint8_t height = glyph->height;
+  const int left = glyph->left;
+
+  const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+
+  if (bitmap != nullptr) {
+    for (int glyphY = 0; glyphY < height; glyphY++) {
+      const int screenY = *y - glyph->top + glyphY;
+      for (int glyphX = 0; glyphX < width; glyphX++) {
+        const int pixelPosition = glyphY * width + glyphX;
+        const int screenX = *x + left + glyphX;
+
+        if (is2Bit) {
+          const uint8_t byte = bitmap[pixelPosition / 4];
+          const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+
+          if (renderMode == BW) {
+            bool shouldDraw = false;
+            if (darkMode) {
+              if (bmpVal == 0) {
+                shouldDraw = true;
+              }
+            } else if (bmpVal < 3) {
+              shouldDraw = true;
+            }
+
+            if (shouldDraw) {
+              drawPixel(screenX, screenY, pixelState);
+            }
+          } else if (renderMode == GRAYSCALE_MSB || renderMode == GRAYSCALE_LSB) {
+            if (bmpVal < 3) {
+              uint8_t val = bmpVal;
+              if (darkMode) {
+                val = 3 - val;
+              }
+              bool bit = (renderMode == GRAYSCALE_LSB) ? (val & 1) : ((val >> 1) & 1);
+              drawPixel(screenX, screenY, !bit);
+            }
+          }
+        } else {
+          const uint8_t byte = bitmap[pixelPosition / 8];
+          const uint8_t bit_index = 7 - (pixelPosition % 8);
+
+          if ((byte >> bit_index) & 1) {
+            drawPixel(screenX, screenY, pixelState);
+          }
+        }
+      }
+    }
+  }
+
+  *x += glyph->advanceX;
+}
+
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
   switch (orientation) {
     case Portrait:
@@ -1296,4 +2221,115 @@ void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBo
       *outLeft = VIEWABLE_MARGIN_TOP;
       break;
   }
+}
+
+// Check if fontId is a reader font (should use external Chinese font)
+// UI fonts (UI_10, UI_12, SMALL_FONT) should NOT use external font
+bool GfxRenderer::isReaderFont(const int fontId) {
+  // First check if it's a UI font - UI fonts should NOT use external reader
+  // font
+  for (int i = 0; i < UI_FONT_COUNT; i++) {
+    if (UI_FONT_IDS[i] == fontId) {
+      return false;  // This is a UI font, not a reader font
+    }
+  }
+
+  // External font IDs are negative (from CrossPointSettings::getReaderFontId())
+  if (fontId < 0) {
+    return true;
+  }
+
+  for (int i = 0; i < READER_FONT_COUNT; i++) {
+    if (READER_FONT_IDS[i] == fontId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Get effective font ID, handling fallback for external reader font IDs
+// When external font is selected (negative ID) but not available, fall back to
+// built-in font
+int GfxRenderer::getEffectiveFontId(int fontId) const {
+  // Only negative IDs that are reader fonts need fallback
+  // UI fonts have negative IDs too but should not be redirected
+  if (fontId < 0 && isReaderFont(fontId)) {
+    // This is an external reader font ID, use the selected built-in reader
+    // font as fallback
+    return readerFallbackFontId != 0 ? readerFallbackFontId : READER_FONT_IDS[0];
+  }
+  return fontId;
+}
+
+void GfxRenderer::renderExternalGlyph(const uint8_t* bitmap, ExternalFont* font, int* x, const int y,
+                                      const bool pixelState, const int advanceOverride, const int minX) const {
+  const uint8_t width = font->getCharWidth();
+  const uint8_t height = font->getCharHeight();
+  const uint8_t bytesPerRow = font->getBytesPerRow();
+
+  // Calculate starting Y position (baseline alignment)
+  const int startY = y - height + 4;  // +4 is baseline adjustment
+
+  // Only render pixels from minX onwards, drawn at screen position *x
+  // This trims the left-side empty space so advanceX matches the drawn width
+  for (int glyphY = 0; glyphY < height; glyphY++) {
+    const int screenY = startY + glyphY;
+    for (int glyphX = minX; glyphX < width; glyphX++) {
+      const int byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+      const int bitIndex = 7 - (glyphX % 8);  // MSB first
+
+      if ((bitmap[byteIndex] >> bitIndex) & 1) {
+        drawPixel(*x + (glyphX - minX), screenY, pixelState);
+      }
+    }
+  }
+
+  // Advance cursor
+  const int advance = (advanceOverride >= 0) ? advanceOverride : width;
+  *x += std::max(1, advance);
+}
+
+void GfxRenderer::renderBuiltinCjkGlyph(const uint32_t cp, int* x, const int y, const bool pixelState) const {
+  // Use built-in 20px CJK UI font
+  const uint8_t* bitmap = CjkUiFont20::getCjkUiGlyph(cp);
+  const uint8_t fontWidth = CjkUiFont20::CJK_UI_FONT_WIDTH;
+  const uint8_t fontHeight = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+  const uint8_t bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
+  const uint8_t bytesPerChar = CjkUiFont20::CJK_UI_FONT_BYTES_PER_CHAR;
+  const uint8_t actualWidth = CjkUiFont20::getCjkUiGlyphWidth(cp);
+
+  if (!bitmap || actualWidth == 0) {
+    return;
+  }
+
+  // Check if glyph is empty (all zeros) - skip rendering but still advance
+  // cursor
+  bool hasContent = false;
+  for (int i = 0; i < bytesPerChar; i++) {
+    if (pgm_read_byte(&bitmap[i]) != 0) {
+      hasContent = true;
+      break;
+    }
+  }
+
+  if (hasContent) {
+    const int startY = y - fontHeight + 4;  // 4px descent for CJK characters
+
+    for (int glyphY = 0; glyphY < fontHeight; glyphY++) {
+      const int screenY = startY + glyphY;
+      for (int glyphX = 0; glyphX < fontWidth; glyphX++) {
+        const int byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+        const int bitIndex = 7 - (glyphX % 8);  // MSB first
+
+        // Read from PROGMEM
+        const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
+        if ((byte >> bitIndex) & 1) {
+          drawPixel(*x + glyphX, screenY, pixelState);
+        }
+      }
+    }
+  }
+
+  // Advance cursor by actual width (proportional spacing)
+  *x += actualWidth;
 }

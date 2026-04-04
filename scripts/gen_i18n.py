@@ -105,6 +105,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 
 def load_translations(
     translations_dir: str,
+    language_filter: List[str] = None,
 ) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]]]:
     """
     Read every YAML file in *translations_dir* and return:
@@ -114,6 +115,9 @@ def load_translations(
         translations     {key: [translation_per_language]}
 
     English is always first;
+
+    If *language_filter* is provided, only include languages whose
+    _language_code is in the filter list. ENGLISH is always included.
     """
     yaml_dir = Path(translations_dir)
     if not yaml_dir.is_dir():
@@ -137,6 +141,19 @@ def load_translations(
 
     if english_file is None:
         raise ValueError("No YAML file with _language_code: EN found")
+
+    # Filter languages if a filter is provided
+    if language_filter:
+        filter_upper = {code.upper() for code in language_filter}
+        filter_upper.add("ENGLISH")  # Always include English
+        filtered_parsed = {}
+        for name, data in parsed.items():
+            code = data.get("_language_code", "").upper()
+            if code in filter_upper:
+                filtered_parsed[name] = data
+        print(f"  Language filter: {', '.join(sorted(filter_upper))}")
+        print(f"  Filtered: {len(parsed)} -> {len(filtered_parsed)} languages")
+        parsed = filtered_parsed
 
     # Order: English first, then by _order metadata (falls back to filename)
     def sort_key(fname: str) -> Tuple[int, int, str]:
@@ -215,6 +232,7 @@ LANG_ABBREVIATIONS = {
     "polski": "PL",
     "português": "PT", "portugues": "PT", "português (brasil)": "PO",
     "中文": "ZH", "chinese": "ZH",
+    "简体中文": "CH", "繁體中文": "ZT",
     "日本語": "JA", "japanese": "JA",
     "한국어": "KO", "korean": "KO",
     "русский": "RU", "russian": "RU",
@@ -587,7 +605,7 @@ def _write_file(path: str, lines: List[str]) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main(translations_dir=None, output_dir=None) -> None:
+def main(translations_dir=None, output_dir=None, language_filter=None) -> None:
     # Default paths (relative to project root)
     default_translations_dir = "lib/I18n/translations"
     default_output_dir = "lib/I18n/"
@@ -600,6 +618,12 @@ def main(translations_dir=None, output_dir=None) -> None:
             # Default for no arguments or weird arguments (e.g. SCons)
             translations_dir = default_translations_dir
             output_dir = default_output_dir
+
+    # Check for I18N_LANGUAGES env var if no filter provided
+    if language_filter is None:
+        env_langs = os.environ.get("I18N_LANGUAGES", "")
+        if env_langs:
+            language_filter = [lang.strip() for lang in env_langs.split(",") if lang.strip()]
 
 
     if not os.path.isdir(translations_dir):
@@ -616,7 +640,7 @@ def main(translations_dir=None, output_dir=None) -> None:
 
     try:
         languages, language_names, string_keys, translations = load_translations(
-            translations_dir
+            translations_dir, language_filter
         )
 
         out = Path(output_dir)
@@ -642,6 +666,14 @@ else:
     try:
         Import("env")
         print("Running i18n generation script from PlatformIO...")
-        main()
+        # Read language filter from platformio.ini custom option
+        _lang_filter = None
+        try:
+            _langs_str = env.GetProjectOption("custom_i18n_languages", "")
+            if _langs_str:
+                _lang_filter = [lang.strip() for lang in _langs_str.split(",") if lang.strip()]
+        except Exception:
+            pass
+        main(language_filter=_lang_filter)
     except NameError:
         pass

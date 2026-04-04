@@ -4622,7 +4622,8 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
       // Reject for any close before upload was confirmed complete (covers both
       // mid-chunk-send closes and the "all chunks sent, waiting for DONE" window)
       if (!uploadComplete) {
-        reject(new Error('WebSocket closed during upload'));
+        const detail = event.reason ? ` (${event.code}: ${event.reason})` : ` (${event.code})`;
+        reject(new Error('WebSocket closed during upload' + detail));
       }
     };
   });
@@ -4708,6 +4709,16 @@ function uploadFile() {
   if (useBatchLog) {
     startBatchLog(epubFilesToConvert.length);
     showLog();
+  }
+
+  function isWebSocketTransportError(error) {
+    if (!error || typeof error.message !== 'string') return false;
+    const message = error.message;
+    return message.includes('WebSocket connection failed') ||
+           message.includes('WebSocket error during upload') ||
+           message.includes('WebSocket closed during upload') ||
+           message.includes('WebSocket closed unexpectedly') ||
+           message.includes('Network error');
   }
 
   async function uploadNextFile() {
@@ -4895,8 +4906,8 @@ function uploadFile() {
         logError(`Upload failed: ${error.message}`);
       }
 
-      if (useWebSocket && error.message === 'WebSocket connection failed') {
-        // Fall back to HTTP for all subsequent uploads
+      if (useWebSocket && isWebSocketTransportError(error)) {
+        // Fall back to HTTP for all subsequent uploads on transport instability
         console.log('WebSocket failed, falling back to HTTP');
         useWebSocket = false;
         // Retry this file with HTTP

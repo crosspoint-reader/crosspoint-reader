@@ -163,8 +163,11 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - 12 - LyraMetrics::values.batteryWidth;
+  const int batteryY = (renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted)
+                           ? renderer.getScreenHeight() - LyraMetrics::values.batteryHeight - 35
+                           : rect.y + 5;
   drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
+                   Rect{batteryX, batteryY, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
   int maxTitleWidth =
@@ -343,10 +346,10 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
-  const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-
   const int pageHeight = renderer.getScreenHeight();
+  const bool placeAtTop = renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted;
+  const bool roundTop = !placeAtTop;
+  const bool roundBottom = placeAtTop;
   constexpr int buttonWidth = 80;
   constexpr int smallButtonHeight = 15;
   constexpr int buttonHeight = LyraMetrics::values.buttonHintsHeight;
@@ -357,27 +360,27 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   constexpr int x3ButtonPositions[] = {65, 157, 291, 383};
   const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  const int buttonTop = placeAtTop ? 0 : pageHeight - buttonY;
+  const int smallButtonTop = placeAtTop ? 0 : pageHeight - smallButtonHeight;
 
   for (int i = 0; i < 4; i++) {
     const int x = buttonPositions[i];
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       // Draw the filled background and border for a FULL-sized button
-      renderer.fillRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, cornerRadius, Color::White);
-      renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false,
-                               false, true);
+      renderer.fillRoundedRect(x, buttonTop, buttonWidth, buttonHeight, cornerRadius, Color::White);
+      renderer.drawRoundedRect(x, buttonTop, buttonWidth, buttonHeight, 1, cornerRadius, roundTop, roundTop,
+                               roundBottom, roundBottom, true);
       const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      renderer.drawText(SMALL_FONT_ID, textX, buttonTop + textYOffset, labels[i]);
     } else {
       // Draw the filled background and border for a SMALL-sized button
-      renderer.fillRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, cornerRadius,
+      renderer.fillRoundedRect(x, smallButtonTop, buttonWidth, smallButtonHeight, cornerRadius,
                                Color::White);
-      renderer.drawRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, 1, cornerRadius, true,
-                               true, false, false, true);
+      renderer.drawRoundedRect(x, smallButtonTop, buttonWidth, smallButtonHeight, 1, cornerRadius,
+                               roundTop, roundTop, roundBottom, roundBottom, true);
     }
   }
-
-  renderer.setOrientation(orig_orientation);
 }
 
 void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
