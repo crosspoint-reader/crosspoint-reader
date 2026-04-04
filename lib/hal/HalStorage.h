@@ -45,6 +45,10 @@ class HalStorage {
   bool openFileForWrite(const char* moduleName, const String& path, HalFile& file);
   bool removeDir(const char* path);
 
+  uint64_t sdTotalBytes() const;
+  uint64_t sdUsedBytes();
+  uint64_t sdFreeBytes();
+
   static HalStorage& getInstance() { return instance; }
 
   class StorageLock;  // private class, used internally
@@ -86,6 +90,7 @@ class HalFile : public Print {
   size_t write(const void* buf, size_t count);
   size_t write(uint8_t b) override;
   bool rename(const char* newPath);
+  bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime);
   bool isDirectory() const;
   void rewindDirectory();
   bool close();

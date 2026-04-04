@@ -848,7 +848,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 
 **Current Versions** (as of docs/file-formats.md):
 - `book.bin`: **Version 5** (metadata structure)
-- `section.bin`: **Version 12** (layout structure)
+- `section.bin`: **Version 20** (layout structure, includes paragraph LUT)
 
 **Version Increment Rules**:
 1. **ALWAYS increment version** BEFORE changing binary structure
@@ -858,7 +858,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Example** (incrementing section format version):
 ```cpp
 // lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 13;  // Was 12, now 13
+static constexpr uint8_t SECTION_FILE_VERSION = 20;  // Was 19, now 20
 
 // Add new field to structure
 struct PageLine {

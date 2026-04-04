@@ -104,7 +104,7 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 8
+### Version 20
 
 ImHex Pattern:
 
@@ -114,7 +114,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 8
+#define EXPECTED_VERSION 20
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -175,36 +175,60 @@ struct Page {
     PageElement elements[elementCount] [[inline]];
 };
 
+// === Anchor Map Entry ===
+
+struct AnchorEntry {
+    String anchorId [[comment("HTML id attribute value")]];
+    u16 pageNumber [[comment("Page where the anchor appears")]];
+};
+
 // === Section Bin Structure ===
 
 struct SectionBin {
     // Header
     u8 version [[comment("Format version"), color("FFD93D")]];
-    
+
     // Version validation
     if (version != EXPECTED_VERSION) {
         std::error(std::format("Unsupported version: {} (expected {})", version, EXPECTED_VERSION));
     }
-    
+
     // Cache busting parameters
     s32 fontId;
     float lineCompression;
     bool extraParagraphSpacing;
+    u8 paragraphAlignment;
     u16 viewportWidth;
-    u16 vieportHeight;
+    u16 viewportHeight;
     u16 pageCount;
-    u32 lutOffset;
-    
+    bool hyphenationEnabled;
+    bool embeddedStyle;
+    u8 imageRendering;
+    u32 pageLutOffset [[comment("Offset to page offset LUT")]];
+    u32 anchorMapOffset [[comment("Offset to anchor map")]];
+    u32 paragraphLutOffset [[comment("Offset to per-page paragraph index LUT")]];
+
     Page page[pageCount];
-    
+
+    // === Page Offset LUT ===
     // Validate LUT offset alignment
     u32 currentOffset = $;
-    if (currentOffset != lutOffset) {
-        std::warning(std::format("LUT offset mismatch: expected 0x{:X}, got 0x{:X}", lutOffset, currentOffset));
+    if (currentOffset != pageLutOffset) {
+        std::warning(std::format("Page LUT offset mismatch: expected 0x{:X}, got 0x{:X}", pageLutOffset, currentOffset));
     }
-    
-    // Lookup Tables
-    u32 lut[pageCount];
+
+    u32 pageOffsets[pageCount] [[comment("File offsets to serialized pages")]];
+
+    // === Anchor Map ===
+    u16 anchorCount;
+    AnchorEntry anchors[anchorCount];
+
+    // === Paragraph Index LUT ===
+    // One entry per page: the 1-based <p> sibling index (XPath convention)
+    // at the time each page was completed during parsing.
+    // Used to resolve KOReader XPath p[N] positions to page numbers.
+    u16 paragraphEntryCount;
+    u16 paragraphIndexPerPage[paragraphEntryCount] [[comment("1-based <p> index at page completion")]];
 };
 
 // === File Parsing ===

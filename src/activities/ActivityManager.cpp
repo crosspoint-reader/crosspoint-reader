@@ -1,5 +1,7 @@
 #include "ActivityManager.h"
 
+#include <Arduino.h>
+#include <HalClock.h>
 #include <HalPowerManager.h>
 
 #include "boot_sleep/BootActivity.h"
@@ -12,6 +14,7 @@
 #include "reader/ReaderActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#include "weather/WeatherActivity.h"
 
 void ActivityManager::begin() {
   xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
@@ -54,6 +57,18 @@ void ActivityManager::loop() {
   if (currentActivity) {
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
+  }
+
+  if (SETTINGS.useClock && HalClock::isSynced()) {
+    time_t now = HalClock::now();
+    if (now > 0) {
+      static time_t lastMinute = -1;
+      time_t minute = now / 60;
+      if (minute != lastMinute) {
+        lastMinute = minute;
+        requestUpdate();
+      }
+    }
   }
 
   while (pendingAction != PendingAction::None) {
@@ -195,6 +210,8 @@ void ActivityManager::goToBoot() { replaceActivity(std::make_unique<BootActivity
 void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::Style style) {
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
+
+void ActivityManager::goToWeather() { replaceActivity(std::make_unique<WeatherActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goHome() { replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput)); }
 

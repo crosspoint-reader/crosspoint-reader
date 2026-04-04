@@ -3,6 +3,8 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <optional>
+
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -11,6 +13,9 @@ class EpubReaderActivity final : public Activity {
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  // Set when navigating to a TOC entry in a different spine (chapter skip or chapter selector).
+  // Cleared on the next render after the new section loads and resolves it to a page.
+  std::optional<int> pendingTocIndex;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;
@@ -24,9 +29,15 @@ class EpubReaderActivity final : public Activity {
   bool pendingPercentJump = false;
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
+  // Pending paragraph index from KOReader sync (resolved to page via Section paragraph LUT)
+  bool pendingParagraphLookup = false;
+  uint16_t pendingParagraphIndex = 0;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  // -1 means use global SETTINGS value.
+  int8_t bookEmbeddedStyleOverride = -1;
+  int8_t bookImageRenderingOverride = -1;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -46,8 +57,12 @@ class EpubReaderActivity final : public Activity {
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  void handleSyncResult(const ActivityResult& result);
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
+  void applyBookReaderOverrides(int8_t embeddedStyleOverride, int8_t imageRenderingOverride);
+  bool getEffectiveEmbeddedStyle() const;
+  uint8_t getEffectiveImageRendering() const;
   void pageTurn(bool isForwardTurn);
 
   // Footnote navigation
@@ -62,4 +77,9 @@ class EpubReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&& lock) override;
   bool isReaderActivity() const override { return true; }
+
+  // Renders the last saved page to the frame buffer without flushing to display.
+  // Used by SleepActivity to prepare the background for the overlay sleep mode.
+  // Returns false if the page cannot be loaded (missing cache / file error).
+  static bool drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer);
 };

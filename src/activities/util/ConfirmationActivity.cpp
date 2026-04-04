@@ -11,9 +11,11 @@ ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputMan
 
 void ConfirmationActivity::onEnter() {
   Activity::onEnter();
+  inputArmed = false;
 
   lineHeight = renderer.getLineHeight(fontId);
-  const int maxWidth = renderer.getScreenWidth() - (margin * 2);
+  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const int maxWidth = contentRect.width - (margin * 2);
 
   if (!heading.empty()) {
     safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::BOLD);
@@ -27,7 +29,7 @@ void ConfirmationActivity::onEnter() {
   if (!safeBody.empty()) totalHeight += lineHeight;
   if (!safeHeading.empty() && !safeBody.empty()) totalHeight += spacing;
 
-  startY = (renderer.getScreenHeight() - totalHeight) / 2;
+  startY = contentRect.y + (contentRect.height - totalHeight) / 2;
 
   requestUpdate(true);
 }
@@ -56,6 +58,19 @@ void ConfirmationActivity::render(RenderLock&& lock) {
 }
 
 void ConfirmationActivity::loop() {
+  if (!inputArmed) {
+    const bool anyFrontPressed = mappedInput.isPressed(MappedInputManager::Button::Back) ||
+                                 mappedInput.isPressed(MappedInputManager::Button::Confirm) ||
+                                 mappedInput.isPressed(MappedInputManager::Button::Left) ||
+                                 mappedInput.isPressed(MappedInputManager::Button::Right);
+
+    // Ignore inherited press/release events from the parent activity.
+    if (!anyFrontPressed && !mappedInput.wasAnyPressed() && !mappedInput.wasAnyReleased()) {
+      inputArmed = true;
+    }
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     ActivityResult res;
     res.isCancelled = false;

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -21,10 +22,13 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
+  int8_t embeddedStyleOverride = -1;
+  int8_t imageRenderingOverride = -1;
 };
 
 struct ChapterResult {
   int spineIndex = 0;
+  std::optional<int> tocIndex;
 };
 
 struct PercentResult {
@@ -37,7 +41,9 @@ struct PageResult {
 
 struct SyncResult {
   int spineIndex = 0;
-  int page = 0;
+  int page = 0;                    // estimated page (fallback)
+  uint16_t paragraphIndex = 0;     // 1-based <p> index from XPath
+  bool hasParagraphIndex = false;  // true when paragraphIndex is available
 };
 
 enum class NetworkMode;

@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 #include <PngToBmpConverter.h>
@@ -77,6 +78,9 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
+  bookMetadata.series = opfParser.series;
+  bookMetadata.seriesIndex = opfParser.seriesIndex;
+  bookMetadata.description = opfParser.description;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -333,6 +337,7 @@ void Epub::parseCssFiles() const {
 // load in the meta data for the epub file
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
+  tocReliabilityState = -1;
 
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
@@ -514,6 +519,30 @@ const std::string& Epub::getLanguage() const {
   }
 
   return bookMetadataCache->coreMetadata.language;
+}
+
+const std::string& Epub::getSeries() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+  return bookMetadataCache->coreMetadata.series;
+}
+
+const std::string& Epub::getSeriesIndex() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+  return bookMetadataCache->coreMetadata.seriesIndex;
+}
+
+const std::string& Epub::getDescription() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+  return bookMetadataCache->coreMetadata.description;
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {
@@ -767,6 +796,18 @@ BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
     return {};
   }
 
+  if (syntheticTocFallbackEnabled && !hasReliableToc()) {
+    const int spineCount = bookMetadataCache->getSpineCount();
+    if (tocIndex < 0 || tocIndex >= spineCount) {
+      LOG_DBG("EBP", "getTocItem synthetic index:%d is out of range", tocIndex);
+      return {};
+    }
+
+    const auto spine = bookMetadataCache->getSpineEntry(tocIndex);
+    return BookMetadataCache::TocEntry(tr(STR_SECTION_PREFIX) + std::to_string(tocIndex + 1), spine.href, "", 1,
+                                       static_cast<int16_t>(tocIndex));
+  }
+
   if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
     LOG_DBG("EBP", "getTocItem index:%d is out of range", tocIndex);
     return {};
@@ -780,6 +821,10 @@ int Epub::getTocItemsCount() const {
     return 0;
   }
 
+  if (syntheticTocFallbackEnabled && !hasReliableToc()) {
+    return bookMetadataCache->getSpineCount();
+  }
+
   return bookMetadataCache->getTocCount();
 }
 
@@ -788,6 +833,14 @@ int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
     return 0;
+  }
+
+  if (syntheticTocFallbackEnabled && !hasReliableToc()) {
+    if (tocIndex < 0 || tocIndex >= bookMetadataCache->getSpineCount()) {
+      LOG_ERR("EBP", "getSpineIndexForTocIndex synthetic tocIndex %d out of range", tocIndex);
+      return 0;
+    }
+    return tocIndex;
   }
 
   if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
@@ -804,7 +857,66 @@ int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
   return spineIndex;
 }
 
-int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
+bool Epub::hasReliableToc() const {
+  if (tocReliabilityState != -1) {
+    return tocReliabilityState == 1;
+  }
+
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    tocReliabilityState = 0;
+    return false;
+  }
+
+  const int spineCount = bookMetadataCache->getSpineCount();
+  const int tocCount = bookMetadataCache->getTocCount();
+
+  if (spineCount <= 0 || tocCount <= 0) {
+    tocReliabilityState = 0;
+    return false;
+  }
+
+  // If a larger book only exposes one TOC entry, treat TOC as unusable for chapter UX.
+  if (spineCount >= 8 && tocCount <= 1) {
+    tocReliabilityState = 0;
+    return false;
+  }
+
+  std::vector<bool> spineReferenced(static_cast<size_t>(spineCount), false);
+  int distinctSpinesReferenced = 0;
+  for (int i = 0; i < tocCount; i++) {
+    const auto toc = bookMetadataCache->getTocEntry(i);
+    if (toc.spineIndex >= 0 && toc.spineIndex < spineCount) {
+      const size_t idx = static_cast<size_t>(toc.spineIndex);
+      if (!spineReferenced[idx]) {
+        spineReferenced[idx] = true;
+        distinctSpinesReferenced++;
+      }
+    }
+  }
+
+  // Require at least 25% spine coverage from TOC references.
+  const bool reliable = (distinctSpinesReferenced * 4 >= spineCount);
+  tocReliabilityState = reliable ? 1 : 0;
+  return reliable;
+}
+
+int Epub::getTocIndexForSpineIndex(const int spineIndex) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "getTocIndexForSpineIndex called but cache not loaded");
+    return -1;
+  }
+
+  if (spineIndex < 0 || spineIndex >= bookMetadataCache->getSpineCount()) {
+    LOG_ERR("EBP", "getTocIndexForSpineIndex: spineIndex %d out of range", spineIndex);
+    return -1;
+  }
+
+  if (syntheticTocFallbackEnabled && !hasReliableToc()) {
+    return spineIndex;
+  }
+
+  return bookMetadataCache->getSpineEntry(spineIndex).tocIndex;
+}
 
 size_t Epub::getBookSize() const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {

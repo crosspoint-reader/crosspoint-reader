@@ -1,6 +1,7 @@
 #include "KOReaderAuthActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -24,12 +25,21 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
 
   {
     RenderLock lock(*this);
-    state = AUTHENTICATING;
-    statusMessage = tr(STR_AUTHENTICATING);
+    if (mode == Mode::REGISTER) {
+      state = REGISTERING;
+      statusMessage = tr(STR_REGISTERING);
+    } else {
+      state = AUTHENTICATING;
+      statusMessage = tr(STR_AUTHENTICATING);
+    }
   }
   requestUpdate();
 
-  performAuthentication();
+  if (mode == Mode::REGISTER) {
+    performRegistration();
+  } else {
+    performAuthentication();
+  }
 }
 
 void KOReaderAuthActivity::performAuthentication() {
@@ -40,6 +50,25 @@ void KOReaderAuthActivity::performAuthentication() {
     if (result == KOReaderSyncClient::OK) {
       state = SUCCESS;
       statusMessage = tr(STR_AUTH_SUCCESS);
+    } else {
+      state = FAILED;
+      errorMessage = KOReaderSyncClient::errorString(result);
+    }
+  }
+  requestUpdate();
+}
+
+void KOReaderAuthActivity::performRegistration() {
+  const auto result = KOReaderSyncClient::registerUser();
+
+  {
+    RenderLock lock(*this);
+    if (result == KOReaderSyncClient::OK) {
+      state = SUCCESS;
+      statusMessage = tr(STR_REGISTER_SUCCESS);
+    } else if (result == KOReaderSyncClient::USER_EXISTS) {
+      state = USER_EXISTS;
+      errorMessage = KOReaderSyncClient::errorString(result);
     } else {
       state = FAILED;
       errorMessage = KOReaderSyncClient::errorString(result);
@@ -65,31 +94,32 @@ void KOReaderAuthActivity::onEnter() {
 void KOReaderAuthActivity::onExit() {
   Activity::onExit();
 
-  // Turn off wifi
-  WiFi.disconnect(false);
-  delay(100);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
+  HalClock::wifiOff();
 }
 
 void KOReaderAuthActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_AUTH));
+  GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
+                 tr(STR_KOREADER_AUTH));
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (pageHeight - height) / 2;
+  const auto top = contentRect.y + (contentRect.height - height) / 2;
 
-  if (state == AUTHENTICATING) {
+  if (state == AUTHENTICATING || state == REGISTERING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, statusMessage.c_str());
   } else if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_SUCCESS), true, EpdFontFamily::BOLD);
+    const char* successMsg = (mode == Mode::REGISTER) ? tr(STR_REGISTER_SUCCESS) : tr(STR_AUTH_SUCCESS);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, successMsg, true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, tr(STR_SYNC_READY));
+  } else if (state == USER_EXISTS) {
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_USERNAME_TAKEN), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
   } else if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_AUTH_FAILED), true, EpdFontFamily::BOLD);
+    const char* failedMsg = (mode == Mode::REGISTER) ? tr(STR_REGISTER_FAILED) : tr(STR_AUTH_FAILED);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, failedMsg, true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + 10, errorMessage.c_str());
   }
 
@@ -99,7 +129,7 @@ void KOReaderAuthActivity::render(RenderLock&&) {
 }
 
 void KOReaderAuthActivity::loop() {
-  if (state == SUCCESS || state == FAILED) {
+  if (state == SUCCESS || state == FAILED || state == USER_EXISTS) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       finish();

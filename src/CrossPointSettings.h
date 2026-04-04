@@ -24,6 +24,7 @@ class CrossPointSettings {
     COVER = 3,
     BLANK = 4,
     COVER_CUSTOM = 5,
+    OVERLAY = 6,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -137,12 +138,35 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // Timezone options (POSIX TZ rules for DST support)
+  enum TIMEZONE {
+    TZ_UTC = 0,
+    TZ_CET = 1,
+    TZ_EET = 2,
+    TZ_MSK = 3,
+    TZ_UTC_PLUS4 = 4,
+    TZ_IST = 5,
+    TZ_UTC_PLUS7 = 6,
+    TZ_UTC_PLUS8 = 7,
+    TZ_UTC_PLUS9 = 8,
+    TZ_AEST = 9,
+    TZ_NZST = 10,
+    TZ_UTC_MINUS3 = 11,
+    TZ_EST = 12,
+    TZ_CST = 13,
+    TZ_MST = 14,
+    TZ_PST = 15,
+    TIMEZONE_COUNT
+  };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Apply information overlay with reading progress on sleep cover
+  uint8_t sleepCoverOverlay = 0;
   // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
   uint8_t statusBarChapterPageCount = 1;
@@ -199,6 +223,17 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Enable synthetic TOC fallback for malformed/sparse TOC books (1 = enabled, 0 = disabled)
+  uint8_t syntheticTocFallback = 1;
+  // Show clock in the reader status bar
+  uint8_t statusBarClock = 0;
+  // Clock format: 0 = 24h (14:00), 1 = 12h (2:00pm)
+  uint8_t clockFormat12h = 0;
+  // Timezone selection (applies POSIX TZ rules for DST)
+  uint8_t timeZone = TZ_UTC;
+  // Use clock and keep the LP timer running during deep sleep (GPIO13 HIGH)
+  // so time can be accurately restored on wake. Increases sleep current by ~3-4 mA.
+  uint8_t useClock = 0;
 
   ~CrossPointSettings() = default;
 

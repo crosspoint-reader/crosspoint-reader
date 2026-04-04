@@ -13,11 +13,14 @@
 bool Xtc::load() {
   LOG_DBG("XTC", "Loading XTC: %s", filepath.c_str());
 
+  // Ensure the per-book cache exists before the parser tries to create page_table.bin.
+  setupCacheDir();
+
   // Initialize parser
   parser.reset(new xtc::XtcParser());
 
-  // Open XTC file
-  xtc::XtcError err = parser->open(filepath.c_str());
+  // Open XTC file and initialize its cache-backed page table
+  xtc::XtcError err = parser->open(filepath.c_str(), cachePath.c_str());
   if (err != xtc::XtcError::OK) {
     LOG_ERR("XTC", "Failed to load: %s", xtc::errorToString(err));
     parser.reset();
@@ -618,4 +621,11 @@ xtc::XtcError Xtc::getLastError() const {
     return xtc::XtcError::FILE_NOT_FOUND;
   }
   return parser->getLastError();
+}
+
+void Xtc::prefetchPages(uint32_t pageIndex) const {
+  if (!loaded || !parser) {
+    return;
+  }
+  parser->prefetchWindow(pageIndex);
 }

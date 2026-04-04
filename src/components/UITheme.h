@@ -20,6 +20,10 @@ class UITheme {
   void setTheme(CrossPointSettings::UI_THEME type);
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
+  // Returns the drawable content Rect accounting for screen orientation and visible button hints.
+  // Bottom hints occupy the physical bottom edge; side hints occupy the physical right edge.
+  // The mapping to logical edges is orientation-dependent.
+  static Rect getContentRect(const GfxRenderer& renderer, bool hasBottomHints, bool hasSideHints);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();

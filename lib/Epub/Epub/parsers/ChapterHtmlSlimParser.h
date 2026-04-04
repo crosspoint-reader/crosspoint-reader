@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "../FootnoteEntry.h"
@@ -26,12 +27,14 @@ class ChapterHtmlSlimParser {
   const std::string& filepath;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>)> completePageFn;
-  std::function<void()> popupFn;  // Popup callback
+  std::function<void(int)> progressFn;  // Progress callback (0-100)
   int depth = 0;
   int skipUntilDepth = INT_MAX;
+  int skipTextUntilDepth = INT_MAX;  // skip character data inside synthetic zero-height spacer <p>
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
+  int preUntilDepth = INT_MAX;  // set when inside a <pre> element; enables \n → line-break handling
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
@@ -70,10 +73,26 @@ class ChapterHtmlSlimParser {
   int tableRowIndex = 0;
   int tableColIndex = 0;
 
+  struct ListEntry {
+    int depth;
+    bool isOrdered;
+    int counter;
+  };
+  std::vector<ListEntry> listStack;
+
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
+  std::vector<std::string> tocAnchors;
+
+  // Paragraph index tracking for XPath-to-page lookup table.
+  // Counts <p> sibling indices (1-based, matching XPath convention) during page building.
+  // Stored per page in the section cache so that XPath p[N] can be resolved to a page
+  // without reparsing, and current page can generate an XPath without reparsing.
+  uint16_t xpathParagraphIndex = 0;             // current <p> sibling index (1-based)
+  int xpathBodyDepth = -1;                      // depth of the <body> element (-1 = not yet seen)
+  std::vector<uint16_t> paragraphIndexPerPage;  // <p> index at each page completion
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -83,6 +102,11 @@ class ChapterHtmlSlimParser {
   char currentFootnoteLinkHref[64] = {};
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
+
+  // Per-chapter caches: resolveStyle and parseInlineStyle are called for every HTML element;
+  // caching by (tag|classAttr) and styleAttr avoids repeated string operations and hash lookups.
+  std::unordered_map<std::string, CssStyle> cssStyleCache_;
+  std::unordered_map<std::string, CssStyle> inlineStyleCache_;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
@@ -102,7 +126,9 @@ class ChapterHtmlSlimParser {
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
-                                 const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
+                                 std::vector<std::string> tocAnchors = {},
+                                 const std::function<void(int)>& progressFn = nullptr,
+                                 const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
@@ -115,15 +141,17 @@ class ChapterHtmlSlimParser {
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
         completePageFn(completePageFn),
-        popupFn(popupFn),
+        progressFn(progressFn),
         cssParser(cssParser),
         embeddedStyle(embeddedStyle),
         imageRendering(imageRendering),
         contentBase(contentBase),
-        imageBasePath(imageBasePath) {}
+        imageBasePath(imageBasePath),
+        tocAnchors(std::move(tocAnchors)) {}
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::vector<uint16_t>& getParagraphIndexPerPage() const { return paragraphIndexPerPage; }
 };

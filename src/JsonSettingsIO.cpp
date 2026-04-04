@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
+#include <cctype>
 #include <cstring>
 #include <string>
 
@@ -248,6 +249,7 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
 bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path) {
   JsonDocument doc;
   doc["lastConnectedSsid"] = store.getLastConnectedSsid();
+  doc["lastKnownMacAddress"] = store.getLastKnownMacAddress();
 
   JsonArray arr = doc["credentials"].to<JsonArray>();
   for (const auto& cred : store.getCredentials()) {
@@ -271,6 +273,33 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
   }
 
   store.lastConnectedSsid = doc["lastConnectedSsid"] | std::string("");
+
+  const auto isValidDashedMac = [](const std::string& value) -> bool {
+    if (value.empty()) {
+      return true;
+    }
+    if (value.size() != 17) {
+      return false;
+    }
+    for (size_t i = 0; i < value.size(); i++) {
+      if (i == 2 || i == 5 || i == 8 || i == 11 || i == 14) {
+        if (value[i] != '-') {
+          return false;
+        }
+      } else if (!std::isxdigit(static_cast<unsigned char>(value[i]))) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  store.lastKnownMacAddress = doc["lastKnownMacAddress"] | std::string("");
+  if (!isValidDashedMac(store.lastKnownMacAddress)) {
+    store.lastKnownMacAddress.clear();
+    if (needsResave) {
+      *needsResave = true;
+    }
+  }
 
   store.credentials.clear();
   JsonArray arr = doc["credentials"].as<JsonArray>();
@@ -301,7 +330,10 @@ bool JsonSettingsIO::saveRecentBooks(const RecentBooksStore& store, const char* 
     obj["path"] = book.path;
     obj["title"] = book.title;
     obj["author"] = book.author;
+    obj["series"] = book.series;
     obj["coverBmpPath"] = book.coverBmpPath;
+    obj["embeddedStyleOverride"] = book.embeddedStyleOverride;
+    obj["imageRenderingOverride"] = book.imageRenderingOverride;
   }
 
   String json;
@@ -319,13 +351,23 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
 
   store.recentBooks.clear();
   JsonArray arr = doc["books"].as<JsonArray>();
+  auto clampInt8 = [](int value, int minValue, int maxValue, int8_t fallback) -> int8_t {
+    if (value < minValue || value > maxValue) {
+      return fallback;
+    }
+    return static_cast<int8_t>(value);
+  };
+
   for (JsonObject obj : arr) {
     if (store.getCount() >= 10) break;
     RecentBook book;
     book.path = obj["path"] | std::string("");
     book.title = obj["title"] | std::string("");
     book.author = obj["author"] | std::string("");
+    book.series = obj["series"] | std::string("");
     book.coverBmpPath = obj["coverBmpPath"] | std::string("");
+    book.embeddedStyleOverride = clampInt8(obj["embeddedStyleOverride"] | -1, -1, 1, -1);
+    book.imageRenderingOverride = clampInt8(obj["imageRenderingOverride"] | -1, -1, 2, -1);
     store.recentBooks.push_back(book);
   }
 

@@ -19,6 +19,7 @@ class ConfirmationActivity : public Activity {
   std::string safeBody;
   int startY = 0;
   int lineHeight = 0;
+  bool inputArmed = false;
 
  public:
   ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& heading,

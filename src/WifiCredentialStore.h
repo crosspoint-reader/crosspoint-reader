@@ -24,6 +24,7 @@ class WifiCredentialStore {
   static WifiCredentialStore instance;
   std::vector<WifiCredential> credentials;
   std::string lastConnectedSsid;
+  std::string lastKnownMacAddress;
 
   static constexpr size_t MAX_NETWORKS = 8;
 
@@ -62,6 +63,10 @@ class WifiCredentialStore {
   void setLastConnectedSsid(const std::string& ssid);
   const std::string& getLastConnectedSsid() const;
   void clearLastConnectedSsid();
+
+  // Last known device MAC (formatted as AA-BB-CC-DD-EE-FF for instant UI display)
+  void setLastKnownMacAddress(const std::string& mac);
+  const std::string& getLastKnownMacAddress() const;
 
   // Clear all credentials
   void clearAll();

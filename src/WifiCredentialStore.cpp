@@ -168,9 +168,19 @@ void WifiCredentialStore::clearLastConnectedSsid() {
   }
 }
 
+void WifiCredentialStore::setLastKnownMacAddress(const std::string& mac) {
+  if (lastKnownMacAddress != mac) {
+    lastKnownMacAddress = mac;
+    saveToFile();
+  }
+}
+
+const std::string& WifiCredentialStore::getLastKnownMacAddress() const { return lastKnownMacAddress; }
+
 void WifiCredentialStore::clearAll() {
   credentials.clear();
   lastConnectedSsid.clear();
+  lastKnownMacAddress.clear();
   saveToFile();
   LOG_DBG("WCS", "Cleared all WiFi credentials");
 }

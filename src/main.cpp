@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -20,6 +21,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "WeatherSettingsStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
@@ -181,6 +183,7 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+  HalClock::saveBeforeSleep(SETTINGS.useClock);
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();
@@ -188,7 +191,7 @@ void enterDeepSleep() {
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio);
+  powerManager.startDeepSleep(gpio, SETTINGS.useClock);
 }
 
 void setupDisplayAndFonts() {
@@ -230,6 +233,7 @@ void setup() {
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();
+  gpio_deep_sleep_hold_dis();  // Release deep sleep GPIO hold state from previous sleep cycle
 
 #ifdef ENABLE_SERIAL_LOG
   if (gpio.isUsbConnected()) {
@@ -256,8 +260,10 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  HalClock::applyTimezone(SETTINGS.timeZone);
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
+  WEATHER_SETTINGS.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
@@ -288,6 +294,7 @@ void setup() {
   activityManager.goToBoot();
 
   APP_STATE.loadFromFile();
+  HalClock::restore();
   RECENT_BOOKS.loadFromFile();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
@@ -314,6 +321,7 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+  HalClock::updatePeriodic();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

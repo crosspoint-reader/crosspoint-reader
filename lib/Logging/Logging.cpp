@@ -1,5 +1,7 @@
 #include "Logging.h"
 
+#include <HalClock.h>
+
 #include <string>
 
 #define MAX_ENTRY_LEN 256
@@ -41,7 +43,14 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   // add the timestamp
   {
     unsigned long ms = millis();
-    int len = snprintf(c, sizeof(buf), "[%lu] ", ms);
+    char wallClock[12];
+    HalClock::formatLogTime(wallClock, sizeof(wallClock));
+    int len;
+    if (wallClock[0] != '\0') {
+      len = snprintf(c, sizeof(buf), "[%lu %s] ", ms, wallClock);
+    } else {
+      len = snprintf(c, sizeof(buf), "[%lu] ", ms);
+    }
     if (len < 0) {
       return;  // encoding error, skip logging
     }

@@ -40,7 +40,9 @@ void XtcReaderActivity::onEnter() {
   // Save current XTC as last opened book and add to recent books
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
+  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), "", xtc->getThumbBmpPath());
+
+  xtc->prefetchPages(currentPage);
 
   // Trigger first update
   requestUpdate();
@@ -63,6 +65,7 @@ void XtcReaderActivity::loop() {
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               currentPage = std::get<PageResult>(result.data).page;
+              xtc->prefetchPages(currentPage);
             }
           });
     }
@@ -98,10 +101,14 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // Handle end of book
+  // At end of the book, forward button goes home and back button returns to last page
   if (currentPage >= xtc->getPageCount()) {
-    currentPage = xtc->getPageCount() - 1;
-    requestUpdate();
+    if (nextTriggered) {
+      onGoHome();
+    } else {
+      currentPage = xtc->getPageCount() - 1;
+      requestUpdate();
+    }
     return;
   }
 
@@ -114,12 +121,14 @@ void XtcReaderActivity::loop() {
     } else {
       currentPage = 0;
     }
+    xtc->prefetchPages(currentPage);
     requestUpdate();
   } else if (nextTriggered) {
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
+    xtc->prefetchPages(currentPage);
     requestUpdate();
   }
 }
@@ -350,4 +359,79 @@ void XtcReaderActivity::loadProgress() {
     }
     f.close();
   }
+}
+
+bool XtcReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
+  Xtc xtc(filePath, "/.crosspoint");
+  if (!xtc.load()) {
+    LOG_DBG("SLP", "XTC: failed to load %s", filePath.c_str());
+    return false;
+  }
+
+  // Load saved page number
+  uint32_t savedPage = 0;
+  FsFile f;
+  if (Storage.openFileForRead("SLP", xtc.getCachePath() + "/progress.bin", f)) {
+    uint8_t data[4];
+    if (f.read(data, 4) == 4) {
+      savedPage = (uint32_t)data[0] | ((uint32_t)data[1] << 8) | ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+    }
+    f.close();
+  }
+  if (savedPage >= xtc.getPageCount()) savedPage = 0;
+
+  const uint16_t pageWidth = xtc.getPageWidth();
+  const uint16_t pageHeight = xtc.getPageHeight();
+  const uint8_t bitDepth = xtc.getBitDepth();
+
+  // Only use the 1-bit BW path; grayscale is not needed as a background under the overlay
+  const size_t pageBufferSize = (bitDepth == 2) ? ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2
+                                                : ((pageWidth + 7) / 8) * pageHeight;
+
+  uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
+  if (!pageBuffer) {
+    LOG_ERR("SLP", "XTC: failed to allocate page buffer");
+    return false;
+  }
+
+  if (xtc.loadPage(savedPage, pageBuffer, pageBufferSize) == 0) {
+    LOG_ERR("SLP", "XTC: failed to load page %lu", savedPage);
+    free(pageBuffer);
+    return false;
+  }
+
+  renderer.clearScreen();
+
+  if (bitDepth == 2) {
+    // 2-bit XTH: draw all non-white pixels as black (BW pass only)
+    const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
+    const uint8_t* plane1 = pageBuffer;
+    const uint8_t* plane2 = pageBuffer + planeSize;
+    const size_t colBytes = (pageHeight + 7) / 8;
+    for (uint16_t y = 0; y < pageHeight; y++) {
+      for (uint16_t x = 0; x < pageWidth; x++) {
+        const size_t colIndex = pageWidth - 1 - x;
+        const size_t byteInCol = y / 8;
+        const size_t bitInByte = 7 - (y % 8);
+        const size_t byteOffset = colIndex * colBytes + byteInCol;
+        const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
+        const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
+        if ((bit1 << 1) | bit2) {
+          renderer.drawPixel(x, y, true);
+        }
+      }
+    }
+  } else {
+    // 1-bit XTG: draw black pixels
+    const size_t srcRowBytes = (pageWidth + 7) / 8;
+    for (uint16_t srcY = 0; srcY < pageHeight; srcY++) {
+      for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
+        const bool isBlack = !((pageBuffer[srcY * srcRowBytes + srcX / 8] >> (7 - srcX % 8)) & 1);
+        if (isBlack) renderer.drawPixel(srcX, srcY, true);
+      }
+    }
+  }
+
+  free(pageBuffer);
+  return true;
 }

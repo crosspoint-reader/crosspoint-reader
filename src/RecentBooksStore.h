@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -6,7 +7,12 @@ struct RecentBook {
   std::string path;
   std::string title;
   std::string author;
+  std::string series;
   std::string coverBmpPath;
+  // -1 = use global setting, otherwise explicit per-book override.
+  int8_t embeddedStyleOverride = -1;
+  // -1 = use global setting, otherwise CrossPointSettings::IMAGE_RENDERING value.
+  int8_t imageRenderingOverride = -1;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -31,11 +37,14 @@ class RecentBooksStore {
   static RecentBooksStore& getInstance() { return instance; }
 
   // Add a book to the recent list (moves to front if already exists)
-  void addBook(const std::string& path, const std::string& title, const std::string& author,
+  void addBook(const std::string& path, const std::string& title, const std::string& author, const std::string& series,
                const std::string& coverBmpPath);
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
-                  const std::string& coverBmpPath);
+                  const std::string& series, const std::string& coverBmpPath);
+
+  // Remove a book from the recent list by path
+  void removeBook(const std::string& path);
 
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
@@ -47,6 +56,8 @@ class RecentBooksStore {
 
   bool loadFromFile();
   RecentBook getDataFromBook(std::string path) const;
+  RecentBook getBookByPath(const std::string& path) const;
+  bool setReaderOverrides(const std::string& path, int8_t embeddedStyleOverride, int8_t imageRenderingOverride);
 
  private:
   bool loadFromBinaryFile();

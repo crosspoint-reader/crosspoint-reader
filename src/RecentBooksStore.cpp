@@ -21,16 +21,22 @@ constexpr int MAX_RECENT_BOOKS = 10;
 RecentBooksStore RecentBooksStore::instance;
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
-                               const std::string& coverBmpPath) {
+                               const std::string& series, const std::string& coverBmpPath) {
+  int8_t embeddedStyleOverride = -1;
+  int8_t imageRenderingOverride = -1;
+
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
+    embeddedStyleOverride = it->embeddedStyleOverride;
+    imageRenderingOverride = it->imageRenderingOverride;
     recentBooks.erase(it);
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  recentBooks.insert(recentBooks.begin(),
+                     {path, title, author, series, coverBmpPath, embeddedStyleOverride, imageRenderingOverride});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -40,17 +46,49 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   saveToFile();
 }
 
+void RecentBooksStore::removeBook(const std::string& path) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    recentBooks.erase(it);
+    saveToFile();
+  }
+}
+
 void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
-                                  const std::string& coverBmpPath) {
+                                  const std::string& series, const std::string& coverBmpPath) {
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
     RecentBook& book = *it;
     book.title = title;
     book.author = author;
+    book.series = series;
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+RecentBook RecentBooksStore::getBookByPath(const std::string& path) const {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    return *it;
+  }
+  return RecentBook{};
+}
+
+bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
+                                          const int8_t imageRenderingOverride) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return false;
+  }
+
+  it->embeddedStyleOverride = embeddedStyleOverride;
+  it->imageRenderingOverride = imageRenderingOverride;
+  return saveToFile();
 }
 
 bool RecentBooksStore::saveToFile() const {
@@ -73,17 +111,18 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
   if (FsHelpers::hasEpubExtension(lastBookFileName)) {
     Epub epub(path, "/.crosspoint");
     epub.load(false, true);
-    return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
+    std::string series = epub.getSeries();
+    if (!series.empty() && !epub.getSeriesIndex().empty()) series += " #" + epub.getSeriesIndex();
+    return RecentBook{path, epub.getTitle(), epub.getAuthor(), series, epub.getThumbBmpPath()};
   } else if (FsHelpers::hasXtcExtension(lastBookFileName)) {
-    // Handle XTC file
     Xtc xtc(path, "/.crosspoint");
     if (xtc.load()) {
-      return RecentBook{path, xtc.getTitle(), xtc.getAuthor(), xtc.getThumbBmpPath()};
+      return RecentBook{path, xtc.getTitle(), xtc.getAuthor(), "", xtc.getThumbBmpPath()};
     }
   } else if (FsHelpers::hasTxtExtension(lastBookFileName) || FsHelpers::hasMarkdownExtension(lastBookFileName)) {
-    return RecentBook{path, lastBookFileName, "", ""};
+    return RecentBook{path, lastBookFileName, "", "", ""};
   }
-  return RecentBook{path, "", "", ""};
+  return RecentBook{path, "", "", "", ""};
 }
 
 bool RecentBooksStore::loadFromFile() {
@@ -120,38 +159,57 @@ bool RecentBooksStore::loadFromBinaryFile() {
     // Old version, just read paths
     uint8_t count;
     serialization::readPod(inputFile, count);
-    recentBooks.clear();
-    recentBooks.reserve(count);
+    std::vector<RecentBook> tmpRecentBooks;
+    tmpRecentBooks.reserve(count);
     for (uint8_t i = 0; i < count; i++) {
       std::string path;
-      serialization::readString(inputFile, path);
+      if (!serialization::readString(inputFile, path)) {
+        LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+        inputFile.close();
+        return false;
+      }
 
       // load book to get missing data
       RecentBook book = getDataFromBook(path);
-      if (book.title.empty() && book.author.empty() && version == 2) {
-        // Fall back to loading what we can from the store
-        std::string title, author;
-        serialization::readString(inputFile, title);
-        serialization::readString(inputFile, author);
-        recentBooks.push_back({path, title, author, ""});
+      if (version == 2) {
+        // v2 always stores title and author after path; consume them regardless
+        // of whether live metadata was found, to keep the stream aligned.
+        std::string storedTitle, storedAuthor;
+        if (!serialization::readString(inputFile, storedTitle) || !serialization::readString(inputFile, storedAuthor)) {
+          LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+          inputFile.close();
+          return false;
+        }
+        // Prefer live metadata; fall back to stored when live is unavailable.
+        const std::string& title = !book.title.empty() ? book.title : storedTitle;
+        const std::string& author = !book.title.empty() ? book.author : storedAuthor;
+        if (!title.empty()) {
+          tmpRecentBooks.push_back({path, title, author, "", ""});
+        }
       } else {
-        recentBooks.push_back(book);
+        // v1: no stored title/author bytes
+        if (!book.title.empty()) {
+          tmpRecentBooks.push_back(book);
+        }
       }
     }
+    recentBooks = std::move(tmpRecentBooks);
   } else if (version == 3) {
     uint8_t count;
     serialization::readPod(inputFile, count);
 
-    recentBooks.clear();
-    recentBooks.reserve(count);
+    std::vector<RecentBook> tmpRecentBooks;
+    tmpRecentBooks.reserve(count);
     uint8_t omitted = 0;
 
     for (uint8_t i = 0; i < count; i++) {
       std::string path, title, author, coverBmpPath;
-      serialization::readString(inputFile, path);
-      serialization::readString(inputFile, title);
-      serialization::readString(inputFile, author);
-      serialization::readString(inputFile, coverBmpPath);
+      if (!serialization::readString(inputFile, path) || !serialization::readString(inputFile, title) ||
+          !serialization::readString(inputFile, author) || !serialization::readString(inputFile, coverBmpPath)) {
+        LOG_ERR("RBS", "Corrupt recent.bin: string too long at entry %u", i);
+        inputFile.close();
+        return false;
+      }
 
       // Omit books with missing title (e.g. saved before metadata was available)
       if (title.empty()) {
@@ -159,8 +217,9 @@ bool RecentBooksStore::loadFromBinaryFile() {
         continue;
       }
 
-      recentBooks.push_back({path, title, author, coverBmpPath});
+      tmpRecentBooks.push_back({path, title, author, "", coverBmpPath});
     }
+    recentBooks = std::move(tmpRecentBooks);
 
     if (omitted > 0) {
       inputFile.close();

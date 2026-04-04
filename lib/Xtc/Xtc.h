@@ -50,6 +50,11 @@ class Xtc {
    */
   void setupCacheDir() const;
 
+  /**
+   * Preload window around specified page (for page turn optimization)
+   */
+  void prefetchPages(uint32_t pageIndex) const;
+
   // Path accessors
   const std::string& getCachePath() const { return cachePath; }
   const std::string& getPath() const { return filepath; }

@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "SettingsList.h"
+#include "SystemStatus.h"
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -340,16 +341,34 @@ void CrossPointWebServer::handleNotFound() const {
 }
 
 void CrossPointWebServer::handleStatus() const {
-  // Get correct IP based on AP vs STA mode
-  const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  const bool fastOnly = server->hasArg("phase") && server->arg("phase") == "fast";
+
+  SystemStatus status = SystemStatus::collectFast();
+  if (!fastOnly) {
+    SystemStatus::fillSdStatus(status);
+  }
 
   JsonDocument doc;
-  doc["version"] = CROSSPOINT_VERSION;
-  doc["ip"] = ipAddr;
-  doc["mode"] = apMode ? "AP" : "STA";
-  doc["rssi"] = apMode ? 0 : WiFi.RSSI();
-  doc["freeHeap"] = ESP.getFreeHeap();
-  doc["uptime"] = millis() / 1000;
+  doc["version"] = status.version;
+  doc["chipVersion"] = status.chipVersion;
+  doc["cpuMHz"] = status.cpuFreqMHz;
+  doc["ip"] = status.ip;
+  doc["mode"] = status.wifiMode;
+  doc["rssi"] = status.rssi;
+  doc["macAddress"] = status.macAddress;
+  doc["freeHeap"] = status.freeHeapBytes;
+  doc["minFreeHeap"] = status.minFreeHeapBytes;
+  doc["maxAllocHeap"] = status.maxAllocHeapBytes;
+  doc["flashTotal"] = status.flashBytes;
+  doc["flashAppUsed"] = status.flashAppUsedBytes;
+  doc["flashAppFree"] = status.flashAppFreeBytes;
+  doc["batteryPercent"] = status.batteryPercent;
+  doc["charging"] = status.charging;
+  doc["uptime"] = status.uptimeSeconds;
+  doc["sdReady"] = !fastOnly;
+  doc["sdTotal"] = status.sdTotalBytes;
+  doc["sdUsed"] = status.sdUsedBytes;
+  doc["sdFree"] = status.sdFreeBytes;
 
   String json;
   serializeJson(doc, json);
@@ -959,16 +978,31 @@ void CrossPointWebServer::handleMove() const {
 }
 
 void CrossPointWebServer::handleDelete() const {
-  // Check if 'paths' argument is provided
-  if (!server->hasArg("paths")) {
-    server->send(400, "text/plain", "Missing paths");
+  // To ensure backwards compatibility, plain `path` is mapped
+  // to a single element JSON array.
+  bool hasPathArg = server->hasArg("path");
+  bool hasPathsArg = server->hasArg("paths");
+  // Check 'paths' or `path` argument is provided
+  if (!(hasPathArg || hasPathsArg)) {
+    server->send(400, "text/plain", "Missing `path` or `paths` argument");
+    return;
+  }
+  if (hasPathArg && hasPathsArg) {
+    server->send(400, "text/plain", "Provide either 'path' or 'paths', not both");
     return;
   }
 
   // Parse paths
-  String pathsArg = server->arg("paths");
+  String pathsArg;
   JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, pathsArg);
+  DeserializationError error = DeserializationError(DeserializationError::Code::Ok);
+  if (hasPathsArg) {
+    pathsArg = server->arg("paths");
+    error = deserializeJson(doc, pathsArg);
+  } else {
+    pathsArg = server->arg("path");
+    doc.add(pathsArg);
+  }
   if (error) {
     server->send(400, "text/plain", "Invalid paths format");
     return;
