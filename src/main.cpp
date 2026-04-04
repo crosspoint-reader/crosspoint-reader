@@ -29,8 +29,6 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-HalDisplay display;
-HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
@@ -173,7 +171,6 @@ void verifyPowerButtonDuration() {
     powerManager.startDeepSleep(gpio);
   }
 }
-
 void waitForPowerRelease() {
   gpio.update();
   while (gpio.isPressed(HalGPIO::BTN_POWER)) {
@@ -192,7 +189,6 @@ void enterDeepSleep() {
   activityManager.goToSleep();
 
   display.deepSleep();
-  LOG_DBG("MAIN", "Power button press calibration value: %lu ms", t2 - t1);
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio, SETTINGS.useClock);
@@ -239,15 +235,17 @@ void setup() {
   powerManager.begin();
   gpio_deep_sleep_hold_dis();  // Release deep sleep GPIO hold state from previous sleep cycle
 
-  // Only start serial if USB connected
+#ifdef ENABLE_SERIAL_LOG
   if (gpio.isUsbConnected()) {
     Serial.begin(115200);
-    // Wait up to 3 seconds for Serial to be ready to catch early logs
-    unsigned long start = millis();
-    while (!Serial && (millis() - start) < 3000) {
+    const unsigned long start = millis();
+    while (!Serial && (millis() - start) < 500) {
       delay(10);
     }
   }
+#endif
+
+  LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -269,11 +267,12 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
-  switch (gpio.getWakeupReason()) {
+  const auto wakeupReason = gpio.getWakeupReason();
+  switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      // For normal wakeups, verify power button press duration
       LOG_DBG("MAIN", "Verifying power button press duration");
-      verifyPowerButtonDuration();
+      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
+                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
@@ -340,9 +339,10 @@ void loop() {
       String cmd = line.substring(4);
       cmd.trim();
       if (cmd == "SCREENSHOT") {
-        logSerial.printf("SCREENSHOT_START:%d\n", HalDisplay::BUFFER_SIZE);
+        const uint32_t bufferSize = display.getBufferSize();
+        logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
         uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, HalDisplay::BUFFER_SIZE);
+        logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
       }
     }
