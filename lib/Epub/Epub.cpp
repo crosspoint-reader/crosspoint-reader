@@ -409,7 +409,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // Do a ToC pass
   // A toc pass reads as much of the spine as fits into memory and then reads the entire ToC
   // After every pass the tocFile position is reset so the next pass may write in positions missed by the first
-  while (bookMetadataCache->continueTocPass()) {
+  // Do at least one run so we parse the files even when not batch processing
+  while (bookMetadataCache->continueTocPass() || decidingToCParser) {
     // Try EPUB 3 nav document first (preferred)
     if ((usingTocNavParser || decidingToCParser) && !tocNavItem.empty()) {
       LOG_DBG("EBP", "Attempting to parse EPUB 3 nav document");
