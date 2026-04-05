@@ -108,16 +108,25 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
-  // Show "Syncing progress..." popup on the current framebuffer before blocking on WiFi/HTTP.
-  // drawPopup calls displayBuffer() internally so it appears immediately.
-  // Safe here because RenderLock is already held by the caller (ActivityManager::exitActivity).
-  if (KOREADER_STORE.hasCredentials()) {
-    GUI.drawPopup(renderer, tr(STR_SYNCING_PROGRESS));
-  }
+  // Skip exit sync entirely if position hasn't changed since last sync — already up to date.
+  const bool positionChanged = [this]() -> bool {
+    if (!hasSyncedWithRemote || !epub || !section) return true;
+    const float chProg =
+        section->pageCount > 0 ? (float)section->currentPage / (float)section->pageCount : 0.0f;
+    const float current = epub->calculateProgress(currentSpineIndex, chProg);
+    return std::abs(current - lastAutoSyncedProgress) > 0.001f;
+  }();
 
-  // Flush progress on exit: reconnect WiFi if needed, always upload current position.
-  // showIndicator=false because onExit() is called with RenderLock held by ActivityManager.
-  tryAutoSync(/*attemptWifiConnect=*/true, /*alwaysUpload=*/true, /*showIndicator=*/false);
+  if (KOREADER_STORE.hasCredentials() && positionChanged) {
+    // Show "Syncing progress..." popup before blocking on WiFi/HTTP.
+    // drawPopup calls displayBuffer() internally so it appears immediately.
+    // Safe here because RenderLock is already held by the caller (ActivityManager::exitActivity).
+    GUI.drawPopup(renderer, tr(STR_SYNCING_PROGRESS));
+
+    // Flush progress on exit: reconnect WiFi if needed, always upload current position.
+    // showIndicator=false because onExit() runs with RenderLock held by ActivityManager.
+    tryAutoSync(/*attemptWifiConnect=*/true, /*alwaysUpload=*/true, /*showIndicator=*/false);
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
