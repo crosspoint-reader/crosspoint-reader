@@ -293,6 +293,16 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+int CrossPointSettings::getKoAutoSyncPageCount() const {
+  switch (koAutoSync) {
+    case KO_AUTO_SYNC_10:
+      return 10;
+    case KO_AUTO_SYNC_15:
+    default:
+      return 15;
+  }
+}
+
 int CrossPointSettings::getReaderFontId() const {
   switch (fontFamily) {
     case BOOKERLY:

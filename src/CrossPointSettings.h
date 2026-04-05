@@ -137,6 +137,9 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // KOReader auto-sync cadence (pages between automatic pushes)
+  enum KO_AUTO_SYNC { KO_AUTO_SYNC_OFF = 0, KO_AUTO_SYNC_10 = 1, KO_AUTO_SYNC_15 = 2, KO_AUTO_SYNC_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -199,6 +202,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // KOReader auto-sync cadence (0 = off, 1 = every 10 pages, 2 = every 15 pages)
+  uint8_t koAutoSync = KO_AUTO_SYNC_OFF;
 
   ~CrossPointSettings() = default;
 
@@ -225,6 +230,7 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  int getKoAutoSyncPageCount() const;
 };
 
 // Helper macro to access settings

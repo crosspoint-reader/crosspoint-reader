@@ -673,8 +673,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom,
-                              const int textYOffset) const {
+                              const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
+                              const float syncProgress, const bool syncFailed, const bool syncing) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -716,9 +716,50 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       // Chapter progress
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
+    const int barThickness = (SETTINGS.statusBarProgressBarThickness + 1) * 2;
     const int barWidth = progressBarMaxWidth * progress / 100;
-    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, ((SETTINGS.statusBarProgressBarThickness + 1) * 2),
-                      true);
+    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, barThickness, true);
+
+    // Draw sync marker: 2px white notch showing last-pushed position within the book progress fill.
+    // Only meaningful when bar represents book progress (chapter mode uses a different scale).
+    // Sync marker: fillRect(true)=black, fillRect(false)=white.
+    // Draw a black tick above the bar (always on white background = visible).
+    // Inside the bar fill (black background): white notch.
+    // Outside the fill (white background): black continuation.
+    if (syncProgress >= 0.0f) {
+      const int syncX = orientedMarginLeft + progressBarMaxWidth * static_cast<int>(syncProgress) / 100;
+      const int fillEnd = orientedMarginLeft + barWidth;
+      LOG_DBG("GUI", "syncMarker: syncProg=%.1f syncX=%d fillEnd=%d barThick=%d", syncProgress, syncX, fillEnd,
+              barThickness);
+      if (syncX > orientedMarginLeft) {
+        // Black tick above the bar (6px tall, 2px wide) — visible in all states
+        renderer.fillRect(syncX - 1, progressBarY - 6, 2, 6, true);
+        // Inside the fill: white notch
+        if (syncX < fillEnd) {
+          const int notchWidth = std::min(2, fillEnd - syncX + 1);
+          renderer.fillRect(syncX - 1, progressBarY, notchWidth, barThickness, false);
+        } else {
+          // At or past the fill edge: black continuation in the unfilled area
+          renderer.fillRect(syncX - 1, progressBarY, 2, barThickness, true);
+        }
+      }
+    } else if (syncFailed) {
+      // Sync-failed indicator: two small black dots at the right edge of the bar area
+      const int fx = orientedMarginLeft + progressBarMaxWidth - 5;
+      renderer.fillRect(fx, progressBarY, 2, barThickness, true);
+      renderer.fillRect(fx + 3, progressBarY, 2, barThickness, true);
+    }
+
+    // Syncing indicator: three small dots above the right end of the bar while HTTP in flight
+    if (syncing) {
+      const int dotY = progressBarY - 5;
+      const int dotRight = orientedMarginLeft + progressBarMaxWidth;
+      renderer.fillRect(dotRight - 2, dotY, 2, 2, true);
+      renderer.fillRect(dotRight - 6, dotY, 2, 2, true);
+      renderer.fillRect(dotRight - 10, dotY, 2, 2, true);
+    }
+  } else {
+    LOG_DBG("GUI", "progressBar HIDDEN");
   }
 
   // Draw Battery

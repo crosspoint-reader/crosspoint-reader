@@ -8,7 +8,9 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <WiFi.h>
 #include <esp_system.h>
+#include <time.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -16,8 +18,10 @@
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
+#include "KOReaderDocumentId.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -81,6 +85,17 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
+  // Load last auto-sync position from cache (4-byte float)
+  FsFile syncFile;
+  if (Storage.openFileForRead("ERS", epub->getCachePath() + "/ko_autosync.bin", syncFile)) {
+    uint8_t buf[4];
+    if (syncFile.read(buf, sizeof(buf)) == sizeof(buf)) {
+      memcpy(&lastAutoSyncedProgress, buf, sizeof(lastAutoSyncedProgress));
+      hasSyncedWithRemote = true;
+    }
+    syncFile.close();
+  }
+
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
@@ -92,6 +107,10 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  // Flush progress on exit: reconnect WiFi if needed, always upload current position.
+  // showIndicator=false because onExit() is called with RenderLock held by ActivityManager.
+  tryAutoSync(/*attemptWifiConnect=*/true, /*alwaysUpload=*/true, /*showIndicator=*/false);
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -133,6 +152,28 @@ void EpubReaderActivity::loop() {
       pageTurn(true);
       return;
     }
+  }
+
+  // Timer-based sync: trigger every AUTO_SYNC_TIMER_MS if credentials are configured
+  // and we've moved at least a few pages since last sync (avoid syncing without progress).
+  if (KOREADER_STORE.hasCredentials() && epub && section && !pendingAutoSync) {
+    const unsigned long now = millis();
+    if (lastAutoSyncAttemptMs > 0 && (now - lastAutoSyncAttemptMs) >= AUTO_SYNC_TIMER_MS) {
+      const float chProg = section->pageCount > 0 ? (float)section->currentPage / (float)section->pageCount : 0.0f;
+      const float currentBookProgress = epub->calculateProgress(currentSpineIndex, chProg);
+      // Only trigger if we've moved meaningfully since last sync (>1% of book, ~a few pages)
+      if (lastAutoSyncedProgress < 0.0f || (currentBookProgress - lastAutoSyncedProgress) > 0.01f) {
+        pendingAutoSync = true;
+      } else {
+        lastAutoSyncAttemptMs = now;  // reset timer even if no movement
+      }
+    }
+  }
+
+  // Perform deferred auto-sync if triggered by page threshold or timer
+  if (pendingAutoSync) {
+    pendingAutoSync = false;
+    tryAutoSync(/*attemptWifiConnect=*/true);
   }
 
   // Enter reader menu activity.
@@ -388,6 +429,25 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
                                                    currentPage, totalPages),
             [this](const ActivityResult& result) {
+              // Re-read sync file so marker appears immediately after manual sync/upload
+              if (epub) {
+                FsFile syncFile;
+                const std::string syncPath = epub->getCachePath() + "/ko_autosync.bin";
+                LOG_DBG("ERS", "KOSync callback: reading %s", syncPath.c_str());
+                if (Storage.openFileForRead("ERS", syncPath, syncFile)) {
+                  uint8_t buf[4];
+                  if (syncFile.read(buf, sizeof(buf)) == sizeof(buf)) {
+                    memcpy(&lastAutoSyncedProgress, buf, sizeof(lastAutoSyncedProgress));
+                    hasSyncedWithRemote = true;
+                    LOG_DBG("ERS", "KOSync callback: loaded syncProg=%.3f", lastAutoSyncedProgress);
+                  } else {
+                    LOG_DBG("ERS", "KOSync callback: read failed (short read)");
+                  }
+                  syncFile.close();
+                } else {
+                  LOG_DBG("ERS", "KOSync callback: file not found");
+                }
+              }
               if (!result.isCancelled) {
                 const auto& sync = std::get<SyncResult>(result.data);
                 if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
@@ -638,6 +698,26 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 
+  if (SETTINGS.koAutoSync != CrossPointSettings::KO_AUTO_SYNC_OFF) {
+    const float chapterProg = (section->pageCount > 0) ? (float)section->currentPage / (float)section->pageCount : 0.0f;
+    const float currentBookProgress = epub->calculateProgress(currentSpineIndex, chapterProg);
+
+    if (lastAutoSyncedProgress < 0.0f) {
+      // First render with no prior sync: anchor threshold baseline to current position, no marker yet
+      lastAutoSyncedProgress = currentBookProgress;
+    } else {
+      // Threshold: N pages expressed as fraction of current chapter's book weight
+      const float chapterWeight =
+          epub->calculateProgress(currentSpineIndex, 1.0f) - epub->calculateProgress(currentSpineIndex, 0.0f);
+      const float threshold = (section->pageCount > 0)
+                                  ? chapterWeight * (float)SETTINGS.getKoAutoSyncPageCount() / (float)section->pageCount
+                                  : 0.05f;
+      if ((currentBookProgress - lastAutoSyncedProgress) >= threshold) {
+        pendingAutoSync = true;
+      }
+    }
+  }
+
   if (pendingScreenshot) {
     pendingScreenshot = false;
     ScreenshotUtil::takeScreenshot(renderer);
@@ -793,6 +873,121 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 }
 
+void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool alwaysUpload, const bool showIndicator) {
+  if (!KOREADER_STORE.hasCredentials()) return;
+  if (!epub || !section) return;
+
+  lastAutoSyncAttemptMs = millis();
+
+  bool weConnectedWifi = false;
+  if (WiFi.status() != WL_CONNECTED) {
+    if (!attemptWifiConnect) return;
+    // Try to reconnect to last stored WiFi network (blocking)
+    WiFi.mode(WIFI_STA);
+    WiFi.begin();
+    LOG_DBG("ERS", "Auto-sync: attempting WiFi reconnect...");
+    const int timeoutMs = alwaysUpload ? 5000 : 3000;  // exit gets longer timeout
+    const int retryCount = timeoutMs / 100;
+    int retries = retryCount;
+    while (WiFi.status() != WL_CONNECTED && retries-- > 0) {
+      delay(100);
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+      LOG_DBG("ERS", "Auto-sync: WiFi reconnect failed");
+      WiFi.mode(WIFI_OFF);
+      pendingSyncFailed = true;
+      return;
+    }
+    weConnectedWifi = true;
+    LOG_DBG("ERS", "Auto-sync: WiFi reconnected");
+  }
+
+  // Show syncing indicator. Skip when called from onExit(): onExit() runs with RenderLock
+  // held by ActivityManager, so requestUpdateAndWait() would assert/deadlock.
+  if (showIndicator) {
+    isSyncing = true;
+    requestUpdateAndWait();
+  }
+
+  const CrossPointPosition localPos{currentSpineIndex, section->currentPage, section->pageCount};
+  const KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+
+  std::string docHash;
+  if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
+    docHash = KOReaderDocumentId::calculateFromFilename(epub->getPath());
+  } else {
+    docHash = KOReaderDocumentId::calculate(epub->getPath());
+  }
+  if (docHash.empty()) {
+    LOG_DBG("ERS", "Auto-sync: hash calculation failed");
+    return;
+  }
+
+  KOReaderProgress remote{};
+  const auto getErr = KOReaderSyncClient::getProgress(docHash, remote);
+  if (getErr != KOReaderSyncClient::OK && getErr != KOReaderSyncClient::NOT_FOUND) {
+    LOG_DBG("ERS", "Auto-sync: getProgress error %d", static_cast<int>(getErr));
+    pendingSyncFailed = true;
+    isSyncing = false;
+    if (weConnectedWifi) {
+      WiFi.disconnect(false);
+      delay(100);
+      WiFi.mode(WIFI_OFF);
+      delay(100);
+    }
+    return;
+  }
+
+  const bool shouldUpload =
+      alwaysUpload || (getErr == KOReaderSyncClient::NOT_FOUND) || (localKoPos.percentage > remote.percentage);
+  if (!shouldUpload) {
+    LOG_DBG("ERS", "Auto-sync: local not ahead (%.3f vs %.3f), skipping", localKoPos.percentage, remote.percentage);
+    isSyncing = false;
+    if (weConnectedWifi) {
+      WiFi.disconnect(false);
+      delay(100);
+      WiFi.mode(WIFI_OFF);
+      delay(100);
+    }
+    return;
+  }
+
+  KOReaderProgress upload{};
+  upload.document = docHash;
+  upload.progress = localKoPos.xpath;
+  upload.percentage = localKoPos.percentage;
+
+  const auto putErr = KOReaderSyncClient::updateProgress(upload);
+  if (putErr == KOReaderSyncClient::OK) {
+    LOG_INF("ERS", "Auto-sync: pushed %.1f%%", localKoPos.percentage * 100.0f);
+    lastAutoSyncedProgress = localKoPos.percentage;
+    hasSyncedWithRemote = true;
+    pendingSyncFailed = false;
+
+    // Persist so the sync marker survives across reading sessions
+    if (epub) {
+      FsFile syncFile;
+      if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/ko_autosync.bin", syncFile)) {
+        uint8_t buf[4];
+        memcpy(buf, &lastAutoSyncedProgress, sizeof(lastAutoSyncedProgress));
+        syncFile.write(buf, sizeof(buf));
+        syncFile.close();
+      }
+    }
+  } else {
+    LOG_DBG("ERS", "Auto-sync: updateProgress error %d", static_cast<int>(putErr));
+    pendingSyncFailed = true;
+  }
+
+  isSyncing = false;
+  if (weConnectedWifi) {
+    WiFi.disconnect(false);
+    delay(100);
+    WiFi.mode(WIFI_OFF);
+    delay(100);
+  }
+}
+
 void EpubReaderActivity::renderStatusBar() const {
   // Calculate progress in book
   const int currentPage = section->currentPage + 1;
@@ -827,7 +1022,25 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
+  // Compute bar-relative sync position: book % for book mode, chapter % for chapter mode.
+  // In chapter mode the marker only shows if the sync occurred within the current chapter.
+  float syncPct = -1.0f;
+  if (hasSyncedWithRemote) {
+    if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
+      syncPct = lastAutoSyncedProgress * 100.0f;
+    } else if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::CHAPTER_PROGRESS) {
+      const float chStart = epub->calculateProgress(currentSpineIndex, 0.0f);
+      const float chEnd = epub->calculateProgress(currentSpineIndex, 1.0f);
+      if (chEnd > chStart && lastAutoSyncedProgress >= chStart && lastAutoSyncedProgress <= chEnd) {
+        syncPct = (lastAutoSyncedProgress - chStart) / (chEnd - chStart) * 100.0f;
+      }
+    }
+  }
+  LOG_DBG("ERS", "renderStatusBar: bookProg=%.1f syncPct=%.1f hasSynced=%d barMode=%d failed=%d syncing=%d",
+          bookProgress, syncPct, (int)hasSyncedWithRemote, (int)SETTINGS.statusBarProgressBar, (int)pendingSyncFailed,
+          (int)isSyncing);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, syncPct, pendingSyncFailed,
+                    isSyncing);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
