@@ -1667,6 +1667,8 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     if (!glyph) continue;
 
     const int advance = fp4::toPixel(glyph->advanceX);
+    // Add 10% vertical spacing between characters (equivalent to line spacing in horizontal mode)
+    const int verticalAdvance = advance + advance / 10;
     const auto* punctOffset = VerticalTextUtils::getVerticalPunctuationOffset(cp);
 
     // Re-encode codepoint to UTF-8 for single-char drawing
@@ -1682,20 +1684,10 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
       charBuf[2] = static_cast<char>(0x80 | (cp & 0x3F));
     }
 
-    if (punctOffset && punctOffset->rotate) {
-      // Rotated punctuation (ー, …, ～ etc.): draw using rotated rendering
-      drawTextRotated90CW(effectiveFontId, x, yPos, charBuf, black, style);
-      yPos += advance;
-    } else {
-      // Upright character (CJK, kana, or offset punctuation)
-      int dx = 0, dy = 0;
-      if (punctOffset) {
-        dx = punctOffset->dxEighths * advance / 8;
-        dy = punctOffset->dyEighths * advance / 8;
-      }
-      drawText(effectiveFontId, x + dx, yPos + dy, charBuf, black, style);
-      yPos += advance;
-    }
+    // All characters drawn upright for now.
+    // TODO: Use OpenType 'vert' feature for proper vertical glyph variants
+    drawText(effectiveFontId, x, yPos, charBuf, black, style);
+    yPos += verticalAdvance;
   }
 }
 

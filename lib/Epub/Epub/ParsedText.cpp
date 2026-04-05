@@ -232,26 +232,26 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
 
   const int lineHeight = renderer.getLineHeight(fontId);
 
-  // Calculate word heights for vertical layout
+  // Calculate word heights for vertical layout (with 10% spacing, matching drawTextVertical)
   std::vector<uint16_t> wordHeights;
   wordHeights.reserve(words.size());
   for (size_t i = 0; i < words.size(); i++) {
     auto vb = (i < wordVerticalBehaviors.size()) ? wordVerticalBehaviors[i]
                                                   : VerticalTextUtils::VerticalBehavior::Upright;
+    uint16_t baseHeight;
     switch (vb) {
       case VerticalTextUtils::VerticalBehavior::Sideways:
-        // Rotated text: height = horizontal text width
-        wordHeights.push_back(renderer.getTextWidth(fontId, words[i].c_str(), wordStyles[i]));
+        baseHeight = renderer.getTextWidth(fontId, words[i].c_str(), wordStyles[i]);
         break;
       case VerticalTextUtils::VerticalBehavior::TateChuYoko:
-        // Horizontal-in-vertical: height = one line height
-        wordHeights.push_back(static_cast<uint16_t>(lineHeight));
+        baseHeight = static_cast<uint16_t>(lineHeight);
         break;
       default:
-        // Upright CJK: height = character advance (CJK is square, so advanceX works)
-        wordHeights.push_back(renderer.getTextWidth(fontId, words[i].c_str(), wordStyles[i]));
+        baseHeight = renderer.getTextWidth(fontId, words[i].c_str(), wordStyles[i]);
         break;
     }
+    // Add 10% vertical spacing between characters (matches drawTextVertical advance)
+    wordHeights.push_back(baseHeight + baseHeight / 10);
   }
 
   // Break into columns when cumulative height exceeds columnHeight

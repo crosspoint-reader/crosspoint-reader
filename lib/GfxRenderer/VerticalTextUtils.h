@@ -19,18 +19,42 @@ struct PunctuationOffset {
   bool rotate;       // true = rotate 90 CW (e.g. long vowel mark)
 };
 
-// Punctuation that needs repositioning in vertical text.
-// Offsets are in 1/8 of character dimension to avoid floating point.
+// CJK punctuation and brackets that need 90 CW rotation in vertical text.
+// Horizontal font glyphs are designed for horizontal layout; rotating them
+// naturally transforms their position to the correct vertical placement
+// (e.g. 。at bottom-left becomes upper-right after rotation).
+// dx/dyEighths are post-rotation fine-tuning offsets (usually 0).
 static constexpr PunctuationOffset VERTICAL_PUNCTUATION[] = {
-    {0x3001, 3, -3, false},   // 、 ideographic comma -> upper-right
-    {0x3002, 3, -3, false},   // 。 ideographic period -> upper-right
-    {0xFF0C, 3, -3, false},   // ， fullwidth comma -> upper-right
-    {0xFF0E, 3, -3, false},   // ． fullwidth period -> upper-right
-    {0x30FC, 0, 0, true},     // ー katakana long vowel mark -> rotate
-    {0x2014, 0, 0, true},     // — em dash -> rotate
-    {0x2015, 0, 0, true},     // ― horizontal bar -> rotate
-    {0x2026, 0, 0, true},     // … ellipsis -> rotate
-    {0xFF5E, 0, 0, true},     // ～ fullwidth tilde -> rotate
+    // Punctuation - rotate to reposition from horizontal to vertical placement
+    {0x3001, 0, 0, true},     // 、 ideographic comma
+    {0x3002, 0, 0, true},     // 。 ideographic period
+    {0xFF0C, 0, 0, true},     // ， fullwidth comma
+    {0xFF0E, 0, 0, true},     // ． fullwidth period
+    {0xFF01, 0, 0, true},     // ！ fullwidth exclamation
+    {0xFF1F, 0, 0, true},     // ？ fullwidth question mark
+    {0xFF1A, 0, 0, true},     // ： fullwidth colon
+    {0xFF1B, 0, 0, true},     // ； fullwidth semicolon
+    // Brackets - rotate so opening/closing direction matches vertical flow
+    {0x300C, 0, 0, true},     // 「 left corner bracket
+    {0x300D, 0, 0, true},     // 」 right corner bracket
+    {0x300E, 0, 0, true},     // 『 left white corner bracket
+    {0x300F, 0, 0, true},     // 』 right white corner bracket
+    {0x3010, 0, 0, true},     // 【 left black lenticular bracket
+    {0x3011, 0, 0, true},     // 】 right black lenticular bracket
+    {0xFF08, 0, 0, true},     // （ fullwidth left paren
+    {0xFF09, 0, 0, true},     // ） fullwidth right paren
+    {0x3008, 0, 0, true},     // 〈 left angle bracket
+    {0x3009, 0, 0, true},     // 〉 right angle bracket
+    {0x300A, 0, 0, true},     // 《 left double angle bracket
+    {0x300B, 0, 0, true},     // 》 right double angle bracket
+    {0x3014, 0, 0, true},     // 〔 left tortoise shell bracket
+    {0x3015, 0, 0, true},     // 〕 right tortoise shell bracket
+    // Long marks - rotate to vertical orientation
+    {0x30FC, 0, 0, true},     // ー katakana long vowel mark
+    {0x2014, 0, 0, true},     // — em dash
+    {0x2015, 0, 0, true},     // ― horizontal bar
+    {0x2026, 0, 0, true},     // … ellipsis
+    {0xFF5E, 0, 0, true},     // ～ fullwidth tilde
 };
 static constexpr int VERTICAL_PUNCTUATION_COUNT =
     sizeof(VERTICAL_PUNCTUATION) / sizeof(VERTICAL_PUNCTUATION[0]);
