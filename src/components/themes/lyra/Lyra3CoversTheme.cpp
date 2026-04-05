@@ -16,6 +16,7 @@
 namespace {
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
+constexpr int coverHeightOffset = 58;
 }  // namespace
 
 void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -23,8 +24,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                                            bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const int tileWidth = (rect.width - 2 * Lyra3CoversMetrics::values.contentSidePadding) / 3;
   const int tileY = rect.y;
-  const int titleAreaHeight = renderer.getLineHeight(SMALL_FONT_ID) * 3 + hPaddingInSelection + 5;
-  const int coverHeight = std::max(120, rect.height - titleAreaHeight);
+  const int coverHeight = std::max(120, rect.height - coverHeightOffset);
   const bool hasContinueReading = !recentBooks.empty();
 
   // Draw book card regardless, fill with message based on `hasContinueReading`
