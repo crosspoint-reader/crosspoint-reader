@@ -35,8 +35,6 @@ void WifiSelectionActivity::onEnter() {
   savePromptSelection = 0;
   forgetPromptSelection = 0;
   autoConnecting = false;
-  upDownChordLatched = false;
-
   // Cache MAC address for display
   uint8_t mac[6];
   WiFi.macAddress(mac);
@@ -436,22 +434,15 @@ void WifiSelectionActivity::loop() {
       }
     }
 
-    if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
-      selectedNetworkIndex = static_cast<size_t>(ButtonNavigator::midpointIndex(static_cast<int>(networks.size())));
+    buttonNavigator.onNext([this] {
+      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
       requestUpdate();
-    }
+    });
 
-    if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
-      buttonNavigator.onNext([this] {
-        selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
-        requestUpdate();
-      });
-
-      buttonNavigator.onPrevious([this] {
-        selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
-        requestUpdate();
-      });
-    }
+    buttonNavigator.onPrevious([this] {
+      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
+      requestUpdate();
+    });
   }
 }
 

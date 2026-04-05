@@ -47,7 +47,6 @@ class WifiSelectionActivity final : public Activity {
 
   WifiSelectionState state = WifiSelectionState::SCANNING;
   size_t selectedNetworkIndex = 0;
-  bool upDownChordLatched = false;
   std::vector<WifiNetworkInfo> networks;
 
   // Selected network for connection
