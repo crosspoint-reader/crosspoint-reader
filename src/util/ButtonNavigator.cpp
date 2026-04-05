@@ -114,7 +114,7 @@ bool ButtonNavigator::shouldSuppressListNavForMidpointChord(const MappedInputMan
       in.isPressed(B::Up) || in.isPressed(B::Down) || in.isPressed(B::Left) || in.isPressed(B::Right);
   if (!anyDirNav) {
     s_midpointChordReleaseGuard = false;
-    return true;  
+    return true;
   }
   return true;
 }
