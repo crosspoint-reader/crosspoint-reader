@@ -19,6 +19,85 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+constexpr int CLASSIC_MIN_RECENT_TILE_HEIGHT = 280;
+constexpr int LYRA_MIN_RECENT_TILE_HEIGHT = 170;
+constexpr int LYRA_3_COVERS_MIN_RECENT_TILE_HEIGHT = 200;
+constexpr int CLASSIC_MIN_RECENT_TO_MENU_GAP = 2;
+constexpr int LYRA_MIN_RECENT_TO_MENU_GAP = 4;
+
+struct HomeScreenLayout {
+  int recentTileHeight;
+  int recentToMenuGap;
+  int menuHeight;
+};
+
+bool isLyraFamilyTheme() {
+  const auto theme = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+  return theme == CrossPointSettings::UI_THEME::LYRA || theme == CrossPointSettings::UI_THEME::LYRA_3_COVERS;
+}
+
+bool isLyraExtendedTheme() {
+  return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_3_COVERS;
+}
+
+int getMinRecentTileHeight() {
+  if (isLyraExtendedTheme()) {
+    return LYRA_3_COVERS_MIN_RECENT_TILE_HEIGHT;
+  }
+  if (isLyraFamilyTheme()) {
+    return LYRA_MIN_RECENT_TILE_HEIGHT;
+  }
+  return CLASSIC_MIN_RECENT_TILE_HEIGHT;
+}
+
+int getMinRecentToMenuGap() {
+  return isLyraFamilyTheme() ? LYRA_MIN_RECENT_TO_MENU_GAP : CLASSIC_MIN_RECENT_TO_MENU_GAP;
+}
+
+HomeScreenLayout computeHomeScreenLayout(const ThemeMetrics& metrics, int contentHeight, int menuItemCount) {
+  HomeScreenLayout layout{metrics.homeCoverTileHeight, metrics.verticalSpacing, 0};
+
+  const int menuRequiredHeight =
+      menuItemCount * metrics.menuRowHeight + std::max(0, menuItemCount - 1) * metrics.menuSpacing;
+
+  auto computeMenuHeight = [&]() {
+    return contentHeight - (metrics.homeTopPadding + layout.recentTileHeight + layout.recentToMenuGap);
+  };
+
+  layout.menuHeight = computeMenuHeight();
+  if (layout.menuHeight >= menuRequiredHeight) {
+    return layout;
+  }
+
+  const int gapReduction =
+      std::min(layout.recentToMenuGap - getMinRecentToMenuGap(), menuRequiredHeight - layout.menuHeight);
+  if (gapReduction > 0) {
+    layout.recentToMenuGap -= gapReduction;
+    layout.menuHeight = computeMenuHeight();
+  }
+
+  if (layout.menuHeight >= menuRequiredHeight) {
+    return layout;
+  }
+
+  const int tileReduction =
+      std::min(layout.recentTileHeight - getMinRecentTileHeight(), menuRequiredHeight - layout.menuHeight);
+  if (tileReduction > 0) {
+    layout.recentTileHeight -= tileReduction;
+    layout.menuHeight = computeMenuHeight();
+  }
+
+  layout.menuHeight = std::max(0, layout.menuHeight);
+  return layout;
+}
+
+int getHomeCoverRenderHeight(const HomeScreenLayout& layout) {
+  return isLyraExtendedTheme() ? std::max(120, layout.recentTileHeight - 58)
+                               : std::max(120, layout.recentTileHeight - (isLyraFamilyTheme() ? 16 : 0));
+}
+}  // namespace
+
 int HomeActivity::getMenuItemCount() const {
   int count = 5;  // File Browser, Recents, File transfer, Weather, Settings
   if (!recentBooks.empty()) {
@@ -222,11 +301,6 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.homeTopPadding}, nullptr);
 
-  GUI.drawRecentBookCover(renderer,
-                          Rect{contentRect.x, metrics.homeTopPadding, contentRect.width, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
-
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
                                         tr(STR_WEATHER), tr(STR_SETTINGS_TITLE)};
@@ -238,11 +312,18 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
 
+  const HomeScreenLayout layout =
+      computeHomeScreenLayout(metrics, contentRect.height, static_cast<int>(menuItems.size()));
+
+  GUI.drawRecentBookCover(renderer,
+                          Rect{contentRect.x, metrics.homeTopPadding, contentRect.width, layout.recentTileHeight},
+                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+                          std::bind(&HomeActivity::storeCoverBuffer, this));
+
   GUI.drawButtonMenu(
       renderer,
-      Rect{contentRect.x, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing,
-           contentRect.width,
-           contentRect.height - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2)},
+      Rect{contentRect.x, metrics.homeTopPadding + layout.recentTileHeight + layout.recentToMenuGap, contentRect.width,
+           layout.menuHeight},
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
@@ -257,7 +338,7 @@ void HomeActivity::render(RenderLock&&) {
     requestUpdate();
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
-    loadRecentCovers(metrics.homeCoverHeight);
+    loadRecentCovers(getHomeCoverRenderHeight(layout));
   }
 }
 
