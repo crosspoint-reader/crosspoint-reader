@@ -9,6 +9,7 @@
 #include <Utf8.h>
 
 #include "FontCacheManager.h"
+#include "VerticalTextUtils.h"
 
 #include <algorithm>
 
@@ -1636,6 +1637,66 @@ int GfxRenderer::getTextHeight(const int fontId) const {
     return 0;
   }
   return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
+}
+
+void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, const char* text, const bool black,
+                                   const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') return;
+
+  // Scan mode: record text for prewarm
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(text, fontId, style);
+    return;
+  }
+
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    LOG_ERR("GFX", "drawTextVertical: font %d not found", effectiveFontId);
+    return;
+  }
+
+  const auto& font = fontMap.at(effectiveFontId);
+  int yPos = y;
+  const char* ptr = text;
+
+  while (*ptr) {
+    uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr));
+    if (cp == 0) break;
+
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) continue;
+
+    const int advance = fp4::toPixel(glyph->advanceX);
+    const auto* punctOffset = VerticalTextUtils::getVerticalPunctuationOffset(cp);
+
+    // Re-encode codepoint to UTF-8 for single-char drawing
+    char charBuf[5] = {};
+    if (cp < 0x80) {
+      charBuf[0] = static_cast<char>(cp);
+    } else if (cp < 0x800) {
+      charBuf[0] = static_cast<char>(0xC0 | (cp >> 6));
+      charBuf[1] = static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+      charBuf[0] = static_cast<char>(0xE0 | (cp >> 12));
+      charBuf[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+      charBuf[2] = static_cast<char>(0x80 | (cp & 0x3F));
+    }
+
+    if (punctOffset && punctOffset->rotate) {
+      // Rotated punctuation (ー, …, ～ etc.): draw using rotated rendering
+      drawTextRotated90CW(effectiveFontId, x, yPos, charBuf, black, style);
+      yPos += advance;
+    } else {
+      // Upright character (CJK, kana, or offset punctuation)
+      int dx = 0, dy = 0;
+      if (punctOffset) {
+        dx = punctOffset->dxEighths * advance / 8;
+        dy = punctOffset->dyEighths * advance / 8;
+      }
+      drawText(effectiveFontId, x + dx, yPos + dy, charBuf, black, style);
+      yPos += advance;
+    }
+  }
 }
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
