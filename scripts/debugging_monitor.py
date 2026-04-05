@@ -179,6 +179,7 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     Format: Free: N bytes, Total: N bytes, Min Free: N bytes, MaxAlloc: N bytes
     Returns: (free_bytes, total_bytes, max_alloc_bytes)
     """
+
     def _find(pattern: str) -> int | None:
         m = re.search(pattern, line)
         if m:
@@ -221,6 +222,8 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
     expecting_screenshot = False
     screenshot_size = 0
+    screenshot_width = 800
+    screenshot_height = 480
     screenshot_data = b""
 
     try:
@@ -232,7 +235,9 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                 screenshot_data += data
                 if len(screenshot_data) == screenshot_size:
                     if Image:
-                        img = Image.frombytes("1", (800, 480), screenshot_data)
+                        img = Image.frombytes(
+                            "1", (screenshot_width, screenshot_height), screenshot_data
+                        )
                         # We need to rotate the image because the raw data is in landscape mode
                         img = img.transpose(Image.ROTATE_270)
                         img.save("screenshot.bmp")
@@ -259,7 +264,15 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                         continue
 
                     if clean_line.startswith("SCREENSHOT_START:"):
-                        screenshot_size = int(clean_line.split(":")[1])
+                        parts = clean_line.split(":")
+                        if len(parts) == 2:
+                            screenshot_size = int(parts[1])
+                        elif len(parts) == 4:
+                            screenshot_width = int(parts[1])
+                            screenshot_height = int(parts[2])
+                            screenshot_size = int(parts[3])
+                        else:
+                            continue
                         expecting_screenshot = True
                         continue
                     elif clean_line == "SCREENSHOT_END":
@@ -271,7 +284,9 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
                     # Check for Memory Line
                     if "[MEM]" in formatted_line:
-                        free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
+                        free_val, total_val, max_alloc_val = parse_memory_line(
+                            formatted_line
+                        )
                         if free_val is not None and total_val is not None:
                             with data_lock:
                                 time_data.append(pc_time)
