@@ -214,7 +214,6 @@
       if (!file) return;
 
       const formData = new FormData();
-      formData.append('family', family);
       formData.append('file', file, file.name);
 
       status.className = '';
@@ -222,7 +221,7 @@
       status.textContent = 'Uploading...';
 
       try {
-        const res = await fetch('/api/fonts/upload', { method: 'POST', body: formData });
+        const res = await fetch('/api/fonts/upload?family=' + encodeURIComponent(family), { method: 'POST', body: formData });
         const data = await res.json();
         if (data.ok) {
           status.className = 'status-ok';
