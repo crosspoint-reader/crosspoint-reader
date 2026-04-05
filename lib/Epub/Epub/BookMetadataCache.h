@@ -65,7 +65,7 @@ class BookMetadataCache {
   bool useSpineHrefIndex = false;
   uint16_t tocBatches = 1;
   uint16_t tocElementsPerBatch = -1;
-  uint16_t tocCurrentBatch = -1;
+  int16_t tocCurrentBatch = -1;
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a 64-bit hash function
