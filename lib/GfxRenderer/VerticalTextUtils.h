@@ -84,4 +84,31 @@ inline bool isUprightInVertical(uint32_t cp) {
   return false;
 }
 
+// Should this codepoint use the OpenType 'vert' substitute glyph?
+// Returns true only for punctuation, brackets, and long marks that need
+// a different glyph shape in vertical text. Kana and ideographs are excluded
+// because their vert variants differ only in metrics (designed for use with
+// a full shaping engine), and bitmap-only substitution looks wrong.
+inline bool shouldUseVertGlyph(uint32_t cp) {
+  // CJK punctuation and brackets (3000-303F), excluding ideographs like 〆(3006)
+  if (cp == 0x3001 || cp == 0x3002) return true;                     // 、。
+  if (cp >= 0x3008 && cp <= 0x3011) return true;                     // 〈〉《》「」『』【】
+  if (cp >= 0x3014 && cp <= 0x301B) return true;                     // 〔〕〖〗〘〙〚〛
+  if (cp >= 0x301D && cp <= 0x301F) return true;                     // 〝〞〟
+  // Fullwidth punctuation and brackets
+  if (cp == 0xFF01 || cp == 0xFF1F) return true;                     // ！？
+  if (cp == 0xFF08 || cp == 0xFF09) return true;                     // （）
+  if (cp == 0xFF0C || cp == 0xFF0E) return true;                     // ，．
+  if (cp == 0xFF1A || cp == 0xFF1B) return true;                     // ：；
+  if (cp == 0xFF3B || cp == 0xFF3D) return true;                     // ［］
+  if (cp == 0xFF5B || cp == 0xFF5D) return true;                     // ｛｝
+  if (cp == 0xFF5E) return true;                                     // ～
+  // Long marks and dashes
+  if (cp == 0x30FC) return true;                                     // ー
+  if (cp == 0x2014 || cp == 0x2015) return true;                     // —―
+  if (cp == 0x2025 || cp == 0x2026) return true;                     // ‥…
+  if (cp == 0x22EF) return true;                                     // ⋯
+  return false;
+}
+
 }  // namespace VerticalTextUtils

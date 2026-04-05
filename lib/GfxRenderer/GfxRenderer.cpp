@@ -1682,10 +1682,13 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     const int advance = fp4::toPixel(glyph->advanceX);
     const int verticalAdvance = advance + advance / 10;
 
-    // Check for vertical substitute glyph (OpenType 'vert' feature)
+    // Check for vertical substitute glyph (OpenType 'vert' feature).
+    // Only apply to punctuation/brackets/long marks — kana and ideographs
+    // have vert variants with different metrics that look wrong without a
+    // full shaping engine.
     const EpdGlyph* vertGlyph = nullptr;
     const uint8_t* vertBitmap = nullptr;
-    if (sdFont) {
+    if (sdFont && VerticalTextUtils::shouldUseVertGlyph(cp)) {
       vertGlyph = sdFont->getVertGlyph(cp, static_cast<uint8_t>(style));
       if (vertGlyph) {
         vertBitmap = sdFont->getVertBitmap(vertGlyph, static_cast<uint8_t>(style));
