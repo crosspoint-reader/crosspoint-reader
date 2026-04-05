@@ -627,8 +627,39 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     # coordinate system so the C++ renderer places them correctly.
     VERT_GLYPH_SCALE = 1.5
 
+    # Only include vert substitutes for punctuation/brackets/long marks.
+    # Kana and ideograph vert variants differ only in metrics and look wrong
+    # without a full shaping engine. This also keeps RAM usage low on ESP32-C3
+    # (232 glyphs → ~40 glyphs, saving ~50KB of bitmap data).
+    VERT_ALLOWED_CPS = set()
+    for cp in range(0x3008, 0x3012):  # 〈〉《》「」『』【】
+        VERT_ALLOWED_CPS.add(cp)
+    for cp in range(0x3014, 0x301C):  # 〔〕〖〗〘〙〚〛
+        VERT_ALLOWED_CPS.add(cp)
+    for cp in range(0x301D, 0x3020):  # 〝〞〟
+        VERT_ALLOWED_CPS.add(cp)
+    VERT_ALLOWED_CPS.update([
+        0x3001, 0x3002,               # 、。
+        0xFF01, 0xFF1F,               # ！？
+        0xFF08, 0xFF09,               # （）
+        0xFF0C, 0xFF0E,               # ，．
+        0xFF1A, 0xFF1B,               # ：；
+        0xFF3B, 0xFF3D,               # ［］
+        0xFF5B, 0xFF5D,               # ｛｝
+        0xFF5E,                       # ～
+        0x30FC,                       # ー
+        0x2014, 0x2015,               # —―
+        0x2025, 0x2026,               # ‥…
+        0x22EF,                       # ⋯
+    ])
+
     if vert_mappings:
-        print(f"  [{style_label}] vert feature: {len(vert_mappings)} mappings found (scale={VERT_GLYPH_SCALE}x)", file=sys.stderr)
+        filtered_mappings = {cp: name for cp, name in vert_mappings.items()
+                             if cp in VERT_ALLOWED_CPS}
+        print(f"  [{style_label}] vert feature: {len(vert_mappings)} mappings found, "
+              f"{len(filtered_mappings)} after filter (scale={VERT_GLYPH_SCALE}x)", file=sys.stderr)
+        vert_mappings = filtered_mappings
+
         # Temporarily set larger font size for vert rendering
         vert_size = int(round(size * VERT_GLYPH_SCALE))
         face.set_char_size(vert_size << 6, vert_size << 6, 150, 150)
