@@ -284,7 +284,7 @@ void CrossPointWebServer::begin() {
   // Font management endpoints
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
   server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
-  server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
+  server->on("/api/fonts/uploaded", HTTP_GET, [this] { handleFontUploaded(); });
   server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
 
   // WiFi credential management endpoints (CJK)
@@ -1592,6 +1592,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
                   filePath.c_str());
 
+          // Ensure parent directory exists (needed for font uploads to /.crosspoint/fonts/<family>/)
+          esp_task_wdt_reset();
+          if (!Storage.exists(wsUploadPath.c_str())) {
+            Storage.mkdir(wsUploadPath.c_str());
+          }
+
           // Check if file exists and remove it
           esp_task_wdt_reset();
           if (Storage.exists(filePath.c_str())) {
@@ -1742,144 +1748,28 @@ void CrossPointWebServer::handleFontList() const {
   server->send(200, "application/json", json);
 }
 
-void CrossPointWebServer::handleFontUploadData() {
-  HTTPUpload& upload = server->upload();
+void CrossPointWebServer::handleFontUploaded() {
+  String family = server->arg("family");
+  String file = server->arg("file");
 
-  switch (upload.status) {
-    case UPLOAD_FILE_START: {
-      esp_task_wdt_reset();
-      fontUpload.valid = false;
-      fontUpload.bytesWritten = 0;
-      fontUpload.bufferPos = 0;
-      fontUpload.failReason = "init";
-
-      // Try query parameter first, then fall back to extracting from filename.
-      // Multipart form fields aren't available during upload callbacks on ESP32 WebServer.
-      String family = server->arg("family");
-      if (family.isEmpty()) {
-        // Extract family from filename: "FamilyName_14.cpfont" → "FamilyName"
-        String fname = upload.filename;
-        int lastUnderscore = fname.lastIndexOf('_');
-        if (lastUnderscore > 0) {
-          family = fname.substring(0, lastUnderscore);
-        }
-      }
-
-      if (!FontInstaller::isValidFamilyName(family.c_str())) {
-        LOG_ERR("WEB", "Invalid font family name: '%s'", family.c_str());
-        break;
-      }
-
-      String filename = upload.filename;
-      if (!filename.endsWith(".cpfont")) {
-        LOG_ERR("WEB", "Not a .cpfont file: %s", filename.c_str());
-        break;
-      }
-
-      fontUpload.familyName = family.c_str();
-
-      // Create a temporary FontInstaller for directory creation
-      FontInstaller installer(sdFontSystem.registry());
-      if (!installer.ensureFamilyDir(family.c_str())) {
-        LOG_ERR("WEB", "Failed to create font family dir");
-        break;
-      }
-
-      char path[128];
-      FontInstaller::buildFontPath(family.c_str(), filename.c_str(), path, sizeof(path));
-      fontUpload.filePath = path;
-
-      if (!Storage.openFileForWrite("WEB", path, fontUpload.file)) {
-        LOG_ERR("WEB", "Failed to open font file for write: %s", path);
-        break;
-      }
-
-      fontUpload.valid = true;
-      fontUpload.failReason.clear();
-      LOG_DBG("WEB", "Font upload started: %s -> %s", filename.c_str(), path);
-      break;
-    }
-
-    case UPLOAD_FILE_WRITE: {
-      if (!fontUpload.valid) break;
-      esp_task_wdt_reset();
-
-      // Validate magic bytes on first chunk
-      if (fontUpload.bytesWritten == 0 && fontUpload.bufferPos == 0 && upload.currentSize >= 8) {
-        if (memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
-          LOG_ERR("WEB", "Invalid .cpfont magic: %02X %02X %02X %02X %02X %02X %02X %02X (size=%u)",
-                  upload.buf[0], upload.buf[1], upload.buf[2], upload.buf[3],
-                  upload.buf[4], upload.buf[5], upload.buf[6], upload.buf[7], upload.currentSize);
-          fontUpload.valid = false;
-          fontUpload.failReason = "bad_magic";
-          break;
-        }
-      }
-
-      // Buffer writes for efficiency
-      size_t remaining = upload.currentSize;
-      const uint8_t* src = upload.buf;
-      while (remaining > 0) {
-        size_t space = FontUploadState::BUFFER_SIZE - fontUpload.bufferPos;
-        size_t chunk = (remaining < space) ? remaining : space;
-        memcpy(fontUpload.buffer.data() + fontUpload.bufferPos, src, chunk);
-        fontUpload.bufferPos += chunk;
-        src += chunk;
-        remaining -= chunk;
-
-        if (fontUpload.bufferPos >= FontUploadState::BUFFER_SIZE) {
-          fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
-          fontUpload.bytesWritten += fontUpload.bufferPos;
-          fontUpload.bufferPos = 0;
-          esp_task_wdt_reset();
-        }
-      }
-      break;
-    }
-
-    case UPLOAD_FILE_END: {
-      // Flush remaining buffer
-      if (fontUpload.valid && fontUpload.bufferPos > 0) {
-        fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
-        fontUpload.bytesWritten += fontUpload.bufferPos;
-        fontUpload.bufferPos = 0;
-      }
-      fontUpload.file.close();
-
-      if (!fontUpload.valid && !fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
-      }
-
-      LOG_DBG("WEB", "Font upload end: valid=%d, %zu bytes", fontUpload.valid, fontUpload.bytesWritten);
-      break;
-    }
-
-    case UPLOAD_FILE_ABORTED: {
-      fontUpload.file.close();
-      if (!fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
-      }
-      fontUpload.valid = false;
-      LOG_DBG("WEB", "Font upload aborted");
-      break;
-    }
+  if (!FontInstaller::isValidFamilyName(family.c_str()) || file.isEmpty() || !file.endsWith(".cpfont")) {
+    server->send(400, "application/json", "{\"error\":\"Invalid family or filename\"}");
+    return;
   }
-}
 
-void CrossPointWebServer::handleFontUpload() {
-  if (fontUpload.valid) {
-    sdFontSystem.registry().discover();
-    server->send(200, "application/json", "{\"ok\":true}");
-    LOG_DBG("WEB", "Font upload complete: %s", fontUpload.filePath.c_str());
-  } else {
-    // Include diagnostic info to help identify the failure point
-    char buf[384];
-    snprintf(buf, sizeof(buf),
-             "{\"error\":\"Invalid .cpfont file\",\"debug\":{\"bytes\":%zu,\"family\":\"%s\",\"path\":\"%s\",\"reason\":\"%s\"}}",
-             fontUpload.bytesWritten, fontUpload.familyName.c_str(), fontUpload.filePath.c_str(),
-             fontUpload.failReason.c_str());
-    server->send(400, "application/json", buf);
+  char path[128];
+  FontInstaller::buildFontPath(family.c_str(), file.c_str(), path, sizeof(path));
+
+  FontInstaller installer(sdFontSystem.registry());
+  if (!installer.validateCpfontFile(path)) {
+    Storage.remove(path);
+    server->send(400, "application/json", "{\"error\":\"Invalid .cpfont file\"}");
+    return;
   }
+
+  installer.refreshRegistry();
+  server->send(200, "application/json", "{\"ok\":true}");
+  LOG_DBG("WEB", "Font validated and registered: %s", path);
 }
 
 void CrossPointWebServer::handleFontDelete() {

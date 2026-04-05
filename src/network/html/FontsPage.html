@@ -206,6 +206,76 @@
       }
     });
 
+    const WS_PORT = 81;
+    const WS_CHUNK_SIZE = 4096;
+
+    function getWsUrl() {
+      const host = window.location.hostname;
+      return `ws://${host}:${WS_PORT}/`;
+    }
+
+    function uploadFontWebSocket(file, uploadPath, onProgress) {
+      return new Promise((resolve, reject) => {
+        const ws = new WebSocket(getWsUrl());
+        let uploadComplete = false;
+        let connected = false;
+        ws.binaryType = 'arraybuffer';
+
+        // Connection timeout: 10 seconds
+        const connectTimeout = setTimeout(() => {
+          if (!connected) {
+            ws.close();
+            reject(new Error('Connection timeout'));
+          }
+        }, 10000);
+
+        ws.onopen = () => {
+          connected = true;
+          clearTimeout(connectTimeout);
+          ws.send(`START:${file.name}:${file.size}:${uploadPath}`);
+        };
+
+        ws.onmessage = async (event) => {
+          const msg = event.data;
+          if (msg === 'READY') {
+            try {
+              let offset = 0;
+              while (offset < file.size && ws.readyState === WebSocket.OPEN) {
+                const chunk = file.slice(offset, offset + WS_CHUNK_SIZE);
+                const buffer = await chunk.arrayBuffer();
+                while (ws.bufferedAmount > WS_CHUNK_SIZE * 2 && ws.readyState === WebSocket.OPEN) {
+                  await new Promise(r => setTimeout(r, 5));
+                }
+                if (ws.readyState !== WebSocket.OPEN) throw new Error('Connection closed');
+                ws.send(buffer);
+                offset += buffer.byteLength;
+                if (onProgress) onProgress(offset, file.size);
+              }
+            } catch (err) {
+              ws.close();
+              reject(err);
+            }
+          } else if (msg === 'DONE') {
+            uploadComplete = true;
+            ws.close();
+            resolve();
+          } else if (msg.startsWith('ERROR:')) {
+            ws.close();
+            reject(new Error(msg.substring(6)));
+          }
+        };
+
+        ws.onerror = () => {
+          clearTimeout(connectTimeout);
+          reject(new Error('WebSocket connection failed'));
+        };
+        ws.onclose = () => {
+          clearTimeout(connectTimeout);
+          if (!uploadComplete) reject(new Error('Connection closed during upload'));
+        };
+      });
+    }
+
     document.getElementById('uploadForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       const status = document.getElementById('status');
@@ -213,15 +283,18 @@
       const file = document.getElementById('fontFile').files[0];
       if (!file) return;
 
-      const formData = new FormData();
-      formData.append('file', file, file.name);
-
       status.className = '';
       status.style.display = 'block';
-      status.textContent = 'Uploading...';
+      status.textContent = 'Uploading... 0%';
 
       try {
-        const res = await fetch('/api/fonts/upload?family=' + encodeURIComponent(family), { method: 'POST', body: formData });
+        const uploadPath = '/.crosspoint/fonts/' + family + '/';
+        await uploadFontWebSocket(file, uploadPath, (sent, total) => {
+          status.textContent = 'Uploading... ' + Math.round(sent / total * 100) + '%';
+        });
+
+        status.textContent = 'Validating...';
+        const res = await fetch('/api/fonts/uploaded?family=' + encodeURIComponent(family) + '&file=' + encodeURIComponent(file.name));
         const data = await res.json();
         if (data.ok) {
           status.className = 'status-ok';
@@ -229,7 +302,7 @@
           loadFonts();
         } else {
           status.className = 'status-err';
-          status.textContent = (data.error || 'Upload failed') + (data.debug ? ' | ' + JSON.stringify(data.debug) : '');
+          status.textContent = data.error || 'Validation failed';
         }
       } catch (err) {
         status.className = 'status-err';
