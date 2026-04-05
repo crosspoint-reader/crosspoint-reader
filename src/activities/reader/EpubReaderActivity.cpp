@@ -108,6 +108,13 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  // Show "Syncing progress..." popup on the current framebuffer before blocking on WiFi/HTTP.
+  // drawPopup calls displayBuffer() internally so it appears immediately.
+  // Safe here because RenderLock is already held by the caller (ActivityManager::exitActivity).
+  if (KOREADER_STORE.hasCredentials()) {
+    GUI.drawPopup(renderer, tr(STR_SYNCING_PROGRESS));
+  }
+
   // Flush progress on exit: reconnect WiFi if needed, always upload current position.
   // showIndicator=false because onExit() is called with RenderLock held by ActivityManager.
   tryAutoSync(/*attemptWifiConnect=*/true, /*alwaysUpload=*/true, /*showIndicator=*/false);
