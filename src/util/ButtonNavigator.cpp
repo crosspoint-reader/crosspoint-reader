@@ -100,8 +100,7 @@ int ButtonNavigator::midpointIndex(const int totalItems) {
 bool ButtonNavigator::isMidpointChordHeld(const MappedInputManager& in) {
   using B = MappedInputManager::Button;
   const bool side = in.isPressed(B::Up) || in.isPressed(B::Down);
-  const bool front =
-      in.isPressed(B::Back) || in.isPressed(B::Confirm) || in.isPressed(B::Left) || in.isPressed(B::Right);
+  const bool front = in.isPressed(B::Left) || in.isPressed(B::Right);
   return side && front;
 }
 
