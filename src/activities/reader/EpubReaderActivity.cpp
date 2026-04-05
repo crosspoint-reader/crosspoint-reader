@@ -183,20 +183,20 @@ void EpubReaderActivity::loop() {
         });
   }
 
-  // Long press BACK (1s+) goes to file selection
+  // Long press BACK (1s+) goes to home screen
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    activityManager.goToFileBrowser(epub ? epub->getPath() : "");
+    onGoHome();
     return;
   }
 
-  // Short press BACK goes directly to home (or restores position if viewing footnote)
+  // Short press BACK returns to the calling activity (or restores position if viewing footnote)
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
       return;
     }
-    onGoHome();
+    finish();
     return;
   }
 
@@ -205,10 +205,10 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button goes home and back button returns to last page
+  // At end of the book, forward button returns to caller and back button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
     if (nextTriggered) {
-      onGoHome();
+      finish();
     } else {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
       nextPageNumber = UINT16_MAX;

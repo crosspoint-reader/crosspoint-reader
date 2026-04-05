@@ -200,6 +200,10 @@ void ActivityManager::goToReader(std::string path) {
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 
+void ActivityManager::pushReader(std::string path) {
+  pushActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
+}
+
 void ActivityManager::goToSleep() {
   replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
