@@ -12,6 +12,7 @@
 void EpubReaderFootnotesActivity::onEnter() {
   Activity::onEnter();
   selectedIndex = 0;
+  upDownChordLatched = false;
   requestUpdate();
 }
 
@@ -34,19 +35,26 @@ void EpubReaderFootnotesActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this] {
-    if (!footnotes.empty()) {
-      selectedIndex = (selectedIndex + 1) % footnotes.size();
-      requestUpdate();
-    }
-  });
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedIndex = ButtonNavigator::midpointIndex(static_cast<int>(footnotes.size()));
+    requestUpdate();
+  }
 
-  buttonNavigator.onPrevious([this] {
-    if (!footnotes.empty()) {
-      selectedIndex = (selectedIndex - 1 + footnotes.size()) % footnotes.size();
-      requestUpdate();
-    }
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNext([this] {
+      if (!footnotes.empty()) {
+        selectedIndex = (selectedIndex + 1) % footnotes.size();
+        requestUpdate();
+      }
+    });
+
+    buttonNavigator.onPrevious([this] {
+      if (!footnotes.empty()) {
+        selectedIndex = (selectedIndex - 1 + footnotes.size()) % footnotes.size();
+        requestUpdate();
+      }
+    });
+  }
 }
 
 void EpubReaderFootnotesActivity::render(RenderLock&&) {

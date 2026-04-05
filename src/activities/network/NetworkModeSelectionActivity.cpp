@@ -16,6 +16,7 @@ void NetworkModeSelectionActivity::onEnter() {
 
   // Reset selection
   selectedIndex = 0;
+  upDownChordLatched = false;
 
   // Trigger first update
   requestUpdate();
@@ -42,16 +43,22 @@ void NetworkModeSelectionActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEM_COUNT);
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedIndex = ButtonNavigator::midpointIndex(MENU_ITEM_COUNT);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEM_COUNT);
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNext([this] {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEM_COUNT);
+      requestUpdate();
+    });
+
+    buttonNavigator.onPrevious([this] {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEM_COUNT);
+      requestUpdate();
+    });
+  }
 }
 
 void NetworkModeSelectionActivity::render(RenderLock&&) {

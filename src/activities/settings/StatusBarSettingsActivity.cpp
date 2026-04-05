@@ -37,6 +37,7 @@ void StatusBarSettingsActivity::onEnter() {
   Activity::onEnter();
 
   selectedIndex = 0;
+  upDownChordLatched = false;
 
   // Clamp statusBarProgressBar and statusBarTitle in case of corrupt/migrated data
   if (SETTINGS.statusBarProgressBar >= PROGRESS_BAR_ITEMS) {
@@ -68,26 +69,32 @@ void StatusBarSettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedIndex = ButtonNavigator::midpointIndex(MENU_ITEMS);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNextRelease([this] {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+      requestUpdate();
+    });
 
-  buttonNavigator.onNextContinuous([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
-    requestUpdate();
-  });
+    buttonNavigator.onPreviousRelease([this] {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+      requestUpdate();
+    });
 
-  buttonNavigator.onPreviousContinuous([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
-    requestUpdate();
-  });
+    buttonNavigator.onNextContinuous([this] {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+      requestUpdate();
+    });
+
+    buttonNavigator.onPreviousContinuous([this] {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+      requestUpdate();
+    });
+  }
 }
 
 void StatusBarSettingsActivity::handleSelection() {

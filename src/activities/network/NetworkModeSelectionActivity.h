@@ -20,6 +20,7 @@ class NetworkModeSelectionActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   int selectedIndex = 0;
+  bool upDownChordLatched = false;
 
  public:
   explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

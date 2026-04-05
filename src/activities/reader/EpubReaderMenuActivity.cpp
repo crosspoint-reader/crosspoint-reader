@@ -39,22 +39,29 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
+  upDownChordLatched = false;
   requestUpdate();
 }
 
 void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderMenuActivity::loop() {
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedIndex = ButtonNavigator::midpointIndex(static_cast<int>(menuItems.size()));
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNext([this] {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+      requestUpdate();
+    });
+
+    buttonNavigator.onPrevious([this] {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
+      requestUpdate();
+    });
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto selectedAction = menuItems[selectedIndex].action;

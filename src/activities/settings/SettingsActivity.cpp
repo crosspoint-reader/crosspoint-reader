@@ -57,6 +57,7 @@ void SettingsActivity::onEnter() {
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
+  upDownChordLatched = false;
 
   // Initialize with first category (Display)
   currentSettings = &displaySettings;
@@ -99,28 +100,34 @@ void SettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedSettingIndex = ButtonNavigator::midpointIndex(settingsCount + 1);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNextRelease([this] {
+      selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+      requestUpdate();
+    });
 
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
+    buttonNavigator.onPreviousRelease([this] {
+      selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+      requestUpdate();
+    });
 
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
+    buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
+      hasChangedCategory = true;
+      selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+      requestUpdate();
+    });
+
+    buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
+      hasChangedCategory = true;
+      selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+      requestUpdate();
+    });
+  }
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;

@@ -19,6 +19,7 @@ void LanguageSelectActivity::onEnter() {
   const auto* end = std::end(SORTED_LANGUAGE_INDICES);
   const auto* it = std::find(begin, end, currentLang);
   selectedIndex = (it != end) ? std::distance(begin, it) : 0;
+  upDownChordLatched = false;
 
   requestUpdate();
 }
@@ -36,16 +37,22 @@ void LanguageSelectActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedIndex = ButtonNavigator::midpointIndex(static_cast<int>(totalItems));
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNextRelease([this] {
+      selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
+      requestUpdate();
+    });
+
+    buttonNavigator.onPreviousRelease([this] {
+      selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
+      requestUpdate();
+    });
+  }
 }
 
 void LanguageSelectActivity::handleSelection() {

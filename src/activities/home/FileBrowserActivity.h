@@ -16,6 +16,7 @@ class FileBrowserActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
+  bool upDownChordLatched = false;
 
   // Files state
   std::string basepath = "/";
