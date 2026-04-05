@@ -14,6 +14,8 @@
 #include "CrossPointSettings.h"
 #include "util/UrlUtils.h"
 
+int HttpDownloader::lastHttpCode = 0;
+
 namespace {
 class FileWriteStream final : public Stream {
  public:
@@ -77,27 +79,88 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
     http.addHeader("Authorization", "Basic " + encoded);
   }
 
+  LOG_DBG("HTTP", "Free heap before GET: %d", ESP.getFreeHeap());
   const int httpCode = http.GET();
+  lastHttpCode = httpCode;
+  LOG_DBG("HTTP", "GET result: %d, free heap: %d", httpCode, ESP.getFreeHeap());
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Fetch failed: %d", httpCode);
     http.end();
     return false;
   }
 
-  http.writeToStream(&outContent);
-
+  const int writeResult = http.writeToStream(&outContent);
   http.end();
 
-  LOG_DBG("HTTP", "Fetch success");
+  if (writeResult < 0) {
+    LOG_ERR("HTTP", "writeToStream failed: %d", writeResult);
+    lastHttpCode = writeResult;
+    return false;
+  }
+
+  LOG_DBG("HTTP", "Fetch success: %d bytes", writeResult);
   return true;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
-  StreamString stream;
-  if (!fetchUrl(url, stream)) {
+  // Direct string fetch: avoids StreamString and writeToStream issues.
+  std::unique_ptr<NetworkClient> client;
+  if (UrlUtils::isHttpsUrl(url)) {
+    auto* secureClient = new NetworkClientSecure();
+    secureClient->setInsecure();
+    client.reset(secureClient);
+  } else {
+    client.reset(new NetworkClient());
+  }
+  HTTPClient http;
+
+  http.begin(*client, url.c_str());
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+
+  LOG_DBG("HTTP", "FetchStr: %s (heap=%d)", url.c_str(), ESP.getFreeHeap());
+  const int httpCode = http.GET();
+  lastHttpCode = httpCode;
+
+  if (httpCode != HTTP_CODE_OK) {
+    LOG_ERR("HTTP", "FetchStr failed: %d", httpCode);
+    http.end();
     return false;
   }
-  outContent = stream.c_str();
+
+  // Read body in small chunks to avoid large single allocation.
+  // TLS buffers (~40KB) are held during the connection, leaving limited heap.
+  NetworkClient* stream = http.getStreamPtr();
+  const int contentLen = http.getSize();
+  outContent.clear();
+  if (contentLen > 0) {
+    outContent.reserve(contentLen);
+  }
+
+  char buf[512];
+  while (stream->available() || stream->connected()) {
+    int avail = stream->available();
+    if (avail <= 0) {
+      delay(1);
+      continue;
+    }
+    int toRead = (avail < static_cast<int>(sizeof(buf))) ? avail : static_cast<int>(sizeof(buf));
+    int bytesRead = stream->readBytes(buf, toRead);
+    if (bytesRead > 0) {
+      outContent.append(buf, bytesRead);
+    } else {
+      break;
+    }
+  }
+  http.end();
+
+  if (outContent.empty()) {
+    LOG_ERR("HTTP", "FetchStr: empty body (contentLen=%d)", contentLen);
+    lastHttpCode = -901;
+    return false;
+  }
+
+  LOG_DBG("HTTP", "FetchStr success: %zu bytes", outContent.size());
   return true;
 }
 
@@ -129,6 +192,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   const int httpCode = http.GET();
+  lastHttpCode = httpCode;
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Download failed: %d", httpCode);
     http.end();
@@ -164,7 +228,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   http.end();
 
   if (writeResult < 0) {
-    LOG_ERR("HTTP", "writeToStream error: %d", writeResult);
+    LOG_ERR("HTTP", "writeToStream error: %d (len=%zu)", writeResult, contentLength);
+    lastHttpCode = writeResult;  // Store writeToStream error code for diagnostics
     Storage.remove(destPath.c_str());
     return HTTP_ERROR;
   }
@@ -175,12 +240,14 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Guard against partial writes even if HTTPClient completes.
   if (!fileStream.ok()) {
     LOG_ERR("HTTP", "Write failed during download");
+    lastHttpCode = -900;  // Custom code: SD write failure
     Storage.remove(destPath.c_str());
     return FILE_ERROR;
   }
 
   if (contentLength == 0 && downloaded == 0) {
     LOG_ERR("HTTP", "Download failed: no data received");
+    lastHttpCode = -901;  // Custom code: no data
     Storage.remove(destPath.c_str());
     return HTTP_ERROR;
   }

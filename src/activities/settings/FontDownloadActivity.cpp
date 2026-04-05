@@ -64,37 +64,35 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
 // --- Manifest fetching ---
 
 bool FontDownloadActivity::fetchAndParseManifest() {
-  // Download manifest to a temp file on SD card to avoid holding both
-  // TLS buffers and the full JSON string in RAM simultaneously.
-  static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
-
-  auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
-  if (result != HttpDownloader::OK) {
-    LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
-    errorMessage_ = "Failed to fetch font list";
-    Storage.remove(MANIFEST_TMP);
+  // Fetch manifest JSON into memory (small file, ~2-5KB).
+  // Avoid downloadToFile here because SD card SPI and WiFi/TLS SPI
+  // can conflict on ESP32-C3 during streaming writes.
+  const size_t heapBefore = ESP.getFreeHeap();
+  std::string manifestJson;
+  if (!HttpDownloader::fetchUrl(FONT_MANIFEST_URL, manifestJson)) {
+    LOG_ERR("FONT", "Failed to fetch manifest (http=%d, heap=%zu)", HttpDownloader::lastHttpCode, heapBefore);
+    char buf[80];
+    snprintf(buf, sizeof(buf), "http=%d heap=%zuKB", HttpDownloader::lastHttpCode, heapBefore / 1024);
+    errorMessage_ = buf;
     return false;
   }
 
-  // HTTP client is now closed — TLS buffers freed. Parse JSON from file.
-  FsFile manifestFile;
-  if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
-    LOG_ERR("FONT", "Failed to open temp manifest");
-    Storage.remove(MANIFEST_TMP);
-    errorMessage_ = "Failed to read font list";
-    return false;
-  }
+  LOG_DBG("FONT", "Manifest fetched: %zu bytes", manifestJson.size());
 
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, manifestFile);
-  manifestFile.close();
-  Storage.remove(MANIFEST_TMP);
+  DeserializationError err = deserializeJson(doc, manifestJson);
 
   if (err) {
-    LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
-    errorMessage_ = "Invalid font manifest";
+    LOG_ERR("FONT", "Parse error: %s, size=%zu, first=%c", err.c_str(), manifestJson.size(),
+            manifestJson.empty() ? '?' : manifestJson[0]);
+    char buf[96];
+    snprintf(buf, sizeof(buf), "Parse: %s (%zuB, '%c...')", err.c_str(), manifestJson.size(),
+             manifestJson.empty() ? '?' : manifestJson[0]);
+    errorMessage_ = buf;
+    manifestJson.clear();
     return false;
   }
+  manifestJson.clear();
 
   int version = doc["version"] | 0;
   if (version != 1) {

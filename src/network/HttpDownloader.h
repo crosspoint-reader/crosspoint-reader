@@ -19,6 +19,9 @@ class HttpDownloader {
     ABORTED,
   };
 
+  /// Last HTTP status code from downloadToFile (-1 = connection failed, -11 = timeout, etc.)
+  static int lastHttpCode;
+
   /**
    * Fetch text content from a URL.
    * @param url The URL to fetch
