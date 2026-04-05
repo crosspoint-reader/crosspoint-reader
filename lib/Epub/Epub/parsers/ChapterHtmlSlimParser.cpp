@@ -196,7 +196,22 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  if (verticalMode) {
+    // Classify for vertical: count ASCII digits to determine TateChuYoko vs Sideways
+    bool allDigits = true;
+    int asciiCharCount = 0;
+    for (int ci = 0; ci < partWordBufferIndex; ci++) {
+      if ((static_cast<uint8_t>(partWordBuffer[ci]) & 0xC0) != 0x80) asciiCharCount++;
+      if (partWordBuffer[ci] < '0' || partWordBuffer[ci] > '9') allDigits = false;
+    }
+    auto vb = VerticalTextUtils::VerticalBehavior::Sideways;  // default for Latin text
+    if (allDigits && asciiCharCount <= 2) {
+      vb = VerticalTextUtils::VerticalBehavior::TateChuYoko;
+    }
+    currentTextBlock->addWord(partWordBuffer, fontStyle, vb, false, nextWordContinues);
+  } else {
+    currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  }
   partWordBufferIndex = 0;
   nextWordContinues = false;
 }
@@ -908,7 +923,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       for (int j = 0; j < charLen && j < 4; j++) {
         cjkWord[j] = s[i + j];
       }
-      self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR);
+      if (self->verticalMode) {
+        self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR,
+                                        VerticalTextUtils::VerticalBehavior::Upright);
+      } else {
+        self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR);
+      }
       i += charLen;
       continue;
     }
@@ -934,13 +954,19 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   const bool earlyFlush = wordCount > 100 && ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_PARSING * 2;
   if (normalFlush || earlyFlush) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+    if (self->verticalMode) {
+      self->currentTextBlock->layoutVerticalColumns(
+          self->renderer, self->fontId, self->viewportHeight,
+          [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); });
+    } else {
+      const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
+      const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
+                                          ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
+                                          : self->viewportWidth;
+      self->currentTextBlock->layoutAndExtractLines(
+          self->renderer, self->fontId, effectiveWidth,
+          [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+    }
   }
 }
 
@@ -1395,9 +1421,15 @@ void ChapterHtmlSlimParser::makePages() {
 
 
   const int layoutFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
-  currentTextBlock->layoutAndExtractLines(
-      renderer, layoutFontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  if (verticalMode) {
+    currentTextBlock->layoutVerticalColumns(
+        renderer, layoutFontId, viewportHeight,
+        [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  } else {
+    currentTextBlock->layoutAndExtractLines(
+        renderer, layoutFontId, effectiveWidth,
+        [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  }
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

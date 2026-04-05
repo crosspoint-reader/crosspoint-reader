@@ -14,6 +14,7 @@
 #include "../blocks/TextBlock.h"
 #include "../css/CssParser.h"
 #include "../css/CssStyle.h"
+#include <VerticalTextUtils.h>
 
 class Page;
 class GfxRenderer;
@@ -55,6 +56,7 @@ class ChapterHtmlSlimParser {
   std::string contentBase;
   std::string imageBasePath;
   int imageCounter = 0;
+  bool verticalMode = false;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {
@@ -121,7 +123,7 @@ class ChapterHtmlSlimParser {
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
                                  const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr,
                                  const int* headingFontIds = nullptr,
-                                 int tableFontId = 0)
+                                 int tableFontId = 0, bool verticalMode = false)
 
       : epub(epub),
         filepath(filepath),
@@ -140,7 +142,8 @@ class ChapterHtmlSlimParser {
         embeddedStyle(embeddedStyle),
         imageRendering(imageRendering),
         contentBase(contentBase),
-        imageBasePath(imageBasePath) {
+        imageBasePath(imageBasePath),
+        verticalMode(verticalMode) {
     if (headingFontIds) {
       for (int i = 0; i < 6; i++) this->headingFontIds[i] = headingFontIds[i];
     }
