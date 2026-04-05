@@ -136,11 +136,17 @@ void EpubReaderActivity::onExit() {
     // Show "Syncing progress..." popup before blocking on WiFi/HTTP.
     // drawPopup calls displayBuffer() internally so it appears immediately.
     // Safe here because RenderLock is already held by the caller (ActivityManager::exitActivity).
-    GUI.drawPopup(renderer, tr(STR_SYNCING_PROGRESS));
+    const auto popupRect = GUI.drawPopup(renderer, tr(STR_SYNCING_PROGRESS));
 
     // Flush progress on exit: reconnect WiFi if needed, always upload current position.
     // showIndicator=false because onExit() runs with RenderLock held by ActivityManager.
     tryAutoSync(/*attemptWifiConnect=*/true, /*alwaysUpload=*/true, /*showIndicator=*/false);
+
+    // Erase the popup from the framebuffer without refreshing — the next activity
+    // (e.g. SleepActivity) will draw its own popup on a clean canvas and call
+    // displayBuffer() itself. Without this, the wider sync popup border bleeds
+    // through around a narrower "Going to sleep" popup.
+    renderer.fillRect(popupRect.x - 2, popupRect.y - 2, popupRect.width + 4, popupRect.height + 4, false);
   }
 
   // Reset orientation back to portrait for the rest of the UI
