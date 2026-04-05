@@ -3456,6 +3456,8 @@
       document.getElementById('convertWarning').style.display = convertEnabled ? 'block' : 'none';
       if (advancedContent.classList.contains('visible') && files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
         showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
+      } else if (advancedContent.classList.contains('visible') && files.length !== 1) {
+        clearImagePicker();
       }
       if (files.length > 1 && convertEnabled && epubFiles.length > 0) {
         console.log(`Batch mode: ${epubFiles.length} EPUB(s) will use auto settings`);
