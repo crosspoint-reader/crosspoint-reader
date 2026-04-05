@@ -97,6 +97,13 @@ typedef struct {
   const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
   uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
 
+  // Vertical glyph substitution (from OpenType 'vert' GSUB feature).
+  // Used in vertical text mode for CJK punctuation/brackets.
+  const uint32_t* vertCodepoints;   ///< Sorted codepoint array for binary search (nullptr if none)
+  const EpdGlyph* vertGlyphs;       ///< Corresponding vertical substitute glyphs
+  const uint8_t* vertBitmaps;       ///< Concatenated bitmap data for vert glyphs
+  uint16_t vertCount;               ///< Number of vert substitution entries (0 if none)
+
   /// On-demand glyph loading for fonts that don't keep all glyphs in RAM (e.g. SD card fonts).
   /// Called by getGlyph() when a codepoint is not found in the interval table.
   /// Returns a valid EpdGlyph* with correct metadata, or nullptr to fall back to the
