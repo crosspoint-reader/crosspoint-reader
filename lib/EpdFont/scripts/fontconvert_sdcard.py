@@ -622,9 +622,10 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     vert_mappings = extract_vert_mappings(fontfile)
     vert_glyphs = []  # [(codepoint, GlyphProps, packed_bytes), ...]
 
-    # Render vert glyphs at a larger size so they fill more of the character
-    # cell. Positioning metrics (left/top) are scaled back to the original
-    # coordinate system so the C++ renderer places them correctly.
+    # Upscale vert glyph bitmaps using nearest-neighbor interpolation.
+    # Rendering at a larger font size was rejected because it also increases
+    # stroke weight, making glyphs appear bold. Bitmap upscaling preserves
+    # the original stroke weight while making glyphs physically larger.
     VERT_GLYPH_SCALE = 1.5
 
     # Only include vert substitutes for punctuation/brackets/long marks.
@@ -653,16 +654,50 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
         0x22EF,                       # ⋯
     ])
 
+    def upscale_2bit_bitmap(pixels2b_bytes, orig_w, orig_h, scale):
+        """Upscale a 2-bit packed bitmap using nearest-neighbor interpolation."""
+        new_w = round(orig_w * scale)
+        new_h = round(orig_h * scale)
+        if orig_w == 0 or orig_h == 0:
+            return pixels2b_bytes, 0, 0
+
+        # Unpack original 2-bit pixels into flat array
+        orig_pixels = []
+        total_px = orig_w * orig_h
+        for byte_val in pixels2b_bytes:
+            for shift in [6, 4, 2, 0]:
+                if len(orig_pixels) < total_px:
+                    orig_pixels.append((byte_val >> shift) & 0x3)
+
+        # Nearest-neighbor upscale
+        new_pixels = []
+        for ny in range(new_h):
+            oy = min(int(ny / scale), orig_h - 1)
+            for nx in range(new_w):
+                ox = min(int(nx / scale), orig_w - 1)
+                new_pixels.append(orig_pixels[oy * orig_w + ox])
+
+        # Repack into 2-bit bytes
+        result = []
+        px = 0
+        for i, val in enumerate(new_pixels):
+            px = (px << 2) | val
+            if i % 4 == 3:
+                result.append(px)
+                px = 0
+        if len(new_pixels) % 4 != 0:
+            remaining = 4 - (len(new_pixels) % 4)
+            px = px << (remaining * 2)
+            result.append(px)
+
+        return bytes(result), new_w, new_h
+
     if vert_mappings:
         filtered_mappings = {cp: name for cp, name in vert_mappings.items()
                              if cp in VERT_ALLOWED_CPS}
         print(f"  [{style_label}] vert feature: {len(vert_mappings)} mappings found, "
-              f"{len(filtered_mappings)} after filter (scale={VERT_GLYPH_SCALE}x)", file=sys.stderr)
+              f"{len(filtered_mappings)} after filter (bitmap upscale={VERT_GLYPH_SCALE}x)", file=sys.stderr)
         vert_mappings = filtered_mappings
-
-        # Temporarily set larger font size for vert rendering
-        vert_size = int(round(size * VERT_GLYPH_SCALE))
-        face.set_char_size(vert_size << 6, vert_size << 6, 150, 150)
 
         vert_bitmap_offset = 0
         for cp, sub_glyph_name in sorted(vert_mappings.items()):
@@ -685,7 +720,7 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             face.load_glyph(glyph_index, load_flags)
             bitmap = face.glyph.bitmap
 
-            # Build 2-bit bitmap (same logic as main glyphs above)
+            # Build 2-bit bitmap at original font size
             pixels4g = []
             px = 0
             for i, v in enumerate(bitmap.buffer):
@@ -721,15 +756,19 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
                 px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
                 pixels2b.append(px)
 
-            packed = bytes(pixels2b)
-            # Scale left/top back to original coordinate system so positioning
-            # works correctly with the base font's ascender
+            # Upscale bitmap using nearest-neighbor (preserves stroke weight)
+            packed_orig = bytes(pixels2b)
+            packed, new_w, new_h = upscale_2bit_bitmap(
+                packed_orig, bitmap.width, bitmap.rows, VERT_GLYPH_SCALE)
+
+            # Keep original left/top so positioning works with the base
+            # font's ascender. Only the bitmap is larger.
             glyph = GlyphProps(
-                width=bitmap.width,
-                height=bitmap.rows,
+                width=new_w,
+                height=new_h,
                 advance_x=fp4_from_ft16_16(face.glyph.linearHoriAdvance),
-                left=round(face.glyph.bitmap_left / VERT_GLYPH_SCALE),
-                top=round(face.glyph.bitmap_top / VERT_GLYPH_SCALE),
+                left=face.glyph.bitmap_left,
+                top=face.glyph.bitmap_top,
                 data_length=len(packed),
                 data_offset=vert_bitmap_offset,
                 code_point=cp,
@@ -737,8 +776,6 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             vert_bitmap_offset += len(packed)
             vert_glyphs.append((cp, glyph, packed))
 
-        # Restore original font size
-        face.set_char_size(size << 6, size << 6, 150, 150)
         print(f"  [{style_label}] vert feature: {len(vert_glyphs)} glyphs rendered", file=sys.stderr)
 
     return StyleRasterData(
