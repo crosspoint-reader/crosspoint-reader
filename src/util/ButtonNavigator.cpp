@@ -4,7 +4,8 @@ const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 namespace {
 bool s_midpointChordReleaseGuard = false;
-}
+bool s_suppressUntilChordRelease = false;
+}  // namespace
 
 void ButtonNavigator::onNext(const Callback& callback) {
   onNextPress(callback);
@@ -119,10 +120,20 @@ bool ButtonNavigator::shouldSuppressListNavForMidpointChord(const MappedInputMan
   return true;
 }
 
-void ButtonNavigator::clearMidpointChordReleaseGuard() { s_midpointChordReleaseGuard = false; }
+void ButtonNavigator::clearMidpointChordReleaseGuard() {
+  s_midpointChordReleaseGuard = false;
+  s_suppressUntilChordRelease = true;
+}
 
 bool ButtonNavigator::beginUpDownChord(const MappedInputManager& in, bool& chordLatched) {
   const bool chord = isMidpointChordHeld(in);
+
+  if (s_suppressUntilChordRelease) {
+    if (!chord) s_suppressUntilChordRelease = false;
+    chordLatched = false;
+    return false;
+  }
+
   if (!chord) {
     chordLatched = false;
     return false;
