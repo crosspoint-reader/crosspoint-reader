@@ -34,6 +34,9 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+// Persists across book open/close within a power session; resets on wake from deep sleep.
+// Set when any auto-sync attempt fails; cleared only by a successful manual sync.
+static bool pendingSyncFailed = false;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -116,7 +119,7 @@ void EpubReaderActivity::onExit() {
     return std::abs(current - lastAutoSyncedProgress) > 0.001f;
   }();
 
-  if (KOREADER_STORE.hasCredentials() && positionChanged) {
+  if (!skipExitSync && !pendingSyncFailed && KOREADER_STORE.hasCredentials() && positionChanged) {
     // Show "Syncing progress..." popup before blocking on WiFi/HTTP.
     // drawPopup calls displayBuffer() internally so it appears immediately.
     // Safe here because RenderLock is already held by the caller (ActivityManager::exitActivity).
@@ -409,6 +412,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
+      skipExitSync = true;
       onGoHome();
       return;
     }
@@ -454,6 +458,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                   if (syncFile.read(buf, sizeof(buf)) == sizeof(buf)) {
                     memcpy(&lastAutoSyncedProgress, buf, sizeof(lastAutoSyncedProgress));
                     hasSyncedWithRemote = true;
+                    pendingSyncFailed = false;  // manual sync succeeded — clear session failure
                     LOG_DBG("ERS", "KOSync callback: loaded syncProg=%.3f", lastAutoSyncedProgress);
                   } else {
                     LOG_DBG("ERS", "KOSync callback: read failed (short read)");
@@ -889,6 +894,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool alwaysUpload, const bool showIndicator) {
+  if (pendingSyncFailed) return;  // sync failed this session; only manual sync can clear it
   if (!KOREADER_STORE.hasCredentials()) return;
   if (!epub || !section) return;
 
@@ -977,7 +983,6 @@ void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool a
     LOG_INF("ERS", "Auto-sync: pushed %.1f%%", localKoPos.percentage * 100.0f);
     lastAutoSyncedProgress = localKoPos.percentage;
     hasSyncedWithRemote = true;
-    pendingSyncFailed = false;
 
     // Persist so the sync marker survives across reading sessions
     if (epub) {

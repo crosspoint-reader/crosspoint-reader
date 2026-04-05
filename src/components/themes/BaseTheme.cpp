@@ -728,20 +728,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     // Outside the fill (white background): black continuation.
     if (syncProgress >= 0.0f) {
       const int syncX = orientedMarginLeft + progressBarMaxWidth * static_cast<int>(syncProgress) / 100;
-      const int fillEnd = orientedMarginLeft + barWidth;
-      LOG_DBG("GUI", "syncMarker: syncProg=%.1f syncX=%d fillEnd=%d barThick=%d", syncProgress, syncX, fillEnd,
-              barThickness);
+      LOG_DBG("GUI", "syncMarker: syncProg=%.1f syncX=%d barWidth=%d", syncProgress, syncX, barWidth);
       if (syncX > orientedMarginLeft) {
-        // Black tick above the bar (6px tall, 2px wide) — visible in all states
+        // Black tick above the bar — position shows last-synced point, visible in all states
         renderer.fillRect(syncX - 1, progressBarY - 6, 2, 6, true);
-        // Inside the fill: white notch
-        if (syncX < fillEnd) {
-          const int notchWidth = std::min(2, fillEnd - syncX + 1);
-          renderer.fillRect(syncX - 1, progressBarY, notchWidth, barThickness, false);
-        } else {
-          // At or past the fill edge: black continuation in the unfilled area
-          renderer.fillRect(syncX - 1, progressBarY, 2, barThickness, true);
-        }
       }
     } else if (syncFailed) {
       // Sync-failed indicator: two small black dots at the right edge of the bar area

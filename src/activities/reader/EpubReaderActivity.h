@@ -32,6 +32,7 @@ class EpubReaderActivity final : public Activity {
   bool hasSyncedWithRemote = false;      // true only after a real push (manual or auto)
   bool pendingAutoSync = false;
   bool isSyncing = false;                   // true while HTTP sync requests are in flight
+  bool skipExitSync = false;                // set to bypass the exit sync (e.g. Go Home no sync)
   unsigned long lastAutoSyncAttemptMs = 0;  // millis() when tryAutoSync last ran
   static constexpr unsigned long AUTO_SYNC_TIMER_MS = 5UL * 60UL * 1000UL;  // 5 min timer
 
@@ -64,7 +65,6 @@ class EpubReaderActivity final : public Activity {
   // showIndicator=false: skip requestUpdateAndWait() — required when called from onExit()
   //   because onExit() runs with RenderLock held and requestUpdateAndWait() would deadlock/assert
   void tryAutoSync(bool attemptWifiConnect = false, bool alwaysUpload = false, bool showIndicator = true);
-  bool pendingSyncFailed = false;  // set when a sync attempt fails
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
