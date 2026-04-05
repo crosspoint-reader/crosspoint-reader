@@ -35,6 +35,12 @@ class ParsedText {
                                                   std::vector<bool>& lineEndsWithHyphenatedWord,
                                                   std::vector<int>& splitPrefixWordIndexes,
                                                   std::vector<bool>& splitInsertedHyphen);
+  std::vector<size_t> computeHyphenatedLineBreaksFromIndex(const GfxRenderer& renderer, int fontId, int pageWidth,
+                                                           std::vector<uint16_t>& wordWidths,
+                                                           std::vector<bool>& continuesVec, size_t startIndex,
+                                                           std::vector<bool>& lineEndsWithHyphenatedWord,
+                                                           std::vector<int>& splitPrefixWordIndexes,
+                                                           std::vector<bool>& splitInsertedHyphen);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks,
                             bool* outInsertedHyphen = nullptr);

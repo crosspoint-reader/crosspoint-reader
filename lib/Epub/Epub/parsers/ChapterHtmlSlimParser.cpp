@@ -79,6 +79,27 @@ bool isTableStructuralTag(const char* name) {
   return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
 }
 
+std::string buildTextBlockPreview(const std::shared_ptr<TextBlock>& line, const size_t maxLen = 120) {
+  if (!line) {
+    return {};
+  }
+
+  std::string preview;
+  const auto& words = line->getWords();
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (i > 0) {
+      preview.push_back(' ');
+    }
+    preview += words[i];
+    if (preview.size() >= maxLen) {
+      preview.resize(maxLen);
+      preview += "...";
+      break;
+    }
+  }
+  return preview;
+}
+
 // Calibre sometimes injects empty <p style="margin:0; border:0; height:0">...</p>
 // spacers inside running prose. Keep them as paragraph boundaries, but ignore
 // their inner text payload (usually NBSP) to avoid no-break-space glue artifacts.
@@ -1396,7 +1417,9 @@ ParsedText::LineProcessResult ChapterHtmlSlimParser::addLineToPage(std::shared_p
   const bool noRoomForAnotherLine =
       currentPageNextY + lineHeight <= viewportHeight && currentPageNextY + (lineHeight * 2) > viewportHeight;
   if (lineEndsWithHyphenatedWord && !suppressHyphenationRetry && noRoomForAnotherLine) {
-    LOG_DBG("EHP", "Requesting line rerender without hyphenation to avoid page-break split word");
+    const std::string linePreview = buildTextBlockPreview(line);
+    LOG_DBG("EHP", "Requesting line rerender without hyphenation to avoid page-break split word: %s",
+            linePreview.c_str());
     return ParsedText::LineProcessResult::RetryWithoutHyphenation;
   }
 
