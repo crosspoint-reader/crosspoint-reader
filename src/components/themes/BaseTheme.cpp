@@ -727,7 +727,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     // Inside the bar fill (black background): white notch.
     // Outside the fill (white background): black continuation.
     if (syncProgress >= 0.0f) {
-      const int syncX = orientedMarginLeft + progressBarMaxWidth * static_cast<int>(syncProgress) / 100;
+      const int syncX = orientedMarginLeft + static_cast<int>(progressBarMaxWidth * syncProgress / 100.0f);
       LOG_DBG("GUI", "syncMarker: syncProg=%.1f syncX=%d barWidth=%d", syncProgress, syncX, barWidth);
       if (syncX > orientedMarginLeft) {
         // Black tick above the bar — position shows last-synced point, visible in all states

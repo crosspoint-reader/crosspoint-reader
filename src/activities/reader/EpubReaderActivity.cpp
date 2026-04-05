@@ -38,6 +38,13 @@ const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
 // Set when any auto-sync attempt fails; cleared only by a successful manual sync.
 static bool pendingSyncFailed = false;
 
+void disconnectWiFi() {
+  WiFi.disconnect(false);
+  delay(100);
+  WiFi.mode(WIFI_OFF);
+  delay(100);
+}
+
 int clampPercent(int percent) {
   if (percent < 0) {
     return 0;
@@ -93,8 +100,14 @@ void EpubReaderActivity::onEnter() {
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/ko_autosync.bin", syncFile)) {
     uint8_t buf[4];
     if (syncFile.read(buf, sizeof(buf)) == sizeof(buf)) {
-      memcpy(&lastAutoSyncedProgress, buf, sizeof(lastAutoSyncedProgress));
-      hasSyncedWithRemote = true;
+      float loaded;
+      memcpy(&loaded, buf, sizeof(loaded));
+      if (std::isfinite(loaded) && loaded >= 0.0f && loaded <= 1.0f) {
+        lastAutoSyncedProgress = loaded;
+        hasSyncedWithRemote = true;
+      } else {
+        LOG_DBG("ERS", "ko_autosync.bin contains invalid value, ignoring");
+      }
     }
     syncFile.close();
   }
@@ -941,6 +954,9 @@ void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool a
   }
   if (docHash.empty()) {
     LOG_DBG("ERS", "Auto-sync: hash calculation failed");
+    pendingSyncFailed = true;
+    isSyncing = false;
+    if (weConnectedWifi) disconnectWiFi();
     return;
   }
 
@@ -950,12 +966,7 @@ void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool a
     LOG_DBG("ERS", "Auto-sync: getProgress error %d", static_cast<int>(getErr));
     pendingSyncFailed = true;
     isSyncing = false;
-    if (weConnectedWifi) {
-      WiFi.disconnect(false);
-      delay(100);
-      WiFi.mode(WIFI_OFF);
-      delay(100);
-    }
+    if (weConnectedWifi) disconnectWiFi();
     return;
   }
 
@@ -964,12 +975,7 @@ void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool a
   if (!shouldUpload) {
     LOG_DBG("ERS", "Auto-sync: local not ahead (%.3f vs %.3f), skipping", localKoPos.percentage, remote.percentage);
     isSyncing = false;
-    if (weConnectedWifi) {
-      WiFi.disconnect(false);
-      delay(100);
-      WiFi.mode(WIFI_OFF);
-      delay(100);
-    }
+    if (weConnectedWifi) disconnectWiFi();
     return;
   }
 
@@ -1000,12 +1006,7 @@ void EpubReaderActivity::tryAutoSync(const bool attemptWifiConnect, const bool a
   }
 
   isSyncing = false;
-  if (weConnectedWifi) {
-    WiFi.disconnect(false);
-    delay(100);
-    WiFi.mode(WIFI_OFF);
-    delay(100);
-  }
+  if (weConnectedWifi) disconnectWiFi();
 }
 
 void EpubReaderActivity::renderStatusBar() const {
