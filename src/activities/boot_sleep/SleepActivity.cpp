@@ -89,10 +89,13 @@ void SleepActivity::renderCustomSleepScreen() const {
       FsFile file;
       if (Storage.openFileForRead("SLP", filename, file)) {
         LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
+        LOG_DBG("SLP", "ForceContrast: %i", (int)(files[randomFileIndex].find("contrast") != std::string::npos));
+        bool forceContrast = (files[randomFileIndex].find("contrast") != std::string::npos);
+
         delay(100);
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
+          renderBitmapSleepScreen(bitmap, forceContrast);
           file.close();
           dir.close();
           return;
@@ -110,7 +113,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, false);
       file.close();
       return;
     }
@@ -137,7 +140,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, bool forceContrast = false) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -191,7 +194,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
-  if (hasGreyscale) {
+  if (hasGreyscale && !forceContrast) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -280,7 +283,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, false);
       file.close();
       return;
     }
