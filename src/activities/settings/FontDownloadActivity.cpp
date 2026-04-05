@@ -7,6 +7,8 @@
 #include <Logging.h>
 #include <WiFi.h>
 
+#include <FontManager.h>
+
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -32,6 +34,9 @@ void FontDownloadActivity::onExit() {
   delay(100);
   WiFi.mode(WIFI_OFF);
   delay(100);
+
+  // Reload font caches that were freed for TLS memory
+  FontManager::getInstance().loadSettings();
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
@@ -45,6 +50,14 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
     state_ = LOADING_MANIFEST;
   }
   requestUpdateAndWait();
+
+  // Free ExternalFont LRU caches (~34KB each) to make room for TLS buffers.
+  FontManager& fm = FontManager::getInstance();
+  ExternalFont* uiFont = fm.getActiveUiFont();
+  ExternalFont* readerFont = fm.getActiveFont();
+  if (uiFont) uiFont->unload();
+  if (readerFont) readerFont->unload();
+  LOG_DBG("FONT", "Freed font caches, heap=%d", ESP.getFreeHeap());
 
   if (!fetchAndParseManifest()) {
     {
@@ -64,35 +77,36 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
 // --- Manifest fetching ---
 
 bool FontDownloadActivity::fetchAndParseManifest() {
-  // Fetch manifest JSON into memory (small file, ~2-5KB).
-  // Avoid downloadToFile here because SD card SPI and WiFi/TLS SPI
-  // can conflict on ESP32-C3 during streaming writes.
+  // Download manifest to SD card temp file, then parse from file.
+  // This avoids holding both TLS buffers and manifest data in RAM.
+  static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
+
   const size_t heapBefore = ESP.getFreeHeap();
-  std::string manifestJson;
-  if (!HttpDownloader::fetchUrl(FONT_MANIFEST_URL, manifestJson)) {
-    LOG_ERR("FONT", "Failed to fetch manifest (http=%d, heap=%zu)", HttpDownloader::lastHttpCode, heapBefore);
+  auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+  if (result != HttpDownloader::OK) {
+    LOG_ERR("FONT", "Manifest fetch failed (err=%d, http=%d, heap=%zu)", result, HttpDownloader::lastHttpCode,
+            heapBefore);
     char buf[80];
-    snprintf(buf, sizeof(buf), "http=%d heap=%zuKB", HttpDownloader::lastHttpCode, heapBefore / 1024);
+    snprintf(buf, sizeof(buf), "err=%d http=%d heap=%zuKB", static_cast<int>(result), HttpDownloader::lastHttpCode,
+             heapBefore / 1024);
     errorMessage_ = buf;
+    Storage.remove(MANIFEST_TMP);
     return false;
   }
 
-  LOG_DBG("FONT", "Manifest fetched: %zu bytes", manifestJson.size());
+  // TLS connection closed — buffers freed. Parse JSON from file.
+  FsFile manifestFile;
+  if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
+    LOG_ERR("FONT", "Failed to open temp manifest");
+    Storage.remove(MANIFEST_TMP);
+    errorMessage_ = "Failed to read manifest";
+    return false;
+  }
 
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, manifestJson);
-
-  if (err) {
-    LOG_ERR("FONT", "Parse error: %s, size=%zu, first=%c", err.c_str(), manifestJson.size(),
-            manifestJson.empty() ? '?' : manifestJson[0]);
-    char buf[96];
-    snprintf(buf, sizeof(buf), "Parse: %s (%zuB, '%c...')", err.c_str(), manifestJson.size(),
-             manifestJson.empty() ? '?' : manifestJson[0]);
-    errorMessage_ = buf;
-    manifestJson.clear();
-    return false;
-  }
-  manifestJson.clear();
+  DeserializationError err = deserializeJson(doc, manifestFile);
+  manifestFile.close();
+  Storage.remove(MANIFEST_TMP);
 
   int version = doc["version"] | 0;
   if (version != 1) {

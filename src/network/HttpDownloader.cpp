@@ -60,6 +60,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
     secureClient->setInsecure();
+    secureClient->setHandshakeTimeout(20);
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
@@ -108,6 +109,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
     secureClient->setInsecure();
+    secureClient->setHandshakeTimeout(20);
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
@@ -171,6 +173,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
     secureClient->setInsecure();
+    secureClient->setHandshakeTimeout(20);
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
