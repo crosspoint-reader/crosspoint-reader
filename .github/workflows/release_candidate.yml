@@ -30,27 +30,20 @@ jobs:
           echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "BRANCH_SUFFIX=${GITHUB_REF_NAME#release/}" >> $GITHUB_ENV
 
-      - name: Build CrossPoint RC (Simplified Chinese)
+      - name: Build CrossPoint RC
         env:
           CROSSPOINT_RC_HASH: ${{ env.SHORT_SHA }}
-        run: pio run -e gh_release_rc
-
-      - name: Build CrossPoint RC (Traditional Chinese)
-        env:
-          CROSSPOINT_RC_HASH: ${{ env.SHORT_SHA }}
-        run: pio run -e gh_release_rc_tc
+        run: pio run -e gh_release
 
       - name: Rename firmware files
         run: |
-          cp .pio/build/gh_release_rc/firmware.bin firmware-sc.bin
-          cp .pio/build/gh_release_rc_tc/firmware.bin firmware-tc.bin
+          cp .pio/build/gh_release/firmware.bin firmware.bin
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: CrossPoint-RC-${{ env.BRANCH_SUFFIX }}
           path: |
-            .pio/build/gh_release_rc/bootloader.bin
-            .pio/build/gh_release_rc/partitions.bin
-            firmware-sc.bin
-            firmware-tc.bin
+            .pio/build/gh_release/bootloader.bin
+            .pio/build/gh_release/partitions.bin
+            firmware.bin
