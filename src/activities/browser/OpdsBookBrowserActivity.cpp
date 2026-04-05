@@ -319,7 +319,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Create sanitized filename: "Author/Title.epub" or just "Title.epub" if no author
   std::string author = StringUtils::sanitizeFilename(book.author);
   std::string title = StringUtils::sanitizeFilename(book.title);
-  
+
   if (title == "") title = "book";
 
   std::string filename = "/" + (author != "" ? (author + "/" + title) : title) + ".epub";
