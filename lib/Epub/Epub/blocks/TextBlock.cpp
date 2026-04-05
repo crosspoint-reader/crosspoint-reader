@@ -109,6 +109,12 @@ bool TextBlock::serialize(FsFile& file) const {
   serialization::writePod(file, blockStyle.drawSeparatorBelow);
   serialization::writePod(file, blockStyle.isListItem);
 
+  // Vertical layout data
+  serialization::writePod(file, isVertical);
+  if (isVertical) {
+    for (auto y : wordYpos) serialization::writePod(file, y);
+  }
+
   return true;
 }
 
@@ -153,6 +159,16 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   serialization::readPod(file, blockStyle.drawSeparatorBelow);
   serialization::readPod(file, blockStyle.isListItem);
 
+  // Vertical layout data
+  bool vertical = false;
+  serialization::readPod(file, vertical);
+  std::vector<int16_t> wordYpos;
+  if (vertical) {
+    wordYpos.resize(wc);
+    for (auto& y : wordYpos) serialization::readPod(file, y);
+  }
+
   return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
+      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle,
+                    std::move(wordYpos), vertical));
 }
