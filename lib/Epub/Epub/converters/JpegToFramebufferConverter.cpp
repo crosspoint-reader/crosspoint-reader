@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <new>
 
+#include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
 
@@ -167,10 +168,21 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
   if (dstYStart >= dstYEnd || dstXStart >= dstXEnd) return 1;
 
+  // Pre-compute orientation and render-mode state once per callback invocation
+  DirectPixelWriter pw;
+  pw.init(renderer);
+
+  DirectCacheWriter cw;
+  if (caching) {
+    cw.init(ctx->cache.buffer, ctx->cache.bytesPerRow, ctx->cache.originX);
+  }
+
   // === 1:1 fast path: no scaling math ===
   if (fineScaleFP == FP_ONE) {
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
+      pw.beginRow(outY);
+      if (caching) cw.beginRow(outY, ctx->config->y);
       const uint8_t* row = &pixels[(dstY - blockY) * stride];
       for (int dstX = dstXStart; dstX < dstXEnd; dstX++) {
         const int outX = cfgX + dstX;
@@ -182,8 +194,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        drawPixelWithRenderMode(renderer, outX, outY, dithered);
-        if (caching) ctx->cache.setPixel(outX, outY, dithered);
+        pw.writePixel(outX, dithered);
+        if (caching) cw.writePixel(outX, dithered);
       }
     }
     return 1;
@@ -203,6 +215,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
+      pw.beginRow(outY);
+      if (caching) cw.beginRow(outY, ctx->config->y);
       const int32_t srcFyFP = dstY * invScaleFP;
       const int32_t fy = srcFyFP & FP_MASK;
       const int32_t fyInv = FP_ONE - fy;
@@ -239,8 +253,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        drawPixelWithRenderMode(renderer, outX, outY, dithered);
-        if (caching) ctx->cache.setPixel(outX, outY, dithered);
+        pw.writePixel(outX, dithered);
+        if (caching) cw.writePixel(outX, dithered);
       }
 
       // Interior (no X boundary checks — lx0 and lx0+1 guaranteed in bounds)
@@ -262,8 +276,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        drawPixelWithRenderMode(renderer, outX, outY, dithered);
-        if (caching) ctx->cache.setPixel(outX, outY, dithered);
+        pw.writePixel(outX, dithered);
+        if (caching) cw.writePixel(outX, dithered);
       }
 
       // Right edge (with X boundary clamping)
@@ -288,8 +302,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        drawPixelWithRenderMode(renderer, outX, outY, dithered);
-        if (caching) ctx->cache.setPixel(outX, outY, dithered);
+        pw.writePixel(outX, dithered);
+        if (caching) cw.writePixel(outX, dithered);
       }
     }
     return 1;
@@ -298,6 +312,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   // === Nearest-neighbor (downscale: fineScale < 1.0) ===
   for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
     const int outY = cfgY + dstY;
+    pw.beginRow(outY);
+    if (caching) cw.beginRow(outY, ctx->config->y);
     const int32_t srcFyFP = dstY * invScaleFP;
     int ly = (srcFyFP >> FP_SHIFT) - blockY;
     if (ly < 0) ly = 0;
@@ -319,8 +335,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         dithered = gray / 85;
         if (dithered > 3) dithered = 3;
       }
-      drawPixelWithRenderMode(renderer, outX, outY, dithered);
-      if (caching) ctx->cache.setPixel(outX, outY, dithered);
+      pw.writePixel(outX, dithered);
+      if (caching) cw.writePixel(outX, dithered);
     }
   }
 
