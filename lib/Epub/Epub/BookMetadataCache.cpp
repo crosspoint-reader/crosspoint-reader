@@ -55,7 +55,7 @@ bool BookMetadataCache::beginTocPass() {
     this->tocBatches = 1;
     this->tocElementsPerBatch = spineCount;
     {
-      uint16_t overestimatedSpineCount = spineCount + spineCount / 4;
+      uint32_t overestimatedSpineCount = static_cast<uint32_t>(spineCount) + spineCount / 4;
       // Approximate required memory
       uint32_t approxSpineHrefMem = sizeof(SpineHrefIndexEntry) * overestimatedSpineCount;
       uint32_t maxAvailableMem = ESP.getFreeHeap();
@@ -76,8 +76,6 @@ bool BookMetadataCache::beginTocPass() {
     spineHrefIndex.resize(this->tocElementsPerBatch);
     spineFile.seek(0);
     LOG_DBG("BMC", "Using fast index for %d spine items", spineCount);
-    // Initial tocPass
-    this->continueTocPass();
   } else {
     useSpineHrefIndex = false;
   }
@@ -240,7 +238,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     uint16_t batches = 1;
     uint16_t elementsPerBatch = spineCount;
     {
-      uint16_t overestimatedSpineCount = spineCount + spineCount / 4;
+      uint32_t overestimatedSpineCount = static_cast<uint32_t>(spineCount) + spineCount / 4;
       // Approximate required memory
       uint32_t approxSpineSizesMem = sizeof(spineSizes[0]) * overestimatedSpineCount;
       uint32_t approxTargetsMem = sizeof(ZipFile::SizeTarget) * overestimatedSpineCount;
@@ -253,7 +251,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
                 "%d available. This may be fatal",
                 spineCount, approxSpineSizesMem + approxTargetsMem, approxSpineSizesMem, approxTargetsMem,
                 maxAvailableMem);
-        uint32_t memAfterSizes = maxAvailableMem - approxSpineSizesMem;
+        uint32_t memAfterSizes =
+            static_cast<uint32_t>(std::max(static_cast<int64_t>(maxAvailableMem) - approxSpineSizesMem, 1LL));
         batches = (approxTargetsMem + memAfterSizes - 1) / memAfterSizes;
         elementsPerBatch = (spineCount + batches - 1) / batches;
         LOG_DBG("BMC", "Trying processing in %d batches with %d elements", batches, elementsPerBatch);

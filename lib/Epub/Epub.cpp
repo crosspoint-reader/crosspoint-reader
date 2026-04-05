@@ -140,6 +140,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   return true;
 }
 
+/// Returns true on success, false on failure
 bool Epub::parseTocNcxFile() const {
   // the ncx file should have been specified in the content.opf file
   if (tocNcxItem.empty()) {
@@ -197,6 +198,7 @@ bool Epub::parseTocNcxFile() const {
   return true;
 }
 
+/// Returns true on success, false on failure
 bool Epub::parseTocNavFile() const {
   // the nav file should have been specified in the content.opf file (EPUB 3)
   if (tocNavItem.empty()) {
@@ -402,30 +404,40 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     return false;
   }
 
+  bool decidingToCParser = true;
+  bool usingTocNavParser = false;
   // Do a ToC pass
   // A toc pass reads as much of the spine as fits into memory and then reads the entire ToC
-  // An initial spine read is performed in beginTocPass
   // After every pass the tocFile position is reset so the next pass may write in positions missed by the first
-  do {
-    bool tocParsed = false;
+  while (bookMetadataCache->continueTocPass()) {
     // Try EPUB 3 nav document first (preferred)
-    if (!tocNavItem.empty()) {
+    if ((usingTocNavParser || decidingToCParser) && !tocNavItem.empty()) {
       LOG_DBG("EBP", "Attempting to parse EPUB 3 nav document");
-      tocParsed = parseTocNavFile();
+      bool success = parseTocNavFile();
+      if (decidingToCParser) {
+        usingTocNavParser = success;
+        decidingToCParser = false;
+      }
+      // Continue on success, else falls through to error or (only on error on first pass) try Ncx Parser
+      if (success) {
+        continue;
+      }
     }
 
     // Fall back to NCX if nav parsing failed or wasn't available
-    if (!tocParsed && !tocNcxItem.empty()) {
+    if (!usingTocNavParser && !tocNcxItem.empty()) {
       LOG_DBG("EBP", "Falling back to NCX TOC");
-      tocParsed = parseTocNcxFile();
+      bool success = parseTocNcxFile();
+      // Continue on success, else falls through to error
+      if (success) {
+        continue;
+      }
     }
 
-    if (!tocParsed) {
-      LOG_ERR("EBP", "Warning: Could not parse any TOC format");
-      break;
-      // Continue anyway - book will work without TOC
-    }
-  } while (bookMetadataCache->continueTocPass());
+    LOG_ERR("EBP", "Warning: Could not parse any TOC format");
+    break;
+    // Continue anyway - book will work without TOC
+  };
 
   if (!bookMetadataCache->endTocPass()) {
     LOG_ERR("EBP", "Could not end writing toc pass");
