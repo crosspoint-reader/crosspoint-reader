@@ -111,8 +111,7 @@ void EpubReaderActivity::onExit() {
   // Skip exit sync entirely if position hasn't changed since last sync — already up to date.
   const bool positionChanged = [this]() -> bool {
     if (!hasSyncedWithRemote || !epub || !section) return true;
-    const float chProg =
-        section->pageCount > 0 ? (float)section->currentPage / (float)section->pageCount : 0.0f;
+    const float chProg = section->pageCount > 0 ? (float)section->currentPage / (float)section->pageCount : 0.0f;
     const float current = epub->calculateProgress(currentSpineIndex, chProg);
     return std::abs(current - lastAutoSyncedProgress) > 0.001f;
   }();
