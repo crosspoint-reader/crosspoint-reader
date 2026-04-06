@@ -359,8 +359,12 @@ ScreenshotInfo XtcReaderActivity::getScreenshotInfo() const {
     const std::string t = xtc->getTitle();
     snprintf(info.title, sizeof(info.title), "%s", t.c_str());
     info.totalPages = xtc->getPageCount();
-    info.progressPercent = xtc->calculateProgress(currentPage);
+    // Clamp to last valid page to avoid sentinel value (currentPage == pageCount)
+    uint32_t clampedPage = currentPage < xtc->getPageCount() ? currentPage : xtc->getPageCount() - 1;
+    info.progressPercent = xtc->calculateProgress(clampedPage);
+    info.currentPage = static_cast<int>(clampedPage) + 1;
+  } else {
+    info.currentPage = currentPage + 1;
   }
-  info.currentPage = currentPage + 1;
   return info;
 }

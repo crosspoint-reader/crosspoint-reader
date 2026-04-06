@@ -28,8 +28,10 @@ void ScreenshotUtil::sanitizeForFat32(const char* input, char* output, size_t ma
 }
 
 void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize) {
+  const unsigned long ts = millis();
+
   if (info.readerType == ScreenshotInfo::ReaderType::None || info.title[0] == '\0') {
-    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", millis());
+    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
     return;
   }
 
@@ -45,9 +47,9 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
 
   if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
     snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, chapterNum, info.currentPage, pct,
-             millis());
+             ts);
   } else {
-    snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
+    snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, ts);
   }
 
   // Truncate title if total path exceeds FAT32 limit
@@ -56,15 +58,19 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
     size_t overhead = strlen(buf) - titleLen;
     if (overhead < 255) {
       size_t maxTitleLen = 255 - overhead;
+      // Walk back to a valid UTF-8 boundary to avoid corrupting multibyte characters
+      while (maxTitleLen > 0 && (sanitizedTitle[maxTitleLen] & 0xC0) == 0x80) {
+        maxTitleLen--;
+      }
       sanitizedTitle[maxTitleLen] = '\0';
       if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
         snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, chapterNum, info.currentPage,
-                 pct, millis());
+                 pct, ts);
       } else {
-        snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
+        snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, ts);
       }
     } else {
-      snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", millis());
+      snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
     }
   }
 }
