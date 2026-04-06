@@ -14,7 +14,7 @@
 
 void ScreenshotUtil::sanitizeForFat32(const char* input, char* output, size_t maxLen) {
   size_t i = 0;
-  for (; input[i] != '\0' && i < maxLen - 1; i++) {
+  for (; i < maxLen - 1 && input[i] != '\0'; i++) {
     char c = input[i];
     // Replace FAT32-invalid characters and spaces with dashes
     if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
