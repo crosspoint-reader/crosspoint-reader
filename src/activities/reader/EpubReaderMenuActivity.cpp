@@ -21,14 +21,15 @@ constexpr StrId kBuiltinReaderFontLabels[kBuiltinReaderFontCount] = {StrId::STR_
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const bool hasFootnotes, const bool verticalMode)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      verticalMode(verticalMode) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -212,7 +213,8 @@ std::string EpubReaderMenuActivity::getMenuItemValue(const MenuAction action) co
       return getCurrentFontLabel();
     case MenuAction::STYLE_LINE_SPACING: {
       char spacingBuf[16];
-      snprintf(spacingBuf, sizeof(spacingBuf), "%.2fx", static_cast<float>(SETTINGS.lineSpacing) / 100.0f);
+      const uint8_t spacing = verticalMode ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal;
+      snprintf(spacingBuf, sizeof(spacingBuf), "%.2fx", static_cast<float>(spacing) / 100.0f);
       return spacingBuf;
     }
     case MenuAction::STYLE_STATUS_BAR:
