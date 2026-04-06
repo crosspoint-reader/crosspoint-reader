@@ -115,6 +115,17 @@ class CrossPointSettings {
     SLEEP_TIMEOUT_COUNT
   };
 
+  enum MTG_SYNC_INTERVAL {
+    MTG_SYNC_NONE = 0,
+    MTG_SYNC_1_MIN = 1,
+    MTG_SYNC_5_MIN = 2,
+    MTG_SYNC_10_MIN = 3,
+    MTG_SYNC_30_MIN = 4,
+    MTG_SYNC_1_HR = 5,
+    MTG_SYNC_1_DAY = 6,
+    MTG_SYNC_INTERVAL_COUNT = 7
+  };
+
   // E-ink refresh frequency (pages between full refreshes)
   enum REFRESH_FREQUENCY {
     REFRESH_1 = 0,
@@ -199,6 +210,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // MTG Sync Interval in minutes
+  uint8_t mtgSyncInterval = 0;
 
   ~CrossPointSettings() = default;
 

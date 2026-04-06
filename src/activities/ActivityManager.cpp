@@ -9,6 +9,7 @@
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
+#include "network/MtgSyncActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -179,6 +180,10 @@ void ActivityManager::goToRecentBooks() {
 
 void ActivityManager::goToBrowser() {
   replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToMtgSync() {
+  replaceActivity(std::make_unique<MtgSyncActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToReader(std::string path) {

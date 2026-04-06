@@ -27,6 +27,10 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <LittleFS.h> // Or SD if the X4 uses an SD card
+
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
@@ -125,6 +129,26 @@ EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;
 unsigned long t2 = 0;
+
+// Sync new MTG image
+void syncNewCard() {
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        http.begin("https://your-mtg-worker.workers.dev/"); 
+        
+        int httpCode = http.GET();
+        if (httpCode == HTTP_CODE_OK) {
+            // Overwrite the specific file the X4 uses for its sleep screen
+            File file = LittleFS.open("/sleep/mtg_card.bmp", FILE_WRITE);
+            if (file) {
+                http.writeToStream(&file);
+                file.close();
+                Serial.println("Slab Updated Seamlessly!");
+            }
+        }
+        http.end();
+    }
+}
 
 // Verify power button press duration on wake-up from deep sleep
 // Pre-condition: isWakeupByPowerButton() == true
