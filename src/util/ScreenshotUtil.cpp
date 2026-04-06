@@ -10,7 +10,7 @@
 #include <string>
 
 #include "Bitmap.h"  // Required for BmpHeader struct definition
-#include "activities/ActivityManager.h"
+#include "activities/Activity.h"
 
 void ScreenshotUtil::sanitizeForFat32(const char* input, char* output, size_t maxLen) {
   size_t i = 0;
