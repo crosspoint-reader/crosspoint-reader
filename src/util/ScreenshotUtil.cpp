@@ -41,8 +41,8 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
   if (pct > 100) pct = 100;
 
   if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-    snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, info.spineIndex,
-             info.currentPage, pct, millis());
+    snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, info.spineIndex, info.currentPage,
+             pct, millis());
   } else {
     snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
   }
