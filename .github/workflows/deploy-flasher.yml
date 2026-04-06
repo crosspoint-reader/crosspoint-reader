@@ -1,0 +1,93 @@
+name: Deploy Flasher
+
+on:
+  workflow_run:
+    workflows: ["Dev Build", "Compile Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-flasher
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Generate manifests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+
+          mkdir -p _site
+
+          # Dev manifest (latest prerelease)
+          DEV_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == true)] | first | .tag_name // empty')
+          if [ -n "${DEV_TAG}" ]; then
+            DEV_BASE="https://github.com/${REPO}/releases/download/${DEV_TAG}"
+            cat > _site/manifest_dev.json <<MANIFEST
+          {
+            "name": "CrossPoint JP (Dev)",
+            "version": "${DEV_TAG}",
+            "builds": [
+              {
+                "chipFamily": "ESP32-C3",
+                "parts": [
+                  { "path": "${DEV_BASE}/bootloader.bin", "offset": 0 },
+                  { "path": "${DEV_BASE}/partitions.bin", "offset": 32768 },
+                  { "path": "${DEV_BASE}/firmware.bin", "offset": 65536 }
+                ]
+              }
+            ]
+          }
+          MANIFEST
+            echo "Dev manifest generated: ${DEV_TAG}"
+          else
+            echo "No dev release found, skipping dev manifest"
+          fi
+
+          # Stable manifest (latest non-prerelease)
+          STABLE_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == false and .draft == false)] | first | .tag_name // empty')
+          if [ -n "${STABLE_TAG}" ]; then
+            STABLE_BASE="https://github.com/${REPO}/releases/download/${STABLE_TAG}"
+            cat > _site/manifest_stable.json <<MANIFEST
+          {
+            "name": "CrossPoint JP (Stable)",
+            "version": "${STABLE_TAG}",
+            "builds": [
+              {
+                "chipFamily": "ESP32-C3",
+                "parts": [
+                  { "path": "${STABLE_BASE}/bootloader.bin", "offset": 0 },
+                  { "path": "${STABLE_BASE}/partitions.bin", "offset": 32768 },
+                  { "path": "${STABLE_BASE}/firmware.bin", "offset": 65536 }
+                ]
+              }
+            ]
+          }
+          MANIFEST
+            echo "Stable manifest generated: ${STABLE_TAG}"
+          else
+            echo "No stable release found, skipping stable manifest"
+          fi
+
+          # Copy index.html
+          cp flasher/index.html _site/index.html
+
+          echo "=== Site contents ==="
+          ls -la _site/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          force_orphan: true
