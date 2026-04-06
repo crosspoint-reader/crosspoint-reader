@@ -667,12 +667,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                       viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
                                       SETTINGS.embeddedStyle, SETTINGS.imageRendering, verticalMode, popupFn,
                                       headingFontIds, UI_10_FONT_ID)) {
-        LOG_ERR("ERS", "Failed to persist page data to SD");
+        LOG_ERR("ERS", "Failed to persist page data to SD (free heap: %d)", ESP.getFreeHeap());
         section.reset();
-        // Show error to user instead of silent return
+        // Show error and return to home to avoid infinite retry loop
+        // (loop() would call requestUpdate() → render() → same failure)
         renderer.clearScreen();
         renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_MEMORY_ERROR), true, EpdFontFamily::BOLD);
-        renderer.displayBuffer();
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        onGoHome();
         return;
       }
     } else {
