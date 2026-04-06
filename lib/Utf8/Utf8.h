@@ -40,3 +40,7 @@ inline bool utf8IsCombiningMark(const uint32_t cp) {
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
 }
+
+// 日本語仮名の濁点(U+3099)・半濁点(U+309A)をin-placeでNFC合成する。
+// macOS等がNFD形式で書き込んだファイル名を正規化するために使用。
+void utf8NfcNormalizeKana(std::string& str);

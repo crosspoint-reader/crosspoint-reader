@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Utf8.h>
 
 #include <algorithm>
 
@@ -90,13 +91,17 @@ void FileBrowserActivity::loadFiles() {
     }
 
     if (file.isDirectory()) {
-      files.emplace_back(std::string(name) + "/");
+      std::string dirName = std::string(name) + "/";
+      utf8NfcNormalizeKana(dirName);
+      files.emplace_back(std::move(dirName));
     } else {
       std::string_view filename{name};
       if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
           FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
           FsHelpers::hasBmpExtension(filename)) {
-        files.emplace_back(filename);
+        std::string normalized(filename);
+        utf8NfcNormalizeKana(normalized);
+        files.emplace_back(std::move(normalized));
       }
     }
     file.close();
