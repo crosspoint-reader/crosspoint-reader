@@ -358,6 +358,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           std::make_unique<SettingsActivity>(renderer, mappedInput, [this] { finish(); }, 1, 1),
           [this](const ActivityResult&) {
             // Reader settings (font/line spacing/margins etc.) may change pagination.
+            // Cache dir may have been deleted by ClearCacheActivity — recreate it.
+            if (epub) epub->setupCacheDir();
             invalidateSectionPreservingPosition();
             requestUpdate();
           });
