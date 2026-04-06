@@ -17,6 +17,8 @@
 
 namespace {
 constexpr const char* SLEEP_BMP_PATH = "/sleep.bmp";
+constexpr const char* SLEEP_BMP_TMP_PATH = "/sleep.bmp.tmp";
+constexpr const char* SLEEP_BMP_BACKUP_PATH = "/sleep.bmp.bak";
 
 uint8_t normalizeImageDitherModeValue(uint8_t mode) { return static_cast<uint8_t>(imageDitherModeFromSetting(mode)); }
 
@@ -37,20 +39,49 @@ void computeCenteredImagePlacement(const int imageWidth, const int imageHeight, 
 
     if (ratio > screenRatio) {
       renderWidth = pageWidth;
-      renderHeight = std::round(static_cast<float>(pageWidth) / ratio);
-      x = 0;
-      y = std::round((static_cast<float>(pageHeight) - renderHeight) / 2.0f);
+      renderHeight = std::max(1, static_cast<int>(std::round(static_cast<float>(pageWidth) / ratio)));
     } else {
       renderHeight = pageHeight;
-      renderWidth = std::round(static_cast<float>(pageHeight) * ratio);
-      x = std::round((static_cast<float>(pageWidth) - renderWidth) / 2.0f);
-      y = 0;
+      renderWidth = std::max(1, static_cast<int>(std::round(static_cast<float>(pageHeight) * ratio)));
     }
+
+    x = std::max(0, (pageWidth - renderWidth) / 2);
+    y = std::max(0, (pageHeight - renderHeight) / 2);
     return;
   }
 
-  x = (pageWidth - imageWidth) / 2;
-  y = (pageHeight - imageHeight) / 2;
+  renderWidth = std::max(1, renderWidth);
+  renderHeight = std::max(1, renderHeight);
+  x = std::max(0, (pageWidth - renderWidth) / 2);
+  y = std::max(0, (pageHeight - renderHeight) / 2);
+}
+
+bool replaceSleepBmpFromTemp() {
+  const bool hadExistingTarget = Storage.exists(SLEEP_BMP_PATH);
+  bool movedExistingToBackup = false;
+
+  if (Storage.exists(SLEEP_BMP_BACKUP_PATH)) {
+    Storage.remove(SLEEP_BMP_BACKUP_PATH);
+  }
+
+  if (hadExistingTarget) {
+    movedExistingToBackup = Storage.rename(SLEEP_BMP_PATH, SLEEP_BMP_BACKUP_PATH);
+    if (!movedExistingToBackup) {
+      return false;
+    }
+  }
+
+  if (Storage.rename(SLEEP_BMP_TMP_PATH, SLEEP_BMP_PATH)) {
+    if (movedExistingToBackup) {
+      Storage.remove(SLEEP_BMP_BACKUP_PATH);
+    }
+    return true;
+  }
+
+  if (movedExistingToBackup) {
+    Storage.rename(SLEEP_BMP_BACKUP_PATH, SLEEP_BMP_PATH);
+  }
+  return false;
 }
 }  // namespace
 
@@ -203,12 +234,15 @@ void BmpViewerActivity::setAsSleepScreen() {
   } else {
     const bool renderedForCapture = isBmpFile(filePath) ? renderBmpImage(false) : renderDecodedImage(false);
     if (renderedForCapture) {
-      success = ScreenshotUtil::saveFramebufferAsBmp(SLEEP_BMP_PATH, renderer.getFrameBuffer(),
-                                                     display.getDisplayWidth(), display.getDisplayHeight());
+      Storage.remove(SLEEP_BMP_TMP_PATH);
+      if (ScreenshotUtil::saveFramebufferAsBmp(SLEEP_BMP_TMP_PATH, renderer.getFrameBuffer(), display.getDisplayWidth(),
+                                               display.getDisplayHeight())) {
+        success = replaceSleepBmpFromTemp();
+      }
     }
 
-    if (!success && Storage.exists(SLEEP_BMP_PATH)) {
-      Storage.remove(SLEEP_BMP_PATH);
+    if (!success && Storage.exists(SLEEP_BMP_TMP_PATH)) {
+      Storage.remove(SLEEP_BMP_TMP_PATH);
     }
   }
 
