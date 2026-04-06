@@ -156,8 +156,10 @@ void EpubReaderActivity::loop() {
       }
     }
 
+    if (!epub) return;
+
     float bookProgress = 0.0f;
-    if (epub && epub->getBookSize() > 0 && menuTotalPages > 0) {
+    if (epub->getBookSize() > 0 && menuTotalPages > 0) {
       const float chapterProgress = static_cast<float>(menuCurrentPage - 1) / static_cast<float>(menuTotalPages);
       bookProgress = epub->calculateProgress(menuSpineIndex, chapterProgress) * 100.0f;
     }

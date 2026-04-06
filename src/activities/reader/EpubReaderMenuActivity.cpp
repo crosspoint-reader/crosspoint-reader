@@ -173,9 +173,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
     if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
       // Render current page turn value on the right edge of the content area.
-      const auto value = pageTurnLabels[selectedPageTurnOption];
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+      const auto pageTurnValue = pageTurnLabels[selectedPageTurnOption];
+      const auto pageTurnWidth = renderer.getTextWidth(UI_10_FONT_ID, pageTurnValue);
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - pageTurnWidth, displayY, pageTurnValue,
+                        !isSelected);
     }
   }
 
