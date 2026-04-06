@@ -92,7 +92,9 @@ BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& 
       filePath(std::move(path))
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
       ,
-      imageDitherMode(normalizeImageDitherModeValue(SETTINGS.imageDithering)) {
+      imageDitherMode(normalizeImageDitherModeValue(SETTINGS.imageDithering)),
+      initialImageDitherMode(imageDitherMode),
+      imageDitherSettingsDirty(false) {
 }
 #else
 {
@@ -117,6 +119,9 @@ void BmpViewerActivity::onEnter() {
 }
 
 void BmpViewerActivity::onExit() {
+#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
+  saveDitherSettingsIfNeeded();
+#endif
   Activity::onExit();
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
@@ -148,12 +153,7 @@ bool BmpViewerActivity::renderBmpImage(const bool showControls) {
   renderer.clearScreen();
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
   if (showControls) {
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-    const auto labels =
-        mappedInput.mapLabels(tr(STR_BACK), "", I18N.get(getCurrentDitherModeLabel()), tr(STR_SET_SLEEP_SCREEN));
-#else
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", tr(STR_SET_SLEEP_SCREEN));
-#endif
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -232,11 +232,22 @@ StrId BmpViewerActivity::getCurrentDitherModeLabel() const {
 void BmpViewerActivity::cycleDitherMode() {
   imageDitherMode = (imageDitherMode + 1) % CrossPointSettings::IMAGE_DITHERING_COUNT;
   SETTINGS.imageDithering = imageDitherMode;
-  SETTINGS.saveToFile();
+  imageDitherSettingsDirty = (imageDitherMode != initialImageDitherMode);
 
   if (!renderCurrentImage()) {
     renderError("Could not render image");
   }
+}
+
+void BmpViewerActivity::saveDitherSettingsIfNeeded() {
+  if (!imageDitherSettingsDirty) {
+    return;
+  }
+
+  SETTINGS.imageDithering = imageDitherMode;
+  SETTINGS.saveToFile();
+  initialImageDitherMode = imageDitherMode;
+  imageDitherSettingsDirty = false;
 }
 #endif
 
@@ -302,7 +313,7 @@ void BmpViewerActivity::loop() {
   }
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  if (!isBmpFile(filePath) && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     cycleDitherMode();
     return;
   }

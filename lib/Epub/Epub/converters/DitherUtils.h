@@ -12,12 +12,7 @@ inline const uint8_t bayer4x4[4][4] = {
     {15, 7, 13, 5},
 };
 
-inline uint8_t quantizeGray4Level(uint8_t gray) {
-  if (gray < 64) return 0;
-  if (gray < 128) return 1;
-  if (gray < 192) return 2;
-  return 3;
-}
+inline uint8_t quantizeGray4Level(uint8_t gray) { return gray >= 213 ? 3 : static_cast<uint8_t>((gray + 42) / 85); }
 
 // Apply Bayer dithering and quantize to 4 levels (0-3)
 // Stateless - works correctly with any pixel processing order
