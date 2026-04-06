@@ -6,22 +6,81 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstring>
 #include <string>
 
 #include "Bitmap.h"  // Required for BmpHeader struct definition
+#include "activities/ActivityManager.h"
+
+void ScreenshotUtil::sanitizeForFat32(const char* input, char* output, size_t maxLen) {
+  size_t i = 0;
+  for (; input[i] != '\0' && i < maxLen - 1; i++) {
+    char c = input[i];
+    // Replace FAT32-invalid characters and spaces with dashes
+    if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
+        c == ' ') {
+      output[i] = '-';
+    } else {
+      output[i] = c;
+    }
+  }
+  output[i] = '\0';
+}
+
+void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize) {
+  if (info.readerType == ScreenshotInfo::ReaderType::None || info.title[0] == '\0') {
+    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", millis());
+    return;
+  }
+
+  char sanitizedTitle[64];
+  sanitizeForFat32(info.title, sanitizedTitle, sizeof(sanitizedTitle));
+
+  int pct = info.progressPercent;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+
+  if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
+    snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, info.spineIndex,
+             info.currentPage, pct, millis());
+  } else {
+    snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
+  }
+
+  // Truncate title if total path exceeds FAT32 limit
+  if (strlen(buf) > 255) {
+    size_t titleLen = strlen(sanitizedTitle);
+    size_t overhead = strlen(buf) - titleLen;
+    if (overhead < 255) {
+      size_t maxTitleLen = 255 - overhead;
+      sanitizedTitle[maxTitleLen] = '\0';
+      if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
+        snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, info.spineIndex,
+                 info.currentPage, pct, millis());
+      } else {
+        snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
+      }
+    } else {
+      snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", millis());
+    }
+  }
+}
 
 void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   const uint8_t* fb = renderer.getFrameBuffer();
-  if (fb) {
-    String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
-    if (ScreenshotUtil::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH,
-                                             HalDisplay::DISPLAY_HEIGHT)) {
-      LOG_DBG("SCR", "Screenshot saved to %s", filename_str.c_str());
-    } else {
-      LOG_ERR("SCR", "Failed to save screenshot");
-    }
-  } else {
+  if (!fb) {
     LOG_ERR("SCR", "Framebuffer not available");
+    return;
+  }
+
+  ScreenshotInfo info = activityManager.getScreenshotInfo();
+  char filename[256];
+  buildFilename(info, filename, sizeof(filename));
+
+  if (saveFramebufferAsBmp(filename, fb, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT)) {
+    LOG_DBG("SCR", "Screenshot saved to %s", filename);
+  } else {
+    LOG_ERR("SCR", "Failed to save screenshot");
   }
 
   // Display a border around the screen to indicate a screenshot was taken

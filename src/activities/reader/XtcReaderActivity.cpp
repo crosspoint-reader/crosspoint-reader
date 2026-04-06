@@ -351,3 +351,16 @@ void XtcReaderActivity::loadProgress() {
     f.close();
   }
 }
+
+ScreenshotInfo XtcReaderActivity::getScreenshotInfo() const {
+  ScreenshotInfo info;
+  info.readerType = ScreenshotInfo::ReaderType::Xtc;
+  if (xtc) {
+    const std::string t = xtc->getTitle();
+    snprintf(info.title, sizeof(info.title), "%s", t.c_str());
+    info.totalPages = xtc->getPageCount();
+    info.progressPercent = xtc->calculateProgress(currentPage);
+  }
+  info.currentPage = currentPage + 1;
+  return info;
+}
