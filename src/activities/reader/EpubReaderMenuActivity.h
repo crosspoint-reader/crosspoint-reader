@@ -65,5 +65,4 @@ class EpubReaderMenuActivity final : public Activity {
   bool verticalMode = false;
 
   std::string getMenuItemValue(MenuAction action) const;
-  std::string getCurrentFontLabel() const;
 };

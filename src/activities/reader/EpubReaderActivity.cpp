@@ -23,7 +23,6 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
-#include "activities/settings/FontSelectActivity.h"
 #include "activities/settings/LineSpacingSelectionActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/settings/StatusBarSettingsActivity.h"
@@ -377,15 +376,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       SETTINGS.invertImages = !SETTINGS.invertImages;
       SETTINGS.saveToFile();
       renderer.setInvertImagesInDarkMode(SETTINGS.invertImages);
-      break;
-    }
-    case EpubReaderMenuActivity::MenuAction::STYLE_FONT_FAMILY: {
-      startActivityForResult(std::make_unique<FontSelectActivity>(
-                                 renderer, mappedInput, FontSelectActivity::SelectMode::Reader, [this] { finish(); }),
-                             [this](const ActivityResult&) {
-                               invalidateSectionPreservingPosition();
-                               requestUpdate();
-                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_LINE_SPACING: {

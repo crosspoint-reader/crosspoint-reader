@@ -1,6 +1,5 @@
 #include "EpubReaderMenuActivity.h"
 
-#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -10,14 +9,6 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-
-namespace {
-constexpr int kBuiltinReaderFontCount = 3;
-constexpr CrossPointSettings::FONT_FAMILY kBuiltinReaderFonts[kBuiltinReaderFontCount] = {
-    CrossPointSettings::BOOKERLY, CrossPointSettings::NOTOSANS, CrossPointSettings::OPENDYSLEXIC};
-constexpr StrId kBuiltinReaderFontLabels[kBuiltinReaderFontCount] = {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS,
-                                                                     StrId::STR_OPEN_DYSLEXIC};
-}  // namespace
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
@@ -41,7 +32,6 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   }
   items.push_back({MenuAction::READER_SETTINGS, StrId::STR_SETTINGS_TITLE});
   items.push_back({MenuAction::STYLE_FIRST_LINE_INDENT, StrId::STR_FIRST_LINE_INDENT});
-  items.push_back({MenuAction::STYLE_FONT_FAMILY, StrId::STR_FONT_FAMILY});
   items.push_back({MenuAction::STYLE_LINE_SPACING, StrId::STR_LINE_SPACING});
   items.push_back({MenuAction::STYLE_INVERT_IMAGES, StrId::STR_INVERT_IMAGES});
   items.push_back({MenuAction::STYLE_STATUS_BAR, StrId::STR_CUSTOMISE_STATUS_BAR});
@@ -187,21 +177,6 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-std::string EpubReaderMenuActivity::getCurrentFontLabel() const {
-  const int currentExternal = FontMgr.getSelectedIndex();
-  if (currentExternal >= 0) {
-    const FontInfo* info = FontMgr.getFontInfo(currentExternal);
-    return info ? std::string(info->name) : std::string(tr(STR_EXTERNAL_FONT));
-  }
-
-  for (int i = 0; i < kBuiltinReaderFontCount; ++i) {
-    if (SETTINGS.fontFamily == static_cast<uint8_t>(kBuiltinReaderFonts[i])) {
-      return std::string(I18N.get(kBuiltinReaderFontLabels[i]));
-    }
-  }
-  return std::string(I18N.get(kBuiltinReaderFontLabels[0]));
-}
-
 std::string EpubReaderMenuActivity::getMenuItemValue(const MenuAction action) const {
   switch (action) {
     case MenuAction::ROTATE_SCREEN:
@@ -210,8 +185,6 @@ std::string EpubReaderMenuActivity::getMenuItemValue(const MenuAction action) co
       return SETTINGS.firstLineIndent ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
     case MenuAction::STYLE_INVERT_IMAGES:
       return SETTINGS.invertImages ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
-    case MenuAction::STYLE_FONT_FAMILY:
-      return getCurrentFontLabel();
     case MenuAction::STYLE_LINE_SPACING: {
       char spacingBuf[16];
       const uint8_t spacing = verticalMode ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal;
