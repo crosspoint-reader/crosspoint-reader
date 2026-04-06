@@ -183,9 +183,10 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  const BookOverlayInfo overlayInfo = (SETTINGS.sleepCoverOverlay != 0 && !APP_STATE.openEpubPath.empty())
-                                          ? getBookOverlayInfo(APP_STATE.openEpubPath)
-                                          : BookOverlayInfo{};
+  const BookOverlayInfo overlayInfo =
+      (SETTINGS.sleepCoverOverlay != 0 && APP_STATE.lastSleepFromReader && !APP_STATE.openEpubPath.empty())
+          ? getBookOverlayInfo(APP_STATE.openEpubPath)
+          : BookOverlayInfo{};
 
   // Check if we have a /.sleep (preferred) or /sleep directory
   const char* sleepDir = nullptr;
