@@ -52,14 +52,13 @@ int adjustPixel(int gray) {
 
   return gray;
 }
-// Simple quantization without dithering - divide into 4 levels
-// The thresholds are fine-tuned to the X4 display
+// Simple quantization without dithering — evenly-spaced midpoint thresholds for factory LUT
 uint8_t quantizeSimple(int gray) {
-  if (gray < 45) {
+  if (gray < 43) {
     return 0;
-  } else if (gray < 70) {
+  } else if (gray < 128) {
     return 1;
-  } else if (gray < 140) {
+  } else if (gray < 213) {
     return 2;
   } else {
     return 3;
