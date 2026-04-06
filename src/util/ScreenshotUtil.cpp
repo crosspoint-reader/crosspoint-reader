@@ -16,9 +16,9 @@ void ScreenshotUtil::sanitizeForFat32(const char* input, char* output, size_t ma
   size_t i = 0;
   for (; i < maxLen - 1 && input[i] != '\0'; i++) {
     char c = input[i];
-    // Replace FAT32-invalid characters and spaces with dashes
+    // Replace FAT32-invalid characters, spaces, and control characters with dashes
     if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
-        c == ' ') {
+        c == ' ' || (c > 0x00 && c <= 0x1f)) {
       output[i] = '-';
     } else {
       output[i] = c;
@@ -40,9 +40,12 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
   if (pct < 0) pct = 0;
   if (pct > 100) pct = 100;
 
+  // Display spine index as 1-based for user-facing filenames
+  const int chapterNum = info.spineIndex + 1;
+
   if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-    snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, info.spineIndex, info.currentPage,
-             pct, millis());
+    snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, chapterNum, info.currentPage, pct,
+             millis());
   } else {
     snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
   }
@@ -55,8 +58,8 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
       size_t maxTitleLen = 255 - overhead;
       sanitizedTitle[maxTitleLen] = '\0';
       if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-        snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, info.spineIndex,
-                 info.currentPage, pct, millis());
+        snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, chapterNum, info.currentPage,
+                 pct, millis());
       } else {
         snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, millis());
       }
@@ -77,10 +80,12 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   char filename[256];
   buildFilename(info, filename, sizeof(filename));
 
-  if (saveFramebufferAsBmp(filename, fb, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT)) {
+  bool saved = saveFramebufferAsBmp(filename, fb, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT);
+  if (saved) {
     LOG_DBG("SCR", "Screenshot saved to %s", filename);
   } else {
     LOG_ERR("SCR", "Failed to save screenshot");
+    return;
   }
 
   // Display a border around the screen to indicate a screenshot was taken
