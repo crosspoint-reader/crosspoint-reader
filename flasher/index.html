@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrossPoint JP Flasher</title>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+      color: #1a1a1a;
+      line-height: 1.6;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .subtitle { color: #666; margin-bottom: 2rem; font-size: 0.9rem; }
+    .channel-select {
+      background: #f5f5f5;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .channel-select h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+    .channel-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+    }
+    .channel-option label { cursor: pointer; }
+    .channel-option .desc { color: #666; font-size: 0.85rem; margin-left: 1.5rem; }
+    .version-info {
+      font-size: 0.85rem;
+      color: #666;
+      margin-left: 1.5rem;
+      margin-top: 0.25rem;
+    }
+    .install-section { text-align: center; margin: 2rem 0; }
+    .instructions {
+      background: #f9f9f9;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .instructions h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+    .instructions ol { padding-left: 1.5rem; }
+    .instructions li { margin-bottom: 0.5rem; }
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: 1rem;
+      font-size: 0.85rem;
+    }
+    .warning h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+    .warning ul { padding-left: 1.5rem; }
+    .warning li { margin-bottom: 0.25rem; }
+    .no-serial {
+      display: none;
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+    }
+    .disabled { opacity: 0.5; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <h1>CrossPoint JP Flasher</h1>
+  <p class="subtitle">ブラウザからXteinkデバイスにファームウェアを書き込めます</p>
+
+  <div class="no-serial" id="no-serial">
+    <strong>お使いのブラウザはWeb Serial APIに対応していません。</strong><br>
+    Chrome 89以降 または Edge 89以降をご利用ください。
+  </div>
+
+  <div class="channel-select">
+    <h2>ファームウェアの選択</h2>
+    <div class="channel-option">
+      <input type="radio" id="ch-dev" name="channel" value="dev" checked>
+      <label for="ch-dev"><strong>開発版 (Dev Build)</strong></label>
+    </div>
+    <div class="desc">最新のmaster変更を含むビルド。新機能をいち早く試せます。</div>
+    <div class="version-info" id="version-dev"></div>
+
+    <div class="channel-option" style="margin-top: 0.75rem;">
+      <input type="radio" id="ch-stable" name="channel" value="stable">
+      <label for="ch-stable"><strong>安定版 (Stable)</strong></label>
+    </div>
+    <div class="desc">テスト済みの安定リリース。</div>
+    <div class="version-info" id="version-stable"></div>
+  </div>
+
+  <div class="install-section">
+    <esp-web-install-button id="install-btn" manifest="./manifest_dev.json">
+      <button slot="activate">インストール</button>
+      <span slot="unsupported">
+        お使いのブラウザは対応していません。Chrome または Edge をご利用ください。
+      </span>
+      <span slot="not-allowed">
+        HTTPS接続が必要です。
+      </span>
+    </esp-web-install-button>
+  </div>
+
+  <div class="instructions">
+    <h2>使い方</h2>
+    <ol>
+      <li>XteinkデバイスをUSB-Cケーブルでパソコンに接続</li>
+      <li>上のファームウェアを選択し「インストール」をクリック</li>
+      <li>シリアルポートの選択ダイアログでデバイスを選択</li>
+      <li>書き込みが完了するまで待機（約2分）</li>
+    </ol>
+  </div>
+
+  <div class="warning">
+    <h2>注意事項</h2>
+    <ul>
+      <li>対応ブラウザ: Chrome 89+, Edge 89+（Safari, Firefoxは非対応）</li>
+      <li>初回書き込み時は既存のデータが消去されます</li>
+      <li>書き込み中はケーブルを抜かないでください</li>
+      <li>書き込み後、デバイスは自動的に再起動します</li>
+    </ul>
+  </div>
+
+  <script>
+    // Web Serial API非対応ブラウザの検出
+    if (!('serial' in navigator)) {
+      document.getElementById('no-serial').style.display = 'block';
+    }
+
+    // チャンネル切り替え
+    const installBtn = document.getElementById('install-btn');
+    document.querySelectorAll('input[name="channel"]').forEach(function(radio) {
+      radio.addEventListener('change', function(e) {
+        installBtn.manifest = e.target.value === 'stable'
+          ? './manifest_stable.json'
+          : './manifest_dev.json';
+      });
+    });
+
+    // マニフェストからバージョン情報を取得して表示
+    function disableStable() {
+      document.getElementById('ch-stable').disabled = true;
+      document.getElementById('version-stable').textContent = '（まだリリースされていません）';
+      document.querySelector('label[for="ch-stable"]').parentElement.classList.add('disabled');
+    }
+
+    function loadVersionInfo(manifestUrl, elementId) {
+      fetch(manifestUrl)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (data && data.version) {
+            document.getElementById(elementId).textContent = 'バージョン: ' + data.version;
+          } else if (elementId === 'version-stable') {
+            disableStable();
+          }
+        })
+        .catch(function() {
+          if (elementId === 'version-stable') {
+            disableStable();
+          }
+        });
+    }
+
+    loadVersionInfo('./manifest_dev.json', 'version-dev');
+    loadVersionInfo('./manifest_stable.json', 'version-stable');
+  </script>
+</body>
+</html>
