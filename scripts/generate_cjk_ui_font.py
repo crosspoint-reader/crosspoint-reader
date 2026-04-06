@@ -56,7 +56,7 @@ def extract_chars_from_translations(translations_dir):
 
 
 # Extract unique characters
-def get_unique_chars(base_text, translations_dir=None):
+def get_unique_chars(base_text, translations_dir=None, codepoints_file=None):
     chars = set()
     for c in base_text:
         if c.strip() and ord(c) >= 0x20:
@@ -65,6 +65,21 @@ def get_unique_chars(base_text, translations_dir=None):
         i18n_chars = extract_chars_from_translations(translations_dir)
         chars.update(i18n_chars)
         print(f"  Extracted {len(i18n_chars)} characters from translations")
+    if codepoints_file:
+        cp_chars = set()
+        with open(codepoints_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    cp = int(line, 16)
+                    if cp >= 0x20:
+                        cp_chars.add(chr(cp))
+                except ValueError:
+                    pass
+        chars.update(cp_chars)
+        print(f"  Added {len(cp_chars)} characters from codepoints file")
     return sorted(chars, key=ord)
 
 def load_font_fitting_cell(font_path, pixel_size):
@@ -87,14 +102,14 @@ def load_font_fitting_cell(font_path, pixel_size):
         pt_size -= 1
     return None, None, None, None
 
-def generate_font_header(font_path, pixel_size, output_path, translations_dir=None):
+def generate_font_header(font_path, pixel_size, output_path, translations_dir=None, codepoints_file=None):
     """Generate CJK UI font header file."""
 
     font, pt_size, ascent, descent = load_font_fitting_cell(font_path, pixel_size)
     if font is None:
         return False
 
-    chars = get_unique_chars(BASE_UI_CHARS, translations_dir)
+    chars = get_unique_chars(BASE_UI_CHARS, translations_dir, codepoints_file)
     print(f"Generating {pixel_size}x{pixel_size} font with {len(chars)} characters...")
 
     # Collect glyph data
@@ -282,6 +297,8 @@ def main():
     parser.add_argument('--output', type=str, help='Output path (default: lib/GfxRenderer/cjk_ui_font_SIZE.h)')
     parser.add_argument('--translations', type=str,
                         help='Path to translations directory (default: auto-detect from project root)')
+    parser.add_argument('--codepoints-file', type=str,
+                        help='Additional codepoints file (hex, one per line) to include in the font')
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
@@ -304,7 +321,7 @@ def main():
             translations_dir = str(default_dir)
             print(f"Auto-detected translations: {translations_dir}")
 
-    if generate_font_header(args.font, args.size, output_path, translations_dir):
+    if generate_font_header(args.font, args.size, output_path, translations_dir, args.codepoints_file):
         print("Success!")
     else:
         print("Failed!")
