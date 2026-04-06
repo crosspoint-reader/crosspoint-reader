@@ -15,6 +15,7 @@
 #include <builtinFonts/all.h>
 
 #include <cstring>
+#include <esp_task_wdt.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -234,9 +235,24 @@ void setupDisplayAndFonts() {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
+// SPIピンを明示的にリセットする。ディープスリープ中にSDカードを抜き差しした場合、
+// SPIバスが不定状態になり sd.begin() がハングする可能性がある（Issue #23）。
+static void resetSpiPins() {
+  constexpr gpio_num_t spiPins[] = {
+      GPIO_NUM_7,   // SPI_MISO (SD/Display共有)
+      GPIO_NUM_8,   // EPD_SCLK
+      GPIO_NUM_10,  // EPD_MOSI
+      GPIO_NUM_12,  // SD_CS
+  };
+  for (auto pin : spiPins) {
+    gpio_reset_pin(pin);
+  }
+}
+
 void setup() {
   t1 = millis();
 
+  resetSpiPins();
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();
@@ -255,7 +271,17 @@ void setup() {
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
-  if (!Storage.begin()) {
+  // WDTガード: sd.begin()がSPIハングした場合、5秒で自動再起動する（Issue #23）
+  static const esp_task_wdt_config_t wdtConfig = {
+      .timeout_ms = 5000,
+      .idle_core_mask = 0,
+      .trigger_panic = true,
+  };
+  esp_task_wdt_init(&wdtConfig);
+  esp_task_wdt_add(NULL);
+  const bool sdOk = Storage.begin();
+  esp_task_wdt_delete(NULL);
+  if (!sdOk) {
     LOG_ERR("MAIN", "SD card initialization failed");
     setupDisplayAndFonts();
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
