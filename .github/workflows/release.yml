@@ -61,6 +61,8 @@ jobs:
           name: CrossPoint Reader ${{ github.ref_name }}
           files: |
             firmware.bin
+            bootloader.bin
+            partitions.bin
           body: |
             ## CrossPoint Reader ${{ github.ref_name }}
 
