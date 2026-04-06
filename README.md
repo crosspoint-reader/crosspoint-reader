@@ -46,12 +46,23 @@ Xteink X3/X4 向けの日本語EPUB閲覧に特化したファームウェアフ
 
 ## インストール
 
-1. [Releases ページ](https://github.com/zrn-ns/crosspoint-jp/releases)から最新の Dev Build を開く
-2. `firmware.bin` をダウンロード
-3. Xteink をUSB-Cでパソコンに接続
-4. https://xteink.dve.al/ からOTAフラッシュで書き込み
+### Web Flasher（推奨）
 
-初回書き込みの場合は `bootloader.bin` と `partitions.bin` も必要です。
+**[CrossPoint JP Flasher](https://zrn-ns.github.io/crosspoint-jp/)** からブラウザ上で簡単にインストールできます。
+
+1. XteinkデバイスをUSB-Cケーブルでパソコンに接続
+2. Chrome または Edge で [CrossPoint JP Flasher](https://zrn-ns.github.io/crosspoint-jp/) を開く
+3. ファームウェア（開発版 / 安定版）を選択し「インストール」をクリック
+4. シリアルポート選択ダイアログでデバイスを選択
+
+対応ブラウザ: Chrome 89+, Edge 89+
+
+### 手動インストール
+
+1. [Releases ページ](https://github.com/zrn-ns/crosspoint-jp/releases)から最新の Dev Build を開く
+2. `firmware.bin`, `bootloader.bin`, `partitions.bin` をダウンロード
+3. Xteink をUSB-Cでパソコンに接続
+4. esptool.py または https://xteink.dve.al/ から書き込み
 
 ## フォントのインストール
 
