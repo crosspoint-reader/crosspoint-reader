@@ -168,12 +168,12 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
 
   // CJK fallback: when firstLineIndent is ON but CSS doesn't define text-indent,
-  // calculate a 2-character CJK indent width and inject it as textIndent for layout.
+  // calculate a 1-character CJK indent width and inject it as textIndent for layout.
   // Skip when textIndent is explicitly negative (hanging indent for <li> bullets).
   if (firstLineIndent && blockStyle.textIndent == 0 && !blockStyle.textIndentDefined &&
       (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)) {
     const int cjkCharWidth = renderer.getTextWidth(fontId, "\xe5\xad\x97", EpdFontFamily::REGULAR);
-    blockStyle.textIndent = static_cast<int16_t>(cjkCharWidth > 0 ? cjkCharWidth * 2 : spaceWidth * 6);
+    blockStyle.textIndent = static_cast<int16_t>(cjkCharWidth > 0 ? cjkCharWidth : spaceWidth * 3);
   }
 
   auto wordWidths = calculateWordWidths(renderer, fontId);
@@ -273,9 +273,17 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
     }
   }
 
+  // Compute first-line indent for vertical mode (same conditions as horizontal).
+  int verticalIndent = 0;
+  if (firstLineIndent && blockStyle.textIndent == 0 && !blockStyle.textIndentDefined &&
+      (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)) {
+    verticalIndent = cjkCharAdvance > 0 ? cjkCharAdvance : lineHeight;
+  }
+
   // Break into columns when cumulative height exceeds columnHeight
   size_t columnStart = 0;
-  int currentY = 0;
+  int currentY = verticalIndent;
+  bool isFirstColumn = true;
 
   auto emitColumn = [&](size_t start, size_t end) {
     std::vector<std::string> colWords(std::make_move_iterator(words.begin() + start),
@@ -287,7 +295,7 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
     colYpos.reserve(count);
     colXpos.resize(count, 0);
 
-    int y = 0;
+    int y = isFirstColumn ? verticalIndent : 0;
     for (size_t j = start; j < end; j++) {
       colYpos.push_back(static_cast<int16_t>(y));
       y += wordHeights[j];
@@ -295,6 +303,7 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
 
     processColumn(std::make_shared<TextBlock>(std::move(colWords), std::move(colXpos), std::move(colStyles), blockStyle,
                                               std::move(colYpos), true));
+    isFirstColumn = false;
   };
 
   // Helper: get the first codepoint of a word string
