@@ -20,19 +20,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Generate manifests
+      - name: Download assets and generate manifests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
 
-          mkdir -p _site
+          mkdir -p _site/dev _site/stable
 
           # Dev manifest (latest prerelease)
           DEV_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == true)] | first | .tag_name // empty')
           if [ -n "${DEV_TAG}" ]; then
-            DEV_BASE="https://github.com/${REPO}/releases/download/${DEV_TAG}"
+            echo "Downloading dev assets: ${DEV_TAG}"
+            gh release download "${DEV_TAG}" --repo "${REPO}" --pattern "bootloader.bin" --dir _site/dev
+            gh release download "${DEV_TAG}" --repo "${REPO}" --pattern "partitions.bin" --dir _site/dev
+            gh release download "${DEV_TAG}" --repo "${REPO}" --pattern "firmware.bin" --dir _site/dev
+
             cat > _site/manifest_dev.json <<MANIFEST
           {
             "name": "CrossPoint JP (Dev)",
@@ -41,9 +45,9 @@ jobs:
               {
                 "chipFamily": "ESP32-C3",
                 "parts": [
-                  { "path": "${DEV_BASE}/bootloader.bin", "offset": 0 },
-                  { "path": "${DEV_BASE}/partitions.bin", "offset": 32768 },
-                  { "path": "${DEV_BASE}/firmware.bin", "offset": 65536 }
+                  { "path": "dev/bootloader.bin", "offset": 0 },
+                  { "path": "dev/partitions.bin", "offset": 32768 },
+                  { "path": "dev/firmware.bin", "offset": 65536 }
                 ]
               }
             ]
@@ -57,7 +61,11 @@ jobs:
           # Stable manifest (latest non-prerelease)
           STABLE_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == false and .draft == false)] | first | .tag_name // empty')
           if [ -n "${STABLE_TAG}" ]; then
-            STABLE_BASE="https://github.com/${REPO}/releases/download/${STABLE_TAG}"
+            echo "Downloading stable assets: ${STABLE_TAG}"
+            gh release download "${STABLE_TAG}" --repo "${REPO}" --pattern "bootloader.bin" --dir _site/stable
+            gh release download "${STABLE_TAG}" --repo "${REPO}" --pattern "partitions.bin" --dir _site/stable
+            gh release download "${STABLE_TAG}" --repo "${REPO}" --pattern "firmware.bin" --dir _site/stable
+
             cat > _site/manifest_stable.json <<MANIFEST
           {
             "name": "CrossPoint JP (Stable)",
@@ -66,9 +74,9 @@ jobs:
               {
                 "chipFamily": "ESP32-C3",
                 "parts": [
-                  { "path": "${STABLE_BASE}/bootloader.bin", "offset": 0 },
-                  { "path": "${STABLE_BASE}/partitions.bin", "offset": 32768 },
-                  { "path": "${STABLE_BASE}/firmware.bin", "offset": 65536 }
+                  { "path": "stable/bootloader.bin", "offset": 0 },
+                  { "path": "stable/partitions.bin", "offset": 32768 },
+                  { "path": "stable/firmware.bin", "offset": 65536 }
                 ]
               }
             ]
@@ -77,13 +85,14 @@ jobs:
             echo "Stable manifest generated: ${STABLE_TAG}"
           else
             echo "No stable release found, skipping stable manifest"
+            rmdir _site/stable 2>/dev/null || true
           fi
 
           # Copy index.html
           cp flasher/index.html _site/index.html
 
           echo "=== Site contents ==="
-          ls -la _site/
+          find _site -type f | sort
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
