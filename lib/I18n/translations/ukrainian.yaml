@@ -77,6 +77,8 @@ STR_LONG_PRESS_SKIP: "Пропуск розділу при довгому нат
 STR_FONT_FAMILY: "Сімейство шрифтів"
 STR_FONT_SIZE: "Розмір шрифту інтерфейсу"
 STR_LINE_SPACING: "Міжрядковий інтервал"
+STR_LINE_SPACING_HORIZONTAL: "Line Spacing (Horizontal)"
+STR_LINE_SPACING_VERTICAL: "Line Spacing (Vertical)"
 STR_SCREEN_MARGIN: "Поле екрана"
 STR_PARA_ALIGNMENT: "Вирівнювання абзаців"
 STR_HYPHENATION: "Перенос слів"
