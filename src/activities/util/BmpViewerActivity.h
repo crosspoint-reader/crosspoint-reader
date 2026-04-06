@@ -16,4 +16,5 @@ class BmpViewerActivity final : public Activity {
 
  private:
   std::string filePath;
+  void setAsSleepScreen();
 };

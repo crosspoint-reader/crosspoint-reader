@@ -5,8 +5,14 @@
 #include <HalStorage.h>
 #include <I18n.h>
 
+#include "../reader/ReaderUtils.h"
+#include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+constexpr const char* SLEEP_BMP_PATH = "/sleep.bmp";
+}  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
@@ -49,7 +55,7 @@ void BmpViewerActivity::onEnter() {
       }
 
       // 4. Prepare Rendering
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", tr(STR_SET_SLEEP_SCREEN));
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
@@ -89,12 +95,44 @@ void BmpViewerActivity::onExit() {
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
+void BmpViewerActivity::setAsSleepScreen() {
+  // Only copy if the source isn't already /sleep.bmp
+  if (filePath != SLEEP_BMP_PATH) {
+    if (!Storage.copyFile("BMP", filePath, SLEEP_BMP_PATH)) {
+      LOG_ERR("BMP", "Failed to copy %s to %s", filePath.c_str(), SLEEP_BMP_PATH);
+      return;
+    }
+  }
+
+  // Switch sleep screen mode to CUSTOM so the copied image is used
+  SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+  SETTINGS.saveToFile();
+  LOG_INF("BMP", "Set %s as sleep screen", filePath.c_str());
+
+  GUI.drawPopup(renderer, tr(STR_SLEEP_SCREEN_SET));
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
 void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Long press BACK (1s+) goes to home screen
+  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     onGoHome();
+    return;
+  }
+
+  // Short press BACK returns to the calling activity
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+    finish();
+    return;
+  }
+
+  // Next/Right button: set this image as the sleep screen
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    setAsSleepScreen();
     return;
   }
 }

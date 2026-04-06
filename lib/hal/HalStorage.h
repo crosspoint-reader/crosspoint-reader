@@ -44,6 +44,7 @@ class HalStorage {
   bool openFileForWrite(const char* moduleName, const std::string& path, HalFile& file);
   bool openFileForWrite(const char* moduleName, const String& path, HalFile& file);
   bool removeDir(const char* path);
+  bool copyFile(const char* moduleName, const std::string& srcPath, const char* dstPath);
 
   uint64_t sdTotalBytes() const;
   uint64_t sdUsedBytes();
