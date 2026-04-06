@@ -7,6 +7,7 @@
 #include <SdFat.h>
 
 #include <cassert>
+#include <new>
 
 #define SDCard SDCardManager::getInstance()
 
@@ -137,6 +138,35 @@ bool HalStorage::openFileForWrite(const char* moduleName, const String& path, Ha
 }
 
 bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDir, path); }
+
+bool HalStorage::copyFile(const char* moduleName, const std::string& srcPath, const char* dstPath) {
+  HalFile src, dst;
+  if (!openFileForRead(moduleName, srcPath, src)) return false;
+  if (!openFileForWrite(moduleName, dstPath, dst)) {
+    src.close();
+    return false;
+  }
+  constexpr size_t BUF_SIZE = 4096;
+  auto* buf = new (std::nothrow) uint8_t[BUF_SIZE];
+  if (!buf) {
+    dst.close();
+    src.close();
+    return false;
+  }
+  bool ok = true;
+  while (src.available()) {
+    const auto bytesRead = src.read(buf, BUF_SIZE);
+    if (bytesRead <= 0) break;
+    if (dst.write(buf, bytesRead) != static_cast<size_t>(bytesRead)) {
+      ok = false;
+      break;
+    }
+  }
+  delete[] buf;
+  dst.close();
+  src.close();
+  return ok;
+}
 
 // HalFile implementation
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.
