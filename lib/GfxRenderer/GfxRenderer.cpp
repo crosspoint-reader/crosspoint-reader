@@ -384,14 +384,21 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 
         // First check built-in CJK UI font (Flash access is fast)
         if (CjkUiFont20::hasCjkUiGlyph(cp)) {
-          width += CjkUiFont20::getCjkUiGlyphWidth(cp);
+          uint8_t advanceWidth = CjkUiFont20::getCjkUiGlyphWidth(cp);
+          // Match the spacing reduction applied during rendering in drawText
+          if (advanceWidth >= 20) {
+            advanceWidth = 18;
+          }
+          width += advanceWidth;
           hasChar = true;
         }
 
         // Fall back to external UI font if enabled (SD card, slow)
         if (!hasChar && hasExternalUiFont) {
           if (uiExtFont->getGlyph(cp) != nullptr) {
-            width += uiExtFont->getCharWidth();
+            uint8_t advanceX = uiExtFont->getCharWidth();
+            uiExtFont->getGlyphMetrics(cp, nullptr, &advanceX);
+            width += advanceX;
             hasChar = true;
           }
         }
@@ -485,6 +492,10 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 
         if (actualWidth > 0) {
           // Character is in UI font: use actual proportional width
+          // Match the spacing reduction applied during rendering in drawText
+          if (actualWidth >= 20) {
+            actualWidth = 18;
+          }
           width += actualWidth;
         } else if (isCjkCodepoint(cp)) {
           // CJK character not in UI font: try UI external font, then reader
@@ -507,14 +518,14 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
             // No external font, use built-in font width
             const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
             if (glyph) {
-              width += glyph->advanceX;
+              width += fp4::toPixel(glyph->advanceX);
             }
           }
         } else {
           // Character not in UI font: use built-in font width
           const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
           if (glyph) {
-            width += glyph->advanceX;
+            width += fp4::toPixel(glyph->advanceX);
           }
         }
       }
