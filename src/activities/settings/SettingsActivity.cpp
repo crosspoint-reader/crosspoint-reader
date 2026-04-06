@@ -60,7 +60,6 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_DOWNLOAD_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
-  displaySettings.push_back(SettingInfo::Action(StrId::STR_EXT_UI_FONT, SettingAction::SelectUiFont));
 
   // Update currentSettings pointer and count for the active category
   switch (selectedCategoryIndex) {
