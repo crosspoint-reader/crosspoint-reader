@@ -16,5 +16,8 @@ class BmpViewerActivity final : public Activity {
 
  private:
   std::string filePath;
+  bool renderBmpImage(bool showControls = true);
+  bool renderDecodedImage(bool showControls = true);
+  void renderError(const char* message);
   void setAsSleepScreen();
 };

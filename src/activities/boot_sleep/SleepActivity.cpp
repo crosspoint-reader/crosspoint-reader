@@ -187,6 +187,21 @@ void SleepActivity::renderCustomSleepScreen() const {
   const bool shouldLoadOverlayInfo =
       SETTINGS.sleepCoverOverlay != 0 && APP_STATE.lastSleepFromReader && !APP_STATE.openEpubPath.empty();
 
+  // An explicitly selected custom sleep image should override random images from /.sleep or /sleep.
+  FsFile explicitSleepFile;
+  if (Storage.openFileForRead("SLP", "/sleep.bmp", explicitSleepFile)) {
+    Bitmap bitmap(explicitSleepFile, true);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      LOG_DBG("SLP", "Loading explicit custom sleep image: /sleep.bmp");
+      const BookOverlayInfo resolvedOverlayInfo =
+          shouldLoadOverlayInfo ? getBookOverlayInfo(APP_STATE.openEpubPath) : overlayInfo;
+      renderBitmapSleepScreen(bitmap, resolvedOverlayInfo);
+      explicitSleepFile.close();
+      return;
+    }
+    explicitSleepFile.close();
+  }
+
   // Check if we have a /.sleep (preferred) or /sleep directory
   const char* sleepDir = nullptr;
   auto dir = Storage.open("/.sleep");
@@ -259,22 +274,6 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
   }
   if (dir) dir.close();
-
-  // Look for sleep.bmp on the root of the sd card to determine if we should
-  // render a custom sleep screen instead of the default.
-  FsFile file;
-  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
-    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      LOG_DBG("SLP", "Loading: /sleep.bmp");
-      const BookOverlayInfo resolvedOverlayInfo =
-          shouldLoadOverlayInfo ? getBookOverlayInfo(APP_STATE.openEpubPath) : overlayInfo;
-      renderBitmapSleepScreen(bitmap, resolvedOverlayInfo);
-      file.close();
-      return;
-    }
-    file.close();
-  }
 
   renderDefaultSleepScreen();
 }
