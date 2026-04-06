@@ -524,6 +524,9 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 
   int w = 0, h = 0;
   fontMap.at(effectiveFontId).getTextDimensions(text, &w, &h, style);
+  // Apply SD card font scaling (e.g. 10pt rendered from 14pt base)
+  const uint16_t scale = getSdCardFontScale(effectiveFontId);
+  if (scale != 256) w = (w * scale + 128) >> 8;
   return w;
 }
 
@@ -1597,7 +1600,10 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
+  int asc = fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
+  const uint16_t scale = getSdCardFontScale(effectiveFontId);
+  if (scale != 256) asc = (asc * scale + 128) >> 8;
+  return asc;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
@@ -1623,7 +1629,10 @@ int GfxRenderer::getLineHeight(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  int adv = fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  const uint16_t scale = getSdCardFontScale(effectiveFontId);
+  if (scale != 256) adv = (adv * scale + 128) >> 8;
+  return adv;
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {

@@ -1355,8 +1355,13 @@ void ChapterHtmlSlimParser::flushTableAsGrid() {
   if (maxCols == 0) return;
 
   const int tblFontId = (tableFontId != 0) ? tableFontId : fontId;
-  const int lineH = renderer.getLineHeight(tblFontId);
-  static constexpr int16_t CELL_PADDING = 3;
+  // Use compact line height for tables: ascender + 1px instead of full advanceY.
+  const int ascender = renderer.getFontAscenderSize(tblFontId);
+  const int fullLineH = renderer.getLineHeight(tblFontId);
+  const int lineH = ascender + 1;
+  // Descender overshoot: glyphs extend below lineH by this amount
+  const int descenderExtra = std::max(0, fullLineH - lineH);
+  static constexpr int16_t CELL_PADDING = 2;
   static constexpr int MAX_CELL_LINES = 8;
 
   // Limit columns to what can fit (min ~50px per column)
@@ -1364,16 +1369,39 @@ void ChapterHtmlSlimParser::flushTableAsGrid() {
   const int maxFittableCols = std::max(1, static_cast<int>(viewportWidth) / MIN_COL_WIDTH);
   if (maxCols > maxFittableCols) maxCols = maxFittableCols;
 
-  // Column widths: equal distribution across viewport
+  // Measure max content width per column across all rows
+  std::vector<int> maxContentWidth(maxCols, 0);
+  for (const auto& row : tableBuffer) {
+    for (int col = 0; col < maxCols && col < static_cast<int>(row.cells.size()); col++) {
+      if (!row.cells[col].text.empty()) {
+        const auto style = row.cells[col].isHeader ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+        const int tw = renderer.getTextWidth(tblFontId, row.cells[col].text.c_str(), style);
+        maxContentWidth[col] = std::max(maxContentWidth[col], tw);
+      }
+    }
+  }
+
+  // Column widths: content-based with minimum width, capped to viewport
   auto layout = std::make_shared<TableColumnLayout>();
   layout->colWidths.resize(maxCols);
   layout->fontId = tblFontId;
   layout->lineHeight = static_cast<int16_t>(lineH);
   layout->cellPadding = CELL_PADDING;
 
-  const int colWidth = viewportWidth / maxCols;
+  static constexpr int MIN_COL_CONTENT_WIDTH = 30;
+  int totalNeeded = 0;
   for (int col = 0; col < maxCols; col++) {
-    layout->colWidths[col] = static_cast<uint16_t>(colWidth);
+    int needed = std::max(MIN_COL_CONTENT_WIDTH, maxContentWidth[col]) + CELL_PADDING * 2;
+    layout->colWidths[col] = static_cast<uint16_t>(needed);
+    totalNeeded += needed;
+  }
+
+  if (totalNeeded > viewportWidth) {
+    // Scale down proportionally to fit viewport
+    for (int col = 0; col < maxCols; col++) {
+      layout->colWidths[col] = static_cast<uint16_t>(
+          static_cast<int>(layout->colWidths[col]) * viewportWidth / totalNeeded);
+    }
   }
 
   // Start table on a new page if current page has content
@@ -1395,14 +1423,15 @@ void ChapterHtmlSlimParser::flushTableAsGrid() {
     for (int col = 0; col < maxCols && col < static_cast<int>(row.cells.size()); col++) {
       headers[col] = row.cells[col].isHeader;
       const auto style = headers[col] ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-      const int maxTextW = colWidth - CELL_PADDING * 2;
+      const int maxTextW = layout->colWidths[col] - CELL_PADDING * 2;
       if (maxTextW > 0 && !row.cells[col].text.empty()) {
         cellLines[col] = wrapCellText(renderer, tblFontId, row.cells[col].text.c_str(), maxTextW, MAX_CELL_LINES, style);
       }
       maxLinesInRow = std::max(maxLinesInRow, static_cast<int>(cellLines[col].size()));
     }
 
-    const int16_t rowHeight = static_cast<int16_t>(maxLinesInRow * lineH + CELL_PADDING * 2);
+    // Add descenderExtra so bottom padding visually matches top padding
+    const int16_t rowHeight = static_cast<int16_t>(maxLinesInRow * lineH + descenderExtra + CELL_PADDING * 2);
 
     auto block = std::make_shared<TableRowBlock>(
         std::move(cellLines), std::move(headers), layout, rowHeight, rowIdx == 0, rowIdx == numRows - 1);

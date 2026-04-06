@@ -35,7 +35,7 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
 
   // Single-variant loading: pick one base .cpfont file (prefer 14pt, else closest)
   static constexpr uint8_t PREFERRED_BASE_PT = 14;
-  static constexpr uint8_t ALL_SIZES[] = {12, 14, 16, 18};
+  static constexpr uint8_t ALL_SIZES[] = {10, 12, 14, 16, 18};
 
   const SdCardFontFileInfo* bestFile = nullptr;
   int bestDiff = INT_MAX;

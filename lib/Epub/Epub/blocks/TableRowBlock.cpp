@@ -23,10 +23,10 @@ void TableRowBlock::render(GfxRenderer& renderer, const int x, const int y, cons
   const int16_t pad = layout->cellPadding;
   const int numCols = static_cast<int>(layout->colWidths.size());
 
-  // Calculate total table width and center it
+  // Left-align table
   int totalTableWidth = 0;
   for (auto w : layout->colWidths) totalTableWidth += w;
-  const int tableX = x + (viewportWidth - totalTableWidth) / 2;
+  const int tableX = x;
 
   // Draw top border for first row
   if (isFirstRow) {
