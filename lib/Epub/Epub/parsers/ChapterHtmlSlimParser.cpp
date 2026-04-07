@@ -407,26 +407,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 const bool hasCssWidth = imgStyle.hasImageWidth();
 
                 if (hasCssHeight && hasCssWidth && dims.width > 0 && dims.height > 0) {
-                  // Both CSS height and width set: resolve both, then clamp to viewport preserving requested ratio
-                  displayHeight = static_cast<int>(
-                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportHeight)) + 0.5f);
-                  displayWidth = static_cast<int>(
+                  // Both CSS height and width set: resolve both as max bounds, then fit image
+                  // within those bounds preserving the original aspect ratio. Image decoders use
+                  // a single scale factor for both axes; non-uniform scaling causes diagonal distortion.
+                  int maxW = static_cast<int>(
                       imgStyle.imageWidth.toPixels(emSize, static_cast<float>(self->viewportWidth)) + 0.5f);
-                  if (displayHeight < 1) displayHeight = 1;
+                  int maxH = static_cast<int>(
+                      imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportHeight)) + 0.5f);
+                  if (maxW > self->viewportWidth) maxW = self->viewportWidth;
+                  if (maxH > self->viewportHeight) maxH = self->viewportHeight;
+                  if (maxW < 1) maxW = 1;
+                  if (maxH < 1) maxH = 1;
+                  float scaleX = static_cast<float>(maxW) / dims.width;
+                  float scaleY = static_cast<float>(maxH) / dims.height;
+                  float scale = (scaleX < scaleY) ? scaleX : scaleY;
+                  displayWidth = static_cast<int>(dims.width * scale + 0.5f);
+                  displayHeight = static_cast<int>(dims.height * scale + 0.5f);
                   if (displayWidth < 1) displayWidth = 1;
-                  if (displayWidth > self->viewportWidth || displayHeight > self->viewportHeight) {
-                    float scaleX = (displayWidth > self->viewportWidth)
-                                       ? static_cast<float>(self->viewportWidth) / displayWidth
-                                       : 1.0f;
-                    float scaleY = (displayHeight > self->viewportHeight)
-                                       ? static_cast<float>(self->viewportHeight) / displayHeight
-                                       : 1.0f;
-                    float scale = (scaleX < scaleY) ? scaleX : scaleY;
-                    displayWidth = static_cast<int>(displayWidth * scale + 0.5f);
-                    displayHeight = static_cast<int>(displayHeight * scale + 0.5f);
-                    if (displayWidth < 1) displayWidth = 1;
-                    if (displayHeight < 1) displayHeight = 1;
-                  }
+                  if (displayHeight < 1) displayHeight = 1;
                   LOG_DBG("EHP", "Display size from CSS height+width: %dx%d", displayWidth, displayHeight);
                 } else if (hasCssHeight && !hasCssWidth && dims.width > 0 && dims.height > 0) {
                   // Use CSS height (resolve % against viewport height) and derive width from aspect ratio
