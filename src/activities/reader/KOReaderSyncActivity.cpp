@@ -32,7 +32,7 @@ void logSyncMemSnapshot(const char* stage) {
 // Frees renderer-owned caches right before network work.
 // Why: TLS handshake needs a large contiguous block, and font cache memory can
 // increase fragmentation even when total free heap looks acceptable.
-void trimMemoryBeforeTls(GfxRenderer& renderer) {
+void trimMemoryBeforeTls(const GfxRenderer& renderer) {
   if (auto* cacheManager = renderer.getFontCacheManager()) {
     cacheManager->clearCache();
     cacheManager->resetStats();
