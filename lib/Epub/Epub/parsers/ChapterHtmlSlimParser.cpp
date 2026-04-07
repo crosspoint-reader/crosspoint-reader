@@ -1042,6 +1042,18 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableBuffer.clear();
     self->tableRowIndex = 0;
     self->tableColIndex = 0;
+
+    // tableの後で改ページ — テーブルと後続テキストの重なりを防ぐ
+    if (self->currentPage) {
+      self->completePageFn(std::move(self->currentPage));
+      self->completedPageCount++;
+      self->currentPage.reset();
+      self->currentPageNextY = 0;
+      if (self->verticalMode) {
+        const int lineHeight = self->renderer.getLineHeight(self->fontId) * self->lineCompression;
+        self->currentPageNextX = self->viewportWidth - lineHeight;
+      }
+    }
   }
 
   // Flush buffer with current style BEFORE any style changes
