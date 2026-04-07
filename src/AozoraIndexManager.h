@@ -21,8 +21,11 @@ class AozoraIndexManager {
   bool addEntry(int workId, const char* title, const char* author, const char* filename);
   bool removeEntry(int workId);
   const std::vector<AozoraBookEntry>& entries() const { return entries_; }
-  static std::string makeFilename(int workId, const char* title);
+  /** 著者名/workId_タイトル.epub 形式の相対パスを生成 */
+  static std::string makeRelativePath(int workId, const char* title, const char* author);
   static bool ensureDirectory();
+  /** 著者名サブディレクトリを含む保存先を確保 */
+  static bool ensureAuthorDirectory(const char* author);
 
  private:
   std::vector<AozoraBookEntry> entries_;

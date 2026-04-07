@@ -105,23 +105,41 @@ bool AozoraIndexManager::saveIndex() const {
   return true;
 }
 
-std::string AozoraIndexManager::makeFilename(int workId, const char* title) {
-  char safeName[52];
-  int pos = 0;
-  for (int i = 0; title[i] && pos < 50; i++) {
-    unsigned char c = static_cast<unsigned char>(title[i]);
+static void sanitizeForFat32(const char* src, char* dest, size_t destSize) {
+  size_t pos = 0;
+  for (size_t i = 0; src[i] && pos < destSize - 1; i++) {
+    unsigned char c = static_cast<unsigned char>(src[i]);
     if (c == '<' || c == '>' || c == ':' || c == '"' ||
         c == '/' || c == '\\' || c == '|' || c == '?' || c == '*') {
-      safeName[pos++] = '_';
+      dest[pos++] = '_';
     } else {
-      safeName[pos++] = static_cast<char>(c);
+      dest[pos++] = static_cast<char>(c);
     }
   }
-  safeName[pos] = '\0';
+  dest[pos] = '\0';
+}
 
-  char result[80];
-  snprintf(result, sizeof(result), "%d_%s.epub", workId, safeName);
+std::string AozoraIndexManager::makeRelativePath(int workId, const char* title, const char* author) {
+  char safeAuthor[32];
+  sanitizeForFat32(author, safeAuthor, sizeof(safeAuthor));
+
+  char safeTitle[52];
+  sanitizeForFat32(title, safeTitle, sizeof(safeTitle));
+
+  char result[160];
+  snprintf(result, sizeof(result), "%s/%d_%s.epub", safeAuthor, workId, safeTitle);
   return std::string(result);
+}
+
+bool AozoraIndexManager::ensureAuthorDirectory(const char* author) {
+  char safeAuthor[32];
+  sanitizeForFat32(author, safeAuthor, sizeof(safeAuthor));
+
+  char dirPath[80];
+  snprintf(dirPath, sizeof(dirPath), "%s/%s", AOZORA_DIR, safeAuthor);
+
+  if (Storage.exists(dirPath)) return true;
+  return Storage.mkdir(dirPath);
 }
 
 bool AozoraIndexManager::ensureDirectory() {

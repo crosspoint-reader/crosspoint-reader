@@ -301,12 +301,12 @@ bool AozoraActivity::downloadBook() {
   char url[256];
   snprintf(url, sizeof(url), "%s/api/convert?work_id=%d", API_BASE, selectedWorkId_);
 
-  std::string filename = AozoraIndexManager::makeFilename(selectedWorkId_, selectedWorkTitle_);
+  std::string relPath = AozoraIndexManager::makeRelativePath(selectedWorkId_, selectedWorkTitle_, selectedWorkAuthor_);
   char destPath[160];
-  snprintf(destPath, sizeof(destPath), "%s/%s", AozoraIndexManager::AOZORA_DIR, filename.c_str());
+  snprintf(destPath, sizeof(destPath), "%s/%s", AozoraIndexManager::AOZORA_DIR, relPath.c_str());
 
-  if (!AozoraIndexManager::ensureDirectory()) {
-    LOG_ERR("AOZORA", "Failed to create Aozora directory");
+  if (!AozoraIndexManager::ensureDirectory() || !AozoraIndexManager::ensureAuthorDirectory(selectedWorkAuthor_)) {
+    LOG_ERR("AOZORA", "Failed to create directory");
     errorMessage_ = "SD card error";
     return false;
   }
@@ -330,7 +330,7 @@ bool AozoraActivity::downloadBook() {
   }
 
   // Add to index
-  if (!indexManager_.addEntry(selectedWorkId_, selectedWorkTitle_, selectedWorkAuthor_, filename.c_str())) {
+  if (!indexManager_.addEntry(selectedWorkId_, selectedWorkTitle_, selectedWorkAuthor_, relPath.c_str())) {
     LOG_ERR("AOZORA", "Failed to add index entry");
     // File is downloaded but index failed -- not critical
   }
