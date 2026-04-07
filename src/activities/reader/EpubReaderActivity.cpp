@@ -185,6 +185,7 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to home screen
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+    ReaderUtils::enforceExitFullRefresh(renderer);
     onGoHome();
     return;
   }
@@ -196,6 +197,7 @@ void EpubReaderActivity::loop() {
       restoreSavedPosition();
       return;
     }
+    ReaderUtils::enforceExitFullRefresh(renderer);
     finish();
     return;
   }
