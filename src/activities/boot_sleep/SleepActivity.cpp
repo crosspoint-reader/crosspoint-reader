@@ -9,6 +9,7 @@
 #include <Serialization.h>
 #include <Txt.h>
 #include <Xtc.h>
+#include <esp_system.h>
 
 #include <algorithm>
 #include <new>
@@ -21,6 +22,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
+
 
 namespace {
 
@@ -216,9 +218,9 @@ size_t pickSleepImageIndex(size_t numFiles) {
     if (last == SIZE_MAX || last >= numFiles) return 0;
     return (last + 1) % numFiles;
   }
-  size_t idx = random(numFiles);
+  size_t idx = static_cast<size_t>(esp_random() % numFiles);
   while (numFiles > 1 && APP_STATE.lastSleepImage != SIZE_MAX && idx == APP_STATE.lastSleepImage) {
-    idx = random(numFiles);
+    idx = static_cast<size_t>(esp_random() % numFiles);
   }
   return idx;
 }

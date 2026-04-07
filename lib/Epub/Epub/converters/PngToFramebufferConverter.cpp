@@ -502,6 +502,8 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   // the 2-bit cache file format, but caching is disabled in this path
   // (BmpViewerActivity passes an empty cachePath).
   ctx.renderModeIsBW = (renderer.getRenderMode() == GfxRenderer::BW);
+  LOG_DBG("PNG", "Render mode at decode: %d (BW=%d) -> 1bit dither=%d", (int)renderer.getRenderMode(),
+          (int)GfxRenderer::BW, ctx.renderModeIsBW ? 1 : 0);
   if (ctx.renderModeIsBW) {
     ctx.atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(ctx.dstWidth);
     if (!ctx.atkinson1BitDitherer) {
