@@ -289,9 +289,12 @@ void HomeActivity::onAozoraOpen() {
 
   startActivityForResult(std::make_unique<AozoraActivity>(renderer, mappedInput),
                          [this](const ActivityResult&) {
-                           // 戻ってきたら再読み込み
+                           // 戻ってきたら再読み込み（フラグリセットして描画を再トリガー）
+                           coverRendered = false;
+                           coverBufferStored = false;
+                           recentsLoaded = false;
+                           recentsLoading = false;
                            const auto& metrics = UITheme::getInstance().getMetrics();
                            loadRecentBooks(metrics.homeRecentBooksCount);
-                           loadRecentCovers(metrics.homeCoverHeight);
                          });
 }
