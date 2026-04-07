@@ -21,7 +21,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-
 namespace {
 constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
