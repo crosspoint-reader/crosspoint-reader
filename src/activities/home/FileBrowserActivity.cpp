@@ -113,12 +113,14 @@ void FileBrowserActivity::onEnter() {
   auto root = Storage.open(basepath.c_str());
   if (!root) {
     basepath = "/";
+    loadFiles();
   } else if (!root.isDirectory()) {
     root.close();
     lockLongPressBack = true;
 
     const std::string oldPath = basepath;
     basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+    if (basepath.empty()) basepath = "/";
     loadFiles();
 
     const auto pos = oldPath.find_last_of('/');
