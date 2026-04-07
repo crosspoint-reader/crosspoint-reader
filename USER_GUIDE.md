@@ -337,7 +337,7 @@ To use custom sleep images, set the sleep screen mode to **Custom** or **Cover +
 > For best results:
 > - Use uncompressed BMP files with 24-bit color depth
 > - Use a resolution of 480x800 pixels to match the device's screen resolution.
-> - For a mix of grayscale images where some look washed out. Add `contrast` to their filename. This will force the **Contrast** filter for them specificaly
+> - For a mix of grayscale images where some look washed out, add `contrast` to their filename. This will force the **Contrast** filter for those images specifically
 
 ---
 
