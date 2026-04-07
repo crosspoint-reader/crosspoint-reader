@@ -9,6 +9,17 @@
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
+  // Reader can launch sync in three UX modes:
+  // - COMPARE: legacy chooser (apply/upload) for power users.
+  // - PULL_REMOTE / PUSH_LOCAL: direct one-step actions from menu entries.
+  // Keeping this split in the caller avoids branching on menu semantics deep
+  // inside generic reader state handling.
+  enum class SyncLaunchMode {
+    COMPARE,
+    PULL_REMOTE,
+    PUSH_LOCAL,
+  };
+
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
@@ -35,6 +46,7 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  std::string deferredSyncEpubPath;
   // -1 means use global SETTINGS value.
   int8_t bookEmbeddedStyleOverride = -1;
   int8_t bookImageRenderingOverride = -1;
@@ -57,6 +69,7 @@ class EpubReaderActivity final : public Activity {
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  void launchKOReaderSync(SyncLaunchMode mode = SyncLaunchMode::COMPARE);
   void handleSyncResult(const ActivityResult& result);
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);

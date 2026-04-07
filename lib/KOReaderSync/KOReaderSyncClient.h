@@ -71,6 +71,17 @@ class KOReaderSyncClient {
   static Error updateProgress(const KOReaderProgress& progress);
 
   /**
+   * Keep HTTP/TLS session alive across multiple sync requests (GET/PUT).
+   * Intended for KOReaderSyncActivity to reduce repeated handshake churn.
+   */
+  static void beginPersistentSession();
+
+  /**
+   * Close and release any persistent HTTP/TLS session.
+   */
+  static void endPersistentSession();
+
+  /**
    * Get human-readable error message (short, for status line).
    */
   static const char* errorString(Error error);
@@ -100,5 +111,8 @@ class KOReaderSyncClient {
    * a request. Below this, the client refuses with NETWORK_ERROR and lastFailureDetail
    * reports a heap-pressure message instead of attempting (and crashing) the TLS handshake.
    */
-  static constexpr unsigned MIN_CONTIG_HEAP_FOR_TLS = 32 * 1024;
+  static constexpr unsigned MIN_CONTIG_HEAP_FOR_TLS = 36 * 1024;
+  // Relaxed threshold only for upload when reusing an already-established session.
+  // Uploads that must perform a fresh handshake still require MIN_CONTIG_HEAP_FOR_TLS.
+  static constexpr unsigned MIN_CONTIG_HEAP_FOR_TLS_UPLOAD = 34 * 1024;
 };

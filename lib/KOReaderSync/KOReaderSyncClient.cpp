@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Logging.h>
+#include <WiFi.h>
 #include <esp_crt_bundle.h>
 #include <esp_err.h>
 #include <esp_heap_caps.h>
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 #include "KOReaderCredentialStore.h"
@@ -22,6 +24,9 @@ unsigned KOReaderSyncClient::lastContigHeapAtFailure = 0;
 const char* KOReaderSyncClient::lastOperation = "";
 
 namespace {
+bool g_keepSessionOpen = false;
+esp_http_client_handle_t g_sessionClient = nullptr;
+
 // Static buffer for the detail string returned by lastFailureDetail() — sized to fit
 // the longest expected message including esp_err name (~32 chars), opcode (~10), heap
 // numbers, and HTTP status. Single-threaded sync flow makes static safe.
@@ -41,10 +46,22 @@ void beginRequest(const char* operation) {
 constexpr char DEVICE_NAME[] = "CrossPoint";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
 
-// Small TLS buffers to fit in ESP32-C3's limited heap (~46KB free after WiFi).
-// KOSync payloads are tiny JSON (<1KB), so 2KB buffers are sufficient.
-// Default 16KB buffers cause OOM during TLS handshake.
-constexpr int HTTP_BUF_SIZE = 2048;
+// Use small HTTP/TLS buffers to reduce peak handshake memory on ESP32-C3.
+// Payloads are tiny JSON, so throughput impact is minimal while avoiding
+// large transient allocations from default client buffer sizes.
+constexpr int HTTP_BUF_SIZE = 1024;
+// Keep strict thresholding here. A small tolerance caused repeated handshake
+// attempts in borderline-fragmented states that still failed in mbedTLS.
+constexpr unsigned TLS_CONTIG_HEAP_TOLERANCE = 0;
+
+// Captures radio/link state around failed connects.
+// Why: many field failures look like TLS errors but are actually weak WiFi.
+void logWifiSnapshot(const char* stage) {
+  const wl_status_t status = WiFi.status();
+  const int32_t rssi = WiFi.RSSI();
+  LOG_DBG("KOSync", "%s: wifi_status=%d rssi=%ld ip=%s", stage, static_cast<int>(status), static_cast<long>(rssi),
+          WiFi.localIP().toString().c_str());
+}
 
 // Response buffer for reading HTTP body
 struct ResponseBuffer {
@@ -63,6 +80,30 @@ struct ResponseBuffer {
     return true;
   }
 };
+
+ResponseBuffer g_sessionResponseBuf;
+
+void clearResponseBuffer(ResponseBuffer* buf) {
+  if (!buf) return;
+  if (buf->data) {
+    free(buf->data);
+    buf->data = nullptr;
+  }
+  buf->len = 0;
+  buf->capacity = 0;
+}
+
+void resetResponseBuffer(ResponseBuffer* buf) {
+  if (!buf) return;
+  buf->len = 0;
+  if (buf->data) {
+    buf->data[0] = '\0';
+  }
+}
+
+ResponseBuffer* effectiveResponseBuffer(ResponseBuffer* localBuf) {
+  return g_keepSessionOpen ? &g_sessionResponseBuf : localBuf;
+}
 
 // HTTP event handler to collect response body
 esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
@@ -105,10 +146,22 @@ std::string base64Encode(const std::string& input) {
 // we should proceed; false means caller must abort with NETWORK_ERROR — in which case
 // lastFailureDetail() will report the heap shortage instead of attempting a doomed handshake.
 bool checkHeapForTls() {
+  const bool hasReusableSession = g_keepSessionOpen && g_sessionClient != nullptr;
+  const bool isUpload =
+      (KOReaderSyncClient::lastOperation && strcmp(KOReaderSyncClient::lastOperation, "update progress") == 0);
+  const unsigned requiredContig = KOReaderSyncClient::MIN_CONTIG_HEAP_FOR_TLS;
+
+  // Upload can often reuse the already-established GET connection. In that case
+  // a full handshake allocation is typically unnecessary, so avoid failing fast
+  // on contiguous-heap threshold and let the HTTP client attempt reuse.
+  if (isUpload && hasReusableSession) {
+    return true;
+  }
+
   // beginRequest() already populated lastContigHeapAtFailure for the diagnostic path.
-  if (KOReaderSyncClient::lastContigHeapAtFailure < KOReaderSyncClient::MIN_CONTIG_HEAP_FOR_TLS) {
+  if (KOReaderSyncClient::lastContigHeapAtFailure + TLS_CONTIG_HEAP_TOLERANCE < requiredContig) {
     LOG_ERR("KOSync", "Insufficient contiguous heap for TLS: %u available, %u required",
-            KOReaderSyncClient::lastContigHeapAtFailure, KOReaderSyncClient::MIN_CONTIG_HEAP_FOR_TLS);
+            KOReaderSyncClient::lastContigHeapAtFailure, requiredContig);
     // Synthesize an esp_err_t-shaped value so the diagnostic detail string is uniform.
     KOReaderSyncClient::lastEspError = ESP_ERR_NO_MEM;
     return false;
@@ -116,18 +169,60 @@ bool checkHeapForTls() {
   return true;
 }
 
+void refreshHeapSnapshot() {
+  KOReaderSyncClient::lastHeapAtFailure = ESP.getFreeHeap();
+  KOReaderSyncClient::lastContigHeapAtFailure = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
+}
+
+void logTlsAttemptPlan(const char* operation, int attempt) {
+  const bool isUpload = (operation && strcmp(operation, "update progress") == 0);
+  const bool hasReusableSession = g_keepSessionOpen && g_sessionClient != nullptr;
+  const unsigned requiredContig = (isUpload && hasReusableSession) ? KOReaderSyncClient::MIN_CONTIG_HEAP_FOR_TLS_UPLOAD
+                                                                   : KOReaderSyncClient::MIN_CONTIG_HEAP_FOR_TLS;
+
+  LOG_DBG("KOSync", "%s attempt %d: keep_session=%s reusable_session=%s tls_mode=%s heap=%u contig=%u need=%u",
+          operation ? operation : "request", attempt, g_keepSessionOpen ? "yes" : "no",
+          hasReusableSession ? "yes" : "no", (isUpload && hasReusableSession) ? "reuse" : "handshake",
+          KOReaderSyncClient::lastHeapAtFailure, KOReaderSyncClient::lastContigHeapAtFailure, requiredContig);
+}
+
+void resetSessionClientForRetry() {
+  if (g_sessionClient) {
+    esp_http_client_cleanup(g_sessionClient);
+    g_sessionClient = nullptr;
+  }
+}
+
 // Create configured esp_http_client with small TLS buffers
 esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
                                       esp_http_client_method_t method = HTTP_METHOD_GET) {
+  ResponseBuffer* activeBuf = effectiveResponseBuffer(buf);
+
+  if (g_keepSessionOpen && g_sessionClient) {
+    esp_http_client_set_url(g_sessionClient, url);
+    esp_http_client_set_method(g_sessionClient, method);
+
+    // KOSync auth headers
+    esp_http_client_set_header(g_sessionClient, "Accept", "application/vnd.koreader.v1+json");
+    esp_http_client_set_header(g_sessionClient, "x-auth-user", KOREADER_STORE.getUsername().c_str());
+    esp_http_client_set_header(g_sessionClient, "x-auth-key", KOREADER_STORE.getMd5Password().c_str());
+
+    std::string credentials = KOREADER_STORE.getUsername() + ":" + KOREADER_STORE.getPassword();
+    std::string authHeader = "Basic " + base64Encode(credentials);
+    esp_http_client_set_header(g_sessionClient, "Authorization", authHeader.c_str());
+    return g_sessionClient;
+  }
+
   esp_http_client_config_t config = {};
   config.url = url;
   config.event_handler = httpEventHandler;
-  config.user_data = buf;
+  config.user_data = activeBuf;
   config.method = method;
   config.timeout_ms = 15000;
   config.buffer_size = HTTP_BUF_SIZE;
   config.buffer_size_tx = HTTP_BUF_SIZE;
   config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.keep_alive_enable = g_keepSessionOpen;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) return nullptr;
@@ -142,9 +237,27 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   std::string authHeader = "Basic " + base64Encode(credentials);
   esp_http_client_set_header(client, "Authorization", authHeader.c_str());
 
+  if (g_keepSessionOpen) {
+    g_sessionClient = client;
+  }
+
   return client;
 }
 }  // namespace
+
+void KOReaderSyncClient::beginPersistentSession() {
+  g_keepSessionOpen = true;
+  clearResponseBuffer(&g_sessionResponseBuf);
+}
+
+void KOReaderSyncClient::endPersistentSession() {
+  g_keepSessionOpen = false;
+  if (g_sessionClient) {
+    esp_http_client_cleanup(g_sessionClient);
+    g_sessionClient = nullptr;
+  }
+  clearResponseBuffer(&g_sessionResponseBuf);
+}
 
 KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
   if (!KOREADER_STORE.hasCredentials()) {
@@ -168,6 +281,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
   LOG_DBG("KOSync", "Register request body: <redacted credentials>");
 
   ResponseBuffer buf;
+  ResponseBuffer* activeBuf = effectiveResponseBuffer(&buf);
+  resetResponseBuffer(activeBuf);
   esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_POST);
   if (!client) {
     lastEspError = ESP_ERR_NO_MEM;
@@ -181,10 +296,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
   const int httpCode = esp_http_client_get_status_code(client);
   lastHttpCode = httpCode;
   lastEspError = err;
-  esp_http_client_cleanup(client);
+  if (!g_keepSessionOpen) {
+    esp_http_client_cleanup(client);
+  }
 
   LOG_DBG("KOSync", "Register response: %d (err: %s) | body: %s", httpCode, esp_err_to_name(err),
-          buf.data ? buf.data : "");
+          activeBuf->data ? activeBuf->data : "");
 
   if (err != ESP_OK) {
     return NETWORK_ERROR;
@@ -198,7 +315,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::registerUser() {
   } else if (httpCode == 402) {
     // Both "user already exists" (error 2002) and "registration disabled" (error 2005)
     // return HTTP 402 on the original kosync server. Distinguish them by body text.
-    std::string lowerBody = buf.data ? buf.data : "";
+    std::string lowerBody = activeBuf->data ? activeBuf->data : "";
     std::transform(lowerBody.begin(), lowerBody.end(), lowerBody.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (lowerBody.find("already") != std::string::npos) {
@@ -226,6 +343,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
           lastContigHeapAtFailure);
 
   ResponseBuffer buf;
+  ResponseBuffer* activeBuf = effectiveResponseBuffer(&buf);
+  resetResponseBuffer(activeBuf);
   esp_http_client_handle_t client = createClient(url.c_str(), &buf);
   if (!client) {
     lastEspError = ESP_ERR_NO_MEM;
@@ -236,7 +355,9 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   const int httpCode = esp_http_client_get_status_code(client);
   lastHttpCode = httpCode;
   lastEspError = err;
-  esp_http_client_cleanup(client);
+  if (!g_keepSessionOpen) {
+    esp_http_client_cleanup(client);
+  }
 
   LOG_DBG("KOSync", "Auth response: %d (err: %s)", httpCode, esp_err_to_name(err));
 
@@ -261,25 +382,59 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
           lastContigHeapAtFailure);
 
   ResponseBuffer buf;
-  esp_http_client_handle_t client = createClient(url.c_str(), &buf);
-  if (!client) {
-    lastEspError = ESP_ERR_NO_MEM;
-    return NETWORK_ERROR;
+  ResponseBuffer* activeBuf = effectiveResponseBuffer(&buf);
+  esp_err_t err = ESP_FAIL;
+  int httpCode = 0;
+
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    // Retry attempts can happen after memory churn from a failed handshake.
+    // Refresh heap snapshot each pass so preflight and diagnostics use current values.
+    refreshHeapSnapshot();
+    logTlsAttemptPlan("get progress", attempt);
+    if (!checkHeapForTls()) {
+      return NETWORK_ERROR;
+    }
+
+    resetResponseBuffer(activeBuf);
+
+    esp_http_client_handle_t client = createClient(url.c_str(), &buf);
+    if (!client) {
+      lastEspError = ESP_ERR_NO_MEM;
+      return NETWORK_ERROR;
+    }
+
+    logWifiSnapshot("WiFi before getProgress");
+    err = esp_http_client_perform(client);
+    httpCode = esp_http_client_get_status_code(client);
+    lastHttpCode = httpCode;
+    lastEspError = err;
+    if (!g_keepSessionOpen) {
+      esp_http_client_cleanup(client);
+    }
+
+    LOG_DBG("KOSync", "Get progress response: %d (err: %s) [attempt %d]", httpCode, esp_err_to_name(err), attempt);
+
+    // Retry exactly once for connect-level failures only.
+    // Why: this recovers short AP/roaming hiccups without masking persistent
+    // TLS/auth/server errors that should be surfaced immediately.
+    if (err == ESP_OK || err != ESP_ERR_HTTP_CONNECT || attempt == 2) {
+      break;
+    }
+
+    // Failed connect can leave a persistent client handle in a bad state.
+    // Recreate it before retry so we don't repeat work on a stale transport.
+    resetSessionClientForRetry();
+
+    LOG_ERR("KOSync", "getProgress connect failed on attempt %d, retrying once", attempt);
+    logWifiSnapshot("WiFi before getProgress retry");
+    delay(400);
   }
-
-  esp_err_t err = esp_http_client_perform(client);
-  const int httpCode = esp_http_client_get_status_code(client);
-  lastHttpCode = httpCode;
-  lastEspError = err;
-  esp_http_client_cleanup(client);
-
-  LOG_DBG("KOSync", "Get progress response: %d (err: %s)", httpCode, esp_err_to_name(err));
 
   if (err != ESP_OK) return NETWORK_ERROR;
 
-  if (httpCode == 200 && buf.data) {
+  if (httpCode == 200 && activeBuf->data) {
     JsonDocument doc;
-    const DeserializationError error = deserializeJson(doc, buf.data);
+    const DeserializationError error = deserializeJson(doc, activeBuf->data);
 
     if (error) {
       LOG_ERR("KOSync", "JSON parse failed: %s", error.c_str());
@@ -329,22 +484,55 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   LOG_DBG("KOSync", "Request body: %s", body.c_str());
 
   ResponseBuffer buf;
-  esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_PUT);
-  if (!client) {
-    lastEspError = ESP_ERR_NO_MEM;
-    return NETWORK_ERROR;
+  ResponseBuffer* activeBuf = effectiveResponseBuffer(&buf);
+  esp_err_t err = ESP_FAIL;
+  int httpCode = 0;
+
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    // Retry attempts can happen after memory churn from a failed handshake.
+    // Refresh heap snapshot each pass so preflight and diagnostics use current values.
+    refreshHeapSnapshot();
+    logTlsAttemptPlan("update progress", attempt);
+    if (!checkHeapForTls()) {
+      return NETWORK_ERROR;
+    }
+
+    resetResponseBuffer(activeBuf);
+
+    esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_PUT);
+    if (!client) {
+      lastEspError = ESP_ERR_NO_MEM;
+      return NETWORK_ERROR;
+    }
+
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, body.c_str(), body.length());
+
+    logWifiSnapshot("WiFi before updateProgress");
+    err = esp_http_client_perform(client);
+    httpCode = esp_http_client_get_status_code(client);
+    lastHttpCode = httpCode;
+    lastEspError = err;
+    if (!g_keepSessionOpen) {
+      esp_http_client_cleanup(client);
+    }
+
+    LOG_DBG("KOSync", "Update progress response: %d (err: %s) [attempt %d]", httpCode, esp_err_to_name(err), attempt);
+
+    // Retry exactly once for connect-level failures only.
+    // Why: same policy as GET keeps behavior predictable across both endpoints.
+    if (err == ESP_OK || err != ESP_ERR_HTTP_CONNECT || attempt == 2) {
+      break;
+    }
+
+    // Failed connect can leave a persistent client handle in a bad state.
+    // Recreate it before retry so we don't repeat work on a stale transport.
+    resetSessionClientForRetry();
+
+    LOG_ERR("KOSync", "updateProgress connect failed on attempt %d, retrying once", attempt);
+    logWifiSnapshot("WiFi before updateProgress retry");
+    delay(400);
   }
-
-  esp_http_client_set_header(client, "Content-Type", "application/json");
-  esp_http_client_set_post_field(client, body.c_str(), body.length());
-
-  esp_err_t err = esp_http_client_perform(client);
-  const int httpCode = esp_http_client_get_status_code(client);
-  lastHttpCode = httpCode;
-  lastEspError = err;
-  esp_http_client_cleanup(client);
-
-  LOG_DBG("KOSync", "Update progress response: %d (err: %s)", httpCode, esp_err_to_name(err));
 
   if (err != ESP_OK) return NETWORK_ERROR;
   if (httpCode == 200 || httpCode == 202) return OK;
@@ -353,11 +541,16 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 }
 
 const char* KOReaderSyncClient::lastFailureDetail() {
+  const bool isUpload = (lastOperation && strcmp(lastOperation, "update progress") == 0);
+  const bool hasReusableSession = g_keepSessionOpen && g_sessionClient != nullptr;
+  const unsigned requiredContig =
+      (isUpload && hasReusableSession) ? MIN_CONTIG_HEAP_FOR_TLS_UPLOAD : MIN_CONTIG_HEAP_FOR_TLS;
+
   // Heap-pressure case: surfaced when checkHeapForTls() refused before any TCP/TLS work happened.
   if (lastEspError == ESP_ERR_NO_MEM && lastHttpCode == 0) {
     snprintf(g_failureDetailBuf, sizeof(g_failureDetailBuf),
              "%s: low memory (%u free, %u contig, need %u). Reboot device.", lastOperation, lastHeapAtFailure,
-             lastContigHeapAtFailure, MIN_CONTIG_HEAP_FOR_TLS);
+             lastContigHeapAtFailure, requiredContig);
     return g_failureDetailBuf;
   }
   // Network/TLS case: esp_http_client_perform() failed before getting a status code.

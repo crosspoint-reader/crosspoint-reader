@@ -25,7 +25,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
-  items.reserve(10);
+  items.reserve(12);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -39,7 +39,8 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   if (KOREADER_STORE.hasCredentials()) {
-    items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
+    items.push_back({MenuAction::PULL_REMOTE, StrId::STR_PULL_PROGRESS_FROM_OTHER_DEVICES});
+    items.push_back({MenuAction::PUSH_LOCAL, StrId::STR_PUSH_PROGRESS_FROM_THIS_DEVICE});
   }
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   return items;

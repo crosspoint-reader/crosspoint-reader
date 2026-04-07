@@ -1917,7 +1917,12 @@ void GfxRenderer::restoreBwBuffer() {
   }
 
   if (missingChunks) {
+    // Store failed part-way (or was skipped), so we cannot restore BW bytes safely.
+    // Still cleanup grayscale staging buffers to avoid retaining large temporary
+    // allocations that can later starve TLS handshakes.
+    display.cleanupGrayscaleBuffers(frameBuffer);
     freeBwBufferChunks();
+    LOG_ERR("GFX", "BW restore skipped due to missing chunks; cleaned grayscale buffers only");
     return;
   }
 

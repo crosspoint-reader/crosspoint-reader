@@ -5,7 +5,6 @@ Generate test EPUBs for rendering verification.
 Creates EPUBs to verify:
 - Image: Grayscale rendering (4 levels), scaling, centering, cache performance
 - Text: pre element line breaks, blank lines, nested code element
-- Layout: nested block margins, sibling style restoration, image wrapper spacing
 """
 
 import os
@@ -47,7 +46,7 @@ def get_font(size=20):
     for path in candidates:
         try:
             return ImageFont.truetype(path, size)
-        except Exception:
+        except:
             continue
     return ImageFont.load_default()
 
@@ -555,7 +554,6 @@ def create_epub(epub_path, title, chapters):
         # Collect all images and chapters
         manifest_items = []
         spine_items = []
-        written_images = set()
 
         # Add chapters and images
         for i, (chapter_title, html_content, images) in enumerate(chapters):
@@ -564,8 +562,6 @@ def create_epub(epub_path, title, chapters):
 
             # Add images for this chapter
             for img_filename, img_data in images:
-                if img_filename in written_images:
-                    continue
                 media_type = (
                     "image/png" if img_filename.endswith(".png") else "image/jpeg"
                 )
@@ -573,7 +569,6 @@ def create_epub(epub_path, title, chapters):
                     f'    <item id="{img_filename.replace(".", "_")}" href="images/{img_filename}" media-type="{media_type}"/>'
                 )
                 epub.writestr(f"OEBPS/images/{img_filename}", img_data)
-                written_images.add(img_filename)
 
             # Add chapter
             manifest_items.append(
@@ -623,12 +618,12 @@ def create_epub(epub_path, title, chapters):
         epub.writestr("OEBPS/nav.xhtml", nav_xhtml)
 
 
-def make_chapter(title, body_content, head_content=""):
+def make_chapter(title, body_content):
     """Create XHTML chapter content."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>{title}</title>{head_content}</head>
+<head><title>{title}</title></head>
 <body>
 <h1>{title}</h1>
 {body_content}
@@ -1004,102 +999,6 @@ def main():
 
         create_epub(
             OUTPUT_DIR / "test_mixed_images.epub", "Mixed Format Tests", mixed_chapters
-        )
-
-        print("Creating layout regression test EPUB...")
-
-        layout_chapters = [
-            (
-                "Introduction",
-                make_chapter(
-                    "Layout Regression Tests",
-                    """
-<p>This EPUB exercises recent parser edge cases around nested block styles and image wrappers.</p>
-<p><strong>Recommended settings:</strong> Paragraph Alignment set to Book Style or Justify.</p>
-<p>This regression EPUB uses inline style attributes rather than a head &lt;style&gt; block so it works even if chapter-local embedded CSS is not loaded.</p>
-<ul>
-<li>Nested horizontal margin inheritance for sibling blocks</li>
-<li>Vertical paragraph spacing should not explode with nested wrappers</li>
-<li>Image wrapper spacing should apply to the image, not leak into following text</li>
-<li>Hidden images should not leave a large blank gap before the next paragraph</li>
-</ul>
-""",
-                ),
-                [],
-            ),
-            (
-                "1. Nested Horizontal Margins",
-                make_chapter(
-                    "Nested Horizontal Margin Inheritance",
-                    """
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">This chapter mirrors the c1/c2/c3/c4 example behind PR 1582.</p>
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Expected: C3 is indented the most. C4 is indented less than C3, but still more than the baseline paragraph outside the wrapper.</p>
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Expected order of indentation: C3 &gt; C4 &gt; baseline paragraph.</p>
-<div style="margin-left: 24px;">
-    <div style="margin-left: 48px;">
-        <p style="margin-top: 0.7em; margin-bottom: 0.7em; margin-left: 12px;">C3 paragraph. This text should have the largest left indent because it inherits the outer wrapper, the inner wrapper, and its own left margin. Repeat text to make the paragraph wrap across multiple lines and make the effective left inset obvious while reading.</p>
-    </div>
-    <p style="margin-top: 0.7em; margin-bottom: 0.7em; margin-left: 12px;">C4 paragraph. This text should still inherit the outer wrapper indent, but not the inner wrapper indent. It should therefore appear less indented than the paragraph above, not flush with the body text.</p>
-    <p style="margin-top: 0.7em; margin-bottom: 0.7em;">Outer-wrapper-only control paragraph. This paragraph should still be indented relative to the page body because it inherits the outer wrapper margin, even though it has no paragraph-level margin-left of its own.</p>
-</div>
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Baseline paragraph outside the wrappers. This paragraph should align with the normal body text and should be the least indented paragraph on this page.</p>
-""",
-                ),
-                [],
-            ),
-            (
-                "2. Nested Vertical Margins",
-                make_chapter(
-                    "Nested Vertical Margin Sanity",
-                    """
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Expected: wrapper nesting should not create an oversized blank vertical gulf between these paragraphs.</p>
-<div style="margin-top: 1.6em; margin-bottom: 1.6em;">
-    <div style="margin-top: 1.2em; margin-bottom: 1.2em;">
-        <p style="margin-top: 0.8em; margin-bottom: 0.8em;">Nested vertical spacing paragraph. There should be some breathing room above and below, but not dramatically more than a normal section break.</p>
-    </div>
-    <p style="margin-top: 0.8em; margin-bottom: 0.8em;">Sibling paragraph after the nested block. Spacing before this paragraph should feel normal and should not keep growing with every ancestor wrapper.</p>
-</div>
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Baseline paragraph after the wrapper section. This should not be pushed far down the page.</p>
-""",
-                ),
-                [],
-            ),
-            (
-                "3. Image Wrapper Spacing",
-                make_chapter(
-                    "Image Wrapper Spacing",
-                    """
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Expected: the wrapper's margins should create space around the image, and the paragraph after the image should start with normal spacing rather than inheriting a second copy of that gap.</p>
-<div style="margin-top: 1.4em; margin-bottom: 1.4em;">
-    <div style="margin-top: 1.4em; margin-bottom: 1.4em; margin-left: 60px; margin-right: 60px;">
-        <p style="margin-top: 0; margin-bottom: 0;"><img src="images/centering_test.jpg" alt="Wrapped image spacing test" style="width: 100%;"/></p>
-    </div>
-</div>
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Paragraph after wrapped image. If the wrapper spacing leaks, this paragraph will begin too far down the page. If container width is ignored, the image may also appear too wide for the wrapper.</p>
-""",
-                ),
-                [("centering_test.jpg", images["centering_test.jpg"])],
-            ),
-            (
-                "4. Hidden Image Spacing",
-                make_chapter(
-                    "Hidden Image Spacing Reset",
-                    """
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Expected: the hidden image wrapper should not leave a large blank gap before the following paragraph.</p>
-<div style="margin-top: 1.4em; margin-bottom: 1.4em;">
-    <p style="margin-top: 0; margin-bottom: 0;"><img src="images/centering_test.jpg" alt="This image is intentionally hidden by CSS" style="display: none;"/></p>
-</div>
-<p style="margin-top: 0.7em; margin-bottom: 0.7em;">Paragraph after hidden image. This should follow with near-normal spacing, not the large gap that would be appropriate for a visible wrapped image.</p>
-""",
-                ),
-                [("centering_test.jpg", images["centering_test.jpg"])],
-            ),
-        ]
-
-        create_epub(
-            OUTPUT_DIR / "test_layout_regressions.epub",
-            "Layout Regression Tests",
-            layout_chapters,
         )
 
         print("Creating text rendering test EPUB...")
