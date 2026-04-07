@@ -30,7 +30,7 @@
 ### リポジトリ構成
 
 ```
-aozora-epub-api/                  ← 新規リポジトリ
+aozora-epub-api/                  ← 新規リポジトリ (zrn-ns/aozora-epub-api)
 ├── api/
 │   ├── authors.ts                ← 作家一覧API
 │   ├── works.ts                  ← 作品一覧API（複数検索軸対応）
