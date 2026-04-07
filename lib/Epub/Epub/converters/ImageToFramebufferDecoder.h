@@ -33,7 +33,10 @@ class ImageToFramebufferDecoder {
 
  protected:
   // Size validation helpers
-  static constexpr int MAX_SOURCE_PIXELS = 3145728;  // 2048 * 1536
+  // JPEG/PNG decoders use streaming (row-by-row) decode with built-in scaling,
+  // so source pixel count does not determine memory usage. This limit is a safety
+  // net against absurdly large images only.
+  static constexpr int MAX_SOURCE_PIXELS = 25000000;  // 5000 * 5000
 
   bool validateImageDimensions(int width, int height, const std::string& format);
   void warnUnsupportedFeature(const std::string& feature, const std::string& imagePath);
