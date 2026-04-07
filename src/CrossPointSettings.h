@@ -164,15 +164,15 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverFilter = NO_FILTER;
   // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
-  uint8_t statusBarChapterPageCount = 1;
-  uint8_t statusBarBookProgressPercentage = 1;
+  uint8_t statusBarChapterPageCount = 0;
+  uint8_t statusBarBookProgressPercentage = 0;
   uint8_t statusBarProgressBar = HIDE_PROGRESS;
   uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
-  uint8_t statusBarTitle = CHAPTER_TITLE;
-  uint8_t statusBarBattery = 1;
+  uint8_t statusBarTitle = 0;
+  uint8_t statusBarBattery = 0;
   // Text rendering settings
-  uint8_t extraParagraphSpacing = 1;
-  uint8_t textAntiAliasing = 1;
+  uint8_t extraParagraphSpacing = 0;
+  uint8_t textAntiAliasing = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings
@@ -190,11 +190,11 @@ class CrossPointSettings {
   // Reader font settings
   uint8_t fontFamily = BOOKERLY;
   uint8_t fontSize = MEDIUM;
-  uint8_t lineSpacingHorizontal = LINE_SPACING_DEFAULT;
-  uint8_t lineSpacingVertical = LINE_SPACING_DEFAULT;
+  uint8_t lineSpacingHorizontal = 185;
+  uint8_t lineSpacingVertical = 185;
   uint8_t paragraphAlignment = JUSTIFIED;
   uint8_t writingMode = WM_AUTO;
-  uint8_t verticalCharSpacing = VERTICAL_CHAR_SPACING_DEFAULT;
+  uint8_t verticalCharSpacing = 15;
   // Auto-sleep timeout setting (default 10 minutes)
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)
@@ -202,7 +202,7 @@ class CrossPointSettings {
   uint8_t hyphenationEnabled = 0;
 
   // Reader screen margin settings
-  uint8_t screenMargin = 5;
+  uint8_t screenMargin = 10;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";
