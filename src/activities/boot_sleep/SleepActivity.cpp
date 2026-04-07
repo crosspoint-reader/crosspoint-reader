@@ -212,12 +212,12 @@ std::vector<std::string> collectSleepImages(bool allowPng) {
 // SEQUENTIAL: advances from APP_STATE.lastSleepImage, wrapping at numFiles.
 size_t pickSleepImageIndex(size_t numFiles) {
   if (SETTINGS.sleepImagePickMode == CrossPointSettings::SLEEP_IMAGE_PICK_MODE::PICK_SEQUENTIAL) {
-    const uint8_t last = APP_STATE.lastSleepImage;
-    if (last == UINT8_MAX || last >= numFiles) return 0;
-    return (static_cast<size_t>(last) + 1) % numFiles;
+    const size_t last = APP_STATE.lastSleepImage;
+    if (last == SIZE_MAX || last >= numFiles) return 0;
+    return (last + 1) % numFiles;
   }
   size_t idx = random(numFiles);
-  while (numFiles > 1 && APP_STATE.lastSleepImage != UINT8_MAX && idx == APP_STATE.lastSleepImage) {
+  while (numFiles > 1 && APP_STATE.lastSleepImage != SIZE_MAX && idx == APP_STATE.lastSleepImage) {
     idx = random(numFiles);
   }
   return idx;
