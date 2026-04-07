@@ -13,6 +13,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .headerHeight = 84,
                                  .verticalSpacing = 16,
                                  .contentSidePadding = 20,
+                                 .listItemInset = 8,
                                  .listRowHeight = 40,
                                  .listWithSubtitleRowHeight = 60,
                                  .menuRowHeight = 64,
@@ -35,7 +36,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .keyboardKeyHeight = 50,
                                  .keyboardKeySpacing = 0,
                                  .keyboardBottomAligned = true,
-                                 .keyboardCenteredText = true};
+                                 .keyboardCenteredText = true,
+                                 .listItemTextYOffset = 7};
 }
 
 class LyraTheme : public BaseTheme {
@@ -44,7 +46,8 @@ class LyraTheme : public BaseTheme {
   //   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) override;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true) const override;
-  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const override;
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                  bool showSdInfo = false) const override;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                      const char* rightLabel = nullptr) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -68,5 +71,4 @@ class LyraTheme : public BaseTheme {
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const override;
   void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected) const override;
-  bool showsFileIcons() const override { return true; }
 };

@@ -4,6 +4,8 @@
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
 #include <SDCardManager.h>
+#include <SdFat.h>
+#include <esp_task_wdt.h>
 
 #include <cassert>
 
@@ -18,7 +20,21 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+bool HalStorage::begin() {
+  const bool ok = SDCard.begin();
+  if (ok) {
+    // Pre-populate the total-bytes cache once (partition size never changes).
+    sdTotalBytesCache = SDCard.cardTotalBytes();
+    // Do an initial free-space walk synchronously — no other tasks are running yet during setup.
+    sdFreeKiB = (uint32_t)(SDCard.cardFreeBytes() / 1024ULL);
+    // Start the background refresh task.
+    if (xTaskCreate(sdFreeUpdateTask, "sdFree", 2048, this, 1, &sdFreeUpdateTaskHandle) != pdPASS) {
+      LOG_ERR("Storage", "Failed to create sdFree task; free-space cache will not update after writes");
+      sdFreeUpdateTaskHandle = nullptr;
+    }
+  }
+  return ok;
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
@@ -49,10 +65,77 @@ size_t HalStorage::readFileToBuffer(const char* path, char* buffer, size_t buffe
 }
 
 bool HalStorage::writeFile(const char* path, const String& content) {
-  HAL_STORAGE_WRAPPED_CALL(writeFile, path, content);
+  bool ok;
+  {
+    StorageLock lock;
+    ok = SDCard.writeFile(path, content);
+  }
+  if (ok) notifySdFreeUpdate();
+  return ok;
 }
 
 bool HalStorage::ensureDirectoryExists(const char* path) { HAL_STORAGE_WRAPPED_CALL(ensureDirectoryExists, path); }
+
+uint64_t HalStorage::sdTotalBytes() const {
+  // Return 0 when the card is absent so callers see "no card" rather than a stale value.
+  // SDCard.ready() is a simple bool read — safe without storageMutex.
+  return SDCard.ready() ? sdTotalBytesCache : 0ULL;
+}
+
+uint64_t HalStorage::sdFreeBytes() const {
+  // sdFreeKiB is a volatile uint32_t written atomically on single-core RISC-V — no mutex needed.
+  // Return 0 when the card is absent.
+  return SDCard.ready() ? (uint64_t)sdFreeKiB * 1024ULL : 0ULL;
+}
+
+uint64_t HalStorage::sdUsedBytes() const {
+  const uint64_t total = sdTotalBytes();
+  const uint64_t free = sdFreeBytes();
+  return total > free ? total - free : 0;
+}
+
+void HalStorage::notifySdFreeUpdate() {
+  if (sdFreeUpdateTaskHandle) {
+    xTaskNotifyGive(sdFreeUpdateTaskHandle);
+  } else {
+    // Background task unavailable (creation failed); refresh synchronously.
+    StorageLock lock;
+    if (SDCard.ready()) {
+      sdTotalBytesCache = SDCard.cardTotalBytes();
+      const uint32_t freeKiB = (uint32_t)(SDCard.cardFreeBytes() / 1024ULL);
+      if (freeKiB <= (uint32_t)(sdTotalBytesCache / 1024ULL)) sdFreeKiB = freeKiB;
+    } else {
+      sdTotalBytesCache = 0;
+      sdFreeKiB = 0;
+    }
+  }
+}
+
+// Background task: wakes on notification, then waits for a 5-second quiet window before
+// walking the FAT. This debounce ensures a batch of writes (e.g. 20 web uploads) triggers
+// exactly one FAT walk — at the end of the batch, not during it.
+void HalStorage::sdFreeUpdateTask(void* param) {
+  auto& self = *static_cast<HalStorage*>(param);
+  esp_task_wdt_add(NULL);  // register with watchdog so esp_task_wdt_reset() is effective
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // block until first notification
+    while (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000))) {
+    }  // reset window on each new notification
+    esp_task_wdt_reset();  // FAT walk can be slow on large/fragmented cards
+    {
+      StorageLock lock;
+      if (SDCard.ready()) {
+        self.sdTotalBytesCache = SDCard.cardTotalBytes();
+        const uint32_t freeKiB = (uint32_t)(SDCard.cardFreeBytes() / 1024ULL);
+        if (freeKiB <= (uint32_t)(self.sdTotalBytesCache / 1024ULL)) self.sdFreeKiB = freeKiB;
+      } else {
+        self.sdTotalBytesCache = 0;
+        self.sdFreeKiB = 0;
+      }
+    }
+    esp_task_wdt_reset();  // reset again after the walk completes
+  }
+}
 
 class HalFile::Impl {
  public:
@@ -64,11 +147,40 @@ HalFile::HalFile() = default;
 
 HalFile::HalFile(std::unique_ptr<Impl> impl) : impl(std::move(impl)) {}
 
-HalFile::~HalFile() = default;
+void HalFile::release() noexcept {
+  if (!openedForWrite || !impl || !impl->file.isOpen()) return;
+  bool needNotify = false;
+  {
+    HalStorage::StorageLock lock;
+    if (impl->file.close()) {
+      openedForWrite = false;
+      needNotify = true;
+    }
+  }  // lock released before notifying, matching HalFile::close()
+  if (needNotify) HalStorage::getInstance().notifySdFreeUpdate();
+}
 
-HalFile::HalFile(HalFile&&) = default;
+HalFile::~HalFile() { release(); }
 
-HalFile& HalFile::operator=(HalFile&&) = default;
+// Move constructor: transfer ownership and clear openedForWrite on the moved-from object
+// so a subsequent close() on it cannot trigger a spurious notify.
+HalFile::HalFile(HalFile&& other) noexcept : impl(std::move(other.impl)), openedForWrite(other.openedForWrite) {
+  other.openedForWrite = false;
+}
+
+HalFile& HalFile::operator=(HalFile&& other) noexcept {
+  if (this != &other) {
+    // release() closes any write-opened file on *this and notifies the free-space
+    // cache before we overwrite impl. HalStorage::openFileForWrite always passes a
+    // fresh HalFile (openedForWrite=false) so this branch is only reached in
+    // user-level reassignment (no lock held).
+    release();
+    impl = std::move(other.impl);
+    openedForWrite = other.openedForWrite;
+    other.openedForWrite = false;
+  }
+  return *this;
+}
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
@@ -79,15 +191,35 @@ bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED
 
 bool HalStorage::exists(const char* path) { HAL_STORAGE_WRAPPED_CALL(exists, path); }
 
-bool HalStorage::remove(const char* path) { HAL_STORAGE_WRAPPED_CALL(remove, path); }
+bool HalStorage::remove(const char* path) {
+  bool ok;
+  {
+    StorageLock lock;
+    ok = SDCard.remove(path);
+  }
+  if (ok) notifySdFreeUpdate();
+  return ok;
+}
+
 bool HalStorage::rename(const char* oldPath, const char* newPath) {
   HAL_STORAGE_WRAPPED_CALL(rename, oldPath, newPath);
 }
 
-bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
+bool HalStorage::rmdir(const char* path) {
+  bool ok;
+  {
+    StorageLock lock;
+    ok = SDCard.rmdir(path);
+  }
+  if (ok) notifySdFreeUpdate();
+  return ok;
+}
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
+  // Assigning into a live write-opened HalFile would call operator= → release() → StorageLock,
+  // re-entering the mutex we already hold and deadlocking.  Callers must pass a fresh handle.
+  assert(!file.openedForWrite);
   FsFile fsFile;
   bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
@@ -102,23 +234,37 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
   return openFileForRead(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
+bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file, bool silent) {
   StorageLock lock;  // ensure thread safety for the duration of this function
+  // Same invariant as openFileForRead: assigning into a live write-opened HalFile would
+  // call operator= → release() → StorageLock, re-entering the held mutex and deadlocking.
+  assert(!file.openedForWrite);
   FsFile fsFile;
   bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
+  if (ok) {
+    file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
+    if (!silent) file.openedForWrite = true;
+  }
   return ok;
 }
 
-bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, HalFile& file) {
-  return openFileForWrite(moduleName, path.c_str(), file);
+bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, HalFile& file, bool silent) {
+  return openFileForWrite(moduleName, path.c_str(), file, silent);
 }
 
-bool HalStorage::openFileForWrite(const char* moduleName, const String& path, HalFile& file) {
-  return openFileForWrite(moduleName, path.c_str(), file);
+bool HalStorage::openFileForWrite(const char* moduleName, const String& path, HalFile& file, bool silent) {
+  return openFileForWrite(moduleName, path.c_str(), file, silent);
 }
 
-bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDir, path); }
+bool HalStorage::removeDir(const char* path) {
+  bool ok;
+  {
+    StorageLock lock;
+    ok = SDCard.removeDir(path);
+  }
+  if (ok) notifySdFreeUpdate();
+  return ok;
+}
 
 // HalFile implementation
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.
@@ -149,7 +295,23 @@ size_t HalFile::write(uint8_t b) { HAL_FILE_WRAPPED_CALL(write, b); }
 bool HalFile::rename(const char* newPath) { HAL_FILE_WRAPPED_CALL(rename, newPath); }
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap
 void HalFile::rewindDirectory() { HAL_FILE_WRAPPED_CALL(rewindDirectory, ); }
-bool HalFile::close() { HAL_FILE_WRAPPED_CALL(close, ); }
+
+bool HalFile::close() {
+  bool needNotify = false;
+  bool ok = false;
+  {
+    HalStorage::StorageLock lock;
+    assert(impl != nullptr);
+    ok = impl->file.close();
+    if (ok && openedForWrite) {
+      openedForWrite = false;  // clear before notify to prevent double-notify on double-close
+      needNotify = true;
+    }
+  }  // lock released here before notifying
+  if (needNotify) HalStorage::getInstance().notifySdFreeUpdate();
+  return ok;
+}
+
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);

@@ -1,156 +1,361 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CrossPoint Reader</title>
-    <style>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CrossPoint Reader</title>
+  <style>
+    :root {
+      --font-color: #333;
+      --bg: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-bg: #FFF;
+      --label-color: #7f8c8d;
+      --border-color: #eee;
+      --accent-color: rgb(110, 154, 130);
+      --accent-hover-color: #5a8c73;
+    }
+
+    @media (prefers-color-scheme: dark) {
       :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 {
-        color: var(--title-color);
-        margin-top: 0;
-      }
-      .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-      .info-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 0;
-        border-bottom: 1px solid var(--border-color);
-      }
-      .info-row:last-child {
-        border-bottom: none;
-      }
-      .label {
-        font-weight: 600;
-        color: var(--label-color);
-      }
-      .value {
-        color: var(--title-color);
-      }
-      .status {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 12px;
-        background-color: #27ae60;
-        color: white;
-        font-size: 0.9em;
-      }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>📚 CrossPoint Reader</h1>
-
-    <div class="nav-links">
-      <a href="/" class="active">Home</a>
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
-    </div>
-
-    <div class="card">
-      <h2>Device Status</h2>
-      <div class="info-row">
-        <span class="label">Version</span>
-        <span class="value" id="version"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">WiFi Status</span>
-        <span class="status">Connected</span>
-      </div>
-      <div class="info-row">
-        <span class="label">IP Address</span>
-        <span class="value" id="ip-address"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">Free Memory</span>
-        <span class="value" id="free-heap"></span>
-      </div>
-    </div>
-
-    <div class="card">
-      <p style="text-align: center; color: #95a5a6; margin: 0">
-        CrossPoint E-Reader • Open Source
-      </p>
-    </div>
-  <script>
-    async function fetchStatus() {
-      try {
-        const response = await fetch('/api/status');
-        if (!response.ok) {
-          throw new Error('Failed to fetch status: ' + response.status + ' ' + response.statusText);
-        }
-        const data = await response.json();
-        document.getElementById('version').textContent = data.version || 'N/A';
-        document.getElementById('ip-address').textContent = data.ip || 'N/A';
-        document.getElementById('free-heap').textContent = data.freeHeap
-          ? data.freeHeap.toLocaleString() + ' bytes'
-          : 'N/A';
-      } catch (error) {
-        console.error('Error fetching status:', error);
+        --font-color: #f5f5f5;
+        --bg: #333;
+        --title-color: #ecf0f1;
+        --card-bg: #444;
+        --label-color: #bdc3c7;
+        --border-color: #555;
+        color-scheme: dark;
       }
     }
 
-    // Fetch status on page load
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Oxygen, Ubuntu, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: var(--bg);
+      color: var(--font-color);
+    }
+
+    h1 {
+      color: var(--title-color);
+      border-bottom: 2px solid var(--accent-color);
+      padding-bottom: 10px;
+    }
+
+    h2 {
+      color: var(--title-color);
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 1em;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-links {
+      margin: 20px 0;
+      display: flex;
+      gap: 10px;
+    }
+
+    .nav-links a {
+      padding: 10px 20px;
+      color: var(--font-color);
+      text-decoration: none;
+      border-radius: 4px;
+    }
+
+    .nav-links a.active {
+      background-color: var(--accent-color);
+      color: white;
+    }
+
+    .nav-links a:not(.active):hover {
+      background-color: var(--accent-hover-color);
+      color: white;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    @media (max-width: 540px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-footer {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: #95a5a6;
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .label {
+      font-weight: 600;
+      color: var(--label-color);
+      font-size: 0.9em;
+    }
+
+    .value {
+      color: var(--title-color);
+      font-size: 0.9em;
+      text-align: right;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background-color: #27ae60;
+      color: white;
+      font-size: 0.85em;
+    }
+
+    .status.ap { background-color: #e67e22; }
+    .status.off { background-color: #95a5a6; }
+
+    .signal-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .signal-excellent { background: #27ae60; }
+    .signal-good      { background: #2ecc71; }
+    .signal-fair      { background: #f39c12; }
+    .signal-weak      { background: #e74c3c; }
+  </style>
+</head>
+
+<body>
+  <h1>📚 CrossPoint Reader</h1>
+
+  <div class="nav-links">
+    <a href="/" class="active">Home</a>
+    <a href="/files">File Manager</a>
+    <a href="/settings">Settings</a>
+  </div>
+
+  <div class="dashboard">
+
+    <div class="card">
+      <h2>📟 Device</h2>
+      <div class="info-row">
+        <span class="label">FW Version</span>
+        <span class="value" id="version">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">FW Size</span>
+        <span class="value" id="firmware">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Chip</span>
+        <span class="value" id="chip-version">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">SPI Flash</span>
+        <span class="value" id="flash-used">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Uptime</span>
+        <span class="value" id="uptime">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Battery</span>
+        <span class="value" id="battery">Loading...</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📶 Network</h2>
+      <div class="info-row">
+        <span class="label">WiFi</span>
+        <span class="status" id="wifi-status">Loading...</span>
+      </div>
+      <div class="info-row" id="row-ssid" style="display:none">
+        <span class="label">SSID</span>
+        <span class="value" id="ssid">—</span>
+      </div>
+      <div class="info-row">
+        <span class="label">IP Address</span>
+        <span class="value" id="ip-address">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">MAC Address</span>
+        <span class="value" id="mac-address">Loading...</span>
+      </div>
+      <div class="info-row" id="row-rssi" style="display:none">
+        <span class="label">Signal</span>
+        <span class="value" id="rssi">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🧠 Memory</h2>
+      <div class="info-row">
+        <span class="label">SRAM</span>
+        <span class="value" id="sram-total">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Static</span>
+        <span class="value" id="sram-static">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Heap</span>
+        <span class="value" id="free-heap">Loading...</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💾 Storage</h2>
+      <div class="info-row">
+        <span class="label">SD Card</span>
+        <span class="value" id="sd-space">Loading...</span>
+      </div>
+    </div>
+
+    <div class="card-footer">
+      CrossPoint E-Reader • Open Source
+    </div>
+
+  </div>
+
+  <script>
+    function formatBytes(bytes) {
+      if (bytes == null) return 'N/A';
+      const units = ['B', 'KiB', 'MiB', 'GiB'];
+      let val = bytes, i = 0;
+      while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+      return val.toFixed(1) + ' ' + units[i];
+    }
+
+    function formatSdBytes(bytes) {
+      if (bytes == null) return 'N/A';
+      const units = ['KB', 'MB', 'GB'];
+      let val = bytes / 1000, i = 0;
+      while (val >= 1000 && i < units.length - 1) { val /= 1000; i++; }
+      return val.toFixed(1) + ' ' + units[i];
+    }
+
+    function formatUptime(seconds) {
+      if (seconds == null) return 'N/A';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
+    }
+
+    function rssiQuality(dBm) {
+      if (dBm >= -50) return ['Excellent', 'excellent'];
+      if (dBm >= -60) return ['Good',      'good'];
+      if (dBm >= -70) return ['Fair',      'fair'];
+      return             ['Weak',      'weak'];
+    }
+
+    function applyStatus(data, includeSd) {
+      // Device
+      document.getElementById('version').textContent = data.version || 'N/A';
+      document.getElementById('chip-version').textContent = (data.chipVersion && data.cpuMHz)
+        ? data.chipVersion + ' (' + data.cpuMHz + ' MHz)' : (data.chipVersion || 'N/A');
+      document.getElementById('uptime').textContent = formatUptime(data.uptime);
+      document.getElementById('battery').textContent = (data.batteryPercent != null)
+        ? (data.batteryPercent + '%' + (data.charging ? ' (Charging)' : '')) : 'N/A';
+
+      // Network
+      const wifiEl = document.getElementById('wifi-status');
+      const wifiLabels = { STA: 'Station', AP: 'Access Point', Off: 'Off' };
+      wifiEl.textContent = wifiLabels[data.mode] || data.mode || 'N/A';
+      wifiEl.className = 'status' + (data.mode === 'AP' ? ' ap' : data.mode === 'Off' ? ' off' : '');
+
+      document.getElementById('ip-address').textContent = data.ip || 'N/A';
+      document.getElementById('mac-address').textContent = data.macAddress || 'N/A';
+
+      const isSta = data.mode === 'STA';
+      document.getElementById('row-ssid').style.display = isSta ? '' : 'none';
+      document.getElementById('ssid').textContent = data.ssid || 'N/A';
+      document.getElementById('row-rssi').style.display = isSta ? '' : 'none';
+      if (isSta && data.rssi) {
+        const [label, cls] = rssiQuality(data.rssi);
+        document.getElementById('rssi').innerHTML =
+          `<span class="signal-dot signal-${cls}"></span>${data.rssi} dBm (${label})`;
+      } else {
+        document.getElementById('rssi').textContent = 'N/A';
+      }
+
+      // Memory
+      const SRAM_TOTAL = 400 * 1024;
+      document.getElementById('sram-total').textContent = formatBytes(SRAM_TOTAL);
+      document.getElementById('sram-static').textContent = data.heapSize
+        ? formatBytes(SRAM_TOTAL - data.heapSize) : 'N/A';
+      document.getElementById('free-heap').textContent = (data.heapSize && data.freeHeap != null)
+        ? formatBytes(data.heapSize - data.freeHeap) + ' / ' + formatBytes(data.heapSize) : 'N/A';
+      // Storage
+      document.getElementById('firmware').textContent = (data.sketchBytes && data.sketchPartitionBytes)
+        ? (Math.round(data.sketchBytes / 1024) + ' KiB / ' + Math.round(data.sketchPartitionBytes / 1024) + ' KiB') : 'N/A';
+      document.getElementById('flash-used').textContent = data.flashTotal
+        ? formatBytes(data.flashTotal) : 'N/A';
+
+      if (includeSd) {
+        document.getElementById('sd-space').textContent = data.sdTotal
+          ? formatSdBytes(data.sdUsed) + ' / ' + formatSdBytes(data.sdTotal) : 'N/A';
+      }
+    }
+
+    async function fetchStatus() {
+      try {
+        const fastResponse = await fetch('/api/status?phase=fast');
+        if (!fastResponse.ok) throw new Error('Fast status failed: ' + fastResponse.status);
+        const fastData = await fastResponse.json();
+        applyStatus(fastData, false);
+        document.getElementById('sd-space').textContent = 'Reading...';
+      } catch (error) {
+        console.error('Error fetching fast status:', error);
+        document.getElementById('sd-space').textContent = 'N/A';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) throw new Error('Full status failed: ' + response.status);
+        const data = await response.json();
+        applyStatus(data, true);
+      } catch (error) {
+        console.error('Error fetching full status:', error);
+        document.getElementById('sd-space').textContent = 'N/A';
+      }
+    }
+
     window.onload = fetchStatus;
   </script>
-  </body>
+</body>
+
 </html>

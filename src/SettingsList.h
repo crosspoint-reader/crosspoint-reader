@@ -80,6 +80,10 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         "sleepTimeout", StrId::STR_CAT_SYSTEM),
       SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                           StrId::STR_CAT_SYSTEM),
+      SettingInfo::Enum(
+          StrId::STR_SD_INFO_DISPLAY, &CrossPointSettings::sdInfoDisplay,
+          {StrId::STR_SD_USED_TOTAL, StrId::STR_SD_USED_ONLY, StrId::STR_SD_FREE_ONLY, StrId::STR_SD_HIDE},
+          "sdInfoDisplay", StrId::STR_CAT_SYSTEM),
 
       // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
       SettingInfo::DynamicString(

@@ -394,7 +394,7 @@ void TxtReaderActivity::renderStatusBar() const {
 
 void TxtReaderActivity::saveProgress() const {
   FsFile f;
-  if (Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f)) {
+  if (Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f, /*silent=*/true)) {
     uint8_t data[4];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;

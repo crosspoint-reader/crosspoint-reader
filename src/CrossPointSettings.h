@@ -137,6 +137,15 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // SD card info display mode in Browse Files
+  enum SD_INFO_DISPLAY {
+    SD_INFO_USED_TOTAL = 0,
+    SD_INFO_USED_ONLY = 1,
+    SD_INFO_FREE_ONLY = 2,
+    SD_INFO_HIDE = 3,
+    SD_INFO_DISPLAY_COUNT
+  };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -199,6 +208,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // SD card info display mode in Browse Files
+  uint8_t sdInfoDisplay = SD_INFO_USED_TOTAL;
 
   ~CrossPointSettings() = default;
 

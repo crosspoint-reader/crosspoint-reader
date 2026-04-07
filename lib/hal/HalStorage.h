@@ -3,6 +3,7 @@
 #include <Print.h>
 #include <common/FsApiConstants.h>  // for oflag_t
 #include <freertos/semphr.h>
+#include <freertos/task.h>
 
 #include <memory>
 #include <string>
@@ -40,20 +41,53 @@ class HalStorage {
   bool openFileForRead(const char* moduleName, const char* path, HalFile& file);
   bool openFileForRead(const char* moduleName, const std::string& path, HalFile& file);
   bool openFileForRead(const char* moduleName, const String& path, HalFile& file);
-  bool openFileForWrite(const char* moduleName, const char* path, HalFile& file);
-  bool openFileForWrite(const char* moduleName, const std::string& path, HalFile& file);
-  bool openFileForWrite(const char* moduleName, const String& path, HalFile& file);
+  // silent=true skips the free-space cache notification on close (use for frequent
+  // small writes like progress saves that do not meaningfully change free space).
+  bool openFileForWrite(const char* moduleName, const char* path, HalFile& file, bool silent = false);
+  bool openFileForWrite(const char* moduleName, const std::string& path, HalFile& file, bool silent = false);
+  bool openFileForWrite(const char* moduleName, const String& path, HalFile& file, bool silent = false);
   bool removeDir(const char* path);
+
+  // Returns total SD card size in bytes (cached — fast, no SD access).
+  uint64_t sdTotalBytes() const;
+  // Returns used space in bytes (total minus free, both cached — fast).
+  // NOTE: quantised to 1 KiB increments — the internal cache stores kibibytes.
+  uint64_t sdUsedBytes() const;
+  // Returns free space in bytes (cached — fast, no SD access).
+  // NOTE: quantised to 1 KiB increments — the internal cache stores kibibytes.
+  uint64_t sdFreeBytes() const;
 
   static HalStorage& getInstance() { return instance; }
 
-  class StorageLock;  // private class, used internally
+  class StorageLock;     // private class, used internally
+  friend class HalFile;  // HalFile::close() calls notifySdFreeUpdate()
 
  private:
   static HalStorage instance;
 
   bool initialized = false;
   SemaphoreHandle_t storageMutex = nullptr;
+
+  // Free-space cache.
+  // sdTotalBytesCache is refreshed by notifySdFreeUpdate/sdFreeUpdateTask so that a
+  // card swap at runtime updates the displayed capacity.  It is always written under
+  // storageMutex and read lock-free; on single-core RISC-V two-word writes are never
+  // split by a context switch, so no torn reads occur in practice.
+  // sdFreeKiB stores free space in 1 KiB units (cardFreeBytes / 1024), giving ~1 KiB
+  // quantisation while keeping the field a uint32_t (atomic on 32-bit RISC-V, no mutex needed).
+  // Supports SD cards up to ~4 TB (2^32 * 1024).
+  // Both caches are set to 0 when the card is not ready (removed/unmounted).
+  uint64_t sdTotalBytesCache = 0;
+  volatile uint32_t sdFreeKiB = 0;
+
+  // Background task: blocks until notified, then waits for a 5-second quiet window
+  // (debounce) before walking the FAT to refresh sdFreeMB. This ensures that even a
+  // large batch of uploads or deletes triggers exactly one FAT walk, at the end.
+  static void sdFreeUpdateTask(void* param);
+  TaskHandle_t sdFreeUpdateTaskHandle = nullptr;
+
+  // Wake the background task. Safe to call from any task; no-op if the task was not started.
+  void notifySdFreeUpdate();
 };
 
 #define Storage HalStorage::getInstance()
@@ -62,13 +96,21 @@ class HalFile : public Print {
   friend class HalStorage;
   class Impl;
   std::unique_ptr<Impl> impl;
+  // Set by HalStorage::openFileForWrite; cleared after notifying sdFreeUpdateTask in close().
+  // Prevents read-only file closes from triggering unnecessary FAT walks.
+  bool openedForWrite = false;
   explicit HalFile(std::unique_ptr<Impl> impl);
+  // Close the underlying file and notify the free-space cache if this instance
+  // was opened for writing. Idempotent; safe to call when impl is null or file
+  // is already closed. Used by operator= and ~HalFile to preserve notify
+  // semantics without duplicating the logic.
+  void release() noexcept;
 
  public:
   HalFile();
   ~HalFile();
-  HalFile(HalFile&&);
-  HalFile& operator=(HalFile&&);
+  HalFile(HalFile&&) noexcept;
+  HalFile& operator=(HalFile&&) noexcept;
   HalFile(const HalFile&) = delete;
   HalFile& operator=(const HalFile&) = delete;
 

@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "SettingsList.h"
+#include "SystemStatus.h"
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -340,16 +341,36 @@ void CrossPointWebServer::handleNotFound() const {
 }
 
 void CrossPointWebServer::handleStatus() const {
-  // Get correct IP based on AP vs STA mode
-  const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  const bool fastOnly = server->hasArg("phase") && server->arg("phase") == "fast";
+
+  SystemStatus status = SystemStatus::collectFast();
+  if (!fastOnly) {
+    SystemStatus::fillSdStatus(status);
+  }
 
   JsonDocument doc;
-  doc["version"] = CROSSPOINT_VERSION;
-  doc["ip"] = ipAddr;
-  doc["mode"] = apMode ? "AP" : "STA";
-  doc["rssi"] = apMode ? 0 : WiFi.RSSI();
-  doc["freeHeap"] = ESP.getFreeHeap();
-  doc["uptime"] = millis() / 1000;
+  doc["version"] = status.version;
+  doc["chipVersion"] = status.chipVersion;
+  doc["cpuMHz"] = status.cpuFreqMHz;
+  doc["ip"] = status.ip;
+  doc["mode"] = status.wifiMode;
+  doc["ssid"] = status.ssid;
+  doc["rssi"] = status.rssi;
+  doc["macAddress"] = status.macAddress;
+  doc["heapSize"] = status.heapSizeBytes;
+  doc["freeHeap"] = status.freeHeapBytes;
+  doc["minFreeHeap"] = status.minFreeHeapBytes;
+  doc["maxAllocHeap"] = status.maxAllocHeapBytes;
+  doc["flashTotal"] = status.flashBytes;
+  doc["sketchBytes"] = status.sketchBytes;
+  doc["sketchPartitionBytes"] = status.sketchPartitionBytes;
+  doc["batteryPercent"] = status.batteryPercent;
+  doc["charging"] = status.charging;
+  doc["uptime"] = status.uptimeSeconds;
+  doc["sdReady"] = !fastOnly;
+  doc["sdTotal"] = status.sdTotalBytes;
+  doc["sdUsed"] = status.sdUsedBytes;
+  doc["sdFree"] = status.sdFreeBytes;
 
   String json;
   serializeJson(doc, json);
