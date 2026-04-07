@@ -153,5 +153,11 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  if (!firstRenderDone) {
+    // First render: thorough clearing to remove ghosting from reader page
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    firstRenderDone = true;
+  } else {
+    renderer.displayBuffer();
+  }
 }
