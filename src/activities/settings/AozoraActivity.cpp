@@ -199,6 +199,9 @@ static bool fetchApiJson(const char* url, JsonDocument& doc) {
 }
 
 bool AozoraActivity::fetchAuthors(const char* kanaPrefix) {
+  // 検索キーを保存（再取得用）
+  snprintf(lastAuthorsKanaPrefix_, sizeof(lastAuthorsKanaPrefix_), "%s", kanaPrefix);
+
   // 不要なバッファを解放してヒープ確保
   works_.clear();
   works_.shrink_to_fit();
@@ -561,6 +564,24 @@ void AozoraActivity::loop() {
       requestUpdate();
     }
   } else if (state_ == AUTHOR_LIST) {
+    // 作品一覧でメモリ解放された場合、作家一覧を再取得
+    if (authors_.empty() && lastAuthorsKanaPrefix_[0]) {
+      {
+        RenderLock lock(*this);
+        state_ = LOADING;
+      }
+      requestUpdateAndWait();
+      if (fetchAuthors(lastAuthorsKanaPrefix_)) {
+        RenderLock lock(*this);
+        state_ = AUTHOR_LIST;
+      } else {
+        RenderLock lock(*this);
+        state_ = ERROR;
+      }
+      requestUpdate();
+      return;
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       {
         RenderLock lock(*this);

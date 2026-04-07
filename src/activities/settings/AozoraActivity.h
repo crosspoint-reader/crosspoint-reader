@@ -76,6 +76,9 @@ class AozoraActivity : public Activity {
   // Selected kana row index (for KANA_CHAR_SELECT)
   int selectedKanaRowIndex_ = 0;
 
+  // 最後に使った作家検索の50音行（再取得用）
+  char lastAuthorsKanaPrefix_[8] = {};
+
   // Selected item info (carried across states)
   int selectedAuthorId_ = 0;
   char selectedAuthorName_[48] = {};
