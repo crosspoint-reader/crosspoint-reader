@@ -108,8 +108,27 @@ void FileBrowserActivity::loadFiles() {
 void FileBrowserActivity::onEnter() {
   Activity::onEnter();
 
-  loadFiles();
   selectorIndex = 0;
+  
+  auto root = Storage.open(basepath.c_str());
+  if (!root) {
+    basepath = "/";
+  } else if (!root.isDirectory()){
+    root.close();
+
+    const std::string oldPath = basepath;
+
+    basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+    if (basepath.empty()) basepath = "/";
+    loadFiles();
+
+    const auto pos = oldPath.find_last_of('/');
+    const std::string dirName = oldPath.substr(pos + 1);
+    selectorIndex = findEntry(dirName);
+  } else {
+    root.close();
+    loadFiles();
+  }
 
   requestUpdate();
 }
