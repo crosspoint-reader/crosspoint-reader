@@ -247,14 +247,17 @@ void HomeActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
-
   if (!firstRenderDone) {
+    // First render: thorough clearing to remove ghosting from previous activity
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     firstRenderDone = true;
     requestUpdate();
-  } else if (!recentsLoaded && !recentsLoading) {
-    recentsLoading = true;
-    loadRecentCovers(metrics.homeCoverHeight);
+  } else {
+    renderer.displayBuffer();
+    if (!recentsLoaded && !recentsLoading) {
+      recentsLoading = true;
+      loadRecentCovers(metrics.homeCoverHeight);
+    }
   }
 }
 
