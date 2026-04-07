@@ -71,10 +71,34 @@ class KOReaderSyncClient {
   static Error updateProgress(const KOReaderProgress& progress);
 
   /**
-   * Get human-readable error message.
+   * Get human-readable error message (short, for status line).
    */
   static const char* errorString(Error error);
 
+  /**
+   * Get a detailed diagnostic string for the last failure, combining the error
+   * category, the underlying esp_err_t (when applicable), the HTTP status code,
+   * and the free heap at the time of failure. Intended for the SYNC_FAILED screen
+   * so users and bug-reporters can tell network/TLS/server failures apart.
+   * Returns a stable c-string valid until the next request.
+   */
+  static const char* lastFailureDetail();
+
   /** HTTP status code from the last request (for diagnostics). */
   static int lastHttpCode;
+  /** Last esp_err_t from esp_http_client_perform (ESP_OK if request reached the server). */
+  static int lastEspError;
+  /** Free heap (bytes) captured at the start of the last failing request. */
+  static unsigned lastHeapAtFailure;
+  /** Largest contiguous free block (bytes) at the start of the last failing request. */
+  static unsigned lastContigHeapAtFailure;
+  /** Operation tag set at the start of each request, surfaced in lastFailureDetail. */
+  static const char* lastOperation;
+
+  /**
+   * Minimum largest-contiguous-free heap block (bytes) required before attempting
+   * a request. Below this, the client refuses with NETWORK_ERROR and lastFailureDetail
+   * reports a heap-pressure message instead of attempting (and crashing) the TLS handshake.
+   */
+  static constexpr unsigned MIN_CONTIG_HEAP_FOR_TLS = 32 * 1024;
 };

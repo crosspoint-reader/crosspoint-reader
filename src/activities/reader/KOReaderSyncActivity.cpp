@@ -87,7 +87,14 @@ void KOReaderSyncActivity::performSync() {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
+      // Combine the short category label with the rich diagnostic so users (and bug
+      // reports) can tell network/TLS/server/heap failures apart at a glance.
       statusMessage = KOReaderSyncClient::errorString(result);
+      const char* detail = KOReaderSyncClient::lastFailureDetail();
+      if (detail && detail[0]) {
+        statusMessage += " — ";
+        statusMessage += detail;
+      }
     }
     requestUpdate(true);
     return;
@@ -154,7 +161,14 @@ void KOReaderSyncActivity::performUpload() {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
+      // Combine the short category label with the rich diagnostic so users (and bug
+      // reports) can tell network/TLS/server/heap failures apart at a glance.
       statusMessage = KOReaderSyncClient::errorString(result);
+      const char* detail = KOReaderSyncClient::lastFailureDetail();
+      if (detail && detail[0]) {
+        statusMessage += " — ";
+        statusMessage += detail;
+      }
     }
     requestUpdate();
     return;
