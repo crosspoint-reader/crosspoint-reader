@@ -1,1 +1,2 @@
 freetype-py==2.5.1
+fonttools==4.62.1

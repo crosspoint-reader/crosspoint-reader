@@ -81,19 +81,55 @@ ruby -rdigest -e 'puts [
 ))"
 
 echo "#define UI_10_FONT_ID ($(ruby -rdigest -e 'puts [
-  "./notosans_10_regular.h",
-  "./notosans_10_bold.h",
+  "./inter_10_regular.h",
+  "./inter_10_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define UI_12_FONT_ID ($(ruby -rdigest -e 'puts [
-  "./notosans_12_regular.h",
-  "./notosans_12_bold.h",
+  "./inter_12_regular.h",
+  "./inter_12_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define SMALL_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notosans_8_regular.h",
+  "./inter_8_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define INTER_8_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./inter_8_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define INTER_10_FONT_ID ($(ruby -rdigest -e 'puts [
+  "./inter_10_regular.h",
+  "./inter_10_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define INTER_12_FONT_ID ($(ruby -rdigest -e 'puts [
+  "./inter_12_regular.h",
+  "./inter_12_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define INTER_14_FONT_ID ($(ruby -rdigest -e 'puts [
+  "./inter_14_regular.h",
+  "./inter_14_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define INTER_16_FONT_ID ($(ruby -rdigest -e 'puts [
+  "./inter_16_regular.h",
+  "./inter_16_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define INTER_18_FONT_ID ($(ruby -rdigest -e 'puts [
+  "./inter_18_regular.h",
+  "./inter_18_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"

@@ -85,17 +85,40 @@ EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
 EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
                                    &notosans18BoldItalicFont);
 
+EpdFont inter8RegularFont(&inter_8_regular);
+EpdFontFamily inter8FontFamily(&inter8RegularFont);
+
+EpdFont inter10RegularFont(&inter_10_regular);
+EpdFont inter10BoldFont(&inter_10_bold);
+EpdFontFamily inter10FontFamily(&inter10RegularFont, &inter10BoldFont);
+
+EpdFont inter12RegularFont(&inter_12_regular);
+EpdFont inter12BoldFont(&inter_12_bold);
+EpdFontFamily inter12FontFamily(&inter12RegularFont, &inter12BoldFont);
+
+EpdFont inter14RegularFont(&inter_14_regular);
+EpdFont inter14BoldFont(&inter_14_bold);
+EpdFontFamily inter14FontFamily(&inter14RegularFont, &inter14BoldFont);
+
+EpdFont inter16RegularFont(&inter_16_regular);
+EpdFont inter16BoldFont(&inter_16_bold);
+EpdFontFamily inter16FontFamily(&inter16RegularFont, &inter16BoldFont);
+
+EpdFont inter18RegularFont(&inter_18_regular);
+EpdFont inter18BoldFont(&inter_18_bold);
+EpdFontFamily inter18FontFamily(&inter18RegularFont, &inter18BoldFont);
+
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&notosans_8_regular);
+EpdFont smallFont(&inter_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
-EpdFont ui10RegularFont(&notosans_10_regular);
-EpdFont ui10BoldFont(&notosans_10_bold);
+EpdFont ui10RegularFont(&inter_10_regular);
+EpdFont ui10BoldFont(&inter_10_bold);
 EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(&notosans_12_regular);
-EpdFont ui12BoldFont(&notosans_12_bold);
+EpdFont ui12RegularFont(&inter_12_regular);
+EpdFont ui12BoldFont(&inter_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
 // measurement of power button press duration calibration value
@@ -189,6 +212,11 @@ void setupDisplayAndFonts() {
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
+
+  renderer.insertFont(INTER_12_FONT_ID, inter12FontFamily);
+  renderer.insertFont(INTER_14_FONT_ID, inter14FontFamily);
+  renderer.insertFont(INTER_16_FONT_ID, inter16FontFamily);
+  renderer.insertFont(INTER_18_FONT_ID, inter18FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);

@@ -310,5 +310,17 @@ int CrossPointSettings::getReaderFontId() const {
         case EXTRA_LARGE:
           return NOTOSANS_18_FONT_ID;
       }
+    case INTER:
+      switch (fontSize) {
+        case SMALL:
+          return INTER_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return INTER_14_FONT_ID;
+        case LARGE:
+          return INTER_16_FONT_ID;
+        case EXTRA_LARGE:
+          return INTER_18_FONT_ID;
+      }
   }
 }

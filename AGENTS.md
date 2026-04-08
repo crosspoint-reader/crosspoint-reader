@@ -703,6 +703,25 @@ renderer.drawText(FONT_UI, x, y, tr(STR_LOADING), true);
 
 ---
 
+## Font Integration Default Pipeline
+
+When a task involves adding/changing fonts, agents MUST treat this as the default workflow and follow:
+- `docs/font-integration-pipeline.md`
+
+### Required defaults for font tasks
+
+1. **Pipeline-first rule**: Do not invent an ad-hoc flow. Execute steps in `docs/font-integration-pipeline.md` unless the user explicitly asks for an exception.
+2. **I18n completeness rule for new font labels**: New font string keys (for example `STR_INTER`) must be added to **all** files in `lib/I18n/translations/*.yaml`, not just English.
+3. **Translation verification rule**: Before finishing, run:
+   ```bash
+   rg --files-without-match '^STR_<FONT_NAME>:' lib/I18n/translations/*.yaml
+   ```
+   This command must return no files.
+4. **Runtime wiring rule**: Ensure font families are both declared and inserted into the renderer font map in `src/main.cpp`.
+5. **ID coherence rule**: Regenerate `src/fontIds.h` from `lib/EpdFont/scripts/build-font-ids.sh` after any font header change.
+
+---
+
 ## Local Development Configuration
 
 ### platformio.local.ini (Personal Overrides)
