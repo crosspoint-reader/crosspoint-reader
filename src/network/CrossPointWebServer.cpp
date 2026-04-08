@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FontManager.h>
+#include <GfxRenderer.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -23,8 +24,11 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/SleepPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+
+extern GfxRenderer renderer;
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -279,6 +283,12 @@ void CrossPointWebServer::begin() {
   server->on("/api/fonts/uploaded", HTTP_GET, [this] { handleFontUploaded(); });
   server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
 
+  // Sleep image management endpoints
+  server->on("/sleep", HTTP_GET, [this] { handleSleepPage(); });
+  server->on("/api/sleep/images", HTTP_GET, [this] { handleSleepImageList(); });
+  server->on("/api/sleep/thumbnail", HTTP_GET, [this] { handleSleepThumbnail(); });
+  server->on("/api/sleep/delete", HTTP_POST, [this] { handleSleepDelete(); });
+
   // WiFi credential management endpoints (CJK)
   server->on("/api/wifi/scan", HTTP_GET, [this] { handleWifiScan(); });
   server->on("/api/wifi/save", HTTP_POST, [this] { handleWifiSave(); });
@@ -475,6 +485,8 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+  doc["screenWidth"] = renderer.getScreenWidth();
+  doc["screenHeight"] = renderer.getScreenHeight();
 
   String json;
   serializeJson(doc, json);
@@ -1784,6 +1796,108 @@ void CrossPointWebServer::handleFontDelete() {
   } else {
     server->send(500, "application/json", "{\"error\":\"Delete failed\"}");
     LOG_ERR("WEB", "Failed to delete font family: %s", familyName);
+  }
+}
+
+// --- Sleep image management handlers ---
+
+void CrossPointWebServer::handleSleepPage() const {
+  sendHtmlContent(server.get(), SleepPageHtml, sizeof(SleepPageHtml));
+  LOG_DBG("WEB", "Served sleep page");
+}
+
+void CrossPointWebServer::handleSleepImageList() const {
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+
+  FsFile dir = Storage.open("/sleep");
+  if (dir && dir.isDirectory()) {
+    char name[256];
+    FsFile file = dir.openNextFile();
+    while (file) {
+      if (!file.isDirectory()) {
+        file.getName(name, sizeof(name));
+        if (name[0] != '.' && endsWithIgnoreCase(name, ".bmp")) {
+          JsonObject obj = arr.add<JsonObject>();
+          obj["name"] = name;
+          obj["size"] = file.size();
+        }
+      }
+      file.close();
+      yield();
+      esp_task_wdt_reset();
+      file = dir.openNextFile();
+    }
+    dir.close();
+  }
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleSleepThumbnail() const {
+  String filename = server->arg("file");
+  if (filename.isEmpty()) {
+    server->send(400, "text/plain", "Missing file parameter");
+    return;
+  }
+
+  // Sanitize: no path traversal, only allow simple filenames
+  if (filename.indexOf("..") >= 0 || filename.indexOf('/') >= 0 || filename.indexOf('\\') >= 0) {
+    server->send(400, "text/plain", "Invalid filename");
+    return;
+  }
+
+  String path = "/sleep/" + filename;
+  FsFile file;
+  if (!Storage.openFileForRead("WEB", path, file)) {
+    server->send(404, "text/plain", "File not found");
+    return;
+  }
+
+  const size_t fileSize = file.size();
+  server->setContentLength(fileSize);
+  server->send(200, "image/bmp", "");
+
+  // Stream file in chunks to avoid large RAM allocation
+  uint8_t buf[512];
+  while (file.available()) {
+    const size_t bytesRead = file.read(buf, sizeof(buf));
+    if (bytesRead == 0) break;
+    server->client().write(buf, bytesRead);
+    esp_task_wdt_reset();
+  }
+  file.close();
+}
+
+void CrossPointWebServer::handleSleepDelete() {
+  String body = server->arg("plain");
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, body);
+
+  if (err || !doc["file"].is<const char*>()) {
+    server->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+    return;
+  }
+
+  const char* filename = doc["file"];
+
+  // Sanitize: no path traversal
+  if (strstr(filename, "..") || strchr(filename, '/') || strchr(filename, '\\')) {
+    server->send(400, "application/json", "{\"error\":\"Invalid filename\"}");
+    return;
+  }
+
+  char path[280];
+  snprintf(path, sizeof(path), "/sleep/%s", filename);
+
+  if (Storage.exists(path)) {
+    Storage.remove(path);
+    server->send(200, "application/json", "{\"ok\":true}");
+    LOG_DBG("WEB", "Deleted sleep image: %s", path);
+  } else {
+    server->send(404, "application/json", "{\"error\":\"File not found\"}");
   }
 }
 

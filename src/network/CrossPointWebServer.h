@@ -115,6 +115,12 @@ class CrossPointWebServer {
   void handleFontUploaded();
   void handleFontDelete();
 
+  // Sleep image management handlers
+  void handleSleepPage() const;
+  void handleSleepImageList() const;
+  void handleSleepThumbnail() const;
+  void handleSleepDelete();
+
   // WiFi credential management (CJK)
   void handleWifiScan() const;
   void handleWifiSave() const;

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>CrossPoint Reader - Sleep Screen</title>
+    <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+        --danger-color: #e74c3c;
+        --danger-hover: #c0392b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          color-scheme: dark;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: var(--bg);
+        color: var(--font-color);
+      }
+      h1 { color: var(--title-color); border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; }
+      h2 { color: var(--title-color); margin-top: 0; }
+      .card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .nav-links a.active { background-color: var(--accent-color); color: white; }
+      .nav-links a:not(.active):hover { background-color: var(--accent-hover-color); color: white; }
+      .empty { color: var(--label-color); text-align: center; padding: 20px; }
+
+      /* Upload area */
+      .upload-area {
+        border: 2px dashed var(--border-color);
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.2s;
+      }
+      .upload-area:hover { border-color: var(--accent-color); }
+      .upload-area .icon { font-size: 40px; margin-bottom: 8px; }
+      .upload-area .hint { font-size: 12px; color: var(--label-color); margin-top: 6px; }
+
+      /* Editor */
+      #editor { display: none; }
+      #editor.active { display: block; }
+      #listView.hidden { display: none; }
+
+      .editor-dark {
+        background: #1a1a1a;
+        color: #fff;
+        border-radius: 8px;
+        padding: 16px;
+        max-width: 520px;
+        margin: 0 auto;
+      }
+      .crop-container {
+        position: relative;
+        margin-bottom: 12px;
+        overflow: hidden;
+        border: 1px solid #444;
+        border-radius: 4px;
+        touch-action: none;
+      }
+      .crop-container canvas { display: block; width: 100%; }
+      .grid-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-rows: 1fr 1fr 1fr;
+      }
+      .grid-overlay div { border: 0.5px solid rgba(255,255,255,0.2); }
+      .resolution-hint { text-align: center; font-size: 11px; color: #888; margin-top: 4px; }
+
+      .slider-group { margin-bottom: 14px; }
+      .slider-label { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; margin-bottom: 4px; }
+      .slider-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      input[type=range] { width: 100%; accent-color: var(--accent-color); }
+
+      .editor-actions { display: flex; gap: 12px; }
+      .editor-actions button {
+        flex: 1;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .btn-cancel { background: #333; color: #fff; border: 1px solid #555 !important; }
+      .btn-upload { background: var(--accent-color); color: #fff; font-weight: bold; }
+      .btn-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      /* Progress */
+      .progress-bar { height: 6px; background: #333; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+      .progress-fill { height: 100%; background: var(--accent-color); border-radius: 3px; transition: width 0.1s; width: 0%; }
+      #uploadStatus { font-size: 12px; color: #aaa; margin-top: 6px; text-align: center; }
+
+      @media (max-width: 600px) {
+        .nav-links a { padding: 8px 12px; font-size: 0.9em; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📚 CrossPoint Reader</h1>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/files">File Manager</a>
+      <a href="/settings">Settings</a>
+      <a href="/fonts">Fonts</a>
+      <a href="/sleep" class="active">Sleep</a>
+    </div>
+
+    <!-- List View -->
+    <div id="listView">
+      <div class="card">
+        <h2>Upload Sleep Image</h2>
+        <div class="upload-area" id="uploadArea">
+          <div class="icon">📷</div>
+          <div>Tap to select an image</div>
+          <div class="hint">JPEG, PNG supported</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" />
+      </div>
+    </div>
+
+    <!-- Editor View -->
+    <div id="editor">
+      <div class="editor-dark">
+        <div class="crop-container" id="cropContainer">
+          <canvas id="cropCanvas"></canvas>
+          <div class="grid-overlay">
+            <div></div><div></div><div></div>
+            <div></div><div></div><div></div>
+            <div></div><div></div><div></div>
+          </div>
+        </div>
+        <div class="resolution-hint" id="resHint"></div>
+
+        <div class="slider-group">
+          <div class="slider-label"><span>Zoom</span><span id="zoomVal">1.0x</span></div>
+          <input type="range" id="zoomSlider" min="100" max="500" value="100" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-group">
+            <div class="slider-label"><span>Brightness</span><span id="brightVal">0</span></div>
+            <input type="range" id="brightSlider" min="-100" max="100" value="0" />
+          </div>
+          <div class="slider-group">
+            <div class="slider-label"><span>Contrast</span><span id="contrastVal">0</span></div>
+            <input type="range" id="contrastSlider" min="-100" max="100" value="0" />
+          </div>
+        </div>
+
+        <div class="progress-bar" id="progressBar" style="display:none"><div class="progress-fill" id="progressFill"></div></div>
+        <div id="uploadStatus"></div>
+
+        <div class="editor-actions">
+          <button class="btn-cancel" id="btnCancel">Cancel</button>
+          <button class="btn-upload" id="btnUpload">Upload</button>
+        </div>
+      </div>
+    </div>
+
+  <script>
+    // --- State ---
+    let screenW = 800, screenH = 480;
+    let sourceImg = null;
+    let cropState = { x: 0, y: 0, scale: 1 };
+
+    // --- Init ---
+    async function init() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (data.screenWidth) screenW = data.screenWidth;
+        if (data.screenHeight) screenH = data.screenHeight;
+      } catch (e) {}
+      document.getElementById('resHint').textContent = screenW + ' \u00d7 ' + screenH + ' px';
+    }
+
+    // --- File Selection ---
+    document.getElementById('uploadArea').addEventListener('click', () => document.getElementById('fileInput').click());
+    document.getElementById('fileInput').addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          sourceImg = img;
+          openEditor();
+        };
+        img.onerror = function() { alert('Failed to load image'); };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+      this.value = '';
+    });
+
+    // --- Editor ---
+    function openEditor() {
+      document.getElementById('listView').classList.add('hidden');
+      document.getElementById('editor').classList.add('active');
+      document.getElementById('zoomSlider').value = 100;
+      document.getElementById('brightSlider').value = 0;
+      document.getElementById('contrastSlider').value = 0;
+      document.getElementById('zoomVal').textContent = '1.0x';
+      document.getElementById('brightVal').textContent = '0';
+      document.getElementById('contrastVal').textContent = '0';
+      document.getElementById('uploadStatus').textContent = '';
+      document.getElementById('progressBar').style.display = 'none';
+      document.getElementById('btnUpload').disabled = false;
+
+      const scaleX = screenW / sourceImg.width;
+      const scaleY = screenH / sourceImg.height;
+      const fitScale = Math.max(scaleX, scaleY);
+      cropState = {
+        x: (screenW - sourceImg.width * fitScale) / 2,
+        y: (screenH - sourceImg.height * fitScale) / 2,
+        scale: fitScale
+      };
+      document.getElementById('zoomSlider').min = Math.floor(fitScale * 100);
+      document.getElementById('zoomSlider').max = Math.floor(fitScale * 500);
+      document.getElementById('zoomSlider').value = Math.floor(fitScale * 100);
+
+      initCropCanvas();
+      drawCrop();
+    }
+
+    function closeEditor() {
+      document.getElementById('editor').classList.remove('active');
+      document.getElementById('listView').classList.remove('hidden');
+      sourceImg = null;
+    }
+
+    document.getElementById('btnCancel').addEventListener('click', closeEditor);
+
+    // --- Crop Canvas ---
+    function initCropCanvas() {
+      const canvas = document.getElementById('cropCanvas');
+      canvas.width = screenW;
+      canvas.height = screenH;
+
+      const container = document.getElementById('cropContainer');
+      let dragging = false, lastX = 0, lastY = 0;
+      let pinching = false, lastDist = 0, lastMidX = 0, lastMidY = 0;
+
+      function getCanvasScale() {
+        return canvas.width / container.getBoundingClientRect().width;
+      }
+
+      container.addEventListener('mousedown', e => {
+        dragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const s = getCanvasScale();
+        cropState.x += (e.clientX - lastX) * s;
+        cropState.y += (e.clientY - lastY) * s;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        clampCrop();
+        drawCrop();
+      });
+      window.addEventListener('mouseup', () => { dragging = false; });
+
+      container.addEventListener('wheel', e => {
+        e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const s = getCanvasScale();
+        const mx = (e.clientX - rect.left) * s;
+        const my = (e.clientY - rect.top) * s;
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        zoomAt(mx, my, factor);
+      }, {passive: false});
+
+      container.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) {
+          dragging = true; pinching = false;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          dragging = false; pinching = true;
+          lastDist = touchDist(e.touches);
+          lastMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          lastMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        }
+        e.preventDefault();
+      }, {passive: false});
+
+      container.addEventListener('touchmove', e => {
+        const s = getCanvasScale();
+        if (dragging && e.touches.length === 1) {
+          cropState.x += (e.touches[0].clientX - lastX) * s;
+          cropState.y += (e.touches[0].clientY - lastY) * s;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          clampCrop();
+          drawCrop();
+        } else if (pinching && e.touches.length === 2) {
+          const dist = touchDist(e.touches);
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const rect = container.getBoundingClientRect();
+          const mx = (midX - rect.left) * s;
+          const my = (midY - rect.top) * s;
+          zoomAt(mx, my, dist / lastDist);
+          cropState.x += (midX - lastMidX) * s;
+          cropState.y += (midY - lastMidY) * s;
+          clampCrop();
+          lastDist = dist;
+          lastMidX = midX;
+          lastMidY = midY;
+        }
+        e.preventDefault();
+      }, {passive: false});
+
+      container.addEventListener('touchend', e => {
+        if (e.touches.length < 2) pinching = false;
+        if (e.touches.length < 1) dragging = false;
+      });
+    }
+
+    function touchDist(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function zoomAt(mx, my, factor) {
+      const minScale = parseFloat(document.getElementById('zoomSlider').min) / 100;
+      const maxScale = parseFloat(document.getElementById('zoomSlider').max) / 100;
+      const newScale = Math.max(minScale, Math.min(maxScale, cropState.scale * factor));
+      const ratio = newScale / cropState.scale;
+      cropState.x = mx - ratio * (mx - cropState.x);
+      cropState.y = my - ratio * (my - cropState.y);
+      cropState.scale = newScale;
+      clampCrop();
+      document.getElementById('zoomSlider').value = Math.round(cropState.scale * 100);
+      document.getElementById('zoomVal').textContent = cropState.scale.toFixed(1) + 'x';
+      drawCrop();
+    }
+
+    function clampCrop() {
+      const imgW = sourceImg.width * cropState.scale;
+      const imgH = sourceImg.height * cropState.scale;
+      if (imgW >= screenW) {
+        cropState.x = Math.min(0, Math.max(screenW - imgW, cropState.x));
+      } else {
+        cropState.x = (screenW - imgW) / 2;
+      }
+      if (imgH >= screenH) {
+        cropState.y = Math.min(0, Math.max(screenH - imgH, cropState.y));
+      } else {
+        cropState.y = (screenH - imgH) / 2;
+      }
+    }
+
+    function drawCrop() {
+      const canvas = document.getElementById('cropCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(sourceImg, cropState.x, cropState.y, sourceImg.width * cropState.scale, sourceImg.height * cropState.scale);
+    }
+
+    // --- Sliders ---
+    document.getElementById('zoomSlider').addEventListener('input', function() {
+      const newScale = this.value / 100;
+      const cx = screenW / 2, cy = screenH / 2;
+      const ratio = newScale / cropState.scale;
+      cropState.x = cx - ratio * (cx - cropState.x);
+      cropState.y = cy - ratio * (cy - cropState.y);
+      cropState.scale = newScale;
+      clampCrop();
+      document.getElementById('zoomVal').textContent = newScale.toFixed(1) + 'x';
+      drawCrop();
+    });
+
+    document.getElementById('brightSlider').addEventListener('input', function() {
+      document.getElementById('brightVal').textContent = this.value;
+      drawCrop();
+    });
+
+    document.getElementById('contrastSlider').addEventListener('input', function() {
+      document.getElementById('contrastVal').textContent = this.value;
+      drawCrop();
+    });
+
+    // --- 24-bit Grayscale BMP Generation ---
+    function generateGrayscaleBmp(w, h) {
+      // Render cropped image with brightness/contrast to offscreen canvas
+      const offscreen = document.createElement('canvas');
+      offscreen.width = w;
+      offscreen.height = h;
+      const ctx = offscreen.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(sourceImg, cropState.x, cropState.y, sourceImg.width * cropState.scale, sourceImg.height * cropState.scale);
+
+      const pixels = ctx.getImageData(0, 0, w, h).data;
+
+      const brightness = parseInt(document.getElementById('brightSlider').value);
+      const contrast = parseInt(document.getElementById('contrastSlider').value);
+
+      // Build brightness+contrast lookup table
+      const lut = new Uint8Array(256);
+      const cf = Math.round((259 * (contrast + 255) * 1024) / (255 * (259 - contrast)));
+      const bOff = Math.round(brightness * 2.55);
+      for (let i = 0; i < 256; i++) {
+        let v = ((cf * (i + bOff - 128)) >> 10) + 128;
+        lut[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+      }
+
+      // 24-bit BMP: bottom-up, rows padded to 4 bytes
+      const rowBytes = (w * 3 + 3) & ~3;
+      const pixelDataSize = rowBytes * h;
+      const headerSize = 14 + 40;
+      const fileSize = headerSize + pixelDataSize;
+      const buf = new ArrayBuffer(fileSize);
+      const view = new DataView(buf);
+      const bytes = new Uint8Array(buf);
+
+      // BMP File Header (14 bytes)
+      view.setUint8(0, 0x42); // 'B'
+      view.setUint8(1, 0x4D); // 'M'
+      view.setUint32(2, fileSize, true);
+      view.setUint32(6, 0, true);
+      view.setUint32(10, headerSize, true);
+
+      // DIB Header (40 bytes)
+      view.setUint32(14, 40, true);
+      view.setInt32(18, w, true);
+      view.setInt32(22, h, true);
+      view.setUint16(26, 1, true);
+      view.setUint16(28, 24, true);
+      view.setUint32(30, 0, true); // BI_RGB
+      view.setUint32(34, pixelDataSize, true);
+      view.setUint32(38, 2835, true);
+      view.setUint32(42, 2835, true);
+      view.setUint32(46, 0, true);
+      view.setUint32(50, 0, true);
+
+      // Pixel data: grayscale (R=G=B=lum), bottom-up
+      const total = w * h;
+      for (let y = 0; y < h; y++) {
+        const srcRow = (h - 1 - y) * w;
+        const dstRow = headerSize + y * rowBytes;
+        for (let x = 0; x < w; x++) {
+          const pi = (srcRow + x) << 2;
+          const g = (77 * pixels[pi] + 150 * pixels[pi + 1] + 29 * pixels[pi + 2]) >> 8;
+          const v = lut[g > 255 ? 255 : g];
+          const off = dstRow + x * 3;
+          bytes[off] = v;     // B
+          bytes[off + 1] = v; // G
+          bytes[off + 2] = v; // R
+        }
+      }
+
+      return new Uint8Array(buf);
+    }
+
+    // --- HTTP Upload ---
+    function getNextFilename() {
+      const d = new Date();
+      const ts = String(d.getFullYear()) +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        String(d.getDate()).padStart(2, '0') + '_' +
+        String(d.getHours()).padStart(2, '0') +
+        String(d.getMinutes()).padStart(2, '0') +
+        String(d.getSeconds()).padStart(2, '0');
+      return 'sleep_' + ts + '.bmp';
+    }
+
+    async function uploadBmp(bmpData, filename) {
+      const blob = new Blob([bmpData], { type: 'application/octet-stream' });
+      const file = new File([blob], filename);
+      const formData = new FormData();
+      formData.append('file', file, filename);
+
+      const xhr = new XMLHttpRequest();
+      return new Promise((resolve, reject) => {
+        xhr.open('POST', '/upload?path=/sleep');
+        xhr.upload.onprogress = function(e) {
+          if (e.lengthComputable) {
+            const pct = Math.round(e.loaded / e.total * 100);
+            document.getElementById('progressFill').style.width = pct + '%';
+            document.getElementById('uploadStatus').textContent = 'Uploading... ' + pct + '%';
+          }
+        };
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error('Upload failed: ' + xhr.status));
+        };
+        xhr.onerror = function() { reject(new Error('Network error')); };
+        xhr.ontimeout = function() { reject(new Error('Upload timeout')); };
+        xhr.timeout = 120000;
+        xhr.send(formData);
+      });
+    }
+
+    // --- Upload Button ---
+    document.getElementById('btnUpload').addEventListener('click', async function() {
+      this.disabled = true;
+      document.getElementById('progressBar').style.display = 'block';
+      document.getElementById('uploadStatus').textContent = 'Generating BMP...';
+
+      await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
+      try {
+        const bmpData = generateGrayscaleBmp(screenW, screenH);
+        const filename = getNextFilename();
+        document.getElementById('uploadStatus').textContent = 'Uploading...';
+        await uploadBmp(bmpData, filename);
+
+        document.getElementById('uploadStatus').textContent = 'Upload complete!';
+        setTimeout(() => { closeEditor(); }, 800);
+      } catch (err) {
+        document.getElementById('uploadStatus').textContent = 'Error: ' + err.message;
+        this.disabled = false;
+      }
+    });
+
+    init();
+  </script>
+  </body>
+</html>
