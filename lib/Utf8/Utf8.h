@@ -22,3 +22,16 @@ inline bool utf8IsCombiningMark(const uint32_t cp) {
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
 }
+
+// Returns true for any combining mark relevant to Vietnamese NFC composition,
+// including U+031B (COMBINING HORN) which sits outside the standard range above.
+inline bool utf8IsVietnameseCombining(const uint32_t cp) {
+  return utf8IsCombiningMark(cp) || cp == 0x031B;
+}
+
+// Apply lightweight NFC-like normalization for Vietnamese precomposed characters.
+// Converts NFD sequences (base vowel + combining marks) into NFC precomposed
+// codepoints from the U+1EA0-U+1EF9 range. Safe no-op for already-NFC text.
+// Handles both canonical NFD ordering and the "natural" order commonly produced
+// by macOS, Microsoft Word, and older Vietnamese publishing tools.
+std::string utf8NfcNorm(std::string s);
