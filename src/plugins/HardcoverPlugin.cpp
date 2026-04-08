@@ -154,9 +154,11 @@ void saveSyncState() {
 // ISBN extraction from EPUB path
 // ---------------------------------------------------------------------------
 
-/// Extract a simple ISBN-like identifier from the EPUB filename.
-/// For a proper implementation this would parse OPF metadata; for now
-/// we use the filename stem as the search query.
+/// Extract a search query from the EPUB path.
+/// TODO: Parse OPF metadata inside the EPUB to extract actual ISBN for more
+///       accurate Hardcover book matching.  Currently uses the filename stem
+///       (minus extension) as the search query, which works well for files
+///       named with titles but poorly for opaque filenames.
 void extractSearchQuery(const char* epubPath, char* outQuery, size_t maxLen) {
   // Find last '/' to get filename
   const char* filename = epubPath;
@@ -235,8 +237,12 @@ void syncTaskFunc(void* /*param*/) {
       case SyncCmd::PAGE_TURN: {
         if (currentUserBookId == 0) break;
 
-        // Simple progress estimate: page / (page + remaining)
-        // The chapter and page info from the hook is used
+        // The page value from onPageTurn is a sequential page number.
+        // Without total page count from book metadata we cannot compute
+        // an accurate percentage.  Send the raw page number as a
+        // progress_percentage clamped to [0,100].
+        // TODO: integrate with EPUB layout engine to get total page count
+        //       for accurate percentage calculation.
         lastProgressPercent = (msg.page > 0) ? static_cast<float>(msg.page) / 100.0f : 0.0f;
         if (lastProgressPercent > 1.0f) lastProgressPercent = 1.0f;
 

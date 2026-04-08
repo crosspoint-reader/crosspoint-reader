@@ -341,6 +341,7 @@ bool JsonSettingsIO::saveHardcover(const HardcoverCredentialStore& store, const 
   doc["token_obf"] = obfuscation::obfuscateToBase64(store.getToken());
 
   String json;
+  json.reserve(256);
   serializeJson(doc, json);
   return Storage.writeFile(path, json);
 }

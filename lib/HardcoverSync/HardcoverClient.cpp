@@ -5,6 +5,8 @@
 #include <Logging.h>
 #include <WiFiClientSecure.h>
 
+#include <memory>
+
 #include "HardcoverCredentialStore.h"
 
 namespace {
@@ -22,7 +24,7 @@ HardcoverClient::Error executeGraphQL(const char* body, JsonDocument& outDoc) {
   }
 
   HTTPClient http;
-  std::unique_ptr<WiFiClientSecure> secureClient(new WiFiClientSecure);
+  auto secureClient = std::make_unique<WiFiClientSecure>();
   if (!secureClient) {
     LOG_ERR(LOG_TAG, "Failed to allocate WiFiClientSecure");
     return HardcoverClient::NETWORK_ERROR;
@@ -64,10 +66,11 @@ HardcoverClient::Error executeGraphQL(const char* body, JsonDocument& outDoc) {
     return HardcoverClient::SERVER_ERROR;
   }
 
-  String responseBody = http.getString();
+  // Parse JSON directly from the HTTP stream to avoid an intermediate
+  // Arduino String allocation (per String Policy in SKILL.md).
+  const DeserializationError err = deserializeJson(outDoc, http.getStream());
   http.end();
 
-  const DeserializationError err = deserializeJson(outDoc, responseBody);
   if (err) {
     LOG_ERR(LOG_TAG, "JSON parse failed: %s", err.c_str());
     return HardcoverClient::JSON_ERROR;
@@ -92,8 +95,8 @@ HardcoverClient::Error HardcoverClient::authenticate() {
   Error err = executeGraphQL(QUERY, doc);
   if (err != OK) return err;
 
-  int userId = doc["data"]["me"][0]["id"] | 0;
-  const char* username = doc["data"]["me"][0]["username"] | "unknown";
+  int userId = doc["data"]["me"]["id"] | 0;
+  const char* username = doc["data"]["me"]["username"] | "unknown";
   if (userId == 0) {
     LOG_ERR(LOG_TAG, "Auth response missing user ID");
     return JSON_ERROR;
