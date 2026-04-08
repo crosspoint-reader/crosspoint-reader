@@ -49,6 +49,10 @@ static constexpr uint32_t SYNC_TASK_STACK = 4096;
 // Queue capacity (number of pending commands)
 static constexpr int QUEUE_SIZE = 8;
 
+// Maximum time (ms) to wait for the background sync task to acknowledge a
+// FLUSH command before entering deep sleep.
+static constexpr uint32_t FLUSH_TIMEOUT_MS = 3000;
+
 // Paths on SD card
 constexpr char STATE_DIR[] = "/.crosspoint/plugin_hardcover";
 constexpr char STATE_FILE[] = "/.crosspoint/plugin_hardcover/state.json";
@@ -70,7 +74,7 @@ struct SyncMessage {
   char path[128];              // EPUB path (BOOK_OPEN only)
   int chapter;                 // Current chapter
   int page;                    // Current page
-  SemaphoreHandle_t completionSem;  // FLUSH only: semaphore to signal completion (may be nullptr)
+  SemaphoreHandle_t completionSem;  // FLUSH only: semaphore to signal completion (nullptr if creation failed or unused)
 };
 
 // ---------------------------------------------------------------------------
@@ -285,7 +289,7 @@ void syncTaskFunc(void* /*param*/) {
       }
 
       case SyncCmd::FLUSH: {
-        if (currentUserBookId != 0 && lastProgressPercent >= 0.0f) {
+        if (currentUserBookId != 0 && lastProgressPercent != PROGRESS_UNKNOWN) {
           HardcoverClient::updateProgress(currentUserBookId, lastProgressPercent);
           saveSyncState();
         }
@@ -412,8 +416,8 @@ void hardcoverSleep() {
     return;
   }
 
-  // Block until the sync task signals completion (3 second timeout)
-  if (xSemaphoreTake(msg.completionSem, pdMS_TO_TICKS(3000)) != pdTRUE) {
+  // Block until the sync task signals completion (FLUSH_TIMEOUT_MS timeout)
+  if (xSemaphoreTake(msg.completionSem, pdMS_TO_TICKS(FLUSH_TIMEOUT_MS)) != pdTRUE) {
     LOG_ERR(LOG_TAG, "Timeout waiting for FLUSH completion — progress may be lost on sleep");
   }
   vSemaphoreDelete(msg.completionSem);

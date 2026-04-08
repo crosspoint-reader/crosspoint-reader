@@ -10,7 +10,9 @@ HardcoverCredentialStore HardcoverCredentialStore::instance;
 
 namespace {
 constexpr char HARDCOVER_FILE_JSON[] = "/.crosspoint/hardcover.json";
-constexpr size_t MAX_HARDCOVER_FILE_BYTES = 4096;  // Reject oversized / corrupt files
+constexpr size_t MAX_HARDCOVER_FILE_BYTES = 4096;  // A valid credentials JSON is ~200 bytes; 4 KB provides
+                                                    // ample margin while preventing heap exhaustion from
+                                                    // corrupt or attacker-controlled files.
 }  // namespace
 
 bool HardcoverCredentialStore::saveToFile() const {

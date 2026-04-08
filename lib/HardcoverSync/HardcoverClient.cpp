@@ -39,8 +39,10 @@ HardcoverClient::Error executeGraphQL(const char* body, JsonDocument& outDoc) {
     return HardcoverClient::NETWORK_ERROR;
   }
   // Use the built-in Mozilla CA certificate bundle for TLS verification.
-  // Requires the device clock to be synchronised (NTP) so certificate dates
-  // pass.  Uses the same esp_crt_bundle_attach extern as OtaUpdater.cpp.
+  // Note: the device clock must be synchronised (e.g. via NTP) for certificate
+  // date validation to succeed; clock-skew will cause a TLS handshake error
+  // that surfaces as NETWORK_ERROR to the caller.  Uses the same
+  // esp_crt_bundle_attach extern approach as OtaUpdater.cpp.
   secureClient->setCACertBundle(esp_crt_bundle_attach);
   http.begin(*secureClient, API_URL);
 
