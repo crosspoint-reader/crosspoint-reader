@@ -350,6 +350,7 @@ size_t pickSleepImageIndex(size_t numFiles) {
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+  RenderLock lock(*this);
   // For OVERLAY mode the popup is suppressed so the frame buffer (reader page) stays intact
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY) {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
