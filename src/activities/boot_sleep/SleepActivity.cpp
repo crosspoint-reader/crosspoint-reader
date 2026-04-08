@@ -674,14 +674,12 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOver
 
     std::string progressStr;
     if (!overlayInfo.chapterName.empty()) {
-      const std::string prefix = "";
-      const int prefixWidth = renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
       const int suffixWidth = renderer.getTextWidth(UI_10_FONT_ID, overlayInfo.progressSuffix.c_str());
-      const int maxChapterWidth = availableWidth - prefixWidth - suffixWidth;
+      const int maxChapterWidth = availableWidth - suffixWidth;
       const std::string truncatedChapter =
           maxChapterWidth > 0 ? renderer.truncatedText(UI_10_FONT_ID, overlayInfo.chapterName.c_str(), maxChapterWidth)
                               : "";
-      progressStr = prefix + truncatedChapter + overlayInfo.progressSuffix;
+      progressStr = truncatedChapter + overlayInfo.progressSuffix;
     } else {
       progressStr = renderer.truncatedText(UI_10_FONT_ID, overlayInfo.progressText.c_str(), availableWidth);
     }

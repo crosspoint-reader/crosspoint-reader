@@ -233,7 +233,7 @@ bool BmpViewerActivity::renderDecodedImage(const bool showControls) {
     if (!showControls) return;
     const char* modeLabel = grayscaleDisplay ? tr(STR_IMAGE_DISPLAY_BW) : tr(STR_IMAGE_DISPLAY_GRAYSCALE);
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-    const char* btn3Label = grayscaleDisplay ? I18N.get(getCurrentDitherModeLabel()) : modeLabel;
+    const char* btn3Label = grayscaleDisplay ? I18N.get(getCurrentDitherModeLabel()) : "";
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), modeLabel, btn3Label, tr(STR_SET_SLEEP_SCREEN));
 #else
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), modeLabel, "", tr(STR_SET_SLEEP_SCREEN));
