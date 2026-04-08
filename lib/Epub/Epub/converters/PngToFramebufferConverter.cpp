@@ -20,61 +20,37 @@ namespace {
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
 // The file I/O callbacks receive the FsFile* via pFile->fHandle (set by pngOpen()).
 struct PngContext {
-  GfxRenderer* renderer;
-  const RenderConfig* config;
-  int screenWidth;
-  int screenHeight;
+  GfxRenderer* renderer{nullptr};
+  const RenderConfig* config{nullptr};
+  int screenWidth{0};
+  int screenHeight{0};
 
   // Scaling state
-  float scale;
-  int srcWidth;
-  int srcHeight;
-  int dstWidth;
-  int dstHeight;
-  int lastDstY;  // Track last rendered destination Y to avoid duplicates
+  float scale{1.f};
+  int srcWidth{0};
+  int srcHeight{0};
+  int dstWidth{0};
+  int dstHeight{0};
+  int lastDstY{-1};  // Track last rendered destination Y to avoid duplicates
 
   PixelCache cache;
-  bool caching;
+  bool caching{false};
 
-  uint8_t* grayLineBuffer;
+  uint8_t* grayLineBuffer{nullptr};
 
   // When the caller requests monochrome output (RenderConfig::monochromeOutput),
   // we run a proper 1-bit Atkinson dither (matching PngToBmpConverter's BW path)
   // and emit only values 0 or 3, which round-trip cleanly through the BW writer's
   // `pixelValue < 3` rule. The 4-level dither path collapses mid-grays to solid
   // black under that rule.
-  int oneBitDitherRow;
-  Atkinson1BitDitherer* atkinson1BitDitherer;
+  int oneBitDitherRow{-1};
+  Atkinson1BitDitherer* atkinson1BitDitherer{nullptr};
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-  int currentDitherRow;
-  AtkinsonDitherer* atkinsonDitherer;
-  DiffusedBayerDitherer* diffusedBayerDitherer;
+  int currentDitherRow{-1};
+  AtkinsonDitherer* atkinsonDitherer{nullptr};
+  DiffusedBayerDitherer* diffusedBayerDitherer{nullptr};
 #endif
-
-  PngContext()
-      : renderer(nullptr),
-        config(nullptr),
-        screenWidth(0),
-        screenHeight(0),
-        scale(1.0f),
-        srcWidth(0),
-        srcHeight(0),
-        dstWidth(0),
-        dstHeight(0),
-        lastDstY(-1),
-        caching(false),
-        grayLineBuffer(nullptr),
-        oneBitDitherRow(-1),
-        atkinson1BitDitherer(nullptr)
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-        ,
-        currentDitherRow(-1),
-        atkinsonDitherer(nullptr),
-        diffusedBayerDitherer(nullptr)
-#endif
-  {
-  }
 
   ~PngContext() {
     delete atkinson1BitDitherer;

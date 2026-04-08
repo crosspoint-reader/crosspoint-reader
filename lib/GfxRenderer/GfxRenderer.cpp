@@ -799,11 +799,21 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      lastBaseX += fp4::toPixel(prevAdvanceFP);
+      prevCp = 0;
+      prevAdvanceFP = 0;
+      lastBaseLeft = 0;
+      lastBaseWidth = 0;
+      lastBaseTop = 0;
+      lastBaseAdvanceFP = 0;
+      continue;
+    }
 
-    lastBaseLeft = glyph ? glyph->left : 0;
-    lastBaseWidth = glyph ? glyph->width : 0;
-    lastBaseTop = glyph ? glyph->top : 0;
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    lastBaseLeft = glyph->left;
+    lastBaseWidth = glyph->width;
+    lastBaseTop = glyph->top;
+    lastBaseAdvanceFP = glyph->advanceX;
     prevAdvanceFP = lastBaseAdvanceFP;
 
     renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
@@ -1773,7 +1783,13 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
-    prevAdvanceFP = glyph ? glyph->advanceX : 0;
+    if (!glyph) {
+      widthPx += fp4::toPixel(prevAdvanceFP);
+      prevCp = 0;
+      prevAdvanceFP = 0;
+      continue;
+    }
+    prevAdvanceFP = glyph->advanceX;
     prevCp = cp;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
@@ -1855,11 +1871,21 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      lastBaseY -= fp4::toPixel(prevAdvanceFP);
+      prevCp = 0;
+      prevAdvanceFP = 0;
+      lastBaseLeft = 0;
+      lastBaseWidth = 0;
+      lastBaseTop = 0;
+      lastBaseAdvanceFP = 0;
+      continue;
+    }
 
-    lastBaseLeft = glyph ? glyph->left : 0;
-    lastBaseWidth = glyph ? glyph->width : 0;
-    lastBaseTop = glyph ? glyph->top : 0;
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    lastBaseLeft = glyph->left;
+    lastBaseWidth = glyph->width;
+    lastBaseTop = glyph->top;
+    lastBaseAdvanceFP = glyph->advanceX;
     prevAdvanceFP = lastBaseAdvanceFP;
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);

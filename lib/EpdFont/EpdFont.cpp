@@ -15,11 +15,12 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     return;
   }
 
-  int32_t cursorXFP = fp4::fromPixel(startX);  // 12.4 fixed-point accumulator
   int lastBaseX = startX;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
   int lastBaseTop = 0;
+  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
@@ -31,20 +32,22 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
+      lastBaseX += fp4::toPixel(prevAdvanceFP);  // flush pending advance before resetting
       prevCp = 0;
+      prevAdvanceFP = 0;
       continue;
     }
 
     const int raiseBy = isCombining ? combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop) : 0;
 
     if (!isCombining && prevCp != 0) {
-      cursorXFP += getKerning(prevCp, cp);  // 4.4 fixed-point kern
+      const auto kernFP = getKerning(prevCp, cp);  // 4.4 fixed-point kern
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
     }
 
-    const int cursorXPixels = fp4::toPixel(cursorXFP);  // snap 12.4 fixed-point to nearest pixel
     const int glyphBaseX =
         isCombining ? combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, glyph->left, glyph->width)
-                    : cursorXPixels;
+                    : lastBaseX;
     const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -53,11 +56,11 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     *maxY = std::max(*maxY, glyphBaseY + glyph->top);
 
     if (!isCombining) {
-      lastBaseX = cursorXPixels;
       lastBaseLeft = glyph->left;
       lastBaseWidth = glyph->width;
+      lastBaseAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
       lastBaseTop = glyph->top;
-      cursorXFP += glyph->advanceX;  // 12.4 fixed-point advance
+      prevAdvanceFP = lastBaseAdvanceFP;
       prevCp = cp;
     }
   }
