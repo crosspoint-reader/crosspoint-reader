@@ -49,9 +49,9 @@ bool parseSemver(const char* str, Semver& out) {
   return sscanf(str, "%d.%d.%d", &out.major, &out.minor, &out.patch) == 3;
 }
 
-/// Return true when `required` <= `current` (the plugin is compatible).
+/// Return true when `required` <= `current` within the same major version.
 bool semverSatisfied(const Semver& required, const Semver& current) {
-  if (current.major != required.major) return current.major > required.major;
+  if (current.major != required.major) return false;
   if (current.minor != required.minor) return current.minor > required.minor;
   return current.patch >= required.patch;
 }
