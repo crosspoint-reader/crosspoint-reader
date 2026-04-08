@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "HardcoverCredentialStore.h"
 #include "KOReaderCredentialStore.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
@@ -72,6 +73,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastSleepImage"] = s.lastSleepImage;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
+  doc["wasDeepSleepActive"] = s.wasDeepSleepActive;
 
   String json;
   serializeJson(doc, json);
@@ -90,6 +92,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastSleepImage = doc["lastSleepImage"] | (uint8_t)UINT8_MAX;
   s.readerActivityLoadCount = doc["readerActivityLoadCount"] | (uint8_t)0;
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
+  s.wasDeepSleepActive = doc["wasDeepSleepActive"] | false;
   return true;
 }
 
@@ -330,5 +333,39 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
   }
 
   LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
+  return true;
+}
+
+// ---- HardcoverCredentialStore ----
+
+bool JsonSettingsIO::saveHardcover(const HardcoverCredentialStore& store, const char* path) {
+  JsonDocument doc;
+  doc["token_obf"] = obfuscation::obfuscateToBase64(store.getToken());
+
+  String json;
+  json.reserve(256);
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore& store, const char* json, bool* needsResave) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("HCS", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  bool ok = false;
+  store.token = obfuscation::deobfuscateFromBase64(doc["token_obf"] | "", &ok);
+  if (!ok) {
+    // Fall back to plain text token (first-time or manual edit)
+    store.token = doc["token"] | std::string("");
+    if (needsResave) *needsResave = true;
+  } else {
+    if (needsResave) *needsResave = false;
+  }
+
+  LOG_DBG("HCS", "Loaded Hardcover token (length=%zu)", store.token.size());
   return true;
 }

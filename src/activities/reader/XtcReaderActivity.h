@@ -16,6 +16,7 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  bool bookOpened = false;  // Tracks whether dispatchBookOpen was called
 
   void renderPage();
   void saveProgress() const;

@@ -23,6 +23,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "plugin/PluginRegistry.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -86,12 +87,20 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  PluginRegistry::dispatchBookOpen(epub->getPath().c_str());
+  bookOpened = true;
+
   // Trigger first update
   requestUpdate();
 }
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -471,6 +480,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
         nextPageNumber = 0;
         currentSpineIndex++;
         section.reset();
+        pendingPageTurnDispatch = true;  // defer — section not loaded yet
       }
     }
   } else {
@@ -483,10 +493,16 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
         nextPageNumber = UINT16_MAX;
         currentSpineIndex--;
         section.reset();
+        pendingPageTurnDispatch = true;  // defer — section not loaded yet
       }
     }
   }
   lastPageTurnTime = millis();
+  // Only dispatch immediately for within-section page turns where section is valid.
+  // Chapter transitions are deferred to render() after the new section finishes loading.
+  if (!pendingPageTurnDispatch) {
+    PluginRegistry::dispatchPageTurn(currentSpineIndex, section ? section->currentPage : 0);
+  }
   requestUpdate();
 }
 
@@ -598,6 +614,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       section->currentPage = newPage;
       pendingPercentJump = false;
     }
+  }
+
+  // Emit a deferred page-turn dispatch now that the new section is loaded and
+  // section->currentPage is finalised (set for chapter transitions in pageTurn()).
+  if (pendingPageTurnDispatch) {
+    pendingPageTurnDispatch = false;
+    PluginRegistry::dispatchPageTurn(currentSpineIndex, section->currentPage);
   }
 
   renderer.clearScreen();
