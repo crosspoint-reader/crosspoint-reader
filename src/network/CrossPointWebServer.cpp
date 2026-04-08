@@ -46,11 +46,40 @@ unsigned long wsLastCompleteAt = 0;
 
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
-  // Only clear cache for .epub files
   if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
   }
+}
+
+// Recursively clear epub caches for all EPUBs inside a directory
+void clearEpubCachesInDirectory(const String& dirPath) {
+  esp_task_wdt_reset();
+  yield();
+  FsFile dir = Storage.open(dirPath.c_str());
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return;
+  }
+  char name[500];
+  FsFile entry = dir.openNextFile();
+  while (entry) {
+    esp_task_wdt_reset();
+    yield();
+    entry.getName(name, sizeof(name));
+    String childPath = dirPath;
+    if (!childPath.endsWith("/")) childPath += "/";
+    childPath += name;
+    if (entry.isDirectory()) {
+      entry.close();
+      clearEpubCachesInDirectory(childPath);
+    } else {
+      entry.close();
+      clearEpubCacheIfNeeded(childPath);
+    }
+    entry = dir.openNextFile();
+  }
+  dir.close();
 }
 
 String normalizeWebPath(const String& inputPath) {
@@ -849,11 +878,7 @@ void CrossPointWebServer::handleRename() const {
     server->send(500, "text/plain", "Failed to open file");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be renamed");
-    return;
-  }
+  const bool isDir = file.isDirectory();
 
   String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
   if (parentPath.isEmpty()) {
@@ -871,16 +896,20 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  clearEpubCacheIfNeeded(itemPath);
+  if (isDir) {
+    clearEpubCachesInDirectory(itemPath);
+  } else {
+    clearEpubCacheIfNeeded(itemPath);
+  }
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
-    LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    LOG_DBG("WEB", "Renamed: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
-    LOG_ERR("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
-    server->send(500, "text/plain", "Failed to rename file");
+    LOG_ERR("WEB", "Failed to rename: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to rename");
   }
 }
 
@@ -925,10 +954,18 @@ void CrossPointWebServer::handleMove() const {
     server->send(500, "text/plain", "Failed to open file");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be moved");
-    return;
+  const bool isDir = file.isDirectory();
+
+  if (isDir) {
+    String destWithSlash = destPath;
+    if (!destWithSlash.endsWith("/")) destWithSlash += "/";
+    String itemWithSlash = itemPath;
+    if (!itemWithSlash.endsWith("/")) itemWithSlash += "/";
+    if (destPath == itemPath || destWithSlash.startsWith(itemWithSlash)) {
+      file.close();
+      server->send(400, "text/plain", "Cannot move folder into itself");
+      return;
+    }
   }
 
   if (!Storage.exists(destPath.c_str())) {
@@ -964,16 +1001,20 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  clearEpubCacheIfNeeded(itemPath);
+  if (isDir) {
+    clearEpubCachesInDirectory(itemPath);
+  } else {
+    clearEpubCacheIfNeeded(itemPath);
+  }
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
-    LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    LOG_DBG("WEB", "Moved: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
-    LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
-    server->send(500, "text/plain", "Failed to move file");
+    LOG_ERR("WEB", "Failed to move: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to move");
   }
 }
 
