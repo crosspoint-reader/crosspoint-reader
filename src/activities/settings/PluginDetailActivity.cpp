@@ -86,11 +86,6 @@ void PluginDetailActivity::render(RenderLock&&) {
   renderer.drawText(UI_10_FONT_ID, leftPad, y, plugin->description);
   y += rowHeight;
 
-  // Plugin's own settings hook
-  if (enabled && compatible && plugin->onSettingsRender) {
-    plugin->onSettingsRender();
-  }
-
   // Button hints
   const char* confirmLabel = "";
   if (compatible) {

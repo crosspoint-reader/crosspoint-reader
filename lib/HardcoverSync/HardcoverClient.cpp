@@ -29,12 +29,19 @@ HardcoverClient::Error executeGraphQL(const char* body, JsonDocument& outDoc) {
     LOG_ERR(LOG_TAG, "Failed to allocate WiFiClientSecure");
     return HardcoverClient::NETWORK_ERROR;
   }
+  // TODO: Replace with esp_crt_bundle_attach (see OtaUpdater.cpp pattern) once
+  // WiFiClientSecure supports it, to enable proper TLS certificate verification.
   secureClient->setInsecure();
   http.begin(*secureClient, API_URL);
 
   // Auth and content headers
   char authHeader[256];
-  snprintf(authHeader, sizeof(authHeader), "Bearer %s", HARDCOVER_STORE.getToken().c_str());
+  const int authWritten =
+      snprintf(authHeader, sizeof(authHeader), "Bearer %s", HARDCOVER_STORE.getToken().c_str());
+  if (authWritten < 0 || authWritten >= (int)sizeof(authHeader)) {
+    LOG_ERR(LOG_TAG, "Bearer token too long for auth header buffer");
+    return HardcoverClient::AUTH_FAILED;
+  }
   http.addHeader("Authorization", authHeader);
   http.addHeader("Content-Type", "application/json");
 
