@@ -132,8 +132,8 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
 
-  int progress = 0;
-  for (RecentBook& book : recentBooks) {
+  for (; nextRecentCoverIndex < recentBooks.size(); nextRecentCoverIndex++) {
+    RecentBook& book = recentBooks[nextRecentCoverIndex];
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
@@ -150,7 +150,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             book.coverBmpPath = "";
           }
           coverRendered = false;
+          nextRecentCoverIndex++;
+          recentsLoading = false;
           requestUpdate();
+          return;
         } else if (FsHelpers::hasXtcExtension(book.path)) {
           // Handle XTC file
           Xtc xtc(book.path, "/.crosspoint");
@@ -162,12 +165,14 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               book.coverBmpPath = "";
             }
             coverRendered = false;
+            nextRecentCoverIndex++;
+            recentsLoading = false;
             requestUpdate();
+            return;
           }
         }
       }
     }
-    progress++;
   }
 
   recentsLoaded = true;
@@ -181,9 +186,18 @@ void HomeActivity::onEnter() {
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
   selectorIndex = 0;
+  recentsLoading = false;
+  recentsLoaded = false;
+  firstRenderDone = false;
+  nextRecentCoverIndex = 0;
+  coverRendered = false;
+  freeCoverBuffer();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
+  if (recentBooks.empty()) {
+    recentsLoaded = true;
+  }
 
   // Trigger first update
   requestUpdate();
