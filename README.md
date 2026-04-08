@@ -37,5 +37,5 @@ Last update: April, 8th, 2026
 | [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) | Okay | Calibre Wireless support; Limited KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | Biggest community | Least common denominator approach | No | No | No |
 | [CrossPet](https://github.com/trilwu/crosspet) | Excellent, Playful | Virtual pet motivator; mini-games | EPUB, TXT |  | Higher battery drain, Small team, bloaty | Yes | Yes | Yes |
 | [Papyrix](https://github.com/bigbag/papyrix-reader) | Minimalist | Calibre Wireless support; exFAT support | EPUB, FB2, MD, TXT | A lot of good ideas | Small team | Yes | Yes | No |
-| [Inx](https://github.com/obijuankenobiii/inx) | Nice | mainly crosspoint functionality plus visual enhancements | EPUB, XTC, TXT | Biggest community | Least common denominator approach | No | No | No |
+| [Inx](https://github.com/obijuankenobiii/inx) | Nice | mainly crosspoint functionality plus reading statistics | EPUB, XTC, TXT | Biggest community | Least common denominator approach | No | No | No |
 | [PlusPoint](https://github.com/ngxson/pluspoint-reader) | Okay | Experimental | EPUB, TXT, JS Apps | Support for custom JS apps; better RTC | Based on older code, small team | Yes | Yes | No |
