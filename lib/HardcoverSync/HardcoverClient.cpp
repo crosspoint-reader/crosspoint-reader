@@ -109,19 +109,25 @@ HardcoverClient::Error HardcoverClient::authenticate() {
 HardcoverClient::Error HardcoverClient::searchBook(const char* query, int& outBookId) {
   outBookId = 0;
 
-  // Build search query — heap-allocate since query string can be long
-  // GraphQL: { search(query: "<query>", query_type: "books") { results { ... on Book { id title } } } }
-  char body[512];
-  int written = snprintf(body, sizeof(body),
-                         R"({"query":"{ search(query: \"%s\", query_type: \"books\") { results { ... on Book { id title } } } }"})",
-                         query);
-  if (written < 0 || written >= (int)sizeof(body)) {
+  // Build request body with JSON serialization so `query` is properly escaped
+  // and supplied as GraphQL data rather than interpolated into the query text.
+  JsonDocument requestBodyDoc;
+  requestBodyDoc["query"] =
+      "query SearchBooks($query: String!) { "
+      "search(query: $query, query_type: \"books\") { "
+      "results { ... on Book { id title } } "
+      "} "
+      "}";
+  requestBodyDoc["variables"]["query"] = query;
+
+  String body;
+  if (serializeJson(requestBodyDoc, body) == 0 || body.length() >= 512) {
     LOG_ERR(LOG_TAG, "Search query too long");
     return SERVER_ERROR;
   }
 
   JsonDocument doc;
-  Error err = executeGraphQL(body, doc);
+  Error err = executeGraphQL(body.c_str(), doc);
   if (err != OK) return err;
 
   JsonArray results = doc["data"]["search"]["results"];
