@@ -23,7 +23,9 @@ void DictionaryWordSelectActivity::onEnter() {
   textPool.reserve(512);
   extractWords(words, rows, textPool);
   mergeHyphenatedWords(words, rows, textPool);
-  navigator.load(std::move(words), std::move(rows), std::move(textPool));
+  // consumeInitialConfirm=true: the long-press that opened word selection may still
+  // be held, so ignore it until the user releases and presses again.
+  navigator.load(std::move(words), std::move(rows), std::move(textPool), true);
   requestUpdate();
 }
 
