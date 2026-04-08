@@ -12,6 +12,7 @@ class HalClock {
   bool _available = false;
   mutable uint8_t _cachedHour = 0;
   mutable uint8_t _cachedMinute = 0;
+  mutable bool _hasCachedTime = false;
   mutable unsigned long _lastPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds
@@ -33,7 +34,7 @@ class HalClock {
   bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetBiased = 24) const;
 
   // Sync the DS3231 RTC from an NTP server. Requires WiFi to be connected.
-  // Blocks briefly (~2-3s) while waiting for NTP response.
+  // Blocks for up to ~5s while waiting for SNTP response.
   // Returns true if the RTC was successfully updated.
   bool syncFromNTP();
 

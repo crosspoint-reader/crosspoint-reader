@@ -5,6 +5,8 @@
 #include <esp_sntp.h>
 #include <time.h>
 
+#include <cassert>
+
 HalClock halClock;  // Singleton instance
 
 // DS3231 register layout (BCD encoded):
@@ -59,13 +61,15 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   Wire.beginTransmission(I2C_ADDR_DS3231);
   Wire.write(DS3231_SEC_REG);
   if (Wire.endTransmission(false) != 0) {
+    if (!_hasCachedTime) return false;
     _lastPollMs = now;
     hour = _cachedHour;
     minute = _cachedMinute;
-    return true;  // return stale data on error
+    return true;
   }
   Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)3);
   if (Wire.available() < 3) {
+    if (!_hasCachedTime) return false;
     _lastPollMs = now;
     hour = _cachedHour;
     minute = _cachedMinute;
@@ -89,6 +93,7 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
     _cachedHour = bcdToDec(rawHour & 0x3F);
   }
   _lastPollMs = now;
+  _hasCachedTime = true;
 
   hour = _cachedHour;
   minute = _cachedMinute;
@@ -112,6 +117,9 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetBiased) co
 }
 
 bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
+  assert(hour < 24);
+  assert(minute < 60);
+  assert(second < 60);
   Wire.beginTransmission(I2C_ADDR_DS3231);
   Wire.write(DS3231_SEC_REG);    // Start at register 0x00
   Wire.write(decToBcd(second));  // 0x00: Seconds
@@ -126,6 +134,7 @@ bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
   _lastPollMs = 0;
   _cachedHour = hour;
   _cachedMinute = minute;
+  _hasCachedTime = true;
   return true;
 }
 
@@ -140,11 +149,11 @@ bool HalClock::syncFromNTP() {
   LOG_INF("CLK", "Starting NTP sync...");
   configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
 
-  // Wait for time to be set (up to 5 seconds)
+  // Wait for SNTP sync to complete (up to 5 seconds)
   constexpr int maxAttempts = 50;
   for (int i = 0; i < maxAttempts; i++) {
-    time_t now = time(nullptr);
-    if (now > 1700000000) {  // Sanity check: after ~Nov 2023
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+      time_t now = time(nullptr);
       struct tm timeinfo;
       gmtime_r(&now, &timeinfo);
 

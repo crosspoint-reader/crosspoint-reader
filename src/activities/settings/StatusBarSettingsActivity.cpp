@@ -27,16 +27,13 @@ constexpr uint8_t UTC_OFFSET_MIN = 0;
 constexpr uint8_t UTC_OFFSET_MAX = 52;
 
 std::string formatUtcOffset(uint8_t biased) {
-  int halfHours = static_cast<int>(biased) - 24;  // -24 to +28
-  int hours = halfHours / 2;
-  int mins = (halfHours % 2) ? 30 : 0;
-  // Handle negative modulo
-  if (halfHours < 0 && mins != 0) {
-    hours -= 1;
-    mins = 30;
-  }
+  int totalMinutes = (static_cast<int>(biased) - 24) * 30;  // -720 to +840
+  bool neg = totalMinutes < 0;
+  int absMinutes = neg ? -totalMinutes : totalMinutes;
+  int hours = absMinutes / 60;
+  int mins = absMinutes % 60;
   char buf[16];
-  snprintf(buf, sizeof(buf), "UTC%+d:%02d", hours, mins);
+  snprintf(buf, sizeof(buf), "UTC%c%d:%02d", neg ? '-' : '+', hours, mins);
   return buf;
 }
 constexpr int PROGRESS_BAR_ITEMS = 3;

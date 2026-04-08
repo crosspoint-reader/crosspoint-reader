@@ -248,7 +248,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Sync RTC from NTP if available (non-blocking-ish, ~2-3s max)
+    // Sync RTC from NTP if available (blocks up to ~5s)
     halClock.syncFromNTP();
 
     // Save this as the last connected network - SD card operations need lock as
