@@ -326,7 +326,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   if (author != "") {
     if (!Storage.exists(author.c_str()) && !Storage.mkdir(author.c_str())) {
-      LOG_DBG("OPDS", "Failed to create directory '%s'!\n", author.c_str());
+      LOG_ERR("OPDS", "Failed to create directory '%s'!\n", author.c_str());
       // Fall back on book title in the root directory
       filename = "/" + title + ".epub";
     }
