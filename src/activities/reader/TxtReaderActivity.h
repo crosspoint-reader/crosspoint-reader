@@ -20,6 +20,7 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  bool bookOpened = false;  // Tracks whether dispatchBookOpen was called
 
   // Cached settings for cache validation (different fonts/margins require re-indexing)
   int cachedFontId = 0;

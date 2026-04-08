@@ -42,6 +42,7 @@ void TxtReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
   PluginRegistry::dispatchBookOpen(filePath.c_str());
+  bookOpened = true;
 
   // Trigger first update
   requestUpdate();
@@ -50,7 +51,10 @@ void TxtReaderActivity::onEnter() {
 void TxtReaderActivity::onExit() {
   Activity::onExit();
 
-  PluginRegistry::dispatchBookClose();
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);

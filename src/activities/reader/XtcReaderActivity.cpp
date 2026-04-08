@@ -44,6 +44,7 @@ void XtcReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
 
   PluginRegistry::dispatchBookOpen(xtc->getPath().c_str());
+  bookOpened = true;
 
   // Trigger first update
   requestUpdate();
@@ -52,7 +53,10 @@ void XtcReaderActivity::onEnter() {
 void XtcReaderActivity::onExit() {
   Activity::onExit();
 
-  PluginRegistry::dispatchBookClose();
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();

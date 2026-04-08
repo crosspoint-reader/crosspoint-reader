@@ -22,6 +22,7 @@ static_assert(pluginCount <= PluginRegistry::MAX_PLUGINS, "Too many plugins regi
 
 namespace {
 constexpr char PLUGINS_JSON_PATH[] = "/.crosspoint/plugins.json";
+constexpr size_t MAX_PLUGIN_JSON_SIZE = 4096;  // Reasonable limit for plugin state JSON
 
 struct PluginState {
   bool enabled = false;
@@ -82,20 +83,29 @@ void PluginRegistry::init() {
 
   // 3. Load enabled state from SD card
   if (Storage.exists(PLUGINS_JSON_PATH)) {
-    String json = Storage.readFile(PLUGINS_JSON_PATH);
-    if (!json.isEmpty()) {
-      JsonDocument doc;
-      auto err = deserializeJson(doc, json);
-      if (err) {
-        LOG_ERR("PLG", "plugins.json parse error: %s", err.c_str());
+    HalFile file;
+    if (Storage.openFileForRead("PLG", PLUGINS_JSON_PATH, file)) {
+      size_t size = file.size();
+      file.close();
+      if (size > MAX_PLUGIN_JSON_SIZE) {
+        LOG_ERR("PLG", "plugins.json too large (%zu bytes), skipping", size);
       } else {
-        for (int i = 0; i < pluginCount; i++) {
-          if (doc[pluginTable[i]->id].is<bool>()) {
-            pluginStates[i].enabled = doc[pluginTable[i]->id].as<bool>();
-          }
-          // Override: incompatible plugins are always disabled
-          if (!pluginStates[i].compatible) {
-            pluginStates[i].enabled = false;
+        String json = Storage.readFile(PLUGINS_JSON_PATH);
+        if (!json.isEmpty()) {
+          JsonDocument doc;
+          auto err = deserializeJson(doc, json);
+          if (err) {
+            LOG_ERR("PLG", "plugins.json parse error: %s", err.c_str());
+          } else {
+            for (int i = 0; i < pluginCount; i++) {
+              if (doc[pluginTable[i]->id].is<bool>()) {
+                pluginStates[i].enabled = doc[pluginTable[i]->id].as<bool>();
+              }
+              // Override: incompatible plugins are always disabled
+              if (!pluginStates[i].compatible) {
+                pluginStates[i].enabled = false;
+              }
+            }
           }
         }
       }
@@ -134,13 +144,14 @@ void PluginRegistry::saveState() {
     doc[pluginTable[i]->id] = pluginStates[i].enabled;
   }
 
-  char buf[256];
-  size_t len = serializeJson(doc, buf, sizeof(buf));
-  if (len == 0 || len >= sizeof(buf)) {
+  String json;
+  json.reserve(256);  // Pre-allocate to avoid reallocation for typical plugin counts
+  size_t len = serializeJson(doc, json);
+  if (len == 0) {
     LOG_ERR("PLG", "plugins.json serialize failed");
     return;
   }
-  if (!Storage.writeFile(PLUGINS_JSON_PATH, buf)) {
+  if (!Storage.writeFile(PLUGINS_JSON_PATH, json)) {
     LOG_ERR("PLG", "Failed to write plugins.json");
   }
 }

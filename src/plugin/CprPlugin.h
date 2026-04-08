@@ -3,9 +3,9 @@
 /**
  * CprPlugin — Compile-time plugin descriptor for CrossPoint Reader.
  *
- * Each plugin fills in a static CprPlugin struct and registers it with
- * CPR_PLUGIN_REGISTER().  The plugin registry collects all registered
- * descriptors at startup and manages enable/disable state plus hook dispatch.
+ * Each plugin fills in a static CprPlugin struct and adds it to the
+ * pluginTable[] array in PluginRegistry.cpp.  See PLUGINS.md for the
+ * full registration process and coding conventions.
  *
  * All hook function pointers are optional — set unused ones to nullptr.
  */

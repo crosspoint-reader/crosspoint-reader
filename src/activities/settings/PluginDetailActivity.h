@@ -1,7 +1,6 @@
 #pragma once
 
 #include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
 
 /**
  * Shows full detail for a single plugin: name, author, version, description,
@@ -9,7 +8,6 @@
  * own on_settings_render hook so it can inject custom rows.
  */
 class PluginDetailActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
   int pluginIndex;
 
  public:
