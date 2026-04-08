@@ -124,16 +124,23 @@ void PluginRegistry::setEnabled(const char* id, bool enabled) {
 }
 
 void PluginRegistry::saveState() {
-  Storage.mkdir("/.crosspoint");
+  if (!Storage.mkdir("/.crosspoint")) {
+    LOG_ERR("PLG", "Failed to create .crosspoint directory");
+    return;
+  }
 
   JsonDocument doc;
   for (int i = 0; i < pluginCount; i++) {
     doc[pluginTable[i]->id] = pluginStates[i].enabled;
   }
 
-  String json;
-  serializeJson(doc, json);
-  if (!Storage.writeFile(PLUGINS_JSON_PATH, json)) {
+  char buf[256];
+  size_t len = serializeJson(doc, buf, sizeof(buf));
+  if (len == 0 || len >= sizeof(buf)) {
+    LOG_ERR("PLG", "plugins.json serialize failed");
+    return;
+  }
+  if (!Storage.writeFile(PLUGINS_JSON_PATH, buf)) {
     LOG_ERR("PLG", "Failed to write plugins.json");
   }
 }

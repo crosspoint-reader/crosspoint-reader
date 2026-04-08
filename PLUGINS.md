@@ -97,7 +97,7 @@ SD card.  Use the `Storage` singleton (from `HalStorage.h`) for all file I/O:
 #include <ArduinoJson.h>
 
 static void saveMyState() {
-    Storage.ensureDirectoryExists("/.crosspoint/plugin_my_feature");
+    Storage.mkdir("/.crosspoint/plugin_my_feature");
 
     JsonDocument doc;
     doc["counter"] = counter;

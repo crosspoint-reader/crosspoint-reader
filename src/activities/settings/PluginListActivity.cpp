@@ -3,6 +3,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <cstdio>
+
 #include "MappedInputManager.h"
 #include "PluginDetailActivity.h"
 #include "components/UITheme.h"
@@ -69,13 +71,17 @@ void PluginListActivity::render(RenderLock&&) {
         [](int index) -> std::string {
           const auto* p = PluginRegistry::get(index);
           if (!p) return "";
-          return std::string(p->name);
+          return p->name;
         },
         nullptr, nullptr,
         [](int index) -> std::string {
           const auto* p = PluginRegistry::get(index);
           if (!p) return "";
-          if (!PluginRegistry::isCompatible(index)) return std::string("! ") + tr(STR_PLUGIN_INCOMPATIBLE);
+          if (!PluginRegistry::isCompatible(index)) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "! %s", tr(STR_PLUGIN_INCOMPATIBLE));
+            return buf;
+          }
           return PluginRegistry::isEnabled(p->id) ? tr(STR_PLUGIN_ENABLED) : tr(STR_PLUGIN_DISABLED);
         },
         true);
