@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "HardcoverCredentialStore.h"
 #include "KOReaderCredentialStore.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
@@ -330,5 +331,35 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
   }
 
   LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
+  return true;
+}
+
+// ---- HardcoverCredentialStore ----
+
+bool JsonSettingsIO::saveHardcover(const HardcoverCredentialStore& store, const char* path) {
+  JsonDocument doc;
+  doc["token_obf"] = obfuscation::obfuscateToBase64(store.getToken());
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore& store, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("HCS", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  bool ok = false;
+  store.token = obfuscation::deobfuscateFromBase64(doc["token_obf"] | "", &ok);
+  if (!ok) {
+    // Fall back to plain text token (first-time or manual edit)
+    store.token = doc["token"] | std::string("");
+  }
+
+  LOG_DBG("HCS", "Loaded Hardcover token (length=%zu)", store.token.size());
   return true;
 }
