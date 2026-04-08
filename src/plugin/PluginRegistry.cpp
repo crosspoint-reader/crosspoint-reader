@@ -10,9 +10,11 @@
 
 // Forward-declare plugin descriptors from src/plugins/
 extern const CprPlugin helloPlugin;
+extern const CprPlugin hardcoverPlugin;
 
 static const CprPlugin* const pluginTable[] = {
     &helloPlugin,
+    &hardcoverPlugin,
 };
 
 static constexpr int pluginCount = sizeof(pluginTable) / sizeof(pluginTable[0]);
