@@ -53,6 +53,8 @@ void clearEpubCacheIfNeeded(const String& filePath) {
 
 // Recursively clear epub caches for all EPUBs inside a directory
 void clearEpubCachesInDirectory(const String& dirPath) {
+  esp_task_wdt_reset();
+  yield();
   FsFile dir = Storage.open(dirPath.c_str());
   if (!dir || !dir.isDirectory()) {
     if (dir) dir.close();
@@ -61,6 +63,8 @@ void clearEpubCachesInDirectory(const String& dirPath) {
   char name[500];
   FsFile entry = dir.openNextFile();
   while (entry) {
+    esp_task_wdt_reset();
+    yield();
     entry.getName(name, sizeof(name));
     String childPath = dirPath;
     if (!childPath.endsWith("/")) childPath += "/";

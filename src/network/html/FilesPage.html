@@ -1908,8 +1908,8 @@
           fileTableContent += '<td>Folder</td>';
           fileTableContent += '<td>-</td>';
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}')" title="Move folder">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}')" title="Rename folder">✏️</button>`;
+          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Move folder">📂</button>`;
+          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Rename folder">✏️</button>`;
           fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
@@ -5033,8 +5033,8 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    const icon = path.endsWith('/') ? '📁' : '📄';
+  function openRenameModal(name, path, isFolder = false) {
+    const icon = isFolder ? '📁' : '📄';
     document.getElementById('renameItemName').textContent = icon + ' ' + name;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
@@ -5149,8 +5149,8 @@ function retryAllFailedUploads() {
     });
   }
 
-  function openMoveModal(name, path) {
-    const icon = path.endsWith('/') ? '📁' : '📄';
+  function openMoveModal(name, path, isFolder = false) {
+    const icon = isFolder ? '📁' : '📄';
     document.getElementById('moveItemName').textContent = icon + ' ' + name;
     document.getElementById('moveItemPath').value = path;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
