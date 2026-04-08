@@ -739,9 +739,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffset)) {
       clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
       // Position to the left of the progress text (with a small gap)
-      const int clockX =
-          renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth -
-          (progressTextWidth > 0 ? 10 : 0) - clockTextWidth;
+      const int clockX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight -
+                         progressTextWidth - (progressTextWidth > 0 ? 10 : 0) - clockTextWidth;
       renderer.drawText(SMALL_FONT_ID, clockX, textY, timeBuf);
     }
   }
