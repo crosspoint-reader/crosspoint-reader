@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <HalClock.h>
+
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -11,14 +13,34 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 7;
+constexpr int MENU_ITEMS = 9;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT,
                                      StrId::STR_BOOK_PROGRESS_PERCENTAGE,
                                      StrId::STR_PROGRESS_BAR,
                                      StrId::STR_PROGRESS_BAR_THICKNESS,
                                      StrId::STR_TITLE,
                                      StrId::STR_BATTERY,
-                                     StrId::STR_XTC_STATUS_BAR};
+                                     StrId::STR_XTC_STATUS_BAR,
+                                     StrId::STR_CLOCK,
+                                     StrId::STR_CLOCK_UTC_OFFSET};
+
+// UTC offset range: 0 = UTC-12:00, 24 = UTC+0, 52 = UTC+14:00 (half-hour steps)
+constexpr uint8_t UTC_OFFSET_MIN = 0;
+constexpr uint8_t UTC_OFFSET_MAX = 52;
+
+std::string formatUtcOffset(uint8_t biased) {
+  int halfHours = static_cast<int>(biased) - 24;  // -24 to +28
+  int hours = halfHours / 2;
+  int mins = (halfHours % 2) ? 30 : 0;
+  // Handle negative modulo
+  if (halfHours < 0 && mins != 0) {
+    hours -= 1;
+    mins = 30;
+  }
+  char buf[16];
+  snprintf(buf, sizeof(buf), "UTC%+d:%02d", hours, mins);
+  return buf;
+}
 constexpr int PROGRESS_BAR_ITEMS = 3;
 const StrId progressBarNames[PROGRESS_BAR_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
 
@@ -121,6 +143,16 @@ void StatusBarSettingsActivity::handleSelection() {
   } else if (selectedIndex == 6) {
     // XTC Status Bar
     SETTINGS.xtcStatusBarMode = (SETTINGS.xtcStatusBarMode + 1) % XTC_STATUS_BAR_ITEMS;
+  } else if (selectedIndex == 7) {
+    // Show Clock (X3 only)
+    SETTINGS.statusBarClock = (SETTINGS.statusBarClock + 1) % 2;
+  } else if (selectedIndex == 8) {
+    // UTC Offset (cycle in half-hour steps)
+    if (SETTINGS.clockUtcOffset >= UTC_OFFSET_MAX) {
+      SETTINGS.clockUtcOffset = UTC_OFFSET_MIN;
+    } else {
+      SETTINGS.clockUtcOffset++;
+    }
   }
   SETTINGS.saveToFile();
 }
@@ -140,7 +172,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
       static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
       nullptr,
-      [this](int index) {
+      [this](int index) -> std::string {
         // Draw status for each setting
         if (index == 0) {
           return SETTINGS.statusBarChapterPageCount ? tr(STR_SHOW) : tr(STR_HIDE);
@@ -156,6 +188,10 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
           return SETTINGS.statusBarBattery ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 6) {
           return I18N.get(xtcStatusBarNames[SETTINGS.xtcStatusBarMode]);
+        } else if (index == 7) {
+          return (halClock.isAvailable() && SETTINGS.statusBarClock) ? tr(STR_SHOW) : tr(STR_HIDE);
+        } else if (index == 8) {
+          return formatUtcOffset(SETTINGS.clockUtcOffset);
         } else {
           return tr(STR_HIDE);
         }
