@@ -215,10 +215,12 @@ void syncTaskFunc(void* /*param*/) {
         extractSearchQuery(msg.path, query, sizeof(query));
         LOG_DBG(LOG_TAG, "Book opened, searching: %s", query);
 
-        // Restore persisted sync state from a previous session (e.g. after reboot/deep sleep)
+        // Restore persisted sync state from a previous session (e.g. after reboot/deep sleep).
+        // Populates lastSyncedPage and lastProgressPercent; currentBookId/currentUserBookId
+        // are overridden by loadBookMap() below if the book is already in the cache.
         loadSyncState();
 
-        // Check cached mapping first (may override currentBookId/currentUserBookId from state)
+        // Check cached mapping first (authoritative source for currentBookId/currentUserBookId)
         loadBookMap(query, currentBookId, currentUserBookId);
 
         if (currentBookId == 0) {

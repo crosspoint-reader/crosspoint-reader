@@ -296,6 +296,8 @@ void setup() {
 
   PluginRegistry::init();
   if (APP_STATE.wasDeepSleepActive) {
+    APP_STATE.wasDeepSleepActive = false;
+    APP_STATE.saveToFile();
     PluginRegistry::dispatchWake();
   }
   PluginRegistry::dispatchBoot();
