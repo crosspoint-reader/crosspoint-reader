@@ -91,6 +91,7 @@ void PluginDetailActivity::render(RenderLock&&) {
   // Description (with multi-line wrapping)
   y += metrics.verticalSpacing;
   {
+    static constexpr int MAX_DESC_LINE_LEN = 256;
     const char* desc = plugin->description;
     if (desc) {
       const int maxWidth = rightX - leftPad;
@@ -104,7 +105,7 @@ void PluginDetailActivity::render(RenderLock&&) {
           fitLen = 0;
           int lastSpace = 0;
           for (int i = 0; i < len; i++) {
-            char buf[256];
+            char buf[MAX_DESC_LINE_LEN];
             int segLen = (i + 1 < (int)sizeof(buf)) ? i + 1 : (int)sizeof(buf) - 1;
             memcpy(buf, lineStart, segLen);
             buf[segLen] = '\0';
@@ -122,7 +123,7 @@ void PluginDetailActivity::render(RenderLock&&) {
           }
           if (fitLen == 0) fitLen = 1;  // Ensure at least one character per line
         }
-        char lineBuf[256];
+        char lineBuf[MAX_DESC_LINE_LEN];
         int copyLen = (fitLen < (int)sizeof(lineBuf) - 1) ? fitLen : (int)sizeof(lineBuf) - 1;
         memcpy(lineBuf, lineStart, copyLen);
         lineBuf[copyLen] = '\0';
