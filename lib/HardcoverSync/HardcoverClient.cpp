@@ -9,6 +9,13 @@
 
 #include "HardcoverCredentialStore.h"
 
+// Forward-declare esp_crt_bundle_attach without including esp_crt_bundle.h, which
+// conflicts with the Arduino WiFiClientSecure header in this build environment
+// (same approach as OtaUpdater.cpp).
+extern "C" {
+extern esp_err_t esp_crt_bundle_attach(void* conf);
+}
+
 namespace {
 constexpr char API_URL[] = "https://api.hardcover.app/v1/graphql";
 constexpr char LOG_TAG[] = "HC";
@@ -18,7 +25,9 @@ constexpr char LOG_TAG[] = "HC";
 /// @param outDoc  Output: parsed JSON response document
 /// @return HardcoverClient::Error code
 HardcoverClient::Error executeGraphQL(const char* body, JsonDocument& outDoc) {
-  if (!HARDCOVER_STORE.hasToken()) {
+  // Snapshot the token once to avoid a race with concurrent setToken()/clearToken()
+  const std::string token = HARDCOVER_STORE.getToken();
+  if (token.empty()) {
     LOG_DBG(LOG_TAG, "No token configured");
     return HardcoverClient::NO_TOKEN;
   }
@@ -29,15 +38,15 @@ HardcoverClient::Error executeGraphQL(const char* body, JsonDocument& outDoc) {
     LOG_ERR(LOG_TAG, "Failed to allocate WiFiClientSecure");
     return HardcoverClient::NETWORK_ERROR;
   }
-  // TODO: Replace with esp_crt_bundle_attach (see OtaUpdater.cpp pattern) once
-  // WiFiClientSecure supports it, to enable proper TLS certificate verification.
-  secureClient->setInsecure();
+  // Use the built-in Mozilla CA certificate bundle for TLS verification.
+  // Requires the device clock to be synchronised (NTP) so certificate dates
+  // pass.  Uses the same esp_crt_bundle_attach extern as OtaUpdater.cpp.
+  secureClient->setCACertBundle(esp_crt_bundle_attach);
   http.begin(*secureClient, API_URL);
 
   // Auth and content headers
   char authHeader[256];
-  const int authWritten =
-      snprintf(authHeader, sizeof(authHeader), "Bearer %s", HARDCOVER_STORE.getToken().c_str());
+  const int authWritten = snprintf(authHeader, sizeof(authHeader), "Bearer %s", token.c_str());
   if (authWritten < 0 || authWritten >= (int)sizeof(authHeader)) {
     LOG_ERR(LOG_TAG, "Bearer token too long for auth header buffer");
     return HardcoverClient::AUTH_FAILED;
@@ -193,6 +202,12 @@ HardcoverClient::Error HardcoverClient::updateStatus(int userBookId, int statusI
   Error err = executeGraphQL(body, doc);
   if (err != OK) return err;
 
+  int updatedId = doc["data"]["update_user_books_by_pk"]["id"] | 0;
+  if (updatedId == 0) {
+    LOG_ERR(LOG_TAG, "updateStatus: missing id in response");
+    return SERVER_ERROR;
+  }
+
   LOG_DBG(LOG_TAG, "Updated user_book %d → status %d", userBookId, statusId);
   return OK;
 }
@@ -217,6 +232,12 @@ HardcoverClient::Error HardcoverClient::updateProgress(int userBookId, float pro
   JsonDocument doc;
   Error err = executeGraphQL(body, doc);
   if (err != OK) return err;
+
+  int insertedId = doc["data"]["insert_user_book_reads_one"]["id"] | 0;
+  if (insertedId == 0) {
+    LOG_ERR(LOG_TAG, "updateProgress: missing id in response");
+    return SERVER_ERROR;
+  }
 
   LOG_DBG(LOG_TAG, "Updated progress: user_book %d → %d%%", userBookId, percentInt);
   return OK;

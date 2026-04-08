@@ -25,4 +25,10 @@ struct CprPlugin {
   void (*onPageTurn)(int chapter, int page);
   void (*onSleep)();
   void (*onWake)();
+  /// Called when the plugin is enabled (via setEnabled or dispatchBoot for
+  /// initially-enabled plugins).  Use this to start background tasks / queues.
+  void (*onEnable)();
+  /// Called when the plugin is disabled at runtime (via setEnabled).
+  /// Use this to stop background tasks / queues and free resources.
+  void (*onDisable)();
 };

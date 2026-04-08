@@ -4,7 +4,7 @@
 class HardcoverCredentialStore;
 namespace JsonSettingsIO {
 bool saveHardcover(const HardcoverCredentialStore& store, const char* path);
-bool loadHardcover(HardcoverCredentialStore& store, const char* json);
+bool loadHardcover(HardcoverCredentialStore& store, const char* json, bool* needsResave = nullptr);
 }  // namespace JsonSettingsIO
 
 /**
@@ -24,7 +24,7 @@ class HardcoverCredentialStore {
   HardcoverCredentialStore() = default;
 
   friend bool JsonSettingsIO::saveHardcover(const HardcoverCredentialStore&, const char*);
-  friend bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore&, const char*);
+  friend bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore&, const char*, bool*);
 
  public:
   // Delete copy constructor and assignment

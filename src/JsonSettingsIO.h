@@ -27,7 +27,7 @@ bool loadKOReader(KOReaderCredentialStore& store, const char* json, bool* needsR
 
 // HardcoverCredentialStore
 bool saveHardcover(const HardcoverCredentialStore& store, const char* path);
-bool loadHardcover(HardcoverCredentialStore& store, const char* json);
+bool loadHardcover(HardcoverCredentialStore& store, const char* json, bool* needsResave = nullptr);
 
 // RecentBooksStore
 bool saveRecentBooks(const RecentBooksStore& store, const char* path);

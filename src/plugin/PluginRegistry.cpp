@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cassert>
 #include <cstring>
 
 // ---- Plugin table (explicit array — fork authors add entries here) ----------
@@ -62,9 +63,8 @@ bool semverSatisfied(const Semver& required, const Semver& current) {
 void PluginRegistry::init() {
   // 1. Parse firmware version once
   Semver firmwareVer{};
-  if (!parseSemver(CROSSPOINT_VERSION, firmwareVer)) {
-    LOG_ERR("PLG", "Cannot parse firmware version: %s", CROSSPOINT_VERSION);
-  }
+  // CROSSPOINT_VERSION must be a valid semver string set at build time.
+  assert(parseSemver(CROSSPOINT_VERSION, firmwareVer) && "Cannot parse CROSSPOINT_VERSION — check build flags");
 
   // 2. Compatibility check for every registered plugin
   for (int i = 0; i < pluginCount; i++) {
@@ -141,7 +141,13 @@ void PluginRegistry::setEnabled(const char* id, bool enabled) {
     if (!pluginTable[i] || !pluginTable[i]->id) continue;
     if (strcmp(pluginTable[i]->id, id) == 0) {
       if (!pluginStates[i].compatible) return;  // cannot enable incompatible plugin
+      const bool wasEnabled = pluginStates[i].enabled;
       pluginStates[i].enabled = enabled;
+      if (enabled && !wasEnabled && pluginTable[i]->onEnable) {
+        pluginTable[i]->onEnable();
+      } else if (!enabled && wasEnabled && pluginTable[i]->onDisable) {
+        pluginTable[i]->onDisable();
+      }
       saveState();
       return;
     }
@@ -173,8 +179,15 @@ void PluginRegistry::saveState() {
 
 void PluginRegistry::dispatchBoot() {
   for (int i = 0; i < pluginCount; i++) {
-    if (pluginStates[i].enabled && pluginStates[i].compatible && pluginTable[i]->onBoot) {
-      pluginTable[i]->onBoot();
+    if (pluginStates[i].enabled && pluginStates[i].compatible) {
+      if (pluginTable[i]->onBoot) {
+        pluginTable[i]->onBoot();
+      }
+      // Call onEnable for plugins that are persisted-enabled at boot so they
+      // can start background resources (tasks, queues, etc.)
+      if (pluginTable[i]->onEnable) {
+        pluginTable[i]->onEnable();
+      }
     }
   }
 }
