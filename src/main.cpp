@@ -383,6 +383,7 @@ void loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
+    RenderLock lock;
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 
