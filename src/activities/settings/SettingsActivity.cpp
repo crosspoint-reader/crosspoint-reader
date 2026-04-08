@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <cstring>
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
@@ -19,6 +20,50 @@
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
+
+static const char* getSettingDescription(const SettingInfo& setting) {
+  if (setting.type == SettingType::ACTION) {
+    switch (setting.action) {
+      case SettingAction::CustomiseStatusBar:
+        return "Choose which progress indicators appear in the reader footer.";
+      case SettingAction::RemapFrontButtons:
+        return "Assign each front hardware button to a reading action.";
+      case SettingAction::Network:
+        return "Scan, join, and forget WiFi networks stored on the device.";
+      case SettingAction::Language:
+        return "Switch the device UI language.";
+      default:
+        return nullptr;
+    }
+  }
+
+  if (!setting.key) return nullptr;
+  if (strcmp(setting.key, "refreshFrequency") == 0) return "Full refresh every N pages. Lower values reduce ghosting.";
+  if (strcmp(setting.key, "fontFamily") == 0) return "Select the main typeface used in the reader.";
+  if (strcmp(setting.key, "fontSize") == 0) return "Adjust the base text size in the reader.";
+  if (strcmp(setting.key, "lineSpacing") == 0) return "Control the vertical spacing between text lines.";
+  if (strcmp(setting.key, "screenMargin") == 0) return "Adds extra inner margin around reader content.";
+  if (strcmp(setting.key, "paragraphAlignment") == 0) return "Choose paragraph alignment or use the book style.";
+  if (strcmp(setting.key, "embeddedStyle") == 0) return "Use the EPUB's embedded CSS for layout and styling.";
+  if (strcmp(setting.key, "hyphenationEnabled") == 0) return "Break long words at line endings.";
+  if (strcmp(setting.key, "orientation") == 0) return "Rotate the reading screen without changing the rest of the UI.";
+  if (strcmp(setting.key, "extraParagraphSpacing") == 0) return "Adds extra blank space between paragraphs.";
+  if (strcmp(setting.key, "textAntiAliasing") == 0) return "Smooth text edges using grayscale rendering.";
+  if (strcmp(setting.key, "imageRendering") == 0) return "Show images, placeholders, or suppress them entirely.";
+  if (strcmp(setting.key, "hideBatteryPercentage") == 0) return "Hide the battery percentage in headers and reader.";
+  if (strcmp(setting.key, "sleepTimeout") == 0) return "Idle time before the device automatically sleeps.";
+  if (strcmp(setting.key, "showHiddenFiles") == 0) return "Display files and folders whose names start with a dot.";
+  if (strcmp(setting.key, "fileBrowserSort") == 0) return "Sort files by natural filename order or file size.";
+  if (strcmp(setting.key, "longPressChapterSkip") == 0) return "Hold a side button to jump to the next chapter.";
+  if (strcmp(setting.key, "sideButtonLayout") == 0) return "Swap the page-turn direction of the side buttons.";
+  if (strcmp(setting.key, "shortPwrBtn") == 0) return "Choose what a short press of the power button does.";
+  if (strcmp(setting.key, "sleepScreen") == 0) return "Select what remains visible while the device sleeps.";
+  if (strcmp(setting.key, "sleepScreenCoverMode") == 0) return "Fit or crop book covers on the sleep screen.";
+  if (strcmp(setting.key, "sleepScreenCoverFilter") == 0) return "Apply a higher-contrast filter to sleep covers.";
+  if (strcmp(setting.key, "uiTheme") == 0) return "Change the visual styling used across menus and lists.";
+  if (strcmp(setting.key, "fadingFix") == 0) return "Compensates for sunlight-related e-ink fading.";
+  return nullptr;
+}
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
@@ -230,7 +275,13 @@ void SettingsActivity::render(RenderLock&&) {
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
       settingsCount, selectedSettingIndex - 1,
-      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
+      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); },
+      [&settings, this](int index) -> std::string {
+        if (index != selectedSettingIndex - 1) return "";
+        const char* desc = getSettingDescription(settings[index]);
+        return desc ? std::string(desc) : "";
+      },
+      nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];
         std::string valueText = "";

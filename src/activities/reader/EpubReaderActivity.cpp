@@ -86,6 +86,11 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  sessionStartMs = millis();
+  lastUserPageTurnMs = sessionStartMs;
+  pageTurnTimesIdx = 0;
+  pageTurnTimesCount = 0;
+
   // Trigger first update
   requestUpdate();
 }
@@ -457,6 +462,17 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  if (!automaticPageTurnActive && lastUserPageTurnMs > 0) {
+    const unsigned long now = millis();
+    const unsigned long duration = now - lastUserPageTurnMs;
+    if (duration >= 1000 && duration <= 600000) {
+      pageTurnTimes[pageTurnTimesIdx] = duration;
+      pageTurnTimesIdx = (pageTurnTimesIdx + 1) % 10;
+      if (pageTurnTimesCount < 10) pageTurnTimesCount++;
+    }
+    lastUserPageTurnMs = now;
+  }
+
   if (isForwardTurn) {
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
@@ -801,6 +817,8 @@ void EpubReaderActivity::renderStatusBar() const {
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
   std::string title;
+  std::string leftInfo;
+  std::string rightInfo;
 
   int textYOffset = 0;
 
@@ -827,7 +845,41 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
+  if (SETTINGS.statusBarTimeEstimate) {
+    const int minsLeft = getEstimatedMinutesLeft();
+    if (minsLeft > 0) {
+      if (minsLeft >= 60) {
+        leftInfo = "~" + std::to_string(minsLeft / 60) + "h" + std::to_string(minsLeft % 60) + "m";
+      } else {
+        leftInfo = "~" + std::to_string(minsLeft) + "m";
+      }
+    }
+  }
+
+  if (SETTINGS.statusBarSessionTimer && sessionStartMs > 0) {
+    const unsigned long elapsedSec = (millis() - sessionStartMs) / 1000;
+    const unsigned long hours = elapsedSec / 3600;
+    const unsigned long mins = (elapsedSec % 3600) / 60;
+    rightInfo = (hours > 0) ? (std::to_string(hours) + "h" + std::to_string(mins) + "m")
+                            : (std::to_string(mins) + "m");
+  }
+
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, leftInfo, rightInfo);
+}
+
+int EpubReaderActivity::getEstimatedMinutesLeft() const {
+  if (!section || pageTurnTimesCount == 0) return 0;
+
+  unsigned long totalMs = 0;
+  for (int i = 0; i < pageTurnTimesCount; i++) {
+    totalMs += pageTurnTimes[i];
+  }
+
+  const int pagesLeft = section->pageCount - section->currentPage - 1;
+  if (pagesLeft <= 0) return 0;
+
+  const unsigned long avgMs = totalMs / static_cast<unsigned long>(pageTurnTimesCount);
+  return static_cast<int>((avgMs * static_cast<unsigned long>(pagesLeft)) / 60000UL);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

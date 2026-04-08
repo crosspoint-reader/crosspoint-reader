@@ -7,6 +7,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cctype>
 
 #include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
@@ -16,62 +17,101 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
-}  // namespace
 
-void sortFileList(std::vector<std::string>& strs) {
-  std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
-    // Directories first
-    bool isDir1 = str1.back() == '/';
-    bool isDir2 = str2.back() == '/';
-    if (isDir1 != isDir2) return isDir1;
+int naturalCompare(const std::string& str1, const std::string& str2) {
+  const char* s1 = str1.c_str();
+  const char* s2 = str2.c_str();
 
-    // Start naive natural sort
-    const char* s1 = str1.c_str();
-    const char* s2 = str2.c_str();
+  while (*s1 && *s2) {
+    if (isdigit(static_cast<unsigned char>(*s1)) && isdigit(static_cast<unsigned char>(*s2))) {
+      while (*s1 == '0') s1++;
+      while (*s2 == '0') s2++;
 
-    // Iterate while both strings have characters
-    while (*s1 && *s2) {
-      // Check if both are at the start of a number
-      if (isdigit(*s1) && isdigit(*s2)) {
-        // Skip leading zeros and track them
-        const char* start1 = s1;
-        const char* start2 = s2;
-        while (*s1 == '0') s1++;
-        while (*s2 == '0') s2++;
+      int len1 = 0;
+      int len2 = 0;
+      while (isdigit(static_cast<unsigned char>(s1[len1]))) len1++;
+      while (isdigit(static_cast<unsigned char>(s2[len2]))) len2++;
 
-        // Count digits to compare lengths first
-        int len1 = 0, len2 = 0;
-        while (isdigit(s1[len1])) len1++;
-        while (isdigit(s2[len2])) len2++;
-
-        // Different length so return smaller integer value
-        if (len1 != len2) return len1 < len2;
-
-        // Same length so compare digit by digit
-        for (int i = 0; i < len1; i++) {
-          if (s1[i] != s2[i]) return s1[i] < s2[i];
-        }
-
-        // Numbers equal so advance pointers
-        s1 += len1;
-        s2 += len2;
-      } else {
-        // Regular case-insensitive character comparison
-        char c1 = tolower(*s1);
-        char c2 = tolower(*s2);
-        if (c1 != c2) return c1 < c2;
-        s1++;
-        s2++;
+      if (len1 != len2) return len1 < len2 ? -1 : 1;
+      for (int i = 0; i < len1; i++) {
+        if (s1[i] != s2[i]) return s1[i] < s2[i] ? -1 : 1;
       }
-    }
 
-    // One string is prefix of other
-    return *s1 == '\0' && *s2 != '\0';
-  });
+      s1 += len1;
+      s2 += len2;
+    } else {
+      const char c1 = static_cast<char>(tolower(static_cast<unsigned char>(*s1)));
+      const char c2 = static_cast<char>(tolower(static_cast<unsigned char>(*s2)));
+      if (c1 != c2) return c1 < c2 ? -1 : 1;
+      s1++;
+      s2++;
+    }
+  }
+
+  if (*s1 == '\0' && *s2 == '\0') return 0;
+  return *s1 == '\0' ? -1 : 1;
 }
+
+std::string formatFileSize(const size_t bytes) {
+  constexpr const char* units[] = {"B", "KB", "MB", "GB"};
+  double value = static_cast<double>(bytes);
+  int unitIndex = 0;
+  while (value >= 1024.0 && unitIndex < 3) {
+    value /= 1024.0;
+    unitIndex++;
+  }
+
+  char buffer[20];
+  if (unitIndex == 0) {
+    snprintf(buffer, sizeof(buffer), "%u%s", static_cast<unsigned>(bytes), units[unitIndex]);
+  } else if (value >= 10.0) {
+    snprintf(buffer, sizeof(buffer), "%.0f%s", value, units[unitIndex]);
+  } else {
+    snprintf(buffer, sizeof(buffer), "%.1f%s", value, units[unitIndex]);
+  }
+  return buffer;
+}
+
+void sortFileList(std::vector<std::string>& names, std::vector<size_t>& sizes) {
+  std::vector<std::pair<std::string, size_t>> items;
+  items.reserve(names.size());
+  for (size_t i = 0; i < names.size(); i++) {
+    items.emplace_back(std::move(names[i]), sizes[i]);
+  }
+
+  std::sort(items.begin(), items.end(), [](const auto& lhs, const auto& rhs) {
+    const bool lhsDir = !lhs.first.empty() && lhs.first.back() == '/';
+    const bool rhsDir = !rhs.first.empty() && rhs.first.back() == '/';
+    if (lhsDir != rhsDir) return lhsDir;
+
+    const int natural = naturalCompare(lhs.first, rhs.first);
+    if (lhsDir && rhsDir) return natural < 0;
+
+    switch (SETTINGS.fileBrowserSort) {
+      case CrossPointSettings::FILE_SORT_NAME_DESC:
+        return natural > 0;
+      case CrossPointSettings::FILE_SORT_SIZE_ASC:
+        if (lhs.second != rhs.second) return lhs.second < rhs.second;
+        return natural < 0;
+      case CrossPointSettings::FILE_SORT_SIZE_DESC:
+        if (lhs.second != rhs.second) return lhs.second > rhs.second;
+        return natural < 0;
+      case CrossPointSettings::FILE_SORT_NAME_ASC:
+      default:
+        return natural < 0;
+    }
+  });
+
+  for (size_t i = 0; i < items.size(); i++) {
+    names[i] = std::move(items[i].first);
+    sizes[i] = items[i].second;
+  }
+}
+}  // namespace
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
+  fileSizes.clear();
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -91,18 +131,20 @@ void FileBrowserActivity::loadFiles() {
 
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");
+      fileSizes.push_back(0);
     } else {
       std::string_view filename{name};
       if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
           FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
           FsHelpers::hasBmpExtension(filename)) {
         files.emplace_back(filename);
+        fileSizes.push_back(file.size());
       }
     }
     file.close();
   }
   root.close();
-  sortFileList(files);
+  sortFileList(files, fileSizes);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -136,6 +178,7 @@ void FileBrowserActivity::onEnter() {
 void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
+  fileSizes.clear();
 }
 
 void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
@@ -294,7 +337,11 @@ void FileBrowserActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
         [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); });
+        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        [this](int index) -> std::string {
+          if (files[index].back() == '/') return "";
+          return formatFileSize(fileSizes[index]);
+        });
   }
 
   // Help text

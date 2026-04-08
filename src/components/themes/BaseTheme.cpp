@@ -673,8 +673,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom,
-                              const int textYOffset) const {
+                              const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
+                              const std::string& leftInfo, const std::string& rightInfo) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -721,14 +721,39 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                       true);
   }
 
-  // Draw Battery
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
+  const int batterySize = SETTINGS.statusBarBattery ? (showBatteryPercentage ? 50 : 20) : 0;
+
+  // Draw Battery
   if (SETTINGS.statusBarBattery) {
     GUI.drawBatteryLeft(renderer,
                         Rect{metrics.statusBarHorizontalMargin + orientedMarginLeft + 1, textY, metrics.batteryWidth,
                              metrics.batteryHeight},
                         showBatteryPercentage);
+  }
+
+  int leftInfoWidth = 0;
+  if (!leftInfo.empty()) {
+    const int leftGap = SETTINGS.statusBarBattery ? 8 : 0;
+    const int maxLeftWidth = std::max(40, renderer.getScreenWidth() / 4);
+    auto leftText = renderer.truncatedText(SMALL_FONT_ID, leftInfo.c_str(), maxLeftWidth);
+    leftInfoWidth = renderer.getTextWidth(SMALL_FONT_ID, leftText.c_str());
+    renderer.drawText(SMALL_FONT_ID, metrics.statusBarHorizontalMargin + orientedMarginLeft + batterySize + leftGap,
+                      textY, leftText.c_str());
+  }
+
+  int rightInfoWidth = 0;
+  if (!rightInfo.empty()) {
+    const int rightGap = progressTextWidth > 0 ? 8 : 0;
+    const int maxRightWidth = std::max(40, renderer.getScreenWidth() / 4);
+    auto rightText = renderer.truncatedText(SMALL_FONT_ID, rightInfo.c_str(), maxRightWidth);
+    rightInfoWidth = renderer.getTextWidth(SMALL_FONT_ID, rightText.c_str());
+    renderer.drawText(
+        SMALL_FONT_ID,
+        renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth -
+            rightGap - rightInfoWidth,
+        textY, rightText.c_str());
   }
 
   // Draw Title
@@ -739,9 +764,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     const int rendererableScreenWidth =
         renderer.getScreenWidth() - (metrics.statusBarHorizontalMargin * 2) - orientedMarginLeft - orientedMarginRight;
 
-    const int batterySize = SETTINGS.statusBarBattery ? (showBatteryPercentage ? 50 : 20) : 0;
-    const int titleMarginLeft = batterySize + 30;
-    const int titleMarginRight = progressTextWidth + 30;
+    const int titleMarginLeft = batterySize + (leftInfoWidth > 0 ? leftInfoWidth + 8 : 0) + 30;
+    const int titleMarginRight = progressTextWidth + (rightInfoWidth > 0 ? rightInfoWidth + 8 : 0) + 30;
 
     // Attempt to center title on the screen, but if title is too wide then later we will center it within the
     // available space.

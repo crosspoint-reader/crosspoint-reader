@@ -57,6 +57,13 @@ class CrossPointSettings {
     STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
   };
   enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
+  enum FILE_BROWSER_SORT {
+    FILE_SORT_NAME_ASC = 0,
+    FILE_SORT_NAME_DESC = 1,
+    FILE_SORT_SIZE_ASC = 2,
+    FILE_SORT_SIZE_DESC = 3,
+    FILE_BROWSER_SORT_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -151,6 +158,8 @@ class CrossPointSettings {
   uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
+  uint8_t statusBarTimeEstimate = 0;
+  uint8_t statusBarSessionTimer = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
@@ -197,6 +206,8 @@ class CrossPointSettings {
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // File browser sort mode
+  uint8_t fileBrowserSort = FILE_SORT_NAME_ASC;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
 
