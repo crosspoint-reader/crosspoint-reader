@@ -57,19 +57,19 @@ void PluginDetailActivity::render(RenderLock&&) {
 
   // Author
   renderer.drawText(UI_10_FONT_ID, leftPad, y, tr(STR_PLUGIN_AUTHOR), true, EpdFontFamily::BOLD);
-  renderer.drawRightAlignedText(UI_10_FONT_ID, rightX, y, plugin->author);
+  renderer.drawText(UI_10_FONT_ID, rightX - renderer.getTextWidth(UI_10_FONT_ID, plugin->author), y, plugin->author);
   y += rowHeight;
 
   // Version
   renderer.drawText(UI_10_FONT_ID, leftPad, y, tr(STR_PLUGIN_VERSION), true, EpdFontFamily::BOLD);
-  renderer.drawRightAlignedText(UI_10_FONT_ID, rightX, y, plugin->version);
+  renderer.drawText(UI_10_FONT_ID, rightX - renderer.getTextWidth(UI_10_FONT_ID, plugin->version), y, plugin->version);
   y += rowHeight;
 
   // Requires
   renderer.drawText(UI_10_FONT_ID, leftPad, y, tr(STR_PLUGIN_REQUIRES), true, EpdFontFamily::BOLD);
   char requiresBuf[64];
   snprintf(requiresBuf, sizeof(requiresBuf), ">= %s", plugin->minCpr);
-  renderer.drawRightAlignedText(UI_10_FONT_ID, rightX, y, requiresBuf);
+  renderer.drawText(UI_10_FONT_ID, rightX - renderer.getTextWidth(UI_10_FONT_ID, requiresBuf), y, requiresBuf);
   y += rowHeight;
 
   // Status

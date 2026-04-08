@@ -88,6 +88,7 @@ void EpubReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
   PluginRegistry::dispatchBookOpen(epub->getPath().c_str());
+  bookOpened = true;
 
   // Trigger first update
   requestUpdate();
@@ -96,7 +97,10 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
-  PluginRegistry::dispatchBookClose();
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);

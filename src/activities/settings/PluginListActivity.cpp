@@ -13,7 +13,6 @@
 
 void PluginListActivity::onEnter() {
   Activity::onEnter();
-  selectedIndex = 0;
   requestUpdate();
 }
 
@@ -25,9 +24,8 @@ void PluginListActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (PluginRegistry::count() > 0) {
-      startActivityForResult(
-          std::make_unique<PluginDetailActivity>(renderer, mappedInput, selectedIndex),
-          [this](const ActivityResult&) { requestUpdate(); });
+      startActivityForResult(std::make_unique<PluginDetailActivity>(renderer, mappedInput, selectedIndex),
+                             [this](const ActivityResult&) { requestUpdate(); });
     }
     return;
   }
@@ -65,8 +63,8 @@ void PluginListActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer,
         Rect{0, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, pageWidth,
-             pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight +
-                           metrics.verticalSpacing * 2)},
+             pageHeight -
+                 (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
         itemCount, selectedIndex,
         [](int index) -> std::string {
           const auto* p = PluginRegistry::get(index);
