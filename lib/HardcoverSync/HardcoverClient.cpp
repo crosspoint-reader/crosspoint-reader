@@ -191,10 +191,10 @@ HardcoverClient::Error HardcoverClient::addBook(int bookId, int statusId, int& o
 
 HardcoverClient::Error HardcoverClient::updateStatus(int userBookId, int statusId) {
   char body[256];
-  int written =
-      snprintf(body, sizeof(body),
-               R"({"query":"mutation { update_user_books_by_pk(pk_columns: { id: %d }, _set: { status_id: %d }) { id } }"})",
-               userBookId, statusId);
+  int written = snprintf(
+      body, sizeof(body),
+      R"({"query":"mutation { update_user_books_by_pk(pk_columns: { id: %d }, _set: { status_id: %d }) { id } }"})",
+      userBookId, statusId);
   if (written < 0 || written >= (int)sizeof(body)) {
     LOG_ERR(LOG_TAG, "updateStatus query too long");
     return SERVER_ERROR;

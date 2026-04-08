@@ -43,8 +43,9 @@ constexpr char LOG_TAG[] = "HCPLG";
 // How many page turns between automatic progress syncs
 static constexpr int PAGE_TURN_SYNC_INTERVAL = 10;
 
-// FreeRTOS task stack size (bytes) — 4096 for network I/O
-static constexpr uint32_t SYNC_TASK_STACK = 4096;
+// FreeRTOS task stack size (bytes) — 8192 to accommodate TLS (WiFiClientSecure),
+// HTTP (HTTPClient) and JSON (deserializeJson) stack usage in executeGraphQL().
+static constexpr uint32_t SYNC_TASK_STACK = 8192;
 
 // Queue capacity (number of pending commands)
 static constexpr int QUEUE_SIZE = 8;
@@ -63,17 +64,17 @@ constexpr char BOOK_MAP_FILE[] = "/.crosspoint/plugin_hardcover/book_map.json";
 // ---------------------------------------------------------------------------
 
 enum class SyncCmd : uint8_t {
-  BOOK_OPEN,    // Look up book, set "Currently Reading"
-  PAGE_TURN,    // Update progress percentage
-  BOOK_CLOSE,   // Flush final progress
-  FLUSH,        // Flush pending (from onSleep)
+  BOOK_OPEN,   // Look up book, set "Currently Reading"
+  PAGE_TURN,   // Update progress percentage
+  BOOK_CLOSE,  // Flush final progress
+  FLUSH,       // Flush pending (from onSleep)
 };
 
 struct SyncMessage {
   SyncCmd cmd;
-  char path[128];              // EPUB path (BOOK_OPEN only)
-  int chapter;                 // Current chapter
-  int page;                    // Current page
+  char path[256];                   // EPUB path (BOOK_OPEN only) — 256 for long SD card paths
+  int chapter;                      // Current chapter
+  int page;                         // Current page
   SemaphoreHandle_t completionSem;  // FLUSH only: semaphore to signal completion (nullptr if creation failed or unused)
 };
 
@@ -119,6 +120,11 @@ void loadBookMap(const char* queryKey, int& bookId, int& userBookId) {
   }
 }
 
+// Maximum entries in the book_map.json cache.  Once exceeded the oldest
+// entries (by insertion order, which is also JsonObject iteration order)
+// are evicted before adding the new one.
+static constexpr int MAX_BOOK_MAP_ENTRIES = 64;
+
 /// Save a book mapping entry to the SD cache.
 void saveBookMap(const char* queryKey, int bookId, int userBookId) {
   Storage.mkdir(STATE_DIR);
@@ -128,8 +134,20 @@ void saveBookMap(const char* queryKey, int bookId, int userBookId) {
   if (Storage.exists(BOOK_MAP_FILE)) {
     String json = Storage.readFile(BOOK_MAP_FILE);
     if (!json.isEmpty()) {
-      deserializeJson(doc, json);  // ignore errors — we'll overwrite anyway
+      if (deserializeJson(doc, json)) {
+        // Corrupt file — start fresh
+        doc.clear();
+      }
     }
+  }
+
+  // Evict oldest entries if at capacity (JsonObject iterates in insertion order)
+  JsonObject root = doc.as<JsonObject>();
+  while (root.size() >= MAX_BOOK_MAP_ENTRIES) {
+    // Remove the first (oldest) key
+    auto it = root.begin();
+    if (it == root.end()) break;
+    root.remove(it);
   }
 
   JsonObject entry = doc[queryKey].to<JsonObject>();
@@ -213,6 +231,11 @@ void syncTaskFunc(void* /*param*/) {
 
     if (!HARDCOVER_STORE.hasToken()) {
       LOG_DBG(LOG_TAG, "No token — skipping sync");
+      // Unblock the sender if this was a FLUSH with a completion semaphore,
+      // otherwise hardcoverSleep() will always timeout waiting.
+      if (msg.completionSem) {
+        xSemaphoreGive(msg.completionSem);
+      }
       continue;
     }
 
@@ -271,7 +294,12 @@ void syncTaskFunc(void* /*param*/) {
         // but do NOT send a misleading value to Hardcover.
         // TODO: integrate with EPUB layout engine to get total page count
         //       for accurate percentage calculation.
+        //
+        // NOTE: Because lastProgressPercent remains PROGRESS_UNKNOWN here,
+        // the FLUSH / updateProgress() path is effectively a no-op until a
+        // reliable total page count is available to compute a real percentage.
         lastSyncedPage = msg.page;
+        lastProgressPercent = PROGRESS_UNKNOWN;
         saveSyncState();
         break;
       }
@@ -328,9 +356,8 @@ void hardcoverEnable() {
     return;
   }
 
-  // Create background sync task (4096 byte stack for network I/O)
-  BaseType_t result =
-      xTaskCreate(syncTaskFunc, "hc_sync", SYNC_TASK_STACK, nullptr, 1, &syncTaskHandle);
+  // Create background sync task
+  BaseType_t result = xTaskCreate(syncTaskFunc, "hc_sync", SYNC_TASK_STACK, nullptr, 1, &syncTaskHandle);
   if (result != pdPASS) {
     LOG_ERR(LOG_TAG, "Failed to create sync task");
     vQueueDelete(syncQueue);
@@ -347,6 +374,11 @@ void hardcoverDisable() {
     syncTaskHandle = nullptr;
   }
   if (syncQueue) {
+    // Drain any remaining messages before deleting the queue
+    SyncMessage tmp;
+    while (uxQueueMessagesWaiting(syncQueue) > 0) {
+      xQueueReceive(syncQueue, &tmp, 0);
+    }
     vQueueDelete(syncQueue);
     syncQueue = nullptr;
   }

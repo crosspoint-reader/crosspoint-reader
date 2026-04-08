@@ -140,12 +140,12 @@ void PluginRegistry::setEnabled(const char* id, bool enabled) {
   for (int i = 0; i < pluginCount; i++) {
     if (!pluginTable[i] || !pluginTable[i]->id) continue;
     if (strcmp(pluginTable[i]->id, id) == 0) {
-      if (!pluginStates[i].compatible) return;  // cannot enable incompatible plugin
-      const bool wasEnabled = pluginStates[i].enabled;
+      if (!pluginStates[i].compatible) return;         // cannot enable incompatible plugin
+      if (pluginStates[i].enabled == enabled) return;  // no change — avoid unnecessary SPIFFS write
       pluginStates[i].enabled = enabled;
-      if (enabled && !wasEnabled && pluginTable[i]->onEnable) {
+      if (enabled && pluginTable[i]->onEnable) {
         pluginTable[i]->onEnable();
-      } else if (!enabled && wasEnabled && pluginTable[i]->onDisable) {
+      } else if (!enabled && pluginTable[i]->onDisable) {
         pluginTable[i]->onDisable();
       }
       saveState();
