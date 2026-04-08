@@ -1,6 +1,7 @@
 #include "BaseTheme.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -731,6 +732,20 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                         showBatteryPercentage);
   }
 
+  // Draw Clock (X3 only — DS3231 RTC)
+  int clockTextWidth = 0;
+  if (SETTINGS.statusBarClock && halClock.isAvailable()) {
+    char timeBuf[6];
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffset)) {
+      clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
+      // Position to the left of the progress text (with a small gap)
+      const int clockX =
+          renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth -
+          (progressTextWidth > 0 ? 10 : 0) - clockTextWidth;
+      renderer.drawText(SMALL_FONT_ID, clockX, textY, timeBuf);
+    }
+  }
+
   // Draw Title
   if (!title.empty()) {
     textY -= textYOffset;
@@ -741,7 +756,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
     const int batterySize = SETTINGS.statusBarBattery ? (showBatteryPercentage ? 50 : 20) : 0;
     const int titleMarginLeft = batterySize + 30;
-    const int titleMarginRight = progressTextWidth + 30;
+    const int clockReserve = clockTextWidth > 0 ? (clockTextWidth + 10) : 0;
+    const int titleMarginRight = progressTextWidth + clockReserve + 30;
 
     // Attempt to center title on the screen, but if title is too wide then later we will center it within the
     // available space.
