@@ -348,7 +348,7 @@ bool JsonSettingsIO::saveHardcover(const HardcoverCredentialStore& store, const 
   return Storage.writeFile(path, json);
 }
 
-bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore& store, const char* json) {
+bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore& store, const char* json, bool* needsResave) {
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
@@ -361,6 +361,9 @@ bool JsonSettingsIO::loadHardcover(HardcoverCredentialStore& store, const char* 
   if (!ok) {
     // Fall back to plain text token (first-time or manual edit)
     store.token = doc["token"] | std::string("");
+    if (needsResave) *needsResave = true;
+  } else {
+    if (needsResave) *needsResave = false;
   }
 
   LOG_DBG("HCS", "Loaded Hardcover token (length=%zu)", store.token.size());

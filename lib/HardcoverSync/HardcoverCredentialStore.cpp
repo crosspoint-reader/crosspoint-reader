@@ -10,6 +10,9 @@ HardcoverCredentialStore HardcoverCredentialStore::instance;
 
 namespace {
 constexpr char HARDCOVER_FILE_JSON[] = "/.crosspoint/hardcover.json";
+constexpr size_t MAX_HARDCOVER_FILE_BYTES = 4096;  // A valid credentials JSON is ~200 bytes; 4 KB provides
+                                                    // ample margin while preventing heap exhaustion from
+                                                    // corrupt or attacker-controlled files.
 }  // namespace
 
 bool HardcoverCredentialStore::saveToFile() const {
@@ -20,6 +23,19 @@ bool HardcoverCredentialStore::saveToFile() const {
 bool HardcoverCredentialStore::loadFromFile() {
   if (!Storage.exists(HARDCOVER_FILE_JSON)) {
     LOG_DBG("HCS", "No credentials file found");
+    return false;
+  }
+
+  // Guard against oversized / corrupt files consuming all heap
+  HalFile file;
+  if (!Storage.openFileForRead("HCS", HARDCOVER_FILE_JSON, file)) {
+    LOG_ERR("HCS", "Failed to open credentials file");
+    return false;
+  }
+  const size_t fileBytes = file.size();
+  file.close();
+  if (fileBytes > MAX_HARDCOVER_FILE_BYTES) {
+    LOG_ERR("HCS", "Credentials file too large (%zu bytes), ignoring", fileBytes);
     return false;
   }
 
@@ -40,7 +56,13 @@ void HardcoverCredentialStore::setToken(const std::string& bearerToken) {
 bool HardcoverCredentialStore::hasToken() const { return !token.empty(); }
 
 void HardcoverCredentialStore::clearToken() {
+  const std::string backup = token;
   token.clear();
-  saveToFile();
+  if (!saveToFile()) {
+    // Persist failed: restore the in-memory token so disk and RAM stay in sync
+    token = backup;
+    LOG_ERR("HCS", "Failed to persist cleared Hardcover token — keeping existing token");
+    return;
+  }
   LOG_DBG("HCS", "Cleared Hardcover token");
 }

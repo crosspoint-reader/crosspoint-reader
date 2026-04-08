@@ -49,6 +49,10 @@ static constexpr uint32_t SYNC_TASK_STACK = 4096;
 // Queue capacity (number of pending commands)
 static constexpr int QUEUE_SIZE = 8;
 
+// Maximum time (ms) to wait for the background sync task to acknowledge a
+// FLUSH command before entering deep sleep.
+static constexpr uint32_t FLUSH_TIMEOUT_MS = 3000;
+
 // Paths on SD card
 constexpr char STATE_DIR[] = "/.crosspoint/plugin_hardcover";
 constexpr char STATE_FILE[] = "/.crosspoint/plugin_hardcover/state.json";
@@ -67,9 +71,10 @@ enum class SyncCmd : uint8_t {
 
 struct SyncMessage {
   SyncCmd cmd;
-  char path[128];   // EPUB path (BOOK_OPEN only)
-  int chapter;      // Current chapter
-  int page;         // Current page
+  char path[128];              // EPUB path (BOOK_OPEN only)
+  int chapter;                 // Current chapter
+  int page;                    // Current page
+  SemaphoreHandle_t completionSem;  // FLUSH only: semaphore to signal completion (nullptr if creation failed or unused)
 };
 
 // ---------------------------------------------------------------------------
@@ -84,7 +89,10 @@ int currentBookId = 0;
 int currentUserBookId = 0;
 int pageTurnCounter = 0;
 int lastSyncedPage = 0;
-float lastProgressPercent = 0.0f;
+
+// Sentinel value meaning "total page count unknown — do not send progress_percentage"
+static constexpr float PROGRESS_UNKNOWN = -1.0f;
+float lastProgressPercent = PROGRESS_UNKNOWN;
 
 // ---------------------------------------------------------------------------
 // SD persistence helpers
@@ -163,7 +171,7 @@ void loadSyncState() {
   currentBookId = doc["book_id"] | 0;
   currentUserBookId = doc["user_book_id"] | 0;
   lastSyncedPage = doc["last_synced_page"] | 0;
-  lastProgressPercent = doc["progress_percent"] | 0.0f;
+  lastProgressPercent = doc["progress_percent"] | PROGRESS_UNKNOWN;
   LOG_DBG(LOG_TAG, "Loaded sync state: book=%d ub=%d page=%d", currentBookId, currentUserBookId, lastSyncedPage);
 }
 
@@ -258,22 +266,13 @@ void syncTaskFunc(void* /*param*/) {
       case SyncCmd::PAGE_TURN: {
         if (currentUserBookId == 0) break;
 
-        // The page value from onPageTurn is a sequential page number.
-        // Without total page count from book metadata we cannot compute
-        // an accurate percentage.  Send the raw page number as a
-        // progress_percentage clamped to [0,100].
+        // Without total page count from book metadata we cannot compute an
+        // accurate progress_percentage.  Record the page for state persistence
+        // but do NOT send a misleading value to Hardcover.
         // TODO: integrate with EPUB layout engine to get total page count
         //       for accurate percentage calculation.
-        lastProgressPercent = (msg.page > 0) ? static_cast<float>(msg.page) / 100.0f : 0.0f;
-        if (lastProgressPercent > 1.0f) lastProgressPercent = 1.0f;
-
-        auto err = HardcoverClient::updateProgress(currentUserBookId, lastProgressPercent);
-        if (err == HardcoverClient::OK) {
-          lastSyncedPage = msg.page;
-          saveSyncState();
-        } else {
-          LOG_DBG(LOG_TAG, "Progress update failed: %s", HardcoverClient::errorString(err));
-        }
+        lastSyncedPage = msg.page;
+        saveSyncState();
         break;
       }
 
@@ -290,10 +289,13 @@ void syncTaskFunc(void* /*param*/) {
       }
 
       case SyncCmd::FLUSH: {
-        if (currentUserBookId == 0) break;
-        if (lastSyncedPage > 0) {
+        if (currentUserBookId != 0 && lastProgressPercent != PROGRESS_UNKNOWN) {
           HardcoverClient::updateProgress(currentUserBookId, lastProgressPercent);
           saveSyncState();
+        }
+        // Signal the sender that the flush is complete (if a semaphore was attached)
+        if (msg.completionSem) {
+          xSemaphoreGive(msg.completionSem);
         }
         break;
       }
@@ -307,9 +309,17 @@ void syncTaskFunc(void* /*param*/) {
 
 void hardcoverBoot() {
   LOG_INF(LOG_TAG, "Hardcover plugin loaded");
-
-  // Load credentials from SD
+  // Load credentials from SD so they are ready before the first sync
   HARDCOVER_STORE.loadFromFile();
+}
+
+void hardcoverEnable() {
+  // Guard: skip creation if already running (e.g. dispatchBoot followed by
+  // a redundant setEnabled call).
+  if (syncQueue != nullptr) {
+    LOG_DBG(LOG_TAG, "Sync task already running — skipping enable");
+    return;
+  }
 
   // Create the sync queue
   syncQueue = xQueueCreate(QUEUE_SIZE, sizeof(SyncMessage));
@@ -329,6 +339,18 @@ void hardcoverBoot() {
   }
 
   LOG_DBG(LOG_TAG, "Background sync task started");
+}
+
+void hardcoverDisable() {
+  if (syncTaskHandle) {
+    vTaskDelete(syncTaskHandle);
+    syncTaskHandle = nullptr;
+  }
+  if (syncQueue) {
+    vQueueDelete(syncQueue);
+    syncQueue = nullptr;
+  }
+  LOG_DBG(LOG_TAG, "Background sync task stopped");
 }
 
 void hardcoverBookOpen(const char* epubPath) {
@@ -378,7 +400,27 @@ void hardcoverSleep() {
   SyncMessage msg = {};
   msg.cmd = SyncCmd::FLUSH;
 
-  xQueueSend(syncQueue, &msg, 0);
+  // Create a binary semaphore so we can block until the background task
+  // finishes processing the FLUSH (i.e., updateProgress completes) before
+  // the device enters deep sleep and loses the pending progress data.
+  msg.completionSem = xSemaphoreCreateBinary();
+  if (!msg.completionSem) {
+    LOG_ERR(LOG_TAG, "Failed to create FLUSH semaphore — progress may be lost on sleep");
+    xQueueSend(syncQueue, &msg, 0);
+    return;
+  }
+
+  if (xQueueSend(syncQueue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
+    LOG_ERR(LOG_TAG, "FLUSH queue send failed — progress may be lost on sleep");
+    vSemaphoreDelete(msg.completionSem);
+    return;
+  }
+
+  // Block until the sync task signals completion (FLUSH_TIMEOUT_MS timeout)
+  if (xSemaphoreTake(msg.completionSem, pdMS_TO_TICKS(FLUSH_TIMEOUT_MS)) != pdTRUE) {
+    LOG_ERR(LOG_TAG, "Timeout waiting for FLUSH completion — progress may be lost on sleep");
+  }
+  vSemaphoreDelete(msg.completionSem);
 }
 
 }  // namespace
@@ -396,9 +438,12 @@ extern const CprPlugin hardcoverPlugin = {
     .description = "Sync reading progress to Hardcover.app",
 
     .onBoot = hardcoverBoot,
+    .onSettingsRender = nullptr,
     .onBookOpen = hardcoverBookOpen,
     .onBookClose = hardcoverBookClose,
     .onPageTurn = hardcoverPageTurn,
     .onSleep = hardcoverSleep,
     .onWake = nullptr,
+    .onEnable = hardcoverEnable,
+    .onDisable = hardcoverDisable,
 };
