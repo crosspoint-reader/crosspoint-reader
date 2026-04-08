@@ -20,18 +20,18 @@ git status --short
 ```bash
 python3 --version
 ```
-Nếu máy chưa có môi trường Python phù hợp hoặc thiếu package, phải dùng virtual environment tại root repo: `/.env`.
+Nếu máy chưa có môi trường Python phù hợp hoặc thiếu package, phải dùng virtual environment tại root repo: `/.venv`.
 5. Tạo hoặc tái sử dụng virtual environment ở root:
 ```bash
 # từ root repo
-python3 -m venv .env
-source .env/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r lib/EpdFont/scripts/requirements.txt
 ```
 6. Trước khi chạy convert script, xác nhận các package đã sẵn sàng:
 ```bash
-source .env/bin/activate
+source .venv/bin/activate
 python -c "import freetype, fontTools; print('font deps ok')"
 ```
 
@@ -54,7 +54,7 @@ python -c "import freetype, fontTools; print('font deps ok')"
 ## 3. Generate header font
 1. Chạy script convert:
 ```bash
-source .env/bin/activate
+source .venv/bin/activate
 bash lib/EpdFont/scripts/convert-builtin-fonts.sh
 ```
 2. Đảm bảo các header mới xuất hiện trong `lib/EpdFont/builtinFonts/`.
