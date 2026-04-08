@@ -27,6 +27,14 @@ struct CprPlugin {
   void (*onWake)();
   /// Called when the plugin is enabled (via setEnabled or dispatchBoot for
   /// initially-enabled plugins).  Use this to start background tasks / queues.
+  ///
+  /// **Idempotency requirement**: onEnable() may be invoked more than once
+  /// without an intervening onDisable() — for example, dispatchBoot() calls
+  /// onEnable() for every persisted-enabled plugin, and a later setEnabled(true)
+  /// can call it again.  Implementations MUST guard against repeated
+  /// initialization (e.g. check `syncQueue != nullptr` before creating
+  /// resources, or use an early-return flag) to avoid duplicate task/queue
+  /// creation.
   void (*onEnable)();
   /// Called when the plugin is disabled at runtime (via setEnabled).
   /// Use this to stop background tasks / queues and free resources.

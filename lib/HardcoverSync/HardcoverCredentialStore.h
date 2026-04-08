@@ -40,7 +40,7 @@ class HardcoverCredentialStore {
 
   // Token management
   void setToken(const std::string& bearerToken);
-  const std::string& getToken() const { return token; }
+  std::string getToken() const { return token; }
 
   // Check if token is set
   bool hasToken() const;

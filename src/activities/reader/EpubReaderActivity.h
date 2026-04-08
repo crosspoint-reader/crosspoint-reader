@@ -27,7 +27,7 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
-  bool bookOpened = false;  // Tracks whether dispatchBookOpen was called
+  bool bookOpened = false;               // Tracks whether dispatchBookOpen was called
   bool pendingPageTurnDispatch = false;  // Deferred dispatchPageTurn on chapter transition
 
   // Footnote support
