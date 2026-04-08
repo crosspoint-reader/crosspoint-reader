@@ -88,8 +88,9 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 
 inline void enforceExitFullRefresh(const GfxRenderer& renderer) {
   // Reader exits can leave visible ghosting when the next screen is rendered with a fast LUT.
-  // Force one full waveform pass before leaving the reader stack.
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  // Schedule the next displayed screen to use a full refresh, rather than refreshing
+  // the current reader screen as it closes.
+  renderer.setNextDisplayRefreshMode(HalDisplay::FULL_REFRESH);
 }
 
 // Grayscale anti-aliasing pass. Renders content twice (LSB + MSB) to build

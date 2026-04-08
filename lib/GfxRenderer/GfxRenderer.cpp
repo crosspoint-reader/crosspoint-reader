@@ -751,11 +751,12 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);
-  int32_t xPosFP = fp4::fromPixel(x);  // 12.4 fixed-point accumulator
   int lastBaseX = x;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
   int lastBaseTop = 0;
+  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
@@ -788,20 +789,24 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     }
 
     cp = font.applyLigatures(cp, text, style);
-    const int kernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
-    xPosFP += kernFP;
 
-    lastBaseX = fp4::toPixel(xPosFP);  // snap 12.4 fixed-point to nearest pixel
+    // Differential rounding: snap (previous advance + current kern) as one unit so
+    // identical character pairs always produce the same pixel step regardless of
+    // where they fall on the line.
+    if (prevCp != 0) {
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+    }
+
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
+    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    prevAdvanceFP = lastBaseAdvanceFP;
 
     renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
-    if (glyph) {
-      xPosFP += glyph->advanceX;  // 12.4 fixed-point advance
-    }
     prevCp = cp;
   }
 }
@@ -1583,10 +1588,17 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::setNextDisplayRefreshMode(const HalDisplay::RefreshMode refreshMode) const {
+  useNextRefreshOverride = true;
+  nextRefreshOverride = refreshMode;
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
+  const auto effectiveMode = useNextRefreshOverride ? nextRefreshOverride : refreshMode;
+  useNextRefreshOverride = false;
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  display.displayBuffer(refreshMode, fadingFix);
+  display.displayBuffer(effectiveMode, fadingFix);
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
@@ -1744,21 +1756,28 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
   uint32_t cp;
   uint32_t prevCp = 0;
-  int32_t widthFP = 0;  // 12.4 fixed-point accumulator
+  int widthPx = 0;
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       continue;
     }
     cp = font.applyLigatures(cp, text, style);
+
+    // Differential rounding: snap (previous advance + current kern) together,
+    // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
-      widthFP += font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);         // snap 12.4 fixed-point to nearest pixel
     }
+
     const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (glyph) widthFP += glyph->advanceX;  // 12.4 fixed-point advance
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;
     prevCp = cp;
   }
-  return fp4::toPixel(widthFP);  // snap 12.4 fixed-point to nearest pixel
+  widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+  return widthPx;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -1805,11 +1824,12 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   const auto& font = fontIt->second;
 
-  int32_t yPosFP = fp4::fromPixel(y);  // 12.4 fixed-point accumulator
   int lastBaseY = y;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
   int lastBaseTop = 0;
+  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
   uint32_t cp;
   uint32_t prevCp = 0;
@@ -1826,21 +1846,23 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     }
 
     cp = font.applyLigatures(cp, text, style);
+
+    // Differential rounding: snap (previous advance + current kern) as one unit,
+    // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
-      yPosFP -= font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern (subtract for rotated)
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
     }
 
-    lastBaseY = fp4::toPixel(yPosFP);  // snap 12.4 fixed-point to nearest pixel
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
+    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    prevAdvanceFP = lastBaseAdvanceFP;
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
-    if (glyph) {
-      yPosFP -= glyph->advanceX;  // 12.4 fixed-point advance (subtract for rotated)
-    }
     prevCp = cp;
   }
 }
