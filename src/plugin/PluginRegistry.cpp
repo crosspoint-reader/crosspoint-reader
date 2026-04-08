@@ -145,6 +145,7 @@ void PluginRegistry::saveState() {
   }
 
   String json;
+  json.reserve(256);  // Pre-allocate to avoid reallocation for typical plugin counts
   size_t len = serializeJson(doc, json);
   if (len == 0) {
     LOG_ERR("PLG", "plugins.json serialize failed");
