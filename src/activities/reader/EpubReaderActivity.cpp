@@ -48,6 +48,10 @@ int clampPercent(int percent) {
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
 
+  // Drop any input events that arrived from the activity that launched us (e.g. a wake-up power
+  // button hold) before they reach detectPageTurn() — see ReaderUtils::InputDrainGuard.
+  inputDrainGuard.arm();
+
   if (!epub) {
     return;
   }
@@ -115,6 +119,10 @@ void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
     finish();
+    return;
+  }
+
+  if (inputDrainGuard.shouldDrain(mappedInput)) {
     return;
   }
 

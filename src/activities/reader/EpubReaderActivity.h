@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "EpubReaderMenuActivity.h"
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
@@ -45,6 +46,7 @@ class EpubReaderActivity final : public Activity {
   uint16_t pendingParagraphIndex = 0;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  ReaderUtils::InputDrainGuard inputDrainGuard;
   bool automaticPageTurnActive = false;
   std::string deferredSyncEpubPath;
   // -1 means use global SETTINGS value.

@@ -9,6 +9,7 @@
 
 #include <Xtc.h>
 
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -16,6 +17,7 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  ReaderUtils::InputDrainGuard inputDrainGuard;
 
   void renderPage();
   void saveProgress() const;

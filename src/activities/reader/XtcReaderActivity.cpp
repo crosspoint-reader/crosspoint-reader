@@ -29,6 +29,10 @@ constexpr unsigned long goHomeMs = 1000;
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
 
+  // See ReaderUtils::InputDrainGuard — prevents wake-up power-button hold from leaking into
+  // the first detectPageTurn() call as a page turn or chapter skip.
+  inputDrainGuard.arm();
+
   if (!xtc) {
     return;
   }
@@ -58,6 +62,10 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
+  if (inputDrainGuard.shouldDrain(mappedInput)) {
+    return;
+  }
+
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {

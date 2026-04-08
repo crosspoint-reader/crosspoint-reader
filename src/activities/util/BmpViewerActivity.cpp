@@ -123,8 +123,7 @@ void BmpViewerActivity::onExit() {
   saveDitherSettingsIfNeeded();
 #endif
   Activity::onExit();
-  renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  ReaderUtils::enforceExitFullRefresh(renderer);
 }
 
 bool BmpViewerActivity::renderBmpImage(const bool showControls) {

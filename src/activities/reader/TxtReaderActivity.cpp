@@ -84,6 +84,10 @@ size_t parseAndWrapLines(const uint8_t* buffer, size_t chunkSize, size_t fileOff
 void TxtReaderActivity::onEnter() {
   Activity::onEnter();
 
+  // See ReaderUtils::InputDrainGuard — prevents wake-up power-button hold from leaking into
+  // the first detectPageTurn() call as a page turn or chapter skip.
+  inputDrainGuard.arm();
+
   if (!txt) {
     return;
   }
@@ -117,6 +121,10 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
+  if (inputDrainGuard.shouldDrain(mappedInput)) {
+    return;
+  }
+
   // Long press BACK (1s+) goes to home screen
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     ReaderUtils::enforceExitFullRefresh(renderer);
