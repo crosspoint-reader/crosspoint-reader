@@ -60,34 +60,34 @@ EpdFont bookerly18BoldItalicFont(&bookerly_18_bolditalic);
 EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont, &bookerly18ItalicFont,
                                    &bookerly18BoldItalicFont);
 
-EpdFont notosans12RegularFont(&notosans_12_regular);
-EpdFont notosans12BoldFont(&notosans_12_bold);
-EpdFont notosans12ItalicFont(&notosans_12_italic);
-EpdFont notosans12BoldItalicFont(&notosans_12_bolditalic);
-EpdFontFamily notosans12FontFamily(&notosans12RegularFont, &notosans12BoldFont, &notosans12ItalicFont,
-                                   &notosans12BoldItalicFont);
-EpdFont notosans14RegularFont(&notosans_14_regular);
-EpdFont notosans14BoldFont(&notosans_14_bold);
-EpdFont notosans14ItalicFont(&notosans_14_italic);
-EpdFont notosans14BoldItalicFont(&notosans_14_bolditalic);
-EpdFontFamily notosans14FontFamily(&notosans14RegularFont, &notosans14BoldFont, &notosans14ItalicFont,
-                                   &notosans14BoldItalicFont);
-EpdFont notosans16RegularFont(&notosans_16_regular);
-EpdFont notosans16BoldFont(&notosans_16_bold);
-EpdFont notosans16ItalicFont(&notosans_16_italic);
-EpdFont notosans16BoldItalicFont(&notosans_16_bolditalic);
-EpdFontFamily notosans16FontFamily(&notosans16RegularFont, &notosans16BoldFont, &notosans16ItalicFont,
-                                   &notosans16BoldItalicFont);
-EpdFont notosans18RegularFont(&notosans_18_regular);
-EpdFont notosans18BoldFont(&notosans_18_bold);
-EpdFont notosans18ItalicFont(&notosans_18_italic);
-EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
-EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
-                                   &notosans18BoldItalicFont);
+EpdFont notosanstc12RegularFont(&notosanstc_12_regular);
+EpdFont notosanstc12BoldFont(&notosanstc_12_bold);
+EpdFont notosanstc12ItalicFont(&notosanstc_12_regular); // Use Regular for Italic
+EpdFont notosanstc12BoldItalicFont(&notosanstc_12_bold); // Use Bold for BoldItalic
+EpdFontFamily notosanstc12FontFamily(&notosanstc12RegularFont, &notosanstc12BoldFont, &notosanstc12ItalicFont,
+                                       &notosanstc12BoldItalicFont);
+EpdFont notosanstc14RegularFont(&notosanstc_14_regular);
+EpdFont notosanstc14BoldFont(&notosanstc_14_bold);
+EpdFont notosanstc14ItalicFont(&notosanstc_14_regular); // Use Regular for Italic
+EpdFont notosanstc14BoldItalicFont(&notosanstc_14_bold); // Use Bold for BoldItalic
+EpdFontFamily notosanstc14FontFamily(&notosanstc14RegularFont, &notosanstc14BoldFont, &notosanstc14ItalicFont,
+                                       &notosanstc14BoldItalicFont);
+EpdFont notosanstc16RegularFont(&notosanstc_16_regular);
+EpdFont notosanstc16BoldFont(&notosanstc_16_bold);
+EpdFont notosanstc16ItalicFont(&notosanstc_16_regular); // Use Regular for Italic
+EpdFont notosanstc16BoldItalicFont(&notosanstc_16_bold); // Use Bold for BoldItalic
+EpdFontFamily notosanstc16FontFamily(&notosanstc16RegularFont, &notosanstc16BoldFont, &notosanstc16ItalicFont,
+                                       &notosanstc16BoldItalicFont);
+EpdFont notosanstc18RegularFont(&notosanstc_18_regular);
+EpdFont notosanstc18BoldFont(&notosanstc_18_bold);
+EpdFont notosanstc18ItalicFont(&notosanstc_18_regular); // Use Regular for Italic
+EpdFont notosanstc18BoldItalicFont(&notosanstc_18_bold); // Use Bold for BoldItalic
+EpdFontFamily notosanstc18FontFamily(&notosanstc18RegularFont, &notosanstc18BoldFont, &notosanstc18ItalicFont,
+                                       &notosanstc18BoldItalicFont);
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&notosans_8_regular);
+EpdFont smallFont(&notosanstc_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
 EpdFont ui10RegularFont(&ubuntu_10_regular);
@@ -185,10 +185,10 @@ void setupDisplayAndFonts() {
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
   renderer.insertFont(BOOKERLY_18_FONT_ID, bookerly18FontFamily);
 
-  renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
-  renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
-  renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
-  renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
+  renderer.insertFont(NOTOSANSTC_12_FONT_ID, notosanstc12FontFamily);
+  renderer.insertFont(NOTOSANSTC_14_FONT_ID, notosanstc14FontFamily);
+  renderer.insertFont(NOTOSANSTC_16_FONT_ID, notosanstc16FontFamily);
+  renderer.insertFont(NOTOSANSTC_18_FONT_ID, notosanstc18FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
