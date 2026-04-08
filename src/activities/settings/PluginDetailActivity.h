@@ -9,6 +9,7 @@
  */
 class PluginDetailActivity final : public Activity {
   int pluginIndex;
+  bool pendingFinish_ = false;
 
  public:
   explicit PluginDetailActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int pluginIndex)

@@ -294,7 +294,9 @@ void setup() {
   RECENT_BOOKS.loadFromFile();
 
   PluginRegistry::init();
-  PluginRegistry::dispatchWake();
+  if (gpio.isDeepSleepWake()) {
+    PluginRegistry::dispatchWake();
+  }
   PluginRegistry::dispatchBoot();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
