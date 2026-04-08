@@ -379,7 +379,7 @@ void loop() {
     return;
   }
 
-  // Refresh screeb when power button is short-pressed with FORCE_REFRESH setting.
+  // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
