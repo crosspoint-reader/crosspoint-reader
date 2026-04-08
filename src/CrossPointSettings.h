@@ -206,6 +206,8 @@ class CrossPointSettings {
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Developer option: show free heap in home header
+  uint8_t showFreeHeap = 0;
   // File browser sort mode
   uint8_t fileBrowserSort = FILE_SORT_NAME_ASC;
   // Image rendering mode in EPUB reader

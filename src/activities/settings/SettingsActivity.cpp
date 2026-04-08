@@ -53,6 +53,7 @@ static const char* getSettingDescription(const SettingInfo& setting) {
   if (strcmp(setting.key, "hideBatteryPercentage") == 0) return "Hide the battery percentage in headers and reader.";
   if (strcmp(setting.key, "sleepTimeout") == 0) return "Idle time before the device automatically sleeps.";
   if (strcmp(setting.key, "showHiddenFiles") == 0) return "Display files and folders whose names start with a dot.";
+  if (strcmp(setting.key, "showFreeHeap") == 0) return "Show free RAM in the home screen header for debugging.";
   if (strcmp(setting.key, "fileBrowserSort") == 0) return "Sort files by natural filename order or file size.";
   if (strcmp(setting.key, "longPressChapterSkip") == 0) return "Hold a side button to jump to the next chapter.";
   if (strcmp(setting.key, "sideButtonLayout") == 0) return "Swap the page-turn direction of the side buttons.";

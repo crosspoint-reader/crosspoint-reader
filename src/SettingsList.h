@@ -80,6 +80,8 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         "sleepTimeout", StrId::STR_CAT_SYSTEM),
       SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                           StrId::STR_CAT_SYSTEM),
+      SettingInfo::Toggle(StrId::STR_SHOW_FREE_HEAP, &CrossPointSettings::showFreeHeap, "showFreeHeap",
+                          StrId::STR_CAT_SYSTEM),
       SettingInfo::Enum(StrId::STR_FILE_SORT, &CrossPointSettings::fileBrowserSort,
                         {StrId::STR_SORT_NAME_ASC, StrId::STR_SORT_NAME_DESC, StrId::STR_SORT_SIZE_ASC,
                          StrId::STR_SORT_SIZE_DESC},

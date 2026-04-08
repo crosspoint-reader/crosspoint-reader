@@ -8,6 +8,7 @@
 #include <I18n.h>
 #include <Utf8.h>
 #include <Xtc.h>
+#include <esp_system.h>
 
 #include <cstring>
 #include <vector>
@@ -219,6 +220,12 @@ void HomeActivity::render(RenderLock&&) {
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+
+  if (SETTINGS.showFreeHeap) {
+    char heapBuf[16];
+    snprintf(heapBuf, sizeof(heapBuf), "%luKB", static_cast<unsigned long>(esp_get_free_heap_size() / 1024));
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, heapBuf, true);
+  }
 
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
