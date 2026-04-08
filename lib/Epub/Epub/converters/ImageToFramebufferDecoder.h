@@ -60,7 +60,11 @@ struct RenderConfig {
   ImageDitherMode ditherMode = ImageDitherMode::Bayer;
   bool performanceMode = false;
   bool useExactDimensions = false;  // If true, use maxWidth/maxHeight as exact output size (no recalculation)
-  std::string cachePath;            // If non-empty, decoder will write pixel cache to this path
+  // If true, the decoder uses a 1-bit Atkinson dither and emits only the values 0/3 — suitable for
+  // pure black-and-white display (no grayscale planes). The 4-level dither path produces values 1/2
+  // which the BW DirectPixelWriter collapses to black, making mid-grays render very dark.
+  bool monochromeOutput = false;
+  std::string cachePath;  // If non-empty, decoder will write pixel cache to this path
 };
 
 class ImageToFramebufferDecoder {

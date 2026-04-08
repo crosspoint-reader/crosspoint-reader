@@ -1,8 +1,6 @@
 #include "JpegToFramebufferConverter.h"
 
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
 #include <BitmapHelpers.h>
-#endif
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -42,6 +40,11 @@ struct JpegContext {
   PixelCache cache;
   bool caching;
 
+  // See PngContext for the rationale: monochromeOutput requests a 1-bit Atkinson dither
+  // emitting only 0/3 so the BW DirectPixelWriter (`pixelValue < 3` rule) maps cleanly.
+  int oneBitDitherRow;
+  Atkinson1BitDitherer* atkinson1BitDitherer;
+
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   int currentDitherRow;
   AtkinsonDitherer* atkinsonDitherer;
@@ -59,7 +62,9 @@ struct JpegContext {
         dstHeight(0),
         fineScaleFP(1 << 16),
         invScaleFP(1 << 16),
-        caching(false)
+        caching(false),
+        oneBitDitherRow(-1),
+        atkinson1BitDitherer(nullptr)
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
         ,
         currentDitherRow(-1),
@@ -69,13 +74,31 @@ struct JpegContext {
   {
   }
 
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   ~JpegContext() {
+    delete atkinson1BitDitherer;
+#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
     delete atkinsonDitherer;
     delete diffusedBayerDitherer;
-  }
 #endif
+  }
 };
+
+// Advance the 1-bit Atkinson ditherer to the requested destination row.
+// Handles non-monotonic row walks (block-based JPEG decode) by reset+replay.
+void prepareOneBitDitherRow(JpegContext& ctx, int dstY) {
+  if (!ctx.atkinson1BitDitherer) return;
+
+  if (ctx.oneBitDitherRow == -1 || dstY < ctx.oneBitDitherRow) {
+    ctx.atkinson1BitDitherer->reset();
+    ctx.oneBitDitherRow = dstY;
+    return;
+  }
+
+  while (ctx.oneBitDitherRow < dstY) {
+    ctx.atkinson1BitDitherer->nextRow();
+    ctx.oneBitDitherRow++;
+  }
+}
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
 void prepareDitherRow(JpegContext& ctx, int dstY) {
@@ -96,6 +119,10 @@ void prepareDitherRow(JpegContext& ctx, int dstY) {
 }
 
 uint8_t ditherGray(JpegContext& ctx, uint8_t gray, int localX, int outX, int outY) {
+  if (ctx.atkinson1BitDitherer) {
+    return ctx.atkinson1BitDitherer->processPixel(gray, localX) ? 3 : 0;
+  }
+
   if (!ctx.config || !ctx.config->useDithering) {
     return quantizeGray4Level(gray);
   }
@@ -121,7 +148,9 @@ uint8_t ditherGray(JpegContext& ctx, uint8_t gray, int localX, int outX, int out
 }
 #else
 uint8_t ditherGray(JpegContext& ctx, uint8_t gray, int localX, int outX, int outY) {
-  (void)ctx;
+  if (ctx.atkinson1BitDitherer) {
+    return ctx.atkinson1BitDitherer->processPixel(gray, localX) ? 3 : 0;
+  }
   (void)localX;
   return applyBayerDither4Level(gray, outX, outY);
 }
@@ -254,6 +283,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (fineScaleFP == FP_ONE) {
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
+      prepareOneBitDitherRow(*ctx, dstY);
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
       prepareDitherRow(*ctx, dstY);
 #endif
@@ -285,6 +315,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
+      prepareOneBitDitherRow(*ctx, dstY);
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
       prepareDitherRow(*ctx, dstY);
 #endif
@@ -367,6 +398,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   // === Nearest-neighbor (downscale: fineScale < 1.0) ===
   for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
     const int outY = cfgY + dstY;
+    prepareOneBitDitherRow(*ctx, dstY);
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
     prepareDitherRow(*ctx, dstY);
 #endif
@@ -531,7 +563,16 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     }
   }
 
-  if (config.useDithering) {
+  // See PngToFramebufferConverter for rationale: BW-only display needs a 1-bit
+  // dither so mid-grays don't collapse to black under DirectPixelWriter's `< 3` rule.
+  if (config.monochromeOutput) {
+    ctx.atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(destWidth);
+    if (!ctx.atkinson1BitDitherer) {
+      LOG_ERR("JPG", "Failed to allocate 1-bit Atkinson ditherer, falling back to 4-level dither");
+    }
+  }
+
+  if (config.useDithering && !ctx.atkinson1BitDitherer) {
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
     switch (config.ditherMode) {
       case ImageDitherMode::Atkinson:

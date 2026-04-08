@@ -1,6 +1,7 @@
 #include "SleepActivity.h"
 
 #include <Epub.h>
+#include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -9,6 +10,7 @@
 #include <Serialization.h>
 #include <Txt.h>
 #include <Xtc.h>
+#include <esp_system.h>
 
 #include <algorithm>
 #include <new>
@@ -68,6 +70,127 @@ int32_t pngSleepSeek(PNGFILE* pFile, int32_t pos) {
   FsFile* f = reinterpret_cast<FsFile*>(pFile->fHandle);
   if (!f) return -1;
   return f->seek(pos);
+}
+
+bool renderPngSleepScreen(const std::string& filename, GfxRenderer& renderer, const BookOverlayInfo& overlayInfo) {
+  constexpr size_t MIN_FREE_HEAP = 60 * 1024;  // PNG decoder ~42 KB + overhead
+  if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
+    LOG_ERR("SLP", "Not enough heap for PNG sleep image: %s", filename.c_str());
+    return false;
+  }
+
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+
+  renderer.clearScreen();
+
+  RenderConfig config;
+  config.x = 0;
+  config.y = 0;
+  config.maxWidth = pageWidth;
+  config.maxHeight = pageHeight;
+  config.useGrayscale = true;
+  config.useDithering = true;
+  config.ditherMode = ImageDitherMode::Bayer;
+  config.performanceMode = false;
+  config.useExactDimensions = false;
+
+  // Overlay drawing is shared across all three rendering passes (BW + LSB + MSB) so the
+  // text appears on every plane. Captured by reference so the lambda sees the renderer.
+  const auto drawOverlay = [&]() {
+    if (overlayInfo.progressText.empty()) {
+      return;
+    }
+    const int lineHeight12 = renderer.getLineHeight(BOOKERLY_12_FONT_ID);
+    const int lineHeight10 = renderer.getLineHeight(UI_10_FONT_ID);
+    constexpr int lineSpacing = 3;
+    constexpr int sectionSpacing = 10;
+    const int maxTextWidth = pageWidth - 20;
+
+    int textBlockHeight = 0;
+    if (!overlayInfo.title.empty()) {
+      textBlockHeight += lineHeight12;
+      if (!overlayInfo.author.empty()) {
+        textBlockHeight += lineSpacing;
+      } else if (!overlayInfo.progressText.empty()) {
+        textBlockHeight += sectionSpacing;
+      }
+    }
+    if (!overlayInfo.author.empty()) {
+      textBlockHeight += lineHeight10;
+      if (!overlayInfo.progressText.empty()) {
+        textBlockHeight += sectionSpacing;
+      }
+    }
+    if (!overlayInfo.progressText.empty()) {
+      textBlockHeight += lineHeight10;
+    }
+
+    const int overlayY = pageHeight - textBlockHeight - (lineHeight12 / 3) - (lineHeight10 * 2 / 3);
+    int y = overlayY + (lineHeight12 / 3);
+    if (!overlayInfo.title.empty()) {
+      const std::string title = renderer.truncatedText(BOOKERLY_12_FONT_ID, overlayInfo.title.c_str(), maxTextWidth);
+      renderer.drawText(BOOKERLY_12_FONT_ID, 10, y, title.c_str(), true);
+      y += lineHeight12;
+      if (!overlayInfo.author.empty()) {
+        y += lineSpacing;
+      } else if (!overlayInfo.progressText.empty()) {
+        y += sectionSpacing;
+      }
+    }
+    if (!overlayInfo.author.empty()) {
+      const std::string author = renderer.truncatedText(UI_10_FONT_ID, overlayInfo.author.c_str(), maxTextWidth);
+      renderer.drawText(UI_10_FONT_ID, 10, y, author.c_str(), true);
+      y += lineHeight10;
+      if (!overlayInfo.progressText.empty()) {
+        y += sectionSpacing;
+      }
+    }
+    if (!overlayInfo.progressText.empty()) {
+      const std::string progress =
+          renderer.truncatedText(UI_10_FONT_ID, overlayInfo.progressText.c_str(), maxTextWidth);
+      renderer.drawText(UI_10_FONT_ID, 10, y, progress.c_str(), true);
+    }
+  };
+
+  PngToFramebufferConverter decoder;
+
+  // Pass 1: BW plane — mirrors SleepActivity::renderBitmapSleepScreen so the BW carrier
+  // matches the 4-level quantization layered on top via the LSB/MSB planes.
+  renderer.setRenderMode(GfxRenderer::BW);
+  renderer.clearScreen();
+  if (!decoder.decodeToFramebuffer(filename, renderer, config)) {
+    LOG_DBG("SLP", "PNG sleep image decode failed: %s", filename.c_str());
+    return false;
+  }
+  drawOverlay();
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+
+  // Pass 2: GRAYSCALE_LSB plane.
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  if (!decoder.decodeToFramebuffer(filename, renderer, config)) {
+    LOG_DBG("SLP", "PNG sleep image LSB decode failed: %s", filename.c_str());
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+  drawOverlay();
+  renderer.copyGrayscaleLsbBuffers();
+
+  // Pass 3: GRAYSCALE_MSB plane.
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  if (!decoder.decodeToFramebuffer(filename, renderer, config)) {
+    LOG_DBG("SLP", "PNG sleep image MSB decode failed: %s", filename.c_str());
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+  drawOverlay();
+  renderer.copyGrayscaleMsbBuffers();
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
+  return true;
 }
 
 // Per-scanline draw callback for PNG overlay compositing.
@@ -216,9 +339,9 @@ size_t pickSleepImageIndex(size_t numFiles) {
     if (last == SIZE_MAX || last >= numFiles) return 0;
     return (last + 1) % numFiles;
   }
-  size_t idx = random(numFiles);
+  size_t idx = static_cast<size_t>(esp_random() % numFiles);
   while (numFiles > 1 && APP_STATE.lastSleepImage != SIZE_MAX && idx == APP_STATE.lastSleepImage) {
-    idx = random(numFiles);
+    idx = static_cast<size_t>(esp_random() % numFiles);
   }
   return idx;
 }
@@ -266,28 +389,43 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
     explicitSleepFile.close();
   }
+  if (Storage.openFileForRead("SLP", "/sleep.png", explicitSleepFile)) {
+    explicitSleepFile.close();
+    const BookOverlayInfo resolvedOverlayInfo =
+        shouldLoadOverlayInfo ? getBookOverlayInfo(APP_STATE.openEpubPath) : overlayInfo;
+    LOG_DBG("SLP", "Loading explicit custom sleep image: /sleep.png");
+    if (renderPngSleepScreen("/sleep.png", renderer, resolvedOverlayInfo)) {
+      return;
+    }
+  }
 
-  // Collect valid BMP files from both /.sleep and /sleep directories (no preference between them)
-  const auto files = collectSleepImages(/*allowPng=*/false);
+  // Collect valid BMP and PNG files from both /.sleep and /sleep directories (no preference between them)
+  const auto files = collectSleepImages(/*allowPng=*/true);
   const auto numFiles = files.size();
   if (numFiles > 0) {
     const auto pickedIndex = pickSleepImageIndex(numFiles);
     APP_STATE.lastSleepImage = pickedIndex;
     APP_STATE.saveToFile();
     const auto& filename = files[pickedIndex];
-    FsFile file;
-    if (Storage.openFileForRead("SLP", filename, file)) {
-      LOG_DBG("SLP", "Loading sleep image: %s", filename.c_str());
-      delay(100);
-      Bitmap bitmap(file, true);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        const BookOverlayInfo resolvedOverlayInfo =
-            shouldLoadOverlayInfo ? getBookOverlayInfo(APP_STATE.openEpubPath) : overlayInfo;
-        renderBitmapSleepScreen(bitmap, resolvedOverlayInfo);
-        file.close();
+    LOG_DBG("SLP", "Loading sleep image: %s", filename.c_str());
+    const BookOverlayInfo resolvedOverlayInfo =
+        shouldLoadOverlayInfo ? getBookOverlayInfo(APP_STATE.openEpubPath) : overlayInfo;
+    if (FsHelpers::hasPngExtension(filename)) {
+      if (renderPngSleepScreen(filename, renderer, resolvedOverlayInfo)) {
         return;
       }
-      file.close();
+    } else {
+      FsFile file;
+      if (Storage.openFileForRead("SLP", filename, file)) {
+        delay(100);
+        Bitmap bitmap(file, true);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          renderBitmapSleepScreen(bitmap, resolvedOverlayInfo);
+          file.close();
+          return;
+        }
+        file.close();
+      }
     }
   }
 
@@ -487,7 +625,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOver
     const bool hasTitle = !overlayInfo.title.empty();
     const bool hasProgress = !overlayInfo.progressText.empty();
     const bool hasAuthor = !overlayInfo.author.empty();
-    if (!hasTitle && !hasAuthor && !hasProgress) {
+    // If there is no overlay progress text, do not draw the overlay background block.
+    if (!hasProgress) {
       return;
     }
 
@@ -497,23 +636,13 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOver
     constexpr int sectionSpacing = 10;
     const int availableWidth = pageWidth - 20;
 
-    int textBlockHeight = 0;
+    int textBlockHeight = lineHeight10;  // progress line (always present here)
     if (hasTitle) {
       textBlockHeight += lineHeight12;
-      if (hasAuthor) {
-        textBlockHeight += lineSpacing;
-      } else if (hasProgress) {
-        textBlockHeight += sectionSpacing;
-      }
+      textBlockHeight += hasAuthor ? lineSpacing : sectionSpacing;
     }
     if (hasAuthor) {
-      textBlockHeight += lineHeight10;
-      if (hasProgress) {
-        textBlockHeight += sectionSpacing;
-      }
-    }
-    if (hasProgress) {
-      textBlockHeight += lineHeight10;
+      textBlockHeight += lineHeight10 + sectionSpacing;
     }
 
     const bool textBlack = (overlayMode != 3);
@@ -534,8 +663,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOver
       const std::string titleStr =
           renderer.truncatedText(BOOKERLY_12_FONT_ID, overlayInfo.title.c_str(), availableWidth, EpdFontFamily::BOLD);
       renderer.drawCenteredText(BOOKERLY_12_FONT_ID, currentY, titleStr.c_str(), textBlack, EpdFontFamily::BOLD);
-      const int spacingAfterTitle = hasAuthor ? lineSpacing : (hasProgress ? sectionSpacing : lineSpacing);
-      currentY += lineHeight12 + spacingAfterTitle;
+      currentY += lineHeight12 + (hasAuthor ? lineSpacing : sectionSpacing);
     }
 
     if (hasAuthor) {
@@ -544,23 +672,20 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOver
       currentY += lineHeight10 + sectionSpacing;
     }
 
-    if (hasProgress) {
-      std::string progressStr;
-      if (!overlayInfo.chapterName.empty()) {
-        const std::string prefix = "";
-        const int prefixWidth = renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
-        const int suffixWidth = renderer.getTextWidth(UI_10_FONT_ID, overlayInfo.progressSuffix.c_str());
-        const int maxChapterWidth = availableWidth - prefixWidth - suffixWidth;
-        const std::string truncatedChapter =
-            maxChapterWidth > 0
-                ? renderer.truncatedText(UI_10_FONT_ID, overlayInfo.chapterName.c_str(), maxChapterWidth)
-                : "";
-        progressStr = prefix + truncatedChapter + overlayInfo.progressSuffix;
-      } else {
-        progressStr = renderer.truncatedText(UI_10_FONT_ID, overlayInfo.progressText.c_str(), availableWidth);
-      }
-      renderer.drawCenteredText(UI_10_FONT_ID, currentY, progressStr.c_str(), textBlack);
+    std::string progressStr;
+    if (!overlayInfo.chapterName.empty()) {
+      const std::string prefix = "";
+      const int prefixWidth = renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
+      const int suffixWidth = renderer.getTextWidth(UI_10_FONT_ID, overlayInfo.progressSuffix.c_str());
+      const int maxChapterWidth = availableWidth - prefixWidth - suffixWidth;
+      const std::string truncatedChapter =
+          maxChapterWidth > 0 ? renderer.truncatedText(UI_10_FONT_ID, overlayInfo.chapterName.c_str(), maxChapterWidth)
+                              : "";
+      progressStr = prefix + truncatedChapter + overlayInfo.progressSuffix;
+    } else {
+      progressStr = renderer.truncatedText(UI_10_FONT_ID, overlayInfo.progressText.c_str(), availableWidth);
     }
+    renderer.drawCenteredText(UI_10_FONT_ID, currentY, progressStr.c_str(), textBlack);
   };
 
   drawOverlay();

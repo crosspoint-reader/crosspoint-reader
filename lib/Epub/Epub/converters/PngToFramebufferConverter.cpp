@@ -1,8 +1,6 @@
 #include "PngToFramebufferConverter.h"
 
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
 #include <BitmapHelpers.h>
-#endif
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -39,6 +37,15 @@ struct PngContext {
   bool caching;
 
   uint8_t* grayLineBuffer;
+
+  // When the caller requests monochrome output (RenderConfig::monochromeOutput),
+  // we run a proper 1-bit Atkinson dither (matching PngToBmpConverter's BW path)
+  // and emit only values 0 or 3, which round-trip cleanly through the BW writer's
+  // `pixelValue < 3` rule. The 4-level dither path collapses mid-grays to solid
+  // black under that rule.
+  int oneBitDitherRow;
+  Atkinson1BitDitherer* atkinson1BitDitherer;
+
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   int currentDitherRow;
   AtkinsonDitherer* atkinsonDitherer;
@@ -57,7 +64,9 @@ struct PngContext {
         dstHeight(0),
         lastDstY(-1),
         caching(false),
-        grayLineBuffer(nullptr)
+        grayLineBuffer(nullptr),
+        oneBitDitherRow(-1),
+        atkinson1BitDitherer(nullptr)
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
         ,
         currentDitherRow(-1),
@@ -67,13 +76,32 @@ struct PngContext {
   {
   }
 
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   ~PngContext() {
+    delete atkinson1BitDitherer;
+#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
     delete atkinsonDitherer;
     delete diffusedBayerDitherer;
-  }
 #endif
+  }
 };
+
+// Advance the 1-bit Atkinson ditherer to the requested destination row.
+// Like the 4-level path below, this handles re-decode passes that walk source
+// rows non-monotonically by resetting and replaying when needed.
+void prepareOneBitDitherRow(PngContext& ctx, int dstY) {
+  if (!ctx.atkinson1BitDitherer) return;
+
+  if (ctx.oneBitDitherRow == -1 || dstY < ctx.oneBitDitherRow) {
+    ctx.atkinson1BitDitherer->reset();
+    ctx.oneBitDitherRow = dstY;
+    return;
+  }
+
+  while (ctx.oneBitDitherRow < dstY) {
+    ctx.atkinson1BitDitherer->nextRow();
+    ctx.oneBitDitherRow++;
+  }
+}
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
 void prepareDitherRow(PngContext& ctx, int dstY) {
@@ -94,6 +122,12 @@ void prepareDitherRow(PngContext& ctx, int dstY) {
 }
 
 uint8_t ditherGray(PngContext& ctx, uint8_t gray, int localX, int outX, int outY) {
+  // BW mode: route through 1-bit Atkinson and emit only 0/3 so the
+  // DirectPixelWriter's `pixelValue < 3` rule maps cleanly to black/white.
+  if (ctx.atkinson1BitDitherer) {
+    return ctx.atkinson1BitDitherer->processPixel(gray, localX) ? 3 : 0;
+  }
+
   if (!ctx.config || !ctx.config->useDithering) {
     return quantizeGray4Level(gray);
   }
@@ -119,7 +153,9 @@ uint8_t ditherGray(PngContext& ctx, uint8_t gray, int localX, int outX, int outY
 }
 #else
 uint8_t ditherGray(PngContext& ctx, uint8_t gray, int localX, int outX, int outY) {
-  (void)ctx;
+  if (ctx.atkinson1BitDitherer) {
+    return ctx.atkinson1BitDitherer->processPixel(gray, localX) ? 3 : 0;
+  }
   (void)localX;
   return applyBayerDither4Level(gray, outX, outY);
 }
@@ -291,6 +327,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
     cw.beginRow(outY, ctx->config->y);
   }
 
+  prepareOneBitDitherRow(*ctx, dstY);
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   prepareDitherRow(*ctx, dstY);
 #endif
@@ -455,7 +492,20 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     }
   }
 
-  if (config.useDithering) {
+  // When the caller explicitly requests monochrome output, use a 1-bit Atkinson
+  // ditherer instead of the 4-level paths below. The 4-level dither produces
+  // values 1-2 for mid grays, which DirectPixelWriter then collapses to black
+  // under its `< 3` BW rule, making images render very dark in BW-only mode.
+  // The 1-bit ditherer emits only 0 or 3 so the BW writer maps cleanly to
+  // black/white.
+  if (config.monochromeOutput) {
+    ctx.atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(ctx.dstWidth);
+    if (!ctx.atkinson1BitDitherer) {
+      LOG_ERR("PNG", "Failed to allocate 1-bit Atkinson ditherer, falling back to 4-level dither");
+    }
+  }
+
+  if (config.useDithering && !ctx.atkinson1BitDitherer) {
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
     switch (config.ditherMode) {
       case ImageDitherMode::Atkinson:

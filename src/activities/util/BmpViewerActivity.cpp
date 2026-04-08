@@ -150,13 +150,43 @@ bool BmpViewerActivity::renderBmpImage(const bool showControls) {
 
   GUI.fillPopupProgress(renderer, popupRect, 50);
 
+  bmpHasGreyscale = bitmap.hasGreyscale();
+  // Only render in grayscale when the bitmap actually carries greyscale data AND the user has it enabled.
+  const bool renderGrayscale = bmpHasGreyscale && grayscaleDisplay;
+
+  // Draw control hints. btn2 only shows the BW/Gray toggle when the bitmap supports greyscale —
+  // pure 1-bit BMPs have nothing to toggle. The label shows the *target* mode (what pressing it switches to).
+  const auto drawHints = [&]() {
+    if (!showControls) return;
+    const char* modeLabel =
+        bmpHasGreyscale ? (grayscaleDisplay ? tr(STR_IMAGE_DISPLAY_BW) : tr(STR_IMAGE_DISPLAY_GRAYSCALE)) : "";
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), modeLabel, "", tr(STR_SET_SLEEP_SCREEN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  };
+
+  renderer.setRenderMode(GfxRenderer::BW);
   renderer.clearScreen();
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
-  if (showControls) {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", tr(STR_SET_SLEEP_SCREEN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
+  drawHints();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+
+  if (renderGrayscale) {
+    // Multi-pass 4-level grayscale render — mirrors SleepActivity::renderBitmapSleepScreen.
+    bitmap.rewindToData();
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+    renderer.copyGrayscaleLsbBuffers();
+
+    bitmap.rewindToData();
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayGrayBuffer();
+    renderer.setRenderMode(GfxRenderer::BW);
+  }
 
   file.close();
   return true;
@@ -182,7 +212,6 @@ bool BmpViewerActivity::renderDecodedImage(const bool showControls) {
   computeCenteredImagePlacement(dims.width, dims.height, pageWidth, pageHeight, x, y, renderWidth, renderHeight);
 
   GUI.fillPopupProgress(renderer, popupRect, 50);
-  renderer.clearScreen();
 
   RenderConfig config{};
   config.x = x;
@@ -198,21 +227,76 @@ bool BmpViewerActivity::renderDecodedImage(const bool showControls) {
   config.ditherMode = ImageDitherMode::Bayer;
 #endif
 
+  // Helper to draw the on-screen control hints. The btn3 label shows the *other* mode
+  // (i.e. what pressing it would switch to).
+  const auto drawHints = [&]() {
+    if (!showControls) return;
+    const char* modeLabel = grayscaleDisplay ? tr(STR_IMAGE_DISPLAY_BW) : tr(STR_IMAGE_DISPLAY_GRAYSCALE);
+#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
+    const char* btn3Label = grayscaleDisplay ? I18N.get(getCurrentDitherModeLabel()) : modeLabel;
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), modeLabel, btn3Label, tr(STR_SET_SLEEP_SCREEN));
+#else
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), modeLabel, "", tr(STR_SET_SLEEP_SCREEN));
+#endif
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  };
+
+  if (!grayscaleDisplay) {
+    // Pure black-and-white path: single decode with 1-bit Atkinson dither.
+    config.monochromeOutput = true;
+    renderer.setRenderMode(GfxRenderer::BW);
+    renderer.clearScreen();
+    if (!decoder->decodeToFramebuffer(filePath, renderer, config)) {
+      return false;
+    }
+    drawHints();
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    return true;
+  }
+
+  // Grayscale path: three decode passes (BW + LSB + MSB), 4-level dither in all of them.
+  // Mirrors SleepActivity::renderCustomSleepScreen so the BW plane carries the same
+  // 4-level quantization as the gray planes layered on top.
+  config.monochromeOutput = false;
+
+  renderer.setRenderMode(GfxRenderer::BW);
+  renderer.clearScreen();
   if (!decoder->decodeToFramebuffer(filePath, renderer, config)) {
     return false;
   }
-
-  if (showControls) {
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-    const auto labels =
-        mappedInput.mapLabels(tr(STR_BACK), "", I18N.get(getCurrentDitherModeLabel()), tr(STR_SET_SLEEP_SCREEN));
-#else
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", tr(STR_SET_SLEEP_SCREEN));
-#endif
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
+  drawHints();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  if (!decoder->decodeToFramebuffer(filePath, renderer, config)) {
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+  renderer.copyGrayscaleLsbBuffers();
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  if (!decoder->decodeToFramebuffer(filePath, renderer, config)) {
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+  renderer.copyGrayscaleMsbBuffers();
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
   return true;
+}
+
+void BmpViewerActivity::toggleDisplayMode() {
+  grayscaleDisplay = !grayscaleDisplay;
+  // Switching between 1-bit BW and 4-level grayscale requires a full refresh to clear
+  // ghosting from the previous mode — a half refresh leaves visible residue.
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  if (!renderCurrentImage()) {
+    renderError(tr(STR_COULD_NOT_RENDER_IMAGE));
+  }
 }
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
@@ -312,8 +396,17 @@ void BmpViewerActivity::loop() {
     return;
   }
 
+  // Confirm: toggle between 1-bit B&W and 4-level grayscale display.
+  // For decoded images this always applies; for BMPs it only makes sense when the bitmap
+  // actually carries greyscale data (1-bit BMPs have nothing to toggle).
+  const bool toggleSupported = isBmpFile(filePath) ? bmpHasGreyscale : true;
+  if (toggleSupported && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    toggleDisplayMode();
+    return;
+  }
+
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-  if (!isBmpFile(filePath) && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  if (!isBmpFile(filePath) && grayscaleDisplay && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     cycleDitherMode();
     return;
   }

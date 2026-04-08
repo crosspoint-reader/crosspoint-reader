@@ -24,9 +24,16 @@ class BmpViewerActivity final : public Activity {
   uint8_t initialImageDitherMode;
   bool imageDitherSettingsDirty;
 #endif
+  // Per-session toggle: monochrome (1-bit Atkinson, single decode) vs grayscale (4-level dither, multipass).
+  // Not persisted — defaults to grayscale every time the viewer opens.
+  bool grayscaleDisplay = true;
+  // True after a successful BMP render iff the bitmap actually carries greyscale data.
+  // Used to gate the BW/Gray toggle in loop() — pure 1-bit BMPs cannot be toggled.
+  bool bmpHasGreyscale = false;
   bool renderCurrentImage(bool showControls = true);
   bool renderBmpImage(bool showControls = true);
   bool renderDecodedImage(bool showControls = true);
+  void toggleDisplayMode();
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   void cycleDitherMode();
   StrId getCurrentDitherModeLabel() const;

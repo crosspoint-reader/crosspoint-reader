@@ -336,6 +336,8 @@ STR_COULD_NOT_RENDER_IMAGE: "Bild konnte nicht dargestellt werden"
 STR_FAILED_TO_SET_SLEEP_SCREEN: "Standby-Bild konnte nicht gesetzt werden"
 STR_SET_SLEEP_SCREEN: "Standby-Bild setzen"
 STR_SLEEP_SCREEN_SET: "Standby-Bild aktualisiert!"
+STR_IMAGE_DISPLAY_BW: ">> S/W"
+STR_IMAGE_DISPLAY_GRAYSCALE: ">> Grau"
 
 STR_WEATHER: "Wetter"
 STR_WEATHER_LOCATION: "Ort"
