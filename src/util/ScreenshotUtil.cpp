@@ -14,8 +14,8 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   const uint8_t* fb = renderer.getFrameBuffer();
   if (fb) {
     String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
-    if (ScreenshotUtil::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH,
-                                             HalDisplay::DISPLAY_HEIGHT)) {
+    if (ScreenshotUtil::saveFramebufferAsBmp(filename_str.c_str(), fb, display.getDisplayWidth(),
+                                             display.getDisplayHeight())) {
       LOG_DBG("SCR", "Screenshot saved to %s", filename_str.c_str());
     } else {
       LOG_ERR("SCR", "Failed to save screenshot");
@@ -26,7 +26,7 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 
   // Display a border around the screen to indicate a screenshot was taken
   if (renderer.storeBwBuffer()) {
-    renderer.drawRect(6, 6, HalDisplay::DISPLAY_HEIGHT - 12, HalDisplay::DISPLAY_WIDTH - 12, 2, true);
+    renderer.drawRect(6, 6, display.getDisplayHeight() - 12, display.getDisplayWidth() - 12, 2, true);
     renderer.displayBuffer();
     delay(1000);
     renderer.restoreBwBuffer();
@@ -76,8 +76,8 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
   }
 
   const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
-  // Max row size for 480px width = 60 bytes; use fixed buffer to avoid VLA
-  constexpr size_t kMaxRowSize = 64;
+  // Max row size for 528px width (X3) = 68 bytes; use fixed buffer to avoid VLA
+  constexpr size_t kMaxRowSize = 68;
   if (rowSizePadded > kMaxRowSize) {
     LOG_ERR("SCR", "Row size %u exceeds buffer capacity", rowSizePadded);
     file.close();

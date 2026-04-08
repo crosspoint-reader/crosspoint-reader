@@ -1,6 +1,7 @@
 #include "FileBrowserActivity.h"
 
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -8,10 +9,10 @@
 #include <algorithm>
 
 #include "../util/ConfirmationActivity.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -83,7 +84,7 @@ void FileBrowserActivity::loadFiles() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if (name[0] == '.' || strcmp(name, "System Volume Information") == 0) {
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
       file.close();
       continue;
     }
@@ -91,10 +92,10 @@ void FileBrowserActivity::loadFiles() {
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");
     } else {
-      auto filename = std::string(name);
-      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
-          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
-          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp")) {
+      std::string_view filename{name};
+      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
+          FsHelpers::hasBmpExtension(filename)) {
         files.emplace_back(filename);
       }
     }
@@ -120,7 +121,7 @@ void FileBrowserActivity::onExit() {
 
 void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
   // Only clear cache for .epub files
-  if (StringUtils::checkFileExtension(fullPath, ".epub")) {
+  if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }
@@ -238,7 +239,11 @@ void FileBrowserActivity::loop() {
 
 std::string getFileName(std::string filename) {
   if (filename.back() == '/') {
-    return filename.substr(0, filename.length() - 1);
+    filename.pop_back();
+    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
+      return "[" + filename + "]";
+    }
+    return filename;
   }
   const auto pos = filename.rfind('.');
   return filename.substr(0, pos);

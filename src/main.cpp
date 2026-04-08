@@ -1,11 +1,13 @@
 #include <Arduino.h>
 #include <Epub.h>
+#include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
+#include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
@@ -25,12 +27,11 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-HalDisplay display;
-HalGPIO gpio;
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
+FontCacheManager fontCacheManager(renderer.getFontMap());
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -168,7 +169,6 @@ void verifyPowerButtonDuration() {
     powerManager.startDeepSleep(gpio);
   }
 }
-
 void waitForPowerRelease() {
   gpio.update();
   while (gpio.isPressed(HalGPIO::BTN_POWER)) {
@@ -186,7 +186,6 @@ void enterDeepSleep() {
   activityManager.goToSleep();
 
   display.deepSleep();
-  LOG_DBG("MAIN", "Power button press calibration value: %lu ms", t2 - t1);
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
@@ -202,7 +201,8 @@ void setupDisplayAndFonts() {
   if (!fontDecompressor.init()) {
     LOG_ERR("MAIN", "Font decompressor init failed");
   }
-  renderer.setFontDecompressor(&fontDecompressor);
+  fontCacheManager.setFontDecompressor(&fontDecompressor);
+  renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
@@ -227,18 +227,21 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+  HalSystem::begin();
   gpio.begin();
   powerManager.begin();
 
-  // Only start serial if USB connected
+#ifdef ENABLE_SERIAL_LOG
   if (gpio.isUsbConnected()) {
     Serial.begin(115200);
-    // Wait up to 3 seconds for Serial to be ready to catch early logs
-    unsigned long start = millis();
-    while (!Serial && (millis() - start) < 3000) {
+    const unsigned long start = millis();
+    while (!Serial && (millis() - start) < 500) {
       delay(10);
     }
   }
+#endif
+
+  LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -249,17 +252,21 @@ void setup() {
     return;
   }
 
+  HalSystem::checkPanic();
+  HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
+
   SETTINGS.loadFromFile();
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
-  switch (gpio.getWakeupReason()) {
+  const auto wakeupReason = gpio.getWakeupReason();
+  switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      // For normal wakeups, verify power button press duration
       LOG_DBG("MAIN", "Verifying power button press duration");
-      verifyPowerButtonDuration();
+      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
+                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
@@ -324,9 +331,10 @@ void loop() {
       String cmd = line.substring(4);
       cmd.trim();
       if (cmd == "SCREENSHOT") {
-        logSerial.printf("SCREENSHOT_START:%d\n", HalDisplay::BUFFER_SIZE);
+        const uint32_t bufferSize = display.getBufferSize();
+        logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
         uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, HalDisplay::BUFFER_SIZE);
+        logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
       }
     }
@@ -369,6 +377,12 @@ void loop() {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
+  }
+
+  // Refresh the battery icon when USB is plugged or unplugged.
+  // Placed after sleep guards so we never queue a render that won't be processed.
+  if (gpio.wasUsbStateChanged()) {
+    activityManager.requestUpdate();
   }
 
   const unsigned long activityStartTime = millis();

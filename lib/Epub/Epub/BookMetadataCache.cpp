@@ -274,11 +274,13 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 }
 
 bool BookMetadataCache::cleanupTmpFiles() const {
-  if (Storage.exists((cachePath + tmpSpineBinFile).c_str())) {
-    Storage.remove((cachePath + tmpSpineBinFile).c_str());
+  const auto spineBinFile = cachePath + tmpSpineBinFile;
+  if (Storage.exists(spineBinFile.c_str())) {
+    Storage.remove(spineBinFile.c_str());
   }
-  if (Storage.exists((cachePath + tmpTocBinFile).c_str())) {
-    Storage.remove((cachePath + tmpTocBinFile).c_str());
+  const auto tocBinFile = cachePath + tmpTocBinFile;
+  if (Storage.exists(tocBinFile.c_str())) {
+    Storage.remove(tocBinFile.c_str());
   }
   return true;
 }

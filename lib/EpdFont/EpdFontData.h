@@ -7,10 +7,12 @@
 /// Font metrics use "fixed-point 4" (4 fractional bits, i.e. 1/16-pixel
 /// resolution).  Both the 12.4 glyph advances (uint16_t) and the 4.4 kern
 /// values (int8_t) share the same 4 fractional bits, so they can be freely
-/// added into a single int32_t accumulator during text layout.  The
-/// accumulator is snapped to the nearest whole pixel only at render time,
-/// which avoids the per-character rounding errors that plagued integer-only
-/// layout.
+/// added before snapping to whole pixels.
+///
+/// Rendering and measurement use "differential rounding": each glyph step
+/// (previous advance + current kern) is combined in fixed-point and snapped
+/// to a pixel as one unit.  This guarantees identical character pairs always
+/// produce the same pixel spacing, regardless of position on the line.
 ///
 /// The helpers below eliminate the raw bit-shifts that would otherwise be
 /// scattered across every layout / measurement call site.
@@ -81,7 +83,7 @@ typedef struct {
   uint32_t compressedSize;    ///< Compressed DEFLATE stream size
   uint32_t uncompressedSize;  ///< Decompressed size
   uint16_t glyphCount;        ///< Number of glyphs in this group
-  uint16_t firstGlyphIndex;   ///< First glyph index in the global glyph array
+  uint32_t firstGlyphIndex;   ///< First glyph index in the global glyph array
 } EpdFontGroup;
 
 /// Glyph interval structure
@@ -117,6 +119,7 @@ typedef struct {
   bool is2Bit;
   const EpdFontGroup* groups;                 ///< NULL for uncompressed fonts
   uint16_t groupCount;                        ///< 0 for uncompressed fonts
+  const uint16_t* glyphToGroup;               ///< Per-glyph group ID (nullptr for contiguous-group fonts)
   const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
   const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
   const int8_t* kernMatrix;              ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels
