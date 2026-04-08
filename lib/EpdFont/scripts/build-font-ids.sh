@@ -44,56 +44,56 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSANSTC_12_FONT_ID ($(
+echo "#define NOTOSANS_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notosanstc_12_regular.h",
-  "./notosanstc_12_bold.h",
-  "./notosanstc_12_bolditalic.h",
-  "./notosanstc_12_italic.h",
+  "./notosans_12_regular.h",
+  "./notosans_12_bold.h",
+  "./notosans_12_bolditalic.h",
+  "./notosans_12_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSANSTC_14_FONT_ID ($(
+echo "#define NOTOSANS_14_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notosanstc_14_regular.h",
-  "./notosanstc_14_bold.h",
-  "./notosanstc_14_bolditalic.h",
-  "./notosanstc_14_italic.h",
+  "./notosans_14_regular.h",
+  "./notosans_14_bold.h",
+  "./notosans_14_bolditalic.h",
+  "./notosans_14_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSANSTC_16_FONT_ID ($(
+echo "#define NOTOSANS_16_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notosanstc_16_regular.h",
-  "./notosanstc_16_bold.h",
-  "./notosanstc_16_bolditalic.h",
-  "./notosanstc_16_italic.h",
+  "./notosans_16_regular.h",
+  "./notosans_16_bold.h",
+  "./notosans_16_bolditalic.h",
+  "./notosans_16_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSANSTC_18_FONT_ID ($(
+echo "#define NOTOSANS_18_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notosanstc_18_regular.h",
-  "./notosanstc_18_bold.h",
-  "./notosanstc_18_bolditalic.h",
-  "./notosanstc_18_italic.h",
+  "./notosans_18_regular.h",
+  "./notosans_18_bold.h",
+  "./notosans_18_bolditalic.h",
+  "./notosans_18_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define UI_10_FONT_ID ($(ruby -rdigest -e 'puts [
-  "./notosanstc_10_regular.h",
-  "./notosanstc_10_bold.h",
+  "./notosans_10_regular.h",
+  "./notosans_10_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define UI_12_FONT_ID ($(ruby -rdigest -e 'puts [
-  "./notosanstc_12_regular.h",
-  "./notosanstc_12_bold.h",
+  "./notosans_12_regular.h",
+  "./notosans_12_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define SMALL_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notosanstc_8_regular.h",
+  "./notosans_8_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"

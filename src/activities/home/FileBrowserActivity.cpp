@@ -120,7 +120,7 @@ void FileBrowserActivity::onEnter() {
 
     const std::string oldPath = basepath;
     basepath = FsHelpers::extractFolderPath(basepath);
-    loadFiles();Expand commentComment on lines R121 to R123Resolved
+    loadFiles();
 
     const auto pos = oldPath.find_last_of('/');
     const std::string fileName = oldPath.substr(pos + 1);

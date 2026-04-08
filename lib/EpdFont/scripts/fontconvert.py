@@ -82,7 +82,7 @@ intervals = [
     (0x2190, 0x21FF),
     ### CJK ###
     # Core Unified Ideographs (Chinese, Japanese, Korean)
-    (0x4E00, 0x9FFF),
+    # (0x4E00, 0x9FFF),
     # Extension A
     # (0x3400, 0x4DBF),
     # CJK Radicals Supplement
@@ -90,13 +90,13 @@ intervals = [
     # Kangxi Radicals
     # (0x2F00, 0x2FDF),
     # CJK Symbols and Punctuation
-    (0x3000, 0x303F),
+    # (0x3000, 0x303F),
     # Hiragana (Japanese)
-    (0x3040, 0x309F),
+    # (0x3040, 0x309F),
     # Katakana (Japanese)
-    (0x30A0, 0x30FF),
+    # (0x30A0, 0x30FF),
     # Katakana Phonetic Extensions
-    (0x31F0, 0x31FF),
+    # (0x31F0, 0x31FF),
     # Halfwidth Katakana
     # (0xFF60, 0xFF9F),
     # Hangul Syllables (Korean)
