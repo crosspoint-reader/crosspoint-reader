@@ -323,12 +323,17 @@ void hardcoverBookOpen(const char* epubPath) {
 }
 
 void hardcoverPageTurn(int chapter, int page) {
-  pageTurnCounter++;
+  if (!syncQueue) return;
 
-  // Debounce: only queue an update every N page turns
-  if (pageTurnCounter % PAGE_TURN_SYNC_INTERVAL != 0) return;
-  if (!syncQueue || currentUserBookId == 0) return;
+  // Keep debounce state local to the hook so the hook does not race with the
+  // background sync task over shared Hardcover state.
+  static uint32_t localPageTurnCounter = 0;
+  localPageTurnCounter++;
 
+  // Debounce: only queue an update every N page turns.
+  // Whether there is an active Hardcover book is background-task state; the
+  // task should decide whether to apply or ignore this event.
+  if (localPageTurnCounter % PAGE_TURN_SYNC_INTERVAL != 0) return;
   SyncMessage msg = {};
   msg.cmd = SyncCmd::PAGE_TURN;
   msg.chapter = chapter;
