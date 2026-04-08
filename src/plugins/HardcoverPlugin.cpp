@@ -90,8 +90,8 @@ float lastProgressPercent = 0.0f;
 // SD persistence helpers
 // ---------------------------------------------------------------------------
 
-/// Load the cached book mapping (ISBN → book_id, user_book_id) from SD.
-void loadBookMap(const char* isbn, int& bookId, int& userBookId) {
+/// Load the cached book mapping (queryKey → book_id, user_book_id) from SD.
+void loadBookMap(const char* queryKey, int& bookId, int& userBookId) {
   bookId = 0;
   userBookId = 0;
 
@@ -103,16 +103,16 @@ void loadBookMap(const char* isbn, int& bookId, int& userBookId) {
   JsonDocument doc;
   if (deserializeJson(doc, json)) return;
 
-  JsonObject entry = doc[isbn];
+  JsonObject entry = doc[queryKey];
   if (entry) {
     bookId = entry["book_id"] | 0;
     userBookId = entry["user_book_id"] | 0;
-    LOG_DBG(LOG_TAG, "Cache hit: %s → book=%d ub=%d", isbn, bookId, userBookId);
+    LOG_DBG(LOG_TAG, "Cache hit: %s → book=%d ub=%d", queryKey, bookId, userBookId);
   }
 }
 
 /// Save a book mapping entry to the SD cache.
-void saveBookMap(const char* isbn, int bookId, int userBookId) {
+void saveBookMap(const char* queryKey, int bookId, int userBookId) {
   Storage.mkdir(STATE_DIR);
 
   // Load existing map (if any) and merge
@@ -124,7 +124,7 @@ void saveBookMap(const char* isbn, int bookId, int userBookId) {
     }
   }
 
-  JsonObject entry = doc[isbn].to<JsonObject>();
+  JsonObject entry = doc[queryKey].to<JsonObject>();
   entry["book_id"] = bookId;
   entry["user_book_id"] = userBookId;
 
@@ -148,6 +148,23 @@ void saveSyncState() {
   json.reserve(128);
   serializeJson(doc, json);
   Storage.writeFile(STATE_FILE, json);
+}
+
+/// Load previously saved sync state from SD (called on BOOK_OPEN to resume after reboot).
+void loadSyncState() {
+  if (!Storage.exists(STATE_FILE)) return;
+
+  String json = Storage.readFile(STATE_FILE);
+  if (json.isEmpty()) return;
+
+  JsonDocument doc;
+  if (deserializeJson(doc, json)) return;
+
+  currentBookId = doc["book_id"] | 0;
+  currentUserBookId = doc["user_book_id"] | 0;
+  lastSyncedPage = doc["last_synced_page"] | 0;
+  lastProgressPercent = doc["progress_percent"] | 0.0f;
+  LOG_DBG(LOG_TAG, "Loaded sync state: book=%d ub=%d page=%d", currentBookId, currentUserBookId, lastSyncedPage);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +215,12 @@ void syncTaskFunc(void* /*param*/) {
         extractSearchQuery(msg.path, query, sizeof(query));
         LOG_DBG(LOG_TAG, "Book opened, searching: %s", query);
 
-        // Check cached mapping first
+        // Restore persisted sync state from a previous session (e.g. after reboot/deep sleep).
+        // Populates lastSyncedPage and lastProgressPercent; currentBookId/currentUserBookId
+        // are overridden by loadBookMap() below if the book is already in the cache.
+        loadSyncState();
+
+        // Check cached mapping first (authoritative source for currentBookId/currentUserBookId)
         loadBookMap(query, currentBookId, currentUserBookId);
 
         if (currentBookId == 0) {
@@ -228,8 +250,7 @@ void syncTaskFunc(void* /*param*/) {
         }
 
         pageTurnCounter = 0;
-        lastSyncedPage = 0;
-        lastProgressPercent = 0.0f;
+        // lastSyncedPage and lastProgressPercent are preserved from loadSyncState() to resume correctly
         LOG_INF(LOG_TAG, "Tracking book_id=%d user_book=%d", currentBookId, currentUserBookId);
         break;
       }
@@ -375,7 +396,6 @@ extern const CprPlugin hardcoverPlugin = {
     .description = "Sync reading progress to Hardcover.app",
 
     .onBoot = hardcoverBoot,
-    .onSettingsRender = nullptr,
     .onBookOpen = hardcoverBookOpen,
     .onBookClose = hardcoverBookClose,
     .onPageTurn = hardcoverPageTurn,

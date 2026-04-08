@@ -50,7 +50,6 @@ extern const CprPlugin helloPlugin = {
     .description = "Minimal example plugin — logs boot and page turns",
 
     .onBoot = helloBoot,
-    .onSettingsRender = nullptr,
     .onBookOpen = nullptr,
     .onBookClose = nullptr,
     .onPageTurn = helloPageTurn,

@@ -12,6 +12,7 @@ class CrossPointState {
   uint8_t lastSleepImage = UINT8_MAX;  // UINT8_MAX = unset sentinel
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
+  bool wasDeepSleepActive = false;  // True when the device previously entered deep sleep
   ~CrossPointState() = default;
 
   // Get singleton instance

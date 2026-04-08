@@ -182,6 +182,7 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+  APP_STATE.wasDeepSleepActive = true;
   APP_STATE.saveToFile();
 
   PluginRegistry::dispatchSleep();
@@ -294,7 +295,11 @@ void setup() {
   RECENT_BOOKS.loadFromFile();
 
   PluginRegistry::init();
-  PluginRegistry::dispatchWake();
+  if (APP_STATE.wasDeepSleepActive) {
+    APP_STATE.wasDeepSleepActive = false;
+    APP_STATE.saveToFile();
+    PluginRegistry::dispatchWake();
+  }
   PluginRegistry::dispatchBoot();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity

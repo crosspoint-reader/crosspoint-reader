@@ -19,7 +19,6 @@ struct CprPlugin {
 
   // Lifecycle hooks — all optional, set unused ones to nullptr
   void (*onBoot)();
-  void (*onSettingsRender)();
   void (*onBookOpen)(const char* epubPath);
   void (*onBookClose)();
   void (*onPageTurn)(int chapter, int page);
