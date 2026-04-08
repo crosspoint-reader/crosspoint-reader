@@ -89,6 +89,10 @@ class HalGPIO {
 
   WakeupReason getWakeupReason() const;
 
+  /// Returns true when the device has woken from deep sleep (as opposed to a
+  /// cold boot or flash reset).
+  bool isDeepSleepWake() const;
+
   // Button indices
   static constexpr uint8_t BTN_BACK = 0;
   static constexpr uint8_t BTN_CONFIRM = 1;

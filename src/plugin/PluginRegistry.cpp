@@ -88,11 +88,20 @@ void PluginRegistry::init() {
     HalFile file;
     if (Storage.openFileForRead("PLG", PLUGINS_JSON_PATH, file)) {
       size_t size = file.size();
-      file.close();
       if (size > MAX_PLUGIN_JSON_SIZE) {
         LOG_ERR("PLG", "plugins.json too large (%zu bytes), skipping", size);
+        file.close();
       } else {
-        String json = Storage.readFile(PLUGINS_JSON_PATH);
+        String json;
+        json.reserve(size + 1);
+        char buf[128];
+        while (file.available()) {
+          int bytesRead = file.read(buf, sizeof(buf));
+          if (bytesRead <= 0) break;
+          json.concat(buf, bytesRead);
+        }
+        file.close();
+
         if (!json.isEmpty()) {
           JsonDocument doc;
           auto err = deserializeJson(doc, json);
@@ -118,14 +127,18 @@ void PluginRegistry::init() {
 }
 
 bool PluginRegistry::isEnabled(const char* id) {
+  if (!id) return false;
   for (int i = 0; i < pluginCount; i++) {
+    if (!pluginTable[i] || !pluginTable[i]->id) continue;
     if (strcmp(pluginTable[i]->id, id) == 0) return pluginStates[i].enabled;
   }
   return false;
 }
 
 void PluginRegistry::setEnabled(const char* id, bool enabled) {
+  if (!id) return;
   for (int i = 0; i < pluginCount; i++) {
+    if (!pluginTable[i] || !pluginTable[i]->id) continue;
     if (strcmp(pluginTable[i]->id, id) == 0) {
       if (!pluginStates[i].compatible) return;  // cannot enable incompatible plugin
       pluginStates[i].enabled = enabled;

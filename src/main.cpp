@@ -295,9 +295,7 @@ void setup() {
   RECENT_BOOKS.loadFromFile();
 
   PluginRegistry::init();
-  if (APP_STATE.wasDeepSleepActive) {
-    APP_STATE.wasDeepSleepActive = false;
-    APP_STATE.saveToFile();
+  if (gpio.isDeepSleepWake()) {
     PluginRegistry::dispatchWake();
   }
   PluginRegistry::dispatchBoot();
