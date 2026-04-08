@@ -40,7 +40,10 @@ class WordSelectNavigator {
 
   // Load pre-populated, pre-organised words, rows, and string pool.
   // Centres the initial selection on the middle row.
-  void load(std::vector<WordInfo> words, std::vector<Row> rows, std::string textPool);
+  // When consumeInitialConfirm is true, the first Confirm release is ignored
+  // (prevents the long-press that opened word selection from also triggering multi-select).
+  void load(std::vector<WordInfo> words, std::vector<Row> rows, std::string textPool,
+            bool consumeInitialConfirm = false);
 
   // Access null-terminated display text from the pool.
   const char* getDisplay(const WordInfo& w) const { return textPool.data() + w.textOffset; }

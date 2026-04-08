@@ -6,7 +6,8 @@
 
 #include "MappedInputManager.h"
 
-void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r, std::string pool) {
+void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r, std::string pool,
+                               bool consumeInitialConfirm) {
   words = std::move(w);
   rows = std::move(r);
   textPool = std::move(pool);
@@ -14,6 +15,7 @@ void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r, std:
   currentWordInRow = (!rows.empty() && !rows[currentRow].wordIndices.empty())
                          ? static_cast<int>(rows[currentRow].wordIndices.size()) / 2
                          : 0;
+  confirmReleaseConsumed = consumeInitialConfirm;
 }
 
 void WordSelectNavigator::organizeIntoRows(std::vector<WordInfo>& words, std::vector<Row>& rows) {
@@ -206,6 +208,16 @@ WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInp
       return MultiSelectAction::ExitedMultiSelect;
     }
     return MultiSelectAction::None;
+  }
+
+  // Consume the Confirm press+release that carried over from the long-press that opened word selection.
+  // Must block both the held-state check (which would immediately enter multi-select) and
+  // the subsequent release event (which would trigger a single-word lookup in the activity).
+  if (confirmReleaseConsumed) {
+    if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+      confirmReleaseConsumed = false;
+    }
+    return MultiSelectAction::Consumed;
   }
 
   // Long press Confirm: enter multi-select (fire at threshold, not on release).
