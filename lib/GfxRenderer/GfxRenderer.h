@@ -35,6 +35,18 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  // Text darkness for 2-bit grayscale glyph rendering.
+  //   0 = Normal     — true 4-level AA (raw=1 → light gray, raw=2 → dark gray)
+  //   1 = Dark       — historical default; raw=2 collapses to black
+  //   2 = Extra Dark — both AA shades go black in the grayscale plane
+  //   3 = Maximum    — grayscale pass skipped entirely; only the hard BW
+  //                    pass remains, so AA pixels render as solid black
+  //                    with the FAST waveform (no gray-LUT softening)
+  // Only affects AA pixels in GRAYSCALE_MSB / GRAYSCALE_LSB rendering of 2-bit fonts.
+  // 1-bit fonts and the BW pass are unchanged. Default is 1 to preserve historical
+  // rendering. See drawMaskFor2BitMode() in GfxRenderer.cpp for the per-level
+  // pixel breakdown and a worked example glyph.
+  uint8_t textDarkness = 1;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -155,6 +167,14 @@ class GfxRenderer {
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   RenderMode getRenderMode() const { return renderMode; }
+
+  // Text darkness control:
+  //   0 = Normal, 1 = Dark, 2 = Extra Dark, 3 = Maximum.
+  // Only affects anti-aliased pixels in 2-bit (grayscale) glyph rendering;
+  // 1-bit fonts and the BW pass are unchanged. See drawMaskFor2BitMode() in
+  // GfxRenderer.cpp for the per-level pixel breakdown and a worked example.
+  void setTextDarkness(const uint8_t d) { textDarkness = d; }
+  uint8_t getTextDarkness() const { return textDarkness; }
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;

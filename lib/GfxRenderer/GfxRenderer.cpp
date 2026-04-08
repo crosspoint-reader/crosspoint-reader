@@ -382,29 +382,105 @@ static inline uint8_t get2BitPixel(const uint8_t* const bitmap, const int stride
   return get2BitPixel(bitmap, row * stride + col);
 }
 
-template <GfxRenderer::RenderMode mode>
-static constexpr uint8_t drawMaskFor2BitMode() {
-  if constexpr (mode == GfxRenderer::BW)
-    return 0x0E;  // draw raw {1,2,3}
-  else if constexpr (mode == GfxRenderer::GRAYSCALE_MSB)
-    return 0x06;  // draw raw {1,2}
-  else
-    return 0x04;  // GRAYSCALE_LSB: draw raw {2}
+// Compute the runtime drawMask for a given render mode and text darkness.
+// Bit N set ⇒ draw when raw 2-bit font value == N
+// (raw: 0=white, 1=light gray, 2=dark gray, 3=black).
+//
+// BW always draws every non-white pixel (darkness has no effect).
+// For grayscale modes, increasing darkness folds more AA shades into the
+// "draw" set so text becomes progressively bolder. The default darkness=1
+// keeps the historical behavior (MSB pass draws both AA shades, LSB pass
+// draws only the dark AA shade).
+//
+// At "Maximum" (darkness>=3) the grayscale passes are suppressed entirely
+// (drawMask 0x00). The BW pass already writes raw {1,2,3} as solid black,
+// so AA pixels render as hard black with no gray-LUT softening — visibly
+// darker than darkness=2 because the gray waveform is skipped.
+//
+//    darkness | GRAYSCALE_MSB           | GRAYSCALE_LSB
+//    --------- ------------------------- -------------------------
+//    0        | 0x02 (raw {1})          | 0x04 (raw {2})
+//    1        | 0x06 (raw {1,2}) ←dflt  | 0x04 (raw {2})   ←dflt
+//    2        | 0x06 (raw {1,2})        | 0x06 (raw {1,2})
+//    3+       | 0x00 (none)             | 0x00 (none)
+//
+// ─── Worked example ────────────────────────────────────────────────────────
+// Imagine a 2-bit antialiased glyph for the diagonal stroke of a letter 'A'.
+// Each cell holds the raw font value at that pixel:
+//
+//   raw values             . . . 2 3       legend:
+//                          . . 2 3 1         . = 0 (white, never drawn)
+//                          . 2 3 1 .         1 = light gray AA
+//                          2 3 1 . .         2 = dark gray AA
+//                          3 1 . . .         3 = solid black (stroke core)
+//
+// Three render passes write to three independent planes; the panel's
+// grayscale waveform combines the BW plane with (MSB,LSB) into 4 shades:
+//
+//   (MSB, LSB)  →  panel shade
+//      (0,0)    →  white
+//      (1,0)    →  light gray
+//      (0,1)    →  dark gray
+//      (1,1)    →  black
+//
+// Per-pixel result for each darkness level (●=black, ▓=dark gray,
+// ░=light gray, ·=white):
+//
+//   darkness=0  Normal — true 4-level AA
+//     . . . ▓ ●        raw=1 → (1,0) light gray
+//     . . ▓ ● ░        raw=2 → (0,1) dark gray
+//     . ▓ ● ░ .        raw=3 → BW black
+//     ▓ ● ░ . .        Crisp edges, lightest stroke. Best for thin/serif fonts.
+//     ● ░ . . .
+//
+//   darkness=1  Dark — historical default
+//     . . . ● ●        raw=1 → (1,0) light gray (unchanged)
+//     . . ● ● ░        raw=2 → (1,1) black  (was dark gray)
+//     . ● ● ░ .        Dark-gray fringe collapses to black; light fringe
+//     ● ● ░ . .        survives. Stroke core thickens by ~1px on the
+//     ● ░ . . .        steep side of the slope.
+//
+//   darkness=2  Extra Dark — both AA shades go black
+//     . . . ● ●        raw=1 → (1,1) black
+//     . . ● ● ●        raw=2 → (1,1) black
+//     . ● ● ● .        All AA pixels are pushed to "black" in the gray
+//     ● ● ● . .        plane. The gray waveform still runs, so pixels
+//     ● ● . . .        share the gray-pass voltage profile (slightly
+//                      softer than Maximum).
+//
+//   darkness=3  Maximum — grayscale pass skipped entirely
+//     . . . ● ●        Both grayscale drawMasks are 0x00; nothing is
+//     . . ● ● ●        written to the (MSB,LSB) planes. The BW pass —
+//     . ● ● ● .        which already writes raw {1,2,3} as solid black —
+//     ● ● ● . .        is the only pass the panel sees, refreshed with
+//     ● ● . . .        the hard FAST waveform. Visually identical pixel
+//                      footprint to darkness=2 but driven harder, so
+//                      strokes look noticeably bolder/blacker on the
+//                      physical e-ink panel.
+// ───────────────────────────────────────────────────────────────────────────
+static inline uint8_t drawMaskFor2BitMode(const GfxRenderer::RenderMode mode, const uint8_t darkness) {
+  if (mode == GfxRenderer::BW) return 0x0E;  // draw raw {1,2,3}
+  if (darkness >= 3) return 0x00;            // skip grayscale entirely (Maximum)
+  if (mode == GfxRenderer::GRAYSCALE_MSB) {
+    return (darkness == 0) ? 0x02 : 0x06;
+  }
+  // GRAYSCALE_LSB
+  return (darkness >= 2) ? 0x06 : 0x04;
 }
 
 // 2-bit pipeline — fused gather+threshold (X axis): the 2-bit analog of extractGlyphBlock, but
 // gather and threshold are collapsed into one pass. The threshold (2-bit raw value → 1-bit on/off)
 // is information-lossy, so no contiguous 2-bit intermediate block can be formed mid-pipeline.
 // The resulting 1-bit mask feeds writeRowBits directly (scatter). build2BitColMask is the Y-axis counterpart.
-template <GfxRenderer::RenderMode mode>
+//
+// Templated on the drawMask byte (a non-type template parameter) so each render-mode/darkness
+// combination compiles to its own specialization with the mask folded into a constant.
+template <uint8_t drawMask>
 static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int rowStartPixel, const int glyphXStartOrEnd,
                                        const int count, const bool reverseXInChunk) {
   // drawMask uses raw 2-bit glyph values directly from font bitmaps:
   // raw 0=white, 1=light gray, 2=dark gray, 3=black.
   // Bit N set means: draw/update when raw==N.
-  // Compile-time constant lets the compiler reduce (drawMask >> raw) & 1 to a single comparison.
-  constexpr uint8_t drawMask = drawMaskFor2BitMode<mode>();
-
   uint8_t mask = 0;
   for (int i = 0; i < count; i++) {
     const int logicalX = reverseXInChunk ? (glyphXStartOrEnd - i) : (glyphXStartOrEnd + i);
@@ -419,10 +495,11 @@ static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int ro
 // The 2-bit glyph bitmap stores 4 pixels per byte, MSB-first:
 //   byte b = [p0.msb p0.lsb  p1.msb p1.lsb  p2.msb p2.lsb  p3.msb p3.lsb]
 //
-// For each render mode the draw decision collapses to a two-bit boolean:
-//   BW            (draw if raw ≠ 0):      msb | lsb
-//   GRAYSCALE_MSB (draw if raw ∈ {1,2}):  msb ^ lsb
-//   GRAYSCALE_LSB (draw if raw == 2):     msb & ~lsb
+// For each drawMask the draw decision collapses to a two-bit boolean:
+//   0x0E (raw ∈ {1,2,3}): msb | lsb
+//   0x06 (raw ∈ {1,2}):   msb ^ lsb
+//   0x04 (raw == 2):      msb & ~lsb
+//   0x02 (raw == 1):      ~msb & lsb
 //
 // Derivation for one byte:
 //   msb_bits = b & 0xAA  →  bits 7,5,3,1 hold p0.msb … p3.msb; bits 6,4,2,0 = 0
@@ -439,7 +516,7 @@ static inline uint8_t build2BitRowMask(const uint8_t* const bitmap, const int ro
 // processes the full 8-pixel chunk in ~16 ALU ops instead of ~56.
 // The caller is responsible for only calling this when pixelStart is
 // 4-pixel (1-byte) aligned (pixelStart & 3 == 0) and count == 8.
-template <GfxRenderer::RenderMode mode>
+template <uint8_t drawMask>
 static inline uint8_t build2BitRowMaskFromTwoBytes(const uint8_t b0, const uint8_t b1) {
   const uint8_t msb0 = b0 & 0xAA;
   const uint8_t lsb0 = (b0 & 0x55) << 1;
@@ -447,15 +524,19 @@ static inline uint8_t build2BitRowMaskFromTwoBytes(const uint8_t b0, const uint8
   const uint8_t lsb1 = (b1 & 0x55) << 1;
 
   uint8_t draw0, draw1;
-  if constexpr (mode == GfxRenderer::BW) {
+  if constexpr (drawMask == 0x0E) {  // BW: raw ∈ {1,2,3}
     draw0 = msb0 | lsb0;
     draw1 = msb1 | lsb1;
-  } else if constexpr (mode == GfxRenderer::GRAYSCALE_MSB) {
+  } else if constexpr (drawMask == 0x06) {  // raw ∈ {1,2}
     draw0 = msb0 ^ lsb0;
     draw1 = msb1 ^ lsb1;
-  } else {  // GRAYSCALE_LSB
+  } else if constexpr (drawMask == 0x04) {  // raw == 2 (dark gray)
     draw0 = msb0 & ~lsb0;
     draw1 = msb1 & ~lsb1;
+  } else {  // drawMask == 0x02, raw == 1 (light gray)
+    static_assert(drawMask == 0x02, "unsupported drawMask in build2BitRowMaskFromTwoBytes");
+    draw0 = ~msb0 & lsb0;
+    draw1 = ~msb1 & lsb1;
   }
 
   // Compact each nibble's draw flags from bit positions 7,5,3,1 → 7,6,5,4.
@@ -468,10 +549,9 @@ static inline uint8_t build2BitRowMaskFromTwoBytes(const uint8_t b0, const uint8
 // 2-bit pipeline — fused gather+threshold (Y axis): column-direction counterpart to build2BitRowMask.
 // Samples count pixels down glyph column glyphX starting at row glyphYStart; reverseRows implements
 // a negative-stride view along Y (reads bottom-to-top), needed for PortraitInverted.
-template <GfxRenderer::RenderMode mode>
+template <uint8_t drawMask>
 static inline uint8_t build2BitColMask(const uint8_t* const bitmap, const int glyphWidth, const int glyphX,
                                        const int glyphYStart, const int count, const bool reverseRows) {
-  constexpr uint8_t drawMask = drawMaskFor2BitMode<mode>();
   uint8_t mask = 0;
   for (int i = 0; i < count; i++) {
     const int row = reverseRows ? (glyphYStart + count - 1 - i) : (glyphYStart + i);
@@ -485,7 +565,7 @@ static inline uint8_t build2BitColMask(const uint8_t* const bitmap, const int gl
 // inverted=false → Portrait (phyY counts down, phyBitPos counts up).
 // inverted=true  → PortraitInverted (phyY counts up, phyBitPos counts down).
 // Both template params are compile-time constants; all ternaries fold away.
-template <GfxRenderer::RenderMode mode, bool inverted>
+template <uint8_t drawMask, bool inverted>
 static void renderGlyphFast2BitPortrait(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
                                         const int glyphHeight, const int screenXBase, const int screenYBase,
                                         const bool writeState) {
@@ -495,7 +575,7 @@ static void renderGlyphFast2BitPortrait(uint8_t* const frameBuffer, const uint8_
     uint8_t* const row = frameBuffer + phyY * HalDisplay::DISPLAY_WIDTH_BYTES;
     for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
       const int count = std::min(8, glyphHeight - glyphY);
-      const uint8_t mask = build2BitColMask<mode>(bitmap, glyphWidth, glyphX, glyphY, count, inverted);
+      const uint8_t mask = build2BitColMask<drawMask>(bitmap, glyphWidth, glyphX, glyphY, count, inverted);
       if (mask == 0) continue;
       const int phyBitPos =
           inverted ? (HalDisplay::DISPLAY_WIDTH - 1 - screenYBase - (glyphY + count - 1)) : (screenYBase + glyphY);
@@ -505,13 +585,14 @@ static void renderGlyphFast2BitPortrait(uint8_t* const frameBuffer, const uint8_
   }
 }
 
-template <GfxRenderer::RenderMode mode>
+template <uint8_t drawMask>
 static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
                                 const int glyphHeight, const int screenXBase, const int screenYBase,
                                 const bool pixelState, const GfxRenderer::Orientation orientation) {
   // Non-rotated text fast path for 2-bit glyphs. Writes compact masks directly to framebuffer rows.
   // TextRotation::Rotated90CW keeps the legacy per-pixel fallback path for safety and readability.
-  const bool writeState = (mode == GfxRenderer::BW) ? pixelState : false;
+  // BW (drawMask 0x0E) honors the caller's pixelState; grayscale passes always clear the bit.
+  const bool writeState = (drawMask == 0x0E) ? pixelState : false;
 
   switch (orientation) {
     case GfxRenderer::LandscapeCounterClockwise: {
@@ -526,9 +607,9 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
           uint8_t mask;
           if (count == 8 && (pixelStart & 3) == 0) {
             const int srcByteIdx = pixelStart >> 2;
-            mask = build2BitRowMaskFromTwoBytes<mode>(bitmap[srcByteIdx], bitmap[srcByteIdx + 1]);
+            mask = build2BitRowMaskFromTwoBytes<drawMask>(bitmap[srcByteIdx], bitmap[srcByteIdx + 1]);
           } else {
-            mask = build2BitRowMask<mode>(bitmap, rowStartPixel, glyphX, count, false);
+            mask = build2BitRowMask<drawMask>(bitmap, rowStartPixel, glyphX, count, false);
           }
           if (mask == 0) continue;
           const int phyBitPos = screenXBase + glyphX;
@@ -555,9 +636,9 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
           uint8_t mask;
           if (count == 8 && (pixelStart & 3) == 0) {
             const int srcByteIdx = pixelStart >> 2;
-            mask = reverseBits8(build2BitRowMaskFromTwoBytes<mode>(bitmap[srcByteIdx], bitmap[srcByteIdx + 1]));
+            mask = reverseBits8(build2BitRowMaskFromTwoBytes<drawMask>(bitmap[srcByteIdx], bitmap[srcByteIdx + 1]));
           } else {
-            mask = build2BitRowMask<mode>(bitmap, rowStartPixel, chunkEnd, count, true);
+            mask = build2BitRowMask<drawMask>(bitmap, rowStartPixel, chunkEnd, count, true);
           }
           if (mask == 0) continue;
           const int phyBitPos = HalDisplay::DISPLAY_WIDTH - 1 - screenXBase - chunkEnd;
@@ -569,13 +650,13 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
     }
 
     case GfxRenderer::Portrait:
-      renderGlyphFast2BitPortrait<mode, false>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase, screenYBase,
-                                               writeState);
+      renderGlyphFast2BitPortrait<drawMask, false>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase,
+                                                   screenYBase, writeState);
       break;
 
     case GfxRenderer::PortraitInverted:
-      renderGlyphFast2BitPortrait<mode, true>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase, screenYBase,
-                                              writeState);
+      renderGlyphFast2BitPortrait<drawMask, true>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase,
+                                                  screenYBase, writeState);
       break;
   }
 }
@@ -614,27 +695,42 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     }
 
     if (is2Bit) {
+      // Compute the drawMask once per glyph from the current render mode + text-darkness setting.
+      // The fast path dispatches on this at runtime to a template specialization so the mask is
+      // a compile-time constant inside the inner loops.
+      const uint8_t drawMask = drawMaskFor2BitMode(renderMode, renderer.getTextDarkness());
+
+      // drawMask == 0 means "draw nothing" — used by Maximum darkness to skip grayscale passes.
+      if (drawMask == 0) return;
+
       if constexpr (rotation == TextRotation::None) {
         // Fast path for normal text orientation. Handles all device orientations via renderGlyphFast2Bit.
-        // Dispatch on renderMode at compile time so each specialization gets a constant drawMask.
-        switch (renderMode) {
-          case GfxRenderer::BW:
-            renderGlyphFast2Bit<GfxRenderer::BW>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
-                                                 pixelState, renderer.getOrientation());
+        switch (drawMask) {
+          case 0x0E:  // BW
+            renderGlyphFast2Bit<0x0E>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
+                                      pixelState, renderer.getOrientation());
             break;
-          case GfxRenderer::GRAYSCALE_MSB:
-            renderGlyphFast2Bit<GfxRenderer::GRAYSCALE_MSB>(renderer.getFrameBuffer(), bitmap, width, height, innerBase,
-                                                            outerBase, pixelState, renderer.getOrientation());
+          case 0x06:  // raw {1,2}
+            renderGlyphFast2Bit<0x06>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
+                                      pixelState, renderer.getOrientation());
             break;
-          case GfxRenderer::GRAYSCALE_LSB:
-            renderGlyphFast2Bit<GfxRenderer::GRAYSCALE_LSB>(renderer.getFrameBuffer(), bitmap, width, height, innerBase,
-                                                            outerBase, pixelState, renderer.getOrientation());
+          case 0x04:  // raw {2}
+            renderGlyphFast2Bit<0x04>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
+                                      pixelState, renderer.getOrientation());
+            break;
+          case 0x02:  // raw {1}
+            renderGlyphFast2Bit<0x02>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
+                                      pixelState, renderer.getOrientation());
             break;
         }
         return;
       }
 
-      // Rotated text fallback: keep explicit per-pixel behavior.
+      // Rotated text fallback: per-pixel path. Uses the same drawMask as the fast path so darkness
+      // takes effect uniformly. (Previously this branch had a separate X4-only "draw light gray too"
+      // quirk; that quirk is now subsumed by the default darkness=1 mask, which already includes
+      // both AA shades for the MSB pass.)
+      const bool isBW = (drawMask == 0x0E);
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
         const int outerCoord = outerBase + glyphY;
@@ -650,22 +746,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 
           const uint8_t byte = bitmap[pixelPosition >> 2];
           const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
-          // we swap this to better match the way images and screen think about colors:
-          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
-          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+          // raw value straight from the font: 0=white, 1=light gray, 2=dark gray, 3=black
+          const uint8_t raw = (byte >> bit_index) & 0x3;
 
-          if (renderMode == GfxRenderer::BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            renderer.drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || (gpio.deviceIsX4() && bmpVal == 2))) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // X3 AA tuning: keep only the darker antialias level to avoid washed text
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
-            renderer.drawPixel(screenX, screenY, false);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
-            renderer.drawPixel(screenX, screenY, false);
+          if ((drawMask >> raw) & 0x01) {
+            // BW honors caller's pixelState; grayscale passes always clear the bit (false)
+            renderer.drawPixel(screenX, screenY, isBW ? pixelState : false);
           }
         }
       }
