@@ -1,9 +1,8 @@
 #include "StatusBarSettingsActivity.h"
 
 #include <GfxRenderer.h>
-#include <I18n.h>
-
 #include <HalClock.h>
+#include <I18n.h>
 
 #include <cstring>
 

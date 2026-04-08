@@ -113,10 +113,10 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetBiased) co
 
 bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
   Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);        // Start at register 0x00
-  Wire.write(decToBcd(second));       // 0x00: Seconds
-  Wire.write(decToBcd(minute));       // 0x01: Minutes
-  Wire.write(decToBcd(hour));         // 0x02: Hours (24h mode, bit 6 = 0)
+  Wire.write(DS3231_SEC_REG);    // Start at register 0x00
+  Wire.write(decToBcd(second));  // 0x00: Seconds
+  Wire.write(decToBcd(minute));  // 0x01: Minutes
+  Wire.write(decToBcd(hour));    // 0x02: Hours (24h mode, bit 6 = 0)
   if (Wire.endTransmission() != 0) {
     LOG_ERR("CLK", "Failed to write time to DS3231");
     return false;
