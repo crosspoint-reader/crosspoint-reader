@@ -259,12 +259,8 @@ void syncTaskFunc(void* /*param*/) {
       case SyncCmd::BOOK_CLOSE: {
         if (currentUserBookId == 0) break;
 
-        // If progress is near 100%, mark as finished
-        if (lastProgressPercent >= 0.95f) {
-          HardcoverClient::updateStatus(currentUserBookId, HardcoverClient::STATUS_READ);
-          LOG_INF(LOG_TAG, "Book marked as finished");
-        }
-
+        // Do not infer "finished" from lastProgressPercent here.
+        // The available progress value is not a reliable end-of-book signal.
         saveSyncState();
         currentBookId = 0;
         currentUserBookId = 0;
