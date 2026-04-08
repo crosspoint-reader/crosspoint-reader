@@ -60,7 +60,7 @@ static const GenreRow GENRES[] = {
 static constexpr int GENRE_COUNT = 5;
 
 // --- トップメニュー項目数 ---
-static constexpr int TOP_MENU_COUNT = 5;
+static constexpr int TOP_MENU_COUNT = 6;
 
 // --- Constructor ---
 
@@ -103,6 +103,7 @@ void AozoraActivity::onWifiSelectionComplete(const bool success) {
 
   // Load download index
   indexManager_.loadAndPurge();
+  favoritesManager_.load();
 
   {
     RenderLock lock(*this);
@@ -368,7 +369,14 @@ void AozoraActivity::loop() {
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       switch (selectedIndex_) {
-        case 0:  // 作家から探す
+        case 0:  // お気に入り作家
+        {
+          RenderLock lock(*this);
+          pushState(FAVORITE_AUTHORS);
+        }
+          requestUpdate();
+          break;
+        case 1:  // 作家から探す
           searchMode_ = SEARCH_AUTHOR;
           {
             RenderLock lock(*this);
@@ -376,7 +384,7 @@ void AozoraActivity::loop() {
           }
           requestUpdate();
           break;
-        case 1:  // 作品名から探す
+        case 2:  // 作品名から探す
           searchMode_ = SEARCH_TITLE;
           {
             RenderLock lock(*this);
@@ -384,14 +392,14 @@ void AozoraActivity::loop() {
           }
           requestUpdate();
           break;
-        case 2:  // ジャンルから探す
+        case 3:  // ジャンルから探す
         {
           RenderLock lock(*this);
           pushState(GENRE_SELECT);
         }
           requestUpdate();
           break;
-        case 3:  // 新着作品
+        case 4:  // 新着作品
         {
           {
             RenderLock lock(*this);
@@ -409,7 +417,7 @@ void AozoraActivity::loop() {
           }
           requestUpdate();
         } break;
-        case 4:  // ダウンロード済み
+        case 5:  // ダウンロード済み
         {
           RenderLock lock(*this);
           pushState(DOWNLOADED_LIST);
@@ -830,14 +838,16 @@ void AozoraActivity::render(RenderLock&&) {
         [](int index) -> std::string {
           switch (index) {
             case 0:
-              return tr(STR_SEARCH_BY_AUTHOR);
+              return tr(STR_FAVORITE_AUTHORS);
             case 1:
-              return tr(STR_SEARCH_BY_TITLE);
+              return tr(STR_SEARCH_BY_AUTHOR);
             case 2:
-              return tr(STR_SEARCH_BY_GENRE);
+              return tr(STR_SEARCH_BY_TITLE);
             case 3:
-              return tr(STR_NEWEST_WORKS);
+              return tr(STR_SEARCH_BY_GENRE);
             case 4:
+              return tr(STR_NEWEST_WORKS);
+            case 5:
               return tr(STR_DOWNLOADED_BOOKS);
             default:
               return "";
