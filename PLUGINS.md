@@ -37,7 +37,7 @@ extern const CprPlugin myFeature = {
 
     .onBoot           = nullptr,      // called once at startup
     .onSettingsRender = nullptr,      // inject custom rows in detail screen
-    .onBookOpen       = nullptr,      // receives epub path
+    .onBookOpen       = nullptr,      // receives book path (EPUB, TXT, XTC, etc.)
     .onBookClose      = nullptr,
     .onPageTurn       = nullptr,      // receives (chapter, page)
     .onSleep          = nullptr,
@@ -76,7 +76,7 @@ That's it — no other files need to change.
 |-------------------|----------------------------------------|--------------------------------------|
 | `onBoot`          | `void ()`                              | Once after system init completes     |
 | `onSettingsRender`| `void ()`                              | Plugin detail screen is rendered     |
-| `onBookOpen`      | `void (const char* epubPath)`          | A book is opened in the reader       |
+| `onBookOpen`      | `void (const char* bookPath)`          | A book is opened in the reader       |
 | `onBookClose`     | `void ()`                              | The reader activity exits            |
 | `onPageTurn`      | `void (int chapter, int page)`         | Every page change in the reader      |
 | `onSleep`         | `void ()`                              | Device is entering deep sleep        |

@@ -4,6 +4,7 @@
 #include <Logging.h>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "MappedInputManager.h"
@@ -17,6 +18,12 @@ void PluginDetailActivity::onEnter() {
 }
 
 void PluginDetailActivity::loop() {
+  if (pendingFinish_) {
+    pendingFinish_ = false;
+    finish();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
@@ -36,7 +43,7 @@ void PluginDetailActivity::loop() {
 void PluginDetailActivity::render(RenderLock&&) {
   const auto* plugin = PluginRegistry::get(pluginIndex);
   if (!plugin) {
-    finish();
+    pendingFinish_ = true;
     return;
   }
 
@@ -81,10 +88,54 @@ void PluginDetailActivity::render(RenderLock&&) {
   }
   y += rowHeight;
 
-  // Description
+  // Description (with multi-line wrapping)
   y += metrics.verticalSpacing;
-  renderer.drawText(UI_10_FONT_ID, leftPad, y, plugin->description);
-  y += rowHeight;
+  {
+    const char* desc = plugin->description;
+    if (desc) {
+      const int maxWidth = rightX - leftPad;
+      const char* lineStart = desc;
+      while (*lineStart) {
+        // Find how many characters fit on this line
+        int len = strlen(lineStart);
+        int fitLen = len;
+        if (renderer.getTextWidth(UI_10_FONT_ID, lineStart) > maxWidth) {
+          // Binary-search style: find last word boundary that fits
+          fitLen = 0;
+          int lastSpace = 0;
+          for (int i = 0; i < len; i++) {
+            char buf[256];
+            int segLen = (i + 1 < (int)sizeof(buf)) ? i + 1 : (int)sizeof(buf) - 1;
+            memcpy(buf, lineStart, segLen);
+            buf[segLen] = '\0';
+            if (renderer.getTextWidth(UI_10_FONT_ID, buf) > maxWidth) {
+              break;
+            }
+            fitLen = i + 1;
+            if (lineStart[i] == ' ') {
+              lastSpace = fitLen;
+            }
+          }
+          // Break at last space if possible
+          if (lastSpace > 0) {
+            fitLen = lastSpace;
+          }
+          if (fitLen == 0) fitLen = 1;  // Ensure at least one character per line
+        }
+        char lineBuf[256];
+        int copyLen = (fitLen < (int)sizeof(lineBuf) - 1) ? fitLen : (int)sizeof(lineBuf) - 1;
+        memcpy(lineBuf, lineStart, copyLen);
+        lineBuf[copyLen] = '\0';
+        // Trim trailing space
+        if (copyLen > 0 && lineBuf[copyLen - 1] == ' ') {
+          lineBuf[copyLen - 1] = '\0';
+        }
+        renderer.drawText(UI_10_FONT_ID, leftPad, y, lineBuf);
+        y += rowHeight;
+        lineStart += fitLen;
+      }
+    }
+  }
 
   // Plugin's own settings hook
   if (enabled && compatible && plugin->onSettingsRender) {
