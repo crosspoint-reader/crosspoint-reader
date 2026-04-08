@@ -23,6 +23,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "plugin/PluginRegistry.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -86,12 +87,20 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  PluginRegistry::dispatchBookOpen(epub->getPath().c_str());
+  bookOpened = true;
+
   // Trigger first update
   requestUpdate();
 }
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -483,6 +492,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     }
   }
   lastPageTurnTime = millis();
+  PluginRegistry::dispatchPageTurn(currentSpineIndex, section ? section->currentPage : 0);
   requestUpdate();
 }
 

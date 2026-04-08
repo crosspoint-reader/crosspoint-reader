@@ -302,3 +302,5 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   }
   return WakeupReason::Other;
 }
+
+bool HalGPIO::isDeepSleepWake() const { return esp_reset_reason() == ESP_RST_DEEPSLEEP; }

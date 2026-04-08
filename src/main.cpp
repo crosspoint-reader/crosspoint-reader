@@ -24,6 +24,7 @@
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "plugin/PluginRegistry.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -183,6 +184,8 @@ void enterDeepSleep() {
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
   APP_STATE.saveToFile();
 
+  PluginRegistry::dispatchSleep();
+
   activityManager.goToSleep();
 
   display.deepSleep();
@@ -289,6 +292,12 @@ void setup() {
 
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
+
+  PluginRegistry::init();
+  if (gpio.isDeepSleepWake()) {
+    PluginRegistry::dispatchWake();
+  }
+  PluginRegistry::dispatchBoot();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
   // crashed (indicated by readerActivityLoadCount > 0)

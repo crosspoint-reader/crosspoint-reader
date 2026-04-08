@@ -14,6 +14,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "plugin/PluginRegistry.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -40,12 +41,20 @@ void TxtReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
+  PluginRegistry::dispatchBookOpen(filePath.c_str());
+  bookOpened = true;
+
   // Trigger first update
   requestUpdate();
 }
 
 void TxtReaderActivity::onExit() {
   Activity::onExit();
+
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -78,9 +87,11 @@ void TxtReaderActivity::loop() {
 
   if (prevTriggered && currentPage > 0) {
     currentPage--;
+    PluginRegistry::dispatchPageTurn(0, currentPage);
     requestUpdate();
   } else if (nextTriggered && currentPage < totalPages - 1) {
     currentPage++;
+    PluginRegistry::dispatchPageTurn(0, currentPage);
     requestUpdate();
   }
 }

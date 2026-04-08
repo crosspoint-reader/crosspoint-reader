@@ -19,6 +19,7 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "plugin/PluginRegistry.h"
 
 namespace {
 constexpr unsigned long skipPageMs = 700;
@@ -42,12 +43,20 @@ void XtcReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
 
+  PluginRegistry::dispatchBookOpen(xtc->getPath().c_str());
+  bookOpened = true;
+
   // Trigger first update
   requestUpdate();
 }
 
 void XtcReaderActivity::onExit() {
   Activity::onExit();
+
+  if (bookOpened) {
+    PluginRegistry::dispatchBookClose();
+    bookOpened = false;
+  }
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -114,12 +123,14 @@ void XtcReaderActivity::loop() {
     } else {
       currentPage = 0;
     }
+    PluginRegistry::dispatchPageTurn(0, currentPage);
     requestUpdate();
   } else if (nextTriggered) {
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
+    PluginRegistry::dispatchPageTurn(0, currentPage);
     requestUpdate();
   }
 }
