@@ -91,6 +91,14 @@ class CrossPointSettings {
   // Swapped: Next, Previous
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
 
+  // Side button long-press action options
+  enum SIDE_BUTTON_LONGPRESS {
+    LONGPRESS_OFF = 0,
+    LONGPRESS_CHAPTER_SKIP = 1,
+    LONGPRESS_ROTATE = 2,
+    SIDE_BUTTON_LONGPRESS_COUNT
+  };
+
   // Font family options
   enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
   // Font size options
@@ -187,8 +195,8 @@ class CrossPointSettings {
   char opdsPassword[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
-  // Long-press chapter skip on side buttons
-  uint8_t longPressChapterSkip = 1;
+  // Side button long-press action (LONGPRESS_OFF, LONGPRESS_CHAPTER_SKIP, LONGPRESS_ROTATE)
+  uint8_t sideButtonLongPress = LONGPRESS_CHAPTER_SKIP;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation

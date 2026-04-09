@@ -193,7 +193,21 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
+  const bool isLongPress = SETTINGS.sideButtonLongPress != CrossPointSettings::LONGPRESS_OFF &&
+                           mappedInput.getHeldTime() > skipChapterMs;
+
+  // Long-press rotation: determine physical button from logical direction + side layout
+  if (isLongPress && SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_ROTATE) {
+    const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? nextTriggered : prevTriggered;
+    const uint8_t newOrientation =
+        isBottom ? (SETTINGS.orientation + CrossPointSettings::ORIENTATION_COUNT - 1) %
+                       CrossPointSettings::ORIENTATION_COUNT
+                 : (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
+    applyOrientation(newOrientation);
+    return;
+  }
+
+  const bool skipChapter = isLongPress && SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_CHAPTER_SKIP;
 
   if (skipChapter) {
     lastPageTurnTime = millis();
@@ -433,6 +447,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     // Reset section to force re-layout in the new orientation.
     section.reset();
   }
+  requestUpdate();
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {

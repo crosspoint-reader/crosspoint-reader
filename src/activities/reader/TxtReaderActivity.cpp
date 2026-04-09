@@ -76,6 +76,18 @@ void TxtReaderActivity::loop() {
     return;
   }
 
+  // Long-press rotation: determine physical button from logical direction + side layout
+  if (SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_ROTATE &&
+      mappedInput.getHeldTime() > ReaderUtils::LONGPRESS_ACTION_MS) {
+    const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? nextTriggered : prevTriggered;
+    const uint8_t newOrientation =
+        isBottom ? (SETTINGS.orientation + CrossPointSettings::ORIENTATION_COUNT - 1) %
+                       CrossPointSettings::ORIENTATION_COUNT
+                 : (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
+    applyOrientation(newOrientation);
+    return;
+  }
+
   if (prevTriggered && currentPage > 0) {
     currentPage--;
     requestUpdate();
@@ -425,6 +437,37 @@ void TxtReaderActivity::loadProgress() {
     }
     f.close();
   }
+}
+
+void TxtReaderActivity::applyOrientation(const uint8_t newOrientation) {
+  if (SETTINGS.orientation == newOrientation) {
+    return;
+  }
+
+  // Preserve reading position as character offset before reflow
+  const size_t savedOffset =
+      (currentPage >= 0 && currentPage < static_cast<int>(pageOffsets.size())) ? pageOffsets[currentPage] : 0;
+
+  SETTINGS.orientation = newOrientation;
+  SETTINGS.saveToFile();
+  ReaderUtils::applyOrientation(renderer, newOrientation);
+
+  // Force full reinitialize with new viewport dimensions
+  initialized = false;
+  pageOffsets.clear();
+  initializeReader();
+
+  // Restore position: find the page whose offset is closest to savedOffset
+  currentPage = 0;
+  for (int i = static_cast<int>(pageOffsets.size()) - 1; i >= 0; i--) {
+    if (pageOffsets[i] <= savedOffset) {
+      currentPage = i;
+      break;
+    }
+  }
+
+  saveProgress();
+  requestUpdate();
 }
 
 bool TxtReaderActivity::loadPageIndexCache() {
