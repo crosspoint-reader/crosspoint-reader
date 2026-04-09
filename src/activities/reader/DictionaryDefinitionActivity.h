@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "../Activity.h"
-#include "util/IpaUtils.h"
 #include "util/DictionaryLookupController.h"
+#include "util/IpaUtils.h"
 #include "util/WordSelectNavigator.h"
 
 class DictionaryDefinitionActivity final : public Activity {

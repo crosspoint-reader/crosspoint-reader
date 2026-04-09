@@ -7,8 +7,8 @@
 #include <freertos/task.h>
 
 #include "../activities/Activity.h"
-#include "DictLookupTask.h"
 #include "../activities/reader/DictionarySuggestionsActivity.h"
+#include "DictLookupTask.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -195,7 +195,7 @@ bool DictionaryLookupController::handleMultiSelect(WordSelectNavigator& navigato
   }
 }
 
-bool DictionaryLookupController::handleConfirmLookup(WordSelectNavigator& navigator) {
+bool DictionaryLookupController::handleConfirmLookup(const WordSelectNavigator& navigator) {
   if (!mappedInput.wasReleased(MappedInputManager::Button::Confirm)) return false;
   const auto* sel = navigator.getSelected();
   if (!sel) return true;  // consumed input even if nothing selected

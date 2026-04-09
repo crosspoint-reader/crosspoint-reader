@@ -34,9 +34,7 @@ void utf8AppendCodepoint(std::string& str, uint32_t cp);
 inline bool utf8EndsWithHyphen(const char* str, size_t len) {
   if (len == 0) return false;
   if (str[len - 1] == '-') return true;
-  return len >= 2 &&
-         static_cast<uint8_t>(str[len - 2]) == 0xC2 &&
-         static_cast<uint8_t>(str[len - 1]) == 0xAD;
+  return len >= 2 && static_cast<uint8_t>(str[len - 2]) == 0xC2 && static_cast<uint8_t>(str[len - 1]) == 0xAD;
 }
 
 // Remove trailing '-' or soft-hyphen (U+00AD) from string.
@@ -44,8 +42,7 @@ inline void utf8RemoveTrailingHyphen(std::string& str) {
   if (str.empty()) return;
   if (str.back() == '-') {
     str.pop_back();
-  } else if (str.size() >= 2 &&
-             static_cast<uint8_t>(str[str.size() - 2]) == 0xC2 &&
+  } else if (str.size() >= 2 && static_cast<uint8_t>(str[str.size() - 2]) == 0xC2 &&
              static_cast<uint8_t>(str[str.size() - 1]) == 0xAD) {
     str.erase(str.size() - 2);
   }

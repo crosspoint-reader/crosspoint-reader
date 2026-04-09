@@ -9,10 +9,10 @@
 #include <memory>
 
 #include "I18nKeys.h"
-#include "util/DictPrepareTask.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/DictPrepareTask.h"
 
 // ---------------------------------------------------------------------------
 // uzlib read callback context
