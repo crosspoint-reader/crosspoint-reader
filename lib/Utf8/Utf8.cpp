@@ -92,3 +92,31 @@ void utf8TruncateChars(std::string& str, const size_t numChars) {
     utf8RemoveLastChar(str);
   }
 }
+
+int utf8EncodeCodepoint(uint32_t cp, char* buf) {
+  if (cp < 0x80) {
+    buf[0] = static_cast<char>(cp);
+    return 1;
+  }
+  if (cp < 0x800) {
+    buf[0] = static_cast<char>(0xC0 | (cp >> 6));
+    buf[1] = static_cast<char>(0x80 | (cp & 0x3F));
+    return 2;
+  }
+  if (cp < 0x10000) {
+    buf[0] = static_cast<char>(0xE0 | (cp >> 12));
+    buf[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+    buf[2] = static_cast<char>(0x80 | (cp & 0x3F));
+    return 3;
+  }
+  buf[0] = static_cast<char>(0xF0 | (cp >> 18));
+  buf[1] = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+  buf[2] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+  buf[3] = static_cast<char>(0x80 | (cp & 0x3F));
+  return 4;
+}
+
+void utf8AppendCodepoint(std::string& str, uint32_t cp) {
+  char buf[4];
+  str.append(buf, utf8EncodeCodepoint(cp, buf));
+}

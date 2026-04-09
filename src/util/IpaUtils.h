@@ -42,22 +42,7 @@ static inline void splitIpaRuns(const char* text, std::vector<IpaTextSpan>& out)
     }
     currentIsIpa = ipa;
     first = false;
-    // Re-encode cp to UTF-8
-    if (cp < 0x80) {
-      current += static_cast<char>(cp);
-    } else if (cp < 0x800) {
-      current += static_cast<char>(0xC0 | (cp >> 6));
-      current += static_cast<char>(0x80 | (cp & 0x3F));
-    } else if (cp < 0x10000) {
-      current += static_cast<char>(0xE0 | (cp >> 12));
-      current += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-      current += static_cast<char>(0x80 | (cp & 0x3F));
-    } else {
-      current += static_cast<char>(0xF0 | (cp >> 18));
-      current += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-      current += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-      current += static_cast<char>(0x80 | (cp & 0x3F));
-    }
+    utf8AppendCodepoint(current, cp);
   }
   if (!current.empty()) out.push_back({std::move(current), currentIsIpa});
 }

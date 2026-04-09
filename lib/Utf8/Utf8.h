@@ -22,3 +22,10 @@ inline bool utf8IsCombiningMark(const uint32_t cp) {
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
 }
+
+// Encode a Unicode codepoint to UTF-8. Writes 1-4 bytes to buf (must be >= 4 bytes).
+// Returns the number of bytes written.
+int utf8EncodeCodepoint(uint32_t cp, char* buf);
+
+// Append a Unicode codepoint as UTF-8 to a string.
+void utf8AppendCodepoint(std::string& str, uint32_t cp);
