@@ -135,10 +135,6 @@ void enterDeepSleep() {
 
   activityManager.goToSleep();
 
-  // Keep the render mutex until the CPU enters deep sleep so any previously queued
-  // render task cannot race the synchronous sleep-screen transition.
-  RenderLock renderLock;
-
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep (powerBtn isPressed=%d, rawPin=%d)", gpio.isPressed(HalGPIO::BTN_POWER),
           digitalRead(InputManager::POWER_BUTTON_PIN) == LOW);
