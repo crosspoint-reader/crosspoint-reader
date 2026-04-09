@@ -14,18 +14,10 @@
  */
 class OpdsBookBrowserActivity final : public Activity {
  public:
-  enum class BrowserState {
-    CHECK_WIFI,
-    WIFI_SELECTION,
-    LOADING,
-    BROWSING,
-    DOWNLOADING,
-    ERROR,
-    SEARCH_INPUT
-  };
+  enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("OpdsBookBrowser", renderer, mappedInput), buttonNavigator() {}
+      : Activity("OpdsBookBrowser", renderer, mappedInput), buttonNavigator() {}
 
   void onEnter() override;
   void onExit() override;
@@ -40,7 +32,7 @@ class OpdsBookBrowserActivity final : public Activity {
   std::string currentPath;
   std::string searchTemplate;
   bool consumeConfirm = false;
-  bool consumeBack = false; // Added missing member
+  bool consumeBack = false;  // Added missing member
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;

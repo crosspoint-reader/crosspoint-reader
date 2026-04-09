@@ -1,5 +1,7 @@
 #include "OpdsParser.h"
+
 #include <Logging.h>
+
 #include <cstring>
 
 OpdsParser::OpdsParser() {
@@ -105,7 +107,8 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       }
 
       if (self->inEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr && strcmp(type, "application/epub+zip") == 0) {
+        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
+            strcmp(type, "application/epub+zip") == 0) {
           self->currentEntry.type = OpdsEntryType::BOOK;
           self->currentEntry.href = href;
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {

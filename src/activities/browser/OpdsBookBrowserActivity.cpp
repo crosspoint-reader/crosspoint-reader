@@ -52,12 +52,13 @@ void OpdsBookBrowserActivity::loop() {
   }
 
   if (consumeConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false; return;
+    consumeConfirm = false;
+    return;
   }
   if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    consumeBack = false; return;
+    consumeBack = false;
+    return;
   }
-
 
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -146,13 +147,15 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
     if (downloadTotal > 0) {
-      GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress, downloadTotal);
+      GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress,
+                          downloadTotal);
     }
     renderer.displayBuffer();
     return;
   }
 
-  const char* confirmLabel = (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+  const char* confirmLabel =
+      (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
   const char* searchLabel = searchTemplate.empty() ? "" : tr(STR_CUSTOM);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -168,7 +171,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       std::string displayText = (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : entry.title;
       if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) displayText += " - " + entry.author;
       auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
-      renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(), i != static_cast<size_t>(selectorIndex));
+      renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
+                        i != static_cast<size_t>(selectorIndex));
     }
   }
   renderer.displayBuffer();
@@ -241,14 +245,17 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
-  std::string downloadUrl = (book.href.find("http") == 0) ? book.href : UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
-  std::string filename = "/" + StringUtils::sanitizeFilename(book.title + (book.author.empty() ? "" : " - " + book.author)) + ".epub";
+  std::string downloadUrl =
+      (book.href.find("http") == 0) ? book.href : UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
+  std::string filename =
+      "/" + StringUtils::sanitizeFilename(book.title + (book.author.empty() ? "" : " - " + book.author)) + ".epub";
 
-  const auto result = HttpDownloader::downloadToFile(downloadUrl, filename, [this](const size_t downloaded, const size_t total) {
-    downloadProgress = downloaded;
-    downloadTotal = total;
-    requestUpdate(true);
-  });
+  const auto result =
+      HttpDownloader::downloadToFile(downloadUrl, filename, [this](const size_t downloaded, const size_t total) {
+        downloadProgress = downloaded;
+        downloadTotal = total;
+        requestUpdate(true);
+      });
 
   if (result == HttpDownloader::OK) {
     Epub(filename, "/.crosspoint").clearCache();
@@ -287,7 +294,8 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
     std::string out;
     out.reserve(s.size() * 3);
     for (unsigned char c : s) {
-      if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') out += static_cast<char>(c);
+      if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+        out += static_cast<char>(c);
       else {
         char buf[4];
         snprintf(buf, sizeof(buf), "%%%02X", c);
@@ -302,7 +310,7 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
   const size_t pos = url.find(placeholder);
   if (pos != std::string::npos) url.replace(pos, placeholder.length(), urlEncode(query));
 
-  navigationHistory.push_back(currentPath); // <-- add this
+  navigationHistory.push_back(currentPath);  // <-- add this
   currentPath = url;                         // <-- add this
 
   state = BrowserState::LOADING;
