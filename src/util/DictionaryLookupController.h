@@ -1,7 +1,5 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
+#include <memory>
 #include <string>
 
 #include "Dictionary.h"
@@ -9,6 +7,7 @@
 #include "WordSelectNavigator.h"
 
 class Activity;
+class DictLookupTask;
 class GfxRenderer;
 class MappedInputManager;
 
@@ -18,6 +17,8 @@ class MappedInputManager;
 // alt-form prompt, not-found popup).  The calling activity delegates input and
 // render to this class whenever isActive() returns true.
 class DictionaryLookupController {
+  friend class DictLookupTask;
+
  public:
   enum class LookupState { Idle, LookingUp, AltFormPrompt, NotFound };
   enum class LookupEvent { None, FoundDefinition, NotFoundDismissedBack, NotFoundDismissedDone, Cancelled };
@@ -43,6 +44,7 @@ class DictionaryLookupController {
 
   DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput, Activity& owner,
                              std::string cachePath = "");
+  ~DictionaryLookupController();
 
   // Start a lookup.  Transitions Idle → LookingUp, spawns background task.
   void startLookup(const std::string& word);
@@ -109,11 +111,10 @@ class DictionaryLookupController {
   volatile bool lookupCancelled = false;
   volatile bool lookupCancelRequested = false;
 
-  TaskHandle_t taskHandle = nullptr;
+  std::unique_ptr<DictLookupTask> task;
 
   void runLookup();
   void handleLookupFailed();
-  static void taskEntry(void* param);
   static void progressCallback(void* ctx, int percent);
   static bool cancelCallback(void* ctx);
 };

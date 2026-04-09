@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 
 #include "../activities/Activity.h"
+#include "DictLookupTask.h"
 #include "../activities/reader/DictionarySuggestionsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -16,6 +17,8 @@
 DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                        Activity& owner, std::string cachePath)
     : renderer(renderer), mappedInput(mappedInput), owner(owner), cachePath(std::move(cachePath)) {}
+
+DictionaryLookupController::~DictionaryLookupController() = default;
 
 void DictionaryLookupController::startLookup(const std::string& word) {
   lookupWord = word;
@@ -27,7 +30,8 @@ void DictionaryLookupController::startLookup(const std::string& word) {
   lookupCancelRequested = false;
   state = LookupState::LookingUp;
   owner.requestUpdateAndWait();
-  xTaskCreate(taskEntry, "DictLookup", 4096, this, 1, &taskHandle);
+  task = std::make_unique<DictLookupTask>(*this);
+  task->start("DictLookup", 4096, 1);
 }
 
 void DictionaryLookupController::startLookupAsSuggestion(const std::string& word) {
@@ -41,9 +45,10 @@ void DictionaryLookupController::setNotFound() {
 }
 
 void DictionaryLookupController::onExit() {
-  if (taskHandle != nullptr) {
-    vTaskDelete(taskHandle);
-    taskHandle = nullptr;
+  if (task) {
+    task->stop();
+    task->wait();
+    task.reset();
   }
 }
 
@@ -51,7 +56,7 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
   if (state == LookupState::LookingUp) {
     if (lookupDone) {
       state = LookupState::Idle;
-      taskHandle = nullptr;
+      task.reset();
 
       if (lookupCancelled) {
         nextIsSuggestion = false;
@@ -234,13 +239,6 @@ void DictionaryLookupController::handleLookupFailed() {
   }
   nextIsSuggestion = false;
   setNotFound();
-}
-
-void DictionaryLookupController::taskEntry(void* param) {
-  DictionaryLookupController* self = static_cast<DictionaryLookupController*>(param);
-  self->runLookup();
-  self->taskHandle = nullptr;
-  vTaskDelete(nullptr);
 }
 
 void DictionaryLookupController::progressCallback(void* ctx, int percent) {

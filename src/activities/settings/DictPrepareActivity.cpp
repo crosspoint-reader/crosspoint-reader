@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "I18nKeys.h"
+#include "util/DictPrepareTask.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -66,13 +67,18 @@ const char* DictPrepareActivity::stepLabel(StepType type) {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
+DictPrepareActivity::DictPrepareActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string folderPath)
+    : Activity("DictPrepare", renderer, mappedInput), folderPath(std::move(folderPath)), steps{} {}
+
+DictPrepareActivity::~DictPrepareActivity() = default;
+
 void DictPrepareActivity::onEnter() {
   Activity::onEnter();
   state = State::CONFIRM;
   prepareDone = false;
   prepareSucceeded = false;
   cancelRequested = false;
-  taskHandle = nullptr;
+  task.reset();
   currentStep = 0;
 
   // Extract the folder name from folderPath for display.
@@ -130,22 +136,12 @@ void DictPrepareActivity::detectSteps() {
 }
 
 void DictPrepareActivity::onExit() {
-  if (taskHandle != nullptr) {
-    vTaskDelete(taskHandle);
-    taskHandle = nullptr;
+  if (task) {
+    task->stop();
+    task->wait();
+    task.reset();
   }
   Activity::onExit();
-}
-
-// ---------------------------------------------------------------------------
-// FreeRTOS task entry
-// ---------------------------------------------------------------------------
-
-void DictPrepareActivity::taskEntry(void* param) {
-  DictPrepareActivity* self = static_cast<DictPrepareActivity*>(param);
-  self->runSteps();
-  self->taskHandle = nullptr;
-  vTaskDelete(nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +168,8 @@ void DictPrepareActivity::loop() {
         steps[i].total = 0;
       }
       requestUpdateAndWait();
-      xTaskCreate(taskEntry, "DictPrep", 4096, this, 1, &taskHandle);
+      task = std::make_unique<DictPrepareTask>(*this);
+      task->start("DictPrep", 4096, 1);
       return;
     }
     return;

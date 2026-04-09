@@ -1,12 +1,12 @@
 #pragma once
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
 #include <cstddef>
+#include <memory>
 #include <string>
 
 #include "activities/Activity.h"
+
+class DictPrepareTask;
 
 // Activity that performs one or more dictionary preparation steps:
 //   1. Extract .dict.dz → .dict  (if .dict.dz present and .dict absent)
@@ -18,9 +18,11 @@
 // then runs all steps sequentially on a FreeRTOS task with per-step progress bars.
 // Returns isCancelled=false on success, true on cancel or any failure.
 class DictPrepareActivity final : public Activity {
+  friend class DictPrepareTask;
+
  public:
-  explicit DictPrepareActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string folderPath)
-      : Activity("DictPrepare", renderer, mappedInput), folderPath(std::move(folderPath)), steps{} {}
+  explicit DictPrepareActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string folderPath);
+  ~DictPrepareActivity() override;
 
   void onEnter() override;
   void onExit() override;
@@ -60,7 +62,7 @@ class DictPrepareActivity final : public Activity {
   volatile bool prepareDone = false;
   volatile bool prepareSucceeded = false;
 
-  TaskHandle_t taskHandle = nullptr;
+  std::unique_ptr<DictPrepareTask> task;
 
   void detectSteps();
 
@@ -75,5 +77,4 @@ class DictPrepareActivity final : public Activity {
   bool generateOft(const char* srcPath, const char* oftPath, uint8_t skipPerEntry, Step& step);
 
   static const char* stepLabel(StepType type);
-  static void taskEntry(void* param);
 };
