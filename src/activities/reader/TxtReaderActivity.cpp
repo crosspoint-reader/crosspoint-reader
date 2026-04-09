@@ -71,20 +71,20 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-  if (!prevTriggered && !nextTriggered) {
+  // Long-press rotation: fires while held, suppresses input until released
+  if (longPressHandled) {
+    longPressHandled = ReaderUtils::isPageButtonHeld(mappedInput);
+    return;
+  }
+  const int8_t rotation = ReaderUtils::detectRotation(mappedInput);
+  if (rotation >= 0) {
+    applyOrientation(rotation);
+    longPressHandled = true;
     return;
   }
 
-  // Long-press rotation: determine physical button from logical direction + side layout
-  if (SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_ROTATE &&
-      mappedInput.getHeldTime() > ReaderUtils::LONGPRESS_ACTION_MS) {
-    const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? nextTriggered : prevTriggered;
-    const uint8_t newOrientation =
-        isBottom ? (SETTINGS.orientation + CrossPointSettings::ORIENTATION_COUNT - 1) %
-                       CrossPointSettings::ORIENTATION_COUNT
-                 : (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
-    applyOrientation(newOrientation);
+  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  if (!prevTriggered && !nextTriggered) {
     return;
   }
 

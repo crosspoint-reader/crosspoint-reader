@@ -176,6 +176,18 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Long-press rotation: fires while held, suppresses input until released
+  if (longPressHandled) {
+    longPressHandled = ReaderUtils::isPageButtonHeld(mappedInput);
+    return;
+  }
+  const int8_t rotation = ReaderUtils::detectRotation(mappedInput);
+  if (rotation >= 0) {
+    applyOrientation(rotation);
+    longPressHandled = true;
+    return;
+  }
+
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -193,21 +205,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool isLongPress = SETTINGS.sideButtonLongPress != CrossPointSettings::LONGPRESS_OFF &&
+  const bool skipChapter = SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_CHAPTER_SKIP &&
                            mappedInput.getHeldTime() > skipChapterMs;
-
-  // Long-press rotation: determine physical button from logical direction + side layout
-  if (isLongPress && SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_ROTATE) {
-    const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? nextTriggered : prevTriggered;
-    const uint8_t newOrientation =
-        isBottom ? (SETTINGS.orientation + CrossPointSettings::ORIENTATION_COUNT - 1) %
-                       CrossPointSettings::ORIENTATION_COUNT
-                 : (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
-    applyOrientation(newOrientation);
-    return;
-  }
-
-  const bool skipChapter = isLongPress && SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_CHAPTER_SKIP;
 
   if (skipChapter) {
     lastPageTurnTime = millis();
