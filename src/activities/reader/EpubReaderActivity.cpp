@@ -650,6 +650,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
+    renderer.clearFontCache();
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
