@@ -18,4 +18,5 @@ class SystemInformationActivity final : public Activity {
  private:
   std::optional<SystemStatus> status_;
   bool sdStatusReady_ = false;
+  bool sdLoadRequested_ = false;
 };

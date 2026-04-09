@@ -110,6 +110,26 @@
       background-color: var(--accent-hover-color);
       color: white;
     }
+
+    .action-row {
+      text-align: center;
+      margin-top: 16px;
+    }
+
+    .action-row button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      background-color: var(--accent-color);
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .action-row button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
   </style>
 </head>
 
@@ -174,7 +194,10 @@
     </div>
     <div class="info-row">
       <span class="label">SD Card</span>
-      <span class="value" id="sd-space">Loading...</span>
+      <span class="value" id="sd-space">Not loaded</span>
+    </div>
+    <div class="action-row">
+      <button id="load-sd-button">Load SD info</button>
     </div>
   </div>
 
@@ -231,6 +254,8 @@
         document.getElementById('sd-space').textContent = data.sdTotal
           ? formatBytes(data.sdUsed) + ' / ' + formatBytes(data.sdTotal)
           : 'N/A';
+      } else {
+        document.getElementById('sd-space').textContent = 'Not loaded';
       }
     }
 
@@ -242,21 +267,43 @@
         }
         const fastData = await fastResponse.json();
         applyStatus(fastData, false);
-        document.getElementById('sd-space').textContent = 'Reading...';
-
-        const response = await fetch('/api/status');
-        if (!response.ok) {
-          throw new Error('Failed to fetch full status: ' + response.status + ' ' + response.statusText);
-        }
-        const data = await response.json();
-        applyStatus(data, true);
+        setSdButtonState(true);
       } catch (error) {
         console.error('Error fetching status:', error);
       }
     }
 
-    // Fetch status on page load
-    window.onload = fetchStatus;
+    async function fetchSdStatus() {
+      const button = document.getElementById('load-sd-button');
+      button.disabled = true;
+      button.textContent = 'Loading...';
+      document.getElementById('sd-space').textContent = 'Loading...';
+
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) {
+          throw new Error('Failed to fetch SD status: ' + response.status + ' ' + response.statusText);
+        }
+        const data = await response.json();
+        applyStatus(data, true);
+        button.style.display = 'none';
+      } catch (error) {
+        console.error('Error fetching SD status:', error);
+        button.disabled = false;
+        button.textContent = 'Load SD info';
+      }
+    }
+
+    function setSdButtonState(enabled) {
+      const button = document.getElementById('load-sd-button');
+      button.disabled = !enabled;
+      button.textContent = enabled ? 'Load SD info' : 'Loading...';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('load-sd-button').addEventListener('click', fetchSdStatus);
+      fetchStatus();
+    });
   </script>
 </body>
 

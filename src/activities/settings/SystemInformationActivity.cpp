@@ -26,6 +26,7 @@ void SystemInformationActivity::onEnter() {
   Activity::onEnter();
   status_.reset();
   sdStatusReady_ = false;
+  sdLoadRequested_ = false;
   requestUpdate();
 }
 
@@ -36,6 +37,7 @@ void SystemInformationActivity::loop() {
     finish();
     return;
   }
+
   // Collect fast fields first so this page appears immediately.
   if (!status_.has_value()) {
     status_ = SystemStatus::collectFast();
@@ -43,11 +45,18 @@ void SystemInformationActivity::loop() {
     return;
   }
 
-  // SD stats can be slower to compute on large cards.
+  // SD stats can be slower to compute on large cards. Load them only when the
+  // user explicitly confirms.
   if (!sdStatusReady_) {
-    SystemStatus::fillSdStatus(*status_);
-    sdStatusReady_ = true;
-    requestUpdate();
+    if (sdLoadRequested_) {
+      SystemStatus::fillSdStatus(*status_);
+      sdStatusReady_ = true;
+      sdLoadRequested_ = false;
+      requestUpdate();
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      sdLoadRequested_ = true;
+      requestUpdate();
+    }
   }
 }
 
@@ -109,14 +118,15 @@ void SystemInformationActivity::render(RenderLock&&) {
   drawRow(8, tr(STR_UPTIME), uptimeBuf);
 
   if (!sdStatusReady_) {
-    drawRow(9, tr(STR_SD_CARD), tr(STR_READING));
+    const char* sdMessage = sdLoadRequested_ ? tr(STR_READING) : tr(STR_SD_UPDATE_PROMPT);
+    drawRow(9, tr(STR_SD_CARD), sdMessage);
   } else if (status.sdTotalBytes > 0) {
     drawRow(9, tr(STR_SD_CARD), formatBytes(status.sdUsedBytes) + " / " + formatBytes(status.sdTotalBytes));
   } else {
     drawRow(9, tr(STR_SD_CARD), tr(STR_NOT_SET));
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_UPDATE), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
