@@ -116,7 +116,7 @@ void FileBrowserActivity::onEnter() {
     loadFiles();
   } else if (!root.isDirectory()) {
     root.close();
-    lockLongPressBack = true;
+    lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
 
     const std::string oldPath = basepath;
     basepath = FsHelpers::extractFolderPath(basepath);
