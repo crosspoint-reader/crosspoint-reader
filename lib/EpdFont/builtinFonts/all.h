@@ -27,8 +27,6 @@
 #include <builtinFonts/inter_18_bold.h>
 #include <builtinFonts/inter_18_regular.h>
 #include <builtinFonts/inter_8_regular.h>
-#include <builtinFonts/notosans_10_bold.h>
-#include <builtinFonts/notosans_10_regular.h>
 #include <builtinFonts/notosans_12_bold.h>
 #include <builtinFonts/notosans_12_bolditalic.h>
 #include <builtinFonts/notosans_12_italic.h>
@@ -45,4 +43,3 @@
 #include <builtinFonts/notosans_18_bolditalic.h>
 #include <builtinFonts/notosans_18_italic.h>
 #include <builtinFonts/notosans_18_regular.h>
-#include <builtinFonts/notosans_8_regular.h>
