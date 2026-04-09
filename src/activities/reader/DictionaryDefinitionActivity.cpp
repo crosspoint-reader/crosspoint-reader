@@ -77,6 +77,20 @@ void DictionaryDefinitionActivity::wrapText() {
 }
 
 // ---------------------------------------------------------------------------
+// Shared helper: measure text width accounting for mixed IPA/non-IPA runs
+// ---------------------------------------------------------------------------
+
+int DictionaryDefinitionActivity::getMixedWidth(std::vector<IpaTextSpan>& ipaRuns, const char* text,
+                                                EpdFontFamily::Style style) {
+  ipaRuns.clear();
+  splitIpaRuns(text, ipaRuns);
+  return std::accumulate(ipaRuns.begin(), ipaRuns.end(), 0, [&](int sum, const IpaTextSpan& run) {
+    return sum +
+           renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str(), style);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // HTML path: run DictHtmlRenderer, lay out spans into LayoutLines
 // ---------------------------------------------------------------------------
 
@@ -119,16 +133,6 @@ void DictionaryDefinitionActivity::wrapHtml() {
       currentLine.segments.push_back({text, style, isIpa});
     }
     currentX += width;
-  };
-
-  // Measure and append a string that may contain mixed IPA/non-IPA runs.
-  auto getMixedWidth = [&](const char* text, EpdFontFamily::Style style) -> int {
-    ipaRuns.clear();
-    splitIpaRuns(text, ipaRuns);
-    return std::accumulate(ipaRuns.begin(), ipaRuns.end(), 0, [&](int sum, const IpaTextSpan& run) {
-      return sum +
-             renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str(), style);
-    });
   };
 
   auto appendMixed = [&](const char* text, EpdFontFamily::Style style) {
@@ -187,7 +191,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
       startLine(span.indentLevel, span.isListItem);
     }
 
-    const int spanWidth = getMixedWidth(span.text, style);
+    const int spanWidth = getMixedWidth(ipaRuns, span.text, style);
     if (currentX + spanWidth <= maxWidth) {
       // Fast path: entire span fits on the current line.
       appendMixed(span.text, style);
@@ -208,13 +212,13 @@ void DictionaryDefinitionActivity::wrapHtml() {
 
         bool lineIsEmpty = currentLine.segments.empty();
         std::string candidate = (!lineIsEmpty && hadSpace) ? " " + tok : tok;
-        int candidateWidth = getMixedWidth(candidate.c_str(), style);
+        int candidateWidth = getMixedWidth(ipaRuns, candidate.c_str(), style);
 
         if (currentX + candidateWidth > maxWidth && !lineIsEmpty) {
           flushLine();
           startLine(span.indentLevel, false);
           candidate = tok;
-          candidateWidth = getMixedWidth(tok.c_str(), style);
+          candidateWidth = getMixedWidth(ipaRuns, tok.c_str(), style);
         }
 
         if (currentX + candidateWidth > maxWidth) {
@@ -244,14 +248,6 @@ void DictionaryDefinitionActivity::wrapPlain() {
   std::string currentLineText;
   int currentLineWidth = 0;
 
-  auto getMixedWidthPlain = [&](const std::string& text) -> int {
-    ipaRuns.clear();
-    splitIpaRuns(text.c_str(), ipaRuns);
-    return std::accumulate(ipaRuns.begin(), ipaRuns.end(), 0, [&](int sum, const IpaTextSpan& run) {
-      return sum + renderer.getTextWidth(run.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId(), run.text.c_str());
-    });
-  };
-
   auto flushLine = [&]() {
     if (currentLineText.empty()) return;
     LayoutLine line;
@@ -267,7 +263,7 @@ void DictionaryDefinitionActivity::wrapPlain() {
 
   auto tryAppendWord = [&]() {
     if (currentWord.empty()) return;
-    const int wordWidth = getMixedWidthPlain(currentWord);
+    const int wordWidth = getMixedWidth(ipaRuns, currentWord.c_str(), EpdFontFamily::REGULAR);
     if (currentLineText.empty()) {
       currentLineText = currentWord;
       currentLineWidth = wordWidth;

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../Activity.h"
+#include "util/IpaUtils.h"
 #include "util/DictionaryLookupController.h"
 #include "util/WordSelectNavigator.h"
 
@@ -79,4 +80,5 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapHtml();
   void wrapPlain();
   void extractWordsFromLayout();
+  int getMixedWidth(std::vector<IpaTextSpan>& ipaRuns, const char* text, EpdFontFamily::Style style);
 };
