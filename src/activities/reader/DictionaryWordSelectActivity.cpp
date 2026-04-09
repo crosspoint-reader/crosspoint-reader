@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -161,26 +162,14 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
     uint16_t lastLen = words[lastWordIdx].textLen;
     if (lastLen == 0) continue;
 
-    bool endsWithHyphen = false;
-    if (lastWord[lastLen - 1] == '-') {
-      endsWithHyphen = true;
-    } else if (lastLen >= 2 && static_cast<uint8_t>(lastWord[lastLen - 2]) == 0xC2 &&
-               static_cast<uint8_t>(lastWord[lastLen - 1]) == 0xAD) {
-      endsWithHyphen = true;
-    }
-    if (!endsWithHyphen) continue;
+    if (!utf8EndsWithHyphen(lastWord, lastLen)) continue;
 
     int nextWordIdx = rows[r + 1].wordIndices.front();
     words[lastWordIdx].continuationIndex = nextWordIdx;
     words[nextWordIdx].continuationOf = lastWordIdx;
 
     std::string firstPart(lastWord, lastLen);
-    if (firstPart.back() == '-') {
-      firstPart.pop_back();
-    } else if (firstPart.size() >= 2 && static_cast<uint8_t>(firstPart[firstPart.size() - 2]) == 0xC2 &&
-               static_cast<uint8_t>(firstPart[firstPart.size() - 1]) == 0xAD) {
-      firstPart.erase(firstPart.size() - 2);
-    }
+    utf8RemoveTrailingHyphen(firstPart);
     const char* nextWord = textPool.data() + words[nextWordIdx].textOffset;
     std::string merged = firstPart + nextWord;
     uint16_t mergedOff = WordSelectNavigator::poolAppend(textPool, merged.c_str(), merged.size());
@@ -196,27 +185,13 @@ void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNa
     int lastWordIdx = rows.back().wordIndices.back();
     const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
     uint16_t lastLen = words[lastWordIdx].textLen;
-    if (lastLen > 0) {
-      bool endsWithHyphen = false;
-      if (lastWord[lastLen - 1] == '-') {
-        endsWithHyphen = true;
-      } else if (lastLen >= 2 && static_cast<uint8_t>(lastWord[lastLen - 2]) == 0xC2 &&
-                 static_cast<uint8_t>(lastWord[lastLen - 1]) == 0xAD) {
-        endsWithHyphen = true;
-      }
-      if (endsWithHyphen) {
-        std::string firstPart(lastWord, lastLen);
-        if (firstPart.back() == '-') {
-          firstPart.pop_back();
-        } else if (firstPart.size() >= 2 && static_cast<uint8_t>(firstPart[firstPart.size() - 2]) == 0xC2 &&
-                   static_cast<uint8_t>(firstPart[firstPart.size() - 1]) == 0xAD) {
-          firstPart.erase(firstPart.size() - 2);
-        }
-        std::string merged = firstPart + nextPageFirstWord;
-        uint16_t off = WordSelectNavigator::poolAppend(textPool, merged.c_str(), merged.size());
-        words[lastWordIdx].lookupOffset = off;
-        words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
-      }
+    if (lastLen > 0 && utf8EndsWithHyphen(lastWord, lastLen)) {
+      std::string firstPart(lastWord, lastLen);
+      utf8RemoveTrailingHyphen(firstPart);
+      std::string merged = firstPart + nextPageFirstWord;
+      uint16_t off = WordSelectNavigator::poolAppend(textPool, merged.c_str(), merged.size());
+      words[lastWordIdx].lookupOffset = off;
+      words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
     }
   }
 
