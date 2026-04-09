@@ -13,6 +13,8 @@ class ButtonNavigator final {
   const uint16_t continuousIntervalMs;
   uint32_t lastContinuousNavTime = 0;
   static const MappedInputManager* mappedInput;
+  std::function<bool(int)> selectablePredicate;
+  int selectableTotalItems = 0;
 
   [[nodiscard]] bool shouldNavigateContinuously() const;
 
@@ -40,6 +42,17 @@ class ButtonNavigator final {
 
   [[nodiscard]] static int nextIndex(int currentIndex, int totalItems);
   [[nodiscard]] static int previousIndex(int currentIndex, int totalItems);
+  [[nodiscard]] static int nextIndex(int currentIndex, const std::vector<bool>& selectable);
+  [[nodiscard]] static int previousIndex(int currentIndex, const std::vector<bool>& selectable);
+  [[nodiscard]] static int nextIndex(int currentIndex, int totalItems,
+                                     const std::function<bool(int index)>& isSelectable);
+  [[nodiscard]] static int previousIndex(int currentIndex, int totalItems,
+                                         const std::function<bool(int index)>& isSelectable);
+
+  [[nodiscard]] int nextIndex(int currentIndex) const;
+  [[nodiscard]] int previousIndex(int currentIndex) const;
+  void setSelectablePredicate(std::function<bool(int)> selectablePredicate, int totalItems);
+  void clearSelectablePredicate();
 
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);

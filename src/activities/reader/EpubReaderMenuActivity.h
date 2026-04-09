@@ -12,6 +12,7 @@ class EpubReaderMenuActivity final : public Activity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
+    NONE,
     SELECT_CHAPTER,
     FOOTNOTES,
     EMBEDDED_STYLE,
@@ -43,9 +44,12 @@ class EpubReaderMenuActivity final : public Activity {
   struct MenuItem {
     MenuAction action;
     StrId labelId;
+    bool isSeparator = false;
   };
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes);
+
+  std::function<bool(int)> buildSelectablePredicate() const;
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;

@@ -27,30 +27,52 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
-  items.reserve(13);
+  items.reserve(18);
+  // Navigation
+  items.push_back({MenuAction::NONE, StrId::STR_READER_NAVIGATION, true});
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
+  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
+  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+
+  // Appearance
+  items.push_back({MenuAction::NONE, StrId::STR_READER_APPEARANCE, true});
   items.push_back({MenuAction::EMBEDDED_STYLE, StrId::STR_EMBEDDED_STYLE});
   items.push_back({MenuAction::IMAGE_RENDERING, StrId::STR_IMAGES});
   items.push_back({MenuAction::TEXT_DARKNESS, StrId::STR_TEXT_DARKNESS});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
-  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
-  items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
-  items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
-  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
+
+  // Synchronisation (only if credentials are set, to avoid confusion)
   if (KOREADER_STORE.hasCredentials()) {
+    items.push_back({MenuAction::NONE, StrId::STR_KOREADER_SYNC, true});
     items.push_back({MenuAction::PULL_REMOTE, StrId::STR_PULL_PROGRESS_FROM_OTHER_DEVICES});
     items.push_back({MenuAction::PUSH_LOCAL, StrId::STR_PUSH_PROGRESS_FROM_THIS_DEVICE});
   }
+
+  // Tools
+  items.push_back({MenuAction::NONE, StrId::STR_READER_TOOLS, true});
+  items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
+  items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
+  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   return items;
+}
+
+std::function<bool(int)> EpubReaderMenuActivity::buildSelectablePredicate() const {
+  return [this](int index) {
+    return index >= 0 && index < static_cast<int>(menuItems.size()) && !menuItems[index].isSeparator;
+  };
 }
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
+  const auto selectablePredicate = buildSelectablePredicate();
+  buttonNavigator.setSelectablePredicate(selectablePredicate, static_cast<int>(menuItems.size()));
+  if (!selectablePredicate(selectedIndex)) {
+    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
+  }
   requestUpdate();
 }
 
@@ -59,17 +81,20 @@ void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 void EpubReaderMenuActivity::loop() {
   // Handle navigation
   buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    selectedIndex = buttonNavigator.previousIndex(selectedIndex);
     requestUpdate();
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto selectedAction = menuItems[selectedIndex].action;
+    if (selectedAction == MenuAction::NONE) {
+      return;
+    }
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       // Cycle orientation preview locally; actual rotation happens on menu exit.
       pendingOrientation = (pendingOrientation + 1) % orientationLabels.size();
@@ -158,60 +183,45 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   // Menu Items
   const int startY = 75 + contentRect.y;
-  constexpr int lineHeight = 30;
+  const int listHeight = contentRect.height - (startY - contentRect.y);
 
-  for (size_t i = 0; i < menuItems.size(); ++i) {
-    const int displayY = startY + (i * lineHeight);
-    const bool isSelected = (static_cast<int>(i) == selectedIndex);
-
-    if (isSelected) {
-      // Highlight only the content area so we don't paint over hint gutters.
-      renderer.fillRect(contentRect.x, displayY, contentRect.width - 1, lineHeight, true);
-    }
-
-    renderer.drawText(UI_10_FONT_ID, contentRect.x + 20, displayY, I18N.get(menuItems[i].labelId), !isSelected);
-
-    if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
-      // Render current orientation value on the right edge of the content area.
-      const char* value = I18N.get(orientationLabels[pendingOrientation]);
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentRect.x + contentRect.width - 20 - width, displayY, value, !isSelected);
-    }
-
-    if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
-      // Render current page turn value on the right edge of the content area.
-      const auto value = pageTurnLabels[selectedPageTurnOption];
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentRect.x + contentRect.width - 20 - width, displayY, value, !isSelected);
-    }
-
-    if (menuItems[i].action == MenuAction::EMBEDDED_STYLE) {
-      const char* value = tr(STR_DEFAULT_VALUE);
-      if (pendingEmbeddedStyleOverride == 1) {
-        value = tr(STR_STATE_ON);
-      } else if (pendingEmbeddedStyleOverride == 0) {
-        value = tr(STR_STATE_OFF);
-      }
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentRect.x + contentRect.width - 20 - width, displayY, value, !isSelected);
-    }
-
-    if (menuItems[i].action == MenuAction::IMAGE_RENDERING) {
-      const char* value = tr(STR_DEFAULT_VALUE);
-      if (pendingImageRenderingOverride >= 0 && pendingImageRenderingOverride < imageRenderingLabels.size()) {
-        value = I18N.get(imageRenderingLabels[pendingImageRenderingOverride]);
-      }
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentRect.x + contentRect.width - 20 - width, displayY, value, !isSelected);
-    }
-
-    if (menuItems[i].action == MenuAction::TEXT_DARKNESS) {
-      const uint8_t idx = (pendingTextDarkness < textDarknessLabels.size()) ? pendingTextDarkness : 0;
-      const char* value = I18N.get(textDarknessLabels[idx]);
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentRect.x + contentRect.width - 20 - width, displayY, value, !isSelected);
-    }
-  }
+  GUI.drawList(
+      renderer, Rect{contentRect.x, startY, contentRect.width, listHeight}, static_cast<int>(menuItems.size()),
+      selectedIndex,
+      [this](int index) {
+        const auto& item = menuItems[index];
+        const auto title = I18N.get(item.labelId);
+        return item.isSeparator ? UITheme::makeSeparatorTitle(title) : title;
+      },
+      nullptr, nullptr,
+      [this](int index) {
+        const auto& item = menuItems[index];
+        switch (item.action) {
+          case MenuAction::ROTATE_SCREEN:
+            return std::string(I18N.get(orientationLabels[pendingOrientation]));
+          case MenuAction::AUTO_PAGE_TURN:
+            return std::string(pageTurnLabels[selectedPageTurnOption]);
+          case MenuAction::EMBEDDED_STYLE:
+            if (pendingEmbeddedStyleOverride == 1) {
+              return std::string(tr(STR_STATE_ON));
+            } else if (pendingEmbeddedStyleOverride == 0) {
+              return std::string(tr(STR_STATE_OFF));
+            }
+            return std::string(tr(STR_DEFAULT_VALUE));
+          case MenuAction::IMAGE_RENDERING:
+            if (pendingImageRenderingOverride >= 0 && pendingImageRenderingOverride < imageRenderingLabels.size()) {
+              return std::string(I18N.get(imageRenderingLabels[pendingImageRenderingOverride]));
+            }
+            return std::string(tr(STR_DEFAULT_VALUE));
+          case MenuAction::TEXT_DARKNESS: {
+            const uint8_t idx = (pendingTextDarkness < textDarknessLabels.size()) ? pendingTextDarkness : 0;
+            return std::string(I18N.get(textDarknessLabels[idx]));
+          }
+          default:
+            return std::string();
+        }
+      },
+      true);
 
   // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

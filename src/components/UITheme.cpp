@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include <memory>
@@ -95,6 +96,16 @@ Rect UITheme::getContentRect(const GfxRenderer& renderer, bool hasBottomHints, b
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
   return Rect{left, top, w - left - right, h - top - bottom};
+}
+
+std::string UITheme::makeSeparatorTitle(const std::string& title) { return std::string("__") + title; }
+
+std::string UITheme::makeSeparatorTitle(StrId labelId) { return std::string("__") + I18N.get(labelId); }
+
+bool UITheme::isSeparatorTitle(const std::string& title) { return title.rfind("__", 0) == 0; }
+
+std::string UITheme::stripSeparatorTitle(const std::string& title) {
+  return isSeparatorTitle(title) ? title.substr(2) : title;
 }
 
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {

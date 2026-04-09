@@ -270,10 +270,15 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
   }
 
+  bool selectedIsSeparator = false;
+  if (selectedIndex >= 0 && selectedIndex < itemCount) {
+    selectedIsSeparator = UITheme::isSeparatorTitle(rowTitle(selectedIndex));
+  }
+
   // Draw selection
   int contentWidth = rect.width - 5;
-  if (selectedIndex >= 0) {
-    renderer.fillRect(0, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
+  if (selectedIndex >= 0 && !selectedIsSeparator) {
+    renderer.fillRect(rect.x, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
   }
   // Draw all items
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
@@ -283,9 +288,19 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     // Draw name
     auto itemName = rowTitle(i);
+    const bool isSeparator = UITheme::isSeparatorTitle(itemName);
+    if (isSeparator) {
+      itemName = UITheme::stripSeparatorTitle(itemName);
+      drawListSeparator(renderer,
+                        Rect{rect.x + BaseMetrics::values.contentSidePadding, itemY,
+                             contentWidth - BaseMetrics::values.contentSidePadding * 2, rowHeight},
+                        rect.x + BaseMetrics::values.contentSidePadding, textWidth, itemName);
+      continue;
+    }
+
     auto font = (rowSubtitle != nullptr) ? UI_12_FONT_ID : UI_10_FONT_ID;
     auto item = renderer.truncatedText(font, itemName.c_str(), textWidth);
-    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
+    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), true);
 
     if (rowSubtitle != nullptr) {
       // Draw subtitle; if the text is newline-separated (author\nseries), join with • for single-line display
@@ -307,6 +322,14 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         itemY, valueText.c_str(), i != selectedIndex);
     }
   }
+}
+
+void BaseTheme::drawListSeparator(const GfxRenderer& renderer, Rect rowRect, int textX, int textWidth,
+                                  const std::string& title) const {
+  const std::string item = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), textWidth);
+  const int lineY = rowRect.y + rowRect.height - 2;
+  renderer.drawLine(rowRect.x, lineY, rowRect.x + rowRect.width - 1, lineY, true);
+  renderer.drawText(SMALL_FONT_ID, textX, rowRect.y + 7, item.c_str(), true, EpdFontFamily::BOLD);
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {

@@ -401,11 +401,16 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                       scrollBarHeight, true);
   }
 
+  bool selectedIsSeparator = false;
+  if (selectedIndex >= 0 && selectedIndex < itemCount && rowTitle != nullptr) {
+    selectedIsSeparator = UITheme::isSeparatorTitle(rowTitle(selectedIndex));
+  }
+
   // Draw selection
   int contentWidth =
       rect.width -
       (totalPages > 1 ? (LyraMetrics::values.scrollBarWidth + LyraMetrics::values.scrollBarRightOffset) : 1);
-  if (selectedIndex >= 0) {
+  if (selectedIndex >= 0 && !selectedIsSeparator) {
     renderer.fillRoundedRect(
         rect.x + LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
         contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight, cornerRadius, Color::LightGray);
@@ -438,6 +443,16 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     auto itemName = rowTitle(i);
+    const bool isSeparator = UITheme::isSeparatorTitle(itemName);
+    if (isSeparator) {
+      itemName = UITheme::stripSeparatorTitle(itemName);
+      drawListSeparator(renderer,
+                        Rect{rect.x + LyraMetrics::values.contentSidePadding, itemY,
+                             contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight},
+                        textX, rowTextWidth, itemName);
+      continue;
+    }
+
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
     renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), true);
 

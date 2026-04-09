@@ -1,5 +1,7 @@
 #pragma once
 
+#include <I18n.h>
+
 #include <functional>
 #include <memory>
 
@@ -20,6 +22,11 @@ class UITheme {
   void setTheme(CrossPointSettings::UI_THEME type);
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
+  static std::string makeSeparatorTitle(const std::string& title);
+  static std::string makeSeparatorTitle(StrId labelId);
+  static bool isSeparatorTitle(const std::string& title);
+  static std::string stripSeparatorTitle(const std::string& title);
+
   // Returns the drawable content Rect accounting for screen orientation and visible button hints.
   // Bottom hints occupy the physical bottom edge; side hints occupy the physical right edge.
   // The mapping to logical edges is orientation-dependent.

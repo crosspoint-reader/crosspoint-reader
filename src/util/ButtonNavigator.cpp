@@ -73,6 +73,26 @@ bool ButtonNavigator::shouldNavigateContinuously() const {
   return buttonHeldLongEnough && navigationIntervalElapsed;
 }
 
+void ButtonNavigator::setSelectablePredicate(std::function<bool(int)> selectablePredicate, int totalItems) {
+  this->selectablePredicate = std::move(selectablePredicate);
+  this->selectableTotalItems = totalItems;
+}
+
+void ButtonNavigator::clearSelectablePredicate() {
+  selectablePredicate = nullptr;
+  selectableTotalItems = 0;
+}
+
+int ButtonNavigator::nextIndex(int currentIndex) const {
+  if (!selectablePredicate || selectableTotalItems <= 0) return currentIndex;
+  return nextIndex(currentIndex, selectableTotalItems, selectablePredicate);
+}
+
+int ButtonNavigator::previousIndex(int currentIndex) const {
+  if (!selectablePredicate || selectableTotalItems <= 0) return currentIndex;
+  return previousIndex(currentIndex, selectableTotalItems, selectablePredicate);
+}
+
 int ButtonNavigator::nextIndex(const int currentIndex, const int totalItems) {
   if (totalItems <= 0) return 0;
 
@@ -85,6 +105,68 @@ int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems)
 
   // Calculate the previous index with wrap-around
   return (currentIndex + totalItems - 1) % totalItems;
+}
+
+int ButtonNavigator::nextIndex(const int currentIndex, const std::vector<bool>& selectable) {
+  const int totalItems = static_cast<int>(selectable.size());
+  if (totalItems <= 0) return 0;
+
+  int index = nextIndex(currentIndex, totalItems);
+  for (int i = 0; i < totalItems; ++i) {
+    if (selectable[index]) {
+      return index;
+    }
+    index = nextIndex(index, totalItems);
+  }
+
+  return currentIndex;
+}
+
+int ButtonNavigator::previousIndex(const int currentIndex, const std::vector<bool>& selectable) {
+  const int totalItems = static_cast<int>(selectable.size());
+  if (totalItems <= 0) return 0;
+
+  int index = previousIndex(currentIndex, totalItems);
+  for (int i = 0; i < totalItems; ++i) {
+    if (selectable[index]) {
+      return index;
+    }
+    index = previousIndex(index, totalItems);
+  }
+
+  return currentIndex;
+}
+
+int ButtonNavigator::nextIndex(const int currentIndex, const int totalItems,
+                               const std::function<bool(int index)>& isSelectable) {
+  if (totalItems <= 0) return 0;
+  if (!isSelectable) return nextIndex(currentIndex, totalItems);
+
+  int index = nextIndex(currentIndex, totalItems);
+  for (int i = 0; i < totalItems; ++i) {
+    if (isSelectable(index)) {
+      return index;
+    }
+    index = nextIndex(index, totalItems);
+  }
+
+  return currentIndex;
+}
+
+int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems,
+                                   const std::function<bool(int index)>& isSelectable) {
+  if (totalItems <= 0) return 0;
+  if (!isSelectable) return previousIndex(currentIndex, totalItems);
+
+  int index = previousIndex(currentIndex, totalItems);
+  for (int i = 0; i < totalItems; ++i) {
+    if (isSelectable(index)) {
+      return index;
+    }
+    index = previousIndex(index, totalItems);
+  }
+
+  return currentIndex;
 }
 
 int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
