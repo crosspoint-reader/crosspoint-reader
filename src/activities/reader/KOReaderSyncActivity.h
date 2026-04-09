@@ -115,5 +115,5 @@ class KOReaderSyncActivity final : public Activity {
   void releaseEpubForMapping();
   bool computeLocalProgressAndChapter();
   void computeRemoteChapter();
-  bool ensureRemotePositionMapped();
+  bool ensureRemotePositionMapped(bool closeSessionBeforeMapping = true);
 };

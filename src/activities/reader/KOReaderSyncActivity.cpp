@@ -266,7 +266,7 @@ void KOReaderSyncActivity::performSync() {
   // still useful for manual conflict decisions.
   // Pre-map remote progress now so compare UI always shows concrete chapter/
   // page data. The mapped result is cached and reused if Apply is chosen.
-  if (!ensureRemotePositionMapped()) {
+  if (!ensureRemotePositionMapped(false)) {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -555,14 +555,17 @@ bool KOReaderSyncActivity::ensureEpubLoadedForMapping() {
   return true;
 }
 
-bool KOReaderSyncActivity::ensureRemotePositionMapped() {
+bool KOReaderSyncActivity::ensureRemotePositionMapped(const bool closeSessionBeforeMapping) {
   if (remotePositionMapped) {
     return true;
   }
 
-  // Apply needs remote->local mapping, which triggers EPUB inflate work.
-  // Release HTTP/TLS session first so mapping has maximum heap headroom.
-  KOReaderSyncClient::endPersistentSession();
+  // Mapping remote->local can trigger EPUB inflate work. For apply/pull paths,
+  // release HTTP/TLS first to maximize heap headroom. Compare pre-map keeps
+  // the warmed session alive so Upload can reuse it without a fresh handshake.
+  if (closeSessionBeforeMapping) {
+    KOReaderSyncClient::endPersistentSession();
+  }
 
   {
     RenderLock lock(*this);
