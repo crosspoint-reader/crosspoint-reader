@@ -33,6 +33,11 @@ void DictionaryDefinitionActivity::onExit() {
   Activity::onExit();
 }
 
+int DictionaryDefinitionActivity::getLineHeight() const {
+  return static_cast<int>(renderer.getLineHeight(SETTINGS.getDefinitionFontId()) *
+                          SETTINGS.getDefinitionLineCompression());
+}
+
 // ---------------------------------------------------------------------------
 // Layout helpers — shared setup
 // ---------------------------------------------------------------------------
@@ -56,12 +61,10 @@ void DictionaryDefinitionActivity::wrapText() {
   rightPadding = (isLandscapeCcw ? hintGutterWidth : 0) + sidePadding;
   bodyStartY = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
-  const int lineHeight = static_cast<int>(renderer.getLineHeight(SETTINGS.getDefinitionFontId()) *
-                                          SETTINGS.getDefinitionLineCompression());
   const int topArea = hintGutterHeight + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
-  linesPerPage = (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight;
+  linesPerPage = (renderer.getScreenHeight() - topArea - bottomArea) / getLineHeight();
   if (linesPerPage < 1) linesPerPage = 1;
 
   // Choose rendering path based on dictionary content type
@@ -320,8 +323,6 @@ void DictionaryDefinitionActivity::wrapPlain() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::extractWordsFromLayout() {
-  const int lineHeight = static_cast<int>(renderer.getLineHeight(SETTINGS.getDefinitionFontId()) *
-                                          SETTINGS.getDefinitionLineCompression());
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
 
   std::vector<WordSelectNavigator::WordInfo> words;
@@ -332,6 +333,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
   textPool.reserve(512);
 
   const int startLineIdx = currentPage * linesPerPage;
+  const int lineHeight = getLineHeight();  // cached for loop
   for (int i = 0; i < linesPerPage && (startLineIdx + i) < static_cast<int>(layoutLines.size()); i++) {
     const LayoutLine& line = layoutLines[startLineIdx + i];
     const int16_t lineY = static_cast<int16_t>(bodyStartY + i * lineHeight);
@@ -519,8 +521,6 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (controller.render()) return;
 
   const auto metrics = UITheme::getInstance().getMetrics();
-  const int lineHeight = static_cast<int>(renderer.getLineHeight(SETTINGS.getDefinitionFontId()) *
-                                          SETTINGS.getDefinitionLineCompression());
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
 
   // Header
@@ -531,6 +531,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // Body: draw layout lines for the current page (BW pass)
   const int startLine = currentPage * linesPerPage;
+  const int lineHeight = getLineHeight();  // cached for loop + renderHighlight
   auto renderBody = [&]() {
     for (int i = 0; i < linesPerPage && (startLine + i) < static_cast<int>(layoutLines.size()); i++) {
       const LayoutLine& line = layoutLines[startLine + i];
