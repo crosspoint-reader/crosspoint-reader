@@ -94,7 +94,7 @@ void OpdsBookBrowserActivity::loop() {
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty()) launchSearch();
+      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
     }
 
     if (!entries.empty()) {
@@ -156,7 +156,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
   const char* confirmLabel =
       (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
-  const char* searchLabel = searchTemplate.empty() ? "" : tr(STR_CUSTOM);
+  const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
@@ -206,7 +206,17 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   }
 
   searchTemplate = parser.getSearchTemplate();
+  const auto& nextUrl = parser.getNextPageUrl();
+  const auto& prevUrl = parser.getPrevPageUrl();
   entries = std::move(parser).getEntries();
+
+  if (!prevUrl.empty()) {
+    entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl, ""});
+  }
+  if (!nextUrl.empty()) {
+    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
+  }
+
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
@@ -272,7 +282,7 @@ void OpdsBookBrowserActivity::launchSearch() {
   state = BrowserState::SEARCH_INPUT;
   requestUpdate();
 
-  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_CUSTOM));
+  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
     state = BrowserState::BROWSING;
     if (!result.isCancelled) {

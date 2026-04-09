@@ -70,6 +70,8 @@ bool OpdsParser::error() const { return errorOccured; }
 void OpdsParser::clear() {
   entries.clear();
   searchTemplate.clear();
+  nextPageUrl.clear();
+  prevPageUrl.clear();
   currentEntry = OpdsEntry{};
   currentText.clear();
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
@@ -104,6 +106,10 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
         if (sHref.find("{searchTerms}") != std::string::npos) {
           self->searchTemplate = sHref;
         }
+      } else if (rel && strcmp(rel, "next") == 0 && !self->inEntry) {
+        self->nextPageUrl = href;
+      } else if (rel && strcmp(rel, "previous") == 0 && !self->inEntry) {
+        self->prevPageUrl = href;
       }
 
       if (self->inEntry) {
