@@ -2513,6 +2513,7 @@
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
     document.getElementById('imageOptimizerOptions').style.display = 'none';
+    document.getElementById('imageOptimizerEnabled').checked = false;
     resetImageOptimizer();
     // Clear image picker cache and reset layout
     epubImagesCache = [];
@@ -3880,20 +3881,26 @@ async function processSleepImage(file) {
       drawSleepImageOnCanvas(ctx, img, origW, origH, outW, outH, rotate);
       ctx.restore();
 
-      if (rotation === 180) {
-        ctx.translate(outW, outH);
-        ctx.rotate(Math.PI);
-        ctx.drawImage(c, 0, 0);
-      }
       const flip = EXIF_FLIP_MAP[exifOrientation];
-      if (flip === 'h') {
-        ctx.translate(outW, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(c, 0, 0);
-      } else if (flip === 'v') {
-        ctx.translate(0, outH);
-        ctx.scale(1, -1);
-        ctx.drawImage(c, 0, 0);
+      const needTransform = rotation === 180 || flip !== 'none';
+      if (needTransform) {
+        const tmp = document.createElement('canvas');
+        tmp.width = outW; tmp.height = outH;
+        const tmpCtx = tmp.getContext('2d');
+        tmpCtx.drawImage(c, 0, 0);
+        ctx.clearRect(0, 0, outW, outH);
+        if (rotation === 180) {
+          ctx.translate(outW, outH);
+          ctx.rotate(Math.PI);
+        }
+        if (flip === 'h') {
+          ctx.translate(outW, 0);
+          ctx.scale(-1, 1);
+        } else if (flip === 'v') {
+          ctx.translate(0, outH);
+          ctx.scale(1, -1);
+        }
+        ctx.drawImage(tmp, 0, 0);
       }
 
       const imgData = ctx.getImageData(0, 0, outW, outH);
@@ -5572,21 +5579,6 @@ async function uploadSleepImages(files) {
         console.log('WebSocket failed, falling back to HTTP');
         useWebSocket = false;
         try {
-          let processedFile = await processSleepImage(file);
-
-          let baseName = processedFile.name.replace(/\.jpg$/i, '').toLowerCase();
-          if (existingBaseNames.has(baseName)) {
-            let counter = 1;
-            while (existingBaseNames.has(`${baseName} (${counter})`)) counter++;
-            const newBase = `${baseName} (${counter})`;
-            const newName = newBase + '.jpg';
-            processedFile = new File([processedFile], newName, { type: 'image/jpeg' });
-            existingBaseNames.add(newBase);
-            renames.push({ original: file.name, renamed: newName });
-          } else {
-            existingBaseNames.add(baseName);
-          }
-
           await uploadFileHTTP(processedFile,
             (loaded, total) => {
               progressFill.style.width = Math.round((loaded / total) * 100) + '%';
@@ -5594,6 +5586,7 @@ async function uploadSleepImages(files) {
             null, null, '/.sleep'
           );
           progressFill.style.width = '100%';
+          processedCount++;
         } catch (httpError) {
           failedFiles.push({ name: file.name, error: httpError.message, file: file });
         }

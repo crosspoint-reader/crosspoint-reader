@@ -54,7 +54,7 @@ void clearEpubCacheIfNeeded(const String& filePath) {
 }
 
 bool convertSleepImageToBmp(const String& filePath) {
-  if (!filePath.startsWith("/.sleep/") && filePath != "/.sleep") {
+  if (!filePath.startsWith("/.sleep/")) {
     return true;
   }
 
