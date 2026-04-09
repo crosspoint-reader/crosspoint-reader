@@ -81,4 +81,5 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapPlain();
   void extractWordsFromLayout();
   int getMixedWidth(std::vector<IpaTextSpan>& ipaRuns, const char* text, EpdFontFamily::Style style);
+  bool handleLongPressExitAll(bool enabled);
 };

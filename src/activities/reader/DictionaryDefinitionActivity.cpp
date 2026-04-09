@@ -389,6 +389,16 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 // Input loop
 // ---------------------------------------------------------------------------
 
+bool DictionaryDefinitionActivity::handleLongPressExitAll(bool enabled) {
+  if (enabled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
+    setResult(ActivityResult{});
+    finish();
+    return true;
+  }
+  return false;
+}
+
 void DictionaryDefinitionActivity::loop() {
   // --- Controller active (LookingUp / AltFormPrompt / NotFound) ---
   if (controller.isActive()) {
@@ -436,13 +446,7 @@ void DictionaryDefinitionActivity::loop() {
     if (!navigator.isMultiSelecting()) {
       if (controller.handleConfirmLookup(navigator)) return;
 
-      // Long press Back: exit-all (fire at threshold).
-      if (mappedInput.isPressed(MappedInputManager::Button::Back) &&
-          mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
-        setResult(ActivityResult{});
-        finish();
-        return;
-      }
+      if (handleLongPressExitAll(true)) return;
 
       // Short press Back: exit word-select mode.
       if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
@@ -487,13 +491,7 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  // Long press Back: exit-all (fire at threshold, only when lookup button shown).
-  if (showLookupButton && mappedInput.isPressed(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
-    setResult(ActivityResult{});  // Done: isCancelled=false — exit all the way
-    finish();
-    return;
-  }
+  if (handleLongPressExitAll(showLookupButton)) return;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       (!showLookupButton || mappedInput.getHeldTime() < Dictionary::LONG_PRESS_MS)) {
