@@ -126,7 +126,7 @@ void SystemInformationActivity::render(RenderLock&&) {
     drawRow(9, tr(STR_SD_CARD), tr(STR_NOT_SET));
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_UPDATE), "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), sdStatusReady_ ? "" : tr(STR_UPDATE), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

@@ -215,6 +215,13 @@
       return parseFloat(val.toFixed(2)).toLocaleString() + ' ' + units[i];
     }
 
+    const SD_LABELS = {
+      NOT_LOADED: 'Not loaded',
+      LOAD_BUTTON: 'Load SD info',
+      LOADING: 'Loading...',
+      ERROR: 'Error loading'
+    };
+
     function formatUptime(seconds) {
       if (seconds == null) return 'N/A';
       const h = Math.floor(seconds / 3600);
@@ -255,7 +262,7 @@
           ? formatBytes(data.sdUsed) + ' / ' + formatBytes(data.sdTotal)
           : 'N/A';
       } else {
-        document.getElementById('sd-space').textContent = 'Not loaded';
+        document.getElementById('sd-space').textContent = SD_LABELS.NOT_LOADED;
       }
     }
 
@@ -270,14 +277,15 @@
         setSdButtonState(true);
       } catch (error) {
         console.error('Error fetching status:', error);
+        document.getElementById('sd-space').textContent = SD_LABELS.ERROR;
       }
     }
 
     async function fetchSdStatus() {
       const button = document.getElementById('load-sd-button');
       button.disabled = true;
-      button.textContent = 'Loading...';
-      document.getElementById('sd-space').textContent = 'Loading...';
+      button.textContent = SD_LABELS.LOADING;
+      document.getElementById('sd-space').textContent = SD_LABELS.LOADING;
 
       try {
         const response = await fetch('/api/status');
@@ -290,14 +298,15 @@
       } catch (error) {
         console.error('Error fetching SD status:', error);
         button.disabled = false;
-        button.textContent = 'Load SD info';
+        button.textContent = SD_LABELS.LOAD_BUTTON;
+        document.getElementById('sd-space').textContent = SD_LABELS.ERROR;
       }
     }
 
     function setSdButtonState(enabled) {
       const button = document.getElementById('load-sd-button');
       button.disabled = !enabled;
-      button.textContent = enabled ? 'Load SD info' : 'Loading...';
+      button.textContent = enabled ? SD_LABELS.LOAD_BUTTON : SD_LABELS.LOADING;
     }
 
     document.addEventListener('DOMContentLoaded', () => {
