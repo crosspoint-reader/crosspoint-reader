@@ -21,7 +21,7 @@
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 4; // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -33,10 +33,10 @@ int HomeActivity::getMenuItemCount() const {
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
   recentBooks.clear();
-  const auto& books = RECENT_BOOKS.getBooks();
+  const auto &books = RECENT_BOOKS.getBooks();
   recentBooks.reserve(std::min(static_cast<int>(books.size()), maxBooks));
 
-  for (const RecentBook& book : books) {
+  for (const RecentBook &book : books) {
     // Limit to maximum number of recent books
     if (recentBooks.size() >= maxBooks) {
       break;
@@ -54,13 +54,16 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
   bool showingLoading = false;
+  bool anyChanged = false;
   Rect popupRect;
 
   int progress = 0;
-  for (RecentBook& book : recentBooks) {
+  for (RecentBook &book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
-      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+      std::string coverPath =
+          UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
+        bool success = false;
         // If epub, try to load the metadata for title/author and cover
         if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
@@ -72,8 +75,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             showingLoading = true;
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
-          GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(coverHeight);
+          GUI.fillPopupProgress(renderer, popupRect,
+                                10 + progress * (90 / recentBooks.size()));
+          success = epub.generateThumbBmp(coverHeight);
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
@@ -89,8 +93,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               showingLoading = true;
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
-            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(coverHeight);
+            GUI.fillPopupProgress(renderer, popupRect,
+                                  10 + progress * (90 / recentBooks.size()));
+            success = xtc.generateThumbBmp(coverHeight);
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
@@ -99,6 +104,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             requestUpdate();
           }
         }
+        if (success)
+          anyChanged = true;
       }
     }
     progress++;
@@ -106,6 +113,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   recentsLoaded = true;
   recentsLoading = false;
+  if (anyChanged) {
+    coverRendered = false;
+    requestUpdate();
+  }
 }
 
 void HomeActivity::onEnter() {
@@ -115,8 +126,12 @@ void HomeActivity::onEnter() {
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
   selectorIndex = 0;
+  coverRendered = false;
+  firstRenderDone = false;
+  recentsLoaded = false;
+  recentsLoading = false;
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto &metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   // Trigger first update
@@ -131,7 +146,7 @@ void HomeActivity::onExit() {
 }
 
 bool HomeActivity::storeCoverBuffer() {
-  uint8_t* frameBuffer = renderer.getFrameBuffer();
+  uint8_t *frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer) {
     return false;
   }
@@ -140,7 +155,7 @@ bool HomeActivity::storeCoverBuffer() {
   freeCoverBuffer();
 
   const size_t bufferSize = renderer.getBufferSize();
-  coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
+  coverBuffer = static_cast<uint8_t *>(malloc(bufferSize));
   if (!coverBuffer) {
     return false;
   }
@@ -154,7 +169,7 @@ bool HomeActivity::restoreCoverBuffer() {
     return false;
   }
 
-  uint8_t* frameBuffer = renderer.getFrameBuffer();
+  uint8_t *frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer) {
     return false;
   }
@@ -188,7 +203,8 @@ void HomeActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Calculate dynamic indices based on which options are available
     int idx = 0;
-    int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
+    int menuSelectedIndex =
+        selectorIndex - static_cast<int>(recentBooks.size());
     const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
@@ -211,29 +227,36 @@ void HomeActivity::loop() {
   }
 }
 
-void HomeActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
+void HomeActivity::render(RenderLock &&) {
+  const auto &metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  GUI.drawHeader(renderer,
+                 Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+                 nullptr);
 
   if (SETTINGS.showFreeHeap) {
     char heapBuf[16];
-    snprintf(heapBuf, sizeof(heapBuf), "%luKB", static_cast<unsigned long>(esp_get_free_heap_size() / 1024));
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, heapBuf, true);
+    snprintf(heapBuf, sizeof(heapBuf), "%luKB",
+             static_cast<unsigned long>(esp_get_free_heap_size() / 1024));
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding,
+                      metrics.topPadding + 5, heapBuf, true);
   }
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
+  GUI.drawRecentBookCover(
+      renderer,
+      Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+      recentBooks, selectorIndex, coverRendered, coverBufferStored,
+      bufferRestored, std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
+  std::vector<const char *> menuItems = {
+      tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
+      tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
   if (hasOpdsUrl) {
@@ -244,15 +267,21 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2 +
-                         metrics.buttonHintsHeight)},
+      Rect{0,
+           metrics.homeTopPadding + metrics.homeCoverTileHeight +
+               metrics.verticalSpacing,
+           pageWidth,
+           pageHeight -
+               (metrics.headerHeight + metrics.homeTopPadding +
+                metrics.verticalSpacing * 2 + metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP),
+                                            tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3,
+                      labels.btn4);
 
   renderer.displayBuffer();
 
@@ -265,14 +294,32 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onSelectBook(const std::string &path) {
+  freeCoverBuffer();
+  activityManager.goToReader(path);
+}
 
-void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
+void HomeActivity::onFileBrowserOpen() {
+  freeCoverBuffer();
+  activityManager.goToFileBrowser();
+}
 
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+void HomeActivity::onRecentsOpen() {
+  freeCoverBuffer();
+  activityManager.goToRecentBooks();
+}
 
-void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
+void HomeActivity::onSettingsOpen() {
+  freeCoverBuffer();
+  activityManager.goToSettings();
+}
 
-void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
+void HomeActivity::onFileTransferOpen() {
+  freeCoverBuffer();
+  activityManager.goToFileTransfer();
+}
 
-void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+void HomeActivity::onOpdsBrowserOpen() {
+  freeCoverBuffer();
+  activityManager.goToBrowser();
+}
