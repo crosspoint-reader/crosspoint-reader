@@ -1,21 +1,14 @@
 #pragma once
+#include <I18n.h>
+
 #include <functional>
 #include <vector>
-
-#include <I18n.h>
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 class ClockSettingsActivity final : public Activity {
-  enum class Action {
-    USE_CLOCK,
-    CLOCK_FORMAT,
-    TIMEZONE,
-    SYNC_TIME,
-    DETECT_TIMEZONE,
-    NONE
-  };
+  enum class Action { USE_CLOCK, CLOCK_FORMAT, TIMEZONE, SYNC_TIME, DETECT_TIMEZONE, NONE };
 
   struct MenuItem {
     Action action;

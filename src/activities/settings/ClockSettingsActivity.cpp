@@ -25,13 +25,13 @@ std::vector<ClockSettingsActivity::MenuItem> ClockSettingsActivity::buildMenuIte
   // Settings
   items.push_back({Action::NONE, StrId::STR_SETTINGS_TITLE, true});
   items.push_back({Action::USE_CLOCK, StrId::STR_USE_CLOCK});
-  items.push_back({Action::CLOCK_FORMAT, StrId::STR_CLOCK_FORMAT}); 
+  items.push_back({Action::CLOCK_FORMAT, StrId::STR_CLOCK_FORMAT});
   items.push_back({Action::TIMEZONE, StrId::STR_TIMEZONE});
 
   // Tools
   items.push_back({Action::NONE, StrId::STR_READER_TOOLS, true});
   items.push_back({Action::DETECT_TIMEZONE, StrId::STR_DETECT_TIMEZONE});
-  items.push_back({Action::SYNC_TIME, StrId::STR_SYNC_TIME}); 
+  items.push_back({Action::SYNC_TIME, StrId::STR_SYNC_TIME});
   return items;
 }
 
@@ -124,8 +124,7 @@ void ClockSettingsActivity::render(RenderLock&&) {
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
 
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(menuItems.size()),
-      selectedIndex,
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(menuItems.size()), selectedIndex,
       [this](int index) {
         const auto title = I18N.get(menuItems[index].labelId);
         return menuItems[index].isSeparator ? UITheme::makeSeparatorTitle(title) : title;
