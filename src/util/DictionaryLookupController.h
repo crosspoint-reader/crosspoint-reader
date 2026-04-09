@@ -80,6 +80,10 @@ class DictionaryLookupController {
   // (caller should return from loop). Cleans the phrase and starts lookup or shows popup.
   bool handleMultiSelect(WordSelectNavigator& navigator);
 
+  // Handle single-word confirm lookup from the navigator. Returns true if input was consumed
+  // (caller should return from loop). Gets the selected word and starts lookup or shows popup.
+  bool handleConfirmLookup(WordSelectNavigator& navigator);
+
   const std::string& getLookupWord() const { return lookupWord; }
   const std::string& getFoundWord() const { return foundWord; }
   const DictLocation& getFoundLocation() const { return foundLocation; }

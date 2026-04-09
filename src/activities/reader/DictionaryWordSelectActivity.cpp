@@ -253,12 +253,7 @@ void DictionaryWordSelectActivity::loop() {
 
   if (navigator.isMultiSelecting()) return;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const auto* sel = navigator.getSelected();
-    if (!sel) return;
-    controller.lookupOrPopup(navigator.getLookup(*sel));
-    return;
-  }
+  if (controller.handleConfirmLookup(navigator)) return;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult r;

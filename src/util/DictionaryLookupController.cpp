@@ -190,6 +190,14 @@ bool DictionaryLookupController::handleMultiSelect(WordSelectNavigator& navigato
   }
 }
 
+bool DictionaryLookupController::handleConfirmLookup(WordSelectNavigator& navigator) {
+  if (!mappedInput.wasReleased(MappedInputManager::Button::Confirm)) return false;
+  const auto* sel = navigator.getSelected();
+  if (!sel) return true;  // consumed input even if nothing selected
+  lookupOrPopup(navigator.getLookup(*sel));
+  return true;
+}
+
 void DictionaryLookupController::lookupOrPopup(const std::string& rawWord) {
   std::string cleaned = Dictionary::cleanWord(rawWord);
   if (cleaned.empty()) {

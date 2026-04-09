@@ -438,12 +438,7 @@ void DictionaryDefinitionActivity::loop() {
     if (controller.handleMultiSelect(navigator)) return;
 
     if (!navigator.isMultiSelecting()) {
-      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-        const auto* sel = navigator.getSelected();
-        if (!sel) return;
-        controller.lookupOrPopup(navigator.getLookup(*sel));
-        return;
-      }
+      if (controller.handleConfirmLookup(navigator)) return;
 
       // Long press Back: exit-all (fire at threshold).
       if (mappedInput.isPressed(MappedInputManager::Button::Back) &&
