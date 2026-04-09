@@ -11,6 +11,43 @@
 
 std::string LookupHistory::filePath(const std::string& cachePath) { return cachePath + "/lookups.txt"; }
 
+// Parse status code char to Status enum.
+static LookupHistory::Status parseStatusCode(char code) {
+  switch (code) {
+    case 'D':
+      return LookupHistory::Status::Direct;
+    case 'T':
+      return LookupHistory::Status::Stem;
+    case 'Y':
+      return LookupHistory::Status::AltForm;
+    case 'S':
+      return LookupHistory::Status::Suggestion;
+    default:
+      return LookupHistory::Status::NotFound;
+  }
+}
+
+// Parse a line buffer into an Entry.
+static LookupHistory::Entry parseLine(const char* lineBuf, int lineLen) {
+  LookupHistory::Entry e;
+  int sepIdx = -1;
+  for (int i = lineLen - 1; i >= 0; i--) {
+    if (lineBuf[i] == '|') {
+      sepIdx = i;
+      break;
+    }
+  }
+  if (sepIdx >= 0 && sepIdx + 1 < lineLen) {
+    e.word = std::string(lineBuf, sepIdx);
+    e.status = parseStatusCode(lineBuf[sepIdx + 1]);
+  } else {
+    // No separator — legacy line, treat as not-found status
+    e.word = std::string(lineBuf, lineLen);
+    e.status = LookupHistory::Status::NotFound;
+  }
+  return e;
+}
+
 // Read all entries from the file (oldest first). Returns empty vector on error.
 std::vector<LookupHistory::Entry> LookupHistory::readAll(const std::string& path) {
   std::vector<Entry> entries;
@@ -29,40 +66,7 @@ std::vector<LookupHistory::Entry> LookupHistory::readAll(const std::string& path
     if (b == '\n' || b == '\r') {
       if (lineLen > 0) {
         lineBuf[lineLen] = '\0';
-        // Find last '|' separator
-        int sepIdx = -1;
-        for (int i = lineLen - 1; i >= 0; i--) {
-          if (lineBuf[i] == '|') {
-            sepIdx = i;
-            break;
-          }
-        }
-        Entry e;
-        if (sepIdx >= 0 && sepIdx + 1 < lineLen) {
-          e.word = std::string(lineBuf, sepIdx);
-          char code = lineBuf[sepIdx + 1];
-          switch (code) {
-            case 'D':
-              e.status = Status::Direct;
-              break;
-            case 'T':
-              e.status = Status::Stem;
-              break;
-            case 'Y':
-              e.status = Status::AltForm;
-              break;
-            case 'S':
-              e.status = Status::Suggestion;
-              break;
-            default:
-              e.status = Status::NotFound;
-              break;
-          }
-        } else {
-          // No separator — legacy line, treat as not-found status
-          e.word = std::string(lineBuf, lineLen);
-          e.status = Status::NotFound;
-        }
+        Entry e = parseLine(lineBuf, lineLen);
         if (!e.word.empty()) entries.push_back(std::move(e));
         lineLen = 0;
       }
@@ -77,38 +81,7 @@ std::vector<LookupHistory::Entry> LookupHistory::readAll(const std::string& path
   // Handle last line without trailing newline
   if (lineLen > 0) {
     lineBuf[lineLen] = '\0';
-    int sepIdx = -1;
-    for (int i = lineLen - 1; i >= 0; i--) {
-      if (lineBuf[i] == '|') {
-        sepIdx = i;
-        break;
-      }
-    }
-    Entry e;
-    if (sepIdx >= 0 && sepIdx + 1 < lineLen) {
-      e.word = std::string(lineBuf, sepIdx);
-      char code = lineBuf[sepIdx + 1];
-      switch (code) {
-        case 'D':
-          e.status = Status::Direct;
-          break;
-        case 'T':
-          e.status = Status::Stem;
-          break;
-        case 'Y':
-          e.status = Status::AltForm;
-          break;
-        case 'S':
-          e.status = Status::Suggestion;
-          break;
-        default:
-          e.status = Status::NotFound;
-          break;
-      }
-    } else {
-      e.word = std::string(lineBuf, lineLen);
-      e.status = Status::NotFound;
-    }
+    Entry e = parseLine(lineBuf, lineLen);
     if (!e.word.empty()) entries.push_back(std::move(e));
   }
 
