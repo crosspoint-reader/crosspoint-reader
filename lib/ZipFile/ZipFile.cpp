@@ -400,6 +400,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     const auto deflatedData = static_cast<uint8_t*>(malloc(deflatedDataSize));
     if (deflatedData == nullptr) {
       LOG_ERR("ZIP", "Failed to allocate memory for decompression buffer");
+      free(data);
       return nullptr;
     }
 
@@ -430,6 +431,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     // Continue out of block with data set
   } else {
     LOG_ERR("ZIP", "Unsupported compression method");
+    free(data);
     return nullptr;
   }
 
@@ -469,7 +471,11 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
         return false;
       }
 
-      out.write(buffer, dataRead);
+      if (out.write(buffer, dataRead) != dataRead) {
+        LOG_ERR("ZIP", "Failed to write all output bytes to stream");
+        free(buffer);
+        return false;
+      }
       remaining -= dataRead;
     }
 
