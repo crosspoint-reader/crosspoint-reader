@@ -89,6 +89,9 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 EpdFont inter8RegularFont(&inter_8_regular);
 EpdFontFamily inter8FontFamily(&inter8RegularFont);
 
+EpdFont dt8RegularFont(&determinationsans_8_regular);
+EpdFontFamily dt8FontFamily(&dt8RegularFont);
+
 EpdFont inter10RegularFont(&inter_10_regular);
 EpdFont inter10BoldFont(&inter_10_bold);
 EpdFontFamily inter10FontFamily(&inter10RegularFont, &inter10BoldFont);
@@ -110,9 +113,6 @@ EpdFont inter18BoldFont(&inter_18_bold);
 EpdFontFamily inter18FontFamily(&inter18RegularFont, &inter18BoldFont);
 
 #endif  // OMIT_FONTS
-
-EpdFont smallFont(&inter_8_regular);
-EpdFontFamily smallFontFamily(&smallFont);
 
 EpdFont ui10RegularFont(&inter_10_regular);
 EpdFont ui10BoldFont(&inter_10_bold);
@@ -219,9 +219,10 @@ void setupDisplayAndFonts() {
   renderer.insertFont(INTER_16_FONT_ID, inter16FontFamily);
   renderer.insertFont(INTER_18_FONT_ID, inter18FontFamily);
 #endif  // OMIT_FONTS
+  renderer.insertFont(SMALL_FONT_ID, inter8FontFamily);
+  renderer.insertFont(DT_8_FONT_ID, dt8FontFamily);
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
   LOG_DBG("MAIN", "Fonts setup");
 }
 

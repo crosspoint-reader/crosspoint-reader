@@ -80,6 +80,18 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
+echo "#define SMALL_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./inter_8_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define DT_8_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./determinationsans_8_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
 echo "#define UI_10_FONT_ID ($(ruby -rdigest -e 'puts [
   "./inter_10_regular.h",
   "./inter_10_bold.h",
@@ -89,12 +101,6 @@ echo "#define UI_10_FONT_ID ($(ruby -rdigest -e 'puts [
 echo "#define UI_12_FONT_ID ($(ruby -rdigest -e 'puts [
   "./inter_12_regular.h",
   "./inter_12_bold.h",
-].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
-))"
-
-echo "#define SMALL_FONT_ID ($(
-ruby -rdigest -e 'puts [
-  "./inter_8_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 

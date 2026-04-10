@@ -7,8 +7,9 @@ cd "$(dirname "$0")"
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
 BOOKERLY_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
-# Inter 12 is generated in the UI loop below (shared by UI_12 and reader SMALL)
+# Inter 8 is generated at the end (shared by SMALL_FONT_ID and INTER_8_FONT_ID)
 INTER_FONT_SIZES=(14 16 18)
+DETERMINATION_SANS_FONT_SIZES=(8)
 for size in ${BOOKERLY_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="bookerly_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
@@ -42,6 +43,14 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
   font_path="../builtinFonts/source/NotoSans/NotoSans-BoldItalic.ttf"
   output_path="../builtinFonts/${font_name}.h"
   python3 fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+  echo "Generated $output_path"
+done
+
+for size in ${DETERMINATION_SANS_FONT_SIZES[@]}; do
+  font_name="determinationsans_${size}_regular"
+  font_path="../builtinFonts/source/DeterminationSans.otf"
+  output_path="../builtinFonts/${font_name}.h"
+  python3 fontconvert.py $font_name $size $font_path > $output_path
   echo "Generated $output_path"
 done
 
