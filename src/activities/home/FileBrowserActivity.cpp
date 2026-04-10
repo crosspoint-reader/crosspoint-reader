@@ -128,25 +128,27 @@ void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::loop() {
-  // Long press BACK (1s+) goes to root folder
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
-      basepath != "/") {
-    basepath = "/";
-    loadFiles();
-    selectorIndex = 0;
+  // Long press BACK (1s+) goes to SD root from any depth.
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Back, GO_HOME_MS)) {
+    if (basepath != "/") {
+      basepath = "/";
+      loadFiles();
+      selectorIndex = 0;
+      requestUpdate();
+    }
     return;
   }
 
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (files.empty()) return;
-
+  // Long press CONFIRM: delete file (fires at threshold, not on release).
+  // Called unconditionally so longPressFired_ is set on any long hold, preventing
+  // the release from falling through to the short-press open handler below.
+  if (!files.empty() && mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, GO_HOME_MS)) {
     const std::string& entry = files[selectorIndex];
-    bool isDirectory = (entry.back() == '/');
+    const bool isDirectory = (entry.back() == '/');
 
-    if (mappedInput.getHeldTime() >= GO_HOME_MS && !isDirectory) {
-      // --- LONG PRESS ACTION: DELETE FILE ---
+    if (!isDirectory) {
       std::string cleanBasePath = basepath;
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
       const std::string fullPath = cleanBasePath + entry;
@@ -161,10 +163,8 @@ void FileBrowserActivity::loop() {
             if (files.empty()) {
               selectorIndex = 0;
             } else if (selectorIndex >= files.size()) {
-              // Move selection to the new "last" item
               selectorIndex = files.size() - 1;
             }
-
             requestUpdate(true);
           } else {
             LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
@@ -175,43 +175,51 @@ void FileBrowserActivity::loop() {
       };
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
-
       startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
       return;
-    } else {
-      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
-      if (basepath.back() != '/') basepath += "/";
+    }
+    // Long press on a directory: consumed without action so release does not enter the folder.
+    return;
+  }
 
-      if (isDirectory) {
-        basepath += entry.substr(0, entry.length() - 1);
-        loadFiles();
-        selectorIndex = 0;
-        requestUpdate();
-      } else {
-        onSelectBook(basepath + entry);
-      }
+  // Short press CONFIRM: open/navigate (suppressed if long press already fired).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
+      !mappedInput.isLongPressHandled(MappedInputManager::Button::Confirm)) {
+    if (files.empty()) return;
+
+    const std::string& entry = files[selectorIndex];
+    const bool isDirectory = (entry.back() == '/');
+
+    if (basepath.back() != '/') basepath += "/";
+
+    if (isDirectory) {
+      basepath += entry.substr(0, entry.length() - 1);
+      loadFiles();
+      selectorIndex = 0;
+      requestUpdate();
+    } else {
+      onSelectBook(basepath + entry);
     }
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    // Short press: go up one directory, or go home if at root
-    if (mappedInput.getHeldTime() < GO_HOME_MS) {
-      if (basepath != "/") {
-        const std::string oldPath = basepath;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      !mappedInput.isLongPressHandled(MappedInputManager::Button::Back)) {
+    // Short press: go up one directory, or go home if at root.
+    if (basepath != "/") {
+      const std::string oldPath = basepath;
 
-        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-        if (basepath.empty()) basepath = "/";
-        loadFiles();
+      basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+      if (basepath.empty()) basepath = "/";
+      loadFiles();
 
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
-        selectorIndex = findEntry(dirName);
+      const auto pos = oldPath.find_last_of('/');
+      const std::string dirName = oldPath.substr(pos + 1) + "/";
+      selectorIndex = findEntry(dirName);
 
-        requestUpdate();
-      } else {
-        onGoHome();
-      }
+      requestUpdate();
+    } else {
+      onGoHome();
     }
   }
 

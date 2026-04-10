@@ -28,6 +28,7 @@
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
+constexpr unsigned long doubleClickWindowMs = 350;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
 
@@ -176,7 +177,80 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Long press page turn: skip chapter (fires at threshold, not on release)
+  if (SETTINGS.longPressChapterSkip) {
+    const bool skipFwd = mappedInput.wasLongPressed(MappedInputManager::Button::PageForward, skipChapterMs) ||
+                         mappedInput.wasLongPressed(MappedInputManager::Button::Right, skipChapterMs);
+    const bool skipBack = mappedInput.wasLongPressed(MappedInputManager::Button::PageBack, skipChapterMs) ||
+                          mappedInput.wasLongPressed(MappedInputManager::Button::Left, skipChapterMs);
+    if (skipFwd || skipBack) {
+      lastPageTurnTime = millis();
+      // We don't want to delete the section mid-render, so grab the semaphore
+      {
+        RenderLock lock(*this);
+        nextPageNumber = 0;
+        currentSpineIndex = skipFwd ? currentSpineIndex + 1 : currentSpineIndex - 1;
+        section.reset();
+      }
+      requestUpdate();
+      return;
+    }
+  }
+
+  // Double press page button: skip 10 pages.
+  // In release mode the release of the second press is suppressed by isDoublePressHandled()
+  // inside detectPageTurn, so no phantom page turn fires after the skip.
+  if (SETTINGS.doublePressPageSkip) {
+    const bool skipFwd = mappedInput.wasDoublePressed(MappedInputManager::Button::PageForward, doubleClickWindowMs) ||
+                         mappedInput.wasDoublePressed(MappedInputManager::Button::Right, doubleClickWindowMs);
+    const bool skipBack = mappedInput.wasDoublePressed(MappedInputManager::Button::PageBack, doubleClickWindowMs) ||
+                          mappedInput.wasDoublePressed(MappedInputManager::Button::Left, doubleClickWindowMs);
+    if (skipFwd || skipBack) {
+      lastPageTurnTime = millis();
+      if (section) {
+        constexpr uint16_t kTenPageSkip = 10;
+        if (skipFwd) {
+          if (section->currentPage + kTenPageSkip < section->pageCount) {
+            section->currentPage += kTenPageSkip;
+          } else {
+            RenderLock lock(*this);
+            nextPageNumber = 0;
+            currentSpineIndex++;
+            section.reset();
+          }
+        } else {
+          if (section->currentPage >= kTenPageSkip) {
+            section->currentPage -= kTenPageSkip;
+          } else if (currentSpineIndex > 0) {
+            RenderLock lock(*this);
+            nextPageNumber = UINT16_MAX;
+            currentSpineIndex--;
+            section.reset();
+          }
+        }
+      }
+      requestUpdate();
+      return;
+    }
+  }
+
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+
+  // In release mode with double press enabled, the first-release page turn is suppressed while
+  // waiting for a possible second press. If the window expires without one, fire the deferred turn.
+  // Guard with !isPressed so a long hold does not fire the deferred turn while the button is still
+  // held (the long press handler will fire instead once the threshold is reached).
+  if (!prevTriggered && !nextTriggered && SETTINGS.doublePressPageSkip) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::PageBack) &&
+        !mappedInput.isPressed(MappedInputManager::Button::Left))
+      prevTriggered = mappedInput.wasDoublePressExpired(MappedInputManager::Button::PageBack) ||
+                      mappedInput.wasDoublePressExpired(MappedInputManager::Button::Left);
+    if (!mappedInput.isPressed(MappedInputManager::Button::PageForward) &&
+        !mappedInput.isPressed(MappedInputManager::Button::Right))
+      nextTriggered = mappedInput.wasDoublePressExpired(MappedInputManager::Button::PageForward) ||
+                      mappedInput.wasDoublePressExpired(MappedInputManager::Button::Right);
+  }
+
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -190,21 +264,6 @@ void EpubReaderActivity::loop() {
       nextPageNumber = UINT16_MAX;
       requestUpdate();
     }
-    return;
-  }
-
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
-
-  if (skipChapter) {
-    lastPageTurnTime = millis();
-    // We don't want to delete the section mid-render, so grab the semaphore
-    {
-      RenderLock lock(*this);
-      nextPageNumber = 0;
-      currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
-      section.reset();
-    }
-    requestUpdate();
     return;
   }
 

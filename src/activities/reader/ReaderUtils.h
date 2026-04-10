@@ -35,17 +35,27 @@ struct PageTurnResult {
 };
 
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
-  const bool usePress = !SETTINGS.longPressChapterSkip;
-  const bool prev = usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) ||
-                                input.wasPressed(MappedInputManager::Button::Left))
-                             : (input.wasReleased(MappedInputManager::Button::PageBack) ||
-                                input.wasReleased(MappedInputManager::Button::Left));
+  // All four navigation buttons defer to release when any chapter-skip gesture is enabled,
+  // so an initial press is not immediately consumed before a long hold or double press can fire.
+  const bool useRelease = SETTINGS.longPressChapterSkip || SETTINGS.doublePressPageSkip;
+
+  // Returns true when the button should count as a page-turn trigger this frame.
+  auto navTurn = [&](MappedInputManager::Button btn) -> bool {
+    if (useRelease) {
+      return input.wasReleased(btn) && !input.isLongPressHandled(btn) && !input.isDoublePressHandled(btn) &&
+             !input.isDoublePressArmed(btn);
+    }
+    return input.wasPressed(btn);
+  };
+
+  const bool prev = navTurn(MappedInputManager::Button::PageBack) || navTurn(MappedInputManager::Button::Left);
+
   const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                          input.wasReleased(MappedInputManager::Button::Power);
-  const bool next = usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn ||
-                                input.wasPressed(MappedInputManager::Button::Right))
-                             : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
-                                input.wasReleased(MappedInputManager::Button::Right));
+
+  const bool next =
+      navTurn(MappedInputManager::Button::PageForward) || navTurn(MappedInputManager::Button::Right) || powerTurn;
+
   return {prev, next};
 }
 
