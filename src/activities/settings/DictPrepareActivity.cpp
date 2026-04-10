@@ -6,8 +6,6 @@
 #include <InflateReader.h>
 #include <Logging.h>
 
-#include "util/Dictionary.h"
-
 #include <memory>
 
 #include "I18nKeys.h"
@@ -15,6 +13,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/DictPrepareTask.h"
+#include "util/Dictionary.h"
 
 // ---------------------------------------------------------------------------
 // uzlib read callback context
