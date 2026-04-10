@@ -3246,24 +3246,24 @@
   document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/status').then(r => r.json()).then(d => {
       if (d.screenWidth && d.screenHeight) {
+        // The API exposes physical panel dimensions (landscape-native: screenWidth=800, screenHeight=480).
+        // The device operates in portrait mode, so swap to get logical portrait dimensions:
+        // MAX_WIDTH=480 (portrait width = physical height), MAX_HEIGHT=800 (portrait height = physical width).
         DEFAULT_MAX_WIDTH = d.screenHeight;
         DEFAULT_MAX_HEIGHT = d.screenWidth;
-        const label = DEFAULT_MAX_WIDTH + '×' + DEFAULT_MAX_HEIGHT + 'px';
+        const label = `${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}px`;
         const labelEl = document.getElementById('sleepScreenSizeLabel');
         if (labelEl) labelEl.textContent = label;
       }
-    }).catch(() => {});
+    }).catch(err => console.error('[sleep-optimizer] Failed to fetch screen dimensions:', err));
 
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityInput = document.getElementById('qualityInput');
 
     // Initialize advanced mode toggle state based on Optimize EPUB checkbox
     const convertCheckbox = document.getElementById('convertBeforeUpload');
-    const advancedToggle = document.getElementById('advancedOptionsToggle');
-    if (convertCheckbox && advancedToggle) {
-      const isOptimizeEnabled = convertCheckbox.checked;
-      advancedToggle.style.opacity = isOptimizeEnabled ? '1' : '0.5';
-      advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
+    if (convertCheckbox) {
+      setAdvancedOptionsEnabled(convertCheckbox.checked);
     }
 
     // Drag & drop for upload modal
@@ -3542,15 +3542,13 @@
 
     if (hasImages && !hasEpubs) {
       clearImagePicker();
-      document.getElementById('convertBeforeUpload').checked = false;
+      const convertCheckbox = document.getElementById('convertBeforeUpload');
+      if (convertCheckbox) convertCheckbox.checked = false;
       const advancedSettingsContent = document.getElementById('advancedSettingsContent');
       if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
-      document.getElementById('advancedOptionsArrow').classList.remove('expanded');
-      const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
-      if (advancedOptionsToggle) {
-        advancedOptionsToggle.style.opacity = '0.5';
-        advancedOptionsToggle.style.pointerEvents = 'none';
-      }
+      const advancedOptionsArrow = document.getElementById('advancedOptionsArrow');
+      if (advancedOptionsArrow) advancedOptionsArrow.classList.remove('expanded');
+      setAdvancedOptionsEnabled(false);
       updateBatchModeUI(false);
       document.getElementById('convertWarning').style.display = 'none';
       const warningEl = document.getElementById('imageOptimizerWarning');
@@ -3568,7 +3566,6 @@
       uploadBtn.disabled = false;
     } else if (hasEpubs) {
       imageOptimizer.style.display = 'none';
-      document.getElementById('imageOptimizerEnabled').checked = false;
       resetImageOptimizer();
       convertOptions.style.display = 'block';
       const advancedContent = document.getElementById('advancedSettingsContent');
@@ -3696,6 +3693,13 @@ function setImageResizeMode(mode) {
   if (sleepPreviewImage) renderSleepPreview();
 }
 
+function setAdvancedOptionsEnabled(enabled) {
+  const toggle = document.getElementById('advancedOptionsToggle');
+  if (!toggle) return;
+  toggle.style.opacity = enabled ? '1' : '0.5';
+  toggle.style.pointerEvents = enabled ? 'auto' : 'none';
+}
+
 function resetImageOptimizer() {
   sleepImageFiles = [];
   sleepPreviewImage = null;
@@ -3717,6 +3721,8 @@ function resetImageOptimizer() {
   if (warning) { warning.style.display = 'none'; warning.innerHTML = ''; }
   const pathDisplay = document.getElementById('uploadPathDisplay');
   if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+  const optimizerCheckbox = document.getElementById('imageOptimizerEnabled');
+  if (optimizerCheckbox) optimizerCheckbox.checked = false;
 }
 
 function toggleImageOptimizer() {
