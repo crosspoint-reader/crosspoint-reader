@@ -22,11 +22,6 @@ struct IpaTextSpan {
 
 /// Split a UTF-8 string into runs of IPA vs non-IPA codepoints.
 /// Results are appended into `out`; caller must clear `out` before each call.
-///
-/// F-065 (future): Add getTextWidth(fontId, data, len, Style) and
-/// drawText(fontId, x, y, data, len, Style) overloads to GfxRenderer so that
-/// IpaTextSpan can become a non-owning view {const char* data, size_t len, bool isIpa},
-/// eliminating all per-run heap allocations here regardless of script or codepoint length.
 static inline void splitIpaRuns(const char* text, std::vector<IpaTextSpan>& out) {
   if (!text || !text[0]) return;
   std::string current;
