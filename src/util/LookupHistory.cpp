@@ -9,7 +9,7 @@
 // Private helpers
 // ---------------------------------------------------------------------------
 
-std::string LookupHistory::filePath(const std::string& cachePath) { return cachePath + "/lookups.txt"; }
+std::string LookupHistory::filePath(const std::string& cachePath) { return cachePath + "/dictionary_history.txt"; }
 
 // Parse status code char to Status enum.
 static LookupHistory::Status parseStatusCode(char code) {

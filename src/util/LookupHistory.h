@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-// Per-book lookup history. Stored as <cachePath>/lookups.txt.
+// Per-book lookup history. Stored as <cachePath>/dictionary_history.txt.
 // Format: one entry per line, "word|STATUS\n" where STATUS is a single char.
 // Oldest entry at top; newest at bottom. No deduplication.
 class LookupHistory {
