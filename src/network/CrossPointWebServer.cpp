@@ -901,12 +901,6 @@ void CrossPointWebServer::handleRename() const {
     server->send(500, "text/plain", "Failed to open file");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be renamed");
-    return;
-  }
-
   String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
   if (parentPath.isEmpty()) {
     parentPath = "/";

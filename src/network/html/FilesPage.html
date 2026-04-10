@@ -2085,7 +2085,7 @@
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
     <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <h3 id="renameModalTitle">✏️ Rename</h3>
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
       <div class="rename-input-row">
@@ -2094,6 +2094,7 @@
       </div>
       <input type="hidden" id="renameItemPath">
       <input type="hidden" id="renameExtension">
+      <input type="hidden" id="renameIsFolder">
       <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
       <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
     </div>
@@ -2402,7 +2403,7 @@
         fileTableContent += '<td class="size-cell"></td>';
         fileTableContent += isProtected
           ? '<td class="actions-col"></td>'
-          : `<td class="actions-col"><button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}' )" title="Rename folder">✏️</button></td>`;
+          : `<td class="actions-col"><button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Rename folder">✏️</button></td>`;
         fileTableContent += '</tr>';
       } else {
         let filePath = currentPath;
@@ -6162,16 +6163,18 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
+  function openRenameModal(name, path, isFolder = false) {
     const dotIndex = name.lastIndexOf('.');
-    const hasExt = dotIndex > 0; // ignore leading dot (hidden files/dirs)
+    const hasExt = !isFolder && dotIndex > 0; // never strip extension from folder names
     const baseName = hasExt ? name.substring(0, dotIndex) : name;
     const ext = hasExt ? name.substring(dotIndex) : '';
 
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+    document.getElementById('renameModalTitle').textContent = isFolder ? '✏️ Rename Folder' : '✏️ Rename File';
+    document.getElementById('renameItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameExtension').value = ext;
     document.getElementById('renameExtSuffix').textContent = ext;
+    document.getElementById('renameIsFolder').value = isFolder ? '1' : '';
     document.getElementById('renameNewName').value = baseName;
     document.getElementById('renameModal').classList.add('open');
     setTimeout(() => {
