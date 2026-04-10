@@ -3531,6 +3531,16 @@
     const hasEpubs = epubFiles.length > 0;
 
     if (hasImages && !hasEpubs) {
+      clearImagePicker();
+      document.getElementById('convertBeforeUpload').checked = false;
+      const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+      if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
+      document.getElementById('advancedOptionsArrow').classList.remove('expanded');
+      const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
+      if (advancedOptionsToggle) {
+        advancedOptionsToggle.style.opacity = '0.5';
+        advancedOptionsToggle.style.pointerEvents = 'none';
+      }
       updateBatchModeUI(false);
       document.getElementById('convertWarning').style.display = 'none';
       const warningEl = document.getElementById('imageOptimizerWarning');
@@ -3548,6 +3558,7 @@
       uploadBtn.disabled = false;
     } else if (hasEpubs) {
       imageOptimizer.style.display = 'none';
+      document.getElementById('imageOptimizerEnabled').checked = false;
       resetImageOptimizer();
       convertOptions.style.display = 'block';
       const advancedContent = document.getElementById('advancedSettingsContent');
