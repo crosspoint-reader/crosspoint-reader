@@ -593,6 +593,10 @@
     .convert-warning {
       font-size: 0.8em;
       color: #d68910;
+      background-color: rgba(214, 137, 16, 0.08);
+      border: 1px solid rgba(214, 137, 16, 0.35);
+      border-radius: 4px;
+      padding: 6px 10px;
       margin-top: 8px;
       line-height: 1.4;
       text-align: center;
@@ -1460,7 +1464,7 @@
       background-color: #c0392b;
     }
     .delete-btn-cancel {
-      background-color: #3498db;
+      background-color: #95a5a6;
       color: white;
       padding: 10px 20px;
       border: none;
@@ -1471,7 +1475,7 @@
       margin-top: 10px;
     }
     .delete-btn-cancel:hover {
-      background-color: #2e86c1;
+      background-color: #7f8c8d;
     }
     .rename-input-row {
       display: flex;
@@ -1871,7 +1875,7 @@
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
         <input type="file" id="fileInput" onchange="validateFile()" multiple style="display:none;">
-        <label class="choose-file-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">📁 Choose Files</label>
+        <label for="fileInput" class="choose-file-btn" onclick="event.stopPropagation()">📁 Choose Files</label>
         <div class="drag-drop-hint">or drag &amp; drop files here</div>
       </div>
       <div class="picker-columns" id="pickerColumns" style="display:none;">

@@ -55,7 +55,7 @@ void clearEpubCacheIfNeeded(const String& filePath) {
   }
 }
 
-bool convertSleepImageToBmp(const String& filePath) {
+static bool convertSleepImageToBmp(const String& filePath) {
   if (!filePath.startsWith("/.sleep/")) {
     return true;
   }
@@ -766,7 +766,9 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         clearEpubCacheIfNeeded(filePath);
 
         // Convert sleep screen images (JPG/PNG → BMP)
-        convertSleepImageToBmp(filePath);
+        if (!convertSleepImageToBmp(filePath)) {
+          LOG_ERR("WEB", "[UPLOAD] Sleep image conversion failed for: %s", filePath.c_str());
+        }
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1409,8 +1411,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearEpubCacheIfNeeded(filePath);
-            convertSleepImageToBmp(filePath);
-            wsServer->sendTXT(num, "DONE");
+            if (!convertSleepImageToBmp(filePath)) {
+              wsServer->sendTXT(num, "ERROR:Sleep image conversion failed");
+            } else {
+              wsServer->sendTXT(num, "DONE");
+            }
             wsLastProgressSent = 0;
             break;
           }
@@ -1481,9 +1486,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         clearEpubCacheIfNeeded(filePath);
 
         // Convert sleep screen images (JPG/PNG → BMP)
-        convertSleepImageToBmp(filePath);
-
-        wsServer->sendTXT(num, "DONE");
+        if (!convertSleepImageToBmp(filePath)) {
+          wsServer->sendTXT(num, "ERROR:Sleep image conversion failed");
+        } else {
+          wsServer->sendTXT(num, "DONE");
+        }
         wsLastProgressSent = 0;
       }
       break;
