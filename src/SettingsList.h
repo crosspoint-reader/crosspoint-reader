@@ -51,8 +51,6 @@ inline const std::vector<SettingInfo>& getSettingsList() {
           StrId::STR_DICT_FONT_SIZE, &CrossPointSettings::dictionaryFontSize,
           {StrId::STR_DICT_USE_GLOBAL, StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE},
           "dictionaryFontSize", StrId::STR_CAT_READER),
-      SettingInfo::Toggle(StrId::STR_DICT_HOLD_TO_LOOKUP, &CrossPointSettings::holdToLookup, "holdToLookup",
-                          StrId::STR_CAT_READER),
       SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
                         {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE}, "lineSpacing", StrId::STR_CAT_READER),
       SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
