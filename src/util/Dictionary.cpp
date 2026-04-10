@@ -88,26 +88,23 @@ void Dictionary::saveGlobalDictPath(const char* folderPath) {
 bool Dictionary::exists(const char* cachePath) {
   std::string folderPath = readDictPath(cachePath);
   if (folderPath.empty()) return false;
-  std::string p = folderPath + ".idx";
-  if (!Storage.exists(p.c_str())) return false;
-  p = folderPath + ".dict";
-  return Storage.exists(p.c_str());
+  DictPaths dp(folderPath);
+  if (!Storage.exists(dp.idx().c_str())) return false;
+  return Storage.exists(dp.dict().c_str());
 }
 
 bool Dictionary::hasAltForms(const char* cachePath) {
   std::string folderPath = readDictPath(cachePath);
   if (folderPath.empty()) return false;
-  std::string p = folderPath + ".syn";
-  return Storage.exists(p.c_str());
+  return Storage.exists(DictPaths(folderPath).syn().c_str());
 }
 
 bool Dictionary::isValidDictionary() {
   std::string folderPath = readDictPath(nullptr);
   if (folderPath.empty()) return false;
-  std::string p = folderPath + ".idx";
-  const bool idxExists = Storage.exists(p.c_str());
-  p = folderPath + ".dict";
-  const bool valid = idxExists && Storage.exists(p.c_str());
+  DictPaths dp(folderPath);
+  const bool idxExists = Storage.exists(dp.idx().c_str());
+  const bool valid = idxExists && Storage.exists(dp.dict().c_str());
   if (!valid) {
     LOG_DBG("DICT", "Stored dictionary path no longer valid, resetting");
     saveGlobalDictPath("");
@@ -123,7 +120,8 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
   DictInfo info;
   if (folderPath == nullptr || folderPath[0] == '\0') return info;
 
-  std::string ifoPath = std::string(folderPath) + ".ifo";
+  std::string folder(folderPath);
+  std::string ifoPath = DictPaths(folder).ifo();
 
   FsFile file;
   if (!Storage.openFileForRead("DICT", ifoPath.c_str(), file)) return info;
@@ -224,10 +222,9 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
 
   file.close();
 
-  std::string p = std::string(folderPath) + ".dict";
-  const bool dictExists = Storage.exists(p.c_str());
-  p = std::string(folderPath) + ".dict.dz";
-  info.isCompressed = !dictExists && Storage.exists(p.c_str());
+  DictPaths dp(folder);
+  const bool dictExists = Storage.exists(dp.dict().c_str());
+  info.isCompressed = !dictExists && Storage.exists(dp.dictDz().c_str());
 
   info.valid = true;
   return info;
@@ -347,9 +344,8 @@ void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, 
 // ---------------------------------------------------------------------------
 
 std::string Dictionary::readDefinition(const std::string& folderPath, uint32_t offset, uint32_t size) {
-  std::string p = folderPath + ".dict";
   FsFile dict;
-  if (!Storage.openFileForRead("DICT", p.c_str(), dict)) return "";
+  if (!Storage.openFileForRead("DICT", DictPaths(folderPath).dict().c_str(), dict)) return "";
 
   dict.seekSet(offset);
 
@@ -371,17 +367,16 @@ DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbac
   result.folderPath = readDictPath(cachePath);
   if (result.folderPath.empty()) return result;
 
-  std::string p = result.folderPath + ".idx";
+  DictPaths dp(result.folderPath);
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return result;
+  if (!Storage.openFileForRead("DICT", dp.idx().c_str(), idx)) return result;
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  p = result.folderPath + ".idx.oft";
   FsFile oft;
-  if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
+  if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
     oft.close();
   }
@@ -438,18 +433,17 @@ std::string Dictionary::lookup(const std::string& word, const DictLookupCallback
 
 // Resolve the word at 0-based ordinal in .idx using .idx.oft for fast page seek.
 std::string Dictionary::wordAtOrdinal(const std::string& folderPath, uint32_t ordinal) {
-  std::string p = folderPath + ".idx";
+  DictPaths dp(folderPath);
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return "";
+  if (!Storage.openFileForRead("DICT", dp.idx().c_str(), idx)) return "";
 
   const uint32_t pageNum = ordinal / OFT_STRIDE;
   const uint32_t withinPage = ordinal % OFT_STRIDE;
   uint32_t pageStartByte = 0;
 
   if (pageNum > 0) {
-    p = folderPath + ".idx.oft";
     FsFile oft;
-    if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
+    if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
       oft.seekSet(OFT_HEADER_SIZE + (pageNum - 1) * 4);
       uint8_t raw[4];
       if (oft.read(raw, 4) == 4) memcpy(&pageStartByte, raw, 4);  // LE uint32
@@ -482,19 +476,18 @@ std::string Dictionary::resolveAltForm(const std::string& word, const char* cach
   std::string folderPath = readDictPath(cachePath);
   if (folderPath.empty()) return "";
 
-  std::string p = folderPath + ".syn";
-  if (!Storage.exists(p.c_str())) return "";
+  DictPaths dp(folderPath);
+  if (!Storage.exists(dp.syn().c_str())) return "";
 
   FsFile syn;
-  if (!Storage.openFileForRead("DICT", p.c_str(), syn)) return "";
+  if (!Storage.openFileForRead("DICT", dp.syn().c_str(), syn)) return "";
 
   const uint32_t synFileSize = static_cast<uint32_t>(syn.fileSize());
   uint32_t startByte = 0;
   uint32_t endByte = synFileSize;
 
-  p = folderPath + ".syn.oft";
   FsFile oft;
-  if (Storage.openFileForRead("DICT", p.c_str(), oft)) {
+  if (Storage.openFileForRead("DICT", dp.synOft().c_str(), oft)) {
     findPageBounds(oft, syn, synFileSize, word.c_str(), &startByte, &endByte);
     oft.close();
   }
@@ -735,17 +728,16 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
   std::string folderPath = readDictPath(cachePath);
   if (folderPath.empty()) return {};
 
-  std::string p = folderPath + ".idx";
+  DictPaths dp(folderPath);
   FsFile idx;
-  if (!Storage.openFileForRead("DICT", p.c_str(), idx)) return {};
+  if (!Storage.openFileForRead("DICT", dp.idx().c_str(), idx)) return {};
 
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
   uint32_t centerStart = 0;
   uint32_t centerEnd = idxFileSize;
 
-  p = folderPath + ".idx.oft";
   FsFile oft;
-  const bool hasOft = Storage.openFileForRead("DICT", p.c_str(), oft);
+  const bool hasOft = Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft);
 
   if (hasOft) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &centerStart, &centerEnd);

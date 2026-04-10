@@ -6,6 +6,8 @@
 #include <InflateReader.h>
 #include <Logging.h>
 
+#include "util/Dictionary.h"
+
 #include <memory>
 
 #include "I18nKeys.h"
@@ -110,23 +112,14 @@ void DictPrepareActivity::onEnter() {
 void DictPrepareActivity::detectSteps() {
   stepCount = 0;
 
-  // Single buffer reused for all path checks — made static to keep it off the stack.
-  static char pathBuf[520];
-
-  snprintf(pathBuf, sizeof(pathBuf), "%s.dict", folderPath.c_str());
-  const bool dictExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.dict.dz", folderPath.c_str());
-  const bool dzExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.syn", folderPath.c_str());
-  const bool synExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.syn.dz", folderPath.c_str());
-  const bool synDzExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.idx", folderPath.c_str());
-  const bool idxExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.idx.oft", folderPath.c_str());
-  const bool idxOftExists = Storage.exists(pathBuf);
-  snprintf(pathBuf, sizeof(pathBuf), "%s.syn.oft", folderPath.c_str());
-  const bool synOftExists = Storage.exists(pathBuf);
+  DictPaths dp(folderPath);
+  const bool dictExists = Storage.exists(dp.dict().c_str());
+  const bool dzExists = Storage.exists(dp.dictDz().c_str());
+  const bool synExists = Storage.exists(dp.syn().c_str());
+  const bool synDzExists = Storage.exists(dp.synDz().c_str());
+  const bool idxExists = Storage.exists(dp.idx().c_str());
+  const bool idxOftExists = Storage.exists(dp.idxOft().c_str());
+  const bool synOftExists = Storage.exists(dp.synOft().c_str());
 
   if (!dictExists && dzExists) steps[stepCount++] = {StepType::EXTRACT_DICT};
   if (!synExists && synDzExists) steps[stepCount++] = {StepType::EXTRACT_SYN};
@@ -205,6 +198,8 @@ void DictPrepareActivity::loop() {
 // ---------------------------------------------------------------------------
 
 void DictPrepareActivity::runSteps() {
+  DictPaths dp(folderPath);
+
   for (int i = 0; i < stepCount; i++) {
     if (cancelRequested) break;
 
@@ -216,23 +211,23 @@ void DictPrepareActivity::runSteps() {
 
     switch (steps[i].type) {
       case StepType::EXTRACT_DICT:
-        ok = extractFile((folderPath + ".dict.dz").c_str(), (folderPath + ".dict").c_str(), steps[i]);
-        if (!ok) Storage.remove((folderPath + ".dict").c_str());
+        ok = extractFile(dp.dictDz().c_str(), dp.dict().c_str(), steps[i]);
+        if (!ok) Storage.remove(dp.dict().c_str());
         break;
 
       case StepType::EXTRACT_SYN:
-        ok = extractFile((folderPath + ".syn.dz").c_str(), (folderPath + ".syn").c_str(), steps[i]);
-        if (!ok) Storage.remove((folderPath + ".syn").c_str());
+        ok = extractFile(dp.synDz().c_str(), dp.syn().c_str(), steps[i]);
+        if (!ok) Storage.remove(dp.syn().c_str());
         break;
 
       case StepType::GEN_IDX:
-        ok = generateOft((folderPath + ".idx").c_str(), (folderPath + ".idx.oft").c_str(), 8, steps[i]);
-        if (!ok) Storage.remove((folderPath + ".idx.oft").c_str());
+        ok = generateOft(dp.idx().c_str(), dp.idxOft().c_str(), 8, steps[i]);
+        if (!ok) Storage.remove(dp.idxOft().c_str());
         break;
 
       case StepType::GEN_SYN:
-        ok = generateOft((folderPath + ".syn").c_str(), (folderPath + ".syn.oft").c_str(), 4, steps[i]);
-        if (!ok) Storage.remove((folderPath + ".syn.oft").c_str());
+        ok = generateOft(dp.syn().c_str(), dp.synOft().c_str(), 4, steps[i]);
+        if (!ok) Storage.remove(dp.synOft().c_str());
         break;
     }
 

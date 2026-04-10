@@ -5,6 +5,21 @@
 #include <string>
 #include <vector>
 
+// Helper for constructing dictionary file paths from a folder base path.
+struct DictPaths {
+  const std::string& folder;
+  explicit DictPaths(const std::string& f) : folder(f) {}
+
+  std::string idx() const { return folder + ".idx"; }
+  std::string dict() const { return folder + ".dict"; }
+  std::string syn() const { return folder + ".syn"; }
+  std::string ifo() const { return folder + ".ifo"; }
+  std::string idxOft() const { return folder + ".idx.oft"; }
+  std::string synOft() const { return folder + ".syn.oft"; }
+  std::string dictDz() const { return folder + ".dict.dz"; }
+  std::string synDz() const { return folder + ".syn.dz"; }
+};
+
 // Plain-function-pointer callbacks for Dictionary::lookup.
 // Zero overhead: no heap allocation, no vtable, no std::function bloat.
 struct DictLookupCallbacks {
