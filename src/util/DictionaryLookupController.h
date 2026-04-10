@@ -47,7 +47,8 @@ class DictionaryLookupController {
   ~DictionaryLookupController();
 
   // Start a lookup.  Transitions Idle → LookingUp, spawns background task.
-  void startLookup(const std::string& word);
+  // If recordHistory is true (default), adds the word to lookup history on success.
+  void startLookup(const std::string& word, bool recordHistory = true);
 
   // Like startLookup but marks the result as Suggestion (word came from fuzzy suggestions list).
   void startLookupAsSuggestion(const std::string& word);
@@ -100,6 +101,7 @@ class DictionaryLookupController {
   LookupState state = LookupState::Idle;
   FoundStatus foundStatus = FoundStatus::Direct;
   bool nextIsSuggestion = false;
+  bool recordHistory_ = true;
 
   std::string lookupWord;
   std::string foundWord;

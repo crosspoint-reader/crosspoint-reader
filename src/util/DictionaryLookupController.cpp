@@ -20,7 +20,7 @@ DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, Ma
 
 DictionaryLookupController::~DictionaryLookupController() = default;
 
-void DictionaryLookupController::startLookup(const std::string& word) {
+void DictionaryLookupController::startLookup(const std::string& word, bool recordHistory) {
   lookupWord = word;
   foundWord.clear();
   foundLocation = DictLocation{};
@@ -28,6 +28,7 @@ void DictionaryLookupController::startLookup(const std::string& word) {
   lookupDone = false;
   lookupCancelled = false;
   lookupCancelRequested = false;
+  recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
   owner.requestUpdateAndWait();
   task = std::make_unique<DictLookupTask>(*this);
@@ -67,6 +68,9 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         foundWord = lookupWord;
         foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Direct;
         nextIsSuggestion = false;
+        if (recordHistory_ && !cachePath.empty()) {
+          LookupHistory::addWord(cachePath, lookupWord, toHistStatus(foundStatus));
+        }
         return LookupEvent::FoundDefinition;
       }
 
@@ -79,6 +83,9 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
           foundLocation = std::move(loc);
           foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Stem;
           nextIsSuggestion = false;
+          if (recordHistory_ && !cachePath.empty()) {
+            LookupHistory::addWord(cachePath, lookupWord, toHistStatus(foundStatus));
+          }
           return LookupEvent::FoundDefinition;
         }
       }
@@ -113,6 +120,9 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
           foundLocation = std::move(loc);
           foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::AltForm;
           nextIsSuggestion = false;
+          if (recordHistory_ && !cachePath.empty()) {
+            LookupHistory::addWord(cachePath, lookupWord, toHistStatus(foundStatus));
+          }
           return LookupEvent::FoundDefinition;
         }
       }

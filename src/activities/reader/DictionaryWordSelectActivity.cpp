@@ -14,7 +14,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
-#include "util/LookupHistory.h"
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
@@ -204,8 +203,6 @@ void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        LookupHistory::addWord(cachePath, controller.getLookupWord(),
-                               DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
         startActivityForResult(
             std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
                                                            controller.getFoundLocation(), true, cachePath),

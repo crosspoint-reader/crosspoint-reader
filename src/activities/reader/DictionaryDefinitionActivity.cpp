@@ -18,7 +18,6 @@
 #include "fontIds.h"
 #include "util/Dictionary.h"
 #include "util/IpaUtils.h"
-#include "util/LookupHistory.h"
 
 static constexpr char kBullet[] = "- ";
 
@@ -406,9 +405,7 @@ void DictionaryDefinitionActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition:
-        if (!cachePath.empty() && !chainBackNavInProgress) {
-          LookupHistory::addWord(cachePath, controller.getLookupWord(),
-                                 DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
+        if (!chainBackNavInProgress) {
           chainWords.push_back(headword);
         }
         chainBackNavInProgress = false;
@@ -501,7 +498,7 @@ void DictionaryDefinitionActivity::loop() {
       std::string prevWord = chainWords.back();
       chainWords.pop_back();
       chainBackNavInProgress = true;
-      controller.startLookup(prevWord);
+      controller.startLookup(prevWord, false);
       return;
     }
     ActivityResult r;

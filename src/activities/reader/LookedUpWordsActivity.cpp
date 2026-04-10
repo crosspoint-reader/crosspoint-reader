@@ -44,8 +44,6 @@ void LookedUpWordsActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        LookupHistory::addWord(cachePath, controller.getLookupWord(),
-                               DictionaryLookupController::toHistStatus(controller.getFoundStatus()));
         startActivityForResult(
             std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, controller.getFoundWord(),
                                                            controller.getFoundLocation(), true, cachePath),
