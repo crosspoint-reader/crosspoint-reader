@@ -481,38 +481,13 @@ pio run -t upload && pio device monitor
 ```bash
 # Static analysis (cppcheck)
 pio check
+
+# Format code (clang-format) - Windows Git Bash
+find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
+
+# Format code (clang-format) - Linux
+clang-format -i src/**/*.cpp src/**/*.h
 ```
-
-#### clang-format (Windows PowerShell)
-
-The project requires clang-format >= 21. The `bin/clang-format-fix` script is Bash-only and does not work in PowerShell.
-
-**Detection** (run once per session):
-```powershell
-$CLANG_FORMAT_BIN = $null
-if (Get-Command clang-format-21 -ErrorAction SilentlyContinue) { $CLANG_FORMAT_BIN = "clang-format-21" }
-elseif (Get-Command clang-format -ErrorAction SilentlyContinue) { $CLANG_FORMAT_BIN = "clang-format" }
-if ($CLANG_FORMAT_BIN) { & $CLANG_FORMAT_BIN --version }
-```
-
-**Format all files**:
-```powershell
-git ls-files --exclude-standard | Where-Object { $_ -match '\.(c|cpp|h|hpp)$' -and $_ -notmatch '^lib/EpdFont/builtinFonts/' -and $_ -notmatch '^lib/Epub/Epub/hyphenation/generated/' -and $_ -notmatch '^lib/uzlib/' } | ForEach-Object { & $CLANG_FORMAT_BIN -style=file -i $_ }
-```
-
-**Format only modified files** (faster, recommended during development):
-```powershell
-git diff --name-only | Where-Object { $_ -match '\.(c|cpp|h|hpp)$' } | ForEach-Object { & $CLANG_FORMAT_BIN -style=file -i $_ }
-```
-
-**Format specific files**:
-```powershell
-& "C:\Program Files\LLVM\bin\clang-format.exe" -style=file -i src/network/CrossPointWebServer.cpp
-```
-
-**Known binary locations on Windows**:
-- `C:\Program Files\LLVM\bin\clang-format.exe` (LLVM install)
-- `C:\Users\<user>\AppData\Local\Programs\LLVM\bin\clang-format.exe`
 
 ### Debugging Crashes
 
