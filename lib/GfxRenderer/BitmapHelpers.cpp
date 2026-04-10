@@ -54,11 +54,14 @@ int adjustPixel(int gray) {
 }
 // Simple quantization without dithering — evenly-spaced midpoint thresholds for factory LUT
 uint8_t quantizeSimple(int gray) {
-  if (gray < 43) {
+  // Midpoint thresholds for 4 levels would be: 0-63=0, 64-127=1, 128-191=2, 192-255=3
+  // Crosspoint thresholds for 4 levels: 0-44=0, 45-69=1, 70-139=2, 140-255=3
+  // (slightly brighter to compensate for quantization)
+  if (gray < 45) {
     return 0;
-  } else if (gray < 128) {
+  } else if (gray < 70) {
     return 1;
-  } else if (gray < 213) {
+  } else if (gray < 140) {
     return 2;
   } else {
     return 3;
