@@ -19,10 +19,10 @@ class HalTiltSensor {
   unsigned long _lastTiltMs = 0;   // Debounce / cooldown
 
   // Tuning constants
-  static constexpr float TILT_THRESHOLD_G = 0.45f;   // ~27° tilt to trigger
-  static constexpr float NEUTRAL_THRESHOLD_G = 0.25f; // Must return below this before next trigger
-  static constexpr unsigned long COOLDOWN_MS = 600;   // Minimum ms between triggers
-  static constexpr unsigned long POLL_INTERVAL_MS = 50; // 20 Hz polling
+  static constexpr float TILT_THRESHOLD_G = 0.45f;       // ~27° tilt to trigger
+  static constexpr float NEUTRAL_THRESHOLD_G = 0.25f;    // Must return below this before next trigger
+  static constexpr unsigned long COOLDOWN_MS = 600;      // Minimum ms between triggers
+  static constexpr unsigned long POLL_INTERVAL_MS = 50;  // 20 Hz polling
 
   mutable unsigned long _lastPollMs = 0;
 
