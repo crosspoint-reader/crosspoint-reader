@@ -3755,6 +3755,7 @@ function toggleImageOptimizer() {
     if (optsBox) optsBox.classList.remove('violet');
     if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
     if (fitCropRow) fitCropRow.style.display = 'none';
+    setImageResizeMode('fit');
   }
 }
 
