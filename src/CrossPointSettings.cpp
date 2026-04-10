@@ -230,6 +230,8 @@ float CrossPointSettings::getReaderLineCompression() const {
     case BOOKERLY:
     default:
       switch (lineSpacing) {
+        case VERY_TIGHT:
+          return 0.85f;
         case TIGHT:
           return 0.95f;
         case NORMAL:
@@ -240,6 +242,8 @@ float CrossPointSettings::getReaderLineCompression() const {
       }
     case NOTOSANS:
       switch (lineSpacing) {
+        case VERY_TIGHT:
+          return 0.80f;
         case TIGHT:
           return 0.90f;
         case NORMAL:
@@ -250,6 +254,8 @@ float CrossPointSettings::getReaderLineCompression() const {
       }
     case OPENDYSLEXIC:
       switch (lineSpacing) {
+        case VERY_TIGHT:
+          return 0.80f;
         case TIGHT:
           return 0.90f;
         case NORMAL:
@@ -290,6 +296,10 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
+    case REFRESH_100:
+      return 100;
+    case REFRESH_1000:
+      return 1000;
   }
 }
 
