@@ -3,6 +3,9 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <optional>
+#include <vector>
+
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -11,6 +14,9 @@ class EpubReaderActivity final : public Activity {
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  // Set when navigating to a TOC entry in a different spine (chapter skip or chapter selector).
+  // Cleared on the next render after the new section loads and resolves it to a page.
+  std::optional<int> pendingTocIndex;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;
@@ -27,6 +33,20 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+
+  // Chapter-level page info aggregated across spine items sharing a TOC entry
+  struct SpineSegment {
+    int spineIndex;
+    int startPage;         // first page in this spine belonging to the chapter
+    int pageCount;         // pages in this segment (endPage - startPage)
+    int cumulativeOffset;  // total chapter pages before this segment
+  };
+  struct ChapterPageInfo {
+    std::optional<int> tocIndex;
+    std::vector<SpineSegment> segments;
+    int totalPages = 0;
+  };
+  ChapterPageInfo chapterPageInfo;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -47,6 +67,11 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
+  // Load the current section and build caches for all spine items in its TOC chapter.
+  // Returns false if the current section could not be loaded or built.
+  bool prepareSection(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Returns the chapter-relative page number for the current position.
+  int getChapterRelativePage() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
 
