@@ -570,6 +570,22 @@ if (!epub) {
 }
 ```
 
+**手法3: デバッグ表示設定フラグ（`SETTINGS.debugDisplay`）**
+
+設定 → 本体 → 「デバッグ表示」で有効化できるランタイムフラグ。画面にデバッグ情報を描画する際のガードに使用する。コンパイルフラグではないため、ユーザーが設定画面から切り替え可能。デフォルトはOFF。
+
+```cpp
+if (SETTINGS.debugDisplay) {
+  char dbg[64];
+  snprintf(dbg, sizeof(dbg), "S:%d H:%dk", stage, (int)(ESP.getFreeHeap() / 1024));
+  renderer.fillRect(5, 5, 350, 30, false);  // 白背景
+  renderer.drawText(UI_10_FONT_ID, 10, 10, dbg, true);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+```
+
+このフラグで制御するデバッグ描画はコミットに含めてよい（ユーザーがOFFにすれば非表示になるため）。
+
 **注意事項**:
 - `fillRect` による視覚的バーは e-ink では判別困難。**数値テキストを使うこと**
 - パース中の `fillRect` はレンダリングで上書きされる。**レンダリング後に描画すること**
