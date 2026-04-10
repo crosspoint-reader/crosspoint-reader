@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <new>
 
+#include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
 
@@ -18,37 +19,23 @@ namespace {
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
 // The file I/O callbacks receive the FsFile* via pFile->fHandle (set by pngOpen()).
 struct PngContext {
-  GfxRenderer* renderer;
-  const RenderConfig* config;
-  int screenWidth;
-  int screenHeight;
+  GfxRenderer* renderer{nullptr};
+  const RenderConfig* config{nullptr};
+  int screenWidth{0};
+  int screenHeight{0};
 
   // Scaling state
-  float scale;
-  int srcWidth;
-  int srcHeight;
-  int dstWidth;
-  int dstHeight;
-  int lastDstY;  // Track last rendered destination Y to avoid duplicates
+  float scale{1.f};
+  int srcWidth{0};
+  int srcHeight{0};
+  int dstWidth{0};
+  int dstHeight{0};
+  int lastDstY{-1};  // Track last rendered destination Y to avoid duplicates
 
   PixelCache cache;
-  bool caching;
+  bool caching{false};
 
-  uint8_t* grayLineBuffer;
-
-  PngContext()
-      : renderer(nullptr),
-        config(nullptr),
-        screenWidth(0),
-        screenHeight(0),
-        scale(1.0f),
-        srcWidth(0),
-        srcHeight(0),
-        dstWidth(0),
-        dstHeight(0),
-        lastDstY(-1),
-        caching(false),
-        grayLineBuffer(nullptr) {}
+  uint8_t* grayLineBuffer{nullptr};
 };
 
 // File I/O callbacks use pFile->fHandle to access the FsFile*,
@@ -207,6 +194,17 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   bool useDithering = ctx->config->useDithering;
   bool caching = ctx->caching;
 
+  // Pre-compute orientation and render-mode state once per row
+  DirectPixelWriter pw;
+  pw.init(*ctx->renderer);
+  pw.beginRow(outY);
+
+  DirectCacheWriter cw;
+  if (caching) {
+    cw.init(ctx->cache.buffer, ctx->cache.bytesPerRow, ctx->cache.originX);
+    cw.beginRow(outY, ctx->config->y);
+  }
+
   int srcX = 0;
   int error = 0;
 
@@ -222,8 +220,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
         ditheredGray = gray / 85;
         if (ditheredGray > 3) ditheredGray = 3;
       }
-      drawPixelWithRenderMode(*ctx->renderer, outX, outY, ditheredGray);
-      if (caching) ctx->cache.setPixel(outX, outY, ditheredGray);
+      pw.writePixel(outX, ditheredGray);
+      if (caching) cw.writePixel(outX, ditheredGray);
     }
 
     // Bresenham-style stepping: advance srcX based on ratio srcWidth/dstWidth
@@ -356,10 +354,18 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
 
-  // Allocate cache buffer using SCALED dimensions
+  // Allocate cache buffer using SCALED dimensions.
+  // PNG decode is fast enough (~135ms for 400x600) that caching provides minimal benefit
+  // for larger images, while the cache buffer competes with the 44KB PNG decoder for heap.
+  // Skip caching when the buffer would exceed the framebuffer size (48KB).
+  static constexpr size_t PNG_MAX_CACHE_BYTES = 48000;
   ctx.caching = !config.cachePath.empty();
   if (ctx.caching) {
-    if (!ctx.cache.allocate(ctx.dstWidth, ctx.dstHeight, config.x, config.y)) {
+    size_t cacheSize = (size_t)((ctx.dstWidth + 3) / 4) * ctx.dstHeight;
+    if (cacheSize > PNG_MAX_CACHE_BYTES) {
+      LOG_DBG("PNG", "Skipping cache: %zu bytes exceeds PNG limit (%zu)", cacheSize, PNG_MAX_CACHE_BYTES);
+      ctx.caching = false;
+    } else if (!ctx.cache.allocate(ctx.dstWidth, ctx.dstHeight, config.x, config.y)) {
       LOG_ERR("PNG", "Failed to allocate cache buffer, continuing without caching");
       ctx.caching = false;
     }

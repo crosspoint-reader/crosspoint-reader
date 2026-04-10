@@ -239,10 +239,22 @@ void FileBrowserActivity::loop() {
 
 std::string getFileName(std::string filename) {
   if (filename.back() == '/') {
-    return filename.substr(0, filename.length() - 1);
+    filename.pop_back();
+    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
+      return "[" + filename + "]";
+    }
+    return filename;
   }
   const auto pos = filename.rfind('.');
   return filename.substr(0, pos);
+}
+
+std::string getFileExtension(std::string filename) {
+  if (filename.back() == '/') {
+    return "";
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(pos);
 }
 
 void FileBrowserActivity::render(RenderLock&&) {
@@ -263,7 +275,8 @@ void FileBrowserActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
         [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); });
+        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        [this](int index) { return getFileExtension(files[index]); }, false);
   }
 
   // Help text

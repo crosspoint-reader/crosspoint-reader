@@ -305,11 +305,15 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // any botton press when at end of the book goes back to the last page
+  // At end of the book, forward button goes home and back button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-    currentSpineIndex = epub->getSpineItemsCount() - 1;
-    nextPageNumber = UINT16_MAX;
-    requestUpdate();
+    if (nextTriggered) {
+      onGoHome();
+    } else {
+      currentSpineIndex = epub->getSpineItemsCount() - 1;
+      nextPageNumber = UINT16_MAX;
+      requestUpdate();
+    }
     return;
   }
 
@@ -909,8 +913,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
+      // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
       page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
-      renderStatusBar();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
