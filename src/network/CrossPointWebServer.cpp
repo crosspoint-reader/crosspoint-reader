@@ -69,9 +69,12 @@ static bool convertSleepImageToBmp(const String& filePath) {
 
   LOG_DBG("WEB", "[SLEEP] Converting to BMP: %s", filePath.c_str());
 
-  FsFile srcFile = Storage.open(filePath.c_str());
-  if (!srcFile || srcFile.isDirectory()) {
-    LOG_DBG("WEB", "[SLEEP] Cannot open source: %s", filePath.c_str());
+  FsFile srcFile;
+  if (!Storage.openFileForRead("SLEEP", filePath, srcFile)) {
+    return false;
+  }
+  if (srcFile.isDirectory()) {
+    srcFile.close();
     return false;
   }
 
