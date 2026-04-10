@@ -15,6 +15,8 @@
 #include <builtinFonts/all.h>
 
 #include <cstring>
+#include <ctime>
+#include <sys/time.h>
 #include <esp_task_wdt.h>
 
 #include "CrossPointSettings.h"
@@ -189,6 +191,11 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+  // NTP同期済みの時刻をファイルに保存（ディープスリープ復帰時の復元用）
+  const time_t now = time(nullptr);
+  if (now >= 1704067200) {
+    APP_STATE.lastKnownTime = static_cast<uint32_t>(now);
+  }
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();
@@ -348,6 +355,20 @@ void setup() {
   activityManager.goToBoot();
 
   APP_STATE.loadFromFile();
+
+  // ディープスリープ復帰時: 保存済み時刻をシステムクロックに復元
+  {
+    const time_t bootTime = time(nullptr);
+    LOG_DBG("MAIN", "Boot time(): %ld, saved: %lu", (long)bootTime, (unsigned long)APP_STATE.lastKnownTime);
+    if (bootTime < 1704067200 && APP_STATE.lastKnownTime >= 1704067200) {
+      struct timeval tv = {.tv_sec = static_cast<time_t>(APP_STATE.lastKnownTime), .tv_usec = 0};
+      settimeofday(&tv, nullptr);
+      LOG_DBG("MAIN", "Restored time from state");
+    } else if (bootTime >= 1704067200) {
+      LOG_DBG("MAIN", "RTC time valid, no restore needed");
+    }
+  }
+
   RECENT_BOOKS.loadFromFile();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity

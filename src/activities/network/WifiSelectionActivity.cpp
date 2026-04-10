@@ -241,24 +241,22 @@ void WifiSelectionActivity::checkConnectionStatus() {
   const wl_status_t status = WiFi.status();
 
   if (status == WL_CONNECTED) {
-    // タイムゾーン設定（JST = UTC+9）+ NTP時刻同期（未同期の場合のみ）
+    // タイムゾーン設定（JST = UTC+9）+ NTP時刻同期（WiFi接続時は常に実行）
     setenv("TZ", "JST-9", 1);
     tzset();
-    if (time(nullptr) < 1704067200) {
-      if (esp_sntp_enabled()) {
-        esp_sntp_stop();
-      }
-      esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-      esp_sntp_setservername(0, "pool.ntp.org");
-      esp_sntp_init();
-      for (int retry = 0; retry < 30 && sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED; retry++) {
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-      }
-      if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-        LOG_DBG("WIFI", "NTP time synced (JST)");
-      } else {
-        LOG_DBG("WIFI", "NTP sync timeout");
-      }
+    if (esp_sntp_enabled()) {
+      esp_sntp_stop();
+    }
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
+    for (int retry = 0; retry < 30 && sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED; retry++) {
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+      LOG_DBG("WIFI", "NTP time synced (JST)");
+    } else {
+      LOG_DBG("WIFI", "NTP sync timeout");
     }
 
     // Successfully connected

@@ -12,6 +12,7 @@ class CrossPointState {
   uint8_t lastSleepImage = UINT8_MAX;  // UINT8_MAX = unset sentinel
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
+  uint32_t lastKnownTime = 0;  // NTP同期済み時刻（epoch秒、ディープスリープ復帰時の復元用）
   ~CrossPointState() = default;
 
   // Get singleton instance
