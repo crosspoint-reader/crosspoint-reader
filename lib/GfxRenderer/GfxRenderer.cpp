@@ -797,7 +797,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   int phyY = 0;
 
   // Note: this call should be inlined for better performance
-  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+  rotateCoordinates(getOrientation(), x, y, &phyX, &phyY, panelWidth, panelHeight);
 
   // Bounds checking against runtime panel dimensions
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
@@ -870,7 +870,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
       const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
                                                        combiningGlyph->width);
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
+      renderCharImpl<TextRotation::None>(*this, getRenderMode(), font, cp, combiningX, yPos - raiseBy, black, style);
       continue;
     }
 
@@ -902,7 +902,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     lastBaseAdvanceFP = glyph->advanceX;
     prevAdvanceFP = lastBaseAdvanceFP;
 
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    renderCharImpl<TextRotation::None>(*this, getRenderMode(), font, cp, lastBaseX, yPos, black, style);
     prevCp = cp;
   }
 }
@@ -914,7 +914,7 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
       std::swap(y1, y2);
     }
     // In Portrait/PortraitInverted a logical vertical line maps to a physical horizontal span.
-    switch (orientation) {
+    switch (getOrientation()) {
       case Portrait:
         fillPhysicalHSpan(HalDisplay::DISPLAY_HEIGHT - 1 - x1, y1, y2, state);
         return;
@@ -930,7 +930,7 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
       std::swap(x1, x2);
     }
     // In Landscape a logical horizontal line maps to a physical horizontal span.
-    switch (orientation) {
+    switch (getOrientation()) {
       case LandscapeCounterClockwise:
         fillPhysicalHSpan(y1, x1, x2, state);
         return;
@@ -1144,7 +1144,7 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
 
   // For each orientation, one logical dimension maps to a constant physical row, allowing the
   // perpendicular dimension to be written as a byte-level span — eliminating per-pixel overhead.
-  switch (orientation) {
+  switch (getOrientation()) {
     case Portrait:
       // Logical column x → physical row (479-x); logical y range → physical x span
       for (int lx = x; lx < x + width; lx++) {
@@ -1212,7 +1212,7 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
     // Byte patterns (phyY even / phyY odd):
     //   Portrait / PortraitInverted: 0xAA / 0x55
     //   LandscapeCW / LandscapeCCW: 0x55 / 0xAA
-    switch (orientation) {
+    switch (getOrientation()) {
       case Portrait:
         for (int lx = x; lx < x + width; lx++) {
           const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - lx;
@@ -1251,7 +1251,7 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
     //   PortraitInverted: 0xAA        / 0xFF (skip)
     //   LandscapeCCW:     0x55        / 0xFF (skip)
     //   LandscapeCW:      0xFF (skip) / 0xAA
-    switch (orientation) {
+    switch (getOrientation()) {
       case Portrait:
         for (int lx = x; lx < x + width; lx++) {
           const int phyY = HalDisplay::DISPLAY_HEIGHT - 1 - lx;
@@ -1401,9 +1401,9 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   int rotatedX = 0;
   int rotatedY = 0;
-  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
+  rotateCoordinates(getOrientation(), x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
   // Rotate origin corner
-  switch (orientation) {
+  switch (getOrientation()) {
     case Portrait:
       rotatedY = rotatedY - height;
       break;
@@ -1519,11 +1519,12 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      if (renderMode == BW && val < 3) {
+      const auto currentRenderMode = getRenderMode();
+      if (currentRenderMode == BW && val < 3) {
         drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+      } else if (currentRenderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
         drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+      } else if (currentRenderMode == GRAYSCALE_LSB && val == 1) {
         drawPixel(screenX, screenY, false);
       }
     }
@@ -1685,16 +1686,19 @@ void GfxRenderer::invertScreen() const {
 }
 
 void GfxRenderer::setNextDisplayRefreshMode(const HalDisplay::RefreshMode refreshMode) const {
-  useNextRefreshOverride = true;
-  nextRefreshOverride = refreshMode;
+  useNextRefreshOverride.store(true, std::memory_order_relaxed);
+  nextRefreshOverride.store(static_cast<int>(refreshMode), std::memory_order_relaxed);
 }
 
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
-  const auto effectiveMode = useNextRefreshOverride ? nextRefreshOverride : refreshMode;
-  useNextRefreshOverride = false;
+  const auto effectiveMode =
+      useNextRefreshOverride.load(std::memory_order_relaxed)
+          ? static_cast<HalDisplay::RefreshMode>(nextRefreshOverride.load(std::memory_order_relaxed))
+          : refreshMode;
+  useNextRefreshOverride.store(false, std::memory_order_relaxed);
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  display.displayBuffer(effectiveMode, fadingFix);
+  display.displayBuffer(effectiveMode, fadingFix.load(std::memory_order_relaxed));
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
@@ -1783,7 +1787,7 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
-  switch (orientation) {
+  switch (getOrientation()) {
     case Portrait:
     case PortraitInverted:
       // 480px wide in portrait logical coordinates
@@ -1797,7 +1801,7 @@ int GfxRenderer::getScreenWidth() const {
 }
 
 int GfxRenderer::getScreenHeight() const {
-  switch (orientation) {
+  switch (getOrientation()) {
     case Portrait:
     case PortraitInverted:
       // 800px tall in portrait logical coordinates
@@ -1943,7 +1947,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       const int combiningX = x - raiseBy;
       const int combiningY = combiningMark::centerOverRotated90CW(lastBaseY, lastBaseLeft, lastBaseWidth,
                                                                   combiningGlyph->left, combiningGlyph->width);
-      renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      renderCharImpl<TextRotation::Rotated90CW>(*this, getRenderMode(), font, cp, combiningX, combiningY, black, style);
       continue;
     }
 
@@ -1974,7 +1978,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     lastBaseAdvanceFP = glyph->advanceX;
     prevAdvanceFP = lastBaseAdvanceFP;
 
-    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    renderCharImpl<TextRotation::Rotated90CW>(*this, getRenderMode(), font, cp, x, lastBaseY, black, style);
     prevCp = cp;
   }
 }
@@ -2083,7 +2087,7 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
-  switch (orientation) {
+  switch (getOrientation()) {
     case Portrait:
       *outTop = VIEWABLE_MARGIN_TOP;
       *outRight = VIEWABLE_MARGIN_RIGHT;

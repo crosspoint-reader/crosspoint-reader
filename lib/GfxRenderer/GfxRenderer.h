@@ -5,6 +5,7 @@
 
 class FontCacheManager;
 
+#include <atomic>
 #include <cstring>
 #include <map>
 #include <string>
@@ -32,10 +33,11 @@ class GfxRenderer {
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
 
   HalDisplay& display;
-  RenderMode renderMode;
-  Orientation orientation;
-  bool fadingFix;
+  std::atomic<int> renderMode;
+  std::atomic<int> orientation;
+  std::atomic<bool> fadingFix;
   // Text darkness for 2-bit grayscale glyph rendering.
+  std::atomic<uint8_t> textDarkness;
   //   0 = Normal     — true 4-level AA (raw=1 → light gray, raw=2 → dark gray)
   //   1 = Dark       — historical default; raw=2 collapses to black
   //   2 = Extra Dark — both AA shades go black in the grayscale plane
@@ -46,7 +48,6 @@ class GfxRenderer {
   // 1-bit fonts and the BW pass are unchanged. Default is 1 to preserve historical
   // rendering. See drawMaskFor2BitMode() in GfxRenderer.cpp for the per-level
   // pixel breakdown and a worked example glyph.
-  uint8_t textDarkness = 1;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -59,8 +60,8 @@ class GfxRenderer {
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
-  mutable bool useNextRefreshOverride = false;
-  mutable HalDisplay::RefreshMode nextRefreshOverride = HalDisplay::FAST_REFRESH;
+  mutable std::atomic<bool> useNextRefreshOverride = false;
+  mutable std::atomic<int> nextRefreshOverride = static_cast<int>(HalDisplay::FAST_REFRESH);
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
@@ -80,7 +81,11 @@ class GfxRenderer {
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
-      : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false) {}
+      : display(halDisplay),
+        renderMode(static_cast<int>(BW)),
+        orientation(static_cast<int>(Portrait)),
+        fadingFix(false),
+        textDarkness(1) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -96,11 +101,11 @@ class GfxRenderer {
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
 
   // Orientation control (affects logical width/height and coordinate transforms)
-  void setOrientation(const Orientation o) { orientation = o; }
-  Orientation getOrientation() const { return orientation; }
+  void setOrientation(const Orientation o) { orientation.store(static_cast<int>(o), std::memory_order_relaxed); }
+  Orientation getOrientation() const { return static_cast<Orientation>(orientation.load(std::memory_order_relaxed)); }
 
   // Fading fix control
-  void setFadingFix(const bool enabled) { fadingFix = enabled; }
+  void setFadingFix(const bool enabled) { fadingFix.store(enabled, std::memory_order_relaxed); }
 
   // Screen ops
   int getScreenWidth() const;
@@ -165,16 +170,18 @@ class GfxRenderer {
   int getTextHeight(int fontId) const;
 
   // Grayscale functions
-  void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
-  RenderMode getRenderMode() const { return renderMode; }
+  void setRenderMode(const RenderMode mode) {
+    this->renderMode.store(static_cast<int>(mode), std::memory_order_relaxed);
+  }
+  RenderMode getRenderMode() const { return static_cast<RenderMode>(renderMode.load(std::memory_order_relaxed)); }
 
   // Text darkness control:
   //   0 = Normal, 1 = Dark, 2 = Extra Dark, 3 = Maximum.
   // Only affects anti-aliased pixels in 2-bit (grayscale) glyph rendering;
   // 1-bit fonts and the BW pass are unchanged. See drawMaskFor2BitMode() in
   // GfxRenderer.cpp for the per-level pixel breakdown and a worked example.
-  void setTextDarkness(const uint8_t d) { textDarkness = d; }
-  uint8_t getTextDarkness() const { return textDarkness; }
+  void setTextDarkness(const uint8_t d) { textDarkness.store(d, std::memory_order_relaxed); }
+  uint8_t getTextDarkness() const { return static_cast<uint8_t>(textDarkness.load(std::memory_order_relaxed)); }
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
