@@ -5,6 +5,7 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "util/DictionaryActivityUtils.h"
 
 void DictionarySuggestionsActivity::onEnter() {
   Activity::onEnter();
@@ -18,10 +19,7 @@ void DictionarySuggestionsActivity::loop() {
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult r;
-    r.isCancelled = true;
-    setResult(std::move(r));
-    finish();
+    DictUtils::cancelAndFinish(*this);
     return;
   }
   const bool prevItem = mappedInput.wasReleased(MappedInputManager::Button::Up) ||

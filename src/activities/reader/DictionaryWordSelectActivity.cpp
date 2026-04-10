@@ -14,6 +14,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
+#include "util/DictionaryActivityUtils.h"
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
@@ -234,10 +235,7 @@ void DictionaryWordSelectActivity::loop() {
 
   if (navigator.isEmpty()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
+      DictUtils::cancelAndFinish(*this);
     }
     return;
   }
@@ -253,10 +251,7 @@ void DictionaryWordSelectActivity::loop() {
   if (controller.handleConfirmLookup(navigator)) return;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult r;
-    r.isCancelled = true;
-    setResult(std::move(r));
-    finish();
+    DictUtils::cancelAndFinish(*this);
     return;
   }
 }

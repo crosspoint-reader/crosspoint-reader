@@ -14,6 +14,7 @@
 #include "fontIds.h"
 #include "util/DictPrepareTask.h"
 #include "util/Dictionary.h"
+#include "util/DictionaryActivityUtils.h"
 
 // ---------------------------------------------------------------------------
 // uzlib read callback context
@@ -143,10 +144,7 @@ void DictPrepareActivity::onExit() {
 void DictPrepareActivity::loop() {
   if (state == State::CONFIRM) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
+      DictUtils::cancelAndFinish(*this);
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

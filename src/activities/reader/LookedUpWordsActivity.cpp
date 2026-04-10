@@ -10,6 +10,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
+#include "util/DictionaryActivityUtils.h"
 #include "util/LookupHistory.h"
 
 const char* LookedUpWordsActivity::glyphFor(LookupHistory::Status s) {
@@ -77,10 +78,7 @@ void LookedUpWordsActivity::loop() {
 
   if (entries.empty()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
+      DictUtils::cancelAndFinish(*this);
     }
     return;
   }
@@ -144,10 +142,7 @@ void LookedUpWordsActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult r;
-    r.isCancelled = true;
-    setResult(std::move(r));
-    finish();
+    DictUtils::cancelAndFinish(*this);
     return;
   }
 }

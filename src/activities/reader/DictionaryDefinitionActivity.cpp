@@ -17,6 +17,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
+#include "util/DictionaryActivityUtils.h"
 #include "util/IpaUtils.h"
 
 static constexpr char kBullet[] = "- ";
@@ -482,10 +483,7 @@ void DictionaryDefinitionActivity::loop() {
         requestUpdate();
       }
     } else {
-      ActivityResult r;
-      r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
+      DictUtils::cancelAndFinish(*this);
     }
     return;
   }
@@ -501,10 +499,7 @@ void DictionaryDefinitionActivity::loop() {
       controller.startLookup(prevWord, false);
       return;
     }
-    ActivityResult r;
-    r.isCancelled = true;
-    setResult(std::move(r));
-    finish();
+    DictUtils::cancelAndFinish(*this);
     return;
   }
 }
