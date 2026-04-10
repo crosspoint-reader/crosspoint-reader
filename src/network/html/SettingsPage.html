@@ -187,23 +187,6 @@
       background-color: #95a5a6;
       cursor: not-allowed;
     }
-    .message {
-      padding: 12px;
-      border-radius: 4px;
-      margin: 15px 0;
-      text-align: center;
-      display: none;
-    }
-    .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
-    }
-    .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
-    }
     .loader-container {
       display: flex;
       justify-content: center;
@@ -266,8 +249,6 @@
     <a href="/settings" class="active">Settings</a>
   </nav>
 
-  <div id="message" class="message"></div>
-
   <div id="settings-container">
     <div class="loader-container">
       <span class="loader"></span>
@@ -297,12 +278,30 @@
       .replaceAll("'", "&#039;");
   }
 
-  function showMessage(text, isError) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = 'message ' + (isError ? 'error' : 'success');
-    msg.style.display = 'block';
-    setTimeout(function() { msg.style.display = 'none'; }, 4000);
+  function showNotification(message, type) {
+    let notification = document.getElementById('notification');
+    if (!notification) {
+      notification = document.createElement('div');
+      notification.id = 'notification';
+      notification.style.cssText =
+        'position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:4px;color:white;font-weight:500;z-index:10000;max-width:300px;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:all 0.3s ease;';
+      document.body.appendChild(notification);
+    }
+    const styles = {
+      'success': 'background-color:#27ae60;',
+      'error': 'background-color:#e74c3c;',
+      'warning': 'background-color:#f39c12;',
+      'info': 'background-color:#3498db;'
+    };
+    notification.style.cssText += styles[type] || styles['info'];
+    notification.textContent = message;
+    notification.style.opacity = '1';
+    notification.style.transform = 'translateX(0)';
+    setTimeout(function() {
+      notification.style.opacity = '0';
+      notification.style.transform = 'translateX(100%)';
+      setTimeout(function() { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 300);
+    }, 4000);
   }
 
   function renderControl(setting) {
@@ -432,7 +431,7 @@
     });
 
     if (Object.keys(changes).length === 0) {
-      showMessage('No changes to save.', false);
+      showNotification('No changes to save.', 'info');
       btn.textContent = 'Save Settings';
       return;
     }
@@ -454,10 +453,10 @@
         originalValues[key] = changes[key];
       }
 
-      showMessage('Settings saved successfully!', false);
+      showNotification('Settings saved successfully!', 'success');
     } catch (e) {
       console.error(e);
-      showMessage('Error: ' + e.message, true);
+      showNotification('Error: ' + e.message, 'error');
     }
 
     btn.textContent = 'Save Settings';

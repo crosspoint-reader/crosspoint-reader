@@ -316,6 +316,10 @@
       color: white;
       border-color: var(--accent-color);
     }
+    .fit-crop-btn:disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
     .image-optimizer-preview {
       text-align: center;
     }
@@ -1164,21 +1168,6 @@
       padding: 40px;
       font-style: italic;
     }
-    .message {
-      padding: 15px;
-      border-radius: 4px;
-      margin: 15px 0;
-    }
-    .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
-    }
-    .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
-    }
     .contents-header {
       display: flex;
       justify-content: space-between;
@@ -1519,6 +1508,10 @@
     }
     .rename-btn-confirm:hover {
       background-color: #219a52;
+    }
+    .rename-btn-confirm:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
     }
     .move-btn-confirm {
       background-color: #27ae60;
@@ -2023,11 +2016,18 @@
           <span>Auto-rotate</span>
         </div>
         <div class="sleep-preview-wrapper" id="sleepPreviewWrapper" style="display:none;">
-          <div id="imageFitCropRow" class="fit-crop-controls-col" style="display:none;">
+          <div id="imageControlsRow" class="fit-crop-controls-col" style="display:none;">
             <div class="setting-title">📐 Resize</div>
             <div class="fit-crop-controls">
-              <button class="fit-crop-btn active" data-value="fit" onclick="setImageResizeMode('fit')">FIT</button>
+              <button class="fit-crop-btn" data-value="fit" onclick="setImageResizeMode('fit')">FIT</button>
               <button class="fit-crop-btn" data-value="crop" onclick="setImageResizeMode('crop')">CROP</button>
+            </div>
+            <div id="imageBgControls">
+              <div class="setting-title" style="margin-top:8px;">🎨 Background</div>
+              <div class="fit-crop-controls">
+                <button class="fit-crop-btn active" data-value="white" onclick="setSleepBgColor('white')">WHITE</button>
+                <button class="fit-crop-btn" data-value="black" onclick="setSleepBgColor('black')">BLACK</button>
+              </div>
             </div>
           </div>
           <div id="imageOptimizerPreview" style="display:none;" class="image-optimizer-preview"></div>
@@ -2089,13 +2089,13 @@
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
       <div class="rename-input-row">
-        <input type="text" id="renameNewName" class="folder-input" placeholder="New name...">
+        <input type="text" id="renameNewName" class="folder-input" placeholder="New name..." oninput="validateRenameInput()">
         <span id="renameExtSuffix" class="rename-ext-suffix"></span>
       </div>
       <input type="hidden" id="renameItemPath">
       <input type="hidden" id="renameExtension">
       <input type="hidden" id="renameIsFolder">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
+      <button id="confirmRenameBtn" class="rename-btn-confirm" onclick="confirmRename()" disabled>Rename</button>
       <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
     </div>
   </div>
@@ -3005,7 +3005,7 @@
     // Check if JSZip is available
     if (typeof JSZip === 'undefined') {
       console.error('JSZip not loaded');
-      alert('JSZip library not available. Conversion will proceed without image picker.');
+      showNotification('JSZip library not available. Conversion will proceed without image picker.', 'info');
       startConversionWithImageStates();
       return;
     }
@@ -3057,7 +3057,7 @@
 
     } catch (error) {
       console.error('Failed to extract images:', error);
-      alert('Failed to preview images: ' + error.message + '\n\nConversion will proceed normally.');
+      showNotification('Failed to preview images: ' + error.message + '. Conversion will proceed normally.', 'warning');
       // Fallback: start conversion directly
       startConversionWithImageStates();
     }
@@ -3376,22 +3376,12 @@
 
   // Open move modal for selected files
   function openMoveSelectedModal() {
-    const items = getSelectedItems().filter(it => !it.isFolder);
-    if (items.length === 0) {
-      alert('Select a file to move.');
-      return;
-    }
-    openMoveModal(items);
+    openMoveModal(getSelectedItems().filter(it => !it.isFolder));
   }
 
   // Open delete modal for currently selected checkboxes
   function openDeleteSelectedModal() {
-    const items = getSelectedItems();
-    if (items.length === 0) {
-      alert('Please select at least one item to delete.');
-      return;
-    }
-    openDeleteModalForItems(items);
+    openDeleteModalForItems(getSelectedItems());
   }
 
   // Open delete modal for a single item (keeps backwards compatibility with per-row delete button)
@@ -3607,6 +3597,7 @@ let currentUploadXhr = null;    // Active XHR reference for external abort
 // ============================================================================
 
 let imageResizeMode = 'fit'; // 'fit' or 'crop'
+let sleepBgColor = 'white';
 let sleepImageFiles = [];     // Files to process for sleep screen
 
 let sleepPreviewImage = null;
@@ -3694,8 +3685,19 @@ function computeTotalRotation(origW, origH, exifOrientation) {
 
 function setImageResizeMode(mode) {
   imageResizeMode = mode;
-  document.querySelectorAll('.fit-crop-btn').forEach(btn => {
+  document.querySelectorAll('.fit-crop-btn[data-value="fit"],.fit-crop-btn[data-value="crop"]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.value === mode);
+  });
+  document.querySelectorAll('#imageBgControls .fit-crop-btn').forEach(btn => {
+    btn.disabled = (mode === 'crop');
+  });
+  if (sleepPreviewImage) renderSleepPreview();
+}
+
+function setSleepBgColor(color) {
+  sleepBgColor = color;
+  document.querySelectorAll('.fit-crop-btn[data-value="white"],.fit-crop-btn[data-value="black"]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === color);
   });
   if (sleepPreviewImage) renderSleepPreview();
 }
@@ -3714,12 +3716,17 @@ function resetImageOptimizer() {
   sleepTotalRotation = 0;
   sleepAspectExact = false;
   imageResizeMode = 'fit';
+  sleepBgColor = 'white';
   exifOrientationCache.clear();
   document.querySelectorAll('.fit-crop-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.value === 'fit');
+    btn.classList.toggle('active', btn.dataset.value === 'fit' || btn.dataset.value === 'white');
+    btn.disabled = false;
   });
-  const fitCropRow = document.getElementById('imageFitCropRow');
-  if (fitCropRow) fitCropRow.style.display = 'none';
+  document.querySelectorAll('#imageBgControls .fit-crop-btn').forEach(btn => {
+    btn.disabled = true;
+  });
+  const controlsRow = document.getElementById('imageControlsRow');
+  if (controlsRow) controlsRow.style.display = 'none';
   const wrapper = document.getElementById('sleepPreviewWrapper');
   if (wrapper) wrapper.style.display = 'none';
   const preview = document.getElementById('imageOptimizerPreview');
@@ -3736,7 +3743,7 @@ function toggleImageOptimizer() {
   const checked = document.getElementById('imageOptimizerEnabled').checked;
   const uploadBtn = document.getElementById('uploadBtn');
   const settingsEl = document.getElementById('imageOptimizerSettings');
-  const fitCropRow = document.getElementById('imageFitCropRow');
+  const controlsRow = document.getElementById('imageControlsRow');
   const preview = document.getElementById('imageOptimizerPreview');
   const pathDisplay = document.getElementById('uploadPathDisplay');
 
@@ -3747,7 +3754,7 @@ function toggleImageOptimizer() {
     if (optsBox) optsBox.classList.add('violet');
     if (pathDisplay) pathDisplay.textContent = '.sleep/';
     if (sleepImageFiles.length === 1) {
-      if (fitCropRow && !sleepAspectExact) fitCropRow.style.display = 'block';
+      if (controlsRow && !sleepAspectExact) controlsRow.style.display = 'block';
       if (preview) renderSleepPreview();
     }
   } else {
@@ -3755,14 +3762,14 @@ function toggleImageOptimizer() {
     uploadBtn.classList.remove('optimize');
     if (optsBox) optsBox.classList.remove('violet');
     if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
-    if (fitCropRow) fitCropRow.style.display = 'none';
+    if (controlsRow) controlsRow.style.display = 'none';
     setImageResizeMode('fit');
   }
 }
 
 async function setupImageOptimizer(imageFiles) {
   sleepImageFiles = imageFiles;
-  const fitCropRow = document.getElementById('imageFitCropRow');
+  const controlsRow = document.getElementById('imageControlsRow');
   const preview = document.getElementById('imageOptimizerPreview');
   const wrapper = document.getElementById('sleepPreviewWrapper');
 
@@ -3783,10 +3790,10 @@ async function setupImageOptimizer(imageFiles) {
         const effH = rotated ? sleepOrigW : sleepOrigH;
         sleepAspectExact = Math.abs(effW / effH - DEFAULT_MAX_WIDTH / DEFAULT_MAX_HEIGHT) < 0.01;
         const optChecked = document.getElementById('imageOptimizerEnabled').checked;
-        fitCropRow.style.display = (optChecked && !sleepAspectExact) ? 'block' : 'none';
+        if (controlsRow) controlsRow.style.display = (optChecked && !sleepAspectExact) ? 'block' : 'none';
         if (sleepAspectExact) imageResizeMode = 'fit';
         document.querySelectorAll('.fit-crop-btn').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.value === 'fit');
+          btn.classList.toggle('active', btn.dataset.value === 'fit' || btn.dataset.value === 'white');
         });
         renderSleepPreview();
       };
@@ -3797,7 +3804,7 @@ async function setupImageOptimizer(imageFiles) {
     }
   } else {
     if (wrapper) wrapper.style.display = 'none';
-    if (fitCropRow) fitCropRow.style.display = 'none';
+    if (controlsRow) controlsRow.style.display = 'none';
     if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
   }
 }
@@ -3831,17 +3838,17 @@ function renderSleepPreview() {
   const effW = rotated ? sleepOrigH : sleepOrigW;
   const effH = rotated ? sleepOrigW : sleepOrigH;
 
-  const PW = 120, PH = 200;
+  const PW = 120, PH = Math.round(120 * DEFAULT_MAX_HEIGHT / DEFAULT_MAX_WIDTH);
   const c = document.createElement('canvas');
   c.width = PW; c.height = PH;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = sleepBgColor === 'black' ? '#000' : '#fff';
   ctx.fillRect(0, 0, PW, PH);
 
   const { scaledW, scaledH } = drawSleepImageOnCanvas(ctx, img, sleepOrigW, sleepOrigH, PW, PH, sleepTotalRotation);
 
   if (!sleepAspectExact && imageResizeMode === 'fit') {
-    ctx.fillStyle = 'rgba(100,100,100,0.3)';
+    ctx.fillStyle = sleepBgColor === 'black' ? 'rgba(0,0,0,0.3)' : 'rgba(100,100,100,0.3)';
     if (scaledW < PW) { ctx.fillRect(0, 0, (PW - scaledW) / 2, PH); ctx.fillRect(PW - (PW - scaledW) / 2, 0, (PW - scaledW) / 2, PH); }
     if (scaledH < PH) { ctx.fillRect(0, 0, PW, (PH - scaledH) / 2); ctx.fillRect(0, PH - (PH - scaledH) / 2, PW, (PH - scaledH) / 2); }
   }
@@ -3903,7 +3910,7 @@ async function processSleepImage(file) {
       const c = document.createElement('canvas');
       c.width = outW; c.height = outH;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = sleepBgColor === 'black' ? '#000' : '#fff';
       ctx.fillRect(0, 0, outW, outH);
       drawSleepImageOnCanvas(ctx, img, origW, origH, outW, outH, totalRotation);
 
@@ -5540,17 +5547,18 @@ async function uploadSleepImages(files) {
 
       let processedFile = await processSleepImage(file);
 
-      let baseName = processedFile.name.replace(/\.jpg$/i, '').toLowerCase();
-      if (existingBaseNames.has(baseName)) {
+      let baseName = processedFile.name.replace(/\.jpg$/i, '');
+      let baseNameLower = baseName.toLowerCase();
+      if (existingBaseNames.has(baseNameLower)) {
         let counter = 1;
-        while (existingBaseNames.has(`${baseName} (${counter})`)) counter++;
-        const newBase = `${baseName} (${counter})`;
-        const newName = newBase + '.jpg';
+        while (existingBaseNames.has(`${baseNameLower} (${counter})`)) counter++;
+        baseName = `${baseName} (${counter})`;
+        const newName = baseName + '.jpg';
         processedFile = new File([processedFile], newName, { type: 'image/jpeg' });
-        existingBaseNames.add(newBase);
+        existingBaseNames.add(baseNameLower);
         renames.push({ original: file.name, renamed: newName });
       } else {
-        existingBaseNames.add(baseName);
+        existingBaseNames.add(baseNameLower);
       }
 
       progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length})...`;
@@ -5785,11 +5793,6 @@ function uploadFile() {
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
   const imageOptimizerEnabled = document.getElementById('imageOptimizerEnabled').checked;
   const isSleepImageMode = sleepImageFiles.length > 0 && imageOptimizerEnabled;
-
-  if (files.length === 0) {
-    alert('Please select at least one file!');
-    return;
-  }
 
   if (isSleepImageMode) {
     uploadSleepImages(files);
@@ -6128,15 +6131,10 @@ function retryAllFailedUploads() {
   function createFolder() {
     const folderName = document.getElementById('folderName').value.trim();
 
-    if (!folderName) {
-      alert('Please enter a folder name!');
-      return;
-    }
-
     // Validate folder name
     const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(folderName);
     if (!validName) {
-      alert('Folder name cannot contain \" * : < > ? / \\ | and must not be . or ..');
+      showNotification('Folder name cannot contain " * : < > ? / \\ | and must not be . or ..', 'warning');
       return;
     }
 
@@ -6151,12 +6149,12 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to create folder: ' + xhr.responseText);
+        showNotification('Failed to create folder: ' + xhr.responseText, 'error');
       }
     };
 
     xhr.onerror = function() {
-      alert('Failed to create folder - network error');
+      showNotification('Failed to create folder - network error', 'error');
     };
 
     xhr.send(formData);
@@ -6181,7 +6179,19 @@ function retryAllFailedUploads() {
       const input = document.getElementById('renameNewName');
       input.focus();
       input.select();
+      validateRenameInput();
     }, 50);
+  }
+
+  function validateRenameInput() {
+    const input = document.getElementById('renameNewName');
+    const hiddenPath = document.getElementById('renameItemPath').value;
+    const isFolder = document.getElementById('renameIsFolder').value === '1';
+    const baseName = hiddenPath.includes('/') ? hiddenPath.split('/').pop() : hiddenPath;
+    const originalBase = isFolder ? baseName : (baseName.includes('.') ? baseName.substring(0, baseName.lastIndexOf('.')) : baseName);
+    const newName = input.value.trim();
+    const btn = document.getElementById('confirmRenameBtn');
+    btn.disabled = !newName || newName === originalBase;
   }
 
   function closeRenameModal() {
@@ -6193,12 +6203,8 @@ function retryAllFailedUploads() {
     const ext = document.getElementById('renameExtension').value;
     const newName = document.getElementById('renameNewName').value.trim() + ext;
 
-    if (!newName) {
-      alert('Please enter a new name.');
-      return;
-    }
     if (newName.includes('/') || newName.includes('\\')) {
-      alert('File name cannot include slashes.');
+      showNotification('File name cannot include slashes.', 'warning');
       return;
     }
 
@@ -6213,13 +6219,13 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to rename: ' + xhr.responseText);
+        showNotification('Failed to rename: ' + xhr.responseText, 'error');
       }
       closeRenameModal();
     };
 
     xhr.onerror = function() {
-      alert('Failed to rename - network error');
+      showNotification('Failed to rename - network error', 'error');
       closeRenameModal();
     };
 
@@ -6266,6 +6272,8 @@ function retryAllFailedUploads() {
         options.add('/' + file.name);
       }
     });
+    options.add('/.sleep');
+    options.add('/.crosspoint');
 
     if (currentPath !== '/') {
       const dirFiles = await fetchFolders(currentPath);
@@ -6282,16 +6290,43 @@ function retryAllFailedUploads() {
     const select = document.getElementById('moveDestPath');
     const prevValue = select.value;
     select.innerHTML = '';
-    Array.from(options).sort().forEach(path => {
+    const currentNormalized = currentPath === '/' ? '/' : currentPath;
+    const normalFolders = Array.from(options).filter(p => !p.startsWith('/.'));
+    const currentFolder = normalFolders.find(p => p === currentNormalized);
+    const otherFolders = normalFolders.filter(p => p !== currentNormalized);
+    const protectedFolders = Array.from(options).filter(p => p === '/.crosspoint' || p === '/.sleep');
+    if (currentFolder) {
+      const option = document.createElement('option');
+      option.value = currentFolder;
+      option.textContent = currentFolder + ' (current)';
+      option.disabled = true;
+      option.selected = true;
+      select.appendChild(option);
+    }
+    otherFolders.sort().forEach(path => {
       const option = document.createElement('option');
       option.value = path;
       option.textContent = path;
       select.appendChild(option);
     });
-    // Restore selection or default to current path
-    const defaultDest = currentPath === '/' ? '/' : currentPath;
-    select.value = prevValue || defaultDest;
-    if (!select.value) select.value = defaultDest;
+    if (protectedFolders.length > 0) {
+      const sep = document.createElement('option');
+      sep.disabled = true;
+      sep.textContent = '── System ──';
+      select.appendChild(sep);
+      protectedFolders.sort().forEach(path => {
+        const option = document.createElement('option');
+        option.value = path;
+        option.textContent = path;
+        select.appendChild(option);
+      });
+    }
+    select.value = prevValue;
+    if (!select.value || select.options[select.selectedIndex].disabled) {
+      for (let i = 0; i < select.options.length; i++) {
+        if (!select.options[i].disabled) { select.value = select.options[i].value; break; }
+      }
+    }
   }
 
   function openMoveModal(items) {
@@ -6313,15 +6348,21 @@ function retryAllFailedUploads() {
     const destPath = normalizePath(document.getElementById('moveDestPath').value);
 
     if (!destPath) {
-      alert('Please enter a destination folder.');
+      showNotification('Please enter a destination folder.', 'warning');
+      return;
+    }
+
+    if (destPath === currentPath) {
+      showNotification('File is already in the selected folder.', 'warning');
       return;
     }
 
     closeMoveModal();
+    let hasErrors = false;
 
     function moveNext(index) {
       if (index >= paths.length) {
-        window.location.reload();
+        if (!hasErrors) window.location.reload();
         return;
       }
       const formData = new FormData();
@@ -6332,12 +6373,14 @@ function retryAllFailedUploads() {
       xhr.open('POST', '/move', true);
       xhr.onload = function() {
         if (xhr.status !== 200) {
-          alert('Failed to move ' + paths[index] + ': ' + xhr.responseText);
+          hasErrors = true;
+          showNotification('Failed to move ' + paths[index] + ': ' + xhr.responseText, 'error');
         }
         moveNext(index + 1);
       };
       xhr.onerror = function() {
-        alert('Failed to move ' + paths[index] + ' - network error');
+        hasErrors = true;
+        showNotification('Failed to move ' + paths[index] + ' - network error', 'error');
         moveNext(index + 1);
       };
       xhr.send(formData);
