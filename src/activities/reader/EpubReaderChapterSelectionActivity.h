@@ -11,6 +11,7 @@ class EpubReaderChapterSelectionActivity final : public Activity {
   std::string epubPath;
   ButtonNavigator buttonNavigator;
   int currentSpineIndex = 0;
+  int currentTocIndex = 0;
   int selectorIndex = 0;
 
   // Number of items that fit on a page, derived from logical screen height.
@@ -23,11 +24,12 @@ class EpubReaderChapterSelectionActivity final : public Activity {
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                               const std::shared_ptr<Epub>& epub, const std::string& epubPath,
-                                              const int currentSpineIndex)
+                                              const int currentSpineIndex, const int currentTocIndex)
       : Activity("EpubReaderChapterSelection", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
-        currentSpineIndex(currentSpineIndex) {}
+        currentSpineIndex(currentSpineIndex),
+        currentTocIndex(currentTocIndex) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
