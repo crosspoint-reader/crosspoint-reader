@@ -306,6 +306,66 @@ static int cistrcmp(const char* a, const char* b) {
   return std::tolower(static_cast<unsigned char>(*a)) - std::tolower(static_cast<unsigned char>(*b));
 }
 
+bool Dictionary::binarySearchCspt(FsFile& cspt, const char* target, uint32_t idxFileSize, uint32_t* startByte,
+                                  uint32_t* endByte) {
+  // Read and validate header (12 bytes).
+  uint8_t hdr[CSPT_HEADER_SIZE];
+  cspt.seekSet(0);
+  if (cspt.read(hdr, CSPT_HEADER_SIZE) != static_cast<int>(CSPT_HEADER_SIZE)) return false;
+  if (memcmp(hdr, CSPT_MAGIC, 4) != 0 || hdr[4] != CSPT_VERSION) return false;
+
+  const uint8_t prefixLen = hdr[5];
+  uint16_t stride;
+  memcpy(&stride, hdr + 6, 2);  // LE
+  uint32_t entryCount;
+  memcpy(&entryCount, hdr + 8, 4);  // LE
+
+  if (entryCount == 0 || prefixLen == 0 || prefixLen > 128) {
+    *startByte = 0;
+    *endByte = idxFileSize;
+    return true;
+  }
+
+  const uint32_t entrySize = prefixLen + 4;
+
+  // Binary search: find last entry whose prefix <= target (case-insensitive).
+  uint32_t lo = 0, hi = entryCount - 1;
+  uint8_t entry[128 + 4];  // prefixLen capped at 128 above
+
+  while (lo < hi) {
+    uint32_t mid = lo + (hi - lo + 1) / 2;
+    cspt.seekSet(CSPT_HEADER_SIZE + mid * entrySize);
+    if (cspt.read(entry, entrySize) != static_cast<int>(entrySize)) return false;
+
+    // Null-terminate prefix for cistrcmp (prefix is already null-padded if shorter).
+    entry[prefixLen] = '\0';
+    if (cistrcmp(reinterpret_cast<const char*>(entry), target) > 0) {
+      hi = mid - 1;
+    } else {
+      lo = mid;
+    }
+  }
+
+  // Read the matched entry to get idxOffset.
+  cspt.seekSet(CSPT_HEADER_SIZE + lo * entrySize);
+  if (cspt.read(entry, entrySize) != static_cast<int>(entrySize)) return false;
+
+  uint32_t idxOffset;
+  memcpy(&idxOffset, entry + prefixLen, 4);  // LE
+  *startByte = idxOffset;
+
+  // End bound: read next entry's idxOffset, or use idxFileSize for last entry.
+  if (lo + 1 < entryCount) {
+    cspt.seekSet(CSPT_HEADER_SIZE + (lo + 1) * entrySize);
+    if (cspt.read(entry, entrySize) != static_cast<int>(entrySize)) return false;
+    memcpy(endByte, entry + prefixLen, 4);  // LE
+  } else {
+    *endByte = idxFileSize;
+  }
+
+  return true;
+}
+
 void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
                                 uint32_t* endByte) {
   const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());

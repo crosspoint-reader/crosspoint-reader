@@ -122,5 +122,10 @@ class Dictionary {
   static void findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
                              uint32_t* endByte);
 
+  // Binary search .idx.oft.cspt to find the scan range in .idx containing target.
+  // Returns true if .cspt was valid and bounds were set, false to fall back to .oft.
+  static bool binarySearchCspt(FsFile& cspt, const char* target, uint32_t idxFileSize, uint32_t* startByte,
+                                uint32_t* endByte);
+
   static int editDistance(const std::string& a, const std::string& b, int maxDist);
 };
