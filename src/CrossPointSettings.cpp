@@ -27,6 +27,48 @@ constexpr char SETTINGS_FILE_BIN[] = "/.crosspoint/settings.bin";
 constexpr char SETTINGS_FILE_JSON[] = "/.crosspoint/settings.json";
 constexpr char SETTINGS_FILE_BAK[] = "/.crosspoint/settings.bin.bak";
 
+// Legacy sleep screen mode enum values from binary settings
+enum LegacySLEEP_SCREEN_MODE {
+  LEGACY_DARK = 0,
+  LEGACY_LIGHT = 1,
+  LEGACY_CUSTOM = 2,
+  LEGACY_COVER = 3,
+  LEGACY_BLANK = 4,
+  LEGACY_COVER_CUSTOM = 5
+};
+enum LegacySLEEP_SCREEN_COVER_MODE { LEGACY_FIT = 0, LEGACY_CROP = 1 };
+
+// Convert legacy sleep screen settings to new unified format
+void migrateLegacySleepSettings(CrossPointSettings& settings, uint8_t legacyCoverMode) {
+  uint8_t legacyMode = settings.sleepScreen;
+
+  switch (legacyMode) {
+    case LegacySLEEP_SCREEN_MODE::LEGACY_DARK:
+    case LegacySLEEP_SCREEN_MODE::LEGACY_LIGHT:
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+      break;
+    case LegacySLEEP_SCREEN_MODE::LEGACY_CUSTOM:
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+      break;
+    case LegacySLEEP_SCREEN_MODE::LEGACY_COVER:
+      settings.sleepScreen = (legacyCoverMode == LegacySLEEP_SCREEN_COVER_MODE::LEGACY_CROP)
+                                 ? CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP
+                                 : CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT;
+      break;
+    case LegacySLEEP_SCREEN_MODE::LEGACY_BLANK:
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::BLANK;
+      break;
+    case LegacySLEEP_SCREEN_MODE::LEGACY_COVER_CUSTOM:
+      settings.sleepScreen = (legacyCoverMode == LegacySLEEP_SCREEN_COVER_MODE::LEGACY_CROP)
+                                 ? CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP
+                                 : CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT;
+      break;
+    default:
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+      break;
+  }
+}
+
 // Convert legacy front button layout into explicit logical->hardware mapping.
 void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
   switch (static_cast<CrossPointSettings::FRONT_BUTTON_LAYOUT>(settings.frontButtonLayout)) {
@@ -135,8 +177,9 @@ bool CrossPointSettings::loadFromBinaryFile() {
 
   uint8_t settingsRead = 0;
   bool frontButtonMappingRead = false;
+  uint8_t legacySleepScreenCoverMode = 0;
   do {
-    readAndValidate(inputFile, sleepScreen, SLEEP_SCREEN_MODE_COUNT);
+    serialization::readPod(inputFile, sleepScreen);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, extraParagraphSpacing);
     if (++settingsRead >= fileSettingsCount) break;
@@ -164,7 +207,7 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, screenMargin);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, sleepScreenCoverMode, SLEEP_SCREEN_COVER_MODE_COUNT);
+    readAndValidate(inputFile, legacySleepScreenCoverMode, 2);  // legacy: FIT=0, CROP=1
     if (++settingsRead >= fileSettingsCount) break;
     {
       std::string urlStr;
@@ -195,7 +238,7 @@ bool CrossPointSettings::loadFromBinaryFile() {
       opdsPassword[sizeof(opdsPassword) - 1] = '\0';
     }
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, sleepScreenCoverFilter, SLEEP_SCREEN_COVER_FILTER_COUNT);
+    readAndValidate(inputFile, sleepScreenFilter, SLEEP_SCREEN_FILTER_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, uiTheme);
     if (++settingsRead >= fileSettingsCount) break;
@@ -213,6 +256,8 @@ bool CrossPointSettings::loadFromBinaryFile() {
     serialization::readPod(inputFile, embeddedStyle);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
+
+  migrateLegacySleepSettings(*this, legacySleepScreenCoverMode);
 
   if (frontButtonMappingRead) {
     CrossPointSettings::validateFrontButtonMapping(*this);

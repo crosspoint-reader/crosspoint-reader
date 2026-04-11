@@ -64,6 +64,36 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
   }
 }
 
+// Convert legacy sleep screen settings (pre-unification: 6 modes + separate cover mode).
+// Old enum: DARK=0, LIGHT=1, CUSTOM=2, COVER=3, BLANK=4, COVER_CUSTOM=5
+// Old cover mode: FIT=0, CROP=1
+// New enum: LOGO=0, CUSTOM=1, COVER_FIT=2, COVER_CROP=3, BLANK=4
+void applyLegacySleepScreenSettings(CrossPointSettings& settings, uint8_t oldMode, uint8_t oldCoverMode) {
+  switch (oldMode) {
+    case 0:  // DARK
+    case 1:  // LIGHT
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+      break;
+    case 2:  // CUSTOM
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+      break;
+    case 3:  // COVER
+      settings.sleepScreen = (oldCoverMode == 1) ? CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP
+                                                 : CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT;
+      break;
+    case 4:  // BLANK
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::BLANK;
+      break;
+    case 5:  // COVER_CUSTOM
+      settings.sleepScreen = (oldCoverMode == 1) ? CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP
+                                                 : CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT;
+      break;
+    default:
+      settings.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+      break;
+  }
+}
+
 // ---- CrossPointState ----
 
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
@@ -199,6 +229,17 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)S::FRONT_HW_RIGHT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_RIGHT);
   CrossPointSettings::validateFrontButtonMapping(s);
+
+  // Legacy migration: if old key "sleepScreenCoverMode" exists, or sleepScreen value is out of new enum range,
+  // this is a pre-unification settings file.
+  if (!doc["sleepScreenCoverMode"].isNull() || !doc["sleepScreen"].isNull() ||
+      s.sleepScreen >= CrossPointSettings::SLEEP_SCREEN_MODE::SLEEP_SCREEN_MODE_COUNT) {
+    uint8_t oldSleepScreen =
+        doc["sleepScreen"] | doc["sleepScreenMode"] | (uint8_t)CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+    uint8_t oldCoverMode = doc["sleepScreenCoverMode"] | (uint8_t)0;
+    applyLegacySleepScreenSettings(s, oldSleepScreen, oldCoverMode);
+    if (needsResave) *needsResave = true;
+  }
 
   LOG_DBG("CPS", "Settings loaded from file");
 
