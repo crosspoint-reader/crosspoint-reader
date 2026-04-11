@@ -333,6 +333,20 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       });
 
   if (result == HttpDownloader::OK) {
+    FsFile downloadedFile;
+    if (!Storage.openFileForRead("OPDS", filename, downloadedFile) || downloadedFile.size() == 0) {
+      LOG_ERR("OPDS", "Downloaded file is empty or unreadable: %s", filename.c_str());
+      if (downloadedFile) {
+        downloadedFile.close();
+      }
+      Storage.remove(filename.c_str());
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_DOWNLOAD_FAILED);
+      requestUpdate();
+      return;
+    }
+    downloadedFile.close();
+
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
 
     // Invalidate any existing cache for this file to prevent stale metadata issues

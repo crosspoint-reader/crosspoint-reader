@@ -179,12 +179,6 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return FILE_ERROR;
   }
 
-  if (contentLength == 0 && downloaded == 0) {
-    LOG_ERR("HTTP", "Download failed: no data received");
-    Storage.remove(destPath.c_str());
-    return HTTP_ERROR;
-  }
-
   // Verify download size if known
   if (contentLength > 0 && downloaded != contentLength) {
     LOG_ERR("HTTP", "Size mismatch: got %zu, expected %zu", downloaded, contentLength);
