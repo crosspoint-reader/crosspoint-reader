@@ -13,6 +13,7 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <memory>
 #include <new>
 
 #include "../reader/EpubReaderActivity.h"
@@ -47,9 +48,9 @@ struct PngOverlayCtx {
 
 // PNGdec file I/O callbacks — mirror the pattern in PngToFramebufferConverter.cpp.
 void* pngSleepOpen(const char* filename, int32_t* size) {
-  FsFile* f = new FsFile();
+  FsFile* f = new FsFile();  // NOLINT(cppcoreguidelines-owning-memory) — ownership transferred via void* to PNGdec callbacks
   if (!Storage.openFileForRead("SLP", std::string(filename), *f)) {
-    delete f;
+    delete f;  // NOLINT(cppcoreguidelines-owning-memory)
     return nullptr;
   }
   *size = f->size();
@@ -59,7 +60,7 @@ void pngSleepClose(void* handle) {
   FsFile* f = reinterpret_cast<FsFile*>(handle);
   if (f) {
     f->close();
-    delete f;
+    delete f;  // NOLINT(cppcoreguidelines-owning-memory)
   }
 }
 int32_t pngSleepRead(PNGFILE* pFile, uint8_t* pBuf, int32_t len) {
@@ -869,13 +870,12 @@ void SleepActivity::renderOverlaySleepScreen() const {
       LOG_ERR("SLP", "Not enough heap for PNG overlay decoder");
       return false;
     }
-    PNG* png = new (std::nothrow) PNG();
+    std::unique_ptr<PNG> png(new (std::nothrow) PNG());
     if (!png) return false;
 
     int rc = png->open(filename.c_str(), pngSleepOpen, pngSleepClose, pngSleepRead, pngSleepSeek, pngOverlayDraw);
     if (rc != PNG_SUCCESS) {
       LOG_DBG("SLP", "PNG open failed: %s (%d)", filename.c_str(), rc);
-      delete png;
       return false;
     }
 
@@ -905,7 +905,6 @@ void SleepActivity::renderOverlaySleepScreen() const {
 
     rc = png->decode(&ctx, 0);
     png->close();
-    delete png;
     return rc == PNG_SUCCESS;
   };
 

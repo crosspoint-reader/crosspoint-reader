@@ -8,6 +8,7 @@
 #include <Logging.h>
 
 #include <cstdlib>
+#include <memory>
 #include <new>
 
 #include "DirectPixelWriter.h"
@@ -43,21 +44,13 @@ struct JpegContext {
   // See PngContext for the rationale: monochromeOutput requests a 1-bit Atkinson dither
   // emitting only 0/3 so the BW DirectPixelWriter (`pixelValue < 3` rule) maps cleanly.
   int oneBitDitherRow{-1};
-  Atkinson1BitDitherer* atkinson1BitDitherer{nullptr};
+  std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
   int currentDitherRow{-1};
-  AtkinsonDitherer* atkinsonDitherer{nullptr};
-  DiffusedBayerDitherer* diffusedBayerDitherer{nullptr};
+  std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
+  std::unique_ptr<DiffusedBayerDitherer> diffusedBayerDitherer;
 #endif
-
-  ~JpegContext() {
-    delete atkinson1BitDitherer;
-#ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-    delete atkinsonDitherer;
-    delete diffusedBayerDitherer;
-#endif
-  }
 };
 
 // Advance the 1-bit Atkinson ditherer to the requested destination row.
@@ -136,9 +129,9 @@ uint8_t ditherGray(JpegContext& ctx, uint8_t gray, int localX, int outX, int out
 // File I/O callbacks use pFile->fHandle to access the FsFile*,
 // avoiding the need for global file state.
 void* jpegOpen(const char* filename, int32_t* size) {
-  FsFile* f = new FsFile();
+  FsFile* f = new FsFile();  // NOLINT(cppcoreguidelines-owning-memory) — ownership transferred via void* to JPEGDEC callbacks
   if (!Storage.openFileForRead("JPG", std::string(filename), *f)) {
-    delete f;
+    delete f;  // NOLINT(cppcoreguidelines-owning-memory)
     return nullptr;
   }
   *size = f->size();
@@ -149,7 +142,7 @@ void jpegClose(void* handle) {
   FsFile* f = reinterpret_cast<FsFile*>(handle);
   if (f) {
     f->close();
-    delete f;
+    delete f;  // NOLINT(cppcoreguidelines-owning-memory)
   }
 }
 
@@ -413,7 +406,7 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
     return false;
   }
 
-  JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
+  std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
   if (!jpeg) {
     LOG_ERR("JPG", "Failed to allocate JPEG decoder for dimensions");
     return false;
@@ -422,7 +415,6 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, nullptr);
   if (rc != 1) {
     LOG_ERR("JPG", "Failed to open JPEG for dimensions (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
-    delete jpeg;
     return false;
   }
 
@@ -431,7 +423,6 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   LOG_DBG("JPG", "Image dimensions: %dx%d", out.width, out.height);
 
   jpeg->close();
-  delete jpeg;
   return true;
 }
 
@@ -445,7 +436,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
+  std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
   if (!jpeg) {
     LOG_ERR("JPG", "Failed to allocate JPEG decoder");
     return false;
@@ -460,7 +451,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegDrawCallback);
   if (rc != 1) {
     LOG_ERR("JPG", "Failed to open JPEG (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
-    delete jpeg;
     return false;
   }
 
@@ -470,13 +460,11 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   if (srcWidth <= 0 || srcHeight <= 0) {
     LOG_ERR("JPG", "Invalid JPEG dimensions: %dx%d", srcWidth, srcHeight);
     jpeg->close();
-    delete jpeg;
     return false;
   }
 
   if (!validateImageDimensions(srcWidth, srcHeight, "JPEG")) {
     jpeg->close();
-    delete jpeg;
     return false;
   }
 
@@ -543,7 +531,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   // See PngToFramebufferConverter for rationale: BW-only display needs a 1-bit
   // dither so mid-grays don't collapse to black under DirectPixelWriter's `< 3` rule.
   if (config.monochromeOutput) {
-    ctx.atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(destWidth);
+    ctx.atkinson1BitDitherer.reset(new (std::nothrow) Atkinson1BitDitherer(destWidth));
     if (!ctx.atkinson1BitDitherer) {
       LOG_ERR("JPG", "Failed to allocate 1-bit Atkinson ditherer, falling back to 4-level dither");
     }
@@ -553,13 +541,13 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
     switch (config.ditherMode) {
       case ImageDitherMode::Atkinson:
-        ctx.atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(destWidth);
+        ctx.atkinsonDitherer.reset(new (std::nothrow) AtkinsonDitherer(destWidth));
         if (!ctx.atkinsonDitherer) {
           LOG_ERR("JPG", "Failed to allocate Atkinson ditherer, falling back to Bayer");
         }
         break;
       case ImageDitherMode::DiffusedBayer:
-        ctx.diffusedBayerDitherer = new (std::nothrow) DiffusedBayerDitherer(destWidth);
+        ctx.diffusedBayerDitherer.reset(new (std::nothrow) DiffusedBayerDitherer(destWidth));
         if (!ctx.diffusedBayerDitherer) {
           LOG_ERR("JPG", "Failed to allocate diffused Bayer ditherer, falling back to Bayer");
         }
@@ -579,12 +567,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   if (rc != 1) {
     LOG_ERR("JPG", "Decode failed (rc=%d, lastError=%d)", rc, jpeg->getLastError());
     jpeg->close();
-    delete jpeg;
     return false;
   }
 
   jpeg->close();
-  delete jpeg;
   LOG_DBG("JPG", "JPEG decoding complete - render time: %lu ms", decodeTime);
 
   // Write cache file if caching was enabled
