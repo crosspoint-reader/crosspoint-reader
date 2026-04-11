@@ -33,6 +33,8 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
                         {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED}, "uiTheme",
                         StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_FILE_BROWSER_VIEW, &CrossPointSettings::fileBrowserViewMode,
+                        {StrId::STR_VIEW_LIST, StrId::STR_VIEW_COVERS}, "fileBrowserViewMode", StrId::STR_CAT_DISPLAY),
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                           StrId::STR_CAT_DISPLAY),
 

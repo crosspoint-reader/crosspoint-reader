@@ -1,23 +1,24 @@
 """
-PlatformIO pre-build script: patch JPEGDEC for MCU_SKIP wild pointer crash.
+PlatformIO pre-build script: patch JPEGDEC library for progressive JPEG support.
 
-Problem:
-  JPEGDecodeMCU_P computes pMCU = &sMCUs[iMCU & 0xffffff].  When iMCU is
-  MCU_SKIP (-8), the bitmask produces index 0xFFFFF8 (16 777 208), creating a
-  pointer ~33 MB past the 392-entry sMCUs array.  If the progressive JPEG's
-  first scan includes AC coefficients (iScanEnd > 0), the AC decode loop writes
-  through this wild pointer and crashes with a store-access fault.
+Two patches are applied:
 
-  Upstream commit 8628297 guarded the DC coefficient write (pMCU[0]) but not the
-  AC coefficient writes at indices 1-63.
+1. JPEGDecodeMCU_P: Guard pMCU writes against MCU_SKIP (-8) by redirecting to a safe buffer.
+   Upstream commit 8628297 guarded the DC coefficient write (pMCU[0]) but not the
+   AC coefficient writes at indices 1-63. Redirecting pMCU to sMCUs[0] when MCU_SKIP
+   is active prevents wild pointer crashes while remaining safe as sMCUs[0] is
+   already guarded for DC writes.
 
-Fix:
-  Redirect pMCU to sMCUs[0] when MCU_SKIP is active.  Writes to sMCUs[1..63]
-  are harmless: for JPEG_SCALE_EIGHTH only sMCUs[0] is read for output, and
-  the DC write at sMCUs[0] is already guarded by the existing `if (iMCU >= 0)`
-  check.
+2. JPEGParseInfo: Force grayscale for non-interleaved progressive JPEGs.
+   If a progressive JPEG contains a luminance-only scan (Y) but the header 
+   defined color (YCrCb), JPEGDEC fails when trying to decode missing chroma
+   components. Forcing ucSubSample=0 (grayscale) avoids this.
 
-Applied idempotently — safe to run on every build.
+Note: Previous patches for AC Huffman table construction and 1/8 scale forcing
+for progressive mode have been removed as they are now handled upstream in
+JPEGDEC v1.8.x.
+
+All patches are applied idempotently so it is safe to run on every build.
 """
 
 Import("env")
@@ -25,6 +26,7 @@ import os
 
 
 def patch_jpegdec(env):
+    # Find the JPEGDEC library in libdeps
     libdeps_dir = os.path.join(env["PROJECT_DIR"], ".pio", "libdeps")
     if not os.path.isdir(libdeps_dir):
         return
@@ -32,6 +34,7 @@ def patch_jpegdec(env):
         jpeg_inl = os.path.join(libdeps_dir, env_dir, "JPEGDEC", "src", "jpeg.inl")
         if os.path.isfile(jpeg_inl):
             _apply_mcu_skip_pointer_fix(jpeg_inl)
+            _apply_grayscale_patch(jpeg_inl)
 
 
 def _apply_mcu_skip_pointer_fix(filepath):
@@ -64,5 +67,35 @@ def _apply_mcu_skip_pointer_fix(filepath):
     print("Patched JPEGDEC: safe pMCU for MCU_SKIP in JPEGDecodeMCU_P: %s" % filepath)
 
 
-# Run immediately at script import time (before compilation).
+def _apply_grayscale_patch(filepath):
+    MARKER = "// CrossPoint patch: force grayscale for non-interleaved progressive"
+    with open(filepath, "r") as f:
+        content = f.read()
+
+    if MARKER in content:
+        return
+
+    OLD = """\
+            JPEGGetSOS(pPage, &iOffset); // get Start-Of-Scan info for decoding
+//        }"""
+
+    NEW = """\
+            JPEGGetSOS(pPage, &iOffset); // get Start-Of-Scan info for decoding
+//        }
+        """ + MARKER + """
+        if (pPage->ucMode == 0xc2 && pPage->ucComponentsInScan == 1) {
+            pPage->ucSubSample = 0; // Treat non-interleaved scan as grayscale
+        }"""
+
+    if OLD not in content:
+        print("WARNING: JPEGDEC grayscale patch target not found in %s" % filepath)
+        return
+
+    content = content.replace(OLD, NEW, 1)
+    with open(filepath, "w") as f:
+        f.write(content)
+    print("Patched JPEGDEC: force grayscale for non-interleaved progressive: %s" % filepath)
+
+
+# Apply patches immediately when this pre: script runs, before compilation starts.
 patch_jpegdec(env)

@@ -41,7 +41,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .keyboardVerticalOffset = -7,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 6};
+                                 .keyboardKeyCornerRadius = 6,
+                                 .coverListItemsPerPage = 3,
+                                 .coverListSpacing = 8};
 }
 
 class LyraTheme : public BaseTheme {
@@ -66,6 +68,10 @@ class LyraTheme : public BaseTheme {
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;
+  void drawCoverList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                     const std::function<std::string(int index)>& rowTitle,
+                     const std::function<std::string(int index)>& rowAuthor,
+                     const std::function<std::string(int index)>& rowPath) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
@@ -73,4 +79,5 @@ class LyraTheme : public BaseTheme {
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
   bool showsFileIcons() const override { return true; }
+  int getCoverListPadding() const override { return 6; }
 };

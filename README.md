@@ -31,7 +31,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] File explorer with file picker
   - [x] Basic EPUB picker from root directory
   - [x] Support nested folders
-  - [ ] EPUB picker with cover art
+  - [X] EPUB picker with cover art
 - [x] Custom sleep screen
   - [x] Cover sleep screen
 - [x] Wifi book upload
