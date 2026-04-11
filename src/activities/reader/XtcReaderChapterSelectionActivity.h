@@ -11,6 +11,7 @@ class XtcReaderChapterSelectionActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   uint32_t currentPage = 0;
   int selectorIndex = 0;
+  bool upDownChordLatched = false;
 
   int getPageItems() const;
   int findChapterIndexForPage(uint32_t page) const;

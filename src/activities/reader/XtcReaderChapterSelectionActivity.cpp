@@ -41,6 +41,8 @@ int XtcReaderChapterSelectionActivity::findChapterIndexForPage(uint32_t page) co
 void XtcReaderChapterSelectionActivity::onEnter() {
   Activity::onEnter();
 
+  upDownChordLatched = false;
+
   if (!xtc) {
     return;
   }
@@ -69,25 +71,32 @@ void XtcReaderChapterSelectionActivity::loop() {
     finish();
   }
 
-  buttonNavigator.onNextRelease([this, totalItems] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectorIndex = ButtonNavigator::midpointIndex(totalItems);
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPreviousRelease([this, totalItems] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNextRelease([this, totalItems] {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+      requestUpdate();
+    });
 
-  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
+    buttonNavigator.onPreviousRelease([this, totalItems] {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
+      requestUpdate();
+    });
 
-  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
+    buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+      selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
+      requestUpdate();
+    });
+
+    buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+      selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
+      requestUpdate();
+    });
+  }
 }
 
 void XtcReaderChapterSelectionActivity::render(RenderLock&&) {

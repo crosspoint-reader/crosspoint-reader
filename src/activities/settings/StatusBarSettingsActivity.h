@@ -21,6 +21,7 @@ class StatusBarSettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   int selectedIndex = 0;
+  bool upDownChordLatched = false;
 
   void handleSelection();
 };

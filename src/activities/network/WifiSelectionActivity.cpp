@@ -35,7 +35,6 @@ void WifiSelectionActivity::onEnter() {
   savePromptSelection = 0;
   forgetPromptSelection = 0;
   autoConnecting = false;
-
   // Cache MAC address for display
   uint8_t mac[6];
   WiFi.macAddress(mac);
@@ -438,7 +437,6 @@ void WifiSelectionActivity::loop() {
       }
     }
 
-    // Handle navigation
     buttonNavigator.onNext([this] {
       selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
       requestUpdate();

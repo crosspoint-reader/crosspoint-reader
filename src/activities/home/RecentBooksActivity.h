@@ -14,6 +14,7 @@ class RecentBooksActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
+  bool upDownChordLatched = false;
 
   // Recent tab state
   std::vector<RecentBook> recentBooks;

@@ -28,6 +28,7 @@ void OpdsBookBrowserActivity::onEnter() {
   navigationHistory.clear();
   currentPath = "";  // Root path - user provides full URL in settings
   selectorIndex = 0;
+  upDownChordLatched = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
   requestUpdate();
@@ -113,25 +114,32 @@ void OpdsBookBrowserActivity::loop() {
 
     // Handle navigation
     if (!entries.empty()) {
-      buttonNavigator.onNextRelease([this] {
-        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
+      if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+        selectorIndex = ButtonNavigator::midpointIndex(static_cast<int>(entries.size()));
         requestUpdate();
-      });
+      }
 
-      buttonNavigator.onPreviousRelease([this] {
-        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
-        requestUpdate();
-      });
+      if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+        buttonNavigator.onNextRelease([this] {
+          selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
+          requestUpdate();
+        });
 
-      buttonNavigator.onNextContinuous([this] {
-        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
+        buttonNavigator.onPreviousRelease([this] {
+          selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
+          requestUpdate();
+        });
 
-      buttonNavigator.onPreviousContinuous([this] {
-        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
+        buttonNavigator.onNextContinuous([this] {
+          selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+          requestUpdate();
+        });
+
+        buttonNavigator.onPreviousContinuous([this] {
+          selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+          requestUpdate();
+        });
+      }
     }
   }
 }

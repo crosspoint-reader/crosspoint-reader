@@ -2,6 +2,11 @@
 
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
+namespace {
+bool s_midpointChordReleaseGuard = false;
+bool s_suppressUntilChordRelease = false;
+}  // namespace
+
 void ButtonNavigator::onNext(const Callback& callback) {
   onNextPress(callback);
   onNextContinuous(callback);
@@ -85,6 +90,57 @@ int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems)
 
   // Calculate the previous index with wrap-around
   return (currentIndex + totalItems - 1) % totalItems;
+}
+
+int ButtonNavigator::midpointIndex(const int totalItems) {
+  if (totalItems <= 0) return 0;
+  return totalItems / 2;
+}
+
+bool ButtonNavigator::isMidpointChordHeld(const MappedInputManager& in) {
+  using B = MappedInputManager::Button;
+  const bool side = in.isPressed(B::Up) || in.isPressed(B::Down);
+  const bool front = in.isPressed(B::Left) || in.isPressed(B::Right);
+  return side && front;
+}
+
+bool ButtonNavigator::shouldSuppressListNavForMidpointChord(const MappedInputManager& in) {
+  using B = MappedInputManager::Button;
+  if (isMidpointChordHeld(in)) return true;
+
+  if (!s_midpointChordReleaseGuard) return false;
+
+  const bool anyDirNav =
+      in.isPressed(B::Up) || in.isPressed(B::Down) || in.isPressed(B::Left) || in.isPressed(B::Right);
+  if (!anyDirNav) {
+    s_midpointChordReleaseGuard = false;
+    return true;
+  }
+  return true;
+}
+
+void ButtonNavigator::clearMidpointChordReleaseGuard() {
+  s_midpointChordReleaseGuard = false;
+  s_suppressUntilChordRelease = true;
+}
+
+bool ButtonNavigator::beginUpDownChord(const MappedInputManager& in, bool& chordLatched) {
+  const bool chord = isMidpointChordHeld(in);
+
+  if (s_suppressUntilChordRelease) {
+    if (!chord) s_suppressUntilChordRelease = false;
+    chordLatched = false;
+    return false;
+  }
+
+  if (!chord) {
+    chordLatched = false;
+    return false;
+  }
+  if (chordLatched) return false;
+  chordLatched = true;
+  s_midpointChordReleaseGuard = true;
+  return true;
 }
 
 int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {

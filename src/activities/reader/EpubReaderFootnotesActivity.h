@@ -25,4 +25,5 @@ class EpubReaderFootnotesActivity final : public Activity {
   int selectedIndex = 0;
   int scrollOffset = 0;
   ButtonNavigator buttonNavigator;
+  bool upDownChordLatched = false;
 };

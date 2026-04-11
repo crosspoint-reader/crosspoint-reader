@@ -22,6 +22,7 @@ void KOReaderSettingsActivity::onEnter() {
   Activity::onEnter();
 
   selectedIndex = 0;
+  upDownChordLatched = false;
   requestUpdate();
 }
 
@@ -38,16 +39,22 @@ void KOReaderSettingsActivity::loop() {
     return;
   }
 
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+  if (ButtonNavigator::beginUpDownChord(mappedInput, upDownChordLatched)) {
+    selectedIndex = static_cast<size_t>(ButtonNavigator::midpointIndex(MENU_ITEMS));
     requestUpdate();
-  });
+  }
 
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
-    requestUpdate();
-  });
+  if (!ButtonNavigator::shouldSuppressListNavForMidpointChord(mappedInput)) {
+    buttonNavigator.onNext([this] {
+      selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+      requestUpdate();
+    });
+
+    buttonNavigator.onPrevious([this] {
+      selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+      requestUpdate();
+    });
+  }
 }
 
 void KOReaderSettingsActivity::handleSelection() {

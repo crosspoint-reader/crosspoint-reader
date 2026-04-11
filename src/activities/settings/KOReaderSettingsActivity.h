@@ -21,6 +21,7 @@ class KOReaderSettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectedIndex = 0;
+  bool upDownChordLatched = false;
 
   void handleSelection();
 };

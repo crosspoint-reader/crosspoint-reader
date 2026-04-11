@@ -40,6 +40,11 @@ class ButtonNavigator final {
 
   [[nodiscard]] static int nextIndex(int currentIndex, int totalItems);
   [[nodiscard]] static int previousIndex(int currentIndex, int totalItems);
+  [[nodiscard]] static int midpointIndex(int totalItems);
+  [[nodiscard]] static bool isMidpointChordHeld(const MappedInputManager& in);
+  [[nodiscard]] static bool shouldSuppressListNavForMidpointChord(const MappedInputManager& in);
+  static void clearMidpointChordReleaseGuard();
+  [[nodiscard]] static bool beginUpDownChord(const MappedInputManager& in, bool& chordLatched);
 
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);

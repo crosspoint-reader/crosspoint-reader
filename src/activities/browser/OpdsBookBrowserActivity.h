@@ -39,6 +39,7 @@ class OpdsBookBrowserActivity final : public Activity {
   std::vector<std::string> navigationHistory;  // Stack of previous feed paths for back navigation
   std::string currentPath;                     // Current feed path being displayed
   int selectorIndex = 0;
+  bool upDownChordLatched = false;
   std::string errorMessage;
   std::string statusMessage;
   size_t downloadProgress = 0;
