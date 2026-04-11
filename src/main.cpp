@@ -353,7 +353,11 @@ void loop() {
       screenshotButtonsReleased = false;
       {
         RenderLock lock;
-        ScreenshotUtil::takeScreenshot(renderer);
+        if (SETTINGS.powerDownCombo == CrossPointSettings::FORCE_REFRESH) {
+          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        } else {
+          ScreenshotUtil::takeScreenshot(renderer);
+        }
       }
     }
     return;
