@@ -34,7 +34,7 @@ class DictPrepareActivity final : public Activity {
  private:
   enum class State { CONFIRM, PROCESSING, SUCCESS, FAILED, CANCELLED };
 
-  enum class StepType { EXTRACT_DICT, EXTRACT_SYN, GEN_IDX, GEN_SYN };
+  enum class StepType { EXTRACT_DICT, EXTRACT_SYN, GEN_IDX, GEN_SYN, GEN_CSPT };
 
   enum class StepStatus { PENDING, IN_PROGRESS, COMPLETE, FAILED };
 
@@ -54,7 +54,7 @@ class DictPrepareActivity final : public Activity {
   // Checked by the FreeRTOS task at each vTaskDelay(1) yield point.
   volatile bool cancelRequested = false;
 
-  Step steps[4];
+  Step steps[5];
   int stepCount = 0;
   volatile int currentStep = 0;
 
@@ -75,6 +75,10 @@ class DictPrepareActivity final : public Activity {
   // Scan srcPath and write an .oft offset file to oftPath.
   // skipPerEntry: bytes after the null-terminated word to skip (8 for .idx, 4 for .syn).
   bool generateOft(const char* srcPath, const char* oftPath, uint8_t skipPerEntry, Step& step);
+
+  // Read .idx.oft page boundaries, sample headword prefixes from .idx at stride 16,
+  // and write a .idx.oft.cspt file for optimized lookup.
+  bool generateCspt(const char* idxPath, const char* oftPath, const char* csptPath, Step& step);
 
   static const char* stepLabel(StepType type);
 };
