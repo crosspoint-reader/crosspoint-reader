@@ -234,7 +234,21 @@ def sanitize_identifier(name: str) -> str:
     return sanitized
 
 
-project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def get_project_dir() -> str:
+    try:
+        Import("env")  # type: ignore[name-defined]
+        return env["PROJECT_DIR"]
+    except NameError:
+        if "__file__" in globals():
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+        elif sys.argv and sys.argv[0]:
+            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        else:
+            script_dir = os.getcwd()
+        return os.path.dirname(script_dir)
+
+
+project_dir = get_project_dir()
 version_string = get_version_string(project_dir)
 PLACEHOLDERS["%%VERSION%%"] = version_string
 
