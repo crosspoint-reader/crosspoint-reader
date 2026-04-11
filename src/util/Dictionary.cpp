@@ -445,10 +445,19 @@ DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbac
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  FsFile oft;
-  if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
-    findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
-    oft.close();
+  // Try .cspt first (CrossPoint optimized index), fall back to .oft.
+  bool boundsResolved = false;
+  FsFile cspt;
+  if (Storage.openFileForRead("DICT", dp.idxOftCspt().c_str(), cspt)) {
+    boundsResolved = binarySearchCspt(cspt, word.c_str(), idxFileSize, &startByte, &endByte);
+    cspt.close();
+  }
+  if (!boundsResolved) {
+    FsFile oft;
+    if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
+      findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
+      oft.close();
+    }
   }
 
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 70);
