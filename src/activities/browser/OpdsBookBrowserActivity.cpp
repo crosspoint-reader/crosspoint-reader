@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
+#include <Xtc.h>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -316,12 +317,25 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL
   std::string downloadUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, book.href);
 
-  // Create sanitized filename: "Title - Author.epub" or just "Title.epub" if no author
+  // Determine file extension from acquisition type
+  const char* ext = ".epub";
+  switch (book.acquisitionType) {
+    case OpdsAcquisitionType::XTC:
+      ext = ".xtc";
+      break;
+    case OpdsAcquisitionType::XTCH:
+      ext = ".xtch";
+      break;
+    default:
+      break;
+  }
+
+  // Create sanitized filename: "Title - Author.ext" or just "Title.ext" if no author
   std::string baseName = book.title;
   if (!book.author.empty()) {
     baseName += " - " + book.author;
   }
-  std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + ".epub";
+  std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + ext;
 
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
@@ -335,10 +349,20 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   if (result == HttpDownloader::OK) {
     LOG_DBG("OPDS", "Download complete: %s", filename.c_str());
 
-    // Invalidate any existing cache for this file to prevent stale metadata issues
-    Epub epub(filename, "/.crosspoint");
-    epub.clearCache();
-    LOG_DBG("OPDS", "Cleared cache for: %s", filename.c_str());
+    // Invalidate cache for the corresponding format
+    bool cacheCleared;
+    if (book.acquisitionType == OpdsAcquisitionType::XTC || book.acquisitionType == OpdsAcquisitionType::XTCH) {
+      Xtc xtc(filename, "/.crosspoint");
+      cacheCleared = xtc.clearCache();
+    } else {
+      Epub epub(filename, "/.crosspoint");
+      cacheCleared = epub.clearCache();
+    }
+    if (!cacheCleared) {
+      LOG_ERR("OPDS", "Failed to clear cache for: %s", filename.c_str());
+    } else {
+      LOG_DBG("OPDS", "Cleared cache for: %s", filename.c_str());
+    }
 
     state = BrowserState::BROWSING;
     requestUpdate();

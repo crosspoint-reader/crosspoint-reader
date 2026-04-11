@@ -106,6 +106,19 @@ const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
   return nullptr;
 }
 
+static bool parseAcquisitionType(const char* mime, OpdsAcquisitionType& out) {
+  if (strcmp(mime, "application/epub+zip") == 0) {
+    out = OpdsAcquisitionType::EPUB;
+  } else if (strcmp(mime, "application/x-xtc+zip") == 0) {
+    out = OpdsAcquisitionType::XTC;
+  } else if (strcmp(mime, "application/x-xtch+zip") == 0) {
+    out = OpdsAcquisitionType::XTCH;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<OpdsParser*>(userData);
 
@@ -152,9 +165,9 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     const char* href = findAttribute(atts, "href");
 
     if (href) {
-      // Check for acquisition link with epub type (this is a downloadable book)
+      // Check for acquisition link with a supported book type
       if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-          strcmp(type, "application/epub+zip") == 0) {
+          parseAcquisitionType(type, self->currentEntry.acquisitionType)) {
         self->currentEntry.type = OpdsEntryType::BOOK;
         self->currentEntry.href = href;
       }
