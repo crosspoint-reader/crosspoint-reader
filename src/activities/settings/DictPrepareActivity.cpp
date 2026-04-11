@@ -492,9 +492,7 @@ bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath,
   const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
 
   // Compute number of OFT page entries (excluding header and sentinel).
-  const uint32_t oftEntryCount = (oftFileSize > OFT_HEADER_SIZE + 4)
-                                     ? (oftFileSize - OFT_HEADER_SIZE - 4) / 4
-                                     : 0;
+  const uint32_t oftEntryCount = (oftFileSize > OFT_HEADER_SIZE + 4) ? (oftFileSize - OFT_HEADER_SIZE - 4) / 4 : 0;
   // Total .cspt entries: 2 per .oft page (stride 16 within stride-32 pages), plus page 0.
   // Page 0 (implicit in .oft, starts at byte 0) contributes 2 sub-entries.
   // Each of the oftEntryCount explicit pages contributes 2 sub-entries.
@@ -606,7 +604,7 @@ bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath,
       break;
     }
 
-    // Skip 15 entries to reach entry 16 of this page.
+    // Skip 16 entries to reach entry 16 of this page.
     idx.seekSet(pageOffset);
     if (!skipIdxEntries(16)) {
       // Page has fewer than 17 entries (last page) — no second sub-entry.
