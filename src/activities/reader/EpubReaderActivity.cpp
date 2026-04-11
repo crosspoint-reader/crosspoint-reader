@@ -6,6 +6,7 @@
 #include <FontManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalIMU.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <JpegToBmpConverter.h>
@@ -323,6 +324,12 @@ void EpubReaderActivity::loop() {
                              const auto& menu = std::get<MenuResult>(result.data);
                              applyOrientation(menu.orientation);
                              toggleAutoPageTurn(menu.pageTurnOption);
+                             // Sync IMU state — tilt setting may have been toggled inline in menu
+                             if (SETTINGS.tiltPageTurn && !imu.isAvailable()) {
+                               imu.begin();
+                             } else if (!SETTINGS.tiltPageTurn && imu.isAvailable()) {
+                               imu.standby();
+                             }
                              if (!result.isCancelled) {
                                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
                              }
@@ -633,6 +640,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::TILT_PAGE_TURN:
+      // Toggled inline in menu; IMU sync handled in result callback.
+      break;
   }
 }
 

@@ -120,6 +120,8 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["frontButtonConfirm"] = s.frontButtonConfirm;
   doc["frontButtonLeft"] = s.frontButtonLeft;
   doc["frontButtonRight"] = s.frontButtonRight;
+  // Tilt page turn (X3 only, not in SettingsList)
+  doc["tiltPageTurn"] = s.tiltPageTurn;
 
   // Direction-specific settings (nested objects)
   auto saveDirection = [](JsonObject obj, const DirectionSettings& ds) {
@@ -218,6 +220,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)S::FRONT_HW_RIGHT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_RIGHT);
   CrossPointSettings::validateFrontButtonMapping(s);
+  // Tilt page turn (X3 only, not in SettingsList)
+  s.tiltPageTurn = clamp(doc["tiltPageTurn"] | (uint8_t)0, 2, 0);
 
   // Load direction-specific settings (nested objects)
   auto loadDirection = [](JsonObject obj, DirectionSettings& ds) -> bool {

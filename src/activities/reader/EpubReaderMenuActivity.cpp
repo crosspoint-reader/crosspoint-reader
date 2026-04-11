@@ -1,6 +1,7 @@
 #include "EpubReaderMenuActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include <cstdio>
@@ -43,6 +44,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
+  if (gpio.deviceIsX3()) {
+    items.push_back({MenuAction::TILT_PAGE_TURN, StrId::STR_TILT_PAGE_TURN});
+  }
   return items;
 }
 
@@ -88,6 +92,14 @@ void EpubReaderMenuActivity::loop() {
 
     if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
       selectedPageTurnOption = (selectedPageTurnOption + 1) % pageTurnLabels.size();
+      requestUpdate();
+      return;
+    }
+
+    if (selectedAction == MenuAction::TILT_PAGE_TURN) {
+      // Toggle inline so the menu stays open and shows the updated value.
+      SETTINGS.tiltPageTurn = !SETTINGS.tiltPageTurn;
+      SETTINGS.saveToFile();
       requestUpdate();
       return;
     }
@@ -194,6 +206,8 @@ std::string EpubReaderMenuActivity::getMenuItemValue(const MenuAction action) co
     }
     case MenuAction::STYLE_STATUS_BAR:
       return "";
+    case MenuAction::TILT_PAGE_TURN:
+      return SETTINGS.tiltPageTurn ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
     default:
       return "";
   }

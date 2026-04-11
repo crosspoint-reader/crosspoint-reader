@@ -1,5 +1,7 @@
 #include "MappedInputManager.h"
 
+#include <HalIMU.h>
+
 #include "CrossPointSettings.h"
 
 namespace {
@@ -76,9 +78,13 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+bool MappedInputManager::wasPressed(const Button button) const {
+  return mapButton(button, &HalGPIO::wasPressed) || wasTiltTriggered(button);
+}
 
-bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+bool MappedInputManager::wasReleased(const Button button) const {
+  return mapButton(button, &HalGPIO::wasReleased) || wasTiltTriggered(button);
+}
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
@@ -137,4 +143,77 @@ int MappedInputManager::getPressedFrontButton() const {
     return HalGPIO::BTN_RIGHT;
   }
   return -1;
+}
+
+namespace {
+// QMI8658 ±2G range: 16384 LSB/G
+// threshold_high = 0.4G ≈ 6554 LSB
+// threshold_low  = 0.2G ≈ 3277 LSB
+constexpr int16_t TILT_THRESHOLD_HIGH = 6554;
+constexpr int16_t TILT_THRESHOLD_LOW = 3277;
+}  // namespace
+
+void MappedInputManager::updateTilt() {
+  // Clear one-shot events from previous frame
+  tiltPageForward = false;
+  tiltPageBack = false;
+
+  if (!SETTINGS.tiltPageTurn || !imu.isAvailable()) return;
+
+  imu.update();
+
+  // Select axis and sign based on screen orientation.
+  // QMI8658 on X3 PCB: Y-axis = left/right tilt (roll), X-axis = forward/backward (pitch).
+  int16_t rawAccel = 0;
+  bool invertDirection = false;
+  switch (effectiveOrientation) {
+    case Orientation::Portrait:
+      rawAccel = imu.getAccelY();
+      break;
+    case Orientation::PortraitInverted:
+      rawAccel = imu.getAccelY();
+      invertDirection = true;
+      break;
+    case Orientation::LandscapeClockwise:
+      rawAccel = imu.getAccelX();
+      break;
+    case Orientation::LandscapeCounterClockwise:
+      rawAccel = imu.getAccelX();
+      invertDirection = true;
+      break;
+  }
+
+  // Low-pass filter (EMA): filteredAccel += (raw - filteredAccel) / N
+  // N=6 gives smooth response (~0.2s settling) while filtering out shakes.
+  filteredAccel += (rawAccel - filteredAccel) / 6;
+
+  const int16_t absAccel = (filteredAccel > 0) ? filteredAccel : ((filteredAccel == -32768) ? 32767 : -filteredAccel);
+
+  switch (tiltState) {
+    case TiltState::IDLE:
+      if (absAccel > TILT_THRESHOLD_HIGH) {
+        // Trigger page turn
+        const bool forward = invertDirection ? (filteredAccel < 0) : (filteredAccel > 0);
+        if (forward) {
+          tiltPageForward = true;
+        } else {
+          tiltPageBack = true;
+        }
+        tiltState = TiltState::COOLDOWN;
+      }
+      break;
+
+    case TiltState::COOLDOWN:
+      // Wait until device returns to near-horizontal
+      if (absAccel < TILT_THRESHOLD_LOW) {
+        tiltState = TiltState::IDLE;
+      }
+      break;
+  }
+}
+
+bool MappedInputManager::wasTiltTriggered(const Button button) const {
+  if (button == Button::PageForward) return tiltPageForward;
+  if (button == Button::PageBack) return tiltPageBack;
+  return false;
 }

@@ -246,6 +246,8 @@ class CrossPointSettings {
   uint8_t colorMode = LIGHT_MODE;
   // Debug display on sleep screen (shows time info)
   uint8_t debugDisplay = 0;
+  // Tilt-based page turning using QMI8658 IMU (X3 only, 0=OFF, 1=ON)
+  uint8_t tiltPageTurn = 0;
 
   ~CrossPointSettings() = default;
 

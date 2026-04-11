@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <HalIMU.h>
 #include <HalPowerManager.h>
 #include <HalRTC.h>
 #include <HalStorage.h>
@@ -347,6 +348,10 @@ void setup() {
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
 
   SETTINGS.loadFromFile();
+  // Initialize IMU for tilt page turn (X3 only, skipped if setting is off or device is X4)
+  if (SETTINGS.tiltPageTurn) {
+    imu.begin();
+  }
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
   UITheme::getInstance().reload();
@@ -453,7 +458,7 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  gpio.update();
+  mappedInputManager.update();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 
@@ -482,7 +487,8 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || mappedInputManager.wasTiltActive() ||
+      activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
