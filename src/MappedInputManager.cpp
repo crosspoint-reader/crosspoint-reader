@@ -192,8 +192,12 @@ void MappedInputManager::updateTilt() {
   switch (tiltState) {
     case TiltState::IDLE:
       if (absAccel > TILT_THRESHOLD_HIGH) {
-        // Trigger page turn
-        const bool forward = invertDirection ? (filteredAccel < 0) : (filteredAccel > 0);
+        // Trigger page turn. Tilt direction follows sideButtonLayout setting:
+        // PREV_NEXT (Standard): right tilt = forward, left tilt = back
+        // NEXT_PREV (Reversed): right tilt = back, left tilt = forward
+        const bool reversedLayout = SETTINGS.sideButtonLayout == CrossPointSettings::SIDE_BUTTON_LAYOUT::NEXT_PREV;
+        bool forward = invertDirection ? (filteredAccel < 0) : (filteredAccel > 0);
+        if (reversedLayout) forward = !forward;
         if (forward) {
           tiltPageForward = true;
         } else {
