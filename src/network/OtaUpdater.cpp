@@ -71,7 +71,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
@@ -212,14 +211,16 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   esp_http_client_config_t client_config = {
       .url = otaUrl.c_str(),
-      .timeout_ms = 15000,
+      .timeout_ms = 30000,
       /* Default HTTP client buffer size 512 byte only
-       * not sufficent to handle URL redirection cases or
+       * not sufficient to handle URL redirection cases or
        * parsing of large HTTP headers.
        */
+      .max_redirection_count = 5,
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
-      .skip_cert_common_name_check = true,
+      /* GitHub release assets redirect to objects.githubusercontent.com CDN.
+       * Without max_redirection_count, esp_https_ota downloads 0 bytes and stalls. */
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
