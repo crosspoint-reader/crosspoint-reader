@@ -6,6 +6,8 @@
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
+#include "activities/network/SignalStrengthWidget.h"
+
 #include "MappedInputManager.h"
 #include "WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -29,6 +31,8 @@ void CalibreConnectActivity::onEnter() {
   lastCompleteName.clear();
   lastCompleteAt = 0;
   lastProcessedCompleteAt = 0;
+  currentRssi = 0;
+  lastRssiUpdateTime = 0;
   exitRequested = false;
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -126,6 +130,12 @@ void CalibreConnectActivity::loop() {
     }
     lastHandleClientTime = millis();
 
+    if (millis() - lastRssiUpdateTime > 5000) {
+      lastRssiUpdateTime = millis();
+      currentRssi = WiFi.RSSI();
+      requestUpdate();
+    }
+
     const auto status = webServer->getWsUploadStatus();
     bool changed = false;
     if (status.inProgress) {
@@ -190,8 +200,15 @@ void CalibreConnectActivity::render(RenderLock&&) {
 
     const int textX = contentRect.x + metrics.contentSidePadding;
     const int textWidth = contentRect.width - metrics.contentSidePadding * 2;
-    int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 4;
+    int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
     const auto heightText12 = renderer.getTextHeight(UI_12_FONT_ID);
+    const auto lineHeightSmall = renderer.getLineHeight(SMALL_FONT_ID);
+
+    const int signalHeight = 22;
+    drawWifiSignalStrength(renderer, textX, y, textWidth, signalHeight, currentRssi);
+    renderer.drawText(SMALL_FONT_ID, textX, y + signalHeight + 2, rssiLabel(currentRssi).c_str());
+    y += signalHeight + lineHeightSmall + metrics.verticalSpacing * 3;
+
     renderer.drawText(UI_12_FONT_ID, textX, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
     y += heightText12 + metrics.verticalSpacing * 2;
 
