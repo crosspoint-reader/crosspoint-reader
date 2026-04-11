@@ -16,6 +16,7 @@ struct DictPaths {
   std::string ifo() const { return folder + ".ifo"; }
   std::string idxOft() const { return folder + ".idx.oft"; }
   std::string synOft() const { return folder + ".syn.oft"; }
+  std::string idxOftCspt() const { return folder + ".idx.oft.cspt"; }
   std::string dictDz() const { return folder + ".dict.dz"; }
   std::string synDz() const { return folder + ".syn.dz"; }
 };

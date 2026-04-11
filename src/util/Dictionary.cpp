@@ -22,6 +22,16 @@ constexpr char GLOBAL_DICT_DIR[] = "/.crosspoint";
 static constexpr uint32_t OFT_HEADER_SIZE = 38;
 static constexpr uint32_t OFT_STRIDE = 32;  // words per page
 
+// .idx.oft.cspt file constants (CrossPoint optimized index).
+// Header: 12 bytes = magic(4) + version(1) + prefixLen(1) + stride(2) + entryCount(4).
+// Each entry: prefixLen bytes (null-padded headword) + 4-byte LE idx offset = 20 bytes.
+static constexpr uint8_t CSPT_MAGIC[4] = {'C', 'S', 'P', 'T'};
+static constexpr uint8_t CSPT_VERSION = 1;
+static constexpr uint8_t CSPT_PREFIX_LEN = 16;
+static constexpr uint16_t CSPT_STRIDE = 16;
+static constexpr uint32_t CSPT_HEADER_SIZE = 12;
+static constexpr uint32_t CSPT_ENTRY_SIZE = CSPT_PREFIX_LEN + 4;  // 20 bytes
+
 // ---------------------------------------------------------------------------
 // Path management
 // ---------------------------------------------------------------------------
