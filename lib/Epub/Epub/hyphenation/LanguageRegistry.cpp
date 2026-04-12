@@ -11,6 +11,7 @@
 #include "generated/hyph-it.trie.h"
 #include "generated/hyph-ru.trie.h"
 #include "generated/hyph-uk.trie.h"
+#include "generated/hyph-fi.trie.h"
 
 namespace {
 
@@ -22,8 +23,9 @@ LanguageHyphenator russianHyphenator(ru_patterns, isCyrillicLetter, toLowerCyril
 LanguageHyphenator spanishHyphenator(es_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator italianHyphenator(it_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator ukrainianHyphenator(uk_patterns, isCyrillicLetter, toLowerCyrillic);
+LanguageHyphenator finnishHyphenator(fi_patterns, isLatinLetter, toLowerLatin);
 
-using EntryArray = std::array<LanguageEntry, 7>;
+using EntryArray = std::array<LanguageEntry, 8>;
 
 const EntryArray& entries() {
   static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
@@ -32,7 +34,8 @@ const EntryArray& entries() {
                                        {"russian", "ru", &russianHyphenator},
                                        {"spanish", "es", &spanishHyphenator},
                                        {"italian", "it", &italianHyphenator},
-                                       {"ukrainian", "uk", &ukrainianHyphenator}}};
+                                       {"ukrainian", "uk", &ukrainianHyphenator},
+                                       {"finnish", "fi", &finnishHyphenator}}};
   return kEntries;
 }
 
