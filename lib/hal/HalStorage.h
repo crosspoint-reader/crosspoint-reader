@@ -4,6 +4,7 @@
 #include <common/FsApiConstants.h>  // for oflag_t
 #include <freertos/semphr.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -85,6 +86,7 @@ class HalFile : public Print {
   int read();  // read a single byte
   size_t write(const void* buf, size_t count);
   size_t write(uint8_t b) override;
+  bool getModifyDateTime(uint16_t* date, uint16_t* time);
   bool rename(const char* newPath);
   bool isDirectory() const;
   void rewindDirectory();
