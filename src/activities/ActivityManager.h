@@ -15,7 +15,42 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+struct HomeMenuItem {
+  enum Value { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+  Value value;
+
+  HomeMenuItem() : value(NONE) {}
+  // cppcheck-suppress noExplicitConstructor
+  HomeMenuItem(Value v) : value(v) {}
+  bool operator==(Value v) const { return value == v; }
+  bool operator!=(Value v) const { return value != v; }
+
+  // onEnter() uses this
+  int toIndex(bool hasOpdsUrl) const {
+    int i = 0;
+    if (value == FILE_BROWSER) return i;
+    ++i;
+    if (value == RECENTS) return i;
+    ++i;
+    if (value == OPDS_BROWSER) return hasOpdsUrl ? i : 0;
+    if (hasOpdsUrl) ++i;
+    if (value == FILE_TRANSFER) return i;
+    ++i;
+    if (value == SETTINGS_MENU) return i;
+    return 0;
+  }
+
+  // loop() uses this
+  static HomeMenuItem fromIndex(int idx, bool hasOpdsUrl) {
+    int i = 0;
+    if (idx == i++) return FILE_BROWSER;
+    if (idx == i++) return RECENTS;
+    if (hasOpdsUrl && idx == i++) return OPDS_BROWSER;
+    if (idx == i++) return FILE_TRANSFER;
+    if (idx == i) return SETTINGS_MENU;
+    return NONE;
+  }
+};
 
 /**
  * ActivityManager

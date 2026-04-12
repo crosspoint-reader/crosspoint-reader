@@ -117,27 +117,7 @@ void HomeActivity::onEnter() {
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
-  switch (initialMenuItem) {
-    case HomeMenuItem::FILE_BROWSER:
-      selectorIndex = base;
-      break;
-    case HomeMenuItem::RECENTS:
-      selectorIndex = base + 1;
-      break;
-    case HomeMenuItem::OPDS_BROWSER:
-      selectorIndex = hasOpdsUrl ? base + 2 : 0;
-      break;
-    case HomeMenuItem::FILE_TRANSFER:
-      selectorIndex = base + (hasOpdsUrl ? 3 : 2);
-      break;
-    case HomeMenuItem::SETTINGS_MENU:
-      selectorIndex = base + (hasOpdsUrl ? 4 : 3);
-      break;
-    case HomeMenuItem::NONE:
-    default:
-      selectorIndex = 0;
-      break;
-  }
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + initialMenuItem.toIndex(hasOpdsUrl);
 
   // Trigger first update
   requestUpdate();
@@ -217,16 +197,27 @@ void HomeActivity::loop() {
 
     if (selectorIndex < recentBooks.size()) {
       onSelectBook(recentBooks[selectorIndex].path);
-    } else if (menuSelectedIndex == fileBrowserIdx) {
-      onFileBrowserOpen();
-    } else if (menuSelectedIndex == recentsIdx) {
-      onRecentsOpen();
-    } else if (menuSelectedIndex == opdsLibraryIdx) {
-      onOpdsBrowserOpen();
-    } else if (menuSelectedIndex == fileTransferIdx) {
-      onFileTransferOpen();
-    } else if (menuSelectedIndex == settingsIdx) {
-      onSettingsOpen();
+    } else {
+      const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
+      switch (HomeMenuItem::fromIndex(menuIndex, hasOpdsUrl).value) {
+        case HomeMenuItem::FILE_BROWSER:
+          onFileBrowserOpen();
+          break;
+        case HomeMenuItem::RECENTS:
+          onRecentsOpen();
+          break;
+        case HomeMenuItem::OPDS_BROWSER:
+          onOpdsBrowserOpen();
+          break;
+        case HomeMenuItem::FILE_TRANSFER:
+          onFileTransferOpen();
+          break;
+        case HomeMenuItem::SETTINGS_MENU:
+          onSettingsOpen();
+          break;
+        default:
+          break;
+      }
     }
   }
 }
