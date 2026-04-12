@@ -84,7 +84,6 @@ class XtcParser {
   FsFile m_file;
   bool m_isOpen;
   XtcHeader m_header;
-  std::vector<PageInfo> m_pageTable;
   std::vector<ChapterInfo> m_chapters;
   std::string m_title;
   std::string m_author;
@@ -96,10 +95,11 @@ class XtcParser {
 
   // Internal helper functions
   XtcError readHeader();
-  XtcError readPageTable();
+  XtcError readFirstPageInfo();
   XtcError readTitle();
   XtcError readAuthor();
   XtcError readChapters();
+  bool readPageTableEntry(uint32_t pageIndex, PageInfo& info) const;
 };
 
 }  // namespace xtc
