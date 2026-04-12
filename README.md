@@ -40,4 +40,4 @@ Last update: April, 12th, 2026
 | [Inx](https://github.com/obijuankenobiii/inx) | Nice | mainly crosspoint functionality plus reading statistics | EPUB, XTC, TXT | Good reading stats | Small team | No | No | No |
 | [vCodex](https://github.com/franssjz/cpr-vcodex) | Nice | mainly crosspoint functionality plus reading statistics | EPUB, XTC, TXT | Good reading stats | Small team | No | No | No |
 | [PlusPoint](https://github.com/ngxson/pluspoint-reader) | Okay | Experimental | EPUB, TXT, JS Apps | Support for custom JS apps; better RTC | Based on older code, small team | Yes | Yes | No |
-| [SUMI](https://github.com/psychoplath9450/SUMI) | Nice | Lua custom apps; Bluetooth keyboard support for notes; Game boy emulator; Bluetooth Transfer | EPUB, TXT, Markdown, XTC | Many apps, customizable, Papyrix fork | Single Contributor, No Wifi | Yes | Yes | Yes |
+| [SUMI](https://github.com/psychoplath9450/SUMI) | Nice | Lua custom apps; Bluetooth keyboard support for notes; Game Boy emulator; Bluetooth Transfer | EPUB, TXT, Markdown, XTC | Many apps, customizable, Papyrix fork | Single Contributor, **No Wi-Fi** | Yes | Yes | Yes |
