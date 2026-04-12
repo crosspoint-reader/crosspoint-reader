@@ -20,6 +20,7 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  bool ignoreFrontButtons = false;
 
   // Cached settings for cache validation (different fonts/margins require re-indexing)
   int cachedFontId = 0;
