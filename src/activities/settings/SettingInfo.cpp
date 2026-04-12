@@ -73,9 +73,9 @@ void SettingInfo::toggleValue() const {
 
     case SettingType::VALUE:
       if (valuePtr) {
-        const auto current = static_cast<int8_t>(SETTINGS.*(valuePtr));
-        SETTINGS.*(valuePtr) =
-            (current + valueRange.step > valueRange.max) ? valueRange.min : current + valueRange.step;
+        const unsigned current = SETTINGS.*(valuePtr);
+        SETTINGS.*(valuePtr) = static_cast<uint8_t>(
+            (current + valueRange.step > valueRange.max) ? valueRange.min : current + valueRange.step);
       }
       break;
 

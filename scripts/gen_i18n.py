@@ -281,7 +281,29 @@ def find_used_string_keys(
             except OSError:
                 continue
             for line in text.splitlines():
-                line = line.split("//", 1)[0]
+                quote_char = None
+                escaped = False
+                comment_index = None
+                for idx, ch in enumerate(line):
+                    if escaped:
+                        escaped = False
+                        continue
+                    if quote_char is None:
+                        if ch == '"' or ch == "'":
+                            quote_char = ch
+                            continue
+                        if ch == "/" and idx + 1 < len(line) and line[idx + 1] == "/":
+                            comment_index = idx
+                            break
+                    else:
+                        if ch == "\\":
+                            escaped = True
+                            continue
+                        if ch == quote_char:
+                            quote_char = None
+                            continue
+                if comment_index is not None:
+                    line = line[:comment_index]
                 for m in pattern.finditer(line):
                     used.add(m.group(0))
 
