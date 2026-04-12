@@ -862,6 +862,7 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
 }
 
 void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
+  (void)textWidth;
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int bracketHeight = lineHeight;
   const int fieldLeft = rect.x + 10;
@@ -914,10 +915,6 @@ void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const ch
   const int itemWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
   const int textX = rect.x + (rect.width - itemWidth) / 2;
   const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2 + primaryOffset;
-
-  if (isSelected) {
-    renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
-  }
   renderer.drawText(UI_12_FONT_ID, textX, textY, label, !isSelected);
 
   if (hasSecondary) {

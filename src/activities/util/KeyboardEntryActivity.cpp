@@ -82,6 +82,8 @@ bool KeyboardEntryActivity::handleKeyPress() {
       case SpecOk:
         onComplete(text);
         return false;
+      default:
+        return true;
     }
   }
 
@@ -254,7 +256,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int bkSpacing = metrics.keyboardBottomKeySpacing;
   const int contentTotalWidth = COLS * keyWidth + (COLS - 1) * keySpacing;
   const int bottomKeyWidth = (contentTotalWidth - (BOTTOM_KEY_COUNT - 1) * bkSpacing) / BOTTOM_KEY_COUNT;
-  const int bottomSelectedRow = isBottomRow(selectedRow);
+  const bool bottomSelected = isBottomRow(selectedRow);
 
   struct BottomKeyInfo {
     KeyboardKeyType themeType;
@@ -270,7 +272,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   for (int i = 0; i < BOTTOM_KEY_COUNT; i++) {
     const int keyX = leftMargin + i * (bottomKeyWidth + bkSpacing);
-    const bool isSelected = bottomSelectedRow && i == selectedCol;
+    const bool isSelected = bottomSelected && i == selectedCol;
 
     GUI.drawKeyboardKey(renderer, Rect{keyX, bottomRowY, bottomKeyWidth, keyHeight}, bottomKeys[i].label, isSelected,
                         nullptr, bottomKeys[i].themeType);
