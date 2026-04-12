@@ -193,6 +193,34 @@ void setup() {
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
+  const auto wakeupReason = gpio.getWakeupReason();
+  LOG_DBG("MAIN", "Wakeup reason: %d, millis=%lu, rawPowerPin=%d", static_cast<int>(wakeupReason), millis(),
+          digitalRead(InputManager::POWER_BUTTON_PIN) == LOW);
+
+  switch (wakeupReason) {
+    case HalGPIO::WakeupReason::PowerButton: {
+      constexpr uint16_t defaultPowerButtonDurationMs = 400;
+      LOG_DBG("MAIN", "Verifying power button press duration (required=%u ms, default only)",
+              defaultPowerButtonDurationMs);
+      gpio.verifyPowerButtonWakeup(defaultPowerButtonDurationMs, false);
+      LOG_DBG("MAIN", "Power button verification passed, millis=%lu", millis());
+      break;
+    }
+    case HalGPIO::WakeupReason::AfterUSBPower:
+      // If USB power caused a cold boot, go back to sleep
+      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
+      powerManager.startDeepSleep(gpio);
+      break;
+    case HalGPIO::WakeupReason::AfterFlash:
+      // After flashing, just proceed to boot
+    case HalGPIO::WakeupReason::Other:
+    default:
+      break;
+  }
+
+  // First serial output only here to avoid timing inconsistencies for power button press duration verification
+  LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
@@ -211,32 +239,6 @@ void setup() {
   WEATHER_SETTINGS.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
-
-  const auto wakeupReason = gpio.getWakeupReason();
-  LOG_DBG("MAIN", "Wakeup reason: %d, millis=%lu, rawPowerPin=%d", static_cast<int>(wakeupReason), millis(),
-          digitalRead(InputManager::POWER_BUTTON_PIN) == LOW);
-  switch (wakeupReason) {
-    case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying power button press duration (required=%u ms, shortPress=%d)",
-              SETTINGS.getPowerButtonDuration(), SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
-      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
-                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
-      LOG_DBG("MAIN", "Power button verification passed, millis=%lu", millis());
-      break;
-    case HalGPIO::WakeupReason::AfterUSBPower:
-      // If USB power caused a cold boot, go back to sleep
-      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      powerManager.startDeepSleep(gpio);
-      break;
-    case HalGPIO::WakeupReason::AfterFlash:
-      // After flashing, just proceed to boot
-    case HalGPIO::WakeupReason::Other:
-    default:
-      break;
-  }
-
-  // First serial output only here to avoid timing inconsistencies for power button press duration verification
-  LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
   setupDisplayAndFonts();
 
