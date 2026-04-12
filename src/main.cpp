@@ -204,10 +204,12 @@ void setup() {
 
   HalSystem::checkPanic();
   HalSystem::clearPanic();  // TODO: move this to an activity when we have one to display the panic info
-
+  LOG_DBG("MAIN", "System initialized, now setting up environment, millis=%lu", millis());
   SETTINGS.loadFromFile();
+  LOG_DBG("MAIN", "Settings loaded, now setting up clock and localization, millis=%lu", millis());
   HalClock::applyTimezone(SETTINGS.timeZone);
   I18N.loadSettings();
+  LOG_DBG("MAIN", "Localization loaded, now setting up theme and button navigation, millis=%lu", millis());
   KOREADER_STORE.loadFromFile();
   WEATHER_SETTINGS.loadFromFile();
   UITheme::getInstance().reload();

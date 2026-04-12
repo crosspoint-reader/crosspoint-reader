@@ -22,8 +22,7 @@
 void SettingsSubmenuActivity::onEnter() {
   Activity::onEnter();
   itemCount = static_cast<int>(items.size());
-  const auto pred = UITheme::makeSelectablePredicate(itemCount,
-                                                     [this](int i) { return items[i].getTitle(); });
+  const auto pred = UITheme::makeSelectablePredicate(itemCount, [this](int i) { return items[i].getTitle(); });
   buttonNavigator.setSelectablePredicate(pred, itemCount);
   if (!pred(selectedIndex)) {
     selectedIndex = buttonNavigator.nextIndex(selectedIndex);
@@ -150,6 +149,9 @@ void SettingsSubmenuActivity::render(RenderLock&&) {
         }
         if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           return std::to_string(SETTINGS.*(setting.valuePtr));
+        }
+        if (setting.type == SettingType::ACTION && !setting.isSeparator) {
+          return std::string(">>");
         }
         return std::string();
       },

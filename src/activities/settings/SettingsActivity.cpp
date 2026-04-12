@@ -333,17 +333,21 @@ void SettingsActivity::render(RenderLock&&) {
       nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];
-        std::string valueText = "";
         if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
           const bool value = SETTINGS.*(setting.valuePtr);
-          valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-        } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-          const uint8_t value = SETTINGS.*(setting.valuePtr);
-          valueText = I18N.get(setting.enumValues[value]);
-        } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          return std::string(value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
         }
-        return valueText;
+        if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+          const uint8_t value = SETTINGS.*(setting.valuePtr);
+          return std::string(I18N.get(setting.enumValues[value]));
+        }
+        if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+          return std::to_string(SETTINGS.*(setting.valuePtr));
+        }
+        if (setting.type == SettingType::ACTION && !setting.isSeparator) {
+          return std::string(">>");
+        }
+        return std::string();
       },
       true);
 
