@@ -41,7 +41,28 @@ def get_git_branch(project_dir):
         return 'unknown'
 
 
+def get_version_from_git_tag(project_dir):
+    """Try to derive version from the latest v* git tag (e.g. v0.1.3 → 0.1.3)."""
+    try:
+        tag = subprocess.check_output(
+            ['git', 'describe', '--tags', '--match', 'v*', '--abbrev=0'],
+            text=True, stderr=subprocess.PIPE, cwd=project_dir
+        ).strip()
+        version = tag.lstrip('v')
+        if version:
+            return version
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+    return None
+
+
 def get_base_version(project_dir):
+    # Prefer version from latest git tag (single source of truth)
+    git_version = get_version_from_git_tag(project_dir)
+    if git_version:
+        return git_version
+
+    # Fall back to platformio.ini (for repos without tags)
     ini_path = os.path.join(project_dir, 'platformio.ini')
     if not os.path.isfile(ini_path):
         warn(f'platformio.ini not found at {ini_path}; base version will be "0.0.0"')

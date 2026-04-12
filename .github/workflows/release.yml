@@ -27,6 +27,13 @@ jobs:
       - name: Install PlatformIO Core
         run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
 
+      - name: Sync version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          sed -i "s/^version = .*/version = ${VERSION}/" platformio.ini
+          echo "Building with version: ${VERSION}"
+
       - name: Build CrossPoint
         run: |
           set -euo pipefail
