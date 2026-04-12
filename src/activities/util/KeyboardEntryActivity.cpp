@@ -15,7 +15,7 @@ void KeyboardEntryActivity::onEnter() {
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
-int KeyboardEntryActivity::getContentRowCount() const { return symMode ? SYM_ROWS : ABC_ROWS; }
+int KeyboardEntryActivity::getContentRowCount() const { return ABC_ROWS; }
 
 int KeyboardEntryActivity::getTotalRowCount() const { return getContentRowCount() + 1; }
 
@@ -237,8 +237,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         secondaryChar = key.primary;
       }
 
-      char primaryBuf[2] = {primaryChar, '\0'};
-      char secondaryBuf[2] = {secondaryChar, '\0'};
+      const char primaryBuf[2] = {primaryChar, '\0'};
+      const char secondaryBuf[2] = {secondaryChar, '\0'};
 
       const bool showSecondary = !symMode && row == 0 && secondaryChar != '\0';
       GUI.drawKeyboardKey(renderer, Rect{keyX, rowY, keyWidth, keyHeight}, primaryBuf, isSelected,
@@ -254,16 +254,15 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int bottomSelectedRow = isBottomRow(selectedRow);
 
   struct BottomKeyInfo {
-    SpecialKeyType type;
     KeyboardKeyType themeType;
     const char* label;
   };
   const BottomKeyInfo bottomKeys[BOTTOM_KEY_COUNT] = {
-      {SpecShift, KeyboardKeyType::Shift, symMode ? shiftString[0] : shiftString[shiftState]},
-      {SpecMode, KeyboardKeyType::Mode, symMode ? "abc" : "#@!"},
-      {SpecSpace, KeyboardKeyType::Space, nullptr},
-      {SpecDel, KeyboardKeyType::Del, nullptr},
-      {SpecOk, KeyboardKeyType::Ok, tr(STR_OK_BUTTON)},
+      {KeyboardKeyType::Shift, symMode ? shiftString[0] : shiftString[shiftState]},
+      {KeyboardKeyType::Mode, symMode ? "abc" : "#@!"},
+      {KeyboardKeyType::Space, nullptr},
+      {KeyboardKeyType::Del, nullptr},
+      {KeyboardKeyType::Ok, tr(STR_OK_BUTTON)},
   };
 
   for (int i = 0; i < BOTTOM_KEY_COUNT; i++) {
