@@ -1,26 +1,21 @@
 #pragma once
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/MenuListActivity.h"
 
 /**
  * Submenu for KOReader Sync settings.
- * Shows username, password, and authenticate options.
+ * Shows username, password, server URL, document matching, authenticate, and register.
  */
-class KOReaderSettingsActivity final : public Activity {
+class KOReaderSettingsActivity final : public MenuListActivity {
  public:
-  explicit KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("KOReaderSettings", renderer, mappedInput) {}
+  explicit KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
-  void onEnter() override;
-  void onExit() override;
-  void loop() override;
   void render(RenderLock&&) override;
 
  private:
-  ButtonNavigator buttonNavigator;
+  void buildMenuItems();
 
-  size_t selectedIndex = 0;
-
-  void handleSelection();
+  // MenuListActivity overrides
+  std::string getItemValueString(int index) const override;
+  void onActionSelected(int index) override;
 };

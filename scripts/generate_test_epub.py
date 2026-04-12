@@ -27,16 +27,16 @@ def get_font(size=20):
     import sys
 
     candidates = []
-    if sys.platform == "win32":
+    if sys.platform == "darwin":
+        candidates = [
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+        ]
+    elif sys.platform == "win32":
         windir = os.environ.get("WINDIR", "C:\\Windows")
         candidates = [
             os.path.join(windir, "Fonts", "arial.ttf"),
             os.path.join(windir, "Fonts", "calibri.ttf"),
-        ]
-    elif sys.platform == "darwin":
-        candidates = [
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/Library/Fonts/Arial.ttf",
         ]
     else:
         candidates = [

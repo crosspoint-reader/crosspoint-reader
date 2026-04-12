@@ -19,32 +19,33 @@ const StrId timeZoneNames[CrossPointSettings::TIMEZONE_COUNT] = {
     StrId::STR_TZ_EST,       StrId::STR_TZ_CST,  StrId::STR_TZ_MST,       StrId::STR_TZ_PST};
 }  // namespace
 
+std::string ClockSettingsActivity::MenuItem::getTitle() const {
+  const auto t = I18N.get(labelId);
+  return isSeparator ? UITheme::makeSeparatorTitle(t) : t;
+}
+
 std::vector<ClockSettingsActivity::MenuItem> ClockSettingsActivity::buildMenuItems() {
   std::vector<MenuItem> items;
   items.reserve(7);
   // Settings
-  items.push_back({Action::NONE, StrId::STR_SETTINGS_TITLE, true});
+  items.push_back(MenuItem::separator(StrId::STR_SETTINGS_TITLE));
   items.push_back({Action::USE_CLOCK, StrId::STR_USE_CLOCK});
   items.push_back({Action::CLOCK_FORMAT, StrId::STR_CLOCK_FORMAT});
   items.push_back({Action::TIMEZONE, StrId::STR_TIMEZONE});
 
   // Tools
-  items.push_back({Action::NONE, StrId::STR_READER_TOOLS, true});
+  items.push_back(MenuItem::separator(StrId::STR_READER_TOOLS));
   items.push_back({Action::DETECT_TIMEZONE, StrId::STR_DETECT_TIMEZONE});
   items.push_back({Action::SYNC_TIME, StrId::STR_SYNC_TIME});
   return items;
 }
 
-std::function<bool(int)> ClockSettingsActivity::buildSelectablePredicate() const {
-  return [this](int index) {
-    return index >= 0 && index < static_cast<int>(menuItems.size()) && !menuItems[index].isSeparator;
-  };
-}
-
 void ClockSettingsActivity::onEnter() {
   Activity::onEnter();
-  buttonNavigator.setSelectablePredicate(buildSelectablePredicate(), static_cast<int>(menuItems.size()));
-  if (!buildSelectablePredicate()(selectedIndex)) {
+  const auto pred = UITheme::makeSelectablePredicate(static_cast<int>(menuItems.size()),
+                                                     [this](int i) { return menuItems[i].getTitle(); });
+  buttonNavigator.setSelectablePredicate(pred, static_cast<int>(menuItems.size()));
+  if (!pred(selectedIndex)) {
     selectedIndex = buttonNavigator.nextIndex(selectedIndex);
   }
   requestUpdate();
@@ -125,11 +126,7 @@ void ClockSettingsActivity::render(RenderLock&&) {
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(menuItems.size()), selectedIndex,
-      [this](int index) {
-        const auto title = I18N.get(menuItems[index].labelId);
-        return menuItems[index].isSeparator ? UITheme::makeSeparatorTitle(title) : title;
-      },
-      nullptr, nullptr,
+      [this](int index) { return menuItems[index].getTitle(); }, nullptr, nullptr,
       [this](int index) {
         const auto action = menuItems[index].action;
         switch (action) {

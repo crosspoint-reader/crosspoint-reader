@@ -14,150 +14,173 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const bool hasFootnotes, const int8_t initialEmbeddedStyleOverride,
                                                const int8_t initialImageRenderingOverride,
                                                const uint8_t initialTextDarkness)
-    : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes)),
-      title(title),
+    : MenuListActivity("EpubReaderMenu", renderer, mappedInput),
       pendingOrientation(currentOrientation),
       pendingEmbeddedStyleOverride(initialEmbeddedStyleOverride),
       pendingImageRenderingOverride(initialImageRenderingOverride),
       pendingTextDarkness(initialTextDarkness),
+      title(title),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent) {
+  buildMenuItems(hasFootnotes);
+}
 
-std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
-  std::vector<MenuItem> items;
-  items.reserve(18);
-  // Navigation
-  items.push_back({MenuAction::NONE, StrId::STR_READER_NAVIGATION, true});
-  items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
-  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
+  menuItems.reserve(18);
+
+  // --- Navigation ---
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_NAVIGATION));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_SELECT_CHAPTER, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_GO_TO_PERCENT, SettingAction::None));
   if (hasFootnotes) {
-    items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+    menuItems.push_back(SettingInfo::Action(StrId::STR_FOOTNOTES, SettingAction::None));
   }
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+  // Auto page turn: ACTION type with custom cycling in onActionSelected
+  menuItems.push_back(SettingInfo::Action(StrId::STR_AUTO_TURN_PAGES_PER_MIN, SettingAction::None));
 
-  // Appearance
-  items.push_back({MenuAction::NONE, StrId::STR_READER_APPEARANCE, true});
-  items.push_back({MenuAction::EMBEDDED_STYLE, StrId::STR_EMBEDDED_STYLE});
-  items.push_back({MenuAction::IMAGE_RENDERING, StrId::STR_IMAGES});
-  items.push_back({MenuAction::TEXT_DARKNESS, StrId::STR_TEXT_DARKNESS});
-  items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+  // --- Appearance ---
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_APPEARANCE));
 
-  // Synchronisation (only if credentials are set, to avoid confusion)
+  // Embedded style: cycles default(-1) -> ON(1) -> OFF(0) via DynamicEnum indices 0/1/2
+  menuItems.push_back(SettingInfo::DynamicEnum(
+      StrId::STR_EMBEDDED_STYLE, {StrId::STR_DEFAULT_VALUE, StrId::STR_STATE_ON, StrId::STR_STATE_OFF},
+      [this]() -> uint8_t {
+        if (pendingEmbeddedStyleOverride < 0) return 0;
+        if (pendingEmbeddedStyleOverride > 0) return 1;
+        return 2;
+      },
+      [this](uint8_t v) {
+        if (v == 0)
+          pendingEmbeddedStyleOverride = -1;
+        else if (v == 1)
+          pendingEmbeddedStyleOverride = 1;
+        else
+          pendingEmbeddedStyleOverride = 0;
+      }));
+
+  // Image rendering: cycles default(-1) -> display(0) -> placeholder(1) -> suppress(2)
+  menuItems.push_back(SettingInfo::DynamicEnum(
+      StrId::STR_IMAGES,
+      {StrId::STR_DEFAULT_VALUE, StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
+      [this]() -> uint8_t { return (pendingImageRenderingOverride < 0) ? 0 : (pendingImageRenderingOverride + 1); },
+      [this](uint8_t v) { pendingImageRenderingOverride = (v == 0) ? -1 : static_cast<int8_t>(v - 1); }));
+
+  // Text darkness: straightforward 0-3 cycle
+  menuItems.push_back(SettingInfo::DynamicEnum(
+      StrId::STR_TEXT_DARKNESS, {StrId::STR_NORMAL, StrId::STR_DARK, StrId::STR_EXTRA_DARK, StrId::STR_MAX_DARK},
+      [this]() -> uint8_t { return pendingTextDarkness; }, [this](uint8_t v) { pendingTextDarkness = v; }));
+
+  // Orientation: straightforward 0-3 cycle
+  menuItems.push_back(SettingInfo::DynamicEnum(
+      StrId::STR_ORIENTATION,
+      {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW},
+      [this]() -> uint8_t { return pendingOrientation; }, [this](uint8_t v) { pendingOrientation = v; }));
+
+  // --- Synchronisation (only if credentials are set) ---
   if (KOREADER_STORE.hasCredentials()) {
-    items.push_back({MenuAction::NONE, StrId::STR_KOREADER_SYNC, true});
-    items.push_back({MenuAction::PULL_REMOTE, StrId::STR_PULL_PROGRESS_FROM_OTHER_DEVICES});
-    items.push_back({MenuAction::PUSH_LOCAL, StrId::STR_PUSH_PROGRESS_FROM_THIS_DEVICE});
+    menuItems.push_back(SettingInfo::Separator(StrId::STR_KOREADER_SYNC));
+    menuItems.push_back(SettingInfo::Action(StrId::STR_PULL_PROGRESS_FROM_OTHER_DEVICES, SettingAction::None));
+    menuItems.push_back(SettingInfo::Action(StrId::STR_PUSH_PROGRESS_FROM_THIS_DEVICE, SettingAction::None));
   }
 
-  // Tools
-  items.push_back({MenuAction::NONE, StrId::STR_READER_TOOLS, true});
-  items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
-  items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
-  items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
-  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
-  return items;
+  // --- Tools ---
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_TOOLS));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_SCREENSHOT_BUTTON, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_DISPLAY_QR, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_DELETE_CACHE, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_GO_HOME_BUTTON, SettingAction::None));
 }
 
-std::function<bool(int)> EpubReaderMenuActivity::buildSelectablePredicate() const {
-  return [this](int index) {
-    return index >= 0 && index < static_cast<int>(menuItems.size()) && !menuItems[index].isSeparator;
-  };
-}
-
-void EpubReaderMenuActivity::onEnter() {
-  Activity::onEnter();
-  const auto selectablePredicate = buildSelectablePredicate();
-  buttonNavigator.setSelectablePredicate(selectablePredicate, static_cast<int>(menuItems.size()));
-  if (!selectablePredicate(selectedIndex)) {
-    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
+EpubReaderMenuActivity::MenuAction EpubReaderMenuActivity::actionForNameId(StrId nameId) {
+  switch (nameId) {
+    case StrId::STR_SELECT_CHAPTER:
+      return MenuAction::SELECT_CHAPTER;
+    case StrId::STR_GO_TO_PERCENT:
+      return MenuAction::GO_TO_PERCENT;
+    case StrId::STR_FOOTNOTES:
+      return MenuAction::FOOTNOTES;
+    case StrId::STR_AUTO_TURN_PAGES_PER_MIN:
+      return MenuAction::AUTO_PAGE_TURN;
+    case StrId::STR_EMBEDDED_STYLE:
+      return MenuAction::EMBEDDED_STYLE;
+    case StrId::STR_IMAGES:
+      return MenuAction::IMAGE_RENDERING;
+    case StrId::STR_TEXT_DARKNESS:
+      return MenuAction::TEXT_DARKNESS;
+    case StrId::STR_ORIENTATION:
+      return MenuAction::ROTATE_SCREEN;
+    case StrId::STR_PULL_PROGRESS_FROM_OTHER_DEVICES:
+      return MenuAction::PULL_REMOTE;
+    case StrId::STR_PUSH_PROGRESS_FROM_THIS_DEVICE:
+      return MenuAction::PUSH_LOCAL;
+    case StrId::STR_SCREENSHOT_BUTTON:
+      return MenuAction::SCREENSHOT;
+    case StrId::STR_DISPLAY_QR:
+      return MenuAction::DISPLAY_QR;
+    case StrId::STR_DELETE_CACHE:
+      return MenuAction::DELETE_CACHE;
+    case StrId::STR_GO_HOME_BUTTON:
+      return MenuAction::GO_HOME;
+    default:
+      return MenuAction::NONE;
   }
-  requestUpdate();
 }
 
-void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
+void EpubReaderMenuActivity::finishWithAction(MenuAction action) {
+  setResult(MenuResult{static_cast<int>(action), pendingOrientation, selectedPageTurnOption,
+                       pendingEmbeddedStyleOverride, pendingImageRenderingOverride, pendingTextDarkness});
+  finish();
+}
 
-void EpubReaderMenuActivity::loop() {
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
+void EpubReaderMenuActivity::onActionSelected(int index) {
+  const auto& item = menuItems[index];
+
+  // Auto page turn cycles locally (not a DynamicEnum because labels are raw strings)
+  if (item.nameId == StrId::STR_AUTO_TURN_PAGES_PER_MIN) {
+    selectedPageTurnOption = (selectedPageTurnOption + 1) % 5;
     requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = buttonNavigator.previousIndex(selectedIndex);
-    requestUpdate();
-  });
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const auto selectedAction = menuItems[selectedIndex].action;
-    if (selectedAction == MenuAction::NONE) {
-      return;
-    }
-    if (selectedAction == MenuAction::ROTATE_SCREEN) {
-      // Cycle orientation preview locally; actual rotation happens on menu exit.
-      pendingOrientation = (pendingOrientation + 1) % orientationLabels.size();
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
-      selectedPageTurnOption = (selectedPageTurnOption + 1) % pageTurnLabels.size();
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::EMBEDDED_STYLE) {
-      // Cycle per-book override: default -> ON -> OFF -> default.
-      if (pendingEmbeddedStyleOverride < 0) {
-        pendingEmbeddedStyleOverride = 1;
-      } else if (pendingEmbeddedStyleOverride > 0) {
-        pendingEmbeddedStyleOverride = 0;
-      } else {
-        pendingEmbeddedStyleOverride = -1;
-      }
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::IMAGE_RENDERING) {
-      // Cycle per-book override: default -> display -> placeholder -> suppress -> default.
-      if (pendingImageRenderingOverride < 0) {
-        pendingImageRenderingOverride = 0;
-      } else if (pendingImageRenderingOverride >= 2) {
-        pendingImageRenderingOverride = -1;
-      } else {
-        pendingImageRenderingOverride++;
-      }
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::TEXT_DARKNESS) {
-      pendingTextDarkness = (pendingTextDarkness + 1) % textDarknessLabels.size();
-      requestUpdate();
-      return;
-    }
-
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
-                         pendingEmbeddedStyleOverride, pendingImageRenderingOverride, pendingTextDarkness});
-    finish();
-    return;
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    result.data = MenuResult{-1,
-                             pendingOrientation,
-                             selectedPageTurnOption,
-                             pendingEmbeddedStyleOverride,
-                             pendingImageRenderingOverride,
-                             pendingTextDarkness};
-    setResult(std::move(result));
-    finish();
     return;
   }
+
+  // All other ACTION items finish with a result
+  finishWithAction(actionForNameId(item.nameId));
 }
+
+void EpubReaderMenuActivity::onSettingToggled(int /*index*/) {
+  // DynamicEnum items update pending state via their setters — no persistence needed.
+}
+
+void EpubReaderMenuActivity::onBackPressed() {
+  ActivityResult result;
+  result.isCancelled = true;
+  result.data = MenuResult{-1,
+                           pendingOrientation,
+                           selectedPageTurnOption,
+                           pendingEmbeddedStyleOverride,
+                           pendingImageRenderingOverride,
+                           pendingTextDarkness};
+  setResult(std::move(result));
+  finish();
+}
+
+std::string EpubReaderMenuActivity::getItemValueString(int index) const {
+  const auto& item = menuItems[index];
+
+  // Auto page turn: custom labels
+  if (item.nameId == StrId::STR_AUTO_TURN_PAGES_PER_MIN) {
+    if (selectedPageTurnOption == 0) return std::string(tr(STR_STATE_OFF));
+    return std::string(pageTurnLabels[selectedPageTurnOption]);
+  }
+
+  // Plain ACTION items (select chapter, screenshot, etc.) show no value
+  if (item.type == SettingType::ACTION) return {};
+
+  // DynamicEnum items use the standard display
+  return MenuListActivity::getItemValueString(index);
+}
+
+void EpubReaderMenuActivity::onEnter() { MenuListActivity::onEnter(); }
 
 void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
@@ -166,7 +189,6 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   // Title
   const std::string truncTitle =
       renderer.truncatedText(UI_12_FONT_ID, title.c_str(), contentRect.width - 40, EpdFontFamily::BOLD);
-  // Manual centering so we can respect the content gutter.
   const int titleX =
       contentRect.x +
       (contentRect.width - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
@@ -184,44 +206,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   // Menu Items
   const int startY = 75 + contentRect.y;
   const int listHeight = contentRect.height - (startY - contentRect.y);
-
-  GUI.drawList(
-      renderer, Rect{contentRect.x, startY, contentRect.width, listHeight}, static_cast<int>(menuItems.size()),
-      selectedIndex,
-      [this](int index) {
-        const auto& item = menuItems[index];
-        const auto title = I18N.get(item.labelId);
-        return item.isSeparator ? UITheme::makeSeparatorTitle(title) : title;
-      },
-      nullptr, nullptr,
-      [this](int index) {
-        const auto& item = menuItems[index];
-        switch (item.action) {
-          case MenuAction::ROTATE_SCREEN:
-            return std::string(I18N.get(orientationLabels[pendingOrientation]));
-          case MenuAction::AUTO_PAGE_TURN:
-            return std::string(pageTurnLabels[selectedPageTurnOption]);
-          case MenuAction::EMBEDDED_STYLE:
-            if (pendingEmbeddedStyleOverride == 1) {
-              return std::string(tr(STR_STATE_ON));
-            } else if (pendingEmbeddedStyleOverride == 0) {
-              return std::string(tr(STR_STATE_OFF));
-            }
-            return std::string(tr(STR_DEFAULT_VALUE));
-          case MenuAction::IMAGE_RENDERING:
-            if (pendingImageRenderingOverride >= 0 && pendingImageRenderingOverride < imageRenderingLabels.size()) {
-              return std::string(I18N.get(imageRenderingLabels[pendingImageRenderingOverride]));
-            }
-            return std::string(tr(STR_DEFAULT_VALUE));
-          case MenuAction::TEXT_DARKNESS: {
-            const uint8_t idx = (pendingTextDarkness < textDarknessLabels.size()) ? pendingTextDarkness : 0;
-            return std::string(I18N.get(textDarknessLabels[idx]));
-          }
-          default:
-            return std::string();
-        }
-      },
-      true);
+  drawMenuList(Rect{contentRect.x, startY, contentRect.width, listHeight});
 
   // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
