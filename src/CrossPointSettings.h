@@ -183,6 +183,9 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // RTC (DS3231) feature master switch — controls sleep mode on X3
+  // 0=OFF (full power-off, battery-efficient), 1=ON (deep sleep, DS3231 time preserved)
+  uint8_t rtcEnabled = 0;
   // Sleep calendar overlay
   uint8_t sleepCalendar = 0;  // 0=OFF, 1=ON
   uint8_t sleepCalendarPosition = CALENDAR_POS_CENTER;
