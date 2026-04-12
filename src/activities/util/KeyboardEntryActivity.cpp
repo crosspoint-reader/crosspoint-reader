@@ -142,8 +142,8 @@ void KeyboardEntryActivity::loop() {
     if (alt != '\0') {
       insertChar(alt);
       requestUpdate();
+      confirmLongHandled = true;
     }
-    confirmLongHandled = true;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
