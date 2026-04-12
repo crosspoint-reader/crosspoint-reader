@@ -17,9 +17,10 @@ KOReaderSettingsActivity::KOReaderSettingsActivity(GfxRenderer& renderer, Mapped
 
 void KOReaderSettingsActivity::buildMenuItems() {
   // Username, Password, Server URL: ACTION items with custom value display
+  menuItems.push_back(SettingInfo::Action(StrId::STR_SYNC_SERVER_URL, SettingAction::None)
+                          .withSubcategory(StrId::STR_MENU_KOSYNC_SERVER));
   menuItems.push_back(SettingInfo::Action(StrId::STR_USERNAME, SettingAction::None));
   menuItems.push_back(SettingInfo::Action(StrId::STR_PASSWORD, SettingAction::None));
-  menuItems.push_back(SettingInfo::Action(StrId::STR_SYNC_SERVER_URL, SettingAction::None));
 
   // Document matching: DynamicEnum toggling between Filename and Binary
   menuItems.push_back(SettingInfo::DynamicEnum(
@@ -31,7 +32,8 @@ void KOReaderSettingsActivity::buildMenuItems() {
       }));
 
   // Authenticate and Register: ACTION items
-  menuItems.push_back(SettingInfo::Action(StrId::STR_AUTHENTICATE, SettingAction::None));
+  menuItems.push_back(
+      SettingInfo::Action(StrId::STR_AUTHENTICATE, SettingAction::None).withSubcategory(StrId::STR_MENU_KOSYNC_AUTH));
   menuItems.push_back(SettingInfo::Action(StrId::STR_REGISTER, SettingAction::None));
 }
 
