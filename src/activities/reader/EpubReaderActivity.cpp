@@ -478,8 +478,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
     // Smart mode: duration will be (re)computed per page from word count and calibrated WPM.
     // Use a sensible fallback (200 wpm average, 250 words/page) until the first page renders.
     const uint16_t wpm = SETTINGS.readingSpeedWpm > 0 ? SETTINGS.readingSpeedWpm : 200;
-    const unsigned long computed =
-        smartPageDurationMs(currentPageWordCount > 0 ? currentPageWordCount : 250, wpm);
+    const unsigned long computed = smartPageDurationMs(currentPageWordCount > 0 ? currentPageWordCount : 250, wpm);
     if (computed > 0) {
       pageTurnDuration = computed;
     }
@@ -928,7 +927,8 @@ void EpubReaderActivity::renderStatusBar() const {
     if (activePageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION) {
       // Smart mode: show calibrated WPM, or "Not calibrated" if the user hasn't run calibration yet.
       if (SETTINGS.readingSpeedWpm > 0) {
-        title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(SETTINGS.readingSpeedWpm) + tr(STR_CALIBRATE_READING_SPEED_WPM);
+        title =
+            tr(STR_AUTO_TURN_ENABLED) + std::to_string(SETTINGS.readingSpeedWpm) + tr(STR_CALIBRATE_READING_SPEED_WPM);
       } else {
         title = std::string(tr(STR_AUTO_TURN_ENABLED)) + tr(STR_CALIBRATE_UNCALIBRATED);
       }

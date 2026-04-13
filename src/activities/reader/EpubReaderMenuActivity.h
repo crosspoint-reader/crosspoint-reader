@@ -58,7 +58,7 @@ class EpubReaderMenuActivity final : public Activity {
   uint8_t selectedPageTurnOption = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
-  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12",
+  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF),      "1", "3", "6", "12",
                                                    I18N.get(StrId::STR_AUTO_TURN_SMART)};
   int currentPage = 0;
   int totalPages = 0;
