@@ -467,7 +467,7 @@ void FileBrowserActivity::renderCoverList(const ThemeMetrics& metrics, int pageW
 
     // Calculate dimensions for probe (same as theme)
     const int itemHeight = (contentHeight - (itemsPerPage - 1) * metrics.coverListSpacing) / itemsPerPage;
-    const int coverPadding = 6;
+    const int coverPadding = GUI.getCoverListPadding();
     const int maxHeight = itemHeight - (coverPadding * 2);
     const int maxWidth = static_cast<int>(maxHeight * 0.75);
 
