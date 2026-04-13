@@ -136,7 +136,8 @@ void ReaderActivity::onEnter() {
   }
 
   if (APP_STATE.koReaderSyncSession.active && APP_STATE.koReaderSyncSession.epubPath == initialBookPath) {
-    LOG_DBG("READER", "Opening EPUB with pending KOReader sync outcome=%d", static_cast<int>(APP_STATE.koReaderSyncSession.outcome));
+    LOG_DBG("READER", "Opening EPUB with pending KOReader sync outcome=%d",
+            static_cast<int>(APP_STATE.koReaderSyncSession.outcome));
   }
 
   currentBookPath = initialBookPath;
