@@ -32,18 +32,18 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
 
 inline bool isPageButtonHeld(const MappedInputManager& input) {
   return input.isPressed(MappedInputManager::Button::PageForward) ||
-         input.isPressed(MappedInputManager::Button::PageBack) ||
-         input.isPressed(MappedInputManager::Button::Left) || input.isPressed(MappedInputManager::Button::Right);
+         input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(MappedInputManager::Button::Left) ||
+         input.isPressed(MappedInputManager::Button::Right);
 }
 
 // Returns the new orientation index if a long-press rotation was detected, or -1.
 inline int8_t detectRotation(const MappedInputManager& input) {
   if (SETTINGS.sideButtonLongPress != CrossPointSettings::LONGPRESS_ROTATE) return -1;
   if (input.getHeldTime() < LONGPRESS_ACTION_MS) return -1;
-  const bool isNextHeld = input.isPressed(MappedInputManager::Button::PageForward) ||
-                          input.isPressed(MappedInputManager::Button::Right);
-  const bool isPrevHeld = input.isPressed(MappedInputManager::Button::PageBack) ||
-                          input.isPressed(MappedInputManager::Button::Left);
+  const bool isNextHeld =
+      input.isPressed(MappedInputManager::Button::PageForward) || input.isPressed(MappedInputManager::Button::Right);
+  const bool isPrevHeld =
+      input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(MappedInputManager::Button::Left);
   if (!isNextHeld && !isPrevHeld) return -1;
   const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? isNextHeld : isPrevHeld;
   return isBottom ? (SETTINGS.orientation + CrossPointSettings::ORIENTATION_COUNT - 1) %
