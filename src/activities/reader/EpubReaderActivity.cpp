@@ -506,6 +506,9 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
         // The user was reading page 1 *before* this turn, so its reading time
         // is not captured by the timer — counting its words would inflate WPM.
         calibrationStartMs = millis();
+        if (calibrationPagesRemaining > 0) {
+          calibrationPagesRemaining--;
+        }
       } else if (currentPageWordCount > 0) {
         // Subsequent turns: the user just finished reading the page they're
         // leaving, so its words are fully covered by the elapsed time.
@@ -908,11 +911,7 @@ void EpubReaderActivity::renderStatusBar() const {
     }
   } else if (calibrationActive) {
     // Show calibration progress in status bar area.
-    // calibrationPagesRemaining counts turn-events remaining; before the first turn the timer
-    // hasn't started yet, so subtract 1 to show the number of pages the user still has to read.
-    const uint8_t displayRemaining =
-        calibrationStartMs == 0UL ? calibrationPagesRemaining - 1 : calibrationPagesRemaining;
-    title = std::string(tr(STR_CALIBRATE_IN_PROGRESS)) + std::to_string(displayRemaining) +
+    title = std::string(tr(STR_CALIBRATE_IN_PROGRESS)) + std::to_string(calibrationPagesRemaining) +
             tr(STR_CALIBRATE_PAGES_LEFT);
 
     const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
