@@ -19,6 +19,7 @@ class HomeActivity final : public Activity {
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
+  const HomeMenuItem initialMenuItem;
   std::vector<RecentBook> recentBooks;
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
@@ -35,8 +36,9 @@ class HomeActivity final : public Activity {
   void loadRecentCovers(int coverHeight);
 
  public:
-  explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Home", renderer, mappedInput) {}
+  explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        HomeMenuItem initialMenuItem = HomeMenuItem::NONE)
+      : Activity("Home", renderer, mappedInput), initialMenuItem(initialMenuItem) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

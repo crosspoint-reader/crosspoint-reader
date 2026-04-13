@@ -196,7 +196,23 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome() { replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput)); }
+void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
+  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
+    const auto& activityName = currentActivity->name;
+    if (activityName == "FileBrowser") {
+      initialMenuItem = HomeMenuItem::FILE_BROWSER;
+    } else if (activityName == "RecentBooks") {
+      initialMenuItem = HomeMenuItem::RECENTS;
+    } else if (activityName == "OpdsBookBrowser") {
+      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+    } else if (activityName == "CrossPointWebServer") {
+      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
+    } else if (activityName == "Settings") {
+      initialMenuItem = HomeMenuItem::SETTINGS_MENU;
+    }
+  }
+  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+}
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
   if (pendingActivity) {
