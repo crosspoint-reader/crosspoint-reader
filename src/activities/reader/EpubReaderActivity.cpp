@@ -600,10 +600,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Reserve extra footer space for the auto-turn banner and all calibration banners
   // (in-progress, done, cancelled) when there is no status bar or only a progress bar.
-  const bool needsFooterBanner = automaticPageTurnActive || calibrationActive ||
-                                  calibrationDoneAtMs > 0 || calibrationCancelledAtMs > 0;
-  if (needsFooterBanner &&
-      (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
+  const bool needsFooterBanner =
+      automaticPageTurnActive || calibrationActive || calibrationDoneAtMs > 0 || calibrationCancelledAtMs > 0;
+  if (needsFooterBanner && (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
         std::max(SETTINGS.screenMargin,
                  static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));

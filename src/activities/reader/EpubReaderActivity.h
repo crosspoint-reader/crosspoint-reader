@@ -36,7 +36,7 @@ class EpubReaderActivity final : public Activity {
   // of data. Changing this value changes the number of *turn events*, not measured pages.
   static constexpr uint8_t CALIBRATION_PAGE_TURNS = 5;  // measures 4 pages
   bool calibrationActive = false;
-  unsigned long calibrationDoneAtMs = 0UL;  // millis() when calibration succeeded (0 = never/expired).
+  unsigned long calibrationDoneAtMs = 0UL;       // millis() when calibration succeeded (0 = never/expired).
   unsigned long calibrationCancelledAtMs = 0UL;  // millis() when calibration was cancelled (0 = never/expired).
   uint8_t calibrationPagesRemaining = 0;
   uint32_t calibrationTotalWords = 0;
