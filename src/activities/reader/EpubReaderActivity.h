@@ -27,6 +27,24 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  uint8_t activePageTurnOption = 0;  // Which option index is currently active (0 = off)
+
+  // Reading-speed calibration state machine.
+  // When active, the user reads N pages manually; we accumulate word counts and time.
+  // NOTE: the first turn starts the timer without recording words (the user was already
+  // mid-read on that page), so calibration measures (CALIBRATION_PAGE_TURNS - 1) pages
+  // of data. Changing this value changes the number of *turn events*, not measured pages.
+  static constexpr uint8_t CALIBRATION_PAGE_TURNS = 5;  // measures 4 pages
+  bool calibrationActive = false;
+  unsigned long calibrationDoneAtMs = 0UL;  // millis() when calibration succeeded (0 = never/expired).
+  uint8_t calibrationPagesRemaining = 0;
+  uint32_t calibrationTotalWords = 0;
+  // 0 means "not started yet"; set on the first forward page turn.
+  // Words from the first page are NOT counted (the user was already reading it before the
+  // timer started), so calibration measures pages 2..N against the time from turn 1 onward.
+  unsigned long calibrationStartMs = 0UL;
+  // Word count of the page currently on screen (set in render(), consumed in pageTurn()).
+  uint16_t currentPageWordCount = 0;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -49,6 +67,11 @@ class EpubReaderActivity final : public Activity {
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
+  // Compute autoflip duration from current page's word count and calibrated WPM.
+  // Returns 0 if WPM is uncalibrated or word count is 0 (caller should keep previous duration).
+  unsigned long smartPageDurationMs(uint16_t wordCount, uint16_t wpm) const;
+  void startCalibration();
+  void finishCalibration();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

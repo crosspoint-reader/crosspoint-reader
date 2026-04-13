@@ -28,8 +28,12 @@
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
-// pages per minute, first item is 1 to prevent division by zero if accessed
-const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+// Pages per minute for each auto-turn option (index matches EpubReaderMenuActivity::pageTurnLabels).
+// Index 0 is unused (off); index 1 is 1 to prevent division-by-zero if accessed.
+// Index SMART_PAGE_TURN_OPTION has no fixed ppm (0); duration is computed per page from WPM.
+const std::vector<int> PAGE_TURN_PPM = {1, 1, 3, 6, 12, 0};
+static_assert(EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION == 5,
+              "SMART_PAGE_TURN_OPTION must equal the last index of PAGE_TURN_PPM (update both together)");
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -109,6 +113,21 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Calibration mode: user reads pages at their own pace.
+  // Short Back cancels; forward page turn advances and accumulates words.
+  if (calibrationActive) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+        mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+      calibrationActive = false;
+      calibrationStartMs = 0UL;
+      calibrationTotalWords = 0;
+      calibrationPagesRemaining = 0;
+      requestUpdate();
+      return;
+    }
+    // Long-press Back exits to home (fall through to standard long-press handler below).
+  }
+
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -147,7 +166,7 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), SETTINGS.readingSpeedWpm),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -194,11 +213,6 @@ void EpubReaderActivity::loop() {
   }
 
   const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
-
-  // Don't skip chapter after screenshot
-  if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
-    return;
-  }
 
   if (skipChapter) {
     lastPageTurnTime = millis();
@@ -333,6 +347,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::CALIBRATE_READING_SPEED: {
+      startCalibration();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
         auto p = section->loadPageFromSectionFile();
@@ -441,14 +459,28 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_PPM.size()) {
     automaticPageTurnActive = false;
     return;
   }
 
   lastPageTurnTime = millis();
-  // calculates page turn duration by dividing by number of pages
-  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_LABELS[selectedPageTurnOption];
+
+  activePageTurnOption = selectedPageTurnOption;
+
+  if (selectedPageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION) {
+    // Smart mode: duration will be (re)computed per page from word count and calibrated WPM.
+    // Use a sensible fallback (200 wpm average, 250 words/page) until the first page renders.
+    const uint16_t wpm = SETTINGS.readingSpeedWpm > 0 ? SETTINGS.readingSpeedWpm : 200;
+    const unsigned long computed =
+        smartPageDurationMs(currentPageWordCount > 0 ? currentPageWordCount : 250, wpm);
+    if (computed > 0) {
+      pageTurnDuration = computed;
+    }
+  } else {
+    // calculates page turn duration by dividing by number of pages
+    pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_PPM[selectedPageTurnOption];
+  }
   automaticPageTurnActive = true;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
@@ -467,6 +499,30 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   if (isForwardTurn) {
+    // Accumulate words for calibration before advancing.
+    if (calibrationActive) {
+      if (calibrationStartMs == 0UL) {
+        // First page turn: start the clock but don't count this page's words.
+        // The user was reading page 1 *before* this turn, so its reading time
+        // is not captured by the timer — counting its words would inflate WPM.
+        calibrationStartMs = millis();
+      } else if (currentPageWordCount > 0) {
+        // Subsequent turns: the user just finished reading the page they're
+        // leaving, so its words are fully covered by the elapsed time.
+        calibrationTotalWords += currentPageWordCount;
+        if (calibrationPagesRemaining > 0) {
+          calibrationPagesRemaining--;
+        }
+        if (calibrationPagesRemaining == 0) {
+          finishCalibration();
+          // Fall through: also advance the page so the user isn't left on the
+          // last calibration page after tapping forward.
+        }
+      }
+      // Zero-word pages (images, covers): advance the page without accumulating
+      // words or decrementing the counter — the timer keeps running.
+    }
+
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
     } else {
@@ -640,6 +696,35 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
 
+    // Count words on this page for smart auto-turn and calibration.
+    {
+      uint16_t words = 0;
+      for (const auto& el : p->elements) {
+        if (el->getTag() == TAG_PageLine) {
+          const auto& line = static_cast<const PageLine&>(*el);
+          if (line.getBlock()) {
+            words += static_cast<uint16_t>(line.getBlock()->wordCount());
+          }
+        }
+      }
+      currentPageWordCount = words;
+    }
+
+    // In smart mode, recalculate the flip duration for this specific page.
+    if (automaticPageTurnActive && activePageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION) {
+      const uint16_t wpm = SETTINGS.readingSpeedWpm > 0 ? SETTINGS.readingSpeedWpm : 200;
+      // Fall back to 250 words for image-only or zero-word pages so the timer
+      // always advances rather than inheriting a stale duration from the previous page.
+      const uint16_t words = currentPageWordCount > 0 ? currentPageWordCount : 250;
+      const unsigned long computed = smartPageDurationMs(words, wpm);
+      if (computed > 0) {
+        pageTurnDuration = computed;
+      }
+      // Reset the countdown from now (end of render) so render time isn't
+      // charged against the reader — and the new duration takes effect immediately.
+      lastPageTurnTime = millis();
+    }
+
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
@@ -689,8 +774,8 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   FsFile f;
   if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
-    data[0] = currentSpineIndex & 0xFF;
-    data[1] = (currentSpineIndex >> 8) & 0xFF;
+    data[0] = spineIndex & 0xFF;
+    data[1] = (spineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
     data[4] = pageCount & 0xFF;
@@ -813,8 +898,38 @@ void EpubReaderActivity::renderStatusBar() const {
 
   int textYOffset = 0;
 
-  if (automaticPageTurnActive) {
-    title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
+  if (calibrationDoneAtMs > 0 && millis() - calibrationDoneAtMs < 3000UL) {
+    // Show success message for 3 seconds after calibration completes.
+    title = tr(STR_CALIBRATE_DONE);
+
+    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+    if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
+      textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
+    }
+  } else if (calibrationActive) {
+    // Show calibration progress in status bar area.
+    // calibrationPagesRemaining counts turn-events remaining; before the first turn the timer
+    // hasn't started yet, so subtract 1 to show the number of pages the user still has to read.
+    const uint8_t displayRemaining =
+        calibrationStartMs == 0UL ? calibrationPagesRemaining - 1 : calibrationPagesRemaining;
+    title = std::string(tr(STR_CALIBRATE_IN_PROGRESS)) + std::to_string(displayRemaining) +
+            tr(STR_CALIBRATE_PAGES_LEFT);
+
+    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+    if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
+      textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
+    }
+  } else if (automaticPageTurnActive) {
+    if (activePageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION) {
+      // Smart mode: show calibrated WPM, or "Not calibrated" if the user hasn't run calibration yet.
+      if (SETTINGS.readingSpeedWpm > 0) {
+        title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(SETTINGS.readingSpeedWpm) + tr(STR_CALIBRATE_READING_SPEED_WPM);
+      } else {
+        title = tr(STR_AUTO_TURN_ENABLED) + tr(STR_CALIBRATE_UNCALIBRATED);
+      }
+    } else {
+      title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
+    }
 
     // calculates textYOffset when rendering title in status bar
     const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
@@ -894,6 +1009,49 @@ void EpubReaderActivity::restoreSavedPosition() {
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
     section.reset();
+  }
+  requestUpdate();
+}
+
+unsigned long EpubReaderActivity::smartPageDurationMs(const uint16_t wordCount, const uint16_t wpm) const {
+  if (wpm == 0 || wordCount == 0) {
+    return 0UL;
+  }
+  // duration = (wordCount / wpm) * 60000  ms
+  // Computed with integer arithmetic to avoid floating point:
+  //   = wordCount * 60000 / wpm
+  return (static_cast<unsigned long>(wordCount) * 60000UL) / static_cast<unsigned long>(wpm);
+}
+
+void EpubReaderActivity::startCalibration() {
+  automaticPageTurnActive = false;
+  activePageTurnOption = 0;
+  calibrationActive = true;
+  calibrationDoneAtMs = 0UL;
+  calibrationPagesRemaining = CALIBRATION_PAGE_TURNS;
+  calibrationTotalWords = 0;
+  // Timer starts on the first page turn (not here) to exclude initial render latency.
+  calibrationStartMs = 0UL;
+  LOG_DBG("ERS", "Reading speed calibration started (%u pages)", CALIBRATION_PAGE_TURNS);
+  requestUpdate();
+}
+
+void EpubReaderActivity::finishCalibration() {
+  calibrationActive = false;
+  const unsigned long elapsedMs = millis() - calibrationStartMs;
+
+  if (elapsedMs > 0 && calibrationTotalWords > 0) {
+    // wpm = totalWords / (elapsedMs / 60000) = totalWords * 60000 / elapsedMs
+    const uint32_t wpm = (static_cast<uint32_t>(calibrationTotalWords) * 60000UL) / elapsedMs;
+    // Cap at 1000 wpm to guard against accidental rapid flipping.
+    SETTINGS.readingSpeedWpm = static_cast<uint16_t>(wpm > 1000U ? 1000U : wpm);
+    SETTINGS.saveToFile();
+    calibrationDoneAtMs = millis();
+    LOG_DBG("ERS", "Calibration done: %lu words in %lums -> %u wpm", calibrationTotalWords, elapsedMs,
+            SETTINGS.readingSpeedWpm);
+  } else {
+    LOG_DBG("ERS", "Calibration failed: elapsedMs=%lu words=%lu", elapsedMs,
+            static_cast<unsigned long>(calibrationTotalWords));
   }
   requestUpdate();
 }

@@ -16,6 +16,7 @@ class EpubReaderMenuActivity final : public Activity {
     FOOTNOTES,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
+    CALIBRATE_READING_SPEED,
     ROTATE_SCREEN,
     SCREENSHOT,
     DISPLAY_QR,
@@ -26,7 +27,8 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes);
+                                  const uint8_t currentOrientation, const bool hasFootnotes,
+                                  const uint16_t readingSpeedWpm);
 
   void onEnter() override;
   void onExit() override;
@@ -52,8 +54,13 @@ class EpubReaderMenuActivity final : public Activity {
   uint8_t selectedPageTurnOption = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
-  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
+  // Index of the Smart (WPM-based) option inside pageTurnLabels / PAGE_TURN_PPM.
+  // A static_assert in EpubReaderActivity.cpp enforces this stays in sync with PAGE_TURN_PPM.
+  static constexpr uint8_t SMART_PAGE_TURN_OPTION = 5;
+  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12",
+                                                   I18N.get(StrId::STR_AUTO_TURN_SMART)};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;
+  uint16_t readingSpeedWpm = 0;
 };
