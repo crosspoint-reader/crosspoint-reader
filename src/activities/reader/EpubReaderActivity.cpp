@@ -113,6 +113,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Clear calibration success message after 3 seconds and trigger a redraw
+  if (calibrationDoneAtMs > 0 && (millis() - calibrationDoneAtMs >= 3000UL)) {
+    calibrationDoneAtMs = 0;
+    requestUpdate();
+  }
+
   // Calibration mode: user reads pages at their own pace.
   // Short Back cancels; forward page turn advances and accumulates words.
   if (calibrationActive) {
@@ -901,8 +907,8 @@ void EpubReaderActivity::renderStatusBar() const {
 
   int textYOffset = 0;
 
-  if (calibrationDoneAtMs > 0 && millis() - calibrationDoneAtMs < 3000UL) {
-    // Show success message for 3 seconds after calibration completes.
+  if (calibrationDoneAtMs > 0) {
+    // Show success message (will be cleared by loop() after 3 seconds)
     title = tr(STR_CALIBRATE_DONE);
 
     const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
