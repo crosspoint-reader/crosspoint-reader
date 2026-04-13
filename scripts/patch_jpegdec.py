@@ -1,25 +1,20 @@
 """
 PlatformIO pre-build script: patch JPEGDEC library for progressive JPEG support.
 
-Four patches are applied:
+Three patches are applied:
 
-1. JPEGMakeHuffTables: Skip AC Huffman table construction for progressive JPEGs.
-   JPEGDEC 1.8.x fails to open progressive JPEGs because JPEGMakeHuffTables()
-   cannot build AC tables with 11+-bit codes (the "slow tables" path is disabled).
-   Since progressive decode only uses DC coefficients, AC tables are not needed.
-
-2. JPEGDecodeMCU_P: Guard pMCU writes against MCU_SKIP (-8).
+1. JPEGDecodeMCU_P: Guard pMCU writes against MCU_SKIP (-8).
    The non-progressive JPEGDecodeMCU checks `iMCU >= 0` before writing to pMCU,
    but JPEGDecodeMCU_P does not.  When EIGHT_BIT_GRAYSCALE mode skips chroma
    channels by passing MCU_SKIP, the unguarded write goes to a wild pointer
    (sMCUs[0xFFFFF8]) and crashes.
 
-3. JPEGParseInfo: Force grayscale for non-interleaved progressive JPEGs.
+2. JPEGParseInfo: Force grayscale for non-interleaved progressive JPEGs.
    If a progressive JPEG contains a luminance-only scan (Y) but the header 
    defined color (YCrCb), JPEGDEC fails when trying to decode missing chroma
    components. Forcing ucSubSample=0 (grayscale) avoids this.
 
-4. JPEGDecode: Remove forced 1/8 scaling for progressive mode.
+3. JPEGDecode: Remove forced 1/8 scaling for progressive mode.
    Upstream v1.8.4+ forces JPEG_SCALE_EIGHTH for progressive JPEGs. We remove
    this to allow high-resolution (though blocky) DC-only decodes, which our
    converter then downsamples properly to the target size.
@@ -39,46 +34,9 @@ def patch_jpegdec(env):
     for env_dir in os.listdir(libdeps_dir):
         jpeg_inl = os.path.join(libdeps_dir, env_dir, "JPEGDEC", "src", "jpeg.inl")
         if os.path.isfile(jpeg_inl):
-            _apply_ac_table_patch(jpeg_inl)
             _apply_mcu_skip_patch(jpeg_inl)
             _apply_grayscale_patch(jpeg_inl)
             _apply_remove_forced_scale_patch(jpeg_inl)
-
-
-def _apply_ac_table_patch(filepath):
-    MARKER = "// CrossPoint patch: skip AC tables for progressive JPEG"
-    with open(filepath, "r") as f:
-        content = f.read()
-
-    if MARKER in content:
-        return  # already patched
-
-    OLD = """\
-    }
-    // now do AC components (up to 4 tables of 16-bit codes)"""
-
-    NEW = (
-        "    }\n"
-        "    " + MARKER + "\n"
-        "    // Progressive JPEG: only DC coefficients are decoded (first scan), so AC\n"
-        "    // Huffman tables are not needed.  Skip building them to avoid failing on\n"
-        "    // 11+-bit AC codes that the optimized table builder cannot handle.\n"
-        "    if (pJPEG->ucMode == 0xc2)\n"
-        "        return 1;\n"
-        "    // now do AC components (up to 4 tables of 16-bit codes)"
-    )
-
-    if OLD not in content:
-        print(
-            "WARNING: JPEGDEC AC table patch target not found in %s — "
-            "library may have been updated" % filepath
-        )
-        return
-
-    content = content.replace(OLD, NEW, 1)
-    with open(filepath, "w") as f:
-        f.write(content)
-    print("Patched JPEGDEC: skip AC tables for progressive JPEG: %s" % filepath)
 
 
 def _apply_mcu_skip_patch(filepath):
