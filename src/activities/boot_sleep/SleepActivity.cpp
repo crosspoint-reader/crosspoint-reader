@@ -365,7 +365,7 @@ void SleepActivity::onEnter() {
       return renderCustomSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
-      if (APP_STATE.lastSleepFromReader) {
+      if (!APP_STATE.openEpubPath.empty()) {
         return renderCoverSleepScreen();
       } else {
         return renderCustomSleepScreen();
