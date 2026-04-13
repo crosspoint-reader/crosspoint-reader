@@ -383,14 +383,14 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
     // Skip leading whitespace before checking for '{' so servers that emit
     // a BOM or indent their JSON don't get incorrectly rejected.
     if (!activeBuf->data) {
-      return SERVER_ERROR;
+      return INVALID_RESPONSE;
     }
     const char* p = activeBuf->data;
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
       p++;
     }
     if (*p != '{') {
-      return SERVER_ERROR;
+      return INVALID_RESPONSE;
     }
     return OK;
   }
@@ -585,7 +585,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
         p++;
       }
       if (*p != '\0' && *p != '{') {
-        return SERVER_ERROR;
+        return INVALID_RESPONSE;
       }
     }
     return OK;
@@ -622,6 +622,13 @@ const char* KOReaderSyncClient::lastFailureDetail() {
     }
     return g_failureDetailBuf;
   }
+  // Invalid-response case: HTTP 200/202 but body was not JSON (e.g. captive portal HTML).
+  // On real success callers never reach lastFailureDetail(), so a 2xx here means INVALID_RESPONSE.
+  if ((lastHttpCode == 200 || lastHttpCode == 202) && lastEspError == ESP_OK) {
+    snprintf(g_failureDetailBuf, sizeof(g_failureDetailBuf),
+             "%s: expected JSON but received HTML (captive portal or proxy?)", lastOperation);
+    return g_failureDetailBuf;
+  }
   // Server case: got an HTTP status the client didn't recognize as success.
   if (lastHttpCode != 0) {
     snprintf(g_failureDetailBuf, sizeof(g_failureDetailBuf), "%s: HTTP %d", lastOperation, lastHttpCode);
@@ -654,6 +661,8 @@ const char* KOReaderSyncClient::errorString(Error error) {
       return "Registration is disabled on this server";
     case REDIRECT_ERROR:
       return "Server redirected (check server URL)";
+    case INVALID_RESPONSE:
+      return "Unexpected response (check server URL)";
     default:
       return "Unknown error";
   }

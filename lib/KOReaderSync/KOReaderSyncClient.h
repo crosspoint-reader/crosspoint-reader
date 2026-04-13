@@ -40,7 +40,8 @@ class KOReaderSyncClient {
     NOT_FOUND,
     USER_EXISTS,
     REGISTRATION_DISABLED,
-    REDIRECT_ERROR
+    REDIRECT_ERROR,
+    INVALID_RESPONSE
   };
 
   /**
