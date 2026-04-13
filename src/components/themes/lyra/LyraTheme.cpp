@@ -36,7 +36,6 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int popupMarginX = 16;
 constexpr int popupMarginY = 12;
-constexpr int maxSubtitleWidth = 100;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
@@ -170,10 +169,20 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    Rect{batteryX, batteryY, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
-  int maxTitleWidth =
-      rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);
+  const int usableWidth = rect.width - LyraMetrics::values.contentSidePadding * 2;
+  constexpr int titleSubtitleGap = 10;
+
+  // サブタイトルの幅を先に計算し、タイトル幅はその残りを使う
+  int subtitleWidth = 0;
+  if (subtitle) {
+    subtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, subtitle);
+    if (subtitleWidth > usableWidth) {
+      subtitleWidth = usableWidth;
+    }
+  }
 
   if (title) {
+    int maxTitleWidth = usableWidth - (subtitleWidth > 0 ? subtitleWidth + titleSubtitleGap : 0);
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
     renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
                       rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
@@ -182,7 +191,8 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   }
 
   if (subtitle) {
-    auto truncatedSubtitle = renderer.truncatedText(SMALL_FONT_ID, subtitle, maxSubtitleWidth, EpdFontFamily::REGULAR);
+    auto truncatedSubtitle =
+        renderer.truncatedText(SMALL_FONT_ID, subtitle, usableWidth, EpdFontFamily::REGULAR);
     int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
     renderer.drawText(SMALL_FONT_ID,
                       rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,
