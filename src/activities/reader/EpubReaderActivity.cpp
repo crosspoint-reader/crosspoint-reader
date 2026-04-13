@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "ReadingStatsStore.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -86,12 +87,19 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  // Load accumulated reading time and start session timer
+  loadReadingStats();
+  sessionStartMillis = millis();
+
   // Trigger first update
   requestUpdate();
 }
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  // Save accumulated reading time before destroying the activity
+  saveReadingStats();
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -147,7 +155,7 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), getTotalSecondsRead()),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -684,6 +692,44 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
   }
 }
+
+// ---- Reading stats helpers ----
+
+void EpubReaderActivity::loadReadingStats() {
+  if (!epub) return;
+  const BookReadingStats stats = ReadingStatsStore::load(epub->getPath());
+  accumulatedSecondsRead = stats.totalSecondsRead;
+  LOG_DBG("ERS", "Loaded reading stats: %us read, %d%% progress", accumulatedSecondsRead,
+          stats.lastProgressPercent);
+}
+
+void EpubReaderActivity::saveReadingStats() {
+  if (!epub) return;
+  BookReadingStats stats;
+  stats.totalSecondsRead = getTotalSecondsRead();
+  stats.lastProgressPercent = getCurrentProgressPercent();
+  ReadingStatsStore::save(epub->getPath(), stats);
+  LOG_DBG("ERS", "Saved reading stats: %us read, %d%% progress", stats.totalSecondsRead,
+          stats.lastProgressPercent);
+}
+
+uint32_t EpubReaderActivity::getTotalSecondsRead() const {
+  const unsigned long now = millis();
+  const unsigned long elapsed = (now >= sessionStartMillis) ? (now - sessionStartMillis) : 0UL;
+  return accumulatedSecondsRead + static_cast<uint32_t>(elapsed / 1000UL);
+}
+
+uint8_t EpubReaderActivity::getCurrentProgressPercent() const {
+  if (!epub || epub->getBookSize() == 0 || !section || section->pageCount == 0) {
+    return 0;
+  }
+  const float chapterProg = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+  const float bookProg = epub->calculateProgress(currentSpineIndex, chapterProg) * 100.0f;
+  const int clamped = bookProg < 0.0f ? 0 : (bookProg > 100.0f ? 100 : static_cast<int>(bookProg + 0.5f));
+  return static_cast<uint8_t>(clamped);
+}
+
+// ---- End reading stats helpers ----
 
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   FsFile f;

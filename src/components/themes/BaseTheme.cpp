@@ -10,6 +10,7 @@
 #include <string>
 
 #include "I18n.h"
+#include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -526,6 +527,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   if (hasContinueReading) {
     const std::string& lastBookTitle = recentBooks[0].title;
     const std::string& lastBookAuthor = recentBooks[0].author;
+    const uint8_t progressPercent = recentBooks[0].lastProgressPercent;
+    const uint32_t secondsRead = recentBooks[0].totalSecondsRead;
 
     // Invert text colors based on selection state:
     // - With cover: selected = white text on black box, unselected = black text on white box
@@ -533,45 +536,37 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
     auto lines = renderer.wrappedText(UI_12_FONT_ID, lastBookTitle.c_str(), bookWidth - 40, 3);
 
-    // Book title text
-    int totalTextHeight = renderer.getLineHeight(UI_12_FONT_ID) * static_cast<int>(lines.size());
-    if (!lastBookAuthor.empty()) {
-      totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
-    }
-
-    // Vertically center the title block within the card
-    int titleYStart = bookY + (bookHeight - totalTextHeight) / 2;
-
     const auto truncatedAuthor = lastBookAuthor.empty()
                                      ? std::string{}
                                      : renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40);
 
-    // If cover image was rendered, draw box behind title and author
+    // Title + author placed near the top of the card
+    constexpr int topPad = 12;
+    int titleYStart = bookY + topPad;
+
+    // Calculate box dimensions to draw behind title+author when cover is shown
     if (coverRendered) {
+      int totalTextHeight = renderer.getLineHeight(UI_12_FONT_ID) * static_cast<int>(lines.size());
+      if (!truncatedAuthor.empty()) {
+        totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+      }
+
       constexpr int boxPadding = 8;
-      // Calculate the max text width for the box
       int maxTextWidth = 0;
       for (const auto& line : lines) {
-        const int lineWidth = renderer.getTextWidth(UI_12_FONT_ID, line.c_str());
-        if (lineWidth > maxTextWidth) {
-          maxTextWidth = lineWidth;
-        }
+        const int lw = renderer.getTextWidth(UI_12_FONT_ID, line.c_str());
+        if (lw > maxTextWidth) maxTextWidth = lw;
       }
       if (!truncatedAuthor.empty()) {
-        const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
-        if (authorWidth > maxTextWidth) {
-          maxTextWidth = authorWidth;
-        }
+        const int aw = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
+        if (aw > maxTextWidth) maxTextWidth = aw;
       }
 
       const int boxWidth = maxTextWidth + boxPadding * 2;
       const int boxHeight = totalTextHeight + boxPadding * 2;
       const int boxX = rect.x + (rect.width - boxWidth) / 2;
       const int boxY = titleYStart - boxPadding;
-
-      // Draw box (inverted when selected: black box instead of white)
       renderer.fillRect(boxX, boxY, boxWidth, boxHeight, bookSelected);
-      // Draw border around the box (inverted when selected: white border instead of black)
       renderer.drawRect(boxX, boxY, boxWidth, boxHeight, !bookSelected);
     }
 
@@ -579,16 +574,58 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
-
     if (!truncatedAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
+      titleYStart += renderer.getLineHeight(UI_10_FONT_ID);
     }
+
+    // ---- Progress bar ----
+    constexpr int barMarginTop = 8;
+    constexpr int barHeight = 8;
+    constexpr int barMarginX = 30;
+    const int barY = titleYStart + barMarginTop;
+    const int barWidth = bookWidth - barMarginX * 2;
+    const int barX = bookX + barMarginX;
+
+    if (coverRendered) {
+      // Semi-opaque box behind the progress bar + stats line
+      constexpr int statBoxPad = 6;
+      constexpr int statsLineHeight = 14;
+      const int statBoxHeight = barMarginTop + barHeight + statBoxPad + statsLineHeight + statBoxPad;
+      const int statBoxX = bookX + barMarginX - statBoxPad;
+      const int statBoxW = barWidth + statBoxPad * 2;
+      renderer.fillRect(statBoxX, barY - statBoxPad, statBoxW, statBoxHeight, bookSelected);
+      renderer.drawRect(statBoxX, barY - statBoxPad, statBoxW, statBoxHeight, !bookSelected);
+    }
+
+    renderer.drawRect(barX, barY, barWidth, barHeight, !bookSelected);
+    const int fillW = barWidth * static_cast<int>(progressPercent) / 100;
+    if (fillW > 2) {
+      renderer.fillRect(barX + 1, barY + 1, fillW - 2, barHeight - 2, !bookSelected);
+    }
+
+    // ---- Stats line ----
+    const int statsY = barY + barHeight + 4;
+    std::string statsLine;
+    if (secondsRead > 0) {
+      const std::string timeRead = ReadingStatsStore::formatTime(secondsRead);
+      const uint32_t secsLeft = ReadingStatsStore::estimateSecondsLeft(secondsRead, progressPercent);
+      statsLine = std::to_string(static_cast<int>(progressPercent)) + "%  ·  " + timeRead + " " +
+                  tr(STR_STATS_READ_SUFFIX);
+      if (secsLeft > 0) {
+        statsLine += "  ·  " + ReadingStatsStore::formatTime(secsLeft) + " " + tr(STR_STATS_LEFT_SUFFIX);
+      }
+    } else {
+      statsLine = std::to_string(static_cast<int>(progressPercent)) + "%";
+    }
+    const std::string truncStats =
+        renderer.truncatedText(UI_10_FONT_ID, statsLine.c_str(), bookWidth - barMarginX * 2);
+    renderer.drawCenteredText(UI_10_FONT_ID, statsY, truncStats.c_str(), !bookSelected);
 
     // "Continue Reading" label at the bottom
     const int continueY = bookY + bookHeight - renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
     if (coverRendered) {
-      // Draw box behind "Continue Reading" text (inverted when selected: black box instead of white)
       const char* continueText = tr(STR_CONTINUE_READING);
       const int continueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, continueText);
       constexpr int continuePadding = 6;

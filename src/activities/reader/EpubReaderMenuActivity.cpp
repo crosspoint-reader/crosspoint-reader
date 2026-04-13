@@ -4,20 +4,22 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "ReadingStatsStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const bool hasFootnotes, const uint32_t totalSecondsRead)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      totalSecondsRead(totalSecondsRead) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -110,13 +112,26 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
-  // Progress summary
+  // Progress summary line
   std::string progressLine;
   if (totalPages > 0) {
     progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" +
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
+
+  // Append reading time stats if we have data
+  if (totalSecondsRead > 0) {
+    const std::string timeRead = ReadingStatsStore::formatTime(totalSecondsRead);
+    progressLine += std::string("  |  ") + timeRead + " " + tr(STR_STATS_READ_SUFFIX);
+    const uint32_t secsLeft = ReadingStatsStore::estimateSecondsLeft(
+        totalSecondsRead, static_cast<uint8_t>(bookProgressPercent > 100 ? 100 : bookProgressPercent));
+    if (secsLeft >= 60) {
+      const std::string timeLeft = ReadingStatsStore::formatTime(secsLeft);
+      progressLine += std::string("  |  ") + timeLeft + " " + tr(STR_STATS_LEFT_SUFFIX);
+    }
+  }
+
   renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
 
   // Menu Items

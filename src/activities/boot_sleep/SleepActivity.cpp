@@ -194,7 +194,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.displayBuffer();
 
   if (hasGreyscale) {
     bitmap.rewindToData();

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/book.h"
@@ -493,23 +494,58 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
     }
 
-    auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
+    const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
 
+    auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
     auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
     const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
-    const int authorHeight = book.author.empty() ? 0 : (renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2);
-    const int totalBlockHeight = titleBlockHeight + authorHeight;
-    int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
-    const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
+
+    // Title near the top of the right panel
+    constexpr int topPad = 8;
+    int textY = tileY + topPad;
+
     for (const auto& line : titleLines) {
-      renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
-      titleY += titleLineHeight;
+      renderer.drawText(UI_12_FONT_ID, textX, textY, line.c_str(), true, EpdFontFamily::BOLD);
+      textY += titleLineHeight;
     }
     if (!book.author.empty()) {
-      titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
+      textY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, textY, author.c_str(), true);
+      textY += renderer.getLineHeight(UI_10_FONT_ID);
     }
+
+    // ---- Progress bar ----
+    const uint8_t progressPercent = book.lastProgressPercent;
+    const uint32_t secondsRead = book.totalSecondsRead;
+
+    constexpr int barMarginTop = 8;
+    constexpr int barHeight = 6;
+    const int barY = textY + barMarginTop;
+    // Clamp bar width to available text panel
+    const int barWidth = textWidth;
+
+    renderer.drawRect(textX, barY, barWidth, barHeight);
+    const int fillW = barWidth * static_cast<int>(progressPercent) / 100;
+    if (fillW > 2) {
+      renderer.fillRect(textX + 1, barY + 1, fillW - 2, barHeight - 2);
+    }
+
+    // ---- Stats line ----
+    const int statsY = barY + barHeight + 4;
+    std::string statsLine;
+    if (secondsRead > 0) {
+      const std::string timeRead = ReadingStatsStore::formatTime(secondsRead);
+      const uint32_t secsLeft = ReadingStatsStore::estimateSecondsLeft(secondsRead, progressPercent);
+      statsLine = std::to_string(static_cast<int>(progressPercent)) + "%  ·  " + timeRead + " " +
+                  tr(STR_STATS_READ_SUFFIX);
+      if (secsLeft > 0) {
+        statsLine += "  ·  " + ReadingStatsStore::formatTime(secsLeft) + " " + tr(STR_STATS_LEFT_SUFFIX);
+      }
+    } else {
+      statsLine = std::to_string(static_cast<int>(progressPercent)) + "%";
+    }
+    const std::string truncStats = renderer.truncatedText(UI_10_FONT_ID, statsLine.c_str(), textWidth);
+    renderer.drawText(UI_10_FONT_ID, textX, statsY, truncStats.c_str(), true);
   } else {
     drawEmptyRecents(renderer, rect);
   }

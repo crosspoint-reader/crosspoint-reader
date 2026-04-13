@@ -4,6 +4,7 @@
 #include <Epub/Section.h>
 
 #include "EpubReaderMenuActivity.h"
+#include "ReadingStatsStore.h"
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
@@ -19,6 +20,17 @@ class EpubReaderActivity final : public Activity {
   int cachedChapterTotalPageCount = 0;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
+
+  // Reading time tracking (no RTC — uses millis() per session)
+  unsigned long sessionStartMillis = 0UL;
+  uint32_t accumulatedSecondsRead = 0;  // loaded from stats.bin on enter, saved on exit
+
+  void loadReadingStats();
+  void saveReadingStats();
+  // Total seconds read including the current live session
+  uint32_t getTotalSecondsRead() const;
+  // Current book progress as a 0-100 uint8_t
+  uint8_t getCurrentProgressPercent() const;
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;

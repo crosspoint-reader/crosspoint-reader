@@ -8,6 +8,10 @@ struct RecentBook {
   std::string author;
   std::string coverBmpPath;
 
+  // Reading stats — loaded on demand from stats.bin, NOT persisted in the JSON store.
+  uint32_t totalSecondsRead = 0;
+  uint8_t lastProgressPercent = 0;  // 0-100
+
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 

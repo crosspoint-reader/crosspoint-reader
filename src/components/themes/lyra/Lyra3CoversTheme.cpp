@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "ReadingStatsStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
@@ -112,6 +113,20 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       for (const auto& line : titleLines) {
         renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, line.c_str(), true);
         currentY += titleLineHeight;
+      }
+
+      // Progress bar (compact, no stats text — limited space per tile)
+      const uint8_t progressPercent = recentBooks[i].lastProgressPercent;
+      constexpr int barHeight = 5;
+      constexpr int barMarginTop = 4;
+      constexpr int barPadding = 2;
+      const int barX = tileX + hPaddingInSelection;
+      const int barW = tileWidth - 2 * hPaddingInSelection;
+      const int barY = currentY + barMarginTop;
+      renderer.drawRect(barX, barY, barW, barHeight);
+      const int fillW = barW * static_cast<int>(progressPercent) / 100;
+      if (fillW > barPadding * 2) {
+        renderer.fillRect(barX + barPadding, barY + barPadding, fillW - barPadding * 2, barHeight - barPadding * 2);
       }
     }
   } else {
