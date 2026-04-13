@@ -30,7 +30,8 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   lookupCancelRequested = false;
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
-  owner.requestUpdateAndWait();
+  // Skip requestUpdateAndWait() - lookup is fast (~30ms), no need to show "looking up..."
+  // overlay. This avoids triggering an e-ink refresh that would block the activity transition.
   task = std::make_unique<DictLookupTask>(*this);
   task->start("DictLookup", 4096, 1);
 }
@@ -68,9 +69,8 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         foundWord = lookupWord;
         foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Direct;
         nextIsSuggestion = false;
-        if (recordHistory_ && !cachePath.empty()) {
-          LookupHistory::addWord(cachePath, lookupWord, toHistStatus(foundStatus));
-        }
+        // Defer history recording - will be done by recordPendingHistory() after definition is displayed
+        pendingHistoryWord = recordHistory_ ? lookupWord : "";
         return LookupEvent::FoundDefinition;
       }
 
@@ -156,12 +156,7 @@ bool DictionaryLookupController::render() {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   if (state == LookupState::LookingUp) {
-    Rect popupLayout = GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
-    if (lookupProgress > 0) {
-      GUI.fillPopupProgress(renderer, popupLayout, lookupProgress);
-    }
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return true;
+    return false;  // Skip popup, let lookup proceed silently
   }
 
   if (state == LookupState::AltFormPrompt) {
@@ -269,5 +264,14 @@ void DictionaryLookupController::runLookup() {
   foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
   lookupCancelled = lookupCancelRequested;
   lookupDone = true;
-  owner.requestUpdate(true);
+  // Don't call requestUpdate(true) here - it triggers an unnecessary e-ink refresh
+  // of the word select activity before transitioning to the definition activity.
+  // The main loop polls lookupDone every ~10ms, so response time is still fast.
+}
+
+void DictionaryLookupController::recordPendingHistory() {
+  if (!pendingHistoryWord.empty() && !cachePath.empty()) {
+    LookupHistory::addWord(cachePath, pendingHistoryWord, toHistStatus(foundStatus));
+    pendingHistoryWord.clear();
+  }
 }

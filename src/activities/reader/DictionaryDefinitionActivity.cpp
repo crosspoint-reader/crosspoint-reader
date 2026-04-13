@@ -26,6 +26,9 @@ void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
   wrapText();
   requestUpdate();
+  // Record lookup history after triggering display update - the e-ink refresh
+  // happens in parallel with this file I/O, so user sees definition immediately.
+  controller.recordPendingHistory();
 }
 
 void DictionaryDefinitionActivity::onExit() {

@@ -105,26 +105,27 @@ void ActivityManager::loop() {
 
     } else if (pendingActivity) {
       // Current activity has requested a new activity to be launched
-      RenderLock lock;
-
       if (pendingAction == PendingAction::Replace) {
-        // Destroy the current activity
+        // Replace needs lock because it calls onExit() which may render
+        RenderLock lock;
         exitActivity(lock);
-        // Clear the stack
         while (!stackActivities.empty()) {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
+        pendingAction = PendingAction::None;
+        currentActivity = std::move(pendingActivity);
+        lock.unlock();  // onEnter may acquire its own lock
+        currentActivity->onEnter();
       } else if (pendingAction == PendingAction::Push) {
-        // Move current activity to stack
+        // Push doesn't need RenderLock - just moves pointers, no rendering.
+        // Avoiding the lock prevents blocking on any in-progress e-ink refresh (~1s).
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
+        pendingAction = PendingAction::None;
+        currentActivity = std::move(pendingActivity);
+        currentActivity->onEnter();
       }
-      pendingAction = PendingAction::None;
-      currentActivity = std::move(pendingActivity);
-
-      lock.unlock();  // onEnter may acquire its own lock
-      currentActivity->onEnter();
 
       // onEnter may request another pending action, we will handle it in the next loop iteration
       continue;
