@@ -17,7 +17,7 @@ void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 const char* KeyboardEntryActivity::keyboard[] = {
   "abcd", "efgh", "ijkl", "mnop", "qrst", "uvwx", "yz12", "3456",
-  //"7890", "~!@#", "$%^&", "*()_", "+:<>", "?   "
+  "7890", "~!@#", "$%^&", "*()_", "+:<>", "?   "
 };
 
 char KeyboardEntryActivity::getSelectedChar() const {
@@ -195,15 +195,36 @@ void KeyboardEntryActivity::render(RenderLock&&) {
                                          (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * 4
                                    : inputStartY + inputHeight + metrics.verticalSpacing * 4;
 
+  char buffer[] = "A B C D\0";
+  int width = renderer.getTextWidth(UI_12_FONT_ID, buffer);
+  int height = renderer.getTextHeight(UI_12_FONT_ID);
+
   if (selectedTopLevel == -1) {
+    int requiredSpace = pageWidth - width * 3;
+    int x = (pageWidth - requiredSpace) / 3;
+
     for(int i = 0; i < 3; i++) {
-      int width = (metrics.keyboardKeyWidth * 4);
-      int offset = (pageWidth / 3);
-      int start = (pageWidth - offset) / 3 + i * offset;
-      renderer.drawRect(start, keyboardStartY, width, metrics.keyboardKeyHeight * 3);
-      renderer.drawText(UI_12_FONT_ID, start + 1, keyboardStartY + 1, keyboard[i * 3]);
-      renderer.drawText(UI_12_FONT_ID, start + 1, keyboardStartY + 1  + 1 * metrics.keyboardKeyHeight, keyboard[i * 3 + 1]);
-      renderer.drawText(UI_12_FONT_ID, start + 1, keyboardStartY + 1  + 2 * metrics.keyboardKeyHeight, keyboard[i * 3 + 2]);
+      renderer.drawRect(x, keyboardStartY, width, height * 3);
+      for(int row = 0; row < 3; row++){
+
+        for(int j = 0; j < 4; j++){
+          buffer[j * 2] = keyboard[i * 3 + row][j];
+        }
+        renderer.drawText(UI_12_FONT_ID, x + 1, keyboardStartY + 1 + row * height, buffer);
+      }
+      x += width + 10;
+    }
+  } else if (selectedMidLevel == -1){
+    int requiredSpace = pageWidth - width * 3;
+    int x = (pageWidth - requiredSpace) / 3;
+
+    for(int i = 0; i < 3; i++) {
+      renderer.drawRect(x, keyboardStartY, width, height * 2);
+      for(int j = 0; j < 4; j++){
+        buffer[j * 2] = keyboard[selectedTopLevel + i][j];
+      }
+      renderer.drawText(UI_12_FONT_ID, x + 1, keyboardStartY + 1, buffer);
+      x += width + 10;
     }
   }
 
