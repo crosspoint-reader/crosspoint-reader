@@ -29,6 +29,10 @@ class HttpDownloader {
 
   static bool fetchUrl(const std::string& url, Stream& stream);
 
+  static bool fetchUrl(const std::string& url, Stream& stream, const char* username, const char* password);
+
+  static bool fetchUrl(const std::string& url, std::string& outContent, const char* username, const char* password);
+
   /**
    * Download a file to the SD card.
    * @param url The URL to download
@@ -38,4 +42,7 @@ class HttpDownloader {
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr);
+
+  static DownloadError downloadToFile(const std::string& url, const std::string& destPath, const char* username,
+                                      const char* password, ProgressCallback progress = nullptr);
 };
