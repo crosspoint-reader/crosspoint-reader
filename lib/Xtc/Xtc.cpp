@@ -7,6 +7,7 @@
 
 #include "Xtc.h"
 
+#include <Bitmap.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
@@ -172,52 +173,12 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  // Write BMP header
-  // BMP file header (14 bytes)
-  const uint32_t rowSize = ((pageInfo.width + 31) / 32) * 4;  // Row size aligned to 4 bytes
-  const uint32_t imageSize = rowSize * pageInfo.height;
-  const uint32_t fileSize = 14 + 40 + 8 + imageSize;  // Header + DIB + palette + data
+  // Write 1-bit BMP header (top-down row order)
+  BmpHeader bmpHeader;
+  createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
+  coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
 
-  // File header
-  coverBmp.write('B');
-  coverBmp.write('M');
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&fileSize), 4);
-  uint32_t reserved = 0;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&reserved), 4);
-  uint32_t dataOffset = 14 + 40 + 8;  // 1-bit palette has 2 colors (8 bytes)
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&dataOffset), 4);
-
-  // DIB header (BITMAPINFOHEADER - 40 bytes)
-  uint32_t dibHeaderSize = 40;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&dibHeaderSize), 4);
-  int32_t width = pageInfo.width;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&width), 4);
-  int32_t height = -static_cast<int32_t>(pageInfo.height);  // Negative for top-down
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&height), 4);
-  uint16_t planes = 1;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
-  uint16_t bitsPerPixel = 1;  // 1-bit monochrome
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&bitsPerPixel), 2);
-  uint32_t compression = 0;  // BI_RGB (no compression)
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&compression), 4);
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&imageSize), 4);
-  int32_t ppmX = 2835;  // 72 DPI
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&ppmX), 4);
-  int32_t ppmY = 2835;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&ppmY), 4);
-  uint32_t colorsUsed = 2;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&colorsUsed), 4);
-  uint32_t colorsImportant = 2;
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&colorsImportant), 4);
-
-  // Color palette (2 colors for 1-bit)
-  // XTC 1-bit polarity: 0 = black, 1 = white (standard BMP palette order)
-  // Color 0: Black (text/foreground in XTC)
-  uint8_t black[4] = {0x00, 0x00, 0x00, 0x00};
-  coverBmp.write(black, 4);
-  // Color 1: White (background in XTC)
-  uint8_t white[4] = {0xFF, 0xFF, 0xFF, 0x00};
-  coverBmp.write(white, 4);
+  const uint32_t rowSize = ((pageInfo.width + 31) / 32) * 4;
 
   // Write bitmap data
   // BMP requires 4-byte row alignment
@@ -400,49 +361,12 @@ bool Xtc::generateThumbBmp(int height) const {
     return false;
   }
 
-  // Write 1-bit BMP header for fast home screen rendering
-  const uint32_t rowSize = (thumbWidth + 31) / 32 * 4;  // 1 bit per pixel, aligned to 4 bytes
-  const uint32_t imageSize = rowSize * thumbHeight;
-  const uint32_t fileSize = 14 + 40 + 8 + imageSize;  // 8 bytes for 2-color palette
+  // Write 1-bit BMP header (top-down row order)
+  BmpHeader bmpHeader;
+  createBmpHeader(&bmpHeader, thumbWidth, thumbHeight, BmpRowOrder::TopDown);
+  thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
 
-  // File header
-  thumbBmp.write('B');
-  thumbBmp.write('M');
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&fileSize), 4);
-  uint32_t reserved = 0;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&reserved), 4);
-  uint32_t dataOffset = 14 + 40 + 8;  // 1-bit palette has 2 colors (8 bytes)
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&dataOffset), 4);
-
-  // DIB header
-  uint32_t dibHeaderSize = 40;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&dibHeaderSize), 4);
-  int32_t widthVal = thumbWidth;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&widthVal), 4);
-  int32_t heightVal = -static_cast<int32_t>(thumbHeight);  // Negative for top-down
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&heightVal), 4);
-  uint16_t planes = 1;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
-  uint16_t bitsPerPixel = 1;  // 1-bit for black and white
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&bitsPerPixel), 2);
-  uint32_t compression = 0;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&compression), 4);
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&imageSize), 4);
-  int32_t ppmX = 2835;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmX), 4);
-  int32_t ppmY = 2835;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmY), 4);
-  uint32_t colorsUsed = 2;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsUsed), 4);
-  uint32_t colorsImportant = 2;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsImportant), 4);
-
-  // Color palette (2 colors for 1-bit: black and white)
-  uint8_t palette[8] = {
-      0x00, 0x00, 0x00, 0x00,  // Color 0: Black
-      0xFF, 0xFF, 0xFF, 0x00   // Color 1: White
-  };
-  thumbBmp.write(palette, 8);
+  const uint32_t rowSize = (thumbWidth + 31) / 32 * 4;
 
   // Allocate row buffer for 1-bit output
   uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));

@@ -181,15 +181,24 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // any botton press when at end of the book goes back to the last page
+  // At end of the book, forward button goes home and back button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-    currentSpineIndex = epub->getSpineItemsCount() - 1;
-    nextPageNumber = UINT16_MAX;
-    requestUpdate();
+    if (nextTriggered) {
+      onGoHome();
+    } else {
+      currentSpineIndex = epub->getSpineItemsCount() - 1;
+      nextPageNumber = UINT16_MAX;
+      requestUpdate();
+    }
     return;
   }
 
   const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
+
+  // Don't skip chapter after screenshot
+  if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
+    return;
+  }
 
   if (skipChapter) {
     lastPageTurnTime = millis();

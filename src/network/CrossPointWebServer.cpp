@@ -959,16 +959,31 @@ void CrossPointWebServer::handleMove() const {
 }
 
 void CrossPointWebServer::handleDelete() const {
-  // Check if 'paths' argument is provided
-  if (!server->hasArg("paths")) {
-    server->send(400, "text/plain", "Missing paths");
+  // To ensure backwards compatibility, plain `path` is mapped
+  // to a single element JSON array.
+  bool hasPathArg = server->hasArg("path");
+  bool hasPathsArg = server->hasArg("paths");
+  // Check 'paths' or `path` argument is provided
+  if (!(hasPathArg || hasPathsArg)) {
+    server->send(400, "text/plain", "Missing `path` or `paths` argument");
+    return;
+  }
+  if (hasPathArg && hasPathsArg) {
+    server->send(400, "text/plain", "Provide either 'path' or 'paths', not both");
     return;
   }
 
   // Parse paths
-  String pathsArg = server->arg("paths");
+  String pathsArg;
   JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, pathsArg);
+  DeserializationError error = DeserializationError(DeserializationError::Code::Ok);
+  if (hasPathsArg) {
+    pathsArg = server->arg("paths");
+    error = deserializeJson(doc, pathsArg);
+  } else {
+    pathsArg = server->arg("path");
+    doc.add(pathsArg);
+  }
   if (error) {
     server->send(400, "text/plain", "Invalid paths format");
     return;
