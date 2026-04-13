@@ -108,8 +108,27 @@ void FileBrowserActivity::loadFiles() {
 void FileBrowserActivity::onEnter() {
   Activity::onEnter();
 
-  loadFiles();
   selectorIndex = 0;
+
+  auto root = Storage.open(basepath.c_str());
+  if (!root) {
+    basepath = "/";
+    loadFiles();
+  } else if (!root.isDirectory()) {
+    root.close();
+    lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
+
+    const std::string oldPath = basepath;
+    basepath = FsHelpers::extractFolderPath(basepath);
+    loadFiles();
+
+    const auto pos = oldPath.find_last_of('/');
+    const std::string fileName = oldPath.substr(pos + 1);
+    selectorIndex = findEntry(fileName);
+  } else {
+    root.close();
+    loadFiles();
+  }
 
   requestUpdate();
 }
@@ -129,11 +148,19 @@ void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
 
 void FileBrowserActivity::loop() {
   // Long press BACK (1s+) goes to root folder
+  // but Long press BACK (1s+) from ReaderActivity sends us here with the MappedInput already set.
+  // So ignore it the first time.
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
-      basepath != "/") {
+      basepath != "/" && !lockLongPressBack) {
     basepath = "/";
     loadFiles();
     selectorIndex = 0;
+    requestUpdate();
+    return;
+  }
+
+  if (lockLongPressBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    lockLongPressBack = false;
     return;
   }
 
