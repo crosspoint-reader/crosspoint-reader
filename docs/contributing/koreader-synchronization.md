@@ -17,6 +17,39 @@ The synchronization layer is designed to:
 - Keep transport/client logic separated from parsing/mapping logic.
 - Prefer precise anchors when available, but degrade gracefully.
 
+## Standalone Sync Lifecycle
+
+KOReader sync no longer runs as a child activity on top of a live EPUB reader.
+Instead, the reader persists a compact handoff record in `APP_STATE`, then the
+activity stack is replaced with `KOReaderSyncActivity`.
+
+Why this exists:
+- HTTPS/TLS setup on ESP32-C3 is sensitive to heap fragmentation.
+- Keeping the full reader activity alive underneath sync reclaimed too little
+  memory and made failures harder to reason about.
+- A standalone sync screen makes memory snapshots and failure modes easier to
+  interpret.
+
+Current lifecycle:
+1. `EpubReaderActivity` stores the EPUB path, current local position, sync
+   intent, and any future sync result slots in `APP_STATE.koReaderSyncSession`.
+2. The reader activity stack is replaced with `KOReaderSyncActivity`.
+3. `KOReaderSyncActivity` lazily reloads EPUB data only for mapping work and
+   releases it again before network-heavy phases.
+4. On completion, cancel, or failure, sync persists an outcome and reopens the
+   book through the normal `ReaderActivity -> EpubReaderActivity` path.
+5. `EpubReaderActivity::applyPendingSyncSession()` consumes that outcome:
+   - remote-apply writes the reopen position into `progress.bin` before normal
+     reader startup loads it
+   - upload-complete keeps the existing local `progress.bin` unchanged
+   - paragraph-level correction metadata is still carried separately because
+     `progress.bin` stores only spine/page/pageCount
+
+Memory notes:
+- Reader-owned state is reclaimed by fully exiting the reader before sync.
+- Sync still trims its own renderer/font caches right before TLS because sync UI
+  rendering can repopulate those caches after the reader is gone.
+
 ## Data Model Mismatch
 
 CrossPoint stores position as chapter/page-centric state.

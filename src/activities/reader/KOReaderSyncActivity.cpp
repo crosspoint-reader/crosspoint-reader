@@ -29,9 +29,10 @@ void logSyncMemSnapshot(const char* stage) {
           integrityOk ? "ok" : "fail");
 }
 
-// Frees renderer-owned caches right before network work.
-// Why: TLS handshake needs a large contiguous block, and font cache memory can
-// increase fragmentation even when total free heap looks acceptable.
+// Frees renderer-owned caches inside the standalone sync activity right before
+// network work. The reader activity is already gone by this point, but sync UI
+// rendering (status popups, compare screen, result screen) can repopulate font
+// caches and chip away at the largest free block needed for TLS.
 void trimMemoryBeforeTls(const GfxRenderer& renderer) {
   if (auto* cacheManager = renderer.getFontCacheManager()) {
     cacheManager->clearCache();
@@ -330,8 +331,8 @@ void KOReaderSyncActivity::performUpload() {
     return;
   }
 
-  // Result screen rendering repopulates glyph caches; trim again right before
-  // the upload handshake to maximize contiguous heap for TLS.
+  // Sync UI rendering can repopulate glyph caches after the initial GET / compare
+  // phase, so trim again right before the upload request.
   trimMemoryBeforeTls(renderer);
   logSyncMemSnapshot("after_trim_before_updateProgress");
 

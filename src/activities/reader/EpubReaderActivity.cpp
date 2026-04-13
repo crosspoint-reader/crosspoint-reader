@@ -39,7 +39,8 @@ void logReaderMemSnapshot(const char* stage) {
   LOG_DBG("ERS", "Reader mem[%s]: free=%lu contig=%lu", stage, freeHeap, contigHeap);
 }
 
-bool writeReaderProgressCache(const std::string& cachePath, const int spineIndex, const int currentPage, const int pageCount) {
+bool writeReaderProgressCache(const std::string& cachePath, const int spineIndex, const int currentPage,
+                              const int pageCount) {
   FsFile f;
   if (!Storage.openFileForWrite("ERS", cachePath + "/progress.bin", f)) {
     LOG_ERR("ERS", "Failed to open progress cache for sync restore: %s", cachePath.c_str());
@@ -566,7 +567,18 @@ void EpubReaderActivity::applyPendingSyncSession() {
     return;
   }
 
-  LOG_DBG("ERS", "Applying pending sync session outcome=%d path=%s", static_cast<int>(sync.outcome), sync.epubPath.c_str());
+  LOG_DBG("ERS", "Applying pending sync session outcome=%d path=%s", static_cast<int>(sync.outcome),
+          sync.epubPath.c_str());
+
+  // Upload-complete returns to the same local position the reader already persisted
+  // before sync launched, so there is no need to rewrite progress.bin here.
+  if (sync.outcome == KOReaderSyncOutcomeState::UPLOAD_COMPLETE) {
+    LOG_DBG("ERS", "Upload-complete resume keeps existing local progress.bin unchanged");
+    sync.clear();
+    APP_STATE.saveToFile();
+    logReaderMemSnapshot("after_apply_pending_sync_session");
+    return;
+  }
 
   int restoreSpineIndex = sync.spineIndex;
   int restorePage = sync.page;
@@ -578,8 +590,8 @@ void EpubReaderActivity::applyPendingSyncSession() {
     restorePage = sync.resultPage;
     pendingParagraphLookup = sync.resultHasParagraphIndex;
     pendingParagraphIndex = sync.resultParagraphIndex;
-    LOG_DBG("ERS", "Applied synced remote position: spine=%d page=%d paragraph=%u hasParagraph=%s",
-            restoreSpineIndex, restorePage, pendingParagraphIndex, pendingParagraphLookup ? "yes" : "no");
+    LOG_DBG("ERS", "Applied synced remote position: spine=%d page=%d paragraph=%u hasParagraph=%s", restoreSpineIndex,
+            restorePage, pendingParagraphIndex, pendingParagraphLookup ? "yes" : "no");
   } else {
     LOG_DBG("ERS", "Restored local pre-sync position: spine=%d page=%d paragraph=%u hasParagraph=%s", restoreSpineIndex,
             restorePage, pendingParagraphIndex, pendingParagraphLookup ? "yes" : "no");

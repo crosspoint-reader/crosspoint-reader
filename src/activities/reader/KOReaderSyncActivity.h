@@ -4,13 +4,18 @@
 #include <memory>
 
 #include "ChapterXPathIndexer.h"
+#include "CrossPointState.h"
 #include "KOReaderSyncClient.h"
 #include "ProgressMapper.h"
-#include "CrossPointState.h"
 #include "activities/Activity.h"
 
 /**
  * Activity for syncing reading progress with KOReader sync server.
+ *
+ * This activity is launched as a standalone replacement screen, not as a
+ * child activity of the reader. The reader persists a compact handoff record,
+ * is destroyed to reclaim memory before WiFi/TLS work begins, and a fresh
+ * reader instance is reopened after sync completes or is cancelled.
  *
  * Shared pipeline:
  * 1. Connect to WiFi (if not connected)
@@ -21,7 +26,7 @@
  * - COMPARE: fetch remote progress, show full comparison screen, let user
  *   choose Apply or Upload.
  * - PULL_REMOTE: fetch and map remote progress, show success feedback, then
- *   return applied SyncResult to reader.
+ *   persist an applied SyncResult for the reopened reader.
  * - PUSH_LOCAL: compute local mapping, warm session with GET, then upload via
  *   reused connection to avoid a second full TLS handshake.
  */

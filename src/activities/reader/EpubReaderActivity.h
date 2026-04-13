@@ -71,6 +71,10 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void launchKOReaderSync(SyncLaunchMode mode = SyncLaunchMode::COMPARE);
+  // Consume a persisted standalone KOReader sync session for this EPUB. Remote
+  // apply writes the mapped reopen position into progress.bin before the normal
+  // reader startup path reads it. Upload-complete leaves the existing local
+  // progress.bin untouched and simply clears the pending session marker.
   void applyPendingSyncSession();
   void applyOrientation(uint8_t orientation);
   void applyTextDarkness(uint8_t textDarkness);

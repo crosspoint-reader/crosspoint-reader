@@ -147,7 +147,7 @@ are documented in:
 Two singletons are central:
 
 - `src/CrossPointSettings.h` (`SETTINGS`): user preferences and behavior flags
-- `src/CrossPointState.h` (`APP_STATE`): runtime/session state such as current book and sleep context
+- `src/CrossPointState.h` (`APP_STATE`): runtime/session state such as current book, sleep context, and standalone KOReader sync handoff/outcome state
 
 Typical persisted areas on SD:
 
