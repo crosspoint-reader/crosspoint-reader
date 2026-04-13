@@ -676,7 +676,7 @@ void BaseTheme::drawCoverList(const GfxRenderer& renderer, Rect rect, int itemCo
     }
 
     // Cover area
-    const int coverPadding = 2;
+    const int coverPadding = 6;
     const int rowHeight = itemHeight;
     const int coverHeightMax = rowHeight - (coverPadding * 2);
     const int coverWidthMax = static_cast<int>(coverHeightMax * 0.75);  // Reserved width
