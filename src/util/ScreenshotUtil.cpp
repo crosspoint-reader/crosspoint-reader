@@ -62,7 +62,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
 
   BmpHeader header;
 
-  createBmpHeader(&header, phyWidth, phyHeight);
+  createBmpHeader(&header, phyWidth, phyHeight, BmpRowOrder::BottomUp);
 
   bool write_error = false;
   if (file.write(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
