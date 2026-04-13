@@ -925,7 +925,7 @@ void EpubReaderActivity::renderStatusBar() const {
       if (SETTINGS.readingSpeedWpm > 0) {
         title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(SETTINGS.readingSpeedWpm) + tr(STR_CALIBRATE_READING_SPEED_WPM);
       } else {
-        title = tr(STR_AUTO_TURN_ENABLED) + tr(STR_CALIBRATE_UNCALIBRATED);
+        title = std::string(tr(STR_AUTO_TURN_ENABLED)) + tr(STR_CALIBRATE_UNCALIBRATED);
       }
     } else {
       title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
