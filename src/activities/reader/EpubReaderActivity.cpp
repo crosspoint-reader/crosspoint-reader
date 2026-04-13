@@ -113,22 +113,22 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Clear calibration success message after 3 seconds and trigger a redraw
+  // Clear calibration success/cancelled message after 3 seconds and trigger a redraw
   if (calibrationDoneAtMs > 0 && (millis() - calibrationDoneAtMs >= 3000UL)) {
     calibrationDoneAtMs = 0;
     requestUpdate();
   }
+  if (calibrationCancelledAtMs > 0 && (millis() - calibrationCancelledAtMs >= 3000UL)) {
+    calibrationCancelledAtMs = 0;
+    requestUpdate();
+  }
 
   // Calibration mode: user reads pages at their own pace.
-  // Short Back cancels; forward page turn advances and accumulates words.
+  // Short Back cancels silently; forward page turn advances and accumulates words.
   if (calibrationActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
         mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-      calibrationActive = false;
-      calibrationStartMs = 0UL;
-      calibrationTotalWords = 0;
-      calibrationPagesRemaining = 0;
-      requestUpdate();
+      cancelCalibration(false);
       return;
     }
     // Long-press Back exits to home (fall through to standard long-press handler below).
@@ -161,7 +161,12 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity.
+  // If calibration is active, cancel it with a message before opening the menu
+  // so that time spent in the menu doesn't drag the measured WPM down.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (calibrationActive) {
+      cancelCalibration(true);
+    }
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -593,8 +598,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
 
-  // reserves space for automatic page turn indicator when no status bar or progress bar only
-  if (automaticPageTurnActive &&
+  // Reserve extra footer space for the auto-turn banner and all calibration banners
+  // (in-progress, done, cancelled) when there is no status bar or only a progress bar.
+  const bool needsFooterBanner = automaticPageTurnActive || calibrationActive ||
+                                  calibrationDoneAtMs > 0 || calibrationCancelledAtMs > 0;
+  if (needsFooterBanner &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
         std::max(SETTINGS.screenMargin,
@@ -914,6 +922,14 @@ void EpubReaderActivity::renderStatusBar() const {
     if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
       textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
     }
+  } else if (calibrationCancelledAtMs > 0) {
+    // Show cancelled message (will be cleared by loop() after 3 seconds)
+    title = tr(STR_CALIBRATE_CANCELLED);
+
+    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+    if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
+      textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
+    }
   } else if (calibrationActive) {
     // Show calibration progress in status bar area.
     title = std::string(tr(STR_CALIBRATE_IN_PROGRESS)) + std::to_string(calibrationPagesRemaining) +
@@ -1038,6 +1054,20 @@ void EpubReaderActivity::startCalibration() {
   // Timer starts on the first page turn (not here) to exclude initial render latency.
   calibrationStartMs = 0UL;
   LOG_DBG("ERS", "Reading speed calibration started (%u pages)", CALIBRATION_PAGE_TURNS);
+
+  // Reset section so render() reflows the page with the extra footer margin that
+  // the calibration banner needs in status-bar-less layouts (mirrors toggleAutoPageTurn()).
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
+    RenderLock lock(*this);
+    if (section) {
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = section->pageCount;
+      nextPageNumber = section->currentPage;
+    }
+    section.reset();
+  }
+
   requestUpdate();
 }
 
@@ -1050,13 +1080,31 @@ void EpubReaderActivity::finishCalibration() {
     const uint32_t wpm = (static_cast<uint32_t>(calibrationTotalWords) * 60000UL) / elapsedMs;
     // Cap at 1000 wpm to guard against accidental rapid flipping.
     SETTINGS.readingSpeedWpm = static_cast<uint16_t>(wpm > 1000U ? 1000U : wpm);
-    SETTINGS.saveToFile();
-    calibrationDoneAtMs = millis();
-    LOG_DBG("ERS", "Calibration done: %lu words in %lums -> %u wpm", calibrationTotalWords, elapsedMs,
-            SETTINGS.readingSpeedWpm);
+    if (SETTINGS.saveToFile()) {
+      calibrationDoneAtMs = millis();
+      LOG_DBG("ERS", "Calibration done: %lu words in %lums -> %u wpm", calibrationTotalWords, elapsedMs,
+              SETTINGS.readingSpeedWpm);
+    } else {
+      LOG_ERR("ERS", "Calibration done but failed to save settings (%u wpm)", SETTINGS.readingSpeedWpm);
+    }
   } else {
     LOG_DBG("ERS", "Calibration failed: elapsedMs=%lu words=%lu", elapsedMs,
             static_cast<unsigned long>(calibrationTotalWords));
+  }
+  requestUpdate();
+}
+
+void EpubReaderActivity::cancelCalibration(const bool showMessage) {
+  calibrationActive = false;
+  calibrationStartMs = 0UL;
+  calibrationTotalWords = 0;
+  calibrationPagesRemaining = 0;
+  if (showMessage) {
+    calibrationCancelledAtMs = millis();
+    LOG_DBG("ERS", "Calibration cancelled (menu opened)");
+  } else {
+    calibrationCancelledAtMs = 0UL;
+    LOG_DBG("ERS", "Calibration cancelled (back button)");
   }
   requestUpdate();
 }

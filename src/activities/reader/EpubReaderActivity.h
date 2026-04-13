@@ -37,6 +37,7 @@ class EpubReaderActivity final : public Activity {
   static constexpr uint8_t CALIBRATION_PAGE_TURNS = 5;  // measures 4 pages
   bool calibrationActive = false;
   unsigned long calibrationDoneAtMs = 0UL;  // millis() when calibration succeeded (0 = never/expired).
+  unsigned long calibrationCancelledAtMs = 0UL;  // millis() when calibration was cancelled (0 = never/expired).
   uint8_t calibrationPagesRemaining = 0;
   uint32_t calibrationTotalWords = 0;
   // 0 means "not started yet"; set on the first forward page turn.
@@ -72,6 +73,7 @@ class EpubReaderActivity final : public Activity {
   unsigned long smartPageDurationMs(uint16_t wordCount, uint16_t wpm) const;
   void startCalibration();
   void finishCalibration();
+  void cancelCalibration(bool showMessage);
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
