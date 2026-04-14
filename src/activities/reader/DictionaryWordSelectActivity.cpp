@@ -244,6 +244,13 @@ void DictionaryWordSelectActivity::loop() {
     requestUpdate();
   }
 
+  // Check Back early when not in multi-select mode. This allows exit even when
+  // confirmReleaseConsumed is stuck true (menu-triggered entry has no Confirm release).
+  if (!navigator.isMultiSelecting() && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    DictUtils::cancelAndFinish(*this);
+    return;
+  }
+
   if (controller.handleMultiSelect(navigator)) return;
 
   if (navigator.isMultiSelecting()) return;
