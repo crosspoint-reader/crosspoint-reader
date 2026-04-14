@@ -39,7 +39,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .keyboardBottomKeyHeight = 35,
                                  .keyboardBottomKeySpacing = 5,
                                  .keyboardBottomAligned = true,
-                                 .keyboardCenteredText = true,
+                                 .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = -7};
 }
 

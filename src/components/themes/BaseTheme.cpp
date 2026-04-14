@@ -878,40 +878,50 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
 }
 
-void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
+void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
+                              int contentStartX, int contentWidth) const {
   (void)textWidth;
+  (void)contentStartX;
+  (void)contentWidth;
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int bracketHeight = lineHeight;
-  const int fieldLeft = rect.x + 10;
+  const int fieldLeft = rect.x + 15;
   const int fieldRight = rect.x + rect.width - 15;
-  const int topY = rect.y - 5;
-  const int bottomY = rect.y + rect.height + lineHeight + 5;
+  const int topY = rect.y - 7;
+  const int bottomY = rect.y + rect.height + lineHeight + 7;
   const int tickLen = bracketHeight / 2;
+  const int thickness = cursorMode ? 3 : 1;
 
-  renderer.drawLine(fieldLeft, topY, fieldLeft, bottomY);
-  renderer.drawLine(fieldLeft, topY, fieldLeft + tickLen, topY);
-  renderer.drawLine(fieldLeft, bottomY, fieldLeft + tickLen, bottomY);
+  renderer.fillRect(fieldLeft, topY, thickness, bottomY - topY + 1, true);
+  renderer.drawLine(fieldLeft, topY, fieldLeft + tickLen, topY, thickness, true);
+  renderer.drawLine(fieldLeft, bottomY, fieldLeft + tickLen, bottomY, thickness, true);
 
-  renderer.drawLine(fieldRight, topY, fieldRight, bottomY);
-  renderer.drawLine(fieldRight, topY, fieldRight - tickLen, topY);
-  renderer.drawLine(fieldRight, bottomY, fieldRight - tickLen, bottomY);
+  renderer.fillRect(fieldRight - thickness + 1, topY, thickness, bottomY - topY + 1, true);
+  renderer.drawLine(fieldRight, topY, fieldRight - tickLen, topY, thickness, true);
+  renderer.drawLine(fieldRight, bottomY, fieldRight - tickLen, bottomY, thickness, true);
 }
 
 void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
-                                const char* secondaryLabel, const KeyboardKeyType keyType) const {
+                                const char* secondaryLabel, const KeyboardKeyType keyType,
+                                const bool inactiveSelection) const {
   if (isSelected) {
-    renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
-  } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode ||
-             keyType == KeyboardKeyType::Reveal || keyType == KeyboardKeyType::Space ||
-             keyType == KeyboardKeyType::Del || keyType == KeyboardKeyType::Ok) {
+    if (inactiveSelection) {
+      renderer.drawRect(rect.x, rect.y, rect.width, rect.height, 2, true);
+    } else {
+      renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+    }
+  } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode || keyType == KeyboardKeyType::Del ||
+             keyType == KeyboardKeyType::Space || keyType == KeyboardKeyType::Ok) {
     renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
   }
+
+  const bool invert = isSelected && !inactiveSelection;
 
   if (keyType == KeyboardKeyType::Space) {
     const int lineHalfWidth = rect.width * 3 / 10;
     const int centerX = rect.x + rect.width / 2;
     const int lineY = rect.y + rect.height / 2 + 3;
-    renderer.drawLine(centerX - lineHalfWidth, lineY, centerX + lineHalfWidth, lineY, 3, !isSelected);
+    renderer.drawLine(centerX - lineHalfWidth, lineY, centerX + lineHalfWidth, lineY, 3, !invert);
     return;
   }
 
@@ -920,28 +930,24 @@ void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const ch
     const int centerY = rect.y + rect.height / 2;
     const int arrowLen = rect.width / 4;
     const int arrowHead = arrowLen / 2;
-    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX + arrowLen / 2, centerY, 3, !isSelected);
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX + arrowLen / 2, centerY, 3, !invert);
     renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY - arrowHead, 3,
-                      !isSelected);
+                      !invert);
     renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY + arrowHead, 3,
-                      !isSelected);
+                      !invert);
     return;
   }
 
   const bool hasSecondary = secondaryLabel != nullptr && secondaryLabel[0] != '\0';
   const int primaryOffset = 0;
-  const int fontId = (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode ||
-                      keyType == KeyboardKeyType::Reveal || keyType == KeyboardKeyType::Ok)
-                         ? UI_10_FONT_ID
-                         : UI_12_FONT_ID;
-  const int itemWidth = renderer.getTextWidth(fontId, label);
+  const int itemWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
   const int textX = rect.x + (rect.width - itemWidth) / 2;
-  const int textY = rect.y + (rect.height - renderer.getLineHeight(fontId)) / 2 + primaryOffset;
+  const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2 + primaryOffset;
 
   if (hasSecondary) {
     const int secWidth = renderer.getTextWidth(SMALL_FONT_ID, secondaryLabel);
-    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - secWidth - 1, rect.y, secondaryLabel, !isSelected);
+    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - secWidth - 1, rect.y, secondaryLabel, !invert);
   }
 
-  renderer.drawText(fontId, textX, textY, label, !isSelected);
+  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !invert);
 }

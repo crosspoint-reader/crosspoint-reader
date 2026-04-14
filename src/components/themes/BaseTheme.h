@@ -149,10 +149,11 @@ class BaseTheme {
                              const int pageCount, std::string title, const int paddingBottom = 0,
                              const int textYOffset = 0, const bool isStarred = false) const;
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
-  virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const;
+  virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
+                             int contentStartX = 0, int contentWidth = 0) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
-                               const char* secondaryLabel = nullptr,
-                               KeyboardKeyType keyType = KeyboardKeyType::Normal) const;
+                               const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
+                               bool inactiveSelection = false) const;
   virtual bool showsFileIcons() const { return false; }
 
   // Shared constants and helpers for battery drawing (used by all themes)
