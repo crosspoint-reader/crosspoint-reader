@@ -453,7 +453,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   esp_err_t err = ESP_FAIL;
   int httpCode = 0;
 
-  for (int attempt = 1; attempt <= 2; attempt++) {
+  for (int attempt = 1; attempt <= 3; attempt++) {
     // Retry attempts can happen after memory churn from a failed handshake.
     // Refresh heap snapshot each pass so preflight and diagnostics use current values.
     refreshHeapSnapshot();
@@ -487,20 +487,21 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
       LOG_ERR("KOSync", "GET failure body preview: %s", g_lastResponsePreview);
     }
 
-    // Retry exactly once for connect-level failures only.
-    // Why: this recovers short AP/roaming hiccups without masking persistent
-    // TLS/auth/server errors that should be surfaced immediately.
-    if (err == ESP_OK || err != ESP_ERR_HTTP_CONNECT || attempt == 2) {
+    // Retry up to two times for transient connect or EAGAIN failures only.
+    // Why: this recovers short AP/roaming or temporary I/O hiccups without masking
+    // persistent TLS/auth/server errors that should be surfaced immediately.
+    const bool retryable = (err == ESP_ERR_HTTP_CONNECT || err == ESP_ERR_HTTP_EAGAIN);
+    if (err == ESP_OK || !retryable || attempt == 3) {
       break;
     }
 
-    // Failed connect can leave a persistent client handle in a bad state.
+    // Failed connect/EAGAIN can leave a persistent client handle in a bad state.
     // Recreate it before retry so we don't repeat work on a stale transport.
     resetSessionClientForRetry();
 
-    LOG_ERR("KOSync", "getProgress connect failed on attempt %d, retrying once", attempt);
+    LOG_ERR("KOSync", "getProgress request failed on attempt %d, retrying", attempt);
     logWifiSnapshot("WiFi before getProgress retry");
-    delay(400);
+    delay(400 * attempt);
   }
 
   if (err != ESP_OK) return NETWORK_ERROR;
@@ -573,7 +574,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   esp_err_t err = ESP_FAIL;
   int httpCode = 0;
 
-  for (int attempt = 1; attempt <= 2; attempt++) {
+  for (int attempt = 1; attempt <= 3; attempt++) {
     // Retry attempts can happen after memory churn from a failed handshake.
     // Refresh heap snapshot each pass so preflight and diagnostics use current values.
     refreshHeapSnapshot();
@@ -612,19 +613,20 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
               progress.document.c_str(), progress.percentage, progress.progress.c_str());
     }
 
-    // Retry exactly once for connect-level failures only.
+    // Retry up to two times for transient connect or EAGAIN failures only.
     // Why: same policy as GET keeps behavior predictable across both endpoints.
-    if (err == ESP_OK || err != ESP_ERR_HTTP_CONNECT || attempt == 2) {
+    const bool retryable = (err == ESP_ERR_HTTP_CONNECT || err == ESP_ERR_HTTP_EAGAIN);
+    if (err == ESP_OK || !retryable || attempt == 3) {
       break;
     }
 
-    // Failed connect can leave a persistent client handle in a bad state.
+    // Failed connect/EAGAIN can leave a persistent client handle in a bad state.
     // Recreate it before retry so we don't repeat work on a stale transport.
     resetSessionClientForRetry();
 
-    LOG_ERR("KOSync", "updateProgress connect failed on attempt %d, retrying once", attempt);
+    LOG_ERR("KOSync", "updateProgress request failed on attempt %d, retrying", attempt);
     logWifiSnapshot("WiFi before updateProgress retry");
-    delay(400);
+    delay(400 * attempt);
   }
 
   if (err != ESP_OK) return NETWORK_ERROR;
