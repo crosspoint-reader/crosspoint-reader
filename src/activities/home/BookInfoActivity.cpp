@@ -98,6 +98,7 @@ void BookInfoActivity::loadData() {
 
 void BookInfoActivity::onEnter() {
   Activity::onEnter();
+  fullRenderDone = false;
   {
     RenderLock lock(*this);
     renderLoading();
@@ -109,10 +110,40 @@ void BookInfoActivity::onEnter() {
 void BookInfoActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    if (descPage > 0) {
+      descPage--;
+      requestUpdate(true);
+    }
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    if (descPage + 1 < descTotalPages) {
+      descPage++;
+      requestUpdate(true);
+    }
   }
 }
 
 void BookInfoActivity::render(RenderLock&&) {
+  // Fast path: only the description page / button hints changed. Reuse the
+  // already-rendered header/cover/meta by clearing just those two bands. Cap
+  // consecutive partial renders to bound e-ink ghosting buildup.
+  //
+  // Requires Portrait orientation: the hints-gutter location is derived below
+  // assuming the gutter sits at the bottom, which is only true in Portrait
+  // (PortraitInverted puts it at the top; landscape orientations put it on a
+  // side). In non-Portrait we fall through to a full render to avoid leaving
+  // stale button labels in the real gutter.
+  if (fullRenderDone && loadSucceeded && !description.empty() && partialRenderCount < MAX_PARTIAL_RENDERS &&
+      renderer.getOrientation() == GfxRenderer::Portrait) {
+    renderer.fillRect(descBandX, descBandY, descBandWidth, descBandHeight, false);
+    renderer.fillRect(0, hintsBandY, renderer.getScreenWidth(), hintsBandHeight, false);
+    renderDescriptionAndHints();
+    ++partialRenderCount;
+    renderer.displayBuffer();
+    return;
+  }
+
+  partialRenderCount = 0;
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -240,28 +271,66 @@ void BookInfoActivity::render(RenderLock&&) {
 
   topSectionBottom = std::max(topSectionBottom, metaY);
 
-  // --- Description: full width below the top section ---
+  // --- Description: full width below the top section, paged via Left/Right ---
+  descTotalPages = 0;
+  descLinesPerPage = 0;
+  descBandX = textX;
+  descBandWidth = textWidth;
+  descBandY = contentBottom;
+  descBandHeight = 0;
   if (!description.empty()) {
     int y = topSectionBottom + metrics.verticalSpacing;
     if (y + lineHeightSmall + 4 < contentBottom) {
       renderer.drawLine(textX, y, contentRect.x + contentRect.width - metrics.contentSidePadding, y);
       y += 4;
 
-      const int descMaxLines = (contentBottom - y) / lineHeightSmall;
-      if (descMaxLines > 0) {
-        const auto lines = renderer.wrappedText(UI_10_FONT_ID, description.c_str(), textWidth, descMaxLines);
-        for (const auto& line : lines) {
-          if (y + lineHeightSmall > contentBottom) break;
-          renderer.drawText(UI_10_FONT_ID, textX, y, line.c_str());
-          y += lineHeightSmall;
-        }
+      // Record the description band (below the separator) for partial redraws.
+      descBandY = y;
+      descBandHeight = contentBottom - y;
+    }
+  }
+
+  // Hints band spans from the bottom of the content area to the screen bottom.
+  hintsBandY = contentRect.y + contentRect.height;
+  hintsBandHeight = renderer.getScreenHeight() - hintsBandY;
+
+  renderDescriptionAndHints();
+
+  fullRenderDone = true;
+  renderer.displayBuffer();
+}
+
+void BookInfoActivity::renderDescriptionAndHints() {
+  const int lineHeightSmall = renderer.getLineHeight(UI_10_FONT_ID);
+
+  descTotalPages = 0;
+  descLinesPerPage = 0;
+
+  if (!description.empty() && descBandHeight > 0) {
+    descLinesPerPage = descBandHeight / lineHeightSmall;
+    if (descLinesPerPage > 0) {
+      if (descLines.empty() || descWrappedWidth != descBandWidth) {
+        descLines = renderer.wrappedText(UI_10_FONT_ID, description.c_str(), descBandWidth, 1000);
+        descWrappedWidth = descBandWidth;
+      }
+      const int totalLines = static_cast<int>(descLines.size());
+      descTotalPages = (totalLines + descLinesPerPage - 1) / descLinesPerPage;
+      if (descPage >= descTotalPages) descPage = std::max(0, descTotalPages - 1);
+
+      const int startLine = descPage * descLinesPerPage;
+      const int endLine = std::min(totalLines, startLine + descLinesPerPage);
+      int y = descBandY;
+      const int bandBottom = descBandY + descBandHeight;
+      for (int i = startLine; i < endLine; ++i) {
+        if (y + lineHeightSmall > bandBottom) break;
+        renderer.drawText(UI_10_FONT_ID, descBandX, y, descLines[i].c_str());
+        y += lineHeightSmall;
       }
     }
   }
 
-  // Button hints
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const char* prevLabel = (descPage > 0) ? tr(STR_PREV) : "";
+  const char* nextLabel = (descPage + 1 < descTotalPages) ? tr(STR_NEXT) : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", prevLabel, nextLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
 }

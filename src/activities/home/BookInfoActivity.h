@@ -19,9 +19,29 @@ class BookInfoActivity final : public Activity {
   bool loadSucceeded = false;
   size_t fileSizeBytes = 0;
 
+  // Description paging (populated lazily on first render)
+  std::vector<std::string> descLines;
+  int descWrappedWidth = 0;
+  int descPage = 0;
+  int descLinesPerPage = 0;
+  int descTotalPages = 0;
+
+  // Partial-render caches: set on the first full render, reused when only the
+  // description page changes.
+  bool fullRenderDone = false;
+  int descBandX = 0;
+  int descBandY = 0;
+  int descBandWidth = 0;
+  int descBandHeight = 0;
+  int hintsBandY = 0;
+  int hintsBandHeight = 0;
+  int partialRenderCount = 0;
+  static constexpr int MAX_PARTIAL_RENDERS = 10;
+
   static std::string formatFileSize(size_t bytes);
   void renderLoading();
   void loadData();
+  void renderDescriptionAndHints();
 
  public:
   explicit BookInfoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath)
