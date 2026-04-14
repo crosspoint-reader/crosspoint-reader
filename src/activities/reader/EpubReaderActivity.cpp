@@ -180,7 +180,8 @@ void EpubReaderActivity::loop() {
 
   // Handle short power button press for footnotes
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+      !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     if (currentPageFootnotes.size() == 1) {
       navigateToHref(currentPageFootnotes[0].href, true);
     } else if (currentPageFootnotes.size() > 1) {
