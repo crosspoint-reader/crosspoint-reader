@@ -187,6 +187,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Ignore" (default) - Require a long press to turn off the device
   - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
+  - "Footnotes" - A short press in reading mode opens the footnotes submenu; if only one footnote is present on the page, the referenced page is opened directly.
 
 #### 3.6.4 System
 
