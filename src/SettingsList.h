@@ -73,6 +73,14 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                         {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                         "imageRendering", StrId::STR_CAT_READER),
+      // Dictionary settings: STR_NONE_OPT excludes from device UI loop; SettingsActivity adds them
+      // manually after the Dictionary selector for correct ordering.
+      SettingInfo::Value(
+          StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
+          {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},
+          "lookupHistoryCap", StrId::STR_NONE_OPT),
+      SettingInfo::Toggle(StrId::STR_DICT_HOLD_TO_LOOKUP, &CrossPointSettings::holdToLookup, "holdToLookup",
+                          StrId::STR_NONE_OPT),
       // --- Controls ---
       SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV}, "sideButtonLayout", StrId::STR_CAT_CONTROLS),
