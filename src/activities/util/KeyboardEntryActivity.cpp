@@ -16,7 +16,15 @@ void KeyboardEntryActivity::onEnter() {
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
-int KeyboardEntryActivity::getContentRowCount() const { return ABC_ROWS; }
+int KeyboardEntryActivity::getContentRowCount() const {
+  if (urlMode) return 3;
+  return symMode ? SYM_ROWS : ABC_ROWS;
+}
+
+int KeyboardEntryActivity::getContentColCount() const {
+  if (urlMode) return 3;
+  return COLS;
+}
 
 int KeyboardEntryActivity::getTotalRowCount() const { return getContentRowCount() + 1; }
 
@@ -56,26 +64,50 @@ bool KeyboardEntryActivity::insertChar(char c) {
   return true;
 }
 
+void KeyboardEntryActivity::insertString(const std::string& str) {
+  if (maxLength != 0 && text.length() + str.length() > maxLength) return;
+  text.insert(cursorPos, str);
+  cursorPos += str.length();
+}
+
 bool KeyboardEntryActivity::handleKeyPress() {
   if (isBottomRow(selectedRow)) {
     switch (static_cast<SpecialKeyType>(selectedCol)) {
       case SpecShift:
+        if (urlMode) return true;
         if (symMode) return true;
         shiftState = (shiftState + 1) % 2;
         return true;
       case SpecMode: {
+        if (urlMode) {
+          urlMode = false;
+          symMode = false;
+          requestUpdate();
+          return true;
+        }
         symMode = !symMode;
         int maxRow = getTotalRowCount() - 1;
         if (selectedRow > maxRow) selectedRow = maxRow;
         if (isBottomRow(selectedRow)) {
           if (selectedCol >= BOTTOM_KEY_COUNT) selectedCol = BOTTOM_KEY_COUNT - 1;
         } else {
-          if (selectedCol >= COLS) selectedCol = COLS - 1;
+          if (selectedCol >= getContentColCount()) selectedCol = getContentColCount() - 1;
         }
         return true;
       }
       case SpecSpace:
-        return insertChar(' ');
+        if (inputType == InputType::Url) {
+          urlMode = !urlMode;
+          if (urlMode) {
+            symMode = false;
+          }
+          selectedRow = getTotalRowCount() - 1;
+          selectedCol = SpecSpace;
+          requestUpdate();
+        } else {
+          return insertChar(' ');
+        }
+        return true;
       case SpecDel:
         if (cursorPos > 0 && !text.empty()) {
           text.erase(cursorPos - 1, 1);
@@ -88,6 +120,14 @@ bool KeyboardEntryActivity::handleKeyPress() {
       default:
         return true;
     }
+  }
+
+  if (urlMode) {
+    const int idx = selectedCol + selectedRow * 3;
+    if (idx < URL_SNIPPET_COUNT) {
+      insertString(urlSnippets[idx]);
+    }
+    return true;
   }
 
   return insertChar(getSelectedChar());
@@ -111,13 +151,25 @@ void KeyboardEntryActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     if (upHeld && !upLongHandled && !cursorMode) {
       bool wasBottom = isBottomRow(selectedRow);
+      const int contentCols = getContentColCount();
       selectedRow = ButtonNavigator::previousIndex(selectedRow, totalRows);
       if (wasBottom && !isBottomRow(selectedRow)) {
-        selectedCol = selectedCol * 2;
+        if (urlMode) {
+          selectedCol = selectedCol - 1;
+          if (selectedCol < 0) selectedCol = 0;
+          if (selectedCol >= 3) selectedCol = 2;
+        } else {
+          selectedCol = selectedCol * 2;
+        }
       } else if (!wasBottom && isBottomRow(selectedRow)) {
-        selectedCol = selectedCol / 2;
+        if (urlMode) {
+          selectedCol = selectedCol + 1;
+          if (selectedCol > BOTTOM_KEY_COUNT - 1) selectedCol = BOTTOM_KEY_COUNT - 1;
+        } else {
+          selectedCol = selectedCol / 2;
+        }
       }
-      int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : COLS - 1;
+      int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : contentCols - 1;
       if (selectedCol > maxCol) selectedCol = maxCol;
       requestUpdate();
     }
@@ -143,13 +195,25 @@ void KeyboardEntryActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     if (downHeld && !downLongHandled && !cursorMode) {
       bool wasBottom = isBottomRow(selectedRow);
+      const int contentCols = getContentColCount();
       selectedRow = ButtonNavigator::nextIndex(selectedRow, totalRows);
       if (wasBottom && !isBottomRow(selectedRow)) {
-        selectedCol = selectedCol * 2;
+        if (urlMode) {
+          selectedCol = selectedCol - 1;
+          if (selectedCol < 0) selectedCol = 0;
+          if (selectedCol >= 3) selectedCol = 2;
+        } else {
+          selectedCol = selectedCol * 2;
+        }
       } else if (!wasBottom && isBottomRow(selectedRow)) {
-        selectedCol = selectedCol / 2;
+        if (urlMode) {
+          selectedCol = selectedCol + 1;
+          if (selectedCol > BOTTOM_KEY_COUNT - 1) selectedCol = BOTTOM_KEY_COUNT - 1;
+        } else {
+          selectedCol = selectedCol / 2;
+        }
       }
-      int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : COLS - 1;
+      int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : contentCols - 1;
       if (selectedCol > maxCol) selectedCol = maxCol;
       requestUpdate();
     }
@@ -165,7 +229,7 @@ void KeyboardEntryActivity::loop() {
       }
       return;
     }
-    int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : COLS - 1;
+    int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : getContentColCount() - 1;
     selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
     requestUpdate();
   });
@@ -181,7 +245,7 @@ void KeyboardEntryActivity::loop() {
       }
       return;
     }
-    int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : COLS - 1;
+    int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : getContentColCount() - 1;
     selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
     requestUpdate();
   });
@@ -384,8 +448,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int keyHeight = metrics.keyboardKeyHeight;
   const int bottomKeyHeight = metrics.keyboardBottomKeyHeight;
   const int keySpacing = metrics.keyboardKeySpacing;
-  const int keyWidth = (pageWidth * 95 / 100 - (COLS - 1) * keySpacing) / COLS;
-  const int leftMargin = (pageWidth - (COLS * keyWidth + (COLS - 1) * keySpacing)) / 2;
+  const int contentCols = getContentColCount();
+  const int keyWidth = (pageWidth * 95 / 100 - (contentCols - 1) * keySpacing) / contentCols;
+  const int leftMargin = (pageWidth - (contentCols * keyWidth + (contentCols - 1) * keySpacing)) / 2;
 
   const int bottomRowGap = metrics.keyboardBottomKeySpacing > 0 ? 4 : 0;
   const int keyboardStartY = metrics.keyboardBottomAligned
@@ -394,38 +459,62 @@ void KeyboardEntryActivity::render(RenderLock&&) {
                                        bottomRowGap + metrics.keyboardVerticalOffset
                                  : inputStartY + inputHeight + lineHeight + metrics.verticalSpacing;
 
+  const int bkSpacing = metrics.keyboardBottomKeySpacing;
+  const int contentTotalWidth =
+      COLS * ((pageWidth * 95 / 100 - (COLS - 1) * keySpacing) / COLS) + (COLS - 1) * keySpacing;
+  const int bottomKeyWidth = (contentTotalWidth - (BOTTOM_KEY_COUNT - 1) * bkSpacing) / BOTTOM_KEY_COUNT;
+  const int bottomLeftMargin =
+      (pageWidth - (BOTTOM_KEY_COUNT * bottomKeyWidth + (BOTTOM_KEY_COUNT - 1) * bkSpacing)) / 2;
+
+  int urlLeftMargin = leftMargin;
+  int urlKeyWidth = keyWidth;
+  if (urlMode) {
+    const int urlCols = 3;
+    urlKeyWidth = keyWidth;
+    const int urlTotalWidth = urlCols * urlKeyWidth + (urlCols - 1) * keySpacing;
+    const int urlCenterX = bottomLeftMargin + SpecSpace * (bottomKeyWidth + bkSpacing) + bottomKeyWidth / 2;
+    urlLeftMargin = urlCenterX - urlTotalWidth / 2;
+  }
+
   const KeyDef(*layout)[COLS] = symMode ? symLayout : abcLayout;
   const int contentRows = getContentRowCount();
 
   for (int row = 0; row < contentRows; row++) {
     const int rowY = keyboardStartY + row * (keyHeight + keySpacing);
+    const int rowLeftMargin = urlMode ? urlLeftMargin : leftMargin;
 
-    for (int col = 0; col < COLS; col++) {
-      const KeyDef& key = layout[row][col];
-      const int keyX = leftMargin + col * (keyWidth + keySpacing);
+    for (int col = 0; col < contentCols; col++) {
+      const int keyX = rowLeftMargin + col * (keyWidth + keySpacing);
       const bool isSelected = row == selectedRow && col == selectedCol;
-
-      char primaryChar = key.primary;
-      char secondaryChar = key.secondary;
-
-      if (!symMode && shiftState > 0 && key.secondary != '\0') {
-        primaryChar = key.secondary;
-        secondaryChar = key.primary;
-      }
-
-      const char primaryBuf[2] = {primaryChar, '\0'};
-      const char secondaryBuf[2] = {secondaryChar, '\0'};
-      const bool showSecondary = !symMode && row == 0 && secondaryChar != '\0';
       const bool activeKeySelected = isSelected && !cursorMode;
-      GUI.drawKeyboardKey(renderer, Rect{keyX, rowY, keyWidth, keyHeight}, primaryBuf, activeKeySelected,
-                          showSecondary ? secondaryBuf : nullptr);
+
+      if (urlMode) {
+        const int snippetIdx = col + row * 3;
+        if (snippetIdx < URL_SNIPPET_COUNT) {
+          GUI.drawKeyboardKey(renderer, Rect{keyX, rowY, keyWidth, keyHeight}, urlSnippets[snippetIdx],
+                              activeKeySelected, nullptr);
+        }
+      } else {
+        const KeyDef& key = layout[row][col];
+
+        char primaryChar = key.primary;
+        char secondaryChar = key.secondary;
+
+        if (!symMode && shiftState > 0 && key.secondary != '\0') {
+          primaryChar = key.secondary;
+          secondaryChar = key.primary;
+        }
+
+        const char primaryBuf[2] = {primaryChar, '\0'};
+        const char secondaryBuf[2] = {secondaryChar, '\0'};
+        const bool showSecondary = !symMode && row == 0 && secondaryChar != '\0';
+        GUI.drawKeyboardKey(renderer, Rect{keyX, rowY, keyWidth, keyHeight}, primaryBuf, activeKeySelected,
+                            showSecondary ? secondaryBuf : nullptr);
+      }
     }
   }
 
   const int bottomRowY = keyboardStartY + contentRows * (keyHeight + keySpacing) + bottomRowGap;
-  const int bkSpacing = metrics.keyboardBottomKeySpacing;
-  const int contentTotalWidth = COLS * keyWidth + (COLS - 1) * keySpacing;
-  const int bottomKeyWidth = (contentTotalWidth - (BOTTOM_KEY_COUNT - 1) * bkSpacing) / BOTTOM_KEY_COUNT;
   const bool bottomSelected = isBottomRow(selectedRow);
 
   struct BottomKeyInfo {
@@ -433,15 +522,16 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const char* label;
   };
   const BottomKeyInfo bottomKeys[BOTTOM_KEY_COUNT] = {
-      {KeyboardKeyType::Shift, symMode ? shiftString[0] : shiftString[shiftState]},
-      {KeyboardKeyType::Mode, symMode ? "abc" : "#@!"},
-      {KeyboardKeyType::Space, nullptr},
+      {KeyboardKeyType::Shift, (symMode || urlMode) ? shiftString[0] : shiftString[shiftState]},
+      {KeyboardKeyType::Mode, urlMode ? "abc" : (symMode ? "abc" : "#@!")},
+      {inputType == InputType::Url ? KeyboardKeyType::Mode : KeyboardKeyType::Space,
+       inputType == InputType::Url ? "URL" : nullptr},
       {KeyboardKeyType::Del, nullptr},
       {KeyboardKeyType::Ok, tr(STR_OK_BUTTON)},
   };
 
   for (int i = 0; i < BOTTOM_KEY_COUNT; i++) {
-    const int keyX = leftMargin + i * (bottomKeyWidth + bkSpacing);
+    const int keyX = bottomLeftMargin + i * (bottomKeyWidth + bkSpacing);
     const bool isSelected = bottomSelected && i == selectedCol;
 
     const bool activeKeySelected = isSelected && !cursorMode;
@@ -452,12 +542,13 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   if (cursorMode) {
     int selKeyX, selKeyY, selKeyW, selKeyH;
     if (isBottomRow(selectedRow)) {
-      selKeyX = leftMargin + selectedCol * (bottomKeyWidth + bkSpacing);
+      selKeyX = bottomLeftMargin + selectedCol * (bottomKeyWidth + bkSpacing);
       selKeyY = bottomRowY;
       selKeyW = bottomKeyWidth;
       selKeyH = bottomKeyHeight;
     } else {
-      selKeyX = leftMargin + selectedCol * (keyWidth + keySpacing);
+      const int rowLM = urlMode ? urlLeftMargin : leftMargin;
+      selKeyX = rowLM + selectedCol * (keyWidth + keySpacing);
       selKeyY = keyboardStartY + selectedRow * (keyHeight + keySpacing);
       selKeyW = keyWidth;
       selKeyH = keyHeight;
@@ -465,6 +556,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     if (isBottomRow(selectedRow)) {
       GUI.drawKeyboardKey(renderer, Rect{selKeyX, selKeyY, selKeyW, selKeyH}, bottomKeys[selectedCol].label, true,
                           nullptr, bottomKeys[selectedCol].themeType, true);
+    } else if (urlMode) {
+      const int idx = selectedCol + selectedRow * 3;
+      if (idx < URL_SNIPPET_COUNT) {
+        GUI.drawKeyboardKey(renderer, Rect{selKeyX, selKeyY, selKeyW, selKeyH}, urlSnippets[idx], true, nullptr,
+                            KeyboardKeyType::Normal, true);
+      }
     } else {
       const KeyDef& selKey = layout[selectedRow][selectedCol];
       char selPrimary = selKey.primary;
