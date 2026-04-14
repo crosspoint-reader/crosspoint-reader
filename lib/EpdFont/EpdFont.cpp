@@ -15,10 +15,9 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     return;
   }
 
-  int lastBaseX = startX;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int32_t cursorFP = fp4::fromPixel(startX);  // accumulate in 12.4 fixed-point
+  int lastBaseAdvanceFP = 0;                  // 12.4 fixed-point (for combining mark centering)
   int lastBaseTop = 0;
-  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
   uint32_t prevCp = 0;
@@ -31,9 +30,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
-      lastBaseX += fp4::toPixel(prevAdvanceFP);  // flush pending advance before resetting
       prevCp = 0;
-      prevAdvanceFP = 0;
       continue;
     }
 
@@ -45,12 +42,14 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       }
     }
 
+    // Add kerning to the accumulator (no rounding yet)
     if (!isCombining && prevCp != 0) {
       const auto kernFP = getKerning(prevCp, cp);  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
+      cursorFP += kernFP;
     }
 
-    const int glyphBaseX = isCombining ? (lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2)) : lastBaseX;
+    const int snapX = fp4::toPixel(cursorFP);
+    const int glyphBaseX = isCombining ? fp4::toPixel(cursorFP + lastBaseAdvanceFP / 2) : snapX;
     const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -61,7 +60,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     if (!isCombining) {
       lastBaseAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
       lastBaseTop = glyph->top;
-      prevAdvanceFP = lastBaseAdvanceFP;
+      cursorFP += lastBaseAdvanceFP;  // advance accumulator without rounding
       prevCp = cp;
     }
   }
