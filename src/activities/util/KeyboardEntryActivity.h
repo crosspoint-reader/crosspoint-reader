@@ -57,6 +57,11 @@ class KeyboardEntryActivity : public Activity {
   bool downHeld = false;
   bool downLongHandled = false;
 
+  bool urlMode = false;
+  static constexpr int URL_SNIPPET_COUNT = 9;
+  static constexpr const char* const urlSnippets[URL_SNIPPET_COUNT] = {
+      "https://", "www.", ".com", "http://", "192.168.", ".org", "/opds", ":8080", ".net"};
+
   void onComplete(std::string text);
   void onCancel();
 
@@ -157,10 +162,12 @@ class KeyboardEntryActivity : public Activity {
   static const char* const shiftString[2];
 
   int getContentRowCount() const;
+  int getContentColCount() const;
   int getTotalRowCount() const;
   bool isBottomRow(int row) const;
   char getSelectedChar() const;
   char getAlternativeChar() const;
   bool handleKeyPress();
   bool insertChar(char c);
+  void insertString(const std::string& str);
 };
