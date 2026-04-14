@@ -167,6 +167,36 @@
       background-color: #c0392b;
     }
 
+    /* Drag & drop overlay */
+    .drop-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(52, 152, 219, 0.15);
+      border: 4px dashed #3498db;
+      z-index: 300;
+      justify-content: center;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .drop-overlay.active {
+      display: flex;
+    }
+
+    .drop-overlay-message {
+      background: var(--card-bg);
+      color: #3498db;
+      padding: 24px 40px;
+      border-radius: 12px;
+      font-size: 1.4em;
+      font-weight: bold;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
     /* Upload modal */
     .modal-overlay {
       display: none;
@@ -1760,6 +1790,11 @@
     </div>
   </div>
 
+  <!-- Drag & drop overlay -->
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="drop-overlay-message">📥 Drop files to upload to <span id="dropOverlayPath"></span></div>
+  </div>
+
   <!-- Failed Uploads Banner -->
   <div class="failed-uploads-banner" id="failedUploadsBanner">
     <div class="failed-uploads-header">
@@ -3078,7 +3113,69 @@
           this.value = qualitySlider.value;
         };
       }
+
+      setupPageDragAndDrop();
     });
+
+    function setupPageDragAndDrop() {
+      const overlay = document.getElementById('dropOverlay');
+      const pathSpan = document.getElementById('dropOverlayPath');
+      let dragDepth = 0;
+
+      const hasFiles = (e) => {
+        if (!e.dataTransfer) return false;
+        const types = e.dataTransfer.types;
+        if (!types) return false;
+        for (let i = 0; i < types.length; i++) {
+          if (types[i] === 'Files') return true;
+        }
+        return false;
+      };
+
+      const canAcceptDrop = () => {
+        if (isUploadInProgress) return false;
+        if (document.getElementById('uploadModal').classList.contains('open')) return false;
+        return true;
+      };
+
+      window.addEventListener('dragenter', (e) => {
+        if (!hasFiles(e) || !canAcceptDrop()) return;
+        e.preventDefault();
+        dragDepth++;
+        pathSpan.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+        overlay.classList.add('active');
+      });
+
+      window.addEventListener('dragover', (e) => {
+        if (!hasFiles(e) || !canAcceptDrop()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        if (!hasFiles(e)) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) overlay.classList.remove('active');
+      });
+
+      window.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        dragDepth = 0;
+        overlay.classList.remove('active');
+        if (!canAcceptDrop()) return;
+        const files = e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+
+        const dt = new DataTransfer();
+        for (let i = 0; i < files.length; i++) dt.items.add(files[i]);
+
+        openUploadModal();
+        const fileInput = document.getElementById('fileInput');
+        fileInput.files = dt.files;
+        validateFile();
+      });
+    }
 
     function openFolderModal() {
       document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
