@@ -127,7 +127,14 @@ void BookInfoActivity::render(RenderLock&&) {
   // Fast path: only the description page / button hints changed. Reuse the
   // already-rendered header/cover/meta by clearing just those two bands. Cap
   // consecutive partial renders to bound e-ink ghosting buildup.
-  if (fullRenderDone && loadSucceeded && !description.empty() && partialRenderCount < MAX_PARTIAL_RENDERS) {
+  //
+  // Requires Portrait orientation: the hints-gutter location is derived below
+  // assuming the gutter sits at the bottom, which is only true in Portrait
+  // (PortraitInverted puts it at the top; landscape orientations put it on a
+  // side). In non-Portrait we fall through to a full render to avoid leaving
+  // stale button labels in the real gutter.
+  if (fullRenderDone && loadSucceeded && !description.empty() && partialRenderCount < MAX_PARTIAL_RENDERS &&
+      renderer.getOrientation() == GfxRenderer::Portrait) {
     renderer.fillRect(descBandX, descBandY, descBandWidth, descBandHeight, false);
     renderer.fillRect(0, hintsBandY, renderer.getScreenWidth(), hintsBandHeight, false);
     renderDescriptionAndHints();
