@@ -350,6 +350,15 @@ void loop() {
       return;
     }
   }
+
+  // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    LOG_DBG("MAIN", "Manual screen refresh triggered");
+    RenderLock lock;
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
+
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) {
     powerHoldStart = 0;
   }
