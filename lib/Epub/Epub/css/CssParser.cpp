@@ -743,7 +743,6 @@ bool CssParser::saveToCache() const {
   }
 
   LOG_DBG("CSS", "Saved %u rules to cache", ruleCount);
-  file.close();
   return true;
 }
 
@@ -765,6 +764,8 @@ bool CssParser::loadFromCache() {
   if (file.read(&version, 1) != 1 || version != CssParser::CSS_CACHE_VERSION) {
     LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u), removing stale cache for rebuild", version,
             CssParser::CSS_CACHE_VERSION);
+    // Explicitly close() file before calling Storage.remove()
+    file.close();
     Storage.remove((cachePath + rulesCache).c_str());
     return false;
   }
@@ -778,7 +779,6 @@ bool CssParser::loadFromCache() {
   if (ruleCount > MAX_RULES) {
     LOG_DBG("CSS", "Invalid cache rule count (%u > %zu)", ruleCount, MAX_RULES);
     rulesBySelector_.clear();
-    file.close();
     return false;
   }
 
@@ -797,7 +797,6 @@ bool CssParser::loadFromCache() {
     uint16_t selectorLen = 0;
     if (!hasRemainingBytes(sizeof(selectorLen))) {
       rulesBySelector_.clear();
-      file.close();
       return false;
     }
     if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
@@ -808,7 +807,6 @@ bool CssParser::loadFromCache() {
     if (selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH || !hasRemainingBytes(selectorLen)) {
       LOG_DBG("CSS", "Invalid selector length in cache: %u", selectorLen);
       rulesBySelector_.clear();
-      file.close();
       return false;
     }
 
@@ -822,7 +820,6 @@ bool CssParser::loadFromCache() {
     if (!hasRemainingBytes(CSS_FIXED_STYLE_BYTES)) {
       LOG_DBG("CSS", "Truncated CSS cache while reading style payload");
       rulesBySelector_.clear();
-      file.close();
       return false;
     }
 
@@ -879,7 +876,6 @@ bool CssParser::loadFromCache() {
     uint8_t displayVal;
     if (file.read(&displayVal, 1) != 1) {
       rulesBySelector_.clear();
-      file.close();
       return false;
     }
     style.display = static_cast<CssDisplay>(displayVal);

@@ -111,7 +111,6 @@ void FileBrowserActivity::onEnter() {
     basepath = "/";
     loadFiles();
   } else if (!root.isDirectory()) {
-    root.close();
     lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
 
     const std::string oldPath = basepath;
@@ -122,7 +121,6 @@ void FileBrowserActivity::onEnter() {
     const std::string fileName = oldPath.substr(pos + 1);
     selectorIndex = findEntry(fileName);
   } else {
-    root.close();
     loadFiles();
   }
 
