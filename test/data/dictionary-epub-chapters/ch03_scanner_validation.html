@@ -53,7 +53,22 @@ because the dictionary metadata is ambiguous.</p>
 <li>Confirm <em>multi-ifo</em> is absent from the list.</li>
 </ol>
 
-<h2>Test E: All test dictionaries appear in picker</h2>
+<h2>Test E: Folder with macOS metadata files appears in picker</h2>
+<p>The <em>macos-metadata</em> folder contains <code>.DS_Store</code> and
+<code>._macos-metadata.*</code> (AppleDouble resource fork) files. The scanner
+must ignore these junk files and display the dictionary normally.</p>
+<h3>Dictionary</h3>
+<p><em>macos-metadata</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>macos-metadata</em> is present in the list.</li>
+<li>Long-press <em>macos-metadata</em>.</li>
+<li>Parsed info view appears showing Name, Words, and Type.</li>
+<li>Press Back. Picker reappears.</li>
+</ol>
+
+<h2>Test F: All test dictionaries appear in picker</h2>
 <p>All of the following must be visible in the picker. Do not select any yet.</p>
 <h3>Words</h3>
 <ul>
@@ -62,6 +77,7 @@ because the dictionary metadata is ambiguous.</p>
 <li><em>english-no-syn</em></li>
 <li><em>html-definitions</em></li>
 <li><em>ipa-phonetic</em></li>
+<li><em>macos-metadata</em></li>
 <li><em>no-ifo</em></li>
 <li><em>overflow-fields</em></li>
 <li><em>phrase</em></li>
@@ -78,7 +94,7 @@ because the dictionary metadata is ambiguous.</p>
 <p><em>prep-long</em> and <em>prep-mini</em> are for Ch 5 per-book prepare tests only.
 Do not select them from Settings.</p>
 
-<h2>Test F: Failed decompression -- error shown, prior selection unchanged</h2>
+<h2>Test G: Failed decompression -- error shown, prior selection unchanged</h2>
 <p>The preparation must fail with an error. The picker must remain open
 and the previously selected dictionary must be unchanged. No crash.</p>
 <h3>Dictionary</h3>
@@ -93,7 +109,7 @@ and the previously selected dictionary must be unchanged. No crash.</p>
 <li>Picker remains open. Previously selected dictionary is unchanged.</li>
 </ol>
 
-<h2>Test G: Metadata info view -- basic</h2>
+<h2>Test H: Metadata info view -- basic</h2>
 <p>Long-pressing a dictionary with a valid .ifo must open the parsed
 metadata info view showing at minimum: Name, Words, Alt Forms, and Type.</p>
 <h3>Dictionary</h3>
@@ -106,7 +122,7 @@ metadata info view showing at minimum: Name, Words, Alt Forms, and Type.</p>
 <li>Press Back. Picker reappears.</li>
 </ol>
 
-<h2>Test H: Metadata info view -- overflow fields</h2>
+<h2>Test I: Metadata info view -- overflow fields</h2>
 <p>All displayed fields must wrap correctly when their values are very long.
 No truncation. No crash.</p>
 <h3>Dictionary</h3>
@@ -120,7 +136,7 @@ No truncation. No crash.</p>
 <li>Press Back. Picker reappears.</li>
 </ol>
 
-<h2>Test I: Picker pagination</h2>
+<h2>Test J: Picker pagination</h2>
 <p>With enough test dictionaries present, the list spans more than one screen.
 Hold-Up and Hold-Down must page-jump without crash.</p>
 <h3>Note</h3>
@@ -133,7 +149,7 @@ on the SD card to create additional entries until the list spans two screens.</p
 <li>Hold Down. List jumps a page downward. No crash.</li>
 </ol>
 
-<h2>Test J: Metadata info view -- View Raw</h2>
+<h2>Test K: Metadata info view -- View Raw</h2>
 <p>From the parsed metadata info view, pressing <em>Confirm</em> must switch
 to the raw .ifo text view showing the unprocessed file contents.
 Pressing <em>Back</em> from the raw view must return to the parsed view.</p>
@@ -148,7 +164,7 @@ Pressing <em>Back</em> from the raw view must return to the parsed view.</p>
 <li>Press <em>Back</em>. Picker reappears.</li>
 </ol>
 
-<h2>Test K: Compressed dictionary shows "Compressed" status line</h2>
+<h2>Test L: Compressed dictionary shows "Compressed" status line</h2>
 <p>The info view for a compressed dictionary must include a "Compressed"
 status line in addition to the standard metadata fields.</p>
 <h3>Dictionary</h3>
@@ -161,7 +177,7 @@ status line in addition to the standard metadata fields.</p>
 <li>Press <em>Back</em>. Picker reappears.</li>
 </ol>
 
-<h2>Test L: "None found" when no dictionaries are present</h2>
+<h2>Test M: "None found" when no dictionaries are present</h2>
 <p>When no valid dictionary folders exist on the SD card, the picker
 must show a "None found" message rather than an empty list.</p>
 <h3>Note</h3>

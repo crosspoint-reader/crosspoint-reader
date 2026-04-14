@@ -305,6 +305,14 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         with open(extra_path, "wb") as f:
             f.write(idx_bytes)
 
+    # Write extra arbitrary files (for macOS metadata test dict)
+    extra_files = meta.get("extra_files", []) or []
+    for ef in extra_files:
+        file_path = os.path.join(out_dir, ef["name"])
+        content = ef.get("content", "").encode("utf-8")
+        with open(file_path, "wb") as f:
+            f.write(content)
+
     # Summary
     exts = []
     if corrupt_dict:
