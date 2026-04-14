@@ -160,7 +160,7 @@ void TxtReaderActivity::loop() {
 
   // Open starred pages list via Confirm button
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !bookmarkStore.isEmpty()) {
-    startActivityForResult(std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore.getAll()),
+    startActivityForResult(std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& starred = std::get<StarredPageResult>(result.data);

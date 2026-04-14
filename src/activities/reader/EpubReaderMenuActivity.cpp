@@ -13,8 +13,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const int8_t initialEmbeddedStyleOverride,
                                                const int8_t initialImageRenderingOverride,
-                                               const uint8_t initialTextDarkness, const bool hasStarredPages)
+                                               const uint8_t initialTextDarkness, const bool hasStarredPages,
+                                               const bool isCurrentPageStarred)
     : MenuListActivity("EpubReaderMenu", renderer, mappedInput),
+      currentPageStarred(isCurrentPageStarred),
       pendingOrientation(currentOrientation),
       pendingEmbeddedStyleOverride(initialEmbeddedStyleOverride),
       pendingImageRenderingOverride(initialImageRenderingOverride),
@@ -33,14 +35,17 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_NAVIGATION));
   menuItems.push_back(SettingInfo::Action(StrId::STR_SELECT_CHAPTER, SettingAction::None));
   menuItems.push_back(SettingInfo::Action(StrId::STR_GO_TO_PERCENT, SettingAction::None));
+
+  // Bookmarks, footnotes
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_BOOKMARKS));
+
+  menuItems.push_back(SettingInfo::Action(StrId::STR_STAR_PAGE, SettingAction::None));
   if (hasStarredPages) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_STARRED_PAGES, SettingAction::None));
   }
   if (hasFootnotes) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_FOOTNOTES, SettingAction::None));
   }
-  // Auto page turn: ACTION type with custom cycling in onActionSelected
-  menuItems.push_back(SettingInfo::Action(StrId::STR_AUTO_TURN_PAGES_PER_MIN, SettingAction::None));
 
   // --- Appearance ---
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_APPEARANCE));
@@ -74,6 +79,10 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
       StrId::STR_TEXT_DARKNESS, {StrId::STR_NORMAL, StrId::STR_DARK, StrId::STR_EXTRA_DARK, StrId::STR_MAX_DARK},
       [this]() -> uint8_t { return pendingTextDarkness; }, [this](uint8_t v) { pendingTextDarkness = v; }));
 
+  // Helper functions, reading ruler, auto page turn, orientation
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_UTILS));
+  // Auto page turn: ACTION type with custom cycling in onActionSelected
+  menuItems.push_back(SettingInfo::Action(StrId::STR_AUTO_TURN_PAGES_PER_MIN, SettingAction::None));
   // Orientation: straightforward 0-3 cycle
   menuItems.push_back(SettingInfo::DynamicEnum(
       StrId::STR_ORIENTATION,
@@ -103,6 +112,8 @@ EpubReaderMenuActivity::MenuAction EpubReaderMenuActivity::actionForNameId(StrId
       return MenuAction::GO_TO_PERCENT;
     case StrId::STR_STARRED_PAGES:
       return MenuAction::STARRED_PAGES;
+    case StrId::STR_STAR_PAGE:
+      return MenuAction::STAR_PAGE;
     case StrId::STR_FOOTNOTES:
       return MenuAction::FOOTNOTES;
     case StrId::STR_AUTO_TURN_PAGES_PER_MIN:
@@ -176,6 +187,11 @@ std::string EpubReaderMenuActivity::getItemValueString(int index) const {
   if (item.nameId == StrId::STR_AUTO_TURN_PAGES_PER_MIN) {
     if (selectedPageTurnOption == 0) return std::string(tr(STR_STATE_OFF));
     return std::string(pageTurnLabels[selectedPageTurnOption]);
+  }
+
+  // Star page: reflect current page's star state
+  if (item.nameId == StrId::STR_STAR_PAGE) {
+    return currentPageStarred ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
   }
 
   // Plain ACTION items (select chapter, screenshot, etc.) show no value

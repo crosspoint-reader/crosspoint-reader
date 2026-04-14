@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -18,24 +19,28 @@ int StarredPagesActivity::getPageItems() const {
   return std::max(1, availableHeight / lineHeight);
 }
 
-std::string StarredPagesActivity::getItemLabel(int index) const {
-  const auto& bm = bookmarks[index];
+std::string StarredPagesActivity::getDefaultLabel(int index) const {
+  const auto& bm = bookmarkStore.getAll()[index];
   char buf[64];
   if (epub) {
-    // Try to get chapter title from TOC
     const int tocIndex = epub->getTocIndexForSpineIndex(bm.spineIndex);
     if (tocIndex != -1) {
       const auto tocItem = epub->getTocItem(tocIndex);
-      snprintf(buf, sizeof(buf), "%d. ", index + 1);
-      return std::string(buf) + tocItem.title + " - " + tr(STR_PAGE_PREFIX) + std::to_string(bm.pageNumber + 1);
+      return tocItem.title + " - " + tr(STR_PAGE_PREFIX) + std::to_string(bm.pageNumber + 1);
     }
-    snprintf(buf, sizeof(buf), "%d. %s%d, %s%d", index + 1, tr(STR_SECTION_PREFIX), bm.spineIndex + 1,
-             tr(STR_PAGE_PREFIX), bm.pageNumber + 1);
+    snprintf(buf, sizeof(buf), "%s%d, %s%d", tr(STR_SECTION_PREFIX), bm.spineIndex + 1, tr(STR_PAGE_PREFIX),
+             bm.pageNumber + 1);
   } else {
-    // TXT file: just page number (spineIndex is always 0)
-    snprintf(buf, sizeof(buf), "%d. %s%d", index + 1, tr(STR_PAGE_PREFIX), bm.pageNumber + 1);
+    snprintf(buf, sizeof(buf), "%s%d", tr(STR_PAGE_PREFIX), bm.pageNumber + 1);
   }
   return std::string(buf);
+}
+
+std::string StarredPagesActivity::getItemLabel(int index) const {
+  char prefix[16];
+  snprintf(prefix, sizeof(prefix), "%d. ", index + 1);
+  const auto& bm = bookmarkStore.getAll()[index];
+  return std::string(prefix) + (bm.name.empty() ? getDefaultLabel(index) : bm.name);
 }
 
 void StarredPagesActivity::onEnter() {
@@ -43,15 +48,52 @@ void StarredPagesActivity::onEnter() {
   requestUpdate();
 }
 
-void StarredPagesActivity::onExit() { Activity::onExit(); }
+void StarredPagesActivity::onExit() {
+  bookmarkStore.save();
+  Activity::onExit();
+}
+
+void StarredPagesActivity::startRename() {
+  const auto& all = bookmarkStore.getAll();
+  if (all.empty() || selectorIndex >= static_cast<int>(all.size())) return;
+  const int renamingIndex = selectorIndex;
+  const std::string initial =
+      all[renamingIndex].name.empty() ? getDefaultLabel(renamingIndex) : all[renamingIndex].name;
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_RENAME), initial,
+                                                                 BookmarkStore::MAX_NAME_LENGTH, false),
+                         [this, renamingIndex](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             const auto& kr = std::get<KeyboardResult>(result.data);
+                             bookmarkStore.rename(renamingIndex, kr.text);
+                           }
+                           requestUpdate();
+                         });
+}
+
+void StarredPagesActivity::deleteSelected() {
+  const auto& all = bookmarkStore.getAll();
+  if (all.empty() || selectorIndex >= static_cast<int>(all.size())) return;
+  bookmarkStore.removeAt(selectorIndex);
+  const int remaining = static_cast<int>(bookmarkStore.getAll().size());
+  if (remaining == 0) {
+    // Nothing left — drop back to the reader.
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
+  if (selectorIndex >= remaining) selectorIndex = remaining - 1;
+  requestUpdate();
+}
 
 void StarredPagesActivity::loop() {
-  const int totalItems = static_cast<int>(bookmarks.size());
+  const int totalItems = static_cast<int>(bookmarkStore.getAll().size());
   const int pageItems = getPageItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (!bookmarks.empty()) {
-      const auto& bm = bookmarks[selectorIndex];
+    if (totalItems > 0) {
+      const auto& bm = bookmarkStore.getAll()[selectorIndex];
       setResult(StarredPageResult{bm.spineIndex, bm.pageNumber});
       finish();
     }
@@ -66,22 +108,33 @@ void StarredPagesActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextRelease([this, totalItems] {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    startRename();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    deleteSelected();
+    return;
+  }
+
+  // Side buttons (Up/Down) drive list navigation; Left/Right are reserved for rename/delete.
+  buttonNavigator.onRelease({MappedInputManager::Button::Down}, [this, totalItems] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, totalItems] {
+  buttonNavigator.onRelease({MappedInputManager::Button::Up}, [this, totalItems] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
+  buttonNavigator.onContinuous({MappedInputManager::Button::Down}, [this, totalItems, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
+  buttonNavigator.onContinuous({MappedInputManager::Button::Up}, [this, totalItems, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
     requestUpdate();
   });
@@ -90,7 +143,7 @@ void StarredPagesActivity::loop() {
 void StarredPagesActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const int totalItems = static_cast<int>(bookmarks.size());
+  const int totalItems = static_cast<int>(bookmarkStore.getAll().size());
 
   if (totalItems == 0) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_NO_STARRED_PAGES), true, EpdFontFamily::BOLD);
@@ -130,7 +183,7 @@ void StarredPagesActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, label.c_str(), !isSelected);
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_RENAME), tr(STR_DELETE));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

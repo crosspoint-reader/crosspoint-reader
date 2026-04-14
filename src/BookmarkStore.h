@@ -15,6 +15,7 @@ class BookmarkStore {
   struct Bookmark {
     uint16_t spineIndex;
     uint16_t pageNumber;
+    std::string name;  // optional user-provided label (empty = use default)
   };
 
   // Load bookmarks from the cache directory (e.g. .crosspoint/epub_<hash>/).
@@ -29,7 +30,8 @@ class BookmarkStore {
     }
 
     uint8_t version;
-    if (f.read(reinterpret_cast<uint8_t*>(&version), sizeof(version)) != sizeof(version) || version != FILE_VERSION) {
+    if (f.read(reinterpret_cast<uint8_t*>(&version), sizeof(version)) != sizeof(version) || version < 1 ||
+        version > FILE_VERSION) {
       f.close();
       return;
     }
@@ -51,7 +53,26 @@ class BookmarkStore {
         f.close();
         return;
       }
-      bookmarks.push_back(bm);
+      if (version >= 2) {
+        uint16_t nameLen = 0;
+        if (f.read(reinterpret_cast<uint8_t*>(&nameLen), sizeof(nameLen)) != sizeof(nameLen) ||
+            nameLen > MAX_NAME_LENGTH) {
+          LOG_ERR("BKM", "Invalid bookmark name length at entry %d", i);
+          bookmarks.clear();
+          f.close();
+          return;
+        }
+        if (nameLen > 0) {
+          bm.name.resize(nameLen);
+          if (f.read(reinterpret_cast<uint8_t*>(&bm.name[0]), nameLen) != nameLen) {
+            LOG_ERR("BKM", "Truncated bookmark name at entry %d", i);
+            bookmarks.clear();
+            f.close();
+            return;
+          }
+        }
+      }
+      bookmarks.push_back(std::move(bm));
     }
 
     f.close();
@@ -83,7 +104,11 @@ class BookmarkStore {
     bool ok = writePodChecked(FILE_VERSION) && writePodChecked(count);
 
     for (const auto& bm : bookmarks) {
-      ok = ok && writePodChecked(bm.spineIndex) && writePodChecked(bm.pageNumber);
+      const uint16_t nameLen = static_cast<uint16_t>(std::min<size_t>(bm.name.size(), MAX_NAME_LENGTH));
+      ok = ok && writePodChecked(bm.spineIndex) && writePodChecked(bm.pageNumber) && writePodChecked(nameLen);
+      if (ok && nameLen > 0) {
+        ok = f.write(reinterpret_cast<const uint8_t*>(bm.name.data()), nameLen) == nameLen;
+      }
     }
 
     ok = ok && f.close();
@@ -119,8 +144,24 @@ class BookmarkStore {
   [[nodiscard]] bool isEmpty() const { return bookmarks.empty(); }
   void markDirty() { dirty = true; }
 
+  // Set or clear the name for the bookmark at index. Empty name reverts to default label.
+  void rename(size_t index, std::string name) {
+    if (index >= bookmarks.size()) return;
+    if (name.size() > MAX_NAME_LENGTH) name.resize(MAX_NAME_LENGTH);
+    bookmarks[index].name = std::move(name);
+    dirty = true;
+  }
+
+  void removeAt(size_t index) {
+    if (index >= bookmarks.size()) return;
+    bookmarks.erase(bookmarks.begin() + index);
+    dirty = true;
+  }
+
+  static constexpr uint16_t MAX_NAME_LENGTH = 128;
+
  private:
-  static constexpr uint8_t FILE_VERSION = 1;
+  static constexpr uint8_t FILE_VERSION = 2;
   static constexpr uint16_t MAX_BOOKMARKS = 1000;
 
   std::vector<Bookmark> bookmarks;

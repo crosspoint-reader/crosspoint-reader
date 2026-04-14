@@ -216,21 +216,24 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty(), bookEmbeddedStyleOverride,
-                               bookImageRenderingOverride, SETTINGS.textDarkness, !bookmarkStore.isEmpty()),
-                           [this](const ActivityResult& result) {
-                             // Always apply orientation/darkness change even if the menu was cancelled
-                             const auto& menu = std::get<MenuResult>(result.data);
-                             applyOrientation(menu.orientation);
-                             applyTextDarkness(menu.textDarkness);
-                             toggleAutoPageTurn(menu.pageTurnOption);
-                             applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                             }
-                           });
+    const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
+                                                                   static_cast<uint16_t>(section->currentPage));
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(
+            renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+            !currentPageFootnotes.empty(), bookEmbeddedStyleOverride, bookImageRenderingOverride, SETTINGS.textDarkness,
+            !bookmarkStore.isEmpty(), isCurrentPageStarred),
+        [this](const ActivityResult& result) {
+          // Always apply orientation/darkness change even if the menu was cancelled
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+          applyTextDarkness(menu.textDarkness);
+          toggleAutoPageTurn(menu.pageTurnOption);
+          applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride);
+          if (!result.isCancelled) {
+            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+          }
+        });
   }
 
   // Long press BACK (1s+) goes to home screen
@@ -516,9 +519,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::STAR_PAGE: {
+      if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
+        bookmarkStore.toggle(static_cast<uint16_t>(currentSpineIndex), static_cast<uint16_t>(section->currentPage));
+        requestUpdate();
+      }
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::STARRED_PAGES: {
       startActivityForResult(
-          std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore.getAll(), epub),
+          std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore, epub),
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& starred = std::get<StarredPageResult>(result.data);

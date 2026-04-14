@@ -11,18 +11,20 @@
 
 class StarredPagesActivity final : public Activity {
   std::shared_ptr<Epub> epub;  // nullptr for TXT files
-  const std::vector<BookmarkStore::Bookmark> bookmarks;
+  BookmarkStore& bookmarkStore;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
 
   int getPageItems() const;
   std::string getItemLabel(int index) const;
+  std::string getDefaultLabel(int index) const;
+  void startRename();
+  void deleteSelected();
 
  public:
-  explicit StarredPagesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                const std::vector<BookmarkStore::Bookmark>& bookmarks,
+  explicit StarredPagesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, BookmarkStore& bookmarkStore,
                                 std::shared_ptr<Epub> epub = nullptr)
-      : Activity("StarredPages", renderer, mappedInput), epub(std::move(epub)), bookmarks(bookmarks) {}
+      : Activity("StarredPages", renderer, mappedInput), epub(std::move(epub)), bookmarkStore(bookmarkStore) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

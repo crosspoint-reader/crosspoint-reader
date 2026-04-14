@@ -28,6 +28,7 @@ class EpubReaderMenuActivity final : public MenuListActivity {
     PUSH_LOCAL,
     SYNC,
     STARRED_PAGES,
+    STAR_PAGE,
     DELETE_CACHE
   };
 
@@ -35,14 +36,16 @@ class EpubReaderMenuActivity final : public MenuListActivity {
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes,
                                   const int8_t initialEmbeddedStyleOverride, const int8_t initialImageRenderingOverride,
-                                  const uint8_t initialTextDarkness,
-                                  const bool hasStarredPages);
+                                  const uint8_t initialTextDarkness, const bool hasStarredPages,
+                                  const bool isCurrentPageStarred);
 
   void onEnter() override;
   void render(RenderLock&&) override;
 
  private:
   void buildMenuItems(bool hasFootnotes, bool hasStarredPages);
+
+  bool currentPageStarred = false;
   void finishWithAction(MenuAction action);
 
   // MenuListActivity overrides
