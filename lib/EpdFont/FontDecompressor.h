@@ -9,6 +9,7 @@
 class FontDecompressor {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
+  static constexpr uint8_t MAX_PAGE_SLOTS = 4;  // One per font style (R/B/I/BI)
 
   FontDecompressor() = default;
   ~FontDecompressor();
@@ -48,16 +49,21 @@ class FontDecompressor {
   Stats stats;
   InflateReader inflateReader;
 
-  // Page buffer: flat array of prewarmed glyph bitmaps with sorted lookup
+  // Page buffer slots: each style gets its own flat glyph buffer with sorted lookup.
+  // Up to MAX_PAGE_SLOTS (4) styles can be prewarmed simultaneously.
   struct PageGlyphEntry {
     uint32_t glyphIndex;
     uint32_t bufferOffset;
     uint32_t alignedOffset;  // byte-aligned offset within its decompressed group (set during prewarm pre-scan)
   };
-  uint8_t* pageBuffer = nullptr;
-  const EpdFontData* pageFont = nullptr;
-  PageGlyphEntry* pageGlyphs = nullptr;
-  uint16_t pageGlyphCount = 0;
+  struct PageSlot {
+    uint8_t* buffer = nullptr;
+    const EpdFontData* fontData = nullptr;
+    PageGlyphEntry* glyphs = nullptr;
+    uint16_t glyphCount = 0;
+  };
+  PageSlot pageSlots[MAX_PAGE_SLOTS] = {};
+  uint8_t pageSlotCount = 0;
 
   // Hot group: last decompressed group (byte-aligned) for non-prewarmed fallback path.
   // Kept in byte-aligned format; individual glyphs are compacted on demand into hotGlyphBuf.
