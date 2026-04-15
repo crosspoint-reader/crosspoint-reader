@@ -466,11 +466,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       (pageWidth - (BOTTOM_KEY_COUNT * bottomKeyWidth + (BOTTOM_KEY_COUNT - 1) * bkSpacing)) / 2;
 
   int urlLeftMargin = leftMargin;
-  int urlKeyWidth = keyWidth;
   if (urlMode) {
-    const int urlCols = 3;
-    urlKeyWidth = keyWidth;
-    const int urlTotalWidth = urlCols * urlKeyWidth + (urlCols - 1) * keySpacing;
+    const int urlTotalWidth = 3 * keyWidth + 2 * keySpacing;
     const int urlCenterX = bottomLeftMargin + SpecSpace * (bottomKeyWidth + bkSpacing) + bottomKeyWidth / 2;
     urlLeftMargin = urlCenterX - urlTotalWidth / 2;
   }
