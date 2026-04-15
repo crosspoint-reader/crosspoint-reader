@@ -193,6 +193,7 @@ void CrossPointWebServer::begin() {
 }
 
 void CrossPointWebServer::abortWsUpload(const char* tag) {
+  // Explicit close() required: file-scope global persists beyond function scope
   wsUploadFile.close();
   String filePath = wsUploadPath;
   if (!filePath.endsWith("/")) filePath += "/";
@@ -1342,6 +1343,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
           // Zero-byte upload: complete immediately without waiting for BIN frames
           if (wsUploadSize == 0) {
+            // Explicit close() required: file-scope global persists beyond function scope
             wsUploadFile.close();
             wsLastCompleteName = wsUploadFileName;
             wsLastCompleteSize = 0;
@@ -1397,6 +1399,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
       // Check if upload complete
       if (wsUploadReceived >= wsUploadSize) {
+        // Explicit close() required: file-scope global persists beyond function scope
         wsUploadFile.close();
         wsUploadInProgress = false;
         wsUploadClientNum = 255;
