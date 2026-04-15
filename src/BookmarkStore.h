@@ -111,10 +111,8 @@ class BookmarkStore {
       }
     }
 
-    bool closeOk = false;
     if (ok) {
-      closeOk = f.close();
-      if (!closeOk) {
+      if (!f.close()) {
         LOG_ERR("BKM", "Failed to close bookmarks file");
         return;
       }
