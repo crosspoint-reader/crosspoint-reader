@@ -62,7 +62,6 @@ class EpubReaderMenuActivity final : public MenuListActivity {
   int8_t pendingEmbeddedStyleOverride = -1;
   int8_t pendingImageRenderingOverride = -1;
   uint8_t pendingTextDarkness = 1;
-  bool initialHalfRefreshDone = false;
 
   static constexpr const char* pageTurnLabels[] = {"", "1", "3", "6", "12"};
 

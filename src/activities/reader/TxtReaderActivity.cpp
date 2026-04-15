@@ -162,6 +162,7 @@ void TxtReaderActivity::loop() {
 
   // Open starred pages list via Confirm button
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !bookmarkStore.isEmpty()) {
+    ReaderUtils::enforceExitFullRefresh(renderer);
     startActivityForResult(std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {

@@ -218,6 +218,7 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
                                                                    static_cast<uint16_t>(section->currentPage));
+    ReaderUtils::enforceExitFullRefresh(renderer);
     startActivityForResult(
         std::make_unique<EpubReaderMenuActivity>(
             renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
@@ -263,6 +264,7 @@ void EpubReaderActivity::loop() {
     if (currentPageFootnotes.size() == 1) {
       navigateToHref(currentPageFootnotes[0].href, true);
     } else if (currentPageFootnotes.size() > 1) {
+      ReaderUtils::enforceExitFullRefresh(renderer);
       startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
                              [this](const ActivityResult& result) {
                                if (!result.isCancelled) {
