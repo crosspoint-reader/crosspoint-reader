@@ -182,7 +182,7 @@ void EpubReaderActivity::loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
       mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (footnoteDepth > 0) {
+    if (SETTINGS.pwrBtnFootnoteBack && footnoteDepth > 0) {
       restoreSavedPosition();
     } else {
       if (currentPageFootnotes.size() == 1) {
