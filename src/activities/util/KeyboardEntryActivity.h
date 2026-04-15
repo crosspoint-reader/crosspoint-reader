@@ -170,4 +170,5 @@ class KeyboardEntryActivity : public Activity {
   bool handleKeyPress();
   bool insertChar(char c);
   void insertString(const std::string& str);
+  void mapColContentBottom(int& col, bool goingUp) const;
 };

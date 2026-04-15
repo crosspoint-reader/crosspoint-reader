@@ -11,6 +11,13 @@ const char* const KeyboardEntryActivity::shiftString[2] = {"shift", "SHIFT"};
 void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
   cursorPos = text.length();
+  symMode = false;
+  urlMode = false;
+  cursorMode = false;
+  passwordVisible = false;
+  shiftState = 0;
+  selectedRow = 0;
+  selectedCol = 0;
   requestUpdate();
 }
 
@@ -58,6 +65,7 @@ char KeyboardEntryActivity::getAlternativeChar() const {
 bool KeyboardEntryActivity::insertChar(char c) {
   if (c == '\0') return true;
   if (maxLength != 0 && text.length() >= maxLength) return true;
+  if (cursorPos > text.length()) cursorPos = text.length();
 
   text.insert(cursorPos, 1, c);
   cursorPos++;
@@ -65,7 +73,10 @@ bool KeyboardEntryActivity::insertChar(char c) {
 }
 
 void KeyboardEntryActivity::insertString(const std::string& str) {
+  if (str.empty()) return;
   if (maxLength != 0 && text.length() + str.length() > maxLength) return;
+  if (cursorPos > text.length()) cursorPos = text.length();
+
   text.insert(cursorPos, str);
   cursorPos += str.length();
 }
@@ -133,6 +144,16 @@ bool KeyboardEntryActivity::handleKeyPress() {
   return insertChar(getSelectedChar());
 }
 
+void KeyboardEntryActivity::mapColContentBottom(int& col, bool goingUp) const {
+  if (urlMode) {
+    col = goingUp ? col - 1 : col + 1;
+    if (col < 0) col = 0;
+    if (col >= 3) col = 2;
+  } else {
+    col = goingUp ? col * 2 : col / 2;
+  }
+}
+
 void KeyboardEntryActivity::loop() {
   const int totalRows = getTotalRowCount();
 
@@ -154,20 +175,9 @@ void KeyboardEntryActivity::loop() {
       const int contentCols = getContentColCount();
       selectedRow = ButtonNavigator::previousIndex(selectedRow, totalRows);
       if (wasBottom && !isBottomRow(selectedRow)) {
-        if (urlMode) {
-          selectedCol = selectedCol - 1;
-          if (selectedCol < 0) selectedCol = 0;
-          if (selectedCol >= 3) selectedCol = 2;
-        } else {
-          selectedCol = selectedCol * 2;
-        }
+        mapColContentBottom(selectedCol, true);
       } else if (!wasBottom && isBottomRow(selectedRow)) {
-        if (urlMode) {
-          selectedCol = selectedCol + 1;
-          if (selectedCol > BOTTOM_KEY_COUNT - 1) selectedCol = BOTTOM_KEY_COUNT - 1;
-        } else {
-          selectedCol = selectedCol / 2;
-        }
+        mapColContentBottom(selectedCol, false);
       }
       int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : contentCols - 1;
       if (selectedCol > maxCol) selectedCol = maxCol;
@@ -198,20 +208,9 @@ void KeyboardEntryActivity::loop() {
       const int contentCols = getContentColCount();
       selectedRow = ButtonNavigator::nextIndex(selectedRow, totalRows);
       if (wasBottom && !isBottomRow(selectedRow)) {
-        if (urlMode) {
-          selectedCol = selectedCol - 1;
-          if (selectedCol < 0) selectedCol = 0;
-          if (selectedCol >= 3) selectedCol = 2;
-        } else {
-          selectedCol = selectedCol * 2;
-        }
+        mapColContentBottom(selectedCol, true);
       } else if (!wasBottom && isBottomRow(selectedRow)) {
-        if (urlMode) {
-          selectedCol = selectedCol + 1;
-          if (selectedCol > BOTTOM_KEY_COUNT - 1) selectedCol = BOTTOM_KEY_COUNT - 1;
-        } else {
-          selectedCol = selectedCol / 2;
-        }
+        mapColContentBottom(selectedCol, false);
       }
       int maxCol = isBottomRow(selectedRow) ? BOTTOM_KEY_COUNT - 1 : contentCols - 1;
       if (selectedCol > maxCol) selectedCol = maxCol;
