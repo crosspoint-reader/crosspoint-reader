@@ -199,7 +199,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   } else {
     int requiredSpace = pageWidth - width * 3;
-    int x = (pageWidth - requiredSpace) / 4;
+    int x = (pageWidth - requiredSpace) / 3;
     for(int i = 0; i < 3; i++){
       renderer.drawRect(x, keyboardStartY, width, height * 2);
       buffer[0] = keyboard[selectedTopLevel].row[selectedMidLevel][i];
