@@ -15,7 +15,6 @@ class StarredPagesActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
 
-  int getPageItems() const;
   std::string getItemLabel(int index) const;
   std::string getDefaultLabel(int index) const;
   void startRename();
