@@ -98,6 +98,7 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
+  bool isInReaderContext() const;
   bool skipLoopDelay() const;
 
   // If immediate is true, the update will be triggered immediately.
