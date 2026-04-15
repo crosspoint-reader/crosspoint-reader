@@ -714,6 +714,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       --end;
     }
 
+    // Make sure that it fit into link text string
+    if (end - start > sizeof(self->currentFootnoteLinkText) - 2) {
+        end = start + sizeof(self->currentFootnoteLinkText) - 2;
+    }
+
     // Extract footnote link text
     for (int i = start; i <= end; ++i) {
       self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = s[i];
