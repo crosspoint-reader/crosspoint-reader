@@ -183,13 +183,22 @@ bool HalStorage::copyFile(const char* moduleName, const std::string& srcPath, co
 
 void HalFile::flush() { HAL_FILE_WRAPPED_CALL(flush, ); }
 size_t HalFile::getName(char* name, size_t len) { HAL_FILE_WRAPPED_CALL(getName, name, len); }
-size_t HalFile::size() { HAL_FILE_FORWARD_CALL(size, ); }          // already thread-safe, no need to wrap
-size_t HalFile::fileSize() { HAL_FILE_FORWARD_CALL(fileSize, ); }  // already thread-safe, no need to wrap
+size_t HalFile::size() {
+  assert(impl != nullptr);
+  return static_cast<size_t>(impl->file.size());
+}
+size_t HalFile::fileSize() {
+  assert(impl != nullptr);
+  return static_cast<size_t>(impl->file.fileSize());
+}
 bool HalFile::seek(size_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
 bool HalFile::seekCur(int64_t offset) { HAL_FILE_WRAPPED_CALL(seekCur, offset); }
 bool HalFile::seekSet(size_t offset) { HAL_FILE_WRAPPED_CALL(seekSet, offset); }
 int HalFile::available() const { HAL_FILE_WRAPPED_CALL(available, ); }
-size_t HalFile::position() const { HAL_FILE_WRAPPED_CALL(position, ); }
+size_t HalFile::position() const {
+  assert(impl != nullptr);
+  return static_cast<size_t>(impl->file.position());
+}
 int HalFile::read(void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(read, buf, count); }
 int HalFile::read() { HAL_FILE_WRAPPED_CALL(read, ); }
 size_t HalFile::write(const void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
@@ -201,6 +210,11 @@ bool HalFile::getModifyDateTime(uint16_t* pdate, uint16_t* ptime) {
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap
 void HalFile::rewindDirectory() { HAL_FILE_WRAPPED_CALL(rewindDirectory, ); }
 bool HalFile::close() { HAL_FILE_WRAPPED_CALL(close, ); }
+uint64_t HalFile::size64() { HAL_FILE_FORWARD_CALL(size, ); }
+uint64_t HalFile::fileSize64() { HAL_FILE_FORWARD_CALL(fileSize, ); }
+bool HalFile::seek64(uint64_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
+bool HalFile::seekSet64(uint64_t offset) { HAL_FILE_WRAPPED_CALL(seekSet, offset); }
+uint64_t HalFile::position64() const { HAL_FILE_FORWARD_CALL(position, ); }
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);

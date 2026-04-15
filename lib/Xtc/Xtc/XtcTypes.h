@@ -102,33 +102,6 @@ struct ChapterInfo {
   uint16_t endPage;
 };
 
-// Cache configuration
-constexpr size_t L1_CACHE_SIZE = 4;               // L1 cache entries
-constexpr size_t L2_WINDOW_SIZE = 100;            // L2 window size (reduced for 2-bit memory)
-constexpr uint32_t PAGE_TABLE_CACHE_VERSION = 1;  // Cache file version
-
-// Cache magic number
-constexpr uint32_t PAGE_TABLE_CACHE_MAGIC = 0x50435458;  // "XTCP"
-
-// Cache file header - NOTE: Do NOT read directly from file buffer!
-// Use safeDeserializeHeader() function for alignment-safe access.
-struct PageTableCacheHeader {
-  uint32_t magic;         // 'XTCP' = 0x50435458
-  uint32_t version;       // Cache version
-  uint32_t pageCount;     // Total pages
-  uint32_t originalHash;  // Original file hash (for validation)
-  uint64_t originalSize;  // Original file size (for validation)
-  uint32_t entrySize;     // PageInfo size (16)
-  uint32_t reserved;      // Reserved
-};
-
-// L1 cache entry
-struct L1CacheEntry {
-  uint32_t pageIndex = 0xFFFFFFFF;  // 0xFFFFFFFF = invalid
-  PageInfo info{};
-  uint32_t lastAccess = 0;  // Timestamp for LRU
-};
-
 // Error codes
 enum class XtcError {
   OK = 0,

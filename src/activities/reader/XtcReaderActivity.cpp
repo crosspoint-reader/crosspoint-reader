@@ -47,8 +47,6 @@ void XtcReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), "", xtc->getThumbBmpPath());
 
-  xtc->prefetchPages(currentPage);
-
   // Trigger first update
   requestUpdate();
 }
@@ -75,7 +73,6 @@ void XtcReaderActivity::loop() {
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               currentPage = std::get<PageResult>(result.data).page;
-              xtc->prefetchPages(currentPage);
             }
           });
     }
@@ -133,14 +130,12 @@ void XtcReaderActivity::loop() {
     } else {
       currentPage = 0;
     }
-    xtc->prefetchPages(currentPage);
     requestUpdate();
   } else if (nextTriggered) {
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
-    xtc->prefetchPages(currentPage);
     requestUpdate();
   }
 }

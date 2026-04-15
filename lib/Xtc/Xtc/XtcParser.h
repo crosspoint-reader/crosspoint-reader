@@ -9,8 +9,6 @@
 
 #include <HalStorage.h>
 
-#include <array>
-#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
@@ -25,6 +23,9 @@ namespace xtc {
  *
  * Reads XTC files from SD card and extracts page data.
  * Designed for ESP32-C3's limited RAM (~380KB) using streaming.
+ *
+ * The source file is kept closed between reads to free heap for rendering.
+ * It is reopened on-demand for page table lookups and bitmap data reads.
  */
 class XtcParser {
  public:
@@ -32,7 +33,7 @@ class XtcParser {
   ~XtcParser();
 
   // File open/close
-  XtcError open(const char* filepath, const char* cacheDir);
+  XtcError open(const char* filepath);
   void close();
   bool isOpen() const { return m_isOpen; }
 
@@ -43,14 +44,28 @@ class XtcParser {
   uint16_t getHeight() const { return m_defaultHeight; }
   uint8_t getBitDepth() const { return m_bitDepth; }  // 1 = XTC/XTG, 2 = XTCH/XTH
 
-  // Page information - three-tier cache interface
+  // Page information
   bool getPageInfo(uint32_t pageIndex, PageInfo& info);
 
-  // Preload window around specified page (optimize sequential page turns)
-  void prefetchWindow(uint32_t pageIndex);
-
-  // Load page bitmap (unchanged)
+  /**
+   * Load page bitmap (raw 1-bit data, skipping XTG header)
+   *
+   * @param pageIndex Page index (0-based)
+   * @param buffer Output buffer (caller allocated)
+   * @param bufferSize Buffer size
+   * @return Number of bytes read on success, 0 on failure
+   */
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
+
+  /**
+   * Streaming page load
+   * Memory-efficient method that reads page data in chunks.
+   *
+   * @param pageIndex Page index
+   * @param callback Callback function to receive data chunks
+   * @param chunkSize Chunk size (default: 1024 bytes)
+   * @return Error code
+   */
   XtcError loadPageStreaming(uint32_t pageIndex,
                              std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                              size_t chunkSize = 1024);
@@ -70,62 +85,30 @@ class XtcParser {
 
  private:
   FsFile m_file;
-  FsFile m_cacheFile;
+  std::string m_filepath;
   bool m_isOpen;
   XtcHeader m_header;
-  std::string m_cacheDir;
-  std::string m_cacheFilePath;
-  std::string m_originalPath;
+  std::vector<ChapterInfo> m_chapters;
   std::string m_title;
   std::string m_author;
   uint16_t m_defaultWidth;
   uint16_t m_defaultHeight;
-  uint8_t m_bitDepth;
+  uint8_t m_bitDepth;  // 1 = XTC/XTG (1-bit), 2 = XTCH/XTH (2-bit)
   bool m_hasChapters;
-  bool m_chaptersLoaded = false;
+  bool m_chaptersLoaded;
   XtcError m_lastError;
-  uint32_t m_accessCounter = 0;
-
-  // L1: Hot cache (fixed 4 entries)
-  std::array<L1CacheEntry, L1_CACHE_SIZE> m_l1Cache;
-
-  // L2: Sliding window (fixed size array)
-  std::array<PageInfo, L2_WINDOW_SIZE> m_l2Window;
-  uint32_t m_l2WindowStart = 0;
-  size_t m_l2WindowCount = 0;
-  bool m_l2Valid = false;
-
-  // Chapters (usually few, keep in memory)
-  std::vector<ChapterInfo> m_chapters;
-
-  // Original Page Table offset (for rebuilding cache)
-  uint64_t m_pageTableOffset = 0;
 
   // Internal helper functions
   XtcError readHeader();
+  XtcError readFirstPageInfo();
   XtcError readTitle();
   XtcError readAuthor();
   XtcError readChapters();
-  void ensureChaptersLoaded();
+  bool readPageTableEntry(uint32_t pageIndex, PageInfo& info);
 
-  // L3 cache management
-  bool isPageTableCacheValid() const;
-  XtcError buildPageTableCache();
-  bool openCacheFile();
-  void closeCacheFile();
-
-  // L1/L2 cache operations
-  bool lookupL1(uint32_t pageIndex, PageInfo& info);
-  void updateL1(uint32_t pageIndex, const PageInfo& info);
-  bool lookupL2(uint32_t pageIndex, PageInfo& info);
-  void loadL2Window(uint32_t centerPage);
-
-  // Safe deserialization (alignment-safe for ESP32-C3)
-  static void safeDeserializeHeader(const uint8_t* buf, PageTableCacheHeader& header);
-  static void safeSerializeHeader(uint8_t* buf, const PageTableCacheHeader& header);
-
-  // Utility functions
-  uint32_t calculateFileHash(const char* filepath) const;
+  // File handle management — reopen on demand, close after use
+  bool ensureFileOpen();
+  void closeFile();
 };
 
 }  // namespace xtc

@@ -50,11 +50,6 @@ class Xtc {
    */
   void setupCacheDir() const;
 
-  /**
-   * Preload window around specified page (for page turn optimization)
-   */
-  void prefetchPages(uint32_t pageIndex) const;
-
   // Path accessors
   const std::string& getCachePath() const { return cachePath; }
   const std::string& getPath() const { return filepath; }
@@ -63,7 +58,7 @@ class Xtc {
   std::string getTitle() const;
   std::string getAuthor() const;
   bool hasChapters() const;
-  const std::vector<xtc::ChapterInfo>& getChapters() const;
+  const std::vector<xtc::ChapterInfo>& getChapters();
 
   // Cover image support (for sleep screen)
   std::string getCoverBmpPath() const;
