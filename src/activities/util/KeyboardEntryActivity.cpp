@@ -48,7 +48,7 @@ char KeyboardEntryActivity::getSelectedChar() const {
 }
 
 char KeyboardEntryActivity::getAlternativeChar() const {
-  if (symMode) return '\0';
+  if (symMode || urlMode) return '\0';
 
   const KeyDef(*layout)[COLS] = abcLayout;
 
