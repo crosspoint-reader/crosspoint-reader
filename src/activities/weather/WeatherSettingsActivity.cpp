@@ -114,71 +114,71 @@ void WeatherSettingsActivity::handleSelection() {
 }
 
 void WeatherSettingsActivity::launchCitySearch() {
-  startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEATHER_SEARCH_CITY), "", 64, false),
-      [this](const ActivityResult& result) {
-        if (result.isCancelled) return;
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEATHER_SEARCH_CITY), "",
+                                                                 64, InputType::Text),
+                         [this](const ActivityResult& result) {
+                           if (result.isCancelled) return;
 
-        const auto& kb = std::get<KeyboardResult>(result.data);
-        if (kb.text.empty()) return;
+                           const auto& kb = std::get<KeyboardResult>(result.data);
+                           if (kb.text.empty()) return;
 
-        // Need WiFi for geocoding
-        if (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
-          startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
-                                 [this, query = kb.text](const ActivityResult& wifiResult) {
-                                   if (wifiResult.isCancelled) return;
-                                   searchResults = WeatherClient::searchCity(query);
-                                   showingSearchResults = !searchResults.empty();
-                                   selectedIndex = 0;
-                                   requestUpdate();
-                                 });
-        } else {
-          searchResults = WeatherClient::searchCity(kb.text);
-          showingSearchResults = !searchResults.empty();
-          selectedIndex = 0;
-          requestUpdate();
-        }
-      });
+                           // Need WiFi for geocoding
+                           if (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+                             startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                                                    [this, query = kb.text](const ActivityResult& wifiResult) {
+                                                      if (wifiResult.isCancelled) return;
+                                                      searchResults = WeatherClient::searchCity(query);
+                                                      showingSearchResults = !searchResults.empty();
+                                                      selectedIndex = 0;
+                                                      requestUpdate();
+                                                    });
+                           } else {
+                             searchResults = WeatherClient::searchCity(kb.text);
+                             showingSearchResults = !searchResults.empty();
+                             selectedIndex = 0;
+                             requestUpdate();
+                           }
+                         });
 }
 
 void WeatherSettingsActivity::launchLatitudeEntry() {
   std::string current = std::to_string(WEATHER_SETTINGS.getLatitude());
-  startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEATHER_LATITUDE), current, 12, false),
-      [this](const ActivityResult& result) {
-        if (!result.isCancelled) {
-          const auto& kb = std::get<KeyboardResult>(result.data);
-          char* end = nullptr;
-          const float lat = strtof(kb.text.c_str(), &end);
-          if (end != kb.text.c_str() && *end == '\0' && lat >= -90.0f && lat <= 90.0f) {
-            if (lat != WEATHER_SETTINGS.getLatitude()) {
-              WEATHER_SETTINGS.setLocation(lat, WEATHER_SETTINGS.getLongitude(), "");
-            }
-            WEATHER_SETTINGS.saveToFile();
-            requestUpdate();
-          }
-        }
-      });
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEATHER_LATITUDE),
+                                                                 current, 12, InputType::Text),
+                         [this](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             const auto& kb = std::get<KeyboardResult>(result.data);
+                             char* end = nullptr;
+                             const float lat = strtof(kb.text.c_str(), &end);
+                             if (end != kb.text.c_str() && *end == '\0' && lat >= -90.0f && lat <= 90.0f) {
+                               if (lat != WEATHER_SETTINGS.getLatitude()) {
+                                 WEATHER_SETTINGS.setLocation(lat, WEATHER_SETTINGS.getLongitude(), "");
+                               }
+                               WEATHER_SETTINGS.saveToFile();
+                               requestUpdate();
+                             }
+                           }
+                         });
 }
 
 void WeatherSettingsActivity::launchLongitudeEntry() {
   std::string current = std::to_string(WEATHER_SETTINGS.getLongitude());
-  startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEATHER_LONGITUDE), current, 12, false),
-      [this](const ActivityResult& result) {
-        if (!result.isCancelled) {
-          const auto& kb = std::get<KeyboardResult>(result.data);
-          char* end = nullptr;
-          const float lon = strtof(kb.text.c_str(), &end);
-          if (end != kb.text.c_str() && *end == '\0' && lon >= -180.0f && lon <= 180.0f) {
-            if (lon != WEATHER_SETTINGS.getLongitude()) {
-              WEATHER_SETTINGS.setLocation(WEATHER_SETTINGS.getLatitude(), lon, "");
-            }
-            WEATHER_SETTINGS.saveToFile();
-            requestUpdate();
-          }
-        }
-      });
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEATHER_LONGITUDE),
+                                                                 current, 12, InputType::Text),
+                         [this](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             const auto& kb = std::get<KeyboardResult>(result.data);
+                             char* end = nullptr;
+                             const float lon = strtof(kb.text.c_str(), &end);
+                             if (end != kb.text.c_str() && *end == '\0' && lon >= -180.0f && lon <= 180.0f) {
+                               if (lon != WEATHER_SETTINGS.getLongitude()) {
+                                 WEATHER_SETTINGS.setLocation(WEATHER_SETTINGS.getLatitude(), lon, "");
+                               }
+                               WEATHER_SETTINGS.saveToFile();
+                               requestUpdate();
+                             }
+                           }
+                         });
 }
 
 void WeatherSettingsActivity::toggleTempUnit() {

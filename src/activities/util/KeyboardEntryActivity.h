@@ -14,18 +14,20 @@ struct KeyDef {
   char secondary;
 };
 
-enum SpecialKeyType { SpecShift, SpecMode, SpecReveal, SpecSpace, SpecDel, SpecOk };
+enum SpecialKeyType { SpecShift, SpecMode, SpecSpace, SpecDel, SpecOk };
+
+enum class InputType { Text, Password, Url };
 
 class KeyboardEntryActivity : public Activity {
  public:
   explicit KeyboardEntryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                  std::string title = "Enter Text", std::string initialText = "",
-                                 const size_t maxLength = 0, const bool isPassword = false)
+                                 const size_t maxLength = 0, InputType inputType = InputType::Text)
       : Activity("KeyboardEntry", renderer, mappedInput),
         title(std::move(title)),
         text(std::move(initialText)),
         maxLength(maxLength),
-        isPassword(isPassword) {}
+        inputType(inputType) {}
 
   void onEnter() override;
   void onExit() override;
@@ -36,7 +38,7 @@ class KeyboardEntryActivity : public Activity {
   std::string title;
   std::string text;
   size_t maxLength;
-  bool isPassword;
+  InputType inputType;
   bool passwordVisible = false;
 
   ButtonNavigator buttonNavigator;
@@ -48,14 +50,29 @@ class KeyboardEntryActivity : public Activity {
   bool confirmHeld = false;
   bool confirmLongHandled = false;
 
+  bool cursorMode = false;
+  size_t cursorPos = 0;
+  bool upHeld = false;
+  bool upLongHandled = false;
+  bool downHeld = false;
+  bool downLongHandled = false;
+
+  bool urlMode = false;
+  static const char* shiftLabel(int shiftState);
+  static constexpr int URL_SNIPPET_COUNT = 9;
+  static constexpr const char* const urlSnippets[URL_SNIPPET_COUNT] = {
+      "https://", "www.", ".com", "http://", "192.168.", ".org", "/opds", ":8080", ".net"};
+
   void onComplete(std::string text);
   void onCancel();
 
   static constexpr uint16_t LONG_PRESS_MS = 500;
+  static constexpr uint16_t DEL_LONG_PRESS_MS = 1500;
 
   static constexpr int COLS = 10;
   static constexpr int ABC_ROWS = 4;
   static constexpr int SYM_ROWS = 4;
+  static constexpr int BOTTOM_KEY_COUNT = 5;
 
   static constexpr KeyDef abcLayout[ABC_ROWS][COLS] = {
       {{'0', ')'},
@@ -143,15 +160,16 @@ class KeyboardEntryActivity : public Activity {
        {'`', '\0'}},
   };
 
-  const char* getShiftLabel() const;
+  static const char* const shiftString[2];
 
   int getContentRowCount() const;
+  int getContentColCount() const;
   int getTotalRowCount() const;
-  int getBottomKeyCount() const;
-  SpecialKeyType getBottomSpecialKey(int index) const;
   bool isBottomRow(int row) const;
   char getSelectedChar() const;
   char getAlternativeChar() const;
   bool handleKeyPress();
   bool insertChar(char c);
+  void insertString(const std::string& str);
+  void mapColContentBottom(int& col, bool goingUp) const;
 };

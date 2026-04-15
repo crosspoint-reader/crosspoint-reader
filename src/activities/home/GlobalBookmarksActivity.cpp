@@ -183,7 +183,7 @@ void GlobalBookmarksActivity::renameSelected() {
       entry.bookmarks[bookmarkIndex].name.empty() ? getRowTitle(selectorIndex) : entry.bookmarks[bookmarkIndex].name;
 
   startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_RENAME), initial,
-                                                                 BookmarkStore::MAX_NAME_LENGTH, false),
+                                                                 BookmarkStore::MAX_NAME_LENGTH, InputType::Text),
                          [this, bookIndex, bookmarkIndex](const ActivityResult& result) {
                            if (!result.isCancelled) {
                              const auto& kr = std::get<KeyboardResult>(result.data);

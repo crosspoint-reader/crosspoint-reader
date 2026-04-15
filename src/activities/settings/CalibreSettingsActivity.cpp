@@ -52,7 +52,7 @@ void CalibreSettingsActivity::handleSelection() {
   if (selectedIndex == 0) {
     // OPDS Server URL
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_CALIBRE_WEB_URL),
-                                                                   SETTINGS.opdsServerUrl, 127, false),
+                                                                   SETTINGS.opdsServerUrl, 127, InputType::Url),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
@@ -64,7 +64,7 @@ void CalibreSettingsActivity::handleSelection() {
   } else if (selectedIndex == 1) {
     // Username
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
-                                                                   SETTINGS.opdsUsername, 63, false),
+                                                                   SETTINGS.opdsUsername, 63, InputType::Text),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
@@ -76,7 +76,7 @@ void CalibreSettingsActivity::handleSelection() {
   } else if (selectedIndex == 2) {
     // Password
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
-                                                                   SETTINGS.opdsPassword, 63, false),
+                                                                   SETTINGS.opdsPassword, 63, InputType::Password),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);

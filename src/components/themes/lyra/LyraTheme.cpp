@@ -790,23 +790,34 @@ void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
-void LyraTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
+void LyraTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
+                              int contentStartX, int contentWidth) const {
   int lineY = rect.y + rect.height + renderer.getLineHeight(UI_12_FONT_ID) + LyraMetrics::values.verticalSpacing;
-  int lineW = textWidth + hPaddingInSelection * 2;
-  renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, 3);
+  const int thickness = cursorMode ? 3 : 2;
+  if (contentWidth > 0) {
+    renderer.drawLine(rect.x + contentStartX, lineY, rect.x + contentStartX + contentWidth, lineY, thickness, true);
+  } else {
+    int lineW = textWidth + hPaddingInSelection * 2;
+    renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, thickness,
+                      true);
+  }
 }
 
 void LyraTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
-                                const char* secondaryLabel, const KeyboardKeyType keyType) const {
+                                const char* secondaryLabel, const KeyboardKeyType keyType,
+                                const bool inactiveSelection) const {
   if (isSelected) {
-    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::Black);
-  } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode ||
-             keyType == KeyboardKeyType::Reveal || keyType == KeyboardKeyType::Del ||
+    if (inactiveSelection) {
+      renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::LightGray);
+    } else {
+      renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::Black);
+    }
+  } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode || keyType == KeyboardKeyType::Del ||
              keyType == KeyboardKeyType::Space || keyType == KeyboardKeyType::Ok) {
     renderer.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 1, cornerRadius, true);
   }
 
-  const bool invert = isSelected;
+  const bool invert = isSelected && !inactiveSelection;
 
   if (keyType == KeyboardKeyType::Space) {
     const int lineHalfWidth = rect.width * 3 / 10;

@@ -49,7 +49,7 @@ void StarredPagesActivity::startRename() {
   const std::string initial =
       all[renamingIndex].name.empty() ? getDefaultLabel(renamingIndex) : all[renamingIndex].name;
   startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_RENAME), initial,
-                                                                 BookmarkStore::MAX_NAME_LENGTH, false),
+                                                                 BookmarkStore::MAX_NAME_LENGTH, InputType::Text),
                          [this, renamingIndex](const ActivityResult& result) {
                            if (!result.isCancelled) {
                              const auto& kr = std::get<KeyboardResult>(result.data);
