@@ -46,6 +46,7 @@ class OpdsBookBrowserActivity final : public Activity {
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
+  void fetchOsdTemplate(const std::string& osdUrl);
   void launchSearch();
   void performSearch(const std::string& query);
   bool preventAutoSleep() override { return true; }

@@ -70,6 +70,7 @@ bool OpdsParser::error() const { return errorOccured; }
 void OpdsParser::clear() {
   entries.clear();
   searchTemplate.clear();
+  osdUrl.clear();
   nextPageUrl.clear();
   prevPageUrl.clear();
   currentEntry = OpdsEntry{};
@@ -105,6 +106,8 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
         std::string sHref(href);
         if (sHref.find("{searchTerms}") != std::string::npos) {
           self->searchTemplate = sHref;
+        } else if (type && strcmp(type, "application/opensearchdescription+xml") == 0) {
+          self->osdUrl = sHref;
         }
       } else if (rel && strcmp(rel, "next") == 0 && !self->inEntry) {
         self->nextPageUrl = href;

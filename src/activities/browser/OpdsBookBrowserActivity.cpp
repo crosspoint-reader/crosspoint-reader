@@ -7,6 +7,7 @@
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
+#include <expat.h>
 
 #include <cctype>
 #include <cstdio>
@@ -245,6 +246,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   }
 
   searchTemplate = parser.getSearchTemplate();
+  if (searchTemplate.empty() && !parser.getOsdUrl().empty()) {
+    fetchOsdTemplate(UrlUtils::buildUrl(url, parser.getOsdUrl()));
+  }
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
   entries = std::move(parser).getEntries();
@@ -333,6 +337,42 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
     requestUpdate();
+  }
+}
+
+void OpdsBookBrowserActivity::fetchOsdTemplate(const std::string& osdUrl) {
+  std::string content;
+  if (!HttpDownloader::fetchUrl(osdUrl, content)) {
+    LOG_ERR("OPDS", "Failed to fetch OSD: %s", osdUrl.c_str());
+    return;
+  }
+
+  struct OsdState {
+    std::string templateUrl;
+    static void XMLCALL onStart(void* ud, const XML_Char* name, const XML_Char** atts) {
+      if (strcmp(name, "Url") != 0 && strstr(name, ":Url") == nullptr) return;
+      auto* state = static_cast<OsdState*>(ud);
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "template") == 0 && strstr(atts[i + 1], "{searchTerms}") != nullptr) {
+          state->templateUrl = atts[i + 1];
+          break;
+        }
+      }
+    }
+  } osdState;
+
+  XML_Parser p = XML_ParserCreate(nullptr);
+  if (!p) {
+    LOG_ERR("OPDS", "OSD parser alloc failed");
+    return;
+  }
+  XML_SetUserData(p, &osdState);
+  XML_SetElementHandler(p, OsdState::onStart, nullptr);
+  XML_Parse(p, content.c_str(), static_cast<int>(content.size()), XML_TRUE);
+  XML_ParserFree(p);
+
+  if (!osdState.templateUrl.empty()) {
+    searchTemplate = UrlUtils::buildUrl(osdUrl, osdState.templateUrl);
   }
 }
 
