@@ -13,6 +13,9 @@
  * Can be started from any activity that needs text entry via startActivityForResult()
  */
 class KeyboardEntryActivity : public Activity {
+  struct KeyBlock {
+    const char* row[3];
+  };
  public:
   /**
    * Constructor
@@ -39,6 +42,7 @@ class KeyboardEntryActivity : public Activity {
   void render(RenderLock&&) override;
 
  private:
+
   std::string title;
   std::string text;
   size_t maxLength;
@@ -62,5 +66,5 @@ class KeyboardEntryActivity : public Activity {
   bool handleKeyPress();  // false if onComplete was triggered
   int getRowLength(int row) const;
 
-  static const char* keyboard[];
+  static KeyBlock keyboard[];
 };
