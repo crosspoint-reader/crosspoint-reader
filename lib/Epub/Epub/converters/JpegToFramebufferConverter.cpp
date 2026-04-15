@@ -19,38 +19,25 @@ namespace {
 // The draw callback receives this via pDraw->pUser (set by setUserPointer()).
 // The file I/O callbacks receive the FsFile* via pFile->fHandle (set by jpegOpen()).
 struct JpegContext {
-  GfxRenderer* renderer;
-  const RenderConfig* config;
-  int screenWidth;
-  int screenHeight;
+  GfxRenderer* renderer{nullptr};
+  const RenderConfig* config{nullptr};
+  int screenWidth{0};
+  int screenHeight{0};
 
   // Source dimensions after JPEGDEC's built-in scaling
-  int scaledSrcWidth;
-  int scaledSrcHeight;
+  int scaledSrcWidth{0};
+  int scaledSrcHeight{0};
 
   // Final output dimensions
-  int dstWidth;
-  int dstHeight;
+  int dstWidth{0};
+  int dstHeight{0};
 
   // Fine scale in 16.16 fixed-point (ESP32-C3 has no FPU)
-  int32_t fineScaleFP;  // src -> dst mapping
-  int32_t invScaleFP;   // dst -> src mapping
+  int32_t fineScaleFP{1 << 16};  // src -> dst mapping
+  int32_t invScaleFP{1 << 16};   // dst -> src mapping
 
   PixelCache cache;
-  bool caching;
-
-  JpegContext()
-      : renderer(nullptr),
-        config(nullptr),
-        screenWidth(0),
-        screenHeight(0),
-        scaledSrcWidth(0),
-        scaledSrcHeight(0),
-        dstWidth(0),
-        dstHeight(0),
-        fineScaleFP(1 << 16),
-        invScaleFP(1 << 16),
-        caching(false) {}
+  bool caching{false};
 };
 
 // File I/O callbacks use pFile->fHandle to access the FsFile*,
