@@ -296,7 +296,7 @@ void KeyboardEntryActivity::loop() {
 void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const Rect contentRect = UITheme::getContentRect(renderer, true, false);
+  const Rect contentRect = UITheme::getContentRect(renderer, true, true);
   const int pageWidth = contentRect.width;
   const int pageHeight = contentRect.height;
   const int contentX = contentRect.x;
@@ -375,11 +375,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     helpTexts[2] = tr(STR_KEYBOARD_HELP_DEFAULT_LINE_3);
   }
 
-  const int helpTop = inputStartY + inputHeight + metrics.verticalSpacing;
-  const int helpHeight = keyboardStartY - helpTop;
+  const int helpGap = keyboardStartY - (inputStartY + inputHeight);
   const int helpLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int maxHelpLines = std::max(0, helpHeight / helpLineHeight);
+  const int maxHelpLines = std::max(0, helpGap / helpLineHeight);
   const int helpLineCount = std::min(3, maxHelpLines);
+  const int helpBodyHeight = helpLineCount * helpLineHeight;
+  const int helpTop = inputStartY + inputHeight + std::max(0, (helpGap - helpBodyHeight) / 2);
   const int helpLineWidth = pageWidth - 2 * metrics.contentSidePadding;
   for (int i = 0; i < helpLineCount; ++i) {
     const char* helpText = helpTexts[i];
@@ -421,6 +422,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
           cursorPixelX = contentX + effectiveMargin + (maxLineWidth - textWidth) / 2 + beforeWidth;
         } else {
           cursorPixelX = contentX + effectiveMargin + beforeWidth;
+        }
+        if (cursorPos == static_cast<size_t>(lineEndIdx) && cursorPos == displayText.length()) {
+          cursorPixelX += 2;
         }
         cursorLineY = inputStartY + inputHeight;
         cursorDrawn = true;
