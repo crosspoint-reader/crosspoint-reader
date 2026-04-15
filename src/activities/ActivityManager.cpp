@@ -9,6 +9,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/FileBrowserActivity.h"
+#include "home/GlobalBookmarksActivity.h"
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
@@ -219,6 +220,10 @@ void ActivityManager::goToFileBrowser(std::string path) {
 
 void ActivityManager::goToRecentBooks() {
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToGlobalBookmarks() {
+  replaceActivity(std::make_unique<GlobalBookmarksActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToBrowser() {

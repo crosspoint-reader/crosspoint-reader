@@ -46,6 +46,9 @@ class TxtReaderActivity final : public Activity {
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+  // Consume a persisted bookmark-jump request (from GlobalBookmarksActivity) for
+  // this TXT file. Rewrites progress.bin before initializeReader() reads it.
+  void applyPendingBookmarkJump();
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)

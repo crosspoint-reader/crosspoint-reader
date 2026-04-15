@@ -14,6 +14,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalBookmarkIndex.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -104,6 +105,9 @@ int HomeActivity::getMenuItemCount() const {
     count += recentBooks.size();
   }
   if (hasOpdsUrl) {
+    count++;
+  }
+  if (!GLOBAL_BOOKMARKS.isEmpty()) {
     count++;
   }
   return count;
@@ -278,8 +282,10 @@ void HomeActivity::loop() {
     // Calculate dynamic indices based on which options are available
     int idx = 0;
     int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
+    const bool hasGlobalBookmarks = !GLOBAL_BOOKMARKS.isEmpty();
     const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
+    const int globalBookmarksIdx = hasGlobalBookmarks ? idx++ : -1;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int weatherIdx = idx++;
@@ -291,6 +297,8 @@ void HomeActivity::loop() {
       onFileBrowserOpen();
     } else if (menuSelectedIndex == recentsIdx) {
       onRecentsOpen();
+    } else if (menuSelectedIndex == globalBookmarksIdx) {
+      onGlobalBookmarksOpen();
     } else if (menuSelectedIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
     } else if (menuSelectedIndex == weatherIdx) {
@@ -317,10 +325,17 @@ void HomeActivity::render(RenderLock&&) {
                                         tr(STR_WEATHER), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Weather, Settings};
 
+  int insertAfterRecents = 2;
+  if (!GLOBAL_BOOKMARKS.isEmpty()) {
+    menuItems.insert(menuItems.begin() + insertAfterRecents, tr(STR_GLOBAL_BOOKMARKS));
+    menuIcons.insert(menuIcons.begin() + insertAfterRecents, Book);
+    insertAfterRecents++;
+  }
+
   if (hasOpdsUrl) {
-    // Insert OPDS Browser after Recents (before File Transfer)
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    // Insert OPDS Browser after Recents (and Global Bookmarks if present)
+    menuItems.insert(menuItems.begin() + insertAfterRecents, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + insertAfterRecents, Library);
   }
 
   const HomeScreenLayout layout =
@@ -355,6 +370,8 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.pushR
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+
+void HomeActivity::onGlobalBookmarksOpen() { activityManager.goToGlobalBookmarks(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

@@ -18,6 +18,7 @@
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
+#include "GlobalBookmarkIndex.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
@@ -93,6 +94,7 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
   applyPendingSyncSession();
+  applyPendingBookmarkJump();
 
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
@@ -145,6 +147,9 @@ void EpubReaderActivity::onExit() {
 
   // Save bookmarks before exit
   bookmarkStore.save();
+  if (epub) {
+    GLOBAL_BOOKMARKS.syncFromStore(bookmarkStore, epub->getPath(), epub->getCachePath(), epub->getTitle(), false);
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -560,6 +565,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           if (!bookmarkStore.isEmpty()) {
             bookmarkStore.markDirty();
             bookmarkStore.save();
+            GLOBAL_BOOKMARKS.syncFromStore(bookmarkStore, epub->getPath(), epub->getCachePath(), epub->getTitle(),
+                                           false);
           }
         }
       }
@@ -687,6 +694,25 @@ void EpubReaderActivity::applyPendingSyncSession() {
   sync.clear();
   APP_STATE.saveToFile();
   logReaderMemSnapshot("after_apply_pending_sync_session");
+}
+
+void EpubReaderActivity::applyPendingBookmarkJump() {
+  auto& jump = APP_STATE.pendingBookmarkJump;
+  if (!jump.active || !epub || jump.bookPath != epub->getPath()) {
+    return;
+  }
+  LOG_DBG("ERS", "Applying pending bookmark jump: spine=%u page=%u", jump.spineIndex, jump.pageNumber);
+  if (writeReaderProgressCache(epub->getCachePath(), jump.spineIndex, jump.pageNumber, 0)) {
+    cachedSpineIndex = jump.spineIndex;
+    cachedChapterTotalPageCount = 0;
+  } else {
+    currentSpineIndex = jump.spineIndex;
+    nextPageNumber = jump.pageNumber;
+    cachedSpineIndex = jump.spineIndex;
+    cachedChapterTotalPageCount = 0;
+  }
+  jump.clear();
+  APP_STATE.saveToFile();
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {

@@ -80,6 +80,10 @@ class EpubReaderActivity final : public Activity {
   // reader startup path reads it. Upload-complete leaves the existing local
   // progress.bin untouched and simply clears the pending session marker.
   void applyPendingSyncSession();
+  // Consume a persisted bookmark-jump request (from GlobalBookmarksActivity) for
+  // this book. Rewrites progress.bin to the bookmarked position before the normal
+  // reader startup path reads it.
+  void applyPendingBookmarkJump();
   void applyOrientation(uint8_t orientation);
   void applyTextDarkness(uint8_t textDarkness);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);

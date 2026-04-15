@@ -77,6 +77,7 @@ bool CrossPointState::loadFromBinaryFile() {
   }
 
   koReaderSyncSession.clear();
+  pendingBookmarkJump.clear();
 
   inputFile.close();
   return true;

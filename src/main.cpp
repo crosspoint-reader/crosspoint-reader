@@ -18,6 +18,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalBookmarkIndex.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -247,6 +248,7 @@ void setup() {
   APP_STATE.loadFromFile();
   HalClock::restore();
   RECENT_BOOKS.loadFromFile();
+  GLOBAL_BOOKMARKS.load();
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
   // crashed (indicated by readerActivityLoadCount > 0)

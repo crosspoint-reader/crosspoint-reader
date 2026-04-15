@@ -73,6 +73,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastSleepImage"] = s.lastSleepImage;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
+  // Information about a pending KOReader sync session
   JsonObject sync = doc["koReaderSyncSession"].to<JsonObject>();
   sync["active"] = s.koReaderSyncSession.active;
   sync["epubPath"] = s.koReaderSyncSession.epubPath;
@@ -87,6 +88,12 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   sync["resultPage"] = s.koReaderSyncSession.resultPage;
   sync["resultParagraphIndex"] = s.koReaderSyncSession.resultParagraphIndex;
   sync["resultHasParagraphIndex"] = s.koReaderSyncSession.resultHasParagraphIndex;
+  // Information about a pending bookmark jump
+  JsonObject jump = doc["pendingBookmarkJump"].to<JsonObject>();
+  jump["active"] = s.pendingBookmarkJump.active;
+  jump["bookPath"] = s.pendingBookmarkJump.bookPath;
+  jump["spineIndex"] = s.pendingBookmarkJump.spineIndex;
+  jump["pageNumber"] = s.pendingBookmarkJump.pageNumber;
 
   String json;
   serializeJson(doc, json);
@@ -121,6 +128,12 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.koReaderSyncSession.resultPage = sync["resultPage"] | 0;
   s.koReaderSyncSession.resultParagraphIndex = sync["resultParagraphIndex"] | (uint16_t)0;
   s.koReaderSyncSession.resultHasParagraphIndex = sync["resultHasParagraphIndex"] | false;
+
+  JsonObject jump = doc["pendingBookmarkJump"].as<JsonObject>();
+  s.pendingBookmarkJump.active = jump["active"] | false;
+  s.pendingBookmarkJump.bookPath = jump["bookPath"] | std::string("");
+  s.pendingBookmarkJump.spineIndex = jump["spineIndex"] | (uint16_t)0;
+  s.pendingBookmarkJump.pageNumber = jump["pageNumber"] | (uint16_t)0;
   return true;
 }
 

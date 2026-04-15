@@ -8,15 +8,13 @@
 #include <string>
 #include <vector>
 
+#include "Bookmark.h"
+
 // Stores starred/bookmarked pages for a single book.
 // Persisted as a binary file on SD card within the book's cache directory.
 class BookmarkStore {
  public:
-  struct Bookmark {
-    uint16_t spineIndex;
-    uint16_t pageNumber;
-    std::string name;  // optional user-provided label (empty = use default)
-  };
+  using Bookmark = ::Bookmark;
 
   // Load bookmarks from the cache directory (e.g. .crosspoint/epub_<hash>/).
   void load(const std::string& cachePath) {

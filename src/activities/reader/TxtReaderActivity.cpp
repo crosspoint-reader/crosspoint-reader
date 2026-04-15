@@ -9,6 +9,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalBookmarkIndex.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -99,6 +100,7 @@ void TxtReaderActivity::onEnter() {
   }
 
   txt->setupCacheDir();
+  applyPendingBookmarkJump();
 
   // Load bookmarks for this file
   bookmarkStore.load(txt->getCachePath());
@@ -119,6 +121,9 @@ void TxtReaderActivity::onExit() {
 
   // Save bookmarks before exit
   bookmarkStore.save();
+  if (txt) {
+    GLOBAL_BOOKMARKS.syncFromStore(bookmarkStore, txt->getPath(), txt->getCachePath(), txt->getTitle(), true);
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -425,6 +430,26 @@ void TxtReaderActivity::saveProgress() const {
     f.write(data, 6);
     f.close();
   }
+}
+
+void TxtReaderActivity::applyPendingBookmarkJump() {
+  auto& jump = APP_STATE.pendingBookmarkJump;
+  if (!jump.active || !txt || jump.bookPath != txt->getPath()) {
+    return;
+  }
+  LOG_DBG("TRS", "Applying pending bookmark jump: page=%u", jump.pageNumber);
+  FsFile f;
+  if (Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f)) {
+    uint8_t data[6] = {0};
+    data[0] = jump.pageNumber & 0xFF;
+    data[1] = (jump.pageNumber >> 8) & 0xFF;
+    // Offset bytes stay 0: loadProgress reads only the page, and the lazy
+    // initializeReader() rebuilds the page index on first render anyway.
+    f.write(data, 6);
+    f.close();
+  }
+  jump.clear();
+  APP_STATE.saveToFile();
 }
 
 void TxtReaderActivity::loadProgress() {
