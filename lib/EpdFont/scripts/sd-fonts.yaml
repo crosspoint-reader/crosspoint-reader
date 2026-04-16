@@ -205,7 +205,7 @@ families:
     description: "Sans-serif Japanese (JIS X 0213)"
     intervals: ascii,latin1,punctuation,cjk
     codepoints_file: codepoints/japanese_jis0213.txt
-    sizes: [10, 12, 14, 16, 18]
+    sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"}
       bold:    {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"}
@@ -214,7 +214,7 @@ families:
     description: "UD Gothic Japanese (MORISAWA, optimized for readability)"
     intervals: ascii,latin1,punctuation,cjk
     codepoints_file: codepoints/japanese_jis0213.txt
-    sizes: [10, 12, 14, 16, 18]
+    sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/googlefonts/morisawa-biz-ud-gothic/raw/main/fonts/ttf/BIZUDGothic-Regular.ttf"}
       bold:    {url: "https://github.com/googlefonts/morisawa-biz-ud-gothic/raw/main/fonts/ttf/BIZUDGothic-Bold.ttf"}
@@ -223,7 +223,7 @@ families:
     description: "Serif Japanese (JIS X 0213)"
     intervals: ascii,latin1,punctuation,cjk
     codepoints_file: codepoints/japanese_jis0213.txt
-    sizes: [10, 12, 14, 16, 18]
+    sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/Variable/OTF/Subset/NotoSerifJP-VF.otf", variable: {wght: 400}}
       bold:    {url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/Variable/OTF/Subset/NotoSerifJP-VF.otf", variable: {wght: 700}}
@@ -232,7 +232,7 @@ families:
     description: "UD Mincho Japanese (MORISAWA, optimized for readability)"
     intervals: ascii,latin1,punctuation,cjk
     codepoints_file: codepoints/japanese_jis0213.txt
-    sizes: [10, 12, 14, 16, 18]
+    sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/googlefonts/morisawa-biz-ud-mincho/raw/main/fonts/ttf/BIZUDMincho-Regular.ttf"}
       bold:    {url: "https://github.com/googlefonts/morisawa-biz-ud-mincho/raw/main/fonts/ttf/BIZUDMincho-Bold.ttf"}
