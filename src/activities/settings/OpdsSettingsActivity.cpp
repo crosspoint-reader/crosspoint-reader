@@ -28,6 +28,8 @@ void OpdsSettingsActivity::onEnter() {
   isNewServer = (serverIndex < 0);
 
   if (!isNewServer) {
+    // Edit flow: copy the selected server into local editable state.
+    // Changes are persisted field-by-field through saveServer().
     const auto* server = OPDS_STORE.getServer(static_cast<size_t>(serverIndex));
     if (server) {
       editServer = *server;
@@ -68,17 +70,21 @@ void OpdsSettingsActivity::loop() {
 
 void OpdsSettingsActivity::saveServer() {
   if (isNewServer) {
+    // Create flow: first save inserts a new server record into the multi-server store.
     OPDS_STORE.addServer(editServer);
     // After the first field is saved, promote to an existing server so
     // subsequent field edits update in-place rather than creating duplicates.
     isNewServer = false;
     serverIndex = static_cast<int>(OPDS_STORE.getCount()) - 1;
   } else {
+    // Edit flow: update the same server entry in-place.
     OPDS_STORE.updateServer(static_cast<size_t>(serverIndex), editServer);
   }
 }
 
 void OpdsSettingsActivity::handleSelection() {
+  // Each field edit is saved immediately so partially configured servers
+  // survive navigation and power-loss scenarios.
   if (selectedIndex == 0) {
     // Server Name
     auto handler = [this](const ActivityResult& result) {
@@ -128,7 +134,7 @@ void OpdsSettingsActivity::handleSelection() {
                                                                    editServer.password, 63, false),
                            handler);
   } else if (selectedIndex == 4 && !isNewServer) {
-    // Delete server
+    // Delete flow is only available for existing servers.
     OPDS_STORE.removeServer(static_cast<size_t>(serverIndex));
     finish();
   }
@@ -140,6 +146,8 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  // Reuse STR_OPDS_BROWSER as the "edit existing server" title.
+  // New server creation uses STR_ADD_SERVER.
   const char* header = isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, header);
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
