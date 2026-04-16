@@ -39,6 +39,10 @@ The release page provides a single firmware binary for the current build.
 
 Build and flash locally with PlatformIO using the same workflow as the upstream project.
 
+```sh
+pio run -e default --target upload
+```
+
 ---
 
 CrossPoint Reader with PDF Support is not affiliated with Xteink or any manufacturer of the X4 hardware.
