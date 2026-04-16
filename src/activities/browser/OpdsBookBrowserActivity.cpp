@@ -347,7 +347,6 @@ void OpdsBookBrowserActivity::checkAndConnectWifi() {
 }
 
 void OpdsBookBrowserActivity::launchWifiSelection() {
-  consumeBack = consumeConfirm = true;
   state = BrowserState::WIFI_SELECTION;
   requestUpdate();
 
