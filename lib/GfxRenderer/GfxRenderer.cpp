@@ -8,7 +8,7 @@
 #include "FontCacheManager.h"
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex,
-                                            bool useAlt) const {
+                                           bool useAlt) const {
   // Fall back to pointer arithmetic if glyphIndex not provided
   if (glyphIndex == UINT32_MAX) {
     glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
@@ -290,8 +290,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     // When using alt, snap to FLOOR — the 0.5px offset is baked into the bitmap,
     // so floor + 0.5 approximates the true fractional position.
     const bool useAlt = fontHasAlt && (cursorFP & 0xF) >= 8;
-    const int snapX = useAlt ? static_cast<int>(cursorFP >> fp4::FRAC_BITS)
-                             : fp4::toPixel(cursorFP);
+    const int snapX = useAlt ? static_cast<int>(cursorFP >> fp4::FRAC_BITS) : fp4::toPixel(cursorFP);
     renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, snapX, yPos, black, style, useAlt);
 
     // Advance the accumulator in fixed-point (no rounding loss).
@@ -1068,7 +1067,7 @@ int32_t GfxRenderer::getSpaceAdvanceFP(const int fontId, const uint32_t leftCp, 
 }
 
 int32_t GfxRenderer::getKerningFP(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
-                                   const EpdFontFamily::Style style) const {
+                                  const EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   return static_cast<int32_t>(fontIt->second.getKerning(leftCp, rightCp, style));  // 4.4 fixed-point, no snap
