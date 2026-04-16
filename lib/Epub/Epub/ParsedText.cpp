@@ -117,6 +117,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     words.reserve(800);
     wordStyles.reserve(800);
     wordContinues.reserve(800);
+    rubyTexts.reserve(800);
   }
 
   words.push_back(std::move(word));
@@ -126,6 +127,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
   wordStyles.push_back(combinedStyle);
   wordContinues.push_back(attachToPrevious);
+  rubyTexts.push_back("");
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
@@ -136,6 +138,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordVerticalBehaviors.reserve(800);
   }
   wordVerticalBehaviors.push_back(vBehavior);
+}
+
+void ParsedText::setRubyForWordAt(size_t index, const std::string& ruby) {
+  if (index < rubyTexts.size()) {
+    rubyTexts[index] = ruby;
+  }
 }
 
 // Consumes data to minimize memory usage
@@ -212,6 +220,10 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     if (!wordVerticalBehaviors.empty()) {
       const size_t vbConsumed = std::min(consumed, wordVerticalBehaviors.size());
       wordVerticalBehaviors.erase(wordVerticalBehaviors.begin(), wordVerticalBehaviors.begin() + vbConsumed);
+    }
+    if (!rubyTexts.empty()) {
+      const size_t rtConsumed = std::min(consumed, rubyTexts.size());
+      rubyTexts.erase(rubyTexts.begin(), rubyTexts.begin() + rtConsumed);
     }
   }
 }
@@ -291,6 +303,7 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
     std::vector<int16_t> colYpos;
     std::vector<int16_t> colXpos;
     std::vector<EpdFontFamily::Style> colStyles(wordStyles.begin() + start, wordStyles.begin() + end);
+    std::vector<std::string> colRubyTexts(rubyTexts.begin() + start, rubyTexts.begin() + end);
     const size_t count = end - start;
     colYpos.reserve(count);
     colXpos.resize(count, 0);
@@ -302,7 +315,7 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
     }
 
     processColumn(std::make_shared<TextBlock>(std::move(colWords), std::move(colXpos), std::move(colStyles), blockStyle,
-                                              std::move(colYpos), true));
+                                              std::move(colYpos), true, std::move(colRubyTexts)));
     isFirstColumn = false;
   };
 
@@ -351,6 +364,7 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
   wordStyles.clear();
   wordContinues.clear();
   wordVerticalBehaviors.clear();
+  rubyTexts.clear();
 }
 
 std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {
@@ -652,6 +666,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   std::vector<std::string> lineWords(std::make_move_iterator(words.begin() + lastBreakAt),
                                      std::make_move_iterator(words.begin() + lineBreak));
   std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
+  std::vector<std::string> lineRubyTexts(rubyTexts.begin() + lastBreakAt, rubyTexts.begin() + lineBreak);
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
@@ -660,5 +675,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   processLine(
-      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle));
+      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle,
+                                  std::vector<int16_t>{}, false, std::move(lineRubyTexts)));
 }

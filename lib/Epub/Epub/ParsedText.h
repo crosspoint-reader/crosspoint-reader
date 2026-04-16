@@ -17,6 +17,7 @@ class ParsedText {
   std::vector<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   std::vector<bool> wordContinues;  // true = word attaches to previous (no space before it)
+  std::vector<std::string> rubyTexts;  // words と並列、ルビなしは空文字列
   std::vector<VerticalTextUtils::VerticalBehavior> wordVerticalBehaviors;
   BlockStyle blockStyle;
   bool firstLineIndent;
@@ -51,6 +52,7 @@ class ParsedText {
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
+  void setRubyForWordAt(size_t index, const std::string& ruby);
   bool isEmpty() const { return words.empty(); }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
