@@ -13,29 +13,29 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-const StrId menuNames[] = {
-    StrId::STR_WEATHER_LOCATION,     // 0: Search city
-    StrId::STR_WEATHER_LATITUDE,     // 1: Manual latitude
-    StrId::STR_WEATHER_LONGITUDE,    // 2: Manual longitude
-    StrId::STR_WEATHER_TEMP_UNIT,    // 3: Temperature unit
-    StrId::STR_WEATHER_WIND_UNIT,    // 4: Wind speed unit
-    StrId::STR_WEATHER_PRECIP_UNIT,  // 5: Precipitation unit
-};
-}  // namespace
+void WeatherSettingsActivity::buildMenuItems() {
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_SETTINGS_TITLE));
+  menuItems.push_back(SettingInfo::Toggle(StrId::STR_USE_WEATHER, &CrossPointSettings::useWeather, "useWeather",
+                                          StrId::STR_CAT_SYSTEM));
 
-void WeatherSettingsActivity::onEnter() {
-  Activity::onEnter();
-  selectedIndex = 0;
-  showingSearchResults = false;
-  requestUpdate();
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_WEATHER_LOCATION));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_WEATHER_LOCATION, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_WEATHER_LATITUDE, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_WEATHER_LONGITUDE, SettingAction::None));
+
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_WEATHER_UNITS));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_WEATHER_TEMP_UNIT, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_WEATHER_WIND_UNIT, SettingAction::None));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_WEATHER_PRECIP_UNIT, SettingAction::None));
 }
 
-void WeatherSettingsActivity::onExit() { Activity::onExit(); }
+void WeatherSettingsActivity::onEnter() {
+  MenuListActivity::onEnter();
+  showingSearchResults = false;
+}
 
 void WeatherSettingsActivity::loop() {
   if (showingSearchResults) {
-    // Handle search results navigation
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       showingSearchResults = false;
       requestUpdate();
@@ -43,7 +43,7 @@ void WeatherSettingsActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (!searchResults.empty() && selectedIndex < searchResults.size()) {
+      if (!searchResults.empty() && selectedIndex < static_cast<int>(searchResults.size())) {
         const auto& result = searchResults[selectedIndex];
         WEATHER_SETTINGS.setLocation(result.latitude, result.longitude, result.name + ", " + result.country);
         WEATHER_SETTINGS.saveToFile();
@@ -69,48 +69,87 @@ void WeatherSettingsActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleSelection();
-    return;
-  }
-
-  buttonNavigator.onNext([this] {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
-    requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
-    requestUpdate();
-  });
+  MenuListActivity::loop();
 }
 
-void WeatherSettingsActivity::handleSelection() {
-  switch (selectedIndex) {
-    case 0:
-      launchCitySearch();
-      break;
-    case 1:
-      launchLatitudeEntry();
-      break;
-    case 2:
-      launchLongitudeEntry();
-      break;
-    case 3:
-      toggleTempUnit();
-      break;
-    case 4:
-      toggleWindUnit();
-      break;
-    case 5:
-      togglePrecipUnit();
-      break;
+std::string WeatherSettingsActivity::getItemValueString(int index) const {
+  const auto& item = menuItems[index];
+  switch (item.nameId) {
+    case StrId::STR_WEATHER_LOCATION: {
+      auto name = WEATHER_SETTINGS.getLocationName();
+      return name.empty() ? std::string(tr(STR_NOT_SET)) : name;
+    }
+    case StrId::STR_WEATHER_LATITUDE: {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%.4f", WEATHER_SETTINGS.getLatitude());
+      return std::string(buf);
+    }
+    case StrId::STR_WEATHER_LONGITUDE: {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%.4f", WEATHER_SETTINGS.getLongitude());
+      return std::string(buf);
+    }
+    case StrId::STR_WEATHER_TEMP_UNIT:
+      return WEATHER_SETTINGS.getTempUnit() == WeatherTempUnit::CELSIUS ? "C" : "F";
+    case StrId::STR_WEATHER_WIND_UNIT:
+      switch (WEATHER_SETTINGS.getWindUnit()) {
+        case WeatherWindUnit::KMH:
+          return "km/h";
+        case WeatherWindUnit::MS:
+          return "m/s";
+        case WeatherWindUnit::MPH:
+          return "mph";
+        case WeatherWindUnit::KNOTS:
+          return "kn";
+      }
+      return "km/h";
+    case StrId::STR_WEATHER_PRECIP_UNIT:
+      return WEATHER_SETTINGS.getPrecipUnit() == WeatherPrecipUnit::MM ? "mm" : "in";
+    default:
+      return MenuListActivity::getItemValueString(index);
   }
+}
+
+void WeatherSettingsActivity::onActionSelected(int index) {
+  const auto& item = menuItems[index];
+  if (item.nameId == StrId::STR_WEATHER_LOCATION) {
+    launchCitySearch();
+  } else if (item.nameId == StrId::STR_WEATHER_LATITUDE) {
+    launchLatitudeEntry();
+  } else if (item.nameId == StrId::STR_WEATHER_LONGITUDE) {
+    launchLongitudeEntry();
+  } else if (item.nameId == StrId::STR_WEATHER_TEMP_UNIT) {
+    auto current = WEATHER_SETTINGS.getTempUnit();
+    WEATHER_SETTINGS.setTempUnit(current == WeatherTempUnit::CELSIUS ? WeatherTempUnit::FAHRENHEIT
+                                                                     : WeatherTempUnit::CELSIUS);
+    WEATHER_SETTINGS.saveToFile();
+    requestUpdate();
+  } else if (item.nameId == StrId::STR_WEATHER_WIND_UNIT) {
+    auto current = static_cast<uint8_t>(WEATHER_SETTINGS.getWindUnit());
+    WEATHER_SETTINGS.setWindUnit(static_cast<WeatherWindUnit>((current + 1) % 4));
+    WEATHER_SETTINGS.saveToFile();
+    requestUpdate();
+  } else if (item.nameId == StrId::STR_WEATHER_PRECIP_UNIT) {
+    auto current = WEATHER_SETTINGS.getPrecipUnit();
+    WEATHER_SETTINGS.setPrecipUnit(current == WeatherPrecipUnit::MM ? WeatherPrecipUnit::INCH : WeatherPrecipUnit::MM);
+    WEATHER_SETTINGS.saveToFile();
+    requestUpdate();
+  }
+}
+
+void WeatherSettingsActivity::onSettingToggled(int index) {
+  if (menuItems[index].nameId == StrId::STR_USE_WEATHER) {
+    SETTINGS.saveToFile();
+  }
+}
+
+void WeatherSettingsActivity::onBackPressed() {
+  if (showingSearchResults) {
+    showingSearchResults = false;
+    requestUpdate();
+    return;
+  }
+  finish();
 }
 
 void WeatherSettingsActivity::launchCitySearch() {
@@ -122,7 +161,6 @@ void WeatherSettingsActivity::launchCitySearch() {
                            const auto& kb = std::get<KeyboardResult>(result.data);
                            if (kb.text.empty()) return;
 
-                           // Need WiFi for geocoding
                            if (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
                              startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                                                     [this, query = kb.text](const ActivityResult& wifiResult) {
@@ -181,28 +219,6 @@ void WeatherSettingsActivity::launchLongitudeEntry() {
                          });
 }
 
-void WeatherSettingsActivity::toggleTempUnit() {
-  auto current = WEATHER_SETTINGS.getTempUnit();
-  WEATHER_SETTINGS.setTempUnit(current == WeatherTempUnit::CELSIUS ? WeatherTempUnit::FAHRENHEIT
-                                                                   : WeatherTempUnit::CELSIUS);
-  WEATHER_SETTINGS.saveToFile();
-  requestUpdate();
-}
-
-void WeatherSettingsActivity::toggleWindUnit() {
-  auto current = static_cast<uint8_t>(WEATHER_SETTINGS.getWindUnit());
-  WEATHER_SETTINGS.setWindUnit(static_cast<WeatherWindUnit>((current + 1) % 4));
-  WEATHER_SETTINGS.saveToFile();
-  requestUpdate();
-}
-
-void WeatherSettingsActivity::togglePrecipUnit() {
-  auto current = WEATHER_SETTINGS.getPrecipUnit();
-  WEATHER_SETTINGS.setPrecipUnit(current == WeatherPrecipUnit::MM ? WeatherPrecipUnit::INCH : WeatherPrecipUnit::MM);
-  WEATHER_SETTINGS.saveToFile();
-  requestUpdate();
-}
-
 void WeatherSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -210,7 +226,6 @@ void WeatherSettingsActivity::render(RenderLock&&) {
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
   if (showingSearchResults) {
-    // Display search results
     GUI.drawHeader(renderer,
                    Rect(contentRect.x, contentRect.y + metrics.topPadding, contentRect.width, metrics.headerHeight),
                    tr(STR_WEATHER_SEARCH_RESULTS));
@@ -241,7 +256,6 @@ void WeatherSettingsActivity::render(RenderLock&&) {
     return;
   }
 
-  // Main settings menu
   GUI.drawHeader(renderer,
                  Rect(contentRect.x, contentRect.y + metrics.topPadding, contentRect.width, metrics.headerHeight),
                  tr(STR_WEATHER_SETTINGS));
@@ -250,46 +264,7 @@ void WeatherSettingsActivity::render(RenderLock&&) {
   const int contentHeight =
       contentRect.height - (metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 2);
 
-  GUI.drawList(
-      renderer, Rect(contentRect.x, contentTop, contentRect.width, contentHeight), MENU_ITEMS,
-      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
-      nullptr,
-      [this](int index) -> std::string {
-        switch (index) {
-          case 0: {
-            auto name = WEATHER_SETTINGS.getLocationName();
-            return name.empty() ? std::string(tr(STR_NOT_SET)) : name;
-          }
-          case 1: {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%.4f", WEATHER_SETTINGS.getLatitude());
-            return std::string(buf);
-          }
-          case 2: {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%.4f", WEATHER_SETTINGS.getLongitude());
-            return std::string(buf);
-          }
-          case 3:
-            return WEATHER_SETTINGS.getTempUnit() == WeatherTempUnit::CELSIUS ? "C" : "F";
-          case 4:
-            switch (WEATHER_SETTINGS.getWindUnit()) {
-              case WeatherWindUnit::KMH:
-                return "km/h";
-              case WeatherWindUnit::MS:
-                return "m/s";
-              case WeatherWindUnit::MPH:
-                return "mph";
-              case WeatherWindUnit::KNOTS:
-                return "kn";
-            }
-            return "km/h";
-          case 5:
-            return WEATHER_SETTINGS.getPrecipUnit() == WeatherPrecipUnit::MM ? "mm" : "in";
-        }
-        return "";
-      },
-      true);
+  drawMenuList(Rect{contentRect.x, contentTop, contentRect.width, contentHeight});
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

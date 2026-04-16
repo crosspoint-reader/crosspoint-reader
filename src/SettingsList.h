@@ -143,6 +143,7 @@ inline const std::vector<SettingInfo> list = {
                        StrId::STR_TZ_EST, StrId::STR_TZ_CST, StrId::STR_TZ_MST, StrId::STR_TZ_PST},
                       "timeZone", StrId::STR_CAT_SYSTEM),
     SettingInfo::Toggle(StrId::STR_USE_CLOCK, &CrossPointSettings::useClock, "useClock", StrId::STR_CAT_SYSTEM),
+    SettingInfo::Toggle(StrId::STR_USE_WEATHER, &CrossPointSettings::useWeather, "useWeather", StrId::STR_CAT_SYSTEM),
 
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
     SettingInfo::DynamicString(

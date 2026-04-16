@@ -100,7 +100,10 @@ int getHomeCoverRenderHeight(const HomeScreenLayout& layout) {
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 5;  // File Browser, Recents, File transfer, Weather, Settings
+  int count = 4;  // File Browser, Recents, File transfer, Settings
+  if (SETTINGS.useWeather) {
+    count++;
+  }
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -283,12 +286,13 @@ void HomeActivity::loop() {
     int idx = 0;
     int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
     const bool hasGlobalBookmarks = !GLOBAL_BOOKMARKS.isEmpty();
+    const bool hasWeather = SETTINGS.useWeather;
     const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
     const int globalBookmarksIdx = hasGlobalBookmarks ? idx++ : -1;
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
-    const int weatherIdx = idx++;
+    const int weatherIdx = hasWeather ? idx++ : -1;
     const int settingsIdx = idx;
 
     if (selectorIndex < recentBooks.size()) {
@@ -321,9 +325,17 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.homeTopPadding}, nullptr);
 
   // Build menu items dynamically
+  const char* weatherMenuLabel = SETTINGS.useWeather ? tr(STR_WEATHER) : tr(STR_SETTINGS_TITLE);
+  const UIIcon weatherMenuIcon = SETTINGS.useWeather ? Weather : Settings;
+
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_WEATHER), tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Weather, Settings};
+                                        weatherMenuLabel, tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, weatherMenuIcon, Settings};
+
+  if (!SETTINGS.useWeather) {
+    menuItems.erase(menuItems.begin() + 3);
+    menuIcons.erase(menuIcons.begin() + 3);
+  }
 
   int insertAfterRecents = 2;
   if (!GLOBAL_BOOKMARKS.isEmpty()) {

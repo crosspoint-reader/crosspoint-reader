@@ -6,7 +6,6 @@
 
 #include "CrossPointSettings.h"
 #include "DetectTimezoneActivity.h"
-#include "MappedInputManager.h"
 #include "SyncTimeActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -19,94 +18,48 @@ const StrId timeZoneNames[CrossPointSettings::TIMEZONE_COUNT] = {
     StrId::STR_TZ_EST,       StrId::STR_TZ_CST,  StrId::STR_TZ_MST,       StrId::STR_TZ_PST};
 }  // namespace
 
-std::string ClockSettingsActivity::MenuItem::getTitle() const {
-  const auto t = I18N.get(labelId);
-  return isSeparator ? UITheme::makeSeparatorTitle(t) : t;
+void ClockSettingsActivity::buildMenuItems() {
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_SETTINGS_TITLE));
+  menuItems.push_back(
+      SettingInfo::Toggle(StrId::STR_USE_CLOCK, &CrossPointSettings::useClock, "useClock", StrId::STR_CAT_SYSTEM));
+  menuItems.push_back(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat12h,
+                                        {StrId::STR_24H, StrId::STR_12H}, "clockFormat12h", StrId::STR_CAT_SYSTEM));
+  menuItems.push_back(
+      SettingInfo::Enum(StrId::STR_TIMEZONE, &CrossPointSettings::timeZone,
+                        {StrId::STR_TZ_UTC, StrId::STR_TZ_CET, StrId::STR_TZ_EET, StrId::STR_TZ_MSK,
+                         StrId::STR_TZ_UTC_PLUS4, StrId::STR_TZ_IST, StrId::STR_TZ_UTC_PLUS7, StrId::STR_TZ_UTC_PLUS8,
+                         StrId::STR_TZ_UTC_PLUS9, StrId::STR_TZ_AEST, StrId::STR_TZ_NZST, StrId::STR_TZ_UTC_MINUS3,
+                         StrId::STR_TZ_EST, StrId::STR_TZ_CST, StrId::STR_TZ_MST, StrId::STR_TZ_PST},
+                        "timeZone", StrId::STR_CAT_SYSTEM));
+
+  menuItems.push_back(SettingInfo::Action(StrId::STR_DETECT_TIMEZONE, SettingAction::DetectTimezone)
+                          .withSubcategory(StrId::STR_READER_TOOLS));
+  menuItems.push_back(SettingInfo::Action(StrId::STR_SYNC_TIME, SettingAction::SyncTime));
 }
 
-std::vector<ClockSettingsActivity::MenuItem> ClockSettingsActivity::buildMenuItems() {
-  std::vector<MenuItem> items;
-  items.reserve(7);
-  // Settings
-  items.push_back(MenuItem::separator(StrId::STR_SETTINGS_TITLE));
-  items.push_back({Action::USE_CLOCK, StrId::STR_USE_CLOCK});
-  items.push_back({Action::CLOCK_FORMAT, StrId::STR_CLOCK_FORMAT});
-  items.push_back({Action::TIMEZONE, StrId::STR_TIMEZONE});
-
-  // Tools
-  items.push_back(MenuItem::separator(StrId::STR_READER_TOOLS));
-  items.push_back({Action::DETECT_TIMEZONE, StrId::STR_DETECT_TIMEZONE});
-  items.push_back({Action::SYNC_TIME, StrId::STR_SYNC_TIME});
-  return items;
-}
-
-void ClockSettingsActivity::onEnter() {
-  Activity::onEnter();
-  const auto pred = UITheme::makeSelectablePredicate(static_cast<int>(menuItems.size()),
-                                                     [this](int i) { return menuItems[i].getTitle(); });
-  buttonNavigator.setSelectablePredicate(pred, static_cast<int>(menuItems.size()));
-  if (!pred(selectedIndex)) {
-    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
+void ClockSettingsActivity::onActionSelected(int index) {
+  const auto& item = menuItems[index];
+  if (item.nameId == StrId::STR_DETECT_TIMEZONE) {
+    auto resultHandler = [](const ActivityResult&) { SETTINGS.saveToFile(); };
+    startActivityForResult(std::make_unique<DetectTimezoneActivity>(renderer, mappedInput), resultHandler);
+  } else if (item.nameId == StrId::STR_SYNC_TIME) {
+    auto resultHandler = [](const ActivityResult&) { SETTINGS.saveToFile(); };
+    startActivityForResult(std::make_unique<SyncTimeActivity>(renderer, mappedInput), resultHandler);
   }
-  requestUpdate();
 }
 
-void ClockSettingsActivity::onExit() { Activity::onExit(); }
-
-void ClockSettingsActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleSelection();
-    requestUpdate();
-    return;
-  }
-
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = buttonNavigator.previousIndex(selectedIndex);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this] {
-    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this] {
-    selectedIndex = buttonNavigator.previousIndex(selectedIndex);
-    requestUpdate();
-  });
-}
-
-void ClockSettingsActivity::handleSelection() {
-  const auto action = menuItems[selectedIndex].action;
-  if (action == Action::USE_CLOCK) {
-    SETTINGS.useClock = (SETTINGS.useClock + 1) % 2;
+void ClockSettingsActivity::onSettingToggled(int index) {
+  const auto& item = menuItems[index];
+  if (item.nameId == StrId::STR_USE_CLOCK) {
     if (!SETTINGS.useClock) {
       SETTINGS.statusBarClock = 0;
     }
     SETTINGS.saveToFile();
-  } else if (action == Action::CLOCK_FORMAT) {
-    SETTINGS.clockFormat12h = (SETTINGS.clockFormat12h + 1) % 2;
-    SETTINGS.saveToFile();
-  } else if (action == Action::TIMEZONE) {
-    SETTINGS.timeZone = (SETTINGS.timeZone + 1) % CrossPointSettings::TIMEZONE_COUNT;
+  } else if (item.nameId == StrId::STR_TIMEZONE) {
     HalClock::applyTimezone(SETTINGS.timeZone);
     SETTINGS.saveToFile();
-  } else if (action == Action::SYNC_TIME) {
-    auto resultHandler = [](const ActivityResult&) { SETTINGS.saveToFile(); };
-    startActivityForResult(std::make_unique<SyncTimeActivity>(renderer, mappedInput), resultHandler);
-  } else if (action == Action::DETECT_TIMEZONE) {
-    auto resultHandler = [](const ActivityResult&) { SETTINGS.saveToFile(); };
-    startActivityForResult(std::make_unique<DetectTimezoneActivity>(renderer, mappedInput), resultHandler);
+  } else if (item.nameId == StrId::STR_CLOCK_FORMAT) {
+    SETTINGS.saveToFile();
   }
 }
 
@@ -129,28 +82,7 @@ void ClockSettingsActivity::render(RenderLock&&) {
   const int contentHeight = contentRect.height - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
                                                   metrics.verticalSpacing * 2);
 
-  GUI.drawList(
-      renderer, Rect(contentRect.x, contentTop, contentRect.width, contentHeight), static_cast<int>(menuItems.size()),
-      selectedIndex, [this](int index) { return menuItems[index].getTitle(); }, nullptr, nullptr,
-      [this](int index) {
-        const auto action = menuItems[index].action;
-        switch (action) {
-          case Action::USE_CLOCK:
-            return std::string(SETTINGS.useClock ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
-          case Action::CLOCK_FORMAT:
-            return std::string(SETTINGS.clockFormat12h ? tr(STR_12H) : tr(STR_24H));
-          case Action::TIMEZONE: {
-            const auto tzIndex = static_cast<size_t>(SETTINGS.timeZone);
-            if (tzIndex < (sizeof(timeZoneNames) / sizeof(timeZoneNames[0]))) {
-              return std::string(I18N.get(timeZoneNames[tzIndex]));
-            }
-            return std::string(tr(STR_TZ_UTC));
-          }
-          default:
-            return std::string("");
-        }
-      },
-      true);
+  drawMenuList(Rect{contentRect.x, contentTop, contentRect.width, contentHeight});
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
