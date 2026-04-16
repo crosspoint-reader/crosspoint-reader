@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "ReadingStatusHelper.h"
+
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
@@ -88,6 +90,21 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
     return Image;
   }
   return File;
+}
+
+UIIcon UITheme::getFileIcon(const std::string& filename, ReadingStatus status) {
+  if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename)) {
+    switch (status) {
+      case ReadingStatus::Finished:
+        return BookFinished;
+      case ReadingStatus::Reading:
+        return BookReading;
+      default:
+        return BookUnread;
+    }
+  }
+  // 書籍以外はステータス無関係で既存ロジックに委譲
+  return getFileIcon(filename);
 }
 
 int UITheme::getStatusBarHeight() {

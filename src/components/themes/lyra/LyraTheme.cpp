@@ -14,6 +14,8 @@
 #include "components/UITheme.h"
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
+#include "components/icons/book_reading24.h"
+#include "components/icons/book_finished24.h"
 #include "components/icons/cover.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
@@ -96,6 +98,12 @@ const uint8_t* iconForName(UIIcon icon, int size) {
         return Book24Icon;
       case UIIcon::File:
         return File24Icon;
+      case UIIcon::BookUnread:
+        return Book24Icon;
+      case UIIcon::BookReading:
+        return BookReading24Icon;
+      case UIIcon::BookFinished:
+        return BookFinished24Icon;
       default:
         return nullptr;
     }

@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "CrossPointSettings.h"
+#include "ReadingStatusHelper.h"
 #include "components/themes/BaseTheme.h"
 
 class UITheme {
@@ -22,6 +23,7 @@ class UITheme {
                                      bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
+  static UIIcon getFileIcon(const std::string& filename, ReadingStatus status);
   static int getStatusBarHeight();
   static int getProgressBarHeight();
 
