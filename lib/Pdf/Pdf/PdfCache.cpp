@@ -137,10 +137,8 @@ void PdfCache::configure(const char* pdfFilePath, size_t fileSize) {
 }
 
 bool PdfCache::loadMeta(uint32_t& pageCount, PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline,
-                        PdfFixedVector<uint32_t, PDF_MAX_PAGES>* pageObjectIds,
-                        uint32_t* fileSize,
-                        uint32_t* signatureHead,
-                        uint32_t* signatureTail) {
+                        PdfFixedVector<uint32_t, PDF_MAX_PAGES>* pageObjectIds, uint32_t* fileSize,
+                        uint32_t* signatureHead, uint32_t* signatureTail) {
   outline.clear();
   if (pageObjectIds) {
     pageObjectIds->clear();
@@ -226,12 +224,9 @@ bool PdfCache::loadMeta(uint32_t& pageCount, PdfFixedVector<PdfOutlineEntry, PDF
   return true;
 }
 
-bool PdfCache::saveMeta(uint32_t pageCount,
-                        const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline,
-                        const PdfFixedVector<uint32_t, PDF_MAX_PAGES>* pageObjectIds,
-                        uint32_t fileSize,
-                        uint32_t signatureHead,
-                        uint32_t signatureTail) {
+bool PdfCache::saveMeta(uint32_t pageCount, const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outline,
+                        const PdfFixedVector<uint32_t, PDF_MAX_PAGES>* pageObjectIds, uint32_t fileSize,
+                        uint32_t signatureHead, uint32_t signatureTail) {
   Storage.ensureDirectoryExists(cacheDir.c_str());
   PdfFixedString<PDF_MAX_PATH> path = cacheDir;
   if (!path.append("/meta.bin", 9)) {

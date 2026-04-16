@@ -1,13 +1,15 @@
 #include "PdfObject.h"
 
-#include "XrefTable.h"
-#include "PdfLog.h"
-
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
 
+#include "PdfLog.h"
+#include "XrefTable.h"
+
 namespace {
+
+constexpr size_t kPdfObjectReadChunkBytes = 64;
 
 size_t findStreamKeywordSv(std::string_view s, size_t start) {
   static const char pat[] = "stream";
@@ -20,10 +22,10 @@ size_t findStreamKeywordSv(std::string_view s, size_t start) {
     if (std::memcmp(s.data() + pos, pat, plen) == 0) {
       const char prev = pos == 0 ? '\0' : s[pos - 1];
       const bool prevOk = (prev == ' ' || prev == '\t' || prev == '\r' || prev == '\n' || prev == '\0' || prev == '/' ||
-                          prev == '<' || prev == '>' || prev == '[' || prev == ']' || prev == '(' || prev == ')');
+                           prev == '<' || prev == '>' || prev == '[' || prev == ']' || prev == '(' || prev == ')');
       const size_t afterPos = pos + plen;
       const bool nextOk = (afterPos >= s.size()) || (s[afterPos] == ' ' || s[afterPos] == '\t' || s[afterPos] == '\r' ||
-                                                      s[afterPos] == '\n' || s[afterPos] == '\0');
+                                                     s[afterPos] == '\n' || s[afterPos] == '\0');
       if (prevOk && nextOk) {
         return pos;
       }
@@ -62,6 +64,8 @@ size_t findEndobjKeywordSv(std::string_view s, size_t start) {
 uint32_t recoverStreamLengthFromNearbyEndstream(FsFile& file, uint32_t streamOffset, uint32_t declaredLen) {
   constexpr size_t kSlack = 32;
   constexpr size_t kMarkerLen = 9;  // "endstream"
+  constexpr size_t kScanChunk = 128;
+  constexpr size_t kCarry = kMarkerLen + 2;
   if (declaredLen == 0) {
     return 0;
   }
@@ -75,45 +79,56 @@ uint32_t recoverStreamLengthFromNearbyEndstream(FsFile& file, uint32_t streamOff
     return declaredLen;
   }
 
-  char window[2048];
-  int n = file.read(reinterpret_cast<uint8_t*>(window), static_cast<size_t>(windowLen));
-  if (n <= 0) {
-    return declaredLen;
-  }
-  const size_t available = static_cast<size_t>(n);
   static const char marker[kMarkerLen + 1] = "endstream";
+  char window[kScanChunk + kCarry];
+  size_t carryLen = 0;
+  size_t consumed = 0;
 
   uint32_t bestLen = declaredLen;
   uint32_t bestDistance = UINT32_MAX;
-  for (size_t i = 0; i + kMarkerLen <= available; ++i) {
-    bool isMarker = true;
-    for (size_t j = 0; j < kMarkerLen; ++j) {
-      if (window[i + j] != marker[j]) {
-        isMarker = false;
-        break;
+  while (consumed < windowLen) {
+    const size_t want = std::min(kScanChunk, static_cast<size_t>(windowLen - consumed));
+    const int n = file.read(reinterpret_cast<uint8_t*>(window + carryLen), want);
+    if (n <= 0) {
+      break;
+    }
+    const size_t available = carryLen + static_cast<size_t>(n);
+
+    for (size_t i = 0; i + kMarkerLen <= available; ++i) {
+      bool isMarker = true;
+      for (size_t j = 0; j < kMarkerLen; ++j) {
+        if (window[i + j] != marker[j]) {
+          isMarker = false;
+          break;
+        }
+      }
+      if (!isMarker) {
+        continue;
+      }
+      const size_t markerAbs = start + consumed - carryLen + i;
+      const size_t next = i + kMarkerLen;
+      if (markerAbs < (declaredLen > kSlack ? declaredLen - kSlack : 0) ||
+          markerAbs > static_cast<size_t>(declaredLen + kSlack)) {
+        continue;
+      }
+      if (i > 0 && (window[i - 1] != ' ' && window[i - 1] != '\r' && window[i - 1] != '\n' && window[i - 1] != '\t')) {
+        continue;
+      }
+      if (next >= available ||
+          (window[next] != ' ' && window[next] != '\r' && window[next] != '\n' && window[next] != '\t')) {
+        continue;
+      }
+      const uint32_t candidate = static_cast<uint32_t>(markerAbs);
+      const uint32_t distance = candidate > declaredLen ? candidate - declaredLen : declaredLen - candidate;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestLen = candidate;
       }
     }
-    if (!isMarker) {
-      continue;
-    }
-    const size_t markerAbs = start + i;
-    const size_t next = i + kMarkerLen;
-    if (markerAbs < (declaredLen > kSlack ? declaredLen - kSlack : 0) ||
-        markerAbs > static_cast<size_t>(declaredLen + kSlack)) {
-      continue;
-    }
-    if (i > 0 && (window[i - 1] != ' ' && window[i - 1] != '\r' && window[i - 1] != '\n' && window[i - 1] != '\t')) {
-      continue;
-    }
-    if (next >= available || (window[next] != ' ' && window[next] != '\r' && window[next] != '\n' && window[next] != '\t')) {
-      continue;
-    }
-    const uint32_t candidate = static_cast<uint32_t>(markerAbs);
-    const uint32_t distance = candidate > declaredLen ? candidate - declaredLen : declaredLen - candidate;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestLen = candidate;
-    }
+
+    carryLen = std::min(available, kCarry);
+    std::memmove(window, window + available - carryLen, carryLen);
+    consumed += static_cast<size_t>(n);
   }
   return bestLen;
 }
@@ -156,9 +171,7 @@ uint32_t resolveIndirectStreamLength(FsFile& file, const XrefTable* xref, uint32
   }
   const char* p = lenBody.c_str();
   char* end = nullptr;
-  const auto isWs = [](const char c) {
-    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
-  };
+  const auto isWs = [](const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
 
   while (isWs(*p)) ++p;
   const unsigned long first = std::strtoul(p, &end, 10);
@@ -202,8 +215,8 @@ uint32_t resolveStreamLength(FsFile& file, const XrefTable* xref, std::string_vi
   while (v.size() > 0 && (v[0] == ' ' || v[0] == '\t' || v[0] == '\r' || v[0] == '\n')) {
     v.erase_prefix(1);
   }
-  while (v.size() > 0 && (v[v.size() - 1] == ' ' || v[v.size() - 1] == '\t' || v[v.size() - 1] == '\r' ||
-                          v[v.size() - 1] == '\n')) {
+  while (v.size() > 0 &&
+         (v[v.size() - 1] == ' ' || v[v.size() - 1] == '\t' || v[v.size() - 1] == '\r' || v[v.size() - 1] == '\n')) {
     v.resize(v.size() - 1);
   }
   if (v.empty()) return 0;
@@ -244,7 +257,7 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
     return false;
   }
 
-  uint8_t chunk[512];
+  uint8_t chunk[kPdfObjectReadChunkBytes];
 
   constexpr size_t kMaxAcc = PDF_OBJECT_BODY_MAX;
 
@@ -263,7 +276,8 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
     const int n = file.read(chunk, toRead);
     if (n <= 0) break;
     if (!bodyStr.append(reinterpret_cast<const char*>(chunk), static_cast<size_t>(n))) {
-      pdfLogErrU32U32("PdfObject::readAt append overflow offset/bodySize=", offset, static_cast<uint32_t>(bodyStr.size()));
+      pdfLogErrU32U32("PdfObject::readAt append overflow offset/bodySize=", offset,
+                      static_cast<uint32_t>(bodyStr.size()));
       pdfLogErr("PdfObject::readAt object body overflow");
       return false;
     }
@@ -273,8 +287,8 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
       const size_t objStart = (objSearchFrom > 3 ? objSearchFrom - 3 : 0);
       if (locateObjKeywordFs(bodyStr, eraseTo, objStart)) {
         bodyStr.erase_prefix(eraseTo);
-        while (bodyStr.size() > 0 && (bodyStr[0] == ' ' || bodyStr[0] == '\t' || bodyStr[0] == '\r' ||
-                                      bodyStr[0] == '\n')) {
+        while (bodyStr.size() > 0 &&
+               (bodyStr[0] == ' ' || bodyStr[0] == '\t' || bodyStr[0] == '\r' || bodyStr[0] == '\n')) {
           bodyStr.erase_prefix(1);
         }
         strippedHeader = true;
@@ -299,9 +313,8 @@ bool PdfObject::readAt(FsFile& file, uint32_t offset, PdfFixedString<PDF_OBJECT_
       const size_t sp = findStreamKeywordSv(acc, streamStart);
       if (sp != std::string_view::npos) {
         size_t dictEnd = sp;
-        while (dictEnd > 0 &&
-               (bodyStr[dictEnd - 1] == ' ' || bodyStr[dictEnd - 1] == '\t' || bodyStr[dictEnd - 1] == '\r' ||
-                bodyStr[dictEnd - 1] == '\n')) {
+        while (dictEnd > 0 && (bodyStr[dictEnd - 1] == ' ' || bodyStr[dictEnd - 1] == '\t' ||
+                               bodyStr[dictEnd - 1] == '\r' || bodyStr[dictEnd - 1] == '\n')) {
           --dictEnd;
         }
         bodyStr.resize(dictEnd);
@@ -408,8 +421,8 @@ bool PdfObject::getDictValue(const char* key, std::string_view dict, PdfFixedStr
           ++v;
           while (v < dict.size()) {
             const unsigned char c = static_cast<unsigned char>(dict[v]);
-            if (std::isspace(c) || c == '/' || c == '(' || c == '[' || c == '<' || c == '>' || c == ']' ||
-                c == '{' || c == '}') {
+            if (std::isspace(c) || c == '/' || c == '(' || c == '[' || c == '<' || c == '>' || c == ']' || c == '{' ||
+                c == '}') {
               break;
             }
             ++v;

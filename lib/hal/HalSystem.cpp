@@ -6,10 +6,10 @@
 #include "HalStorage.h"
 #include "Logging.h"
 #include "esp_debug_helpers.h"
-#include "esp_rom_sys.h"
 #include "esp_private/esp_cpu_internal.h"
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
+#include "esp_rom_sys.h"
 
 #define MAX_PANIC_STACK_DEPTH 32
 
@@ -73,8 +73,7 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 // Prints a decoded backtrace to UART (needs CONFIG_ESP_SYSTEM_USE_EH_FRAME on RISC-V for best results).
 void __wrap_abort(void) {
 #ifdef ENABLE_SERIAL_LOG
-  esp_rom_printf(
-      "\n\n*** CrossPoint: abort() - stack backtrace (decode PCs: scripts/addr2line_crash.sh) ***\n");
+  esp_rom_printf("\n\n*** CrossPoint: abort() - stack backtrace (decode PCs: scripts/addr2line_crash.sh) ***\n");
   esp_backtrace_print(32);
   esp_rom_printf("*** end CrossPoint abort backtrace ***\n\n");
 #endif

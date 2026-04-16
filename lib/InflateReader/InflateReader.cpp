@@ -8,7 +8,7 @@ namespace {
 // in the PDF/image paths while still supporting full DEFLATE distance range.
 // ZIP/deflate streams can require up to 32KiB back-references.
 constexpr size_t INFLATE_DICT_SIZE = 32768;
-}
+}  // namespace
 
 // Guarantee the cast pattern in the header comment is valid.
 static_assert(std::is_standard_layout<InflateReader>::value,

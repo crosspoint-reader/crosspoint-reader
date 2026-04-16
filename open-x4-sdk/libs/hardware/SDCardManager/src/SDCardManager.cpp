@@ -54,7 +54,7 @@ void logSdModulePath(const char* moduleName, const char* msg, const char* path) 
   Serial.print(msg);
   Serial.println(path);
 }
-}
+}  // namespace
 
 SDCardManager SDCardManager::instance;
 
@@ -72,9 +72,7 @@ bool SDCardManager::begin() {
   return initialized;
 }
 
-bool SDCardManager::ready() const {
-  return initialized;
-}
+bool SDCardManager::ready() const { return initialized; }
 
 std::vector<String> SDCardManager::listFiles(const char* path, const int maxFiles) {
   std::vector<String> ret;
@@ -163,8 +161,7 @@ bool SDCardManager::readFileToStream(const char* path, Print& out, const size_t 
 }
 
 size_t SDCardManager::readFileToBuffer(const char* path, char* buffer, const size_t bufferSize, const size_t maxBytes) {
-  if (!buffer || bufferSize == 0)
-    return 0;
+  if (!buffer || bufferSize == 0) return 0;
   if (!initialized) {
     logSdLine("Path is not a directory");
     logSdLine("SDCardManager: not initialized; cannot read file");

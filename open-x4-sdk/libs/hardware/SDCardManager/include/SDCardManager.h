@@ -1,9 +1,10 @@
 #pragma once
 
-#include <WString.h>
-#include <vector>
-#include <string>
 #include <SdFat.h>
+#include <WString.h>
+
+#include <string>
+#include <vector>
 
 class SDCardManager {
  public:
@@ -40,7 +41,7 @@ class SDCardManager {
   bool openFileForWrite(const char* moduleName, const String& path, FsFile& file);
   bool removeDir(const char* path);
 
- static SDCardManager& getInstance() { return instance; }
+  static SDCardManager& getInstance() { return instance; }
 
  private:
   static SDCardManager instance;

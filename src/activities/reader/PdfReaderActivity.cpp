@@ -25,7 +25,7 @@
 namespace {
 // Cap stream buffer for embedded heap; corrupt PDFs can advertise huge lengths.
 constexpr size_t kMaxPdfImageStreamBytes = 2 * 1024 * 1024;
-}
+}  // namespace
 
 void PdfReaderActivity::jumpToPage(uint32_t page) {
   if (page < totalPages) {
@@ -82,14 +82,14 @@ bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRend
   const int bottomLimit = renderer.getScreenHeight() - marginBottom - lineHeight;
 
   auto toRendererStyle = [](uint8_t pdfStyle) {
-    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    uint8_t style = EpdFontFamily::REGULAR;
     if ((pdfStyle & PdfTextStyleBold) != 0) {
-      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+      style |= EpdFontFamily::BOLD;
     }
     if ((pdfStyle & PdfTextStyleItalic) != 0) {
-      style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::ITALIC);
+      style |= EpdFontFamily::ITALIC;
     }
-    return style;
+    return static_cast<EpdFontFamily::Style>(style);
   };
 
   auto getStep = [&](size_t stepIndex, bool& isImage, uint32_t& index) -> bool {
@@ -141,11 +141,13 @@ bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRend
       if (draw) {
         int x = marginLeft;
         if (isHeader) {
-          x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle)) / 2;
+          x = marginLeft +
+              (viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle)) / 2;
         } else {
           switch (SETTINGS.paragraphAlignment) {
             case CrossPointSettings::CENTER_ALIGN:
-              x = marginLeft + (viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle)) / 2;
+              x = marginLeft +
+                  (viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle)) / 2;
               break;
             case CrossPointSettings::RIGHT_ALIGN:
               x = marginLeft + viewportWidth - renderer.getTextWidth(cachedFontId, lines[lineIndex].c_str(), textStyle);
@@ -167,7 +169,7 @@ bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRend
     return true;
   };
 
-  for (size_t stepIndex = start.stepIndex; ; ++stepIndex) {
+  for (size_t stepIndex = start.stepIndex;; ++stepIndex) {
     bool isImage = false;
     uint32_t index = 0;
     if (!getStep(stepIndex, isImage, index)) {
@@ -370,13 +372,13 @@ void PdfReaderActivity::loop() {
                                onGoHome();
                              } else if (menu.action == PdfReaderMenuActivity::ACTION_OUTLINE) {
                                startActivityForResult(std::make_unique<PdfReaderChapterSelectionActivity>(
-                                                         renderer, mappedInput, pdf->outline(), currentPage),
-                                                     [this](const ActivityResult& res) {
-                                                       if (!res.isCancelled) {
-                                                         const uint32_t p = std::get<PageResult>(res.data).page;
-                                                         jumpToPage(p);
-                                                       }
-                                                     });
+                                                          renderer, mappedInput, pdf->outline(), currentPage),
+                                                      [this](const ActivityResult& res) {
+                                                        if (!res.isCancelled) {
+                                                          const uint32_t p = std::get<PageResult>(res.data).page;
+                                                          jumpToPage(p);
+                                                        }
+                                                      });
                              }
                            });
     return;

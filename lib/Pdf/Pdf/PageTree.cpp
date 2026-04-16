@@ -1,10 +1,10 @@
 #include "PageTree.h"
 
-#include "PdfObject.h"
-#include "PdfLog.h"
-
 #include <cstdlib>
 #include <cstring>
+
+#include "PdfLog.h"
+#include "PdfObject.h"
 
 bool debugPageTree() {
   static int enabled = -1;

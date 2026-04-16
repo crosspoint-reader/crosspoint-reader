@@ -4,12 +4,12 @@
 
 #include <cstddef>
 
+#include "Pdf/PageTree.h"
 #include "Pdf/PdfCache.h"
 #include "Pdf/PdfFixed.h"
 #include "Pdf/PdfLimits.h"
 #include "Pdf/PdfOutline.h"
 #include "Pdf/PdfPage.h"
-#include "Pdf/PageTree.h"
 #include "Pdf/XrefTable.h"
 
 class Pdf {

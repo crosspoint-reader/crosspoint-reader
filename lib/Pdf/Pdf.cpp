@@ -7,8 +7,8 @@
 #include <cstring>
 
 #include "Pdf/ContentStream.h"
-#include "Pdf/PdfObject.h"
 #include "Pdf/PdfLog.h"
+#include "Pdf/PdfObject.h"
 
 namespace {
 
@@ -202,7 +202,8 @@ bool Pdf::open(const char* path) {
   uint32_t cachedFileSize = 0;
   uint32_t cachedHead = 0;
   uint32_t cachedTail = 0;
-  if (cache_.loadMeta(cachedPageCount, outlineEntries_, &cachedPageObjectIds_, &cachedFileSize, &cachedHead, &cachedTail) &&
+  if (cache_.loadMeta(cachedPageCount, outlineEntries_, &cachedPageObjectIds_, &cachedFileSize, &cachedHead,
+                      &cachedTail) &&
       cachedPageCount > 0 && cachedPageCount <= PDF_MAX_PAGES && cachedPageCount == cachedPageObjectIds_.size() &&
       cachedFileSize == static_cast<uint32_t>(sourceSignature_.fileSize) && cachedHead == sourceSignature_.headHash &&
       cachedTail == sourceSignature_.tailHash && cache_.allPagesCached(cachedPageCount) &&

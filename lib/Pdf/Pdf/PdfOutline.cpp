@@ -251,8 +251,10 @@ bool readStringToken(const char*& p, const char* end, PdfFixedString<PDF_DICT_VA
         p += 2;
         continue;
       }
-      if (*p == '(') ++depth;
-      else if (*p == ')') --depth;
+      if (*p == '(')
+        ++depth;
+      else if (*p == ')')
+        --depth;
       ++p;
     } while (p < end && depth > 0);
     return decodePdfStringToken(std::string_view(start, static_cast<size_t>(p - start)), out);
@@ -583,7 +585,8 @@ bool walkOutlineItem(FsFile& file, const XrefTable& xref, const PageTree& pageTr
 }  // namespace
 
 bool PdfOutlineParser::parse(FsFile& file, const XrefTable& xref, const PageTree& pageTree, uint32_t outlinesObjId,
-                             uint32_t namesObjId, PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outEntries) {
+                             uint32_t namesObjId,
+                             PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outEntries) {
   outEntries.clear();
   if (outlinesObjId == 0) {
     return true;

@@ -104,25 +104,15 @@ void InputManager::update() {
   }
 }
 
-bool InputManager::isPressed(const uint8_t buttonIndex) const {
-  return currentState & (1 << buttonIndex);
-}
+bool InputManager::isPressed(const uint8_t buttonIndex) const { return currentState & (1 << buttonIndex); }
 
-bool InputManager::wasPressed(const uint8_t buttonIndex) const {
-  return pressedEvents & (1 << buttonIndex);
-}
+bool InputManager::wasPressed(const uint8_t buttonIndex) const { return pressedEvents & (1 << buttonIndex); }
 
-bool InputManager::wasAnyPressed() const {
-  return pressedEvents > 0;
-}
+bool InputManager::wasAnyPressed() const { return pressedEvents > 0; }
 
-bool InputManager::wasReleased(const uint8_t buttonIndex) const {
-  return releasedEvents & (1 << buttonIndex);
-}
+bool InputManager::wasReleased(const uint8_t buttonIndex) const { return releasedEvents & (1 << buttonIndex); }
 
-bool InputManager::wasAnyReleased() const {
-  return releasedEvents > 0;
-}
+bool InputManager::wasAnyReleased() const { return releasedEvents > 0; }
 
 unsigned long InputManager::getHeldTime() const {
   // Still hold a button
@@ -140,6 +130,4 @@ const char* InputManager::getButtonName(const uint8_t buttonIndex) {
   return "Unknown";
 }
 
-bool InputManager::isPowerButtonPressed() const {
-  return isPressed(BTN_POWER);
-}
+bool InputManager::isPowerButtonPressed() const { return isPressed(BTN_POWER); }

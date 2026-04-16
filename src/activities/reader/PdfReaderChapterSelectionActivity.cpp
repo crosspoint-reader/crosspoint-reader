@@ -10,10 +10,9 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-PdfReaderChapterSelectionActivity::PdfReaderChapterSelectionActivity(GfxRenderer& renderer,
-                                                                     MappedInputManager& mappedInput,
-                                                                     const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outlineIn,
-                                                                     uint32_t currentPageZeroBased)
+PdfReaderChapterSelectionActivity::PdfReaderChapterSelectionActivity(
+    GfxRenderer& renderer, MappedInputManager& mappedInput,
+    const PdfFixedVector<PdfOutlineEntry, PDF_MAX_OUTLINE_ENTRIES>& outlineIn, uint32_t currentPageZeroBased)
     : Activity("PdfChapterSelection", renderer, mappedInput), outline(outlineIn), currentPage(currentPageZeroBased) {}
 
 int PdfReaderChapterSelectionActivity::getTotalItems() const { return static_cast<int>(outline.size()); }

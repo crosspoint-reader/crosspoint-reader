@@ -3,6 +3,18 @@
  * Build: test/pdf/run_pdf_parser_tests.sh
  */
 
+#include <HalStorage.h>
+#include <InflateReader.h>
+#include <zlib.h>
+
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <string>
+#include <vector>
+
 #include "ContentStream.h"
 #include "PageTree.h"
 #include "PdfCachedPageReader.h"
@@ -11,18 +23,6 @@
 #include "PdfPage.h"
 #include "PdfPageNavigation.h"
 #include "XrefTable.h"
-
-#include <HalStorage.h>
-#include <InflateReader.h>
-
-#include <algorithm>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <zlib.h>
-#include <filesystem>
-#include <string>
-#include <vector>
 
 namespace {
 
@@ -38,12 +38,12 @@ void check(bool ok, const char* expr, const char* file, int line) {
 #define REQUIRE(cond) check(static_cast<bool>(cond), #cond, __FILE__, __LINE__)
 
 // Stop this file's checks on first failure chain (avoids cascading bogus failures).
-#define REQF(cond)                       \
-  do {                                   \
-    if (!(cond)) {                       \
-      REQUIRE(cond);                     \
-      return false;                      \
-    }                                    \
+#define REQF(cond)   \
+  do {               \
+    if (!(cond)) {   \
+      REQUIRE(cond); \
+      return false;  \
+    }                \
   } while (0)
 
 uint32_t contentsObjectId(const std::string& pageBody) {
@@ -119,9 +119,7 @@ size_t totalTextChars(const PdfPage& p) {
   return n;
 }
 
-bool hasStyle(uint8_t style, uint8_t flag) {
-  return (style & flag) != 0;
-}
+bool hasStyle(uint8_t style, uint8_t flag) { return (style & flag) != 0; }
 
 const char* styleName(uint8_t style) {
   if (hasStyle(style, PdfTextStyleHeader)) {
@@ -150,9 +148,7 @@ void dumpPageText(size_t pageIndex, const PdfPage& page) {
   std::printf("\n");
 }
 
-static bool isAsciiAlnum(char c) {
-  return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-}
+static bool isAsciiAlnum(char c) { return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
 
 static void appendTokenWithSpacing(std::string& out, const std::string& token) {
   if (token.empty()) {
@@ -191,7 +187,8 @@ std::string buildPageLinePreview(const PdfPage& page) {
     if (token.empty()) {
       continue;
     }
-    const bool lineBreak = havePrevHint && std::abs(static_cast<int>(block.orderHint) - static_cast<int>(prevHint)) >= 10;
+    const bool lineBreak =
+        havePrevHint && std::abs(static_cast<int>(block.orderHint) - static_cast<int>(prevHint)) >= 10;
     if (lineBreak) {
       if (!preview.empty() && preview.back() != '\n') {
         preview.push_back('\n');
@@ -281,7 +278,8 @@ std::string makeSyntheticOutlinePdf() {
       {7, "<< /Dests 8 0 R >>"},
       {8, "<< /Names [ (Chapter1) 20 0 R (DirectDest) [ 5 0 R /XYZ 0 400 0 ] ] >>"},
       {12, "<< /Title " + makeLiteral("Slash Name") + " /A << /S /GoTo /D /Chapter1 >> /Parent 6 0 R /Next 13 0 R >>"},
-      {13, "<< /Title " + makeLiteral("Direct Array") + " /A << /S /GoTo /D /DirectDest >> /Parent 6 0 R /Prev 12 0 R /Next 14 0 R >>"},
+      {13, "<< /Title " + makeLiteral("Direct Array") +
+               " /A << /S /GoTo /D /DirectDest >> /Parent 6 0 R /Prev 12 0 R /Next 14 0 R >>"},
       {14, "<< /Title " + makeLiteral("Chapter (1)") + " /A << /S /GoTo /D /Chapter1 >> /Parent 6 0 R /Prev 13 0 R >>"},
       {20, "[ 4 0 R /XYZ 0 700 0 ]"},
   };
@@ -467,9 +465,8 @@ void testInflateReaderLongWindowStreaming() {
   uLongf compressedBound = compressBound(plain.size());
   REQUIRE(compressedBound > 0);
   std::vector<uint8_t> compressed(compressedBound);
-  const auto zret = compress2(
-      reinterpret_cast<Bytef*>(compressed.data()), &compressedBound, reinterpret_cast<const Bytef*>(plain.data()), plain.size(),
-      Z_BEST_COMPRESSION);
+  const auto zret = compress2(reinterpret_cast<Bytef*>(compressed.data()), &compressedBound,
+                              reinterpret_cast<const Bytef*>(plain.data()), plain.size(), Z_BEST_COMPRESSION);
   REQUIRE(zret == Z_OK);
   compressed.resize(compressedBound);
 

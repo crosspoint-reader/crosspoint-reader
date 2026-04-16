@@ -1,9 +1,9 @@
 #pragma once
 
+#include <cstdint>
+
 #include "PdfFixed.h"
 #include "PdfLimits.h"
-
-#include <cstdint>
 
 enum PdfTextStyle : uint8_t {
   PdfTextStyleRegular = 0,

@@ -1,18 +1,18 @@
 #include "XrefTable.h"
 
-#include "PdfObject.h"
-#include "StreamDecoder.h"
-#include "PdfLog.h"
-
 #include <Logging.h>
 
 #include <algorithm>
-#include <cstdio>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "PdfLog.h"
+#include "PdfObject.h"
+#include "StreamDecoder.h"
 
 namespace {
 
@@ -75,9 +75,7 @@ uint32_t readBe24(const uint8_t* p) {
   return (static_cast<uint32_t>(p[0]) << 16) | (static_cast<uint32_t>(p[1]) << 8) | static_cast<uint32_t>(p[2]);
 }
 
-uint32_t readBe16(const uint8_t* p) {
-  return (static_cast<uint32_t>(p[0]) << 8) | static_cast<uint32_t>(p[1]);
-}
+uint32_t readBe16(const uint8_t* p) { return (static_cast<uint32_t>(p[0]) << 8) | static_cast<uint32_t>(p[1]); }
 
 static constexpr size_t kPackedOffsetBytes = 3;
 
@@ -141,8 +139,8 @@ size_t findStreamKeywordSlice(std::string_view s) {
       const bool prevOk = prev == ' ' || prev == '\t' || prev == '\r' || prev == '\n' || prev == '\0' || prev == '/' ||
                           prev == '<' || prev == '>' || prev == '[' || prev == ']' || prev == '(' || prev == ')';
       const size_t after = pos + plen;
-      const bool nextOk = after >= s.size() || s[after] == ' ' || s[after] == '\t' || s[after] == '\r' || s[after] == '\n' ||
-                          s[after] == '\0';
+      const bool nextOk = after >= s.size() || s[after] == ' ' || s[after] == '\t' || s[after] == '\r' ||
+                          s[after] == '\n' || s[after] == '\0';
       if (prevOk && nextOk) {
         return pos;
       }
@@ -163,7 +161,8 @@ void trimWsBothFs(PdfFixedString<PDF_INLINE_DICT_MAX>& s) {
   }
 }
 
-bool splitObjStmObjectSlice(std::string_view slice, PdfFixedString<PDF_INLINE_DICT_MAX>& dictOut, PdfByteBuffer& streamOut) {
+bool splitObjStmObjectSlice(std::string_view slice, PdfFixedString<PDF_INLINE_DICT_MAX>& dictOut,
+                            PdfByteBuffer& streamOut) {
   streamOut.clear();
   const size_t sp = findStreamKeywordSlice(slice);
   if (sp == std::string_view::npos) {
@@ -274,7 +273,7 @@ bool scanObjStmHeaderFromBytes(const uint8_t* bytes, size_t len, size_t first, i
 }
 
 [[maybe_unused]] bool scanObjStmHeaderForTargetAndNext(FsFile& file, size_t first, int nObj, uint32_t targetObjId,
-                                                      uint32_t& targetRel, uint32_t& nextRel) {
+                                                       uint32_t& targetRel, uint32_t& nextRel) {
   if (!file.seek(first)) {
     return false;
   }
@@ -405,8 +404,8 @@ bool readClassicXrefMeta(FsFile& file, size_t fileSize, uint32_t xrefOff, Classi
 
   for (;;) {
     readLineFromFile(file, lineBuf, sizeof(lineBuf), lineLen);
-      if (lineLen == 0) {
-        if (file.position() >= fileSize) {
+    if (lineLen == 0) {
+      if (file.position() >= fileSize) {
         pdfLogErr("xref: unexpected EOF before trailer");
         return false;
       }
@@ -551,9 +550,7 @@ struct XrefStreamDecodeState {
   uint8_t objStmBits[(PDF_MAX_OBJECTS + 7) / 8]{};
 };
 
-void setBit(uint8_t* bits, uint32_t id) {
-  bits[id >> 3U] |= static_cast<uint8_t>(1U << (id & 7U));
-}
+void setBit(uint8_t* bits, uint32_t id) { bits[id >> 3U] |= static_cast<uint8_t>(1U << (id & 7U)); }
 
 bool takeXrefStreamChunk(void* ctx, const uint8_t* data, size_t len) {
   auto* s = static_cast<XrefStreamDecodeState*>(ctx);
@@ -889,12 +886,12 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
   if (slice.empty()) {
     return false;
   }
-  while (!slice.empty() && (slice.front() == ' ' || slice.front() == '\t' || slice.front() == '\r' ||
-                            slice.front() == '\n')) {
+  while (!slice.empty() &&
+         (slice.front() == ' ' || slice.front() == '\t' || slice.front() == '\r' || slice.front() == '\n')) {
     slice.erase(slice.begin());
   }
-  while (!slice.empty() && (slice.back() == ' ' || slice.back() == '\t' || slice.back() == '\r' ||
-                            slice.back() == '\n')) {
+  while (!slice.empty() &&
+         (slice.back() == ' ' || slice.back() == '\t' || slice.back() == '\r' || slice.back() == '\n')) {
     slice.pop_back();
   }
   if (slice.empty()) {
@@ -917,8 +914,8 @@ bool XrefTable::loadObjStreamForTarget(FsFile& file, uint32_t stmObjId, uint32_t
 
   uint32_t targetRel = 0;
   uint32_t nextRel = 0;
-  if (!scanObjStmHeaderFromBytes(stream.bytes.data(), stream.bytes.size(), static_cast<size_t>(first), nObj, targetObjId,
-                                targetRel, nextRel)) {
+  if (!scanObjStmHeaderFromBytes(stream.bytes.data(), stream.bytes.size(), static_cast<size_t>(first), nObj,
+                                 targetObjId, targetRel, nextRel)) {
     return false;
   }
   const size_t base = static_cast<size_t>(first);

@@ -3,13 +3,13 @@
 // Host-only in-memory file stand-in for lib/Pdf tests (shadows lib/hal/HalStorage.h).
 #define HAL_STORAGE_STUB 1
 
-#include "Print.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <vector>
+
+#include "Print.h"
 
 class HalFile : public Print {
   std::vector<uint8_t> data_;

@@ -2,12 +2,12 @@
 
 #include <HalStorage.h>
 
-#include "PdfFixed.h"
-#include "PdfLimits.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+
+#include "PdfFixed.h"
+#include "PdfLimits.h"
 
 class XrefTable {
   // Packed little-endian 24-bit offsets: 3 bytes per object.

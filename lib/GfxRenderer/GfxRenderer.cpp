@@ -1065,7 +1065,7 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
   const EpdFontFamily* font = findFont(fontId);
   if (!font) return 0;
   const int kernFP = font->getKerning(leftCp, rightCp, style);  // 4.4 fixed-point
-  return fp4::toPixel(kernFP);                                           // snap 4.4 fixed-point to nearest pixel
+  return fp4::toPixel(kernFP);                                  // snap 4.4 fixed-point to nearest pixel
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {

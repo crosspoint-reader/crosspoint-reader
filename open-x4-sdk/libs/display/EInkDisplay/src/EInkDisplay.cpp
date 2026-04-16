@@ -120,7 +120,8 @@ EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t 
 #endif
       customLutActive(false) {
   if (Serial) Serial.printf("[%lu] EInkDisplay: Constructor called\n", millis());
-  if (Serial) Serial.printf("[%lu]   SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d\n", millis(), sclk, mosi, cs, dc, rst, busy);
+  if (Serial)
+    Serial.printf("[%lu]   SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d\n", millis(), sclk, mosi, cs, dc, rst, busy);
 }
 
 void EInkDisplay::begin() {
@@ -305,12 +306,10 @@ void EInkDisplay::setRamArea(const uint16_t x, uint16_t y, uint16_t w, uint16_t 
   sendData((y + h - 1) / 256);  // high byte
 }
 
-void EInkDisplay::clearScreen(const uint8_t color) const {
-  memset(frameBuffer, color, BUFFER_SIZE);
-}
+void EInkDisplay::clearScreen(const uint8_t color) const { memset(frameBuffer, color, BUFFER_SIZE); }
 
-void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h,
-                            const bool fromProgmem) const {
+void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w,
+                            const uint16_t h, const bool fromProgmem) const {
   if (!frameBuffer) {
     if (Serial) Serial.printf("[%lu]   ERROR: Frame buffer not allocated!\n", millis());
     return;
@@ -322,15 +321,13 @@ void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const ui
   // Copy image data to frame buffer
   for (uint16_t row = 0; row < h; row++) {
     const uint16_t destY = y + row;
-    if (destY >= DISPLAY_HEIGHT)
-      break;
+    if (destY >= DISPLAY_HEIGHT) break;
 
     const uint16_t destOffset = destY * DISPLAY_WIDTH_BYTES + (x / 8);
     const uint16_t srcOffset = row * imageWidthBytes;
 
     for (uint16_t col = 0; col < imageWidthBytes; col++) {
-      if ((x / 8 + col) >= DISPLAY_WIDTH_BYTES)
-        break;
+      if ((x / 8 + col) >= DISPLAY_WIDTH_BYTES) break;
 
       if (fromProgmem) {
         frameBuffer[destOffset + col] = pgm_read_byte(&imageData[srcOffset + col]);
@@ -344,8 +341,8 @@ void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const ui
 }
 
 // Draws only black pixels from the image, leaves white pixels clear (unchanged in framebuffer)
-void EInkDisplay::drawImageTransparent(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h,
-                                     const bool fromProgmem) const {
+void EInkDisplay::drawImageTransparent(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w,
+                                       const uint16_t h, const bool fromProgmem) const {
   if (!frameBuffer) {
     Serial.printf("[%lu]   ERROR: Frame buffer not allocated!\n", millis());
     return;
@@ -357,15 +354,13 @@ void EInkDisplay::drawImageTransparent(const uint8_t* imageData, const uint16_t 
   // Copy only black pixels to frame buffer
   for (uint16_t row = 0; row < h; row++) {
     const uint16_t destY = y + row;
-    if (destY >= DISPLAY_HEIGHT)
-      break;
+    if (destY >= DISPLAY_HEIGHT) break;
 
     const uint16_t destOffset = destY * DISPLAY_WIDTH_BYTES + (x / 8);
     const uint16_t srcOffset = row * imageWidthBytes;
 
     for (uint16_t col = 0; col < imageWidthBytes; col++) {
-      if ((x / 8 + col) >= DISPLAY_WIDTH_BYTES)
-        break;
+      if ((x / 8 + col) >= DISPLAY_WIDTH_BYTES) break;
 
       uint8_t srcByte = fromProgmem ? pgm_read_byte(&imageData[srcOffset + col]) : imageData[srcOffset + col];
       frameBuffer[destOffset + col] &= srcByte;
@@ -387,9 +382,7 @@ void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_
   if (Serial) Serial.printf("[%lu]   %s RAM write complete (%lu ms)\n", millis(), bufferName, duration);
 }
 
-void EInkDisplay::setFramebuffer(const uint8_t* bwBuffer) const {
-  memcpy(frameBuffer, bwBuffer, BUFFER_SIZE);
-}
+void EInkDisplay::setFramebuffer(const uint8_t* bwBuffer) const { memcpy(frameBuffer, bwBuffer, BUFFER_SIZE); }
 
 #ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE
 void EInkDisplay::swapBuffers() {
@@ -441,8 +434,7 @@ void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
 #endif
 
 void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
-  if (!isScreenOn && !turnOffScreen)
-  {
+  if (!isScreenOn && !turnOffScreen) {
     // Force half refresh if screen is off
     mode = HALF_REFRESH;
   }
@@ -518,7 +510,8 @@ void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
   const uint16_t windowWidthBytes = w / 8;
   const uint32_t windowBufferSize = windowWidthBytes * h;
 
-  if (Serial) Serial.printf("[%lu]   Window buffer size: %lu bytes (%d x %d pixels)\n", millis(), windowBufferSize, w, h);
+  if (Serial)
+    Serial.printf("[%lu]   Window buffer size: %lu bytes (%d x %d pixels)\n", millis(), windowBufferSize, w, h);
 
   // Allocate temporary buffer on stack
   std::vector<uint8_t> windowBuffer(windowBufferSize);

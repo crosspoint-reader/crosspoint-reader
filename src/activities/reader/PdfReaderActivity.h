@@ -3,8 +3,8 @@
 #include <Pdf.h>
 
 #include "../Activity.h"
-#include "PdfPageNavigation.h"
 #include "Pdf/PdfCachedPageReader.h"
+#include "PdfPageNavigation.h"
 
 class PdfReaderActivity final : public Activity {
   struct PdfRenderCursor {

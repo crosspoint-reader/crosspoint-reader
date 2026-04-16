@@ -1,12 +1,12 @@
 #include "PdfCachedPageReader.h"
 
 #include <HalStorage.h>
+#include <Serialization.h>
 
 #include <algorithm>
 #include <cstring>
 
 #include "PdfLog.h"
-#include <Serialization.h>
 
 namespace {
 
