@@ -55,7 +55,6 @@ bool CrossPointState::loadFromBinaryFile() {
   serialization::readPod(inputFile, version);
   if (version > STATE_FILE_VERSION) {
     LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
-    inputFile.close();
     return false;
   }
 
@@ -76,6 +75,5 @@ bool CrossPointState::loadFromBinaryFile() {
     lastSleepFromReader = false;
   }
 
-  inputFile.close();
   return true;
 }
