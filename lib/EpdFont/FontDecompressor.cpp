@@ -37,6 +37,7 @@ void FontDecompressor::freeHotGroup() {
   hotGroup.shrink_to_fit();
   hotGroupFont = nullptr;
   hotGroupIndex = UINT16_MAX;
+  hotGroupIsAlt = false;
   hotGlyphBuf.clear();
   hotGlyphBuf.shrink_to_fit();
 }
@@ -128,40 +129,48 @@ void FontDecompressor::compactSingleGlyph(const uint8_t* alignedSrc, uint8_t* pa
 
 // --- getBitmap: page buffer → hot group → decompress ---
 
-const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex) {
+const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex,
+                                           bool useAlt) {
   const uint32_t tStart = micros();
   stats.getBitmapCalls++;
 
-  if (!fontData->groups || fontData->groupCount == 0) {
+  // Select data sources based on alt flag
+  const auto* groups = useAlt ? fontData->altGroups : fontData->groups;
+  const auto* bitmap = useAlt ? fontData->altBitmap : fontData->bitmap;
+  const auto* glyphArray = useAlt ? fontData->altGlyph : fontData->glyph;
+
+  if (!groups || fontData->groupCount == 0) {
     stats.getBitmapTimeUs += micros() - tStart;
-    return &fontData->bitmap[glyph->dataOffset];
+    return bitmap ? &bitmap[glyph->dataOffset] : nullptr;
   }
 
-  // Check page buffer slots (populated by prewarmCache — one slot per font style)
-  for (uint8_t s = 0; s < pageSlotCount; s++) {
-    const auto& slot = pageSlots[s];
-    if (slot.fontData != fontData || slot.glyphCount == 0) continue;
+  // Check page buffer slots (only for primary glyphs — alt glyphs are not prewarmed)
+  if (!useAlt) {
+    for (uint8_t s = 0; s < pageSlotCount; s++) {
+      const auto& slot = pageSlots[s];
+      if (slot.fontData != fontData || slot.glyphCount == 0) continue;
 
-    int left = 0, right = slot.glyphCount - 1;
-    while (left <= right) {
-      int mid = left + (right - left) / 2;
-      if (slot.glyphs[mid].glyphIndex == glyphIndex) {
-        if (slot.glyphs[mid].bufferOffset != UINT32_MAX) {
-          stats.cacheHits++;
-          stats.getBitmapTimeUs += micros() - tStart;
-          return &slot.buffer[slot.glyphs[mid].bufferOffset];
+      int left = 0, right = slot.glyphCount - 1;
+      while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (slot.glyphs[mid].glyphIndex == glyphIndex) {
+          if (slot.glyphs[mid].bufferOffset != UINT32_MAX) {
+            stats.cacheHits++;
+            stats.getBitmapTimeUs += micros() - tStart;
+            return &slot.buffer[slot.glyphs[mid].bufferOffset];
+          }
+          break;
         }
-        break;  // Not extracted during prewarm; fall through to hot-group path
+        if (slot.glyphs[mid].glyphIndex < glyphIndex)
+          left = mid + 1;
+        else
+          right = mid - 1;
       }
-      if (slot.glyphs[mid].glyphIndex < glyphIndex)
-        left = mid + 1;
-      else
-        right = mid - 1;
+      break;
     }
-    break;  // Found the right slot but glyph wasn't in it; don't check other slots
   }
 
-  // Fallback: hot group slot
+  // Fallback: hot group slot (group structure is shared — use primary groups for index lookup)
   uint16_t groupIndex = getGroupIndex(fontData, glyphIndex);
   if (groupIndex >= fontData->groupCount) {
     LOG_ERR("FDC", "Glyph %u not found in any group", glyphIndex);
@@ -169,10 +178,10 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     return nullptr;
   }
 
-  // Check if hot group already has this group decompressed — if not, decompress it
-  if (!(!hotGroup.empty() && hotGroupFont == fontData && hotGroupIndex == groupIndex)) {
+  // Check if hot group already has this group decompressed (must match alt flag too)
+  if (!(!hotGroup.empty() && hotGroupFont == fontData && hotGroupIndex == groupIndex && hotGroupIsAlt == useAlt)) {
     stats.cacheMisses++;
-    const EpdFontGroup& group = fontData->groups[groupIndex];
+    const EpdFontGroup& group = groups[groupIndex];
 
     hotGroup.resize(group.uncompressedSize);
     if (hotGroup.empty()) {
@@ -183,7 +192,13 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
       return nullptr;
     }
 
-    if (!decompressGroup(fontData, groupIndex, hotGroup.data(), group.uncompressedSize)) {
+    // Decompress from the selected bitmap/groups data
+    const uint32_t tDecomp = millis();
+    inflateReader.init(false);
+    inflateReader.setSource(&bitmap[group.compressedOffset], group.compressedSize);
+    if (!inflateReader.read(hotGroup.data(), group.uncompressedSize)) {
+      stats.decompressTimeMs += millis() - tDecomp;
+      LOG_ERR("FDC", "Decompression failed for %sgroup %u", useAlt ? "alt " : "", groupIndex);
       hotGroup.clear();
       hotGroup.shrink_to_fit();
       hotGroupFont = nullptr;
@@ -191,15 +206,18 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
       stats.getBitmapTimeUs += micros() - tStart;
       return nullptr;
     }
+    stats.decompressTimeMs += millis() - tDecomp;
 
     hotGroupFont = fontData;
     hotGroupIndex = groupIndex;
+    hotGroupIsAlt = useAlt;
     stats.hotGroupBytes = group.uncompressedSize;
   } else {
     stats.cacheHits++;
   }
 
-  // Compact just the requested glyph from byte-aligned data into scratch buffer
+  // Compact just the requested glyph from byte-aligned data into scratch buffer.
+  // Use the alt glyph dimensions for byte-aligned offset calculation.
   if (glyph->dataLength > hotGlyphBuf.size()) {
     hotGlyphBuf.resize(glyph->dataLength);
   }
@@ -208,7 +226,18 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     return nullptr;
   }
 
-  uint32_t alignedOff = getAlignedOffset(fontData, groupIndex, glyphIndex);
+  // Compute aligned offset using the correct glyph array (alt glyph dimensions may differ)
+  uint32_t alignedOff = 0;
+  {
+    const EpdFontGroup& group = groups[groupIndex];
+    for (uint32_t i = group.firstGlyphIndex; i < glyphIndex; i++) {
+      const auto& g = glyphArray[i];
+      if (g.width > 0 && g.height > 0) {
+        alignedOff += ((g.width + 3) / 4) * g.height;
+      }
+    }
+  }
+
   compactSingleGlyph(&hotGroup[alignedOff], hotGlyphBuf.data(), glyph->width, glyph->height);
   stats.getBitmapTimeUs += micros() - tStart;
   return hotGlyphBuf.data();

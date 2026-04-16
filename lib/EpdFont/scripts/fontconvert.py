@@ -18,6 +18,7 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--dual-position", dest="dual_position", action="store_true", help="Generate alternate glyph bitmaps at 0.5px horizontal offset for sub-pixel rendering. Requires --compress --2bit.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -882,6 +883,155 @@ if ligature_pairs:
         print(f"    {{ 0x{packed_pair:08X}, 0x{lig_cp:04X} }}, // {cp_label(packed_pair >> 16)} {cp_label(packed_pair & 0xFFFF)} -> {cp_label(lig_cp)}")
     print("};\n")
 
+# --- Dual-position alternate glyph generation ---
+dual_position = args.dual_position
+if dual_position and not (compress and is2Bit):
+    print("Error: --dual-position requires --compress --2bit", file=sys.stderr)
+    sys.exit(1)
+
+if dual_position:
+    import freetype.raw as ft
+
+    print("// --- Dual-position alternate glyphs (0.5px offset) ---", file=sys.stderr)
+
+    # Re-render all glyphs with 0.5px horizontal offset using FT_Set_Transform
+    alt_glyphs = []  # list of (GlyphProps, packed_bytes)
+    alt_total_size = 0
+
+    for face_obj in font_stack:
+        face_obj.set_char_size(size << 6, size << 6, 150, 150)
+
+    # Apply 0.5px horizontal offset via FT_Set_Transform on each face in the stack
+    matrix = ft.FT_Matrix(1 << 16, 0, 0, 1 << 16)  # identity
+    delta = ft.FT_Vector(32, 0)  # 0.5px in 26.6 fixed-point
+    for face_obj in font_stack:
+        ft.FT_Set_Transform(face_obj._FT_Face, ft.byref(matrix), ft.byref(delta))
+
+    for i_start, i_end in intervals:
+        for code_point in range(i_start, i_end + 1):
+            face = load_glyph(code_point)
+            if face is None:
+                alt_glyphs.append((GlyphProps(0, 0, 0, 0, 0, 0, 0, code_point), b''))
+                continue
+            bitmap = face.glyph.bitmap
+
+            if bitmap.width == 0 or bitmap.rows == 0:
+                alt_glyphs.append((GlyphProps(0, 0, 0, face.glyph.bitmap_left, face.glyph.bitmap_top, 0, 0, code_point), b''))
+                continue
+
+            # Build 4-bit greyscale then downsample to 2-bit (same as primary path)
+            pixels4g = []
+            px = 0
+            for idx, v in enumerate(bitmap.buffer[:bitmap.width * bitmap.rows]):
+                x = idx % bitmap.width
+                if x % 2 == 0:
+                    px = (v >> 4)
+                else:
+                    px = px | (v & 0xF0)
+                    pixels4g.append(px)
+                    px = 0
+                if x == bitmap.width - 1 and bitmap.width % 2 > 0:
+                    pixels4g.append(px)
+                    px = 0
+
+            pixels2b = []
+            px = 0
+            pitch = (bitmap.width // 2) + (bitmap.width % 2)
+            for y in range(bitmap.rows):
+                for x in range(bitmap.width):
+                    px = px << 2
+                    bm = pixels4g[y * pitch + (x // 2)]
+                    bm = (bm >> ((x % 2) * 4)) & 0xF
+                    if bm >= 12:
+                        px += 3
+                    elif bm >= 8:
+                        px += 2
+                    elif bm >= 4:
+                        px += 1
+                    if (y * bitmap.width + x) % 4 == 3:
+                        pixels2b.append(px)
+                        px = 0
+            if (bitmap.width * bitmap.rows) % 4 != 0:
+                px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
+                pixels2b.append(px)
+
+            packed = bytes(pixels2b)
+            glyph = GlyphProps(
+                width=bitmap.width,
+                height=bitmap.rows,
+                advance_x=0,  # alt glyphs don't need advance (shared with primary)
+                left=face.glyph.bitmap_left,
+                top=face.glyph.bitmap_top,
+                data_length=len(packed),
+                data_offset=alt_total_size,
+                code_point=code_point,
+            )
+            alt_total_size += len(packed)
+            alt_glyphs.append((glyph, packed))
+
+    # Reset FT_Set_Transform
+    delta_zero = ft.FT_Vector(0, 0)
+    for face_obj in font_stack:
+        ft.FT_Set_Transform(face_obj._FT_Face, ft.byref(matrix), ft.byref(delta_zero))
+
+    print(f"// Alt glyphs: {len(alt_glyphs)} glyphs, {alt_total_size} bytes uncompressed", file=sys.stderr)
+
+    # Compress alt glyphs using the same group structure as primary
+    alt_compressed_groups = []
+    alt_compressed_bitmap_data = []
+    alt_glyph_props = []
+
+    for first_idx, count in groups:
+        packed_len = 0
+        group_aligned = bytearray()
+        for gi in range(first_idx, first_idx + count):
+            alt_props, alt_packed = alt_glyphs[gi]
+            within_group_offset = packed_len
+            alt_glyph_props.append(GlyphProps(
+                width=alt_props.width,
+                height=alt_props.height,
+                advance_x=alt_props.advance_x,
+                left=alt_props.left,
+                top=alt_props.top,
+                data_length=alt_props.data_length,
+                data_offset=within_group_offset,
+                code_point=alt_props.code_point,
+            ))
+            packed_len += len(alt_packed)
+            group_aligned.extend(to_byte_aligned(alt_packed, alt_props.width, alt_props.height))
+
+        compressor = zlib.compressobj(level=9, wbits=-15)
+        compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
+        alt_compressed_groups.append((compressed, len(group_aligned), count, first_idx))
+        alt_compressed_bitmap_data.extend(compressed)
+
+    # Fill in any glyphs not covered by groups (shouldn't happen with matching structure)
+    while len(alt_glyph_props) < len(alt_glyphs):
+        alt_props, _ = alt_glyphs[len(alt_glyph_props)]
+        alt_glyph_props.append(alt_props)
+
+    alt_total_compressed = len(alt_compressed_bitmap_data)
+    print(f"// Alt compression: {alt_total_size} -> {alt_total_compressed} bytes "
+          f"({100*alt_total_compressed/alt_total_size:.1f}%), {len(alt_compressed_groups)} groups", file=sys.stderr)
+
+    # Output alt arrays
+    print(f"static const uint8_t {font_name}AltBitmaps[{len(alt_compressed_bitmap_data)}] = {{")
+    for c in chunks(alt_compressed_bitmap_data, 16):
+        print("    " + " ".join(f"0x{b:02X}," for b in c))
+    print("};\n")
+
+    print(f"static const EpdGlyph {font_name}AltGlyphs[] = {{")
+    for i, g in enumerate(alt_glyph_props):
+        print("    { " + ", ".join([f"{a}" for a in list(g[:-1])]) + " },", f"// {cp_label(g.code_point)}")
+    print("};\n")
+
+    print(f"static const EpdFontGroup {font_name}AltGroups[] = {{")
+    compressed_offset = 0
+    for compressed, uncompressed_size, count, first_idx in alt_compressed_groups:
+        print(f"    {{ {compressed_offset}, {len(compressed)}, {uncompressed_size}, {count}, {first_idx} }},")
+        compressed_offset += len(compressed)
+    print("};\n")
+
 print(f"static const EpdFontData {font_name} = {{")
 print(f"    {font_name}Bitmaps,")
 print(f"    {font_name}Glyphs,")
@@ -921,4 +1071,13 @@ if ligature_pairs:
 else:
     print(f"    nullptr,")
     print(f"    0,")
+# Dual-position alt glyph fields
+if dual_position:
+    print(f"    {font_name}AltBitmaps,")
+    print(f"    {font_name}AltGlyphs,")
+    print(f"    {font_name}AltGroups,")
+else:
+    print(f"    nullptr,")
+    print(f"    nullptr,")
+    print(f"    nullptr,")
 print("};")

@@ -5382,4 +5382,7 @@ static const EpdFontData bookerly_18_bold = {
     127,
     bookerly_18_boldLigaturePairs,
     5,
+    nullptr,
+    nullptr,
+    nullptr,
 };

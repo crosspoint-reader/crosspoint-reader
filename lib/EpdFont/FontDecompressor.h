@@ -19,7 +19,9 @@ class FontDecompressor {
 
   // Returns pointer to decompressed bitmap data for the given glyph.
   // Checks the page buffer (from prewarm) first, then falls back to the hot group slot.
-  const uint8_t* getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex);
+  // When useAlt is true, decompresses from altBitmap/altGroups instead of primary data.
+  const uint8_t* getBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex,
+                           bool useAlt = false);
 
   // Free all cached data (page buffer + hot group).
   void clearCache();
@@ -69,6 +71,7 @@ class FontDecompressor {
   // Kept in byte-aligned format; individual glyphs are compacted on demand into hotGlyphBuf.
   const EpdFontData* hotGroupFont = nullptr;
   uint16_t hotGroupIndex = UINT16_MAX;
+  bool hotGroupIsAlt = false;
   std::vector<uint8_t> hotGroup;
 
   // Scratch buffer for compacting a single glyph from the hot group.

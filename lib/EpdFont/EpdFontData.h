@@ -129,4 +129,11 @@ typedef struct {
   uint8_t kernRightClassCount;           ///< Number of distinct right classes (matrix cols)
   const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
   uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
+
+  // Dual-position glyph support: alternate bitmaps rendered at 0.5px horizontal offset.
+  // When non-null, the renderer selects between primary and alt based on the fractional
+  // cursor position (>= 0.5px → alt). Glyph indices and group structure mirror the primary.
+  const uint8_t* altBitmap;              ///< Compressed alt glyph bitmaps (nullptr if no dual-position)
+  const EpdGlyph* altGlyph;              ///< Alt glyph metadata (dimensions may differ from primary due to hinting)
+  const EpdFontGroup* altGroups;         ///< DEFLATE group table for alt bitmaps (same group count as primary)
 } EpdFontData;

@@ -4809,4 +4809,7 @@ static const EpdFontData bookerly_16_regular = {
     123,
     bookerly_16_regularLigaturePairs,
     5,
+    nullptr,
+    nullptr,
+    nullptr,
 };

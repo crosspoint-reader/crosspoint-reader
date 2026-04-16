@@ -15,7 +15,7 @@ class TextBlock final : public Block {
   std::vector<std::string> words;
   std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<int8_t> wordTracking;  // per-word tracking in FP4 units (4 frac bits), transient, not serialized
+  std::vector<int8_t> wordTracking;  // per-word tracking in FP4 units (4 frac bits)
   BlockStyle blockStyle;
 
  public:

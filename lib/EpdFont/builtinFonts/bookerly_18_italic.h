@@ -5570,4 +5570,7 @@ static const EpdFontData bookerly_18_italic = {
     117,
     bookerly_18_italicLigaturePairs,
     5,
+    nullptr,
+    nullptr,
+    nullptr,
 };
