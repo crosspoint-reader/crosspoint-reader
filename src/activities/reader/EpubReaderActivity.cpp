@@ -800,10 +800,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // so we reload here with the correct direction after resolution.
     ensureSdFontLoaded(verticalMode);
 
-    // ルビ用フォント: フォントロード後に最小サイズ(10pt)を取得
-    int rubyId = SETTINGS.getTableFontId(verticalMode);
-    if (rubyId == 0) rubyId = SETTINGS.getReaderFontId(verticalMode);  // フォールバック
-    TextBlock::rubyFontId = rubyId;
+    // ルビ用フォント: フォントロード後に8ptフォントを取得
+    {
+      static constexpr uint8_t RUBY_FONT_SIZE_ENUM = 5;  // 8pt
+      int rubyId = 0;
+      const auto& rubyDs = SETTINGS.getDirectionSettings(verticalMode);
+      if (rubyDs.sdFontFamilyName[0] != '\0' && SETTINGS.sdFontIdResolver) {
+        rubyId = SETTINGS.sdFontIdResolver(SETTINGS.sdFontResolverCtx, rubyDs.sdFontFamilyName, RUBY_FONT_SIZE_ENUM);
+      }
+      if (rubyId == 0) rubyId = SETTINGS.getReaderFontId(verticalMode);
+      TextBlock::rubyFontId = rubyId;
+    }
 
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);

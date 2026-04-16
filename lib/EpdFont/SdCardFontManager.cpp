@@ -37,7 +37,7 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
   // Dual-base loading: pick a primary .cpfont closest to preferredBasePt (body text),
   // and optionally a secondary .cpfont closest to headingBasePt (heading text).
   // Each virtual font ID is assigned to the closer base, eliminating upscaling artifacts.
-  static constexpr uint8_t ALL_SIZES[] = {10, 12, 14, 16, 18};
+  static constexpr uint8_t ALL_SIZES[] = {8, 10, 12, 14, 16, 18};
 
   // --- Primary base selection ---
   const SdCardFontFileInfo* primaryFile = nullptr;

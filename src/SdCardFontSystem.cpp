@@ -8,7 +8,8 @@
 
 // Map fontSize enum (SMALL=0, MEDIUM=1, LARGE=2, EXTRA_LARGE=3) to point sizes.
 // Index 4 (TABLE_SIZE) maps to 10pt for table rendering.
-static constexpr uint8_t FONT_SIZE_TO_PT[] = {12, 14, 16, 18, 10};
+// Index 5 (RUBY_SIZE) maps to 8pt for ruby/furigana text.
+static constexpr uint8_t FONT_SIZE_TO_PT[] = {12, 14, 16, 18, 10, 8};
 
 // Convert fontSize enum to the point size used as .cpfont base selection target.
 static uint8_t fontSizeEnumToPt(uint8_t fontSizeEnum) {
