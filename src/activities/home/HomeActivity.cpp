@@ -345,13 +345,17 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   if (hasOpdsUrl) {
-    // Insert OPDS Browser after Recents (and Global Bookmarks if present)
     menuItems.insert(menuItems.begin() + insertAfterRecents, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + insertAfterRecents, Library);
   }
 
-  const HomeScreenLayout layout =
-      computeHomeScreenLayout(metrics, contentRect.height, static_cast<int>(menuItems.size()));
+  const int totalItems = static_cast<int>(recentBooks.size() + menuItems.size());
+  if (selectorIndex >= totalItems) {
+    selectorIndex = std::max(0, totalItems - 1);
+  }
+
+  const int menuCount = static_cast<int>(menuItems.size());
+  const HomeScreenLayout layout = computeHomeScreenLayout(metrics, contentRect.height, menuCount);
 
   GUI.drawRecentBookCover(renderer,
                           Rect{contentRect.x, metrics.homeTopPadding, contentRect.width, layout.recentTileHeight},
@@ -362,7 +366,7 @@ void HomeActivity::render(RenderLock&&) {
       renderer,
       Rect{contentRect.x, metrics.homeTopPadding + layout.recentTileHeight + layout.recentToMenuGap, contentRect.width,
            layout.menuHeight},
-      static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
+      menuCount, selectorIndex - static_cast<int>(recentBooks.size()),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 

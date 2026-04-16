@@ -96,6 +96,7 @@ void CrossPointWebServerActivity::onExit() {
   }
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
+  requestUpdate();
 }
 
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {

@@ -177,7 +177,9 @@ void ActivityManager::loop() {
   }
 
   if (requestedUpdate) {
+    taskENTER_CRITICAL(nullptr);
     requestedUpdate = false;
+    taskEXIT_CRITICAL(nullptr);
     // Using direct notification to signal the render task to update
     // Increment counter so multiple rapid calls won't be lost
     if (renderTaskHandle) {
@@ -299,7 +301,9 @@ void ActivityManager::requestUpdate(bool immediate) {
   } else {
     // Deferring the update until current loop is finished
     // This is to avoid multiple updates being requested in the same loop
+    taskENTER_CRITICAL(nullptr);
     requestedUpdate = true;
+    taskEXIT_CRITICAL(nullptr);
   }
 }
 void ActivityManager::requestUpdateAndWait() {

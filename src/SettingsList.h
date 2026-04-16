@@ -134,18 +134,29 @@ inline const std::vector<SettingInfo> list = {
                         StrId::STR_CAT_SYSTEM),
     SettingInfo::Toggle(StrId::STR_SHOW_FILE_EXTENSIONS, &CrossPointSettings::showFileExtensions, "showFileExtensions",
                         StrId::STR_CAT_SYSTEM),
+
+    // Will be dealt with separately , so do receive none of the main categories to be visible in the web UI but not the
+    // device UI
+    SettingInfo::Toggle(StrId::STR_USE_CLOCK, &CrossPointSettings::useClock, "useClock", StrId::STR_CLOCK),
     SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat12h, {StrId::STR_24H, StrId::STR_12H},
-                      "clockFormat12h", StrId::STR_CAT_SYSTEM),
+                      "clockFormat12h", StrId::STR_CLOCK),
     SettingInfo::Enum(StrId::STR_TIMEZONE, &CrossPointSettings::timeZone,
                       {StrId::STR_TZ_UTC, StrId::STR_TZ_CET, StrId::STR_TZ_EET, StrId::STR_TZ_MSK,
                        StrId::STR_TZ_UTC_PLUS4, StrId::STR_TZ_IST, StrId::STR_TZ_UTC_PLUS7, StrId::STR_TZ_UTC_PLUS8,
                        StrId::STR_TZ_UTC_PLUS9, StrId::STR_TZ_AEST, StrId::STR_TZ_NZST, StrId::STR_TZ_UTC_MINUS3,
                        StrId::STR_TZ_EST, StrId::STR_TZ_CST, StrId::STR_TZ_MST, StrId::STR_TZ_PST},
-                      "timeZone", StrId::STR_CAT_SYSTEM),
-    SettingInfo::Toggle(StrId::STR_USE_CLOCK, &CrossPointSettings::useClock, "useClock", StrId::STR_CAT_SYSTEM),
-    SettingInfo::Toggle(StrId::STR_USE_WEATHER, &CrossPointSettings::useWeather, "useWeather", StrId::STR_CAT_SYSTEM),
+                      "timeZone", StrId::STR_CLOCK),
+    // Weather
+    SettingInfo::Toggle(StrId::STR_USE_WEATHER, &CrossPointSettings::useWeather, "useWeather", StrId::STR_WEATHER),
 
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
+    SettingInfo::DynamicString(
+        StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
+        [](const std::string& v) {
+          KOREADER_STORE.setServerUrl(v);
+          KOREADER_STORE.saveToFile();
+        },
+        "koServerUrl", StrId::STR_KOREADER_SYNC),
     SettingInfo::DynamicString(
         StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
         [](const std::string& v) {
@@ -161,13 +172,6 @@ inline const std::vector<SettingInfo> list = {
         },
         "koPassword", StrId::STR_KOREADER_SYNC)
         .withObfuscated(),
-    SettingInfo::DynamicString(
-        StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
-        [](const std::string& v) {
-          KOREADER_STORE.setServerUrl(v);
-          KOREADER_STORE.saveToFile();
-        },
-        "koServerUrl", StrId::STR_KOREADER_SYNC),
     SettingInfo::DynamicEnum(
         StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
         [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
@@ -185,6 +189,7 @@ inline const std::vector<SettingInfo> list = {
     SettingInfo::String(StrId::STR_PASSWORD, SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), "opdsPassword",
                         StrId::STR_OPDS_BROWSER)
         .withObfuscated(),
+
     // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
     SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                         "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),
