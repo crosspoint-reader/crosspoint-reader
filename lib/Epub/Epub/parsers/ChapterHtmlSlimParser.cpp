@@ -697,14 +697,29 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Collect footnote link display text (for the number label)
   // Skip whitespace and brackets to normalize noterefs like "[1]" → "1"
   if (self->insideFootnoteLink) {
-    for (int i = 0; i < len; i++) {
-      unsigned char c = static_cast<unsigned char>(s[i]);
-      if (isWhitespace(c) || c == '[' || c == ']') continue;
-      if (self->currentFootnoteLinkTextLen < static_cast<int>(sizeof(self->currentFootnoteLinkText)) - 1) {
-        self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = c;
-        self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
-      }
+    int start = 0;
+    int end = len - 1;
+
+    // Example input and output texts:
+    // "     [  12  ]   " => "12"
+    // "   turn to 256  " => "turn to 256"
+
+    // Ignore leading whitespaces and left square brackets
+    while (start < len && (isWhitespace(s[start]) || (s[start] == '['))) {
+      ++start;
     }
+
+    // Ignore trailing whitespaces and right square brackets
+    while (end >= start && (isWhitespace(s[end]) || (s[end] == ']'))) {
+      --end;
+    }
+
+    // Extract footnote link text
+    for (int i = start; (self->currentFootnoteLinkTextLen < sizeof(self->currentFootnoteLinkText) - 1) && (i <= end);
+         ++i) {
+      self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = s[i];
+    }
+    self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
   }
 
   for (int i = 0; i < len; i++) {
