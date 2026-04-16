@@ -1,9 +1,9 @@
 """
-PlatformIO pre-build script: inject git branch into CROSSPOINT_VERSION for
-the default (dev) environment.
+PlatformIO pre-build script: inject CROSSPOINT_VERSION for generated builds.
 
 Results in a version string like:  1.1.0-dev+feat-koysnc-xpath
-Release environments are unaffected; they set CROSSPOINT_VERSION in the ini.
+Release builds use CROSSPOINT_RELEASE_VERSION when set, falling back to the
+base version from platformio.ini for local builds.
 """
 
 import configparser
@@ -55,15 +55,17 @@ def get_base_version(project_dir):
 
 
 def inject_version(env):
-    # Only applies to the dev (default) environment; release envs set the
-    # version via build_flags in platformio.ini and are unaffected.
-    if env['PIOENV'] != 'default':
+    pio_env = env['PIOENV']
+    if pio_env not in ('default', 'gh_release'):
         return
 
     project_dir = env['PROJECT_DIR']
     base_version = get_base_version(project_dir)
-    branch = get_git_branch(project_dir)
-    version_string = f'{base_version}-dev+{branch}'
+    if pio_env == 'gh_release':
+        version_string = os.environ.get('CROSSPOINT_RELEASE_VERSION', base_version)
+    else:
+        branch = get_git_branch(project_dir)
+        version_string = f'{base_version}-dev+{branch}'
 
     env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
     print(f'CrossPoint build version: {version_string}')
