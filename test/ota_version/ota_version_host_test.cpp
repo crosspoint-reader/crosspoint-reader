@@ -1,7 +1,7 @@
-#include "network/OtaVersion.h"
-
 #include <cstdlib>
 #include <iostream>
+
+#include "network/OtaVersion.h"
 
 namespace {
 
@@ -15,8 +15,9 @@ void require(bool condition, const char* message) {
 }  // namespace
 
 int main() {
-  require(!ota_version::isNewer("v2026.04.16-reduce-pdf-object-buffer-usage", "v2026.04.16-reduce-pdf-object-buffer-usage"),
-          "matching date tags are not newer");
+  require(
+      !ota_version::isNewer("v2026.04.16-reduce-pdf-object-buffer-usage", "v2026.04.16-reduce-pdf-object-buffer-usage"),
+      "matching date tags are not newer");
   require(ota_version::isNewer("v2026.04.16-reduce-pdf-object-buffer-usage", "1.1.1"),
           "date tag is newer than installed semver build");
   require(ota_version::isNewer("v2026.04.17-next", "v2026.04.16-reduce-pdf-object-buffer-usage"),
