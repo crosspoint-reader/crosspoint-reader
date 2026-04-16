@@ -16,12 +16,20 @@ void KeyboardEntryActivity::onEnter() {
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 KeyboardEntryActivity::KeyBlock KeyboardEntryActivity::keyboard[] = {
-  {.row = {"abc", "def", "ghi"}}, {.row = {"jkl", "mno", "pqr"}}, {.row = {"stu", "vwx", "yz1"}},
-  {.row = {"234", "567", "890"}}, {.row = {"+:<", ">?!", "    "}}, {.row = {"   ", "   ", "   "}}
+  {.row = {"abc", "def", "ghi"}}, {.row = {"jkl", "mno", "pqr"}}, {.row = {"stu", "vwx", "yz`"}},
+  {.row = {"ABC", "DEF", "GHI"}}, {.row = {"JKL", "MNO", "PQR"}}, {.row = {"STU", "VWX", "YZ~"}},
+  {.row = {"123", "456", "789"}}, {.row = {"0!@", "#$%", "^&*"}}, {.row = {"()-", "_=+", "[]\\"}},
+  {.row = {"{}|", ";:'", "\",."}}, {.row = {"/<>", "   ", "   "}}, {.row = {"   ", "   ", "   "}}
 };
 
 char KeyboardEntryActivity::getSelectedChar() const {
-  return keyboard[selectedTopLevel].row[selectedMidLevel][selectedBottomLevel];
+  return keyboard[selectedTopLevel + keyPage * 3].row[selectedMidLevel][selectedBottomLevel];
+}
+
+void KeyboardEntryActivity::resetLevels(){
+  selectedTopLevel = -1;
+  selectedMidLevel = -1;
+  selectedBottomLevel = -1;
 }
 
 bool KeyboardEntryActivity::handleKeyPress() {
@@ -37,18 +45,11 @@ bool KeyboardEntryActivity::handleKeyPress() {
 
   if (maxLength == 0 || text.length() < maxLength) {
     text += c;
-    selectedTopLevel = -1;
-    selectedMidLevel = -1;
-    selectedBottomLevel = -1;
-    // Auto-disable shift after typing a character in non-lock mode
-    if (shiftState == 1) {
-      shiftState = 0;
-    }
+    resetLevels();
   }
 
   return true;
 }
-
 
 void KeyboardEntryActivity::setLevelOnPress(int level) {
   if (selectedTopLevel == -1) {
@@ -63,11 +64,14 @@ void KeyboardEntryActivity::setLevelOnPress(int level) {
 void KeyboardEntryActivity::loop() {
   // Handle navigation
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
+    int pages = sizeof(KeyboardEntryActivity::keyboard) / (sizeof(KeyboardEntryActivity::KeyBlock) * 3);
+    keyPage = (keyPage - 1 + pages) % pages;
     requestUpdate();
   });
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
-    //selectedRow = ButtonNavigator::nextIndex(selectedRow, NUM_ROWS);
+    int pages = sizeof(KeyboardEntryActivity::keyboard) / (sizeof(KeyboardEntryActivity::KeyBlock) * 3);
+    keyPage = (keyPage + 1 + pages) % pages;
     requestUpdate();
   });
 
@@ -96,9 +100,7 @@ void KeyboardEntryActivity::loop() {
       selectedBottomLevel = -1;
       selectedMidLevel = -1;
     } else if (selectedTopLevel != -1) {
-      selectedBottomLevel = -1;
-      selectedMidLevel = -1;
-      selectedTopLevel = -1;
+      resetLevels();
     } else {
       onCancel();
     }
@@ -106,7 +108,28 @@ void KeyboardEntryActivity::loop() {
   });
 
   buttonNavigator.onContinuous({MappedInputManager::Button::Back}, [this] {
+    onCancel();
+  });
 
+  buttonNavigator.onContinuous({MappedInputManager::Button::Confirm}, [this] {
+    onComplete(text);
+  });
+
+
+  buttonNavigator.onContinuous({MappedInputManager::Button::Left}, [this] {
+    if (!text.empty()) {
+        text.pop_back();
+        resetLevels();
+        requestUpdate();
+    }
+  });
+
+  buttonNavigator.onContinuous({MappedInputManager::Button::Right}, [this] {
+    if (maxLength == 0 || text.length() <maxLength) {
+        text += ' ';
+        resetLevels();
+        requestUpdate();
+    }
   });
 }
 
@@ -166,46 +189,43 @@ void KeyboardEntryActivity::render(RenderLock&&) {
                                          (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * 4
                                    : inputStartY + inputHeight + metrics.verticalSpacing * 4;
 
-  char buffer[] = "A B C\0";
-  int width = renderer.getTextWidth(UI_12_FONT_ID, buffer);
-  int height = renderer.getTextHeight(UI_12_FONT_ID);
+  char buffer[] = "\0\0\0\0\0"; // Big enough for any single utf8 rune
+
+  const int keyWidth = metrics.keyboardKeyWidth;
+  const int keyHeight = metrics.keyboardKeyHeight;
+  const int keySpacing = metrics.keyboardKeySpacing;
+  const int width = keyWidth * 3 + keySpacing * 2;
+  const int requiredSpace = pageWidth - width * 3;
 
   if (selectedTopLevel == -1) {
-    int requiredSpace = pageWidth - width * 3;
-    int x = (pageWidth - requiredSpace) / 3;
-
     for(int i = 0; i < 3; i++) {
-      renderer.drawRect(x, keyboardStartY, width, height * 3);
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1);
       for(int row = 0; row < 3; row++){
-
+        int startX = x;
         for(int j = 0; j < 3; j++){
-          buffer[j * 2] = keyboard[i].row[row][j];
+          buffer[0] = keyboard[i + keyPage * 3].row[row][j];
+          GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY + row * keyHeight, keyWidth, keyHeight}, buffer, false);
+          x += keyWidth + keySpacing;
         }
-        renderer.drawText(UI_12_FONT_ID, x + 1, keyboardStartY + 1 + row * height, buffer);
+        x = startX;
       }
-      x += width + 10;
     }
   } else if (selectedMidLevel == -1){
-    int requiredSpace = pageWidth - width * 3;
-    int x = (pageWidth - requiredSpace) / 3;
-
     for(int i = 0; i < 3; i++) {
-      renderer.drawRect(x, keyboardStartY, width, height * 2);
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1);
       for(int j = 0; j < 3; j++){
-        buffer[j * 2] = keyboard[selectedTopLevel].row[i][j];
+        buffer[0] = keyboard[selectedTopLevel + keyPage * 3].row[i][j];
+        GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY, keyWidth, keyHeight}, buffer, false);
+        x += keyWidth + keySpacing;
       }
-      renderer.drawText(UI_12_FONT_ID, x + 1, keyboardStartY + 1, buffer);
-      x += width + 10;
     }
   } else {
-    int requiredSpace = pageWidth - width * 3;
-    int x = (pageWidth - requiredSpace) / 3;
     for(int i = 0; i < 3; i++){
-      renderer.drawRect(x, keyboardStartY, width, height * 2);
-      buffer[0] = keyboard[selectedTopLevel].row[selectedMidLevel][i];
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1);
+      buffer[0] = keyboard[selectedTopLevel + keyPage * 3].row[selectedMidLevel][i];
       buffer[1] = '\0';
-      renderer.drawText(UI_12_FONT_ID, x + 1, keyboardStartY + 1, buffer);
-      x += width + 10;
+      GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY, keyWidth, keyHeight}, buffer, false);
+      x += keyWidth + keySpacing;
     }
   }
 

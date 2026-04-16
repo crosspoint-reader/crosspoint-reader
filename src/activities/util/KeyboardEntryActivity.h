@@ -54,17 +54,20 @@ class KeyboardEntryActivity : public Activity {
   int selectedTopLevel = -1;
   int selectedMidLevel = -1;
   int selectedBottomLevel = -1;
-  int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
+  int keyPage = 0;
 
   void setLevelOnPress(int level);
+  void resetLevels();
 
   // Handlers
   void onComplete(std::string text);
   void onCancel();
+
 
   char getSelectedChar() const;
   bool handleKeyPress();  // false if onComplete was triggered
   int getRowLength(int row) const;
 
   static KeyBlock keyboard[];
+  static int pages;
 };
