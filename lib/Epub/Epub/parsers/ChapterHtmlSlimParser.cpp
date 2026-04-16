@@ -1139,9 +1139,47 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
+  // Collect all lines from this paragraph, then emit with widow/orphan control.
+  std::vector<std::shared_ptr<TextBlock>> paragraphLines;
+  paragraphLines.reserve(8);
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+      [&paragraphLines](const std::shared_ptr<TextBlock>& textBlock) { paragraphLines.push_back(textBlock); });
+
+  const bool isMultiLine = paragraphLines.size() > 1;
+
+  for (size_t li = 0; li < paragraphLines.size(); li++) {
+    // Orphan prevention: first line of multi-line paragraph would be last on current page.
+    if (li == 0 && isMultiLine && currentPage && !currentPage->elements.empty()) {
+      const int spaceLeft = viewportHeight - currentPageNextY;
+      if (spaceLeft >= lineHeight && spaceLeft < lineHeight * 2) {
+        // Only 1 line fits — would create an orphan. Force page break.
+        completePageFn(std::move(currentPage));
+        completedPageCount++;
+        currentPage.reset(new Page());
+        currentPageNextY = 0;
+      }
+    }
+
+    // Widow prevention: at the second-to-last line of a multi-line paragraph,
+    // check if adding it would leave the last line alone on a new page.
+    // Uses pre-check instead of pop_back to keep footnote tracking consistent.
+    if (isMultiLine && li == paragraphLines.size() - 2 && currentPage) {
+      const int spaceAfterThisLine = viewportHeight - (currentPageNextY + lineHeight);
+      if (spaceAfterThisLine >= 0 && spaceAfterThisLine < lineHeight) {
+        // Would create a widow. Only prevent if page keeps enough content
+        // (at least 2 elements) to avoid trading a widow for an orphan.
+        if (currentPage->elements.size() >= 2) {
+          completePageFn(std::move(currentPage));
+          completedPageCount++;
+          currentPage.reset(new Page());
+          currentPageNextY = 0;
+        }
+      }
+    }
+
+    addLineToPage(paragraphLines[li]);
+  }
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

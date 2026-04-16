@@ -13,7 +13,16 @@
 void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   const uint8_t* fb = renderer.getFrameBuffer();
   if (fb) {
-    String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
+    // Find the next available screenshot number
+    static int nextNumber = 1;
+    char nameBuf[48];
+    snprintf(nameBuf, sizeof(nameBuf), "/screenshots/screenshot-%04d.bmp", nextNumber);
+    while (Storage.exists(nameBuf) && nextNumber < 9999) {
+      nextNumber++;
+      snprintf(nameBuf, sizeof(nameBuf), "/screenshots/screenshot-%04d.bmp", nextNumber);
+    }
+    nextNumber++;
+    String filename_str = nameBuf;
     if (ScreenshotUtil::saveFramebufferAsBmp(filename_str.c_str(), fb, renderer.getDisplayWidth(),
                                              renderer.getDisplayHeight())) {
       LOG_DBG("SCR", "Screenshot saved to %s", filename_str.c_str());

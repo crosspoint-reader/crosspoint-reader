@@ -15,7 +15,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
-    renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
+    const int tracking = (i < wordTracking.size()) ? wordTracking[i] : 0;
+    renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle, tracking);
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = words[i];
@@ -53,6 +54,10 @@ bool TextBlock::serialize(FsFile& file) const {
   for (const auto& w : words) serialization::writeString(file, w);
   for (auto x : wordXpos) serialization::writePod(file, x);
   for (auto s : wordStyles) serialization::writePod(file, s);
+  // Tracking (1 byte per word, 0 = none)
+  for (size_t i = 0; i < words.size(); i++) {
+    serialization::writePod(file, i < wordTracking.size() ? wordTracking[i] : static_cast<int8_t>(0));
+  }
 
   // Style (alignment + margins/padding/indent)
   serialization::writePod(file, blockStyle.alignment);
@@ -91,9 +96,11 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   words.resize(wc);
   wordXpos.resize(wc);
   wordStyles.resize(wc);
+  std::vector<int8_t> wordTracking(wc);
   for (auto& w : words) serialization::readString(file, w);
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
+  for (auto& t : wordTracking) serialization::readPod(file, t);
 
   // Style (alignment + margins/padding/indent)
   serialization::readPod(file, blockStyle.alignment);
@@ -110,5 +117,5 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
 
   return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
+      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle, std::move(wordTracking)));
 }

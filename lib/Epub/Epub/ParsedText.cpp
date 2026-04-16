@@ -1,5 +1,6 @@
 #include "ParsedText.h"
 
+#include <EpdFontData.h>
 #include <GfxRenderer.h>
 #include <Utf8.h>
 
@@ -89,6 +90,42 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   wordContinues.push_back(attachToPrevious);
 }
 
+// Calculate the worst-line badness for a set of line breaks.
+// Returns the maximum spare space per gap across all non-last lines.
+static int evaluateBadness(const std::vector<size_t>& lineBreakIndices, const std::vector<uint16_t>& wordWidths,
+                           const std::vector<bool>& continuesVec, const std::vector<std::string>& wordsRef,
+                           const std::vector<EpdFontFamily::Style>& wordStylesRef, const GfxRenderer& renderer,
+                           const int fontId, const int pageWidth) {
+  int worstBadness = 0;
+  const size_t lineCount = lineBreakIndices.size();
+
+  for (size_t bi = 0; bi < lineCount; bi++) {
+    const size_t lineStart = bi > 0 ? lineBreakIndices[bi - 1] : 0;
+    const size_t lineEnd = lineBreakIndices[bi];
+    const bool isLast = (bi == lineCount - 1);
+    if (isLast) continue;  // last line is not justified
+
+    int32_t contentFP = 0;
+    int gapCount = 0;
+    for (size_t wi = lineStart; wi < lineEnd; wi++) {
+      contentFP += fp4::fromPixel(wordWidths[wi]);
+      if (wi > lineStart && !continuesVec[wi]) {
+        gapCount++;
+        contentFP += renderer.getSpaceAdvanceFP(fontId, lastCodepoint(wordsRef[wi - 1]),
+                                                firstCodepoint(wordsRef[wi]), wordStylesRef[wi - 1]);
+      } else if (wi > lineStart && continuesVec[wi]) {
+        contentFP += renderer.getKerningFP(fontId, lastCodepoint(wordsRef[wi - 1]),
+                                           firstCodepoint(wordsRef[wi]), wordStylesRef[wi - 1]);
+      }
+    }
+    const int spare = pageWidth - fp4::toPixel(contentFP);
+    const int absSpare = spare >= 0 ? spare : -spare;
+    const int badness = gapCount > 0 ? absSpare / gapCount : absSpare;
+    if (badness > worstBadness) worstBadness = badness;
+  }
+  return worstBadness;
+}
+
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
@@ -104,16 +141,104 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   auto wordWidths = calculateWordWidths(renderer, fontId);
 
   std::vector<size_t> lineBreakIndices;
-  if (hyphenationEnabled) {
-    // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
-    lineBreakIndices = computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues);
+  int8_t paragraphTracking = 0;
+
+  // For justified text, try paragraph-level tracking optimization.
+  // Trial line-breaking passes mutate member vectors (words, wordStyles, wordContinues)
+  // via hyphenation, so we save/restore around each trial and do one final definitive pass.
+  if (blockStyle.alignment == CssTextAlign::Justify) {
+    const auto savedWords = words;
+    const auto savedStyles = wordStyles;
+    const auto savedContinues = wordContinues;
+    const auto savedWidths = wordWidths;
+
+    // Count characters per word (pre-hyphenation, for tracking width adjustment)
+    std::vector<int> charCounts(words.size());
+    for (size_t i = 0; i < words.size(); i++) {
+      int n = 0;
+      const auto* p = reinterpret_cast<const unsigned char*>(words[i].c_str());
+      while (*p) { utf8NextCodepoint(&p); n++; }
+      charCounts[i] = n;
+    }
+
+    // Trial pass to evaluate badness.
+    // Pass wordContinues (member) directly — hyphenateWordAtIndex modifies it in sync with words/wordStyles.
+    {
+      auto trialWidths = wordWidths;
+      auto trialBreaks = hyphenationEnabled
+          ? computeHyphenatedLineBreaks(renderer, fontId, pageWidth, trialWidths, wordContinues)
+          : computeLineBreaks(renderer, fontId, pageWidth, trialWidths, wordContinues);
+      // After this: words, wordStyles, wordContinues, trialWidths are all expanded consistently.
+
+      if (trialBreaks.size() > 1) {
+        const int naturalSpace = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+        const int currentBadness = evaluateBadness(trialBreaks, trialWidths, wordContinues, words, wordStyles,
+                                                    renderer, fontId, pageWidth);
+
+        if (currentBadness > naturalSpace) {
+          int bestBadness = currentBadness;
+
+          for (int8_t tryTracking = -4; tryTracking <= 4; tryTracking++) {
+            if (tryTracking == 0) continue;
+
+            // Restore pre-hyphenation state for this trial
+            words = savedWords;
+            wordStyles = savedStyles;
+            wordContinues = savedContinues;
+
+            auto adjustedWidths = savedWidths;
+            for (size_t i = 0; i < adjustedWidths.size(); i++) {
+              const int expansion = ((charCounts[i] - 1) * tryTracking + 8) >> 4;  // FP4 to pixels, rounded
+              const int adjusted = static_cast<int>(adjustedWidths[i]) + expansion;
+              adjustedWidths[i] = static_cast<uint16_t>(std::max(1, adjusted));
+            }
+
+            auto tryBreaks = hyphenationEnabled
+                ? computeHyphenatedLineBreaks(renderer, fontId, pageWidth, adjustedWidths, wordContinues)
+                : computeLineBreaks(renderer, fontId, pageWidth, adjustedWidths, wordContinues);
+
+            const int tryBadness = evaluateBadness(tryBreaks, adjustedWidths, wordContinues, words, wordStyles,
+                                                    renderer, fontId, pageWidth);
+
+            if (tryBadness < bestBadness) {
+              bestBadness = tryBadness;
+              paragraphTracking = tryTracking;
+            }
+            if (bestBadness == 0) break;  // can't improve further
+          }
+        }
+      }
+    }
+
+    // Final definitive pass — restore pre-hyphenation state and apply winning tracking
+    words = savedWords;
+    wordStyles = savedStyles;
+    wordContinues = savedContinues;
+    wordWidths = savedWidths;
+
+    if (paragraphTracking != 0) {
+      for (size_t i = 0; i < wordWidths.size(); i++) {
+        const int expansion = ((charCounts[i] - 1) * paragraphTracking + 8) >> 4;
+        const int adjusted = static_cast<int>(wordWidths[i]) + expansion;
+        wordWidths[i] = static_cast<uint16_t>(std::max(1, adjusted));
+      }
+    }
+
+    lineBreakIndices = hyphenationEnabled
+        ? computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues)
+        : computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues);
   } else {
-    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues);
+    // Not justified — single pass, no tracking optimization
+    lineBreakIndices = hyphenationEnabled
+        ? computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues)
+        : computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues);
   }
+
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, wordWidths, wordContinues, lineBreakIndices, processLine, renderer, fontId);
+    extractLine(i, pageWidth, wordWidths, wordContinues, lineBreakIndices, processLine, renderer, fontId,
+                paragraphTracking);
   }
 
   // Remove consumed words so size() reflects only remaining words
@@ -175,7 +300,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   ans[totalWordCount - 1] = totalWordCount - 1;
 
   for (int i = totalWordCount - 2; i >= 0; --i) {
-    int currlen = 0;
+    int32_t currlenFP = 0;  // accumulate in 12.4 fixed-point
     dp[i] = MAX_COST;
 
     // First line has reduced width due to text-indent
@@ -183,16 +308,17 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
     for (size_t j = i; j < totalWordCount; ++j) {
       // Add space before word j, unless it's the first word on the line or a continuation
-      int gap = 0;
+      int32_t gapFP = 0;
       if (j > static_cast<size_t>(i) && !continuesVec[j]) {
-        gap =
-            renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+        gapFP = renderer.getSpaceAdvanceFP(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
+                                           wordStyles[j - 1]);
       } else if (j > static_cast<size_t>(i) && continuesVec[j]) {
-        // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-        gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+        gapFP = renderer.getKerningFP(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
+                                      wordStyles[j - 1]);
       }
-      currlen += wordWidths[j] + gap;
+      currlenFP += fp4::fromPixel(wordWidths[j]) + gapFP;
 
+      const int currlen = fp4::toPixel(currlenFP);
       if (currlen > effectivePageWidth) {
         break;
       }
@@ -290,7 +416,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
   while (currentIndex < wordWidths.size()) {
     const size_t lineStart = currentIndex;
-    int lineWidth = 0;
+    int32_t lineWidthFP = 0;  // accumulate in 12.4 fixed-point for precision
 
     // First line has reduced width due to text-indent
     const int effectivePageWidth = isFirstLine ? pageWidth - firstLineIndent : pageWidth;
@@ -298,39 +424,38 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
     // Consume as many words as possible for current line, splitting when prefixes fit
     while (currentIndex < wordWidths.size()) {
       const bool isFirstWord = currentIndex == lineStart;
-      int spacing = 0;
+      int32_t spacingFP = 0;
       if (!isFirstWord && !continuesVec[currentIndex]) {
-        spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
-                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+        spacingFP = renderer.getSpaceAdvanceFP(fontId, lastCodepoint(words[currentIndex - 1]),
+                                               firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
       } else if (!isFirstWord && continuesVec[currentIndex]) {
-        // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
-                                      firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+        spacingFP = renderer.getKerningFP(fontId, lastCodepoint(words[currentIndex - 1]),
+                                          firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
       }
-      const int candidateWidth = spacing + wordWidths[currentIndex];
+      const int32_t candidateWidthFP = spacingFP + fp4::fromPixel(wordWidths[currentIndex]);
 
-      // Word fits on current line
-      if (lineWidth + candidateWidth <= effectivePageWidth) {
-        lineWidth += candidateWidth;
+      // Word fits on current line (compare snapped FP total against page width)
+      if (fp4::toPixel(lineWidthFP + candidateWidthFP) <= effectivePageWidth) {
+        lineWidthFP += candidateWidthFP;
         ++currentIndex;
         continue;
       }
 
       // Word would overflow — try to split based on hyphenation points
-      const int availableWidth = effectivePageWidth - lineWidth - spacing;
+      const int availableWidth = effectivePageWidth - fp4::toPixel(lineWidthFP + spacingFP);
       const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
 
       if (availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
         // Prefix now fits; append it to this line and move to next line
-        lineWidth += spacing + wordWidths[currentIndex];
+        lineWidthFP += spacingFP + fp4::fromPixel(wordWidths[currentIndex]);
         ++currentIndex;
         break;
       }
 
       // Could not split: force at least one word per line to avoid infinite loop
       if (currentIndex == lineStart) {
-        lineWidth += candidateWidth;
+        lineWidthFP += candidateWidthFP;
         ++currentIndex;
       }
       break;
@@ -438,7 +563,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
                              const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
-                             const GfxRenderer& renderer, const int fontId) {
+                             const GfxRenderer& renderer, const int fontId, const int8_t paragraphTracking) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
@@ -454,74 +579,138 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           ? blockStyle.textIndent
           : 0;
 
-  // Calculate total word width for this line, count actual word gaps,
-  // and accumulate total natural gap widths (including space kerning adjustments).
-  int lineWordWidthSum = 0;
+  // Calculate total line content width in fixed-point, count actual word gaps.
+  int32_t lineContentFP = 0;
   size_t actualGapCount = 0;
-  int totalNaturalGaps = 0;
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
-    // Count gaps: each word after the first creates a gap, unless it's a continuation
+    lineContentFP += fp4::fromPixel(wordWidths[lastBreakAt + wordIdx]);
     if (wordIdx > 0 && !continuesVec[lastBreakAt + wordIdx]) {
       actualGapCount++;
-      totalNaturalGaps +=
-          renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
-                                   firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
+      lineContentFP +=
+          renderer.getSpaceAdvanceFP(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
+                                     firstCodepoint(words[lastBreakAt + wordIdx]),
+                                     wordStyles[lastBreakAt + wordIdx - 1]);
     } else if (wordIdx > 0 && continuesVec[lastBreakAt + wordIdx]) {
-      // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-      totalNaturalGaps +=
-          renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
-                              firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
+      lineContentFP +=
+          renderer.getKerningFP(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
+                                firstCodepoint(words[lastBreakAt + wordIdx]),
+                                wordStyles[lastBreakAt + wordIdx - 1]);
     }
   }
 
   // Calculate spacing (account for indent reducing effective page width on first line)
   const int effectivePageWidth = pageWidth - firstLineIndent;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
+  const int lineContentPx = fp4::toPixel(lineContentFP);
 
-  // For justified text, compute per-gap extra to distribute remaining space evenly
-  const int spareSpace = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-  const int justifyExtra = (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
-                               ? spareSpace / static_cast<int>(actualGapCount)
-                               : 0;
+  // For justified text, distribute remaining space across word gaps and optionally
+  // into letter-spacing (tracking). Gaps absorb up to 50% extra beyond natural width;
+  // excess goes into per-character tracking for more even appearance.
+  const int spareSpace = effectivePageWidth - lineContentPx;
+  const bool justify = blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1;
 
-  // Calculate initial x position (first line starts at indent for left/justified text;
-  // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
-  auto xpos = static_cast<int16_t>(firstLineIndent);
-  if (blockStyle.alignment == CssTextAlign::Right) {
-    xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-  } else if (blockStyle.alignment == CssTextAlign::Center) {
-    xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
+  int justifyExtraFP = 0;     // per-gap extra in 12.4 FP
+  int justifyRemainderFP = 0; // leftover distributed to first N gaps in 12.4 FP
+  int8_t trackingFP = paragraphTracking;  // start with paragraph-level tracking, add per-line overflow
+
+  if (justify && spareSpace > 0) {
+    const int32_t spareSpaceFP = fp4::fromPixel(spareSpace);
+    const int naturalSpace = renderer.getSpaceWidth(fontId, wordStyles[lastBreakAt]);
+    const int32_t maxGapExtraFP = fp4::fromPixel(naturalSpace) / 2;  // cap at 50% of natural space
+    const int32_t maxGapAbsorptionFP = maxGapExtraFP * static_cast<int32_t>(actualGapCount);
+
+    if (spareSpaceFP <= maxGapAbsorptionFP) {
+      // All spare fits in gaps — no tracking needed
+      justifyExtraFP = spareSpaceFP / static_cast<int32_t>(actualGapCount);
+      justifyRemainderFP = spareSpaceFP - justifyExtraFP * static_cast<int32_t>(actualGapCount);
+    } else {
+      // Gaps absorb max, remainder goes to tracking
+      justifyExtraFP = maxGapExtraFP;
+      const int32_t trackingSpaceFP = spareSpaceFP - maxGapAbsorptionFP;
+
+      // Count total characters for tracking distribution
+      int totalChars = 0;
+      for (size_t wi = 0; wi < lineWordCount; wi++) {
+        const auto* p = reinterpret_cast<const unsigned char*>(words[lastBreakAt + wi].c_str());
+        while (*p) { utf8NextCodepoint(&p); totalChars++; }
+      }
+      // drawText applies tracking (Ni - 1) times per word (between chars, not after last).
+      // Total inter-character slots = totalChars - lineWordCount (one less per word).
+      const int trackSlots = totalChars - static_cast<int>(lineWordCount);
+      if (trackSlots > 0) {
+        int32_t trackPerCharFP = trackingSpaceFP / trackSlots;
+        // Cap total tracking (paragraph + per-line) at 0.5px per character
+        constexpr int32_t MAX_TRACKING_FP = 8;  // 0.5px in FP4
+        int32_t totalTrackingFP = static_cast<int32_t>(paragraphTracking) + trackPerCharFP;
+        if (totalTrackingFP > MAX_TRACKING_FP) totalTrackingFP = MAX_TRACKING_FP;
+        trackingFP = static_cast<int8_t>(totalTrackingFP);
+        // Any space not absorbed by per-line tracking goes back to gaps
+        const int32_t perLineAbsorbed = (totalTrackingFP - paragraphTracking) * trackSlots;
+        const int32_t unabsorbed = trackingSpaceFP - perLineAbsorbed;
+        justifyExtraFP += unabsorbed / static_cast<int32_t>(actualGapCount);
+        justifyRemainderFP = unabsorbed - (unabsorbed / static_cast<int32_t>(actualGapCount)) * static_cast<int32_t>(actualGapCount);
+      }
+    }
   }
 
-  // Pre-calculate X positions for words
-  // Continuation words attach to the previous word with no space before them
+  // Calculate initial x position using FP accumulation
+  int32_t xposFP = fp4::fromPixel(firstLineIndent);
+  if (blockStyle.alignment == CssTextAlign::Right) {
+    xposFP = fp4::fromPixel(effectivePageWidth - lineContentPx);
+  } else if (blockStyle.alignment == CssTextAlign::Center) {
+    xposFP = fp4::fromPixel((effectivePageWidth - lineContentPx) / 2);
+  }
+
+  // Pre-calculate X positions for words using FP accumulation.
+  // When tracking is active, each word renders wider — account for expansion.
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
+  int32_t gapRemainderBudget = justifyRemainderFP;
+
+  // Helper: count UTF-8 codepoints in a word
+  auto countChars = [](const std::string& w) -> int {
+    int n = 0;
+    const auto* p = reinterpret_cast<const unsigned char*>(w.c_str());
+    while (*p) { utf8NextCodepoint(&p); n++; }
+    return n;
+  };
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    lineXPos.push_back(xpos);
+    lineXPos.push_back(static_cast<int16_t>(fp4::toPixel(xposFP)));
+
+    // Position expansion: only the per-line tracking delta beyond paragraph tracking,
+    // since paragraph tracking is already baked into the expanded wordWidths.
+    int32_t trackExpansionFP = 0;
+    const int8_t deltaTrackingFP = trackingFP - paragraphTracking;
+    if (deltaTrackingFP != 0) {
+      const int charCount = countChars(words[lastBreakAt + wordIdx]);
+      if (charCount > 1) {
+        trackExpansionFP = static_cast<int32_t>(deltaTrackingFP) * (charCount - 1);
+      }
+    }
 
     const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
     if (nextIsContinuation) {
-      int advance = wordWidths[lastBreakAt + wordIdx];
-      // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-      advance +=
-          renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                              firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
-      xpos += advance;
-    } else {
-      int gap = 0;
-      if (wordIdx + 1 < lineWordCount) {
-        gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+      xposFP += fp4::fromPixel(wordWidths[lastBreakAt + wordIdx]) + trackExpansionFP;
+      xposFP += renderer.getKerningFP(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
                                        firstCodepoint(words[lastBreakAt + wordIdx + 1]),
                                        wordStyles[lastBreakAt + wordIdx]);
+    } else {
+      xposFP += fp4::fromPixel(wordWidths[lastBreakAt + wordIdx]) + trackExpansionFP;
+      if (wordIdx + 1 < lineWordCount) {
+        xposFP += renderer.getSpaceAdvanceFP(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                              firstCodepoint(words[lastBreakAt + wordIdx + 1]),
+                                              wordStyles[lastBreakAt + wordIdx]);
       }
-      if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
-        gap += justifyExtra;
+      if (justify) {
+        xposFP += justifyExtraFP;
+        if (gapRemainderBudget > 0) {
+          // Distribute remainder one FP unit at a time
+          xposFP += 1;
+          gapRemainderBudget -= 1;
+        }
       }
-      xpos += wordWidths[lastBreakAt + wordIdx] + gap;
     }
   }
 
@@ -536,6 +725,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(
-      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle));
+  // Build per-word tracking vector (only when tracking is active)
+  std::vector<int8_t> lineTracking;
+  if (trackingFP != 0) {
+    lineTracking.resize(lineWordCount, trackingFP);
+  }
+
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
+                                          blockStyle, std::move(lineTracking)));
 }
