@@ -197,6 +197,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int width = keyWidth * 3 + keySpacing * 2;
   const int requiredSpace = pageWidth - width * 3;
 
+  for(int i = 0; i < 3; i++){
+    int x = (pageWidth - requiredSpace) / 3 * (i + 1);
+    renderer.drawRect(x - 1, keyboardStartY, width, keyHeight * 3 + 1);
+  }
+
+
   if (selectedTopLevel == -1) {
     for(int i = 0; i < 3; i++) {
       int x = (pageWidth - requiredSpace) / 3 * (i + 1);
@@ -221,11 +227,10 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   } else {
     for(int i = 0; i < 3; i++){
-      int x = (pageWidth - requiredSpace) / 3 * (i + 1);
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1) + keyWidth + keySpacing;
       buffer[0] = keyboard[selectedTopLevel + keyPage * 3].row[selectedMidLevel][i];
       buffer[1] = '\0';
       GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY, keyWidth, keyHeight}, buffer, false);
-      x += keyWidth + keySpacing;
     }
   }
 
