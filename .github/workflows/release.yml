@@ -4,6 +4,9 @@ on:
     tags:
       - '*'
 
+permissions:
+  contents: write
+
 jobs:
   build-release:
     runs-on: ubuntu-latest
@@ -29,6 +32,43 @@ jobs:
         env:
           CROSSPOINT_RELEASE_VERSION: ${{ github.ref_name }}
         run: pio run -e gh_release
+
+      - name: Create Draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          title="CrossPoint ${tag}"
+          notes_file="$(mktemp)"
+
+          cat > "$notes_file" <<EOF
+          Firmware build for ${tag}.
+
+          Primary install artifact:
+          - firmware.bin
+
+          Additional build artifacts:
+          - bootloader.bin
+          - partitions.bin
+          - firmware.elf
+          - firmware.map
+          EOF
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$title" --notes-file "$notes_file"
+          else
+            gh release create "$tag" --draft --verify-tag --title "$title" --notes-file "$notes_file"
+          fi
+
+          gh release upload "$tag" \
+            ".pio/build/gh_release/firmware.bin#firmware.bin" \
+            ".pio/build/gh_release/bootloader.bin#bootloader.bin" \
+            ".pio/build/gh_release/partitions.bin#partitions.bin" \
+            ".pio/build/gh_release/firmware.elf#firmware.elf" \
+            ".pio/build/gh_release/firmware.map#firmware.map" \
+            --clobber
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
