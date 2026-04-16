@@ -30,6 +30,9 @@ class EpubReaderActivity final : public Activity {
   uint8_t fontPrewarmSuppressPages = 0;
   int lastSavedSpineIndex = -1;
   int lastSavedPage = -1;
+  int pageLoadRetrySpineIndex = -1;
+  int pageLoadRetryPage = -1;
+  bool pageLoadRetryUsed = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -52,6 +55,8 @@ class EpubReaderActivity final : public Activity {
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
+  bool consumePageLoadRetry(int spineIndex, int pageNumber);
+  void resetPageLoadRetry();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

@@ -490,7 +490,23 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   requestUpdate();
 }
 
-// TODO: Failure handling
+bool EpubReaderActivity::consumePageLoadRetry(int spineIndex, int pageNumber) {
+  if (pageLoadRetryUsed && pageLoadRetrySpineIndex == spineIndex && pageLoadRetryPage == pageNumber) {
+    return false;
+  }
+
+  pageLoadRetrySpineIndex = spineIndex;
+  pageLoadRetryPage = pageNumber;
+  pageLoadRetryUsed = true;
+  return true;
+}
+
+void EpubReaderActivity::resetPageLoadRetry() {
+  pageLoadRetrySpineIndex = -1;
+  pageLoadRetryPage = -1;
+  pageLoadRetryUsed = false;
+}
+
 void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
@@ -623,14 +639,27 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
+      const int failedSpineIndex = currentSpineIndex;
+      const int failedPage = section->currentPage;
+      if (!consumePageLoadRetry(failedSpineIndex, failedPage)) {
+        LOG_ERR("ERS", "Failed to load page after cache rebuild: spine=%d page=%d", failedSpineIndex, failedPage);
+        renderer.clearScreen();
+        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_ERROR_GENERAL_FAILURE), true, EpdFontFamily::BOLD);
+        renderStatusBar();
+        renderer.displayBuffer();
+        automaticPageTurnActive = false;
+        return;
+      }
+
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+      nextPageNumber = failedPage;
       section->clearCache();
       section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
+      requestUpdate();  // Try once more after clearing cache.
       automaticPageTurnActive = false;
       return;
     }
+    resetPageLoadRetry();
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
