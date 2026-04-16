@@ -50,6 +50,10 @@ intervals = [
     # Croatian digraphs (DŽ/Lj/Nj), Pinyin caron variants,
     # European diacritical variants, Romanian (Ș/ș/Ț/ț)
     (0x01C4, 0x021F),
+    ### Latin Extended Additional ###
+    # IAST/Sanskrit transliteration characters (e.g. Ṛ ṛ Ṣ ṣ Ṇ ṇ Ṭ ṭ Ḍ ḍ Ṃ ṃ Ḥ ḥ)
+    # Also covers Welsh, medievalist, and other scholarly transliteration needs
+    (0x1E00, 0x1E9F),
     ### Vietnamese Extended ###
     # All precomposed Vietnamese characters with tone marks
     # Ả Ấ Ầ Ẩ Ẫ Ậ Ắ Ằ Ẳ Ẵ Ặ Ẹ Ẻ Ẽ Ế Ề Ể Ễ Ệ Ỉ Ị Ọ Ỏ Ố Ồ Ổ Ỗ Ộ Ớ Ờ Ở Ỡ Ợ Ụ Ủ Ứ Ừ Ử Ữ Ự Ỳ Ỵ Ỷ Ỹ
