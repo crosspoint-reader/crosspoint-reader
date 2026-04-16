@@ -187,7 +187,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
-  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(SETTINGS.opdsServer.url, path);
+  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(server.url, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
   OpdsParser parser;
   {
