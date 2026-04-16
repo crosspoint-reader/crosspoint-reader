@@ -1,5 +1,6 @@
 #include "UITheme.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 
@@ -10,7 +11,6 @@
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
-#include "util/StringUtils.h"
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
@@ -49,7 +49,7 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
 }
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
-                                     bool hasSubtitle) {
+                                     bool hasSubtitle, int extraReservedHeight) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   int reservedHeight = metrics.topPadding;
   if (hasHeader) {
@@ -61,7 +61,7 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   if (hasButtonHints) {
     reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
   }
-  const int availableHeight = renderer.getScreenHeight() - reservedHeight;
+  const int availableHeight = renderer.getScreenHeight() - reservedHeight - extraReservedHeight;
   int rowHeight = hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
   return availableHeight / rowHeight;
 }
@@ -74,18 +74,17 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
   return coverBmpPath;
 }
 
-UIIcon UITheme::getFileIcon(std::string filename) {
+UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (filename.back() == '/') {
     return Folder;
   }
-  if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
-      StringUtils::checkFileExtension(filename, ".xtc")) {
+  if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename)) {
     return Book;
   }
-  if (StringUtils::checkFileExtension(filename, ".txt") || StringUtils::checkFileExtension(filename, ".md")) {
+  if (FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename)) {
     return Text;
   }
-  if (StringUtils::checkFileExtension(filename, ".bmp")) {
+  if (FsHelpers::hasBmpExtension(filename)) {
     return Image;
   }
   return File;

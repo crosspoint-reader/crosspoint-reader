@@ -39,6 +39,14 @@ usability over "swiss-army-knife" functionality.
 * **Complex Annotation:** No typed out notes. These features are better suited for devices with better input
   capabilities and more powerful chips.
 
+### In-scope — Technically Unsupported
+
+*These features align with CrossPoint's goals but are impractical on the current hardware or produce poor UX.*
+
+* **Clock Display:** The ESP32-C3's RTC drifts significantly during deep sleep; making the clock untrustworthy after any sleep cycle. NTP sync could help, but CrossPoint doesn't connect to the internet on every boot.
+
+* **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text — resulting in constant panning and zooming that makes for a poor reading experience on e-ink.
+
 ## 3. Idea Evaluation
 
 While I appreciate the desire to add new and exciting features to CrossPoint Reader, CrossPoint Reader is designed to be

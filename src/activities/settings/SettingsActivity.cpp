@@ -89,8 +89,13 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    SETTINGS.saveToFile();
-    onGoHome();
+    if (selectedSettingIndex > 0) {
+      selectedSettingIndex = 0;
+      requestUpdate();
+    } else {
+      SETTINGS.saveToFile();
+      onGoHome();
+    }
     return;
   }
 
@@ -243,7 +248,10 @@ void SettingsActivity::render(RenderLock&&) {
       true);
 
   // Draw help text
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto confirmLabel = (selectedSettingIndex == 0)
+                                ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
+                                : tr(STR_TOGGLE);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

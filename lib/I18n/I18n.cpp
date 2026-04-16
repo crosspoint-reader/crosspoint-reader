@@ -71,7 +71,6 @@ void I18n::loadSettings() {
   serialization::readPod(file, version);
   if (version != SETTINGS_VERSION) {
     Serial.printf("[I18N] Settings version mismatch\n");
-    file.close();
     return;
   }
 
@@ -81,8 +80,6 @@ void I18n::loadSettings() {
     _language = static_cast<Language>(lang);
     Serial.printf("[I18N] Loaded language: %d\n", static_cast<int>(_language));
   }
-
-  file.close();
 }
 
 // Generate character set for a specific language

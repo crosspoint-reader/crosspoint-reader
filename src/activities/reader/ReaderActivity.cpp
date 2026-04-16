@@ -1,5 +1,6 @@
 #include "ReaderActivity.h"
 
+#include <FsHelpers.h>
 #include <HalStorage.h>
 
 #include "CrossPointSettings.h"
@@ -11,26 +12,15 @@
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
-#include "util/StringUtils.h"
 
-std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
-  const auto lastSlash = filePath.find_last_of('/');
-  if (lastSlash == std::string::npos || lastSlash == 0) {
-    return "/";
-  }
-  return filePath.substr(0, lastSlash);
-}
-
-bool ReaderActivity::isXtcFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtch");
-}
+bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  return StringUtils::checkFileExtension(path, ".txt") ||
-         StringUtils::checkFileExtension(path, ".md");  // Treat .md as txt files (until we have a markdown reader)
+  return FsHelpers::hasTxtExtension(path) ||
+         FsHelpers::hasMarkdownExtension(path);  // Treat .md as txt files (until we have a markdown reader)
 }
 
-bool ReaderActivity::isBmpFile(const std::string& path) { return StringUtils::checkFileExtension(path, ".bmp"); }
+bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
@@ -79,8 +69,8 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
 
 void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
-  auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
-  activityManager.goToMyLibrary(std::move(initialPath));
+  auto initialPath = fromBookPath.empty() ? "/" : FsHelpers::extractFolderPath(fromBookPath);
+  activityManager.goToFileBrowser(std::move(initialPath));
 }
 
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {

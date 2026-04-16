@@ -1,6 +1,7 @@
-#include "MyLibraryActivity.h"
+#include "FileBrowserActivity.h"
 
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -8,10 +9,10 @@
 #include <algorithm>
 
 #include "../util/ConfirmationActivity.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -69,12 +70,11 @@ void sortFileList(std::vector<std::string>& strs) {
   });
 }
 
-void MyLibraryActivity::loadFiles() {
+void FileBrowserActivity::loadFiles() {
   files.clear();
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
-    if (root) root.close();
     return;
   }
 
@@ -83,60 +83,83 @@ void MyLibraryActivity::loadFiles() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if (name[0] == '.' || strcmp(name, "System Volume Information") == 0) {
-      file.close();
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
       continue;
     }
 
     if (file.isDirectory()) {
       files.emplace_back(std::string(name) + "/");
     } else {
-      auto filename = std::string(name);
-      if (StringUtils::checkFileExtension(filename, ".epub") || StringUtils::checkFileExtension(filename, ".xtch") ||
-          StringUtils::checkFileExtension(filename, ".xtc") || StringUtils::checkFileExtension(filename, ".txt") ||
-          StringUtils::checkFileExtension(filename, ".md") || StringUtils::checkFileExtension(filename, ".bmp")) {
+      std::string_view filename{name};
+      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
+          FsHelpers::hasBmpExtension(filename)) {
         files.emplace_back(filename);
       }
     }
-    file.close();
   }
-  root.close();
   sortFileList(files);
 }
 
-void MyLibraryActivity::onEnter() {
+void FileBrowserActivity::onEnter() {
   Activity::onEnter();
 
-  loadFiles();
   selectorIndex = 0;
+
+  auto root = Storage.open(basepath.c_str());
+  if (!root) {
+    basepath = "/";
+    loadFiles();
+  } else if (!root.isDirectory()) {
+    lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
+
+    const std::string oldPath = basepath;
+    basepath = FsHelpers::extractFolderPath(basepath);
+    loadFiles();
+
+    const auto pos = oldPath.find_last_of('/');
+    const std::string fileName = oldPath.substr(pos + 1);
+    selectorIndex = findEntry(fileName);
+  } else {
+    loadFiles();
+  }
 
   requestUpdate();
 }
 
-void MyLibraryActivity::onExit() {
+void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
 }
 
-void MyLibraryActivity::clearFileMetadata(const std::string& fullPath) {
+void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
   // Only clear cache for .epub files
-  if (StringUtils::checkFileExtension(fullPath, ".epub")) {
+  if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
-    LOG_DBG("MyLibrary", "Cleared metadata cache for: %s", fullPath.c_str());
+    LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }
 }
 
-void MyLibraryActivity::loop() {
+void FileBrowserActivity::loop() {
   // Long press BACK (1s+) goes to root folder
+  // but Long press BACK (1s+) from ReaderActivity sends us here with the MappedInput already set.
+  // So ignore it the first time.
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_HOME_MS &&
-      basepath != "/") {
+      basepath != "/" && !lockLongPressBack) {
     basepath = "/";
     loadFiles();
     selectorIndex = 0;
+    requestUpdate();
     return;
   }
 
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
+  if (lockLongPressBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    lockLongPressBack = false;
+    return;
+  }
+
+  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
+  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) return;
@@ -152,10 +175,10 @@ void MyLibraryActivity::loop() {
 
       auto handler = [this, fullPath](const ActivityResult& res) {
         if (!res.isCancelled) {
-          LOG_DBG("MyLibrary", "Attempting to delete: %s", fullPath.c_str());
+          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           clearFileMetadata(fullPath);
           if (Storage.remove(fullPath.c_str())) {
-            LOG_DBG("MyLibrary", "Deleted successfully");
+            LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
             if (files.empty()) {
               selectorIndex = 0;
@@ -166,10 +189,10 @@ void MyLibraryActivity::loop() {
 
             requestUpdate(true);
           } else {
-            LOG_ERR("MyLibrary", "Failed to delete file: %s", fullPath.c_str());
+            LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
           }
         } else {
-          LOG_DBG("MyLibrary", "Delete cancelled by user");
+          LOG_DBG("FileBrowser", "Delete cancelled by user");
         }
       };
 
@@ -238,13 +261,25 @@ void MyLibraryActivity::loop() {
 
 std::string getFileName(std::string filename) {
   if (filename.back() == '/') {
-    return filename.substr(0, filename.length() - 1);
+    filename.pop_back();
+    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
+      return "[" + filename + "]";
+    }
+    return filename;
   }
   const auto pos = filename.rfind('.');
   return filename.substr(0, pos);
 }
 
-void MyLibraryActivity::render(RenderLock&&) {
+std::string getFileExtension(std::string filename) {
+  if (filename.back() == '/') {
+    return "";
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(pos);
+}
+
+void FileBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -254,15 +289,46 @@ void MyLibraryActivity::render(RenderLock&&) {
   std::string folderName = (basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
+  const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int pathReserved = pathLineHeight + metrics.verticalSpacing;
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
         [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); });
+        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        [this](int index) { return getFileExtension(files[index]); }, false);
+  }
+
+  // Full path display
+  {
+    const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
+    const int separatorY = pathY - metrics.verticalSpacing / 2;
+    renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
+    const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;
+    // Left-truncate so the deepest directory is always visible
+    const char* pathStr = basepath.c_str();
+    const char* pathDisplay = pathStr;
+    char leftTruncBuf[256];
+    if (renderer.getTextWidth(SMALL_FONT_ID, pathStr) > pathMaxWidth) {
+      const char ellipsis[] = "\xe2\x80\xa6";  // UTF-8 ellipsis (…)
+      const int ellipsisWidth = renderer.getTextWidth(SMALL_FONT_ID, ellipsis);
+      const int available = pathMaxWidth - ellipsisWidth;
+      // Walk forward from the start until the suffix fits, skipping UTF-8 continuation bytes
+      const char* p = pathStr;
+      while (*p) {
+        if (renderer.getTextWidth(SMALL_FONT_ID, p) <= available) break;
+        ++p;
+        while (*p && (static_cast<unsigned char>(*p) & 0xC0) == 0x80) ++p;
+      }
+      snprintf(leftTruncBuf, sizeof(leftTruncBuf), "%s%s", ellipsis, p);
+      pathDisplay = leftTruncBuf;
+    }
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, pathY, pathDisplay);
   }
 
   // Help text
@@ -274,7 +340,7 @@ void MyLibraryActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-size_t MyLibraryActivity::findEntry(const std::string& name) const {
+size_t FileBrowserActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return 0;

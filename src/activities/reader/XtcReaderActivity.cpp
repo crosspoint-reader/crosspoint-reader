@@ -70,7 +70,7 @@ void XtcReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    activityManager.goToMyLibrary(xtc ? xtc->getPath() : "");
+    activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
     return;
   }
 
@@ -98,10 +98,14 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // Handle end of book
+  // At end of the book, forward button goes home and back button returns to last page
   if (currentPage >= xtc->getPageCount()) {
-    currentPage = xtc->getPageCount() - 1;
-    requestUpdate();
+    if (nextTriggered) {
+      onGoHome();
+    } else {
+      currentPage = xtc->getPageCount() - 1;
+      requestUpdate();
+    }
     return;
   }
 

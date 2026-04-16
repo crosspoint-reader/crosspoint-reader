@@ -1,6 +1,7 @@
 #include "SleepActivity.h"
 
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -9,14 +10,22 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
-#include "util/StringUtils.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+
+  // Show popup with reader orientation only when going to sleep from reader
+  if (APP_STATE.lastSleepFromReader) {
+    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  } else {
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  }
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
@@ -24,74 +33,79 @@ void SleepActivity::onEnter() {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
-    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
+      if (APP_STATE.lastSleepFromReader) {
+        return renderCoverSleepScreen();
+      } else {
+        return renderCustomSleepScreen();
+      }
     default:
       return renderDefaultSleepScreen();
   }
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // Check if we have a /sleep directory
-  auto dir = Storage.open("/sleep");
+  // Check if we have a /.sleep (preferred) or /sleep directory
+  const char* sleepDir = nullptr;
+  auto dir = Storage.open("/.sleep");
   if (dir && dir.isDirectory()) {
+    sleepDir = "/.sleep";
+  } else {
+    dir = Storage.open("/sleep");
+    if (dir && dir.isDirectory()) {
+      sleepDir = "/sleep";
+    }
+  }
+
+  if (sleepDir) {
     std::vector<std::string> files;
     char name[500];
     // collect all valid BMP files
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
       if (file.isDirectory()) {
-        file.close();
         continue;
       }
       file.getName(name, sizeof(name));
       auto filename = std::string(name);
       if (filename[0] == '.') {
-        file.close();
         continue;
       }
 
-      if (filename.substr(filename.length() - 4) != ".bmp") {
+      if (!FsHelpers::hasBmpExtension(filename)) {
         LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name);
-        file.close();
         continue;
       }
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
         LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-        file.close();
         continue;
       }
       files.emplace_back(filename);
-      file.close();
     }
     const auto numFiles = files.size();
     if (numFiles > 0) {
       // Generate a random number between 1 and numFiles
       auto randomFileIndex = random(numFiles);
       // If we picked the same image as last time, reroll
-      while (numFiles > 1 && randomFileIndex == APP_STATE.lastSleepImage) {
+      while (numFiles > 1 && APP_STATE.lastSleepImage != UINT8_MAX && randomFileIndex == APP_STATE.lastSleepImage) {
         randomFileIndex = random(numFiles);
       }
       APP_STATE.lastSleepImage = randomFileIndex;
       APP_STATE.saveToFile();
-      const auto filename = "/sleep/" + files[randomFileIndex];
+      const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
       FsFile file;
       if (Storage.openFileForRead("SLP", filename, file)) {
-        LOG_DBG("SLP", "Randomly loading: /sleep/%s", files[randomFileIndex].c_str());
+        LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
         delay(100);
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           renderBitmapSleepScreen(bitmap);
-          file.close();
-          dir.close();
           return;
         }
-        file.close();
       }
     }
   }
-  if (dir) dir.close();
-
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   FsFile file;
@@ -100,10 +114,8 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
-      file.close();
       return;
     }
-    file.close();
   }
 
   renderDefaultSleepScreen();
@@ -217,8 +229,7 @@ void SleepActivity::renderCoverSleepScreen() const {
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
 
   // Check if the current book is XTC, TXT, or EPUB
-  if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtc") ||
-      StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".xtch")) {
+  if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
     // Handle XTC file
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
@@ -232,7 +243,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
-  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".txt")) {
+  } else if (FsHelpers::hasTxtExtension(APP_STATE.openEpubPath)) {
     // Handle TXT file - looks for cover image in the same folder
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastTxt.load()) {
@@ -246,7 +257,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastTxt.getCoverBmpPath();
-  } else if (StringUtils::checkFileExtension(APP_STATE.openEpubPath, ".epub")) {
+  } else if (FsHelpers::hasEpubExtension(APP_STATE.openEpubPath)) {
     // Handle EPUB file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
     // Skip loading css since we only need metadata here
@@ -271,10 +282,8 @@ void SleepActivity::renderCoverSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
       renderBitmapSleepScreen(bitmap);
-      file.close();
       return;
     }
-    file.close();
   }
 
   return (this->*renderNoCoverSleepScreen)();
