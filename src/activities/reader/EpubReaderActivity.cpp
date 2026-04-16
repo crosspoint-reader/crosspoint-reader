@@ -178,8 +178,7 @@ void EpubReaderActivity::onEnter() {
     return;
   }
 
-  // ルビ描画用フォントID: まずメインフォントと同じIDを使用（サイズは同一だがレンダリング確認のため）
-  TextBlock::rubyFontId = SETTINGS.getReaderFontId(epub->isPageProgressionRtl());
+  // ルビフォントIDはrender()内でフォントロード後に設定
 
   // Screen orientation (both renderer and input) is already set by
   // enterNewActivity() → OrientationHelper::applyOrientation() before onEnter().
@@ -800,6 +799,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // goToReader() calls ensureSdFontLoaded(false) before verticalMode is known,
     // so we reload here with the correct direction after resolution.
     ensureSdFontLoaded(verticalMode);
+
+    // ルビ用フォント: フォントロード後に最小サイズ(10pt)を取得
+    int rubyId = SETTINGS.getTableFontId(verticalMode);
+    if (rubyId == 0) rubyId = SETTINGS.getReaderFontId(verticalMode);  // フォールバック
+    TextBlock::rubyFontId = rubyId;
 
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
