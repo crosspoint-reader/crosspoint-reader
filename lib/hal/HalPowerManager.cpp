@@ -36,9 +36,10 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     enabled = false;
   }
 
-  // Note: We don't use mutex here to avoid too much overhead,
-  // it's not very important if we read a slightly stale value for currentLockMode
-  const LockMode mode = currentLockMode;
+  // Relaxed atomic read: a slightly stale value is acceptable (the lock holder
+  // that just won the race will re-call setPowerSaving anyway), but we want
+  // defined semantics rather than relying on compiler behavior for a plain int.
+  const LockMode mode = currentLockMode.load(std::memory_order_relaxed);
 
   if (mode == None && enabled && !isLowPower) {
     LOG_DBG("PWR", "Going to low-power mode");
@@ -101,45 +102,50 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, bool keepClockAlive) const {
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
+  // Guard against an X3 board mistakenly taking the ADC path: BAT_GPIO0 is
+  // reused as X3_I2C_SCL on X3, so reading it as ADC would collide with the
+  // fuel-gauge bus. _batteryUseI2C must match the detected device type.
+  assert(_batteryUseI2C == gpio.deviceIsX3());
   if (_batteryUseI2C) {
     const unsigned long now = millis();
     if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {
       return _batteryCachedPercent;
     }
 
-    // Read SOC directly from I2C fuel gauge (16-bit LE register).
+    // Read SOC from the I2C fuel gauge via the shared helper so the transaction
+    // shape stays consistent with other BQ27220/DS3231/QMI8658 reads.
     // On I2C error, keep last known value to avoid UI jitter/slowdowns.
-    Wire.beginTransmission(I2C_ADDR_BQ27220);
-    Wire.write(BQ27220_SOC_REG);
-    if (Wire.endTransmission(false) != 0) {
-      _batteryLastPollMs = now;
-      return _batteryCachedPercent;
+    uint16_t soc = 0;
+    if (X3GPIO::readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_SOC_REG, &soc)) {
+      _batteryCachedPercent = soc > 100 ? 100 : soc;
     }
-    Wire.requestFrom(I2C_ADDR_BQ27220, (uint8_t)2);
-    if (Wire.available() < 2) {
-      _batteryLastPollMs = now;
-      return _batteryCachedPercent;
-    }
-    const uint8_t lo = Wire.read();
-    const uint8_t hi = Wire.read();
-    const uint16_t soc = (hi << 8) | lo;
-    _batteryCachedPercent = soc > 100 ? 100 : soc;
     _batteryLastPollMs = now;
     return _batteryCachedPercent;
   }
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  _batteryCachedPercent = battery.readPercentage();
-  return _batteryCachedPercent;
+
+  // Smooth the battery % with a 1/10-weight IIR. The cache stores the value
+  // scaled ×10 so integer math keeps enough precision. Seed explicitly on the
+  // first real sample; using 0 as a sentinel caused a second seed whenever a
+  // later reading momentarily returned 0, producing visible jumps.
+  const uint16_t sample = battery.readPercentage();
+  if (!_batterySeeded) {
+    _batteryCachedPercent = 10 * sample;
+    _batterySeeded = true;
+  } else {
+    _batteryCachedPercent = (_batteryCachedPercent * 9 + sample * 10) / 10;
+  }
+  return _batteryCachedPercent / 10;
 }
 
 HalPowerManager::Lock::Lock() {
   xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
   // Current limitation: only one lock at a time
-  if (powerManager.currentLockMode != None) {
+  if (powerManager.currentLockMode.load(std::memory_order_relaxed) != None) {
     LOG_ERR("PWR", "Lock already held, ignore");
     valid = false;
   } else {
-    powerManager.currentLockMode = NormalSpeed;
+    powerManager.currentLockMode.store(NormalSpeed, std::memory_order_relaxed);
     valid = true;
   }
   xSemaphoreGive(powerManager.modeMutex);
@@ -152,7 +158,7 @@ HalPowerManager::Lock::Lock() {
 HalPowerManager::Lock::~Lock() {
   xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
   if (valid) {
-    powerManager.currentLockMode = None;
+    powerManager.currentLockMode.store(None, std::memory_order_relaxed);
   }
   xSemaphoreGive(powerManager.modeMutex);
 }

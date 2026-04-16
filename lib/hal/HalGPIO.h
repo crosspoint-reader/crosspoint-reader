@@ -38,6 +38,11 @@
 #define QMI8658_WHO_AM_I_REG 0x00    // WHO_AM_I command code
 #define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
 
+namespace X3GPIO {
+// Read a 16-bit little-endian I2C register. Returns false on bus error.
+bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue);
+}  // namespace X3GPIO
+
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;

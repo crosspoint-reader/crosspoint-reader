@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include <freertos/semphr.h>
 
+#include <atomic>
 #include <cassert>
 
 #include "HalGPIO.h"
@@ -20,12 +21,13 @@ class HalPowerManager {
 
   // I2C fuel gauge configuration for X3 battery monitoring
   bool _batteryUseI2C = false;                   // True if using I2C fuel gauge (X3), false for ADC (X4)
-  mutable int _batteryCachedPercent = 0;         // Last read battery percentage (0-100)
+  mutable int _batteryCachedPercent = 0;         // Last read battery percentage — X3: 0-100, X4: 0-1000 (scaled)
+  mutable bool _batterySeeded = false;           // True once the smoothing filter has a first real sample (X4)
   mutable unsigned long _batteryLastPollMs = 0;  // Timestamp of last battery read in milliseconds
 
   enum LockMode { None, NormalSpeed };
-  LockMode currentLockMode = None;
-  SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  std::atomic<LockMode> currentLockMode{None};
+  SemaphoreHandle_t modeMutex = nullptr;  // Protect Lock acquire/release ordering
 
  public:
   static constexpr int LOW_POWER_FREQ = 10;                    // MHz
