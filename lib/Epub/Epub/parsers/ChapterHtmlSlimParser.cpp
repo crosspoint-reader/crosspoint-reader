@@ -1020,11 +1020,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
             self->currentTextBlock->getBlockStyle().addBottom(self->blockStyleStack.back()));
       }
       self->blockStyleStack.pop_back();
-      // Restore parent's accumulated style on empty blocks to prevent the closed
-      // element's styles from bleeding into the next sibling.
-      if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
-        self->currentTextBlock->setBlockStyle(self->blockStyleStack.back().withoutBottom());
-      }
     }
   }
 }
