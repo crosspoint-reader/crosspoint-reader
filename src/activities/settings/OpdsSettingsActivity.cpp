@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <cstring>
 
@@ -26,6 +27,7 @@ void OpdsSettingsActivity::onEnter() {
 
   selectedIndex = 0;
   isNewServer = (serverIndex < 0);
+  showSaveError = false;
 
   if (!isNewServer) {
     // Edit flow: copy the selected server into local editable state.
@@ -68,18 +70,34 @@ void OpdsSettingsActivity::loop() {
   });
 }
 
-void OpdsSettingsActivity::saveServer() {
+bool OpdsSettingsActivity::saveServer() {
+  bool success = false;
+
   if (isNewServer) {
     // Create flow: first save inserts a new server record into the multi-server store.
-    OPDS_STORE.addServer(editServer);
-    // After the first field is saved, promote to an existing server so
-    // subsequent field edits update in-place rather than creating duplicates.
-    isNewServer = false;
-    serverIndex = static_cast<int>(OPDS_STORE.getCount()) - 1;
+    success = OPDS_STORE.addServer(editServer);
+    if (success) {
+      // After the first successful save, promote to an existing server so
+      // subsequent field edits update in-place rather than creating duplicates.
+      isNewServer = false;
+      serverIndex = static_cast<int>(OPDS_STORE.getCount()) - 1;
+    } else {
+      LOG_ERR("OPS", "Failed to add OPDS server");
+    }
   } else {
     // Edit flow: update the same server entry in-place.
-    OPDS_STORE.updateServer(static_cast<size_t>(serverIndex), editServer);
+    success = OPDS_STORE.updateServer(static_cast<size_t>(serverIndex), editServer);
+    if (!success) {
+      LOG_ERR("OPS", "Failed to update OPDS server at index %d", serverIndex);
+    }
   }
+
+  showSaveError = !success;
+  if (showSaveError) {
+    requestUpdate();
+  }
+
+  return success;
 }
 
 void OpdsSettingsActivity::handleSelection() {
@@ -92,6 +110,7 @@ void OpdsSettingsActivity::handleSelection() {
         const auto& kb = std::get<KeyboardResult>(result.data);
         editServer.name = kb.text;
         saveServer();
+        requestUpdate();
       }
     };
     startActivityForResult(
@@ -104,6 +123,7 @@ void OpdsSettingsActivity::handleSelection() {
         const auto& kb = std::get<KeyboardResult>(result.data);
         editServer.url = kb.text;
         saveServer();
+        requestUpdate();
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL),
@@ -116,6 +136,7 @@ void OpdsSettingsActivity::handleSelection() {
         const auto& kb = std::get<KeyboardResult>(result.data);
         editServer.username = kb.text;
         saveServer();
+        requestUpdate();
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
@@ -128,6 +149,7 @@ void OpdsSettingsActivity::handleSelection() {
         const auto& kb = std::get<KeyboardResult>(result.data);
         editServer.password = kb.text;
         saveServer();
+        requestUpdate();
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
@@ -135,7 +157,12 @@ void OpdsSettingsActivity::handleSelection() {
                            handler);
   } else if (selectedIndex == 4 && !isNewServer) {
     // Delete flow is only available for existing servers.
-    OPDS_STORE.removeServer(static_cast<size_t>(serverIndex));
+    if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
+      LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
+      showSaveError = true;
+      requestUpdate();
+      return;
+    }
     finish();
   }
 }
@@ -185,6 +212,10 @@ void OpdsSettingsActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (showSaveError) {
+    GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
+  }
 
   renderer.displayBuffer();
 }

@@ -29,8 +29,9 @@ class OpdsSettingsActivity final : public Activity {
   int serverIndex;
   OpdsServer editServer;
   bool isNewServer = false;
+  bool showSaveError = false;
 
   int getMenuItemCount() const;
   void handleSelection();
-  void saveServer();
+  bool saveServer();
 };
