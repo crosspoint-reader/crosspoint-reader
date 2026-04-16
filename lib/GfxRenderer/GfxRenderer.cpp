@@ -98,9 +98,13 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   const uint32_t glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
 
   // Select alt glyph for rendering if available (dimensions may differ due to FreeType hinting)
-  const EpdGlyph* renderGlyph = glyph;
-  if (useAlt && fontData->altGlyph) {
-    renderGlyph = &fontData->altGlyph[glyphIndex];
+  const bool tryAlt = useAlt && fontData->altGlyph;
+  const EpdGlyph* renderGlyph = tryAlt ? &fontData->altGlyph[glyphIndex] : glyph;
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, renderGlyph, glyphIndex, tryAlt);
+  if (!bitmap && tryAlt) {
+    // Alt data unavailable (e.g., decompression failure) — fall back to primary
+    renderGlyph = glyph;
+    bitmap = renderer.getGlyphBitmap(fontData, glyph, glyphIndex, false);
   }
 
   const bool is2Bit = fontData->is2Bit;
@@ -108,8 +112,6 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   const uint8_t height = renderGlyph->height;
   const int left = renderGlyph->left;
   const int top = renderGlyph->top;
-
-  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, renderGlyph, glyphIndex, useAlt && fontData->altGlyph);
 
   if (bitmap != nullptr) {
     // For Normal:  outer loop advances screenY, inner loop advances screenX

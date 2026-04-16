@@ -890,8 +890,6 @@ if dual_position and not (compress and is2Bit):
     sys.exit(1)
 
 if dual_position:
-    import freetype.raw as ft
-
     print("// --- Dual-position alternate glyphs (0.5px offset) ---", file=sys.stderr)
 
     # Re-render all glyphs with 0.5px horizontal offset using FT_Set_Transform
@@ -901,11 +899,11 @@ if dual_position:
     for face_obj in font_stack:
         face_obj.set_char_size(size << 6, size << 6, 150, 150)
 
-    # Apply 0.5px horizontal offset via FT_Set_Transform on each face in the stack
-    matrix = ft.FT_Matrix(1 << 16, 0, 0, 1 << 16)  # identity
-    delta = ft.FT_Vector(32, 0)  # 0.5px in 26.6 fixed-point
+    # Apply 0.5px horizontal offset via set_transform on each face in the stack
+    matrix = freetype.FT_Matrix(1 << 16, 0, 0, 1 << 16)  # identity
+    delta = freetype.FT_Vector(32, 0)  # 0.5px in 26.6 fixed-point
     for face_obj in font_stack:
-        ft.FT_Set_Transform(face_obj._FT_Face, ft.byref(matrix), ft.byref(delta))
+        face_obj.set_transform(matrix, delta)
 
     for i_start, i_end in intervals:
         for code_point in range(i_start, i_end + 1):
@@ -969,10 +967,10 @@ if dual_position:
             alt_total_size += len(packed)
             alt_glyphs.append((glyph, packed))
 
-    # Reset FT_Set_Transform
-    delta_zero = ft.FT_Vector(0, 0)
+    # Reset transform
+    delta_zero = freetype.FT_Vector(0, 0)
     for face_obj in font_stack:
-        ft.FT_Set_Transform(face_obj._FT_Face, ft.byref(matrix), ft.byref(delta_zero))
+        face_obj.set_transform(matrix, delta_zero)
 
     print(f"// Alt glyphs: {len(alt_glyphs)} glyphs, {alt_total_size} bytes uncompressed", file=sys.stderr)
 
@@ -1021,7 +1019,7 @@ if dual_position:
     print("};\n")
 
     print(f"static const EpdGlyph {font_name}AltGlyphs[] = {{")
-    for i, g in enumerate(alt_glyph_props):
+    for g in alt_glyph_props:
         print("    { " + ", ".join([f"{a}" for a in list(g[:-1])]) + " },", f"// {cp_label(g.code_point)}")
     print("};\n")
 
@@ -1077,7 +1075,7 @@ if dual_position:
     print(f"    {font_name}AltGlyphs,")
     print(f"    {font_name}AltGroups,")
 else:
-    print(f"    nullptr,")
-    print(f"    nullptr,")
-    print(f"    nullptr,")
+    print("    nullptr,")
+    print("    nullptr,")
+    print("    nullptr,")
 print("};")

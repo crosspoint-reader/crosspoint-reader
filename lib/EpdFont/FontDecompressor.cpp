@@ -228,13 +228,19 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
 
   // Compute aligned offset using the correct glyph array (alt glyph dimensions may differ)
   uint32_t alignedOff = 0;
-  {
+  auto accumGlyph = [&](const EpdGlyph& g) {
+    if (g.width > 0 && g.height > 0) {
+      alignedOff += ((g.width + 3) / 4) * g.height;
+    }
+  };
+  if (fontData->glyphToGroup) {
+    for (uint32_t i = 0; i < glyphIndex; i++) {
+      if (fontData->glyphToGroup[i] == groupIndex) accumGlyph(glyphArray[i]);
+    }
+  } else {
     const EpdFontGroup& group = groups[groupIndex];
     for (uint32_t i = group.firstGlyphIndex; i < glyphIndex; i++) {
-      const auto& g = glyphArray[i];
-      if (g.width > 0 && g.height > 0) {
-        alignedOff += ((g.width + 3) / 4) * g.height;
-      }
+      accumGlyph(glyphArray[i]);
     }
   }
 
