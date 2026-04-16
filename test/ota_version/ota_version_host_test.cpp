@@ -29,6 +29,9 @@ int main() {
   require(!ota_version::isNewer("1.1.0", "1.1.1"), "lower semver is not newer");
   require(ota_version::isNewer("1.1.1", "1.1.1-rc+abc1234"), "release is newer than matching rc");
   require(!ota_version::isNewer("1.1.1", "1.1.1"), "matching semver is not newer");
+  require(!ota_version::isNewer("release-candidate", "1.1.1"), "unknown latest tag format is not newer");
+  require(!ota_version::isNewer("1.1.x", "1.1.1"), "malformed latest semver is not newer");
+  require(ota_version::isNewer("1.1.1", "custom-local-build"), "valid latest is newer than unknown local build");
 
   return 0;
 }

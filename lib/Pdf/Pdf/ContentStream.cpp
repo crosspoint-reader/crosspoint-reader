@@ -1435,6 +1435,32 @@ bool runContentOperators(char* p, char* end, FsFile& file, const XrefTable& xref
   return true;
 }
 
+bool decodeFileContentStream(FsFile& file, uint32_t streamOffset, uint32_t streamLen, bool isCompressed, uint8_t* buf,
+                             size_t maxStream, size_t& got) {
+  if (isCompressed) {
+    got = StreamDecoder::flateDecode(file, streamOffset, streamLen, buf, maxStream);
+    return true;
+  }
+
+  if (!file.seek(streamOffset)) {
+    return false;
+  }
+  const int rd = file.read(buf, std::min<size_t>(static_cast<size_t>(streamLen), maxStream));
+  if (rd < 0) {
+    return false;
+  }
+  got = static_cast<size_t>(rd);
+  return true;
+}
+
+bool runDecodedContentOperators(uint8_t* buf, size_t got, FsFile& file, const XrefTable& xref,
+                                std::string_view pageObjectBody, PdfPage& outPage) {
+  buf[got] = '\0';
+  char* p = reinterpret_cast<char*>(buf);
+  char* endp = p + got;
+  return runContentOperators(p, endp, file, xref, pageObjectBody, outPage);
+}
+
 }  // namespace
 
 bool ContentStream::parse(FsFile& file, uint32_t streamOffset, uint32_t streamLen, bool isCompressed,
@@ -1443,7 +1469,6 @@ bool ContentStream::parse(FsFile& file, uint32_t streamOffset, uint32_t streamLe
   outPage.images.clear();
   outPage.drawOrder.clear();
 
-#ifdef HAL_STORAGE_STUB
   const size_t kMaxStream = pdfContentStreamMaxBytes();
   auto* buf = static_cast<uint8_t*>(malloc(kMaxStream + 1));
   if (!buf) {
@@ -1452,58 +1477,13 @@ bool ContentStream::parse(FsFile& file, uint32_t streamOffset, uint32_t streamLe
   }
 
   size_t got = 0;
-  if (isCompressed) {
-    got = StreamDecoder::flateDecode(file, streamOffset, streamLen, buf, kMaxStream);
-  } else {
-    if (!file.seek(streamOffset)) {
-      free(buf);
-      return false;
-    }
-    const int rd = file.read(buf, std::min<size_t>(static_cast<size_t>(streamLen), kMaxStream));
-    if (rd < 0) {
-      free(buf);
-      return false;
-    }
-    got = static_cast<size_t>(rd);
-  }
-  buf[got] = '\0';
-
-  char* p = reinterpret_cast<char*>(buf);
-  char* endp = p + got;
-  const bool ok = runContentOperators(p, endp, file, xref, pageObjectBody, outPage);
-  free(buf);
-  return ok;
-#else
-  const size_t kMaxStream = pdfContentStreamMaxBytes();
-  auto* buf = static_cast<uint8_t*>(malloc(kMaxStream + 1));
-  if (!buf) {
-    LOG_ERR("PDF", "ContentStream: malloc failed (need %zu bytes for page stream)", kMaxStream);
+  if (!decodeFileContentStream(file, streamOffset, streamLen, isCompressed, buf, kMaxStream, got)) {
+    free(buf);
     return false;
   }
-
-  size_t got = 0;
-  if (isCompressed) {
-    got = StreamDecoder::flateDecode(file, streamOffset, streamLen, buf, kMaxStream);
-  } else {
-    if (!file.seek(streamOffset)) {
-      free(buf);
-      return false;
-    }
-    const int rd = file.read(buf, std::min<size_t>(static_cast<size_t>(streamLen), kMaxStream));
-    if (rd < 0) {
-      free(buf);
-      return false;
-    }
-    got = static_cast<size_t>(rd);
-  }
-  buf[got] = '\0';
-
-  char* p = reinterpret_cast<char*>(buf);
-  char* endp = p + got;
-  const bool ok = runContentOperators(p, endp, file, xref, pageObjectBody, outPage);
+  const bool ok = runDecodedContentOperators(buf, got, file, xref, pageObjectBody, outPage);
   free(buf);
   return ok;
-#endif
 }
 
 bool ContentStream::parseBuffer(const uint8_t* streamBytes, size_t streamLen, bool isCompressed, FsFile& file,
@@ -1526,11 +1506,7 @@ bool ContentStream::parseBuffer(const uint8_t* streamBytes, size_t streamLen, bo
     got = std::min(streamLen, kMaxStream);
     std::memcpy(buf, streamBytes, got);
   }
-  buf[got] = '\0';
-
-  char* p = reinterpret_cast<char*>(buf);
-  char* endp = p + got;
-  const bool ok = runContentOperators(p, endp, file, xref, pageObjectBody, outPage);
+  const bool ok = runDecodedContentOperators(buf, got, file, xref, pageObjectBody, outPage);
   free(buf);
   return ok;
 }

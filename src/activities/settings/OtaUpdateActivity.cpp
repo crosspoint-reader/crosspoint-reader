@@ -139,8 +139,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
 }
 
 void OtaUpdateActivity::loop() {
-  // TODO @ngxson : refactor this logic later
-  if (updater.getRender()) {
+  if (updater.consumeRenderRequest()) {
     requestUpdate();
   }
 

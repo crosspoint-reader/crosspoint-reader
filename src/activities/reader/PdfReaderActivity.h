@@ -38,6 +38,8 @@ class PdfReaderActivity final : public Activity {
   void renderContents(PdfCachedPageReader& page);
   void renderStatusBar() const;
   void saveProgressNow();
+  void drawPdfImagePlaceholder(int y) const;
+  bool renderPdfImage(const PdfImageDescriptor& img, int y, int bottomLimit);
 
  public:
   explicit PdfReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Pdf> pdf);

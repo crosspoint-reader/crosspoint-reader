@@ -3,6 +3,10 @@
 #include <ArduinoJson.h>
 #include <Logging.h>
 
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+
 #include "OtaVersion.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
@@ -10,10 +14,18 @@
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/ioma8/crosspoint-ioma8/releases/latest";
+constexpr size_t kMaxReleaseJsonBytes = 32 * 1024;
 
-/* This is buffer and size holder to keep upcoming data from latestReleaseUrl */
-char* local_buf;
-int output_len;
+struct ReleaseResponseBuffer {
+  char* data = nullptr;
+  size_t length = 0;
+  size_t capacity = 0;
+};
+
+struct ReleaseResponseCleaner {
+  ReleaseResponseBuffer& response;
+  ~ReleaseResponseCleaner() { free(response.data); }
+};
 
 /*
  * When esp_crt_bundle.h included, it is pointing wrong header file
@@ -28,36 +40,45 @@ esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
   return esp_http_client_set_header(http_client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 }
 
-esp_err_t event_handler(esp_http_client_event_t* event) {
-  /* We do interested in only HTTP_EVENT_ON_DATA event only */
-  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-
-  if (!esp_http_client_is_chunked_response(event->client)) {
-    int content_len = esp_http_client_get_content_length(event->client);
-    int copy_len = 0;
-
-    if (local_buf == NULL) {
-      /* local_buf life span is tracked by caller checkForUpdate */
-      local_buf = static_cast<char*>(calloc(content_len + 1, sizeof(char)));
-      output_len = 0;
-      if (local_buf == NULL) {
-        LOG_ERR("OTA", "HTTP Client Out of Memory Failed, Allocation %d", content_len);
-        return ESP_ERR_NO_MEM;
-      }
-    }
-    copy_len = min(event->data_len, (content_len - output_len));
-    if (copy_len) {
-      memcpy(local_buf + output_len, event->data, copy_len);
-    }
-    output_len += copy_len;
-  } else {
-    /* Code might be hits here, It happened once (for version checking) but I need more logs to handle that */
-    int chunked_len;
-    esp_http_client_get_chunk_length(event->client, &chunked_len);
-    LOG_DBG("OTA", "esp_http_client_is_chunked_response failed, chunked_len: %d", chunked_len);
+esp_err_t appendReleaseResponseData(ReleaseResponseBuffer& response, const char* data, size_t dataLen) {
+  if (dataLen == 0) {
+    return ESP_OK;
+  }
+  if (response.length + dataLen > kMaxReleaseJsonBytes) {
+    LOG_ERR("OTA", "Release JSON response exceeds %zu bytes", kMaxReleaseJsonBytes);
+    return ESP_ERR_NO_MEM;
   }
 
+  const size_t required = response.length + dataLen + 1;
+  if (required > response.capacity) {
+    size_t newCapacity = response.capacity == 0 ? 1024 : response.capacity;
+    while (newCapacity < required) {
+      newCapacity *= 2;
+    }
+    newCapacity = std::min(newCapacity, kMaxReleaseJsonBytes + 1);
+
+    char* next = static_cast<char*>(realloc(response.data, newCapacity));
+    if (!next) {
+      LOG_ERR("OTA", "HTTP Client Out of Memory Failed, Allocation %zu", newCapacity);
+      return ESP_ERR_NO_MEM;
+    }
+    response.data = next;
+    response.capacity = newCapacity;
+  }
+
+  std::memcpy(response.data + response.length, data, dataLen);
+  response.length += dataLen;
+  response.data[response.length] = '\0';
   return ESP_OK;
+}
+
+esp_err_t event_handler(esp_http_client_event_t* event) {
+  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
+  auto* response = static_cast<ReleaseResponseBuffer*>(event->user_data);
+  if (!response) return ESP_ERR_INVALID_ARG;
+
+  return appendReleaseResponseData(*response, static_cast<const char*>(event->data),
+                                   static_cast<size_t>(event->data_len));
 } /* event_handler */
 } /* namespace */
 
@@ -65,6 +86,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   JsonDocument filter;
   esp_err_t esp_err;
   JsonDocument doc;
+  ReleaseResponseBuffer response;
+  ReleaseResponseCleaner responseCleaner{response};
 
   esp_http_client_config_t client_config = {
       .url = latestReleaseUrl,
@@ -72,21 +95,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
+      .user_data = &response,
       .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
-
-  /* To track life time of local_buf, dtor will be called on exit from that function */
-  struct localBufCleaner {
-    char** bufPtr;
-    ~localBufCleaner() {
-      if (*bufPtr) {
-        free(*bufPtr);
-        *bufPtr = NULL;
-      }
-    }
-  } localBufCleaner = {&local_buf};
 
   esp_http_client_handle_t client_handle = esp_http_client_init(&client_config);
   if (!client_handle) {
@@ -119,7 +132,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   filter["assets"][0]["name"] = true;
   filter["assets"][0]["browser_download_url"] = true;
   filter["assets"][0]["size"] = true;
-  const DeserializationError error = deserializeJson(doc, local_buf, DeserializationOption::Filter(filter));
+  if (!response.data) {
+    LOG_ERR("OTA", "Empty release response");
+    return JSON_PARSE_ERROR;
+  }
+  const DeserializationError error = deserializeJson(doc, response.data, DeserializationOption::Filter(filter));
   if (error) {
     LOG_ERR("OTA", "JSON parse failed: %s", error.c_str());
     return JSON_PARSE_ERROR;

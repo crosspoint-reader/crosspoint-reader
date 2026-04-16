@@ -29,7 +29,11 @@ class OtaUpdater {
 
   size_t getTotalSize() const { return totalSize; }
 
-  bool getRender() const { return render; }
+  bool consumeRenderRequest() {
+    const bool shouldRender = render;
+    render = false;
+    return shouldRender;
+  }
 
   OtaUpdater() = default;
   bool isUpdateNewer() const;

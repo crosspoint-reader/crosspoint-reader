@@ -322,3 +322,31 @@ size_t Pdf::extractImageStream(const PdfImageDescriptor& img, uint8_t* outBuf, s
   }
   return static_cast<size_t>(r);
 }
+
+size_t Pdf::extractImageStreamToFile(const PdfImageDescriptor& img, FsFile& outFile, size_t maxBytes) {
+  if (!valid_ || maxBytes == 0 || img.pdfStreamLength == 0) {
+    return 0;
+  }
+  if (!file_.seek(img.pdfStreamOffset)) {
+    return 0;
+  }
+
+  uint8_t chunk[512];
+  size_t remaining = std::min(maxBytes, static_cast<size_t>(img.pdfStreamLength));
+  size_t copied = 0;
+  while (remaining > 0) {
+    const size_t toRead = std::min(remaining, sizeof(chunk));
+    const int r = file_.read(chunk, toRead);
+    if (r <= 0) {
+      break;
+    }
+
+    const size_t readLen = static_cast<size_t>(r);
+    if (outFile.write(chunk, readLen) != readLen) {
+      break;
+    }
+    copied += readLen;
+    remaining -= readLen;
+  }
+  return copied;
+}

@@ -34,6 +34,7 @@ class Pdf {
   bool loadProgress(uint32_t& page);
 
   size_t extractImageStream(const PdfImageDescriptor& img, uint8_t* outBuf, size_t maxBytes);
+  size_t extractImageStreamToFile(const PdfImageDescriptor& img, FsFile& outFile, size_t maxBytes);
 
   const PdfFixedString<PDF_MAX_PATH>& cacheDirectory() const;
 

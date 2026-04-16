@@ -79,6 +79,12 @@ jobs:
       - name: Run OTA version host tests
         run: bash test/ota_version/run_ota_version_tests.sh
 
+      - name: Run PDF parser host tests
+        run: bash test/pdf/run_pdf_parser_tests.sh
+
+      - name: Run hyphenation evaluation
+        run: bash test/run_hyphenation_eval.sh
+
       - name: Build CrossPoint
         run: |
           set -euo pipefail

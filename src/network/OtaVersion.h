@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 namespace ota_version {
@@ -10,6 +11,8 @@ struct Semver {
   int minor = 0;
   int patch = 0;
 };
+
+inline bool hasRecognizedSuffix(const char* suffix) { return *suffix == '\0' || *suffix == '-' || *suffix == '+'; }
 
 inline bool parseSemverPrefix(const char* version, Semver& out) {
   if (version == nullptr) {
@@ -33,7 +36,7 @@ inline bool parseSemverPrefix(const char* version, Semver& out) {
   version = end + 1;
 
   const long patch = std::strtol(version, &end, 10);
-  if (end == version) {
+  if (end == version || !hasRecognizedSuffix(end)) {
     return false;
   }
 
@@ -52,7 +55,10 @@ inline bool isNewer(const std::string& latestVersion, const char* currentVersion
   Semver current;
   const bool latestParsed = parseSemverPrefix(latestVersion.c_str(), latest);
   const bool currentParsed = parseSemverPrefix(currentVersion, current);
-  if (!latestParsed || !currentParsed) {
+  if (!latestParsed) {
+    return false;
+  }
+  if (!currentParsed) {
     return true;
   }
 
@@ -60,7 +66,7 @@ inline bool isNewer(const std::string& latestVersion, const char* currentVersion
   if (latest.minor != current.minor) return latest.minor > current.minor;
   if (latest.patch != current.patch) return latest.patch > current.patch;
 
-  if (std::string(currentVersion).find("-rc") != std::string::npos) {
+  if (std::strstr(currentVersion, "-rc") != nullptr) {
     return true;
   }
 

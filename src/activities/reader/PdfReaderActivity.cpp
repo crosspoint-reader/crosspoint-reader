@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -73,6 +72,53 @@ bool PdfReaderActivity::loadPage(uint32_t page) {
   navigationState.slice = 0;
   rebuildPageSlices();
   return !pageSliceStarts.empty();
+}
+
+void PdfReaderActivity::drawPdfImagePlaceholder(int y) const {
+  renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
+}
+
+bool PdfReaderActivity::renderPdfImage(const PdfImageDescriptor& img, int y, int bottomLimit) {
+  if (!pdf || img.pdfStreamLength == 0 || img.pdfStreamLength > kMaxPdfImageStreamBytes) {
+    return false;
+  }
+
+  const auto dir = pdf->cacheDirectory().view();
+  if (dir.empty()) {
+    return false;
+  }
+
+  const char* name = img.format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
+  const std::string tmpPath = std::string(dir) + "/" + name;
+  FsFile wf;
+  if (!Storage.openFileForWrite("PDF", tmpPath, wf)) {
+    return false;
+  }
+
+  const size_t got = pdf->extractImageStreamToFile(img, wf, kMaxPdfImageStreamBytes);
+  wf.close();
+  bool drawn = false;
+  if (got >= 4) {
+    RenderConfig cfg;
+    cfg.x = marginLeft;
+    cfg.y = y;
+    cfg.maxWidth = viewportWidth;
+    cfg.maxHeight = bottomLimit - y;
+    cfg.useGrayscale = true;
+    cfg.useDithering = true;
+    if (cfg.maxHeight >= 16) {
+      if (img.format == 0) {
+        JpegToFramebufferConverter jpg;
+        drawn = jpg.decodeToFramebuffer(tmpPath, renderer, cfg);
+      } else {
+        PngToFramebufferConverter png;
+        drawn = png.decodeToFramebuffer(tmpPath, renderer, cfg);
+      }
+    }
+  }
+
+  Storage.remove(tmpPath.c_str());
+  return drawn;
 }
 
 bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRenderCursor& start, PdfRenderCursor& next,
@@ -185,8 +231,6 @@ bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRend
         next.lineIndex = 0;
         return false;
       }
-      const auto dir = pdf->cacheDirectory().view();
-      const char* name = img.format == 0 ? "_tmpimg.jpg" : "_tmpimg.png";
       if (y > bottomLimit) {
         next.stepIndex = stepIndex;
         next.lineIndex = 0;
@@ -204,50 +248,8 @@ bool PdfReaderActivity::renderPageSlice(PdfCachedPageReader& page, const PdfRend
         }
       }
       if (draw) {
-        if (dir.empty()) {
-          renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-        } else {
-          const std::string tmpPath = std::string(dir) + "/" + name;
-          if (img.pdfStreamLength == 0 || img.pdfStreamLength > kMaxPdfImageStreamBytes) {
-            renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-          } else {
-            auto* raw = static_cast<uint8_t*>(malloc(img.pdfStreamLength));
-            if (!raw) {
-              renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-            } else {
-              const size_t got = pdf->extractImageStream(img, raw, img.pdfStreamLength);
-              bool drawn = false;
-              if (got >= 4) {
-                FsFile wf;
-                if (Storage.openFileForWrite("PDF", tmpPath, wf)) {
-                  wf.write(raw, got);
-                  wf.close();
-
-                  RenderConfig cfg;
-                  cfg.x = marginLeft;
-                  cfg.y = y;
-                  cfg.maxWidth = viewportWidth;
-                  cfg.maxHeight = bottomLimit - y;
-                  cfg.useGrayscale = true;
-                  cfg.useDithering = true;
-                  if (cfg.maxHeight >= 16) {
-                    if (img.format == 0) {
-                      JpegToFramebufferConverter jpg;
-                      drawn = jpg.decodeToFramebuffer(tmpPath, renderer, cfg);
-                    } else {
-                      PngToFramebufferConverter png;
-                      drawn = png.decodeToFramebuffer(tmpPath, renderer, cfg);
-                    }
-                  }
-                  Storage.remove(tmpPath.c_str());
-                }
-              }
-              free(raw);
-              if (!drawn) {
-                renderer.drawText(UI_10_FONT_ID, marginLeft, y, tr(STR_PDF_IMAGE_PLACEHOLDER));
-              }
-            }
-          }
+        if (!renderPdfImage(img, y, bottomLimit)) {
+          drawPdfImagePlaceholder(y);
         }
       }
       y += advanceY;
