@@ -367,7 +367,7 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   store.servers.clear();
   JsonArray arr = doc["servers"].as<JsonArray>();
   for (JsonObject obj : arr) {
-    if (store.servers.size() >= 8) break;
+    if (store.servers.size() >= OpdsServerStore::MAX_SERVERS) break;
     OpdsServer server;
     server.name = obj["name"] | std::string("");
     server.url = obj["url"] | std::string("");
