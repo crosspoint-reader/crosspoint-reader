@@ -257,8 +257,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
-  std::string downloadUrl =
-      (book.href.find("http") == 0) ? book.href : UrlUtils::buildUrl(server.url, book.href);
+  std::string downloadUrl = (book.href.find("http") == 0) ? book.href : UrlUtils::buildUrl(server.url, book.href);
 
   std::string filename =
       "/" + StringUtils::sanitizeFilename(book.title + (book.author.empty() ? "" : " - " + book.author)) + ".epub";
