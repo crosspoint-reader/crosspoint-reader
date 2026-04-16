@@ -130,9 +130,13 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
-      // Set the block style directly. Callers from block/header element opens pass the
-      // fully accumulated style (parent stack + this element) so merging is not needed.
-      currentTextBlock->setBlockStyle(blockStyle);
+      // The stack accumulates horizontal margins and text properties from ancestors.
+      // Vertical margins are per-element and not inherited through the stack, but
+      // container elements deposit their vertical margins on the empty block when they
+      // open. Merge those into the new style so the first child in a container inherits
+      // the container's vertical spacing.
+      currentTextBlock->setBlockStyle(
+          currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
 
       if (!pendingAnchorId.empty()) {
         anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
@@ -434,16 +438,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->startNewTextBlock(parentBlockStyle);
                 }
 
-                // Apply vertical margins from the current (possibly empty) text block.
-                // When an image is inside a container like <div style="margin:1em 40%">,
-                // the div's margins live on the empty text block but are never flushed
-                // via makePages(). Apply them here so the image respects vertical spacing.
+                // Apply vertical margins from the container to the image.
+                // Top margin lives on the empty text block (deposited via vertical merge
+                // in startNewTextBlock). Bottom margin was stripped by withoutBottom() for
+                // deferred application at element close, so read it from the stack.
                 int16_t imageMarginTop = 0;
                 int16_t imageMarginBottom = 0;
                 if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
                   const auto& bs = self->currentTextBlock->getBlockStyle();
-                  imageMarginTop = static_cast<int16_t>(bs.marginTop + bs.paddingTop);
-                  imageMarginBottom = static_cast<int16_t>(bs.marginBottom + bs.paddingBottom);
+                  imageMarginTop = bs.topInset();
+                  if (self->blockStyleStack.size() > 1) {
+                    imageMarginBottom = self->blockStyleStack.back().bottomInset();
+                  }
                 }
 
                 // Create page for image - only break if image won't fit remaining space
@@ -500,7 +506,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Fallback to alt text if image processing fails
       if (!alt.empty()) {
         alt = "[Image: " + alt + "]";
-        self->startNewTextBlock(self->blockStyleStack.back().getCombinedBlockStyle(centeredBlockStyle));
+        self->startNewTextBlock(
+            self->blockStyleStack.back()
+                .getCombinedBlockStyle(centeredBlockStyle, BlockStyle::CombineAxis::Horizontal)
+                .withoutBottom());
         self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
         self->depth += 1;
         self->characterData(userData, alt.c_str(), alt.length());
@@ -590,9 +599,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->embeddedStyle && cssStyle.hasTextAlign()) {
       headerBlockStyle.alignment = cssStyle.textAlign;
     }
-    const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle);
+    const auto accumulated =
+        self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
-    self->startNewTextBlock(accumulated);
+    self->startNewTextBlock(accumulated.withoutBottom());
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
@@ -601,12 +611,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
+      self->startNewTextBlock(self->blockStyleStack.back().withoutBottom());
     } else {
       self->currentCssStyle = cssStyle;
-      const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle);
+      const auto accumulated =
+          self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle, BlockStyle::CombineAxis::Horizontal);
       self->blockStyleStack.push_back(accumulated);
-      self->startNewTextBlock(accumulated);
+      self->startNewTextBlock(accumulated.withoutBottom());
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
@@ -999,15 +1010,20 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->currentCssStyle.reset();
     self->updateEffectiveInlineStyle();
 
-    // Pop this element's contribution from the block style stack and restore the
-    // parent's accumulated style on empty blocks. This prevents closed elements'
-    // styles (alignment, margins, padding) from bleeding into siblings while
-    // correctly preserving ancestor styles for subsequent children.
     // br is self-closing and not a container — it doesn't push/pop the stack.
     if (strcmp(name, "br") != 0 && self->blockStyleStack.size() > 1) {
+      // Apply closing element's bottom margin to the current text block so
+      // container spacing appears after the element's content (on the last child),
+      // not on the first child via the empty-block merge in startNewTextBlock.
+      if (self->currentTextBlock) {
+        self->currentTextBlock->setBlockStyle(
+            self->currentTextBlock->getBlockStyle().addBottom(self->blockStyleStack.back()));
+      }
       self->blockStyleStack.pop_back();
+      // Restore parent's accumulated style on empty blocks to prevent the closed
+      // element's styles from bleeding into the next sibling.
       if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
-        self->currentTextBlock->setBlockStyle(self->blockStyleStack.back());
+        self->currentTextBlock->setBlockStyle(self->blockStyleStack.back().withoutBottom());
       }
     }
   }
