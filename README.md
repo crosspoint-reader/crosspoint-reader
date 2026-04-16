@@ -29,7 +29,7 @@ bash test/pdf/run_pdf_parser_tests.sh
 
 ## Installation
 
-1. Download the latest `firmware.bin` from the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
+1. Download the latest `firmware.bin` from the [releases page](https://github.com/ioma8/crosspoint-ioma8/releases)
 2. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
 3. Open https://xteink.dve.al/ and flash the firmware file with the OTA flash controls
 
