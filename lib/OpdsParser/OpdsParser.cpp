@@ -115,8 +115,16 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       if (self->inEntry) {
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
-          self->currentEntry.type = OpdsEntryType::BOOK;
-          self->currentEntry.href = href;
+          // Prefer plain EPUB links over derived formats when multiple
+          // acquisition links are present for one entry.
+          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
+          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
+                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
+                                            self->currentEntry.href.find("/epub/") != std::string::npos);
+          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
+            self->currentEntry.type = OpdsEntryType::BOOK;
+            self->currentEntry.href = href;
+          }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
             self->currentEntry.type = OpdsEntryType::NAVIGATION;
@@ -146,44 +154,6 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
     self->inId = true;
     self->currentText.clear();
-<<<<<<< fix-opds-epub
-    return;
-  }
-
-  // Check for link element
-  if (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr) {
-    const char* rel = findAttribute(atts, "rel");
-    const char* type = findAttribute(atts, "type");
-    const char* href = findAttribute(atts, "href");
-
-    if (href) {
-      // Check for acquisition link with epub type (this is a downloadable book).
-      // Accept the first matching link, but keep looking: if a later link's href
-      // explicitly points to a plain epub (.epub extension or /epub/ path segment),
-      // prefer that over a derived format (e.g. kepub). Once we have a plain epub
-      // link, stop overwriting.
-      if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-          strcmp(type, "application/epub+zip") == 0) {
-        const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-        const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                         (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                          self->currentEntry.href.find("/epub/") != std::string::npos);
-        if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
-          self->currentEntry.type = OpdsEntryType::BOOK;
-          self->currentEntry.href = href;
-        }
-      }
-      // Check for navigation link (subsection or no rel specified with atom+xml type)
-      else if (type && strstr(type, "application/atom+xml") != nullptr) {
-        // Only set navigation link if we don't already have an epub link
-        if (self->currentEntry.type != OpdsEntryType::BOOK) {
-          self->currentEntry.type = OpdsEntryType::NAVIGATION;
-          self->currentEntry.href = href;
-        }
-      }
-    }
-=======
->>>>>>> master
   }
 }
 
