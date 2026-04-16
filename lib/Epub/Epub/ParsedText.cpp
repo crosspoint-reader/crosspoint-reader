@@ -303,8 +303,13 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
     std::vector<int16_t> colYpos;
     std::vector<int16_t> colXpos;
     std::vector<EpdFontFamily::Style> colStyles(wordStyles.begin() + start, wordStyles.begin() + end);
-    std::vector<std::string> colRubyTexts(rubyTexts.begin() + start, rubyTexts.begin() + end);
     const size_t count = end - start;
+    std::vector<std::string> colRubyTexts;
+    if (rubyTexts.size() >= end) {
+      colRubyTexts.assign(rubyTexts.begin() + start, rubyTexts.begin() + end);
+    } else {
+      colRubyTexts.resize(count);
+    }
     colYpos.reserve(count);
     colXpos.resize(count, 0);
 
@@ -574,6 +579,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
   wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
+  if (wordIndex + 1 <= rubyTexts.size()) {
+    rubyTexts.insert(rubyTexts.begin() + wordIndex + 1, "");
+  }
 
   if (continuesVec) {
     continuesVec->insert(continuesVec->begin() + wordIndex + 1, false);
@@ -666,7 +674,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   std::vector<std::string> lineWords(std::make_move_iterator(words.begin() + lastBreakAt),
                                      std::make_move_iterator(words.begin() + lineBreak));
   std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
-  std::vector<std::string> lineRubyTexts(rubyTexts.begin() + lastBreakAt, rubyTexts.begin() + lineBreak);
+  std::vector<std::string> lineRubyTexts;
+  if (rubyTexts.size() >= lineBreak) {
+    lineRubyTexts.assign(rubyTexts.begin() + lastBreakAt, rubyTexts.begin() + lineBreak);
+  } else {
+    lineRubyTexts.resize(lineWordCount);
+  }
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
