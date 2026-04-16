@@ -135,8 +135,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // container elements deposit their vertical margins on the empty block when they
       // open. Merge those into the new style so the first child in a container inherits
       // the container's vertical spacing.
-      currentTextBlock->setBlockStyle(
-          currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
+      const auto style = currentTextBlock->getBlockStyle();
+      currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
 
       if (!pendingAnchorId.empty()) {
         anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
@@ -1016,8 +1016,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       // container spacing appears after the element's content (on the last child),
       // not on the first child via the empty-block merge in startNewTextBlock.
       if (self->currentTextBlock) {
-        self->currentTextBlock->setBlockStyle(
-            self->currentTextBlock->getBlockStyle().addBottom(self->blockStyleStack.back()));
+        const auto style = self->currentTextBlock->getBlockStyle();
+        self->currentTextBlock->setBlockStyle(style.addBottom(self->blockStyleStack.back()));
       }
       self->blockStyleStack.pop_back();
     }
