@@ -84,12 +84,15 @@ class ParagraphStreamer final : public Print {
     } else if (c == '>') {
       globalInTag = false;
     } else if (!globalInTag) {
-      totalVisChars++;
-      if (revPFound && !revDone) {
-        revVisChars++;
-        if (revVisChars >= revChar) {
-          targetVisChars = totalVisChars;
-          revDone = true;
+      const bool startsCodepoint = (c & 0xC0) != 0x80;
+      if (startsCodepoint) {
+        totalVisChars++;
+        if (revPFound && !revDone) {
+          revVisChars++;
+          if (revVisChars >= revChar) {
+            targetVisChars = totalVisChars;
+            revDone = true;
+          }
         }
       }
     }
@@ -154,7 +157,8 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   if (bookSize == 0) return result;
 
   const int spineCount = epub->getSpineItemsCount();
-  const size_t targetBytes = static_cast<size_t>(bookSize * koPos.percentage);
+  const float clampedPercentage = std::max(0.0f, std::min(1.0f, koPos.percentage));
+  const size_t targetBytes = static_cast<size_t>(static_cast<float>(bookSize) * clampedPercentage);
 
   const int docFrag = parseIndex(koPos.xpath, "/body/DocFragment[");
   const int xpathP = parseIndex(koPos.xpath, "/p[", true);
@@ -165,8 +169,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     result.hasParagraphIndex = true;
   }
 
-  // Use XPath spine when paragraph is available (p[N] only makes sense in that file)
-  if (xpathSpine >= 0 && xpathSpine < spineCount && xpathP > 0) {
+  if (xpathSpine >= 0 && xpathSpine < spineCount) {
     result.spineIndex = xpathSpine;
   } else {
     for (int i = 0; i < spineCount; i++) {

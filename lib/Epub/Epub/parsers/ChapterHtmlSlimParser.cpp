@@ -157,14 +157,14 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
-  if (strcmp(name, "p") == 0) {
-    self->xpathParagraphIndex++;
-  }
-
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
     self->depth += 1;
     return;
+  }
+
+  if (strcmp(name, "p") == 0) {
+    self->xpathParagraphIndex++;
   }
 
   // Extract class, style, and id attributes

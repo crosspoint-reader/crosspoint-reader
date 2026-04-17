@@ -2,6 +2,7 @@
 
 #include <Logging.h>
 #include <Print.h>
+#include <Utf8.h>
 #include <XmlParserUtils.h>
 #include <expat.h>
 
@@ -55,6 +56,34 @@ std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegm
     xpath += "/text()." + std::to_string(charOffset);
   }
   return xpath;
+}
+
+size_t countUtf8Codepoints(const XML_Char* data, const int len) {
+  if (!data || len <= 0) {
+    return 0;
+  }
+
+  size_t count = 0;
+  const unsigned char* ptr = reinterpret_cast<const unsigned char*>(data);
+  const unsigned char* end = ptr + len;
+  while (ptr < end) {
+    const unsigned char lead = *ptr;
+    size_t advance = 1;
+    if (lead < 0x80) {
+      advance = 1;
+    } else if ((lead >> 5) == 0x6 && (ptr + 1) < end && (ptr[1] & 0xC0) == 0x80) {
+      advance = 2;
+    } else if ((lead >> 4) == 0xE && (ptr + 2) < end && (ptr[1] & 0xC0) == 0x80 && (ptr[2] & 0xC0) == 0x80) {
+      advance = 3;
+    } else if ((lead >> 3) == 0x1E && (ptr + 3) < end && (ptr[1] & 0xC0) == 0x80 && (ptr[2] & 0xC0) == 0x80 &&
+               (ptr[3] & 0xC0) == 0x80) {
+      advance = 4;
+    }
+    ptr += advance;
+    count++;
+  }
+
+  return count;
 }
 
 class ParagraphTextCounter final : public Print {
@@ -130,7 +159,6 @@ class ParagraphTextCounter final : public Print {
       if (name == "body") {
         insideBody = true;
         bodyDepth = depth;
-        parentStates.emplace_back();
       }
       depth++;
       return;
@@ -139,8 +167,6 @@ class ParagraphTextCounter final : public Print {
     if (name == "p") {
       paragraphDepth++;
     }
-
-    parentStates.emplace_back();
     depth++;
   }
 
@@ -154,12 +180,7 @@ class ParagraphTextCounter final : public Print {
 
     if (depth == bodyDepth && name == "body") {
       insideBody = false;
-      parentStates.clear();
       return;
-    }
-
-    if (!parentStates.empty()) {
-      parentStates.pop_back();
     }
 
     if (name == "p" && paragraphDepth > 0) {
@@ -167,12 +188,12 @@ class ParagraphTextCounter final : public Print {
     }
   }
 
-  void onCharacterData(const XML_Char*, const int len) {
+  void onCharacterData(const XML_Char* data, const int len) {
     if (!insideBody || paragraphDepth <= 0 || len <= 0) {
       return;
     }
 
-    visibleChars += static_cast<size_t>(len);
+    visibleChars += countUtf8Codepoints(data, len);
   }
 
  private:
@@ -184,7 +205,6 @@ class ParagraphTextCounter final : public Print {
   int bodyDepth = -1;
   int paragraphDepth = 0;
   size_t visibleChars = 0;
-  std::vector<ParentState> parentStates;
 };
 
 class XPathParagraphResolver final : public Print {
@@ -437,12 +457,13 @@ class XPathProgressResolver final : public Print {
     }
   }
 
-  void onCharacterData(const XML_Char*, const int len) {
+  void onCharacterData(const XML_Char* data, const int len) {
     if (!insideBody || paragraphDepth <= 0 || len <= 0 || stopped) {
       return;
     }
 
-    const size_t nextVisibleChars = visibleChars + static_cast<size_t>(len);
+    const size_t codepointCount = countUtf8Codepoints(data, len);
+    const size_t nextVisibleChars = visibleChars + codepointCount;
     if (targetVisibleChar <= nextVisibleChars) {
       const size_t delta = targetVisibleChar - visibleChars;
       const int charOffset = static_cast<int>(paragraphVisibleChars + delta);
@@ -453,7 +474,7 @@ class XPathProgressResolver final : public Print {
     }
 
     visibleChars = nextVisibleChars;
-    paragraphVisibleChars += static_cast<size_t>(len);
+    paragraphVisibleChars += codepointCount;
   }
 
   XML_Parser parser = nullptr;
