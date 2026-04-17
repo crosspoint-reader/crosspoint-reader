@@ -24,13 +24,14 @@ void KOReaderSettingsActivity::buildMenuItems() {
   menuItems.push_back(SettingInfo::Action(StrId::STR_PASSWORD, SettingAction::None));
 
   // Document matching: DynamicEnum toggling between Filename and Binary
-  menuItems.push_back(SettingInfo::DynamicEnum(
-      StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
-      static_cast<SettingInfo::ValueGetterFn>([](const void*) -> uint8_t { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); }),
-      [](void*, uint8_t v) {
-        KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
-        KOREADER_STORE.saveToFile();
-      }));
+  menuItems.push_back(SettingInfo::DynamicEnum(StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
+                                               static_cast<SettingInfo::ValueGetterFn>([](const void*) -> uint8_t {
+                                                 return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod());
+                                               }),
+                                               [](void*, uint8_t v) {
+                                                 KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
+                                                 KOREADER_STORE.saveToFile();
+                                               }));
 
   // Authenticate and Register: ACTION items
   menuItems.push_back(
