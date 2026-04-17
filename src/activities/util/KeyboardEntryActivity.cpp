@@ -1,5 +1,6 @@
 #include "KeyboardEntryActivity.h"
 
+#include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 
@@ -30,7 +31,11 @@ void KeyboardEntryActivity::onEnter() {
   requestUpdate();
 }
 
-void KeyboardEntryActivity::onExit() { Activity::onExit(); }
+void KeyboardEntryActivity::onExit() {
+  Activity::onExit();
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
 
 int KeyboardEntryActivity::getContentRowCount() const {
   if (urlMode) return 3;
@@ -300,14 +305,14 @@ void KeyboardEntryActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     if (cursorMode && inputType == InputType::Password) {
-      if (!rightLongHandled && !togglePos && cursorPos < text.length()) {
-        cursorPos++;
-        requestUpdate();
-      }
       rightHeld = false;
       rightLongHandled = false;
-      return;
     }
+    if (cursorMode && !togglePos && cursorPos < text.length()) {
+      cursorPos++;
+      requestUpdate();
+    }
+    if (cursorMode) return;
     rightHeld = false;
     rightLongHandled = false;
   }
