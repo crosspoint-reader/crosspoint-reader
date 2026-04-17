@@ -118,6 +118,7 @@ void HomeActivity::rebuildMenuEntries() {
     menuEntries.push_back({MenuAction::Weather, StrId::STR_WEATHER, Weather});
   }
   menuEntries.push_back({MenuAction::Settings, StrId::STR_SETTINGS_TITLE, Settings});
+  menuEntriesDirty = false;
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -265,7 +266,9 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
-  rebuildMenuEntries();
+  if (menuEntriesDirty) {
+    rebuildMenuEntries();
+  }
   const int totalItems = static_cast<int>(recentBooks.size() + menuEntries.size());
 
   if (firstRenderDone && !recentsLoaded && !recentsLoading) {

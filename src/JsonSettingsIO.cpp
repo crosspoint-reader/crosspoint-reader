@@ -100,9 +100,19 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
     return false;
   }
 
+  if (doc.overflowed()) {
+    LOG_ERR("CPS", "JSON document overflowed while building state");
+    file.close();
+    return false;
+  }
+
+  const size_t expected = measureJson(doc);
   const size_t written = serializeJson(doc, file);
-  file.close();
-  return written > 0;
+  file.flush();
+  if (!file.close()) {
+    return false;
+  }
+  return written == expected;
 }
 
 bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
