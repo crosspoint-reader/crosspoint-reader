@@ -219,6 +219,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       clamp(doc["frontButtonRight"] | (uint8_t)S::FRONT_HW_RIGHT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_RIGHT);
   CrossPointSettings::validateFrontButtonMapping(s);
 
+  // convert legacy line spacing setting to new numerical setting
+  if (doc["lineSpacingPt"].isNull() && !doc["lineSpacing"].isNull()) {
+    s.lineSpacing = clamp(doc["lineSpacing"], CrossPointSettings::LINE_COMPRESSION_COUNT, CrossPointSettings::NORMAL);
+    S::applyLegacyConvertLineCompression(s);
+  }
+
   LOG_DBG("CPS", "Settings loaded from file");
 
   return true;
