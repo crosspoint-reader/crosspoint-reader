@@ -17,8 +17,8 @@
 // ---- RTC / I2C configuration ----------------------------------------------
 // Pins for ESP32-C3 (according to https://gist.github.com/CrazyCoder/1c5f846adee18e21f91e264601a6ddce)
 static constexpr uint8_t DS3231_ADDRESS = 0x68;
-static constexpr int I2C_SDA = 8;
-static constexpr int I2C_SCL = 9;
+// static constexpr int I2C_SDA = 8;
+// static constexpr int I2C_SCL = 9;
 static uint8_t bin2bcd(uint8_t val) { return val + 6 * (val / 10); }
 static uint8_t bcd2bin(uint8_t val) { return val - 6 * (val >> 4); }
 
@@ -203,6 +203,9 @@ static time_t nvsReadSyncTime() {
 
 // ---- internal helpers -----------------------------------------------------
 
+static bool initExternalRTC();
+static float readExternalTemp();
+
 static float readChipTemperatureC() {
   // ESP32 and ESP32-C3 use the internal ADC temperature sensor.
   if (initExternalRTC()) {
@@ -224,7 +227,7 @@ static bool initExternalRTC() {
     return false;
   }
 
-  Wire.begin(I2C_SDA, I2C_SCL);
+  // Wire has already been initialized; no need to call Wire.begin(I2C_SDA, I2C_SCL);
   Wire.beginTransmission(DS3231_ADDRESS);
   if (Wire.endTransmission() == 0) {
     exists = true;
