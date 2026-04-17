@@ -336,6 +336,57 @@ bool AozoraActivity::downloadBook() {
   return true;
 }
 
+bool AozoraActivity::updateBook() {
+  char url[256];
+  snprintf(url, sizeof(url), "%s/api/convert?work_id=%d", API_BASE, selectedWorkId_);
+
+  std::string relPath = AozoraIndexManager::makeRelativePath(selectedWorkId_, selectedWorkTitle_, selectedWorkAuthor_);
+  char destPath[160];
+  char tmpPath[168];
+  snprintf(destPath, sizeof(destPath), "%s/%s", AozoraIndexManager::AOZORA_DIR, relPath.c_str());
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", destPath);
+
+  if (!AozoraIndexManager::ensureDirectory() || !AozoraIndexManager::ensureAuthorDirectory(selectedWorkAuthor_)) {
+    LOG_ERR("AOZORA", "Failed to create directory");
+    errorMessage_ = "SD card error";
+    return false;
+  }
+
+  // 既存のtmpファイルが残っていたら掃除
+  Storage.remove(tmpPath);
+
+  // 一時ファイルにダウンロード（既存ファイルはこの時点では無傷）
+  auto result = HttpDownloader::downloadToFile(
+      std::string(url), std::string(tmpPath),
+      [this](size_t downloaded, size_t total) {
+        downloadProgress_ = downloaded;
+        downloadTotal_ = total;
+        requestUpdate(true);
+      },
+      30000);
+
+  if (result != HttpDownloader::OK) {
+    LOG_ERR("AOZORA", "Update download failed: err=%d http=%d", static_cast<int>(result), HttpDownloader::lastHttpCode);
+    Storage.remove(tmpPath);  // 不完全な一時ファイルを削除、旧ファイルは保持
+    char buf[80];
+    snprintf(buf, sizeof(buf), "err=%d http=%d", static_cast<int>(result), HttpDownloader::lastHttpCode);
+    errorMessage_ = buf;
+    return false;
+  }
+
+  // Atomic swap: 旧ファイル削除 → .tmp を正式名にrename
+  Storage.remove(destPath);
+  if (!Storage.rename(tmpPath, destPath)) {
+    LOG_ERR("AOZORA", "Rename failed: %s -> %s", tmpPath, destPath);
+    Storage.remove(tmpPath);
+    errorMessage_ = "Rename failed";
+    return false;
+  }
+
+  LOG_DBG("AOZORA", "Updated: %s", destPath);
+  return true;
+}
+
 // --- Input handling ---
 
 void AozoraActivity::loop() {
@@ -708,20 +759,11 @@ void AozoraActivity::loop() {
       return;
     }
 
-    bool alreadyDownloaded = indexManager_.isDownloaded(selectedWorkId_);
+    const bool alreadyDownloaded = indexManager_.isDownloaded(selectedWorkId_);
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (alreadyDownloaded) {
-        // Delete the book
-        if (indexManager_.removeEntry(selectedWorkId_)) {
-          {
-            RenderLock lock(*this);
-            popState();
-          }
-          requestUpdate();
-        }
-      } else {
-        // Download the book
+    if (!alreadyDownloaded) {
+      // 未ダウンロード: Right = 取得
+      if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
         {
           RenderLock lock(*this);
           state_ = DOWNLOADING;
@@ -733,6 +775,34 @@ void AozoraActivity::loop() {
         if (downloadBook()) {
           RenderLock lock(*this);
           state_ = WORK_DETAIL;  // Stay on detail, now showing "downloaded"
+        } else {
+          RenderLock lock(*this);
+          state_ = ERROR;
+        }
+        requestUpdate();
+      }
+    } else {
+      // ダウンロード済み: Left = 削除, Right = 更新
+      if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+        if (indexManager_.removeEntry(selectedWorkId_)) {
+          {
+            RenderLock lock(*this);
+            popState();
+          }
+          requestUpdate();
+        }
+      } else if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+        {
+          RenderLock lock(*this);
+          state_ = DOWNLOADING;
+          downloadProgress_ = 0;
+          downloadTotal_ = 0;
+        }
+        requestUpdateAndWait();
+
+        if (updateBook()) {
+          RenderLock lock(*this);
+          state_ = WORK_DETAIL;  // 更新成功、詳細画面に戻る
         } else {
           RenderLock lock(*this);
           state_ = ERROR;
@@ -1052,10 +1122,11 @@ void AozoraActivity::render(RenderLock&&) {
       y += metrics.verticalSpacing;
       renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, tr(STR_DOWNLOAD_COMPLETE));
 
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DELETE_CONFIRM), "", "");
+      const auto labels =
+          mappedInput.mapLabels(tr(STR_BACK), "", tr(STR_DELETE_CONFIRM), tr(STR_AOZORA_UPDATE));
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     } else {
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DOWNLOAD), "", "");
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", tr(STR_AOZORA_GET));
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
 

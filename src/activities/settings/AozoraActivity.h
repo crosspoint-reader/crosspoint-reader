@@ -113,6 +113,7 @@ class AozoraActivity : public Activity {
   bool fetchAuthors(const char* kanaPrefix);
   bool fetchWorks(const char* queryParam);
   bool downloadBook();
+  bool updateBook();
 
   // JSON parsing
   bool parseAuthorsJson(JsonDocument& doc);
