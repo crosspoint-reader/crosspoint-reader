@@ -95,14 +95,13 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   jump["spineIndex"] = s.pendingBookmarkJump.spineIndex;
   jump["pageNumber"] = s.pendingBookmarkJump.pageNumber;
 
-  FsFile file;
-  if (!Storage.openFileForWrite("CPS", path, file)) {
+  if (doc.overflowed()) {
+    LOG_ERR("CPS", "JSON document overflowed while building state");
     return false;
   }
 
-  if (doc.overflowed()) {
-    LOG_ERR("CPS", "JSON document overflowed while building state");
-    file.close();
+  FsFile file;
+  if (!Storage.openFileForWrite("CPS", path, file)) {
     return false;
   }
 
