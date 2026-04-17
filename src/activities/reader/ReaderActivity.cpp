@@ -20,12 +20,20 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+#ifndef DEBUG_MEMORY_CONSUMPTION
+#define DEBUG_MEMORY_CONSUMPTION 0
+#endif
+
 namespace {
+#if DEBUG_MEMORY_CONSUMPTION
 void logReaderLaunchMemSnapshot(const char* stage) {
   const uint32_t freeHeap = esp_get_free_heap_size();
   const uint32_t contigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
   LOG_DBG("READER", "Reader mem[%s]: free=%lu contig=%lu", stage, freeHeap, contigHeap);
 }
+#else
+inline void logReaderLaunchMemSnapshot(const char*) {}
+#endif
 }  // namespace
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {

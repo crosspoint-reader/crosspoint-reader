@@ -116,7 +116,7 @@ class ActivityManager {
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToWeather();
-  void goHome(std::string focusBookPath = {});
+  void goHome(std::string focusBookPath = {}, int focusSelectorIndex = -1);
 
   // Replace-with-hint helpers: destroy the current activity before launching the new
   // one (freeing its memory) and record where to route control when the new activity
@@ -129,6 +129,19 @@ class ActivityManager {
   // clears it, and dispatches to the corresponding parent with restoration args. If
   // no hint is set, defaults to goHome().
   void returnFromChild();
+
+  // Record a ReturnHint before calling any plain goTo*() helper. Allows an activity
+  // (e.g. Home) to declare "when this flow ends, come back here with this state" for
+  // transitions where we don't want a dedicated replaceWith*() wrapper.
+  // Cleared by returnFromChild() or by an explicit goHome()/replaceWith*() call.
+  void setReturnHint(ReturnHint hint) {
+    returnHint = std::move(hint);
+    hasReturnHint = true;
+  }
+  void clearReturnHint() {
+    returnHint = {};
+    hasReturnHint = false;
+  }
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);

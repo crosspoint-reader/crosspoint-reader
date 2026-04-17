@@ -1,3 +1,7 @@
+#ifndef DEBUG_MEMORY_CONSUMPTION
+#define DEBUG_MEMORY_CONSUMPTION 0
+#endif
+
 #include "EpubReaderActivity.h"
 
 #include <Epub/Page.h>
@@ -35,11 +39,15 @@ constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 
+#if DEBUG_MEMORY_CONSUMPTION
 void logReaderMemSnapshot(const char* stage) {
   const uint32_t freeHeap = esp_get_free_heap_size();
   const uint32_t contigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
   LOG_DBG("ERS", "Reader mem[%s]: free=%lu contig=%lu", stage, freeHeap, contigHeap);
 }
+#else
+inline void logReaderMemSnapshot(const char*) {}
+#endif
 
 bool writeReaderProgressCache(const std::string& cachePath, const int spineIndex, const int currentPage,
                               const int pageCount) {

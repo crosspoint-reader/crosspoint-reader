@@ -11,6 +11,7 @@ This document explains the refactoring from the original per-activity render tas
 | `RenderLock` | Inner class of `Activity` | Standalone class, acquires global mutex |
 | Subactivities | `ActivityWithSubactivity` base class | Activity stack managed by `ActivityManager` |
 | Navigation | Free functions in `main.cpp` | `activityManager.goHome()`, `goToReader()`, etc. |
+| Forward flow | Parent stays on stack (`pushActivity`) | Parent destroyed on forward flow (`replaceWith*` + `ReturnHint`) |
 | Subactivity results | Callback lambdas stored in parent | `startActivityForResult()` / `setResult()` / `finish()` |
 | `requestUpdate()` | Notifies activity's own render task | Delegates to `ActivityManager` (immediate or deferred) |
 
@@ -99,7 +100,7 @@ class MyActivity final : public Activity {
 };
 ```
 
-Note that navigation callbacks like `goBack` are no longer stored — use `finish()` or `activityManager.goHome()` instead.
+Note that navigation callbacks like `goBack` are no longer stored — use `finish()`, `onGoHome()`, or a direct `activityManager.goHome()` / `goTo*()` / `replaceWith*()` call instead.
 
 ### 2. Replace Navigation Functions
 
@@ -116,7 +117,7 @@ activityManager.goToSettings();
 activityManager.replaceActivity(std::make_unique<MyActivity>(renderer, mappedInput));
 ```
 
-`replaceActivity()` destroys the current activity and clears the stack. Use it for top-level navigation (home, reader, settings, etc.).
+`replaceActivity()` destroys the current activity and clears the stack. Use it for top-level navigation (home, reader, settings, etc.). See the "Navigation Flow" section after the checklist for when to use replace vs push, and how the `ReturnHint` mechanism restores a parent's prior state without keeping it resident.
 
 ### 3. Replace Subactivity Pattern
 
@@ -234,11 +235,81 @@ class SettingsActivity : public Activity {
 public:
   SettingsActivity(GfxRenderer& r, MappedInputManager& m)
       : Activity("Settings", r, m) {}
-  // Use finish() to go back, activityManager.goHome() to go home
+  // Use finish() to go back (pops the stack, or returns via ReturnHint if empty),
+  // onGoHome() to exit the flow ("up and out"), or activityManager.goHome() for a hard reset.
 };
 ```
 
 This removes `std::function` overhead (~2-4KB per unique signature) and eliminates lifetime risks from captured `this` pointers.
+
+## Navigation Flow
+
+### Push vs Replace: Memory Matters
+
+On an ESP32-C3, heap fragmentation is a real constraint — especially when the next activity is heavy (EPUB reader, TLS sync). There are two ways to launch a new activity, and the choice matters:
+
+| Call                                               | Current activity                | Stack            | When to use                                                 |
+|----------------------------------------------------|---------------------------------|------------------|-------------------------------------------------------------|
+| `replaceActivity()` / `goTo*()` / `replaceWith*()` | **destroyed** (onExit + delete) | cleared          | Forward flow: the caller has no reason to stay resident     |
+| `pushActivity()` / `startActivityForResult()`      | kept alive on stack             | parent preserved | Modal result flow: the caller needs to resume with a result |
+
+**Default to replace.** Push is only correct when you need to deliver a result back to a still-living parent (keyboard entry, confirmation dialog, chapter picker, etc.). For plain one-way transitions — opening a book, going to settings, switching tabs — use replace so the parent's memory is freed before the next activity runs.
+
+### The `ReturnHint` Pattern
+
+Replace destroys the parent, but the user still expects Back to return "where they came from" — not always Home. To bridge that, `ActivityManager` holds a small `ReturnHint`:
+
+```cpp
+enum class ReturnTo : uint8_t { Home, FileBrowser, RecentBooks };
+
+struct ReturnHint {
+  ReturnTo target = ReturnTo::Home;
+  std::string path;        // FileBrowser directory to restore
+  std::string selectName;  // item to re-focus (file name, book path)
+  int selectIndex = -1;    // combined-list index (Home selector, Recents row)
+};
+```
+
+A parent records a hint before launching a forward flow. When the launched activity (or anything it chains to) eventually exits with an empty stack, `ActivityManager::returnFromChild()` consumes the hint and routes to the correct parent — restoring its prior selection. If no hint is set, it falls back to `goHome()`.
+
+Two ways to set a hint:
+
+**1. Dedicated wrappers** — for the common book-open paths:
+
+```cpp
+// FileBrowserActivity::onFileOpen
+ReturnHint hint;
+hint.target     = ReturnTo::FileBrowser;
+hint.path       = basepath;        // "/books/fiction"
+hint.selectName = entry;           // "war_and_peace.epub"
+activityManager.replaceWithReader(fullPath, std::move(hint));
+
+// RecentBooksActivity::onSelect
+ReturnHint hint;
+hint.target      = ReturnTo::RecentBooks;
+hint.selectIndex = selectorIndex;
+activityManager.replaceWithReader(path, std::move(hint));
+```
+
+**2. `setReturnHint()` + any `goTo*()`** — for arbitrary transitions where a dedicated wrapper would be overkill:
+
+```cpp
+// HomeActivity::dispatchMenuAction
+ReturnHint hint;
+hint.target      = ReturnTo::Home;
+hint.selectIndex = selectorIndex;   // restore focus on the same menu entry
+activityManager.setReturnHint(std::move(hint));
+activityManager.goToSettings();     // parent destroyed; hint survives the round trip
+```
+
+`goTo*()` helpers do **not** clear the hint — only `goHome()` (explicit hard-reset) and the `replaceWith*()` helpers (which overwrite it with their own hint) do. This lets a hint survive chained transitions: Home → Reader → KOReaderSync → Reader → back to Home, hint intact.
+
+How `finish()` interacts with the hint:
+
+- **Non-empty stack**: `finish()` pops to the parent on the stack (classic modal result flow). Hint is untouched.
+- **Empty stack**: `finish()` falls through to `returnFromChild()` automatically. An activity launched via a `replaceWith*()` helper has no stack — so its Back-button `finish()` naturally routes via the hint.
+
+`onGoHome()` is now semantically "up and out" — it calls `returnFromChild()`, so long-press Back in a reader returns to whichever view opened the book, not always Home. For an explicit hard-reset, call `activityManager.goHome()` directly.
 
 ## Technical Details
 
@@ -443,6 +514,10 @@ Child calls: setResult(MyResult{...}); finish();
 **Modifying shared state without `RenderLock`**: If `render()` reads a variable and `loop()` writes it, the write must be under a `RenderLock`. Without it, `render()` could see a half-written value (e.g., a partially updated string or struct).
 
 **Creating background tasks that outlive the activity**: Any FreeRTOS task created in `onEnter()` must be deleted in `onExit()` before the activity is destroyed. The `ActivityManager` does not track or clean up background tasks.
+
+**Using push for forward navigation**: `pushActivity()` / `startActivityForResult()` keeps the parent alive on the stack. For a heavy child (EPUB reader, TLS sync) on a fragmented heap, the parent's resident allocations can be the difference between a successful launch and OOM. Only push when you need the parent to receive a result — otherwise use `replaceActivity()` / `goTo*()` / `replaceWith*()` and let the parent be freed first. If you do need "back to where I came from" semantics, record a `ReturnHint` before the replace instead of pushing.
+
+**Stale `ReturnHint`**: A hint set by one activity persists until either `returnFromChild()` / `goHome()` clears it, or a `replaceWith*()` helper overwrites it. If you record a hint but the flow aborts down an unusual path (error screen, boot transition), the next unrelated `finish()` could consume it. Prefer setting the hint immediately before the transition, and call `activityManager.clearReturnHint()` if you abort the flow without launching the intended target.
 
 **Holding `RenderLock` across blocking calls**: The render task is blocked on the mutex while you hold the lock. Keep critical sections short — acquire, mutate state, release, then do blocking work.
 

@@ -22,6 +22,10 @@
 #include "util/FullScreenMessageActivity.h"
 #include "weather/WeatherActivity.h"
 
+#ifndef DEBUG_MEMORY_CONSUMPTION
+#define DEBUG_MEMORY_CONSUMPTION 0
+#endif
+
 void ActivityManager::begin() {
   xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
               8192,              // Stack size
@@ -32,12 +36,16 @@ void ActivityManager::begin() {
   assert(renderTaskHandle != nullptr && "Failed to create render task");
 }
 
+#if DEBUG_MEMORY_CONSUMPTION
 static void logActivityStackState(const char* stage, Activity* currentActivity, size_t stackSize) {
   const uint32_t freeHeap = esp_get_free_heap_size();
   const uint32_t contigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
   LOG_DBG("ACT", "%s: current=%s stackSize=%zu free=%lu contig=%lu", stage,
           currentActivity ? currentActivity->getName().c_str() : "<none>", stackSize, freeHeap, contigHeap);
 }
+#else
+static inline void logActivityStackState(const char*, Activity*, size_t) {}
+#endif
 
 void ActivityManager::renderTaskTrampoline(void* param) {
   auto* self = static_cast<ActivityManager*>(param);
@@ -159,7 +167,9 @@ void ActivityManager::loop() {
       RenderLock lock;
 
       if (pendingAction == PendingAction::Replace) {
+#if DEBUG_MEMORY_CONSUMPTION
         logActivityStackState("replace_before", currentActivity.get(), stackActivities.size());
+#endif
         // Destroy the current activity
         exitActivity(lock);
         // Clear the stack
@@ -167,13 +177,21 @@ void ActivityManager::loop() {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
+#if DEBUG_MEMORY_CONSUMPTION
         logActivityStackState("replace_after_clear", nullptr, stackActivities.size());
+#endif
       } else if (pendingAction == PendingAction::Push) {
+#if DEBUG_MEMORY_CONSUMPTION
         logActivityStackState("push_before", currentActivity.get(), stackActivities.size());
+#endif
         // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
+#if DEBUG_MEMORY_CONSUMPTION
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
         logActivityStackState("push_after", currentActivity.get(), stackActivities.size());
+#else
+        LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
+#endif
       }
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
@@ -215,8 +233,10 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
     // leading to the "delete this" problem
+#if DEBUG_MEMORY_CONSUMPTION
     LOG_DBG("ACT", "replaceActivity requested: current=%s stackSize=%zu", currentActivity->getName().c_str(),
             stackActivities.size());
+#endif
     pendingActivity = std::move(newActivity);
     pendingAction = PendingAction::Replace;
   } else {
@@ -233,12 +253,10 @@ void ActivityManager::goToFileTransfer() {
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToFileBrowser(std::string path, std::string focusName) {
-  hasReturnHint = false;
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path), std::move(focusName)));
 }
 
 void ActivityManager::goToRecentBooks(int focusIndex) {
-  hasReturnHint = false;
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput, focusIndex));
 }
 
@@ -303,7 +321,7 @@ void ActivityManager::returnFromChild() {
       break;
     case ReturnTo::Home:
     default:
-      goHome(std::move(hint.selectName));
+      goHome(std::move(hint.selectName), hint.selectIndex);
       break;
   }
 }
@@ -321,9 +339,9 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 
 void ActivityManager::goToWeather() { replaceActivity(std::make_unique<WeatherActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goHome(std::string focusBookPath) {
+void ActivityManager::goHome(std::string focusBookPath, int focusSelectorIndex) {
   hasReturnHint = false;
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, std::move(focusBookPath)));
+  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, std::move(focusBookPath), focusSelectorIndex));
 }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
@@ -332,8 +350,10 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
     LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");
     pendingActivity.reset();
   }
+#if DEBUG_MEMORY_CONSUMPTION
   LOG_DBG("ACT", "pushActivity requested: current=%s stackSize=%zu",
           currentActivity ? currentActivity->getName().c_str() : "<none>", stackActivities.size());
+#endif
   pendingActivity = std::move(activity);
   pendingAction = PendingAction::Push;
 }
