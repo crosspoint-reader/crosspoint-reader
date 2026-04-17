@@ -34,7 +34,7 @@ void KeyboardEntryActivity::onEnter() {
 void KeyboardEntryActivity::onExit() {
   Activity::onExit();
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
 int KeyboardEntryActivity::getContentRowCount() const {
