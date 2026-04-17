@@ -1,7 +1,7 @@
 #pragma once
 #include <I18n.h>
 
-#include <functional>
+#include <cassert>
 #include <string>
 #include <vector>
 
@@ -49,11 +49,37 @@ struct SettingInfo {
   size_t stringOffset = 0;
   size_t stringMaxLen = 0;
 
-  // Dynamic accessors (for settings stored outside CrossPointSettings, e.g. KOReaderCredentialStore)
-  std::function<uint8_t()> valueGetter;
-  std::function<void(uint8_t)> valueSetter;
-  std::function<std::string()> stringGetter;
-  std::function<void(const std::string&)> stringSetter;
+  // Dynamic accessors (for settings stored outside CrossPointSettings, e.g. KOReaderCredentialStore).
+  // Function pointers + opaque context avoid the heap allocation of std::function. Stateless
+  // lambdas pass ctx=nullptr; captures must be hand-written as trampoline functions. See
+  // DynamicEnumCtx / DynamicStringCtx factories below.
+  using ValueGetterFn = uint8_t (*)(void*);
+  using ValueSetterFn = void (*)(void*, uint8_t);
+  using StringGetterFn = std::string (*)(void*);
+  using StringSetterFn = void (*)(void*, const std::string&);
+
+  void* accessorCtx = nullptr;
+  ValueGetterFn valueGetter = nullptr;
+  ValueSetterFn valueSetter = nullptr;
+  StringGetterFn stringGetter = nullptr;
+  StringSetterFn stringSetter = nullptr;
+
+  uint8_t callValueGetter() const {
+    assert(valueGetter && "SettingInfo::callValueGetter requires a non-null valueGetter");
+    return valueGetter(accessorCtx);
+  }
+  void callValueSetter(uint8_t v) const {
+    assert(valueSetter && "SettingInfo::callValueSetter requires a non-null valueSetter");
+    valueSetter(accessorCtx, v);
+  }
+  std::string callStringGetter() const {
+    assert(stringGetter && "SettingInfo::callStringGetter requires a non-null stringGetter");
+    return stringGetter(accessorCtx);
+  }
+  void callStringSetter(const std::string& v) const {
+    assert(stringSetter && "SettingInfo::callStringSetter requires a non-null stringSetter");
+    stringSetter(accessorCtx, v);
+  }
 
   SettingInfo& withObfuscated() {
     obfuscated = true;
@@ -115,30 +141,46 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo DynamicEnum(StrId nameId, std::vector<StrId> values, std::function<uint8_t()> getter,
-                                 std::function<void(uint8_t)> setter, const char* key = nullptr,
-                                 StrId category = StrId::STR_NONE_OPT) {
+  // Stateless variant — getter/setter are free/static functions with no captured state.
+  static SettingInfo DynamicEnum(StrId nameId, std::vector<StrId> values, ValueGetterFn getter, ValueSetterFn setter,
+                                 const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
     s.nameId = nameId;
     s.type = SettingType::ENUM;
     s.enumValues = std::move(values);
-    s.valueGetter = std::move(getter);
-    s.valueSetter = std::move(setter);
+    s.valueGetter = getter;
+    s.valueSetter = setter;
     s.key = key;
     s.category = category;
     return s;
   }
 
-  static SettingInfo DynamicString(StrId nameId, std::function<std::string()> getter,
-                                   std::function<void(const std::string&)> setter, const char* key = nullptr,
-                                   StrId category = StrId::STR_NONE_OPT) {
+  // Context-carrying variant — trampolines receive `ctx` as first argument and cast it back to
+  // their concrete owner type.
+  static SettingInfo DynamicEnumCtx(StrId nameId, std::vector<StrId> values, void* ctx, ValueGetterFn getter,
+                                    ValueSetterFn setter, const char* key = nullptr,
+                                    StrId category = StrId::STR_NONE_OPT) {
+    SettingInfo s = DynamicEnum(nameId, std::move(values), getter, setter, key, category);
+    s.accessorCtx = ctx;
+    return s;
+  }
+
+  static SettingInfo DynamicString(StrId nameId, StringGetterFn getter, StringSetterFn setter,
+                                   const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
     s.nameId = nameId;
     s.type = SettingType::STRING;
-    s.stringGetter = std::move(getter);
-    s.stringSetter = std::move(setter);
+    s.stringGetter = getter;
+    s.stringSetter = setter;
     s.key = key;
     s.category = category;
+    return s;
+  }
+
+  static SettingInfo DynamicStringCtx(StrId nameId, void* ctx, StringGetterFn getter, StringSetterFn setter,
+                                      const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
+    SettingInfo s = DynamicString(nameId, getter, setter, key, category);
+    s.accessorCtx = ctx;
     return s;
   }
 

@@ -151,22 +151,22 @@ inline const std::vector<SettingInfo> list = {
 
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
     SettingInfo::DynamicString(
-        StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
-        [](const std::string& v) {
+        StrId::STR_SYNC_SERVER_URL, [](void*) { return KOREADER_STORE.getServerUrl(); },
+        [](void*, const std::string& v) {
           KOREADER_STORE.setServerUrl(v);
           KOREADER_STORE.saveToFile();
         },
         "koServerUrl", StrId::STR_KOREADER_SYNC),
     SettingInfo::DynamicString(
-        StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
-        [](const std::string& v) {
+        StrId::STR_KOREADER_USERNAME, [](void*) { return KOREADER_STORE.getUsername(); },
+        [](void*, const std::string& v) {
           KOREADER_STORE.setCredentials(v, KOREADER_STORE.getPassword());
           KOREADER_STORE.saveToFile();
         },
         "koUsername", StrId::STR_KOREADER_SYNC),
     SettingInfo::DynamicString(
-        StrId::STR_KOREADER_PASSWORD, [] { return KOREADER_STORE.getPassword(); },
-        [](const std::string& v) {
+        StrId::STR_KOREADER_PASSWORD, [](void*) { return KOREADER_STORE.getPassword(); },
+        [](void*, const std::string& v) {
           KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), v);
           KOREADER_STORE.saveToFile();
         },
@@ -174,8 +174,8 @@ inline const std::vector<SettingInfo> list = {
         .withObfuscated(),
     SettingInfo::DynamicEnum(
         StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
-        [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
-        [](uint8_t v) {
+        [](void*) { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
+        [](void*, uint8_t v) {
           KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
           KOREADER_STORE.saveToFile();
         },

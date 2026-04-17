@@ -33,7 +33,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
-const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 
 void logReaderMemSnapshot(const char* stage) {
   const uint32_t freeHeap = esp_get_free_heap_size();
@@ -756,7 +756,7 @@ void EpubReaderActivity::applyTextDarkness(const uint8_t textDarkness) {
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_LABELS)) {
     automaticPageTurnActive = false;
     return;
   }

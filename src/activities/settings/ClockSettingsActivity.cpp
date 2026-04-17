@@ -19,6 +19,7 @@ const StrId timeZoneNames[CrossPointSettings::TIMEZONE_COUNT] = {
 }  // namespace
 
 void ClockSettingsActivity::buildMenuItems() {
+  menuItems.reserve(6);
   menuItems.push_back(SettingInfo::Separator(StrId::STR_SETTINGS_TITLE));
   menuItems.push_back(
       SettingInfo::Toggle(StrId::STR_USE_CLOCK, &CrossPointSettings::useClock, "useClock", StrId::STR_CAT_SYSTEM));

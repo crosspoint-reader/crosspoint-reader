@@ -99,21 +99,26 @@ int getHomeCoverRenderHeight(const HomeScreenLayout& layout) {
 }
 }  // namespace
 
-int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
-  if (SETTINGS.useWeather) {
-    count++;
-  }
-  if (!recentBooks.empty()) {
-    count += recentBooks.size();
+// Builds the menu entry list in display order. Single source of truth for both loop() (which
+// dispatches Confirm based on action) and render() (which draws labels/icons).
+void HomeActivity::rebuildMenuEntries() {
+  menuEntries.clear();
+  menuEntries.reserve(7);
+
+  menuEntries.push_back({MenuAction::FileBrowser, StrId::STR_BROWSE_FILES, Folder});
+  menuEntries.push_back({MenuAction::Recents, StrId::STR_MENU_RECENT_BOOKS, Recent});
+  if (!GLOBAL_BOOKMARKS.isEmpty()) {
+    menuEntries.push_back({MenuAction::GlobalBookmarks, StrId::STR_GLOBAL_BOOKMARKS, Book});
   }
   if (hasOpdsUrl) {
-    count++;
+    menuEntries.push_back({MenuAction::OpdsBrowser, StrId::STR_OPDS_BROWSER, Library});
   }
-  if (!GLOBAL_BOOKMARKS.isEmpty()) {
-    count++;
+  menuEntries.push_back({MenuAction::FileTransfer, StrId::STR_FILE_TRANSFER, Transfer});
+  if (SETTINGS.useWeather) {
+    menuEntries.push_back({MenuAction::Weather, StrId::STR_WEATHER, Weather});
   }
-  return count;
+  menuEntries.push_back({MenuAction::Settings, StrId::STR_SETTINGS_TITLE, Settings});
+  menuEntriesDirty = false;
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -207,6 +212,7 @@ void HomeActivity::onEnter() {
   }
 
   // Trigger first update
+  menuEntriesDirty = true;
   requestUpdate();
 }
 
@@ -260,57 +266,39 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  if (menuEntriesDirty) {
+    rebuildMenuEntries();
+  }
+  const int totalItems = static_cast<int>(recentBooks.size() + menuEntries.size());
+
   if (firstRenderDone && !recentsLoaded && !recentsLoading) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const Rect contentRect = UITheme::getContentRect(renderer, true, false);
-    const int menuItemCount = getMenuItemCount();
-    const HomeScreenLayout layout = computeHomeScreenLayout(metrics, contentRect.height, menuItemCount);
+    const HomeScreenLayout layout =
+        computeHomeScreenLayout(metrics, contentRect.height, static_cast<int>(menuEntries.size()));
     loadRecentCovers(getHomeCoverRenderHeight(layout));
     return;
   }
 
-  const int menuCount = getMenuItemCount();
-
-  buttonNavigator.onNext([this, menuCount] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+  buttonNavigator.onNext([this, totalItems] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, menuCount] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+  buttonNavigator.onPrevious([this, totalItems] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Calculate dynamic indices based on which options are available
-    int idx = 0;
-    int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    const bool hasGlobalBookmarks = !GLOBAL_BOOKMARKS.isEmpty();
-    const bool hasWeather = SETTINGS.useWeather;
-    const int fileBrowserIdx = idx++;
-    const int recentsIdx = idx++;
-    const int globalBookmarksIdx = hasGlobalBookmarks ? idx++ : -1;
-    const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
-    const int fileTransferIdx = idx++;
-    const int weatherIdx = hasWeather ? idx++ : -1;
-    const int settingsIdx = idx;
-
-    if (selectorIndex < recentBooks.size()) {
+    const int recentsCount = static_cast<int>(recentBooks.size());
+    if (selectorIndex < recentsCount) {
       onSelectBook(recentBooks[selectorIndex].path);
-    } else if (menuSelectedIndex == fileBrowserIdx) {
-      onFileBrowserOpen();
-    } else if (menuSelectedIndex == recentsIdx) {
-      onRecentsOpen();
-    } else if (menuSelectedIndex == globalBookmarksIdx) {
-      onGlobalBookmarksOpen();
-    } else if (menuSelectedIndex == opdsLibraryIdx) {
-      onOpdsBrowserOpen();
-    } else if (menuSelectedIndex == weatherIdx) {
-      onWeatherOpen();
-    } else if (menuSelectedIndex == fileTransferIdx) {
-      onFileTransferOpen();
-    } else if (menuSelectedIndex == settingsIdx) {
-      onSettingsOpen();
+    } else {
+      const int menuIdx = selectorIndex - recentsCount;
+      if (menuIdx < static_cast<int>(menuEntries.size())) {
+        dispatchMenuAction(menuEntries[menuIdx].action);
+      }
     }
   }
 }
@@ -324,37 +312,16 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.homeTopPadding}, nullptr);
 
-  // Build menu items dynamically
-  const char* weatherMenuLabel = SETTINGS.useWeather ? tr(STR_WEATHER) : tr(STR_SETTINGS_TITLE);
-  const UIIcon weatherMenuIcon = SETTINGS.useWeather ? Weather : Settings;
-
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        weatherMenuLabel, tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, weatherMenuIcon, Settings};
-
-  if (!SETTINGS.useWeather) {
-    menuItems.erase(menuItems.begin() + 3);
-    menuIcons.erase(menuIcons.begin() + 3);
+  if (menuEntriesDirty) {
+    rebuildMenuEntries();
   }
 
-  int insertAfterRecents = 2;
-  if (!GLOBAL_BOOKMARKS.isEmpty()) {
-    menuItems.insert(menuItems.begin() + insertAfterRecents, tr(STR_GLOBAL_BOOKMARKS));
-    menuIcons.insert(menuIcons.begin() + insertAfterRecents, Book);
-    insertAfterRecents++;
-  }
-
-  if (hasOpdsUrl) {
-    menuItems.insert(menuItems.begin() + insertAfterRecents, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + insertAfterRecents, Library);
-  }
-
-  const int totalItems = static_cast<int>(recentBooks.size() + menuItems.size());
+  const int totalItems = static_cast<int>(recentBooks.size() + menuEntries.size());
   if (selectorIndex >= totalItems) {
     selectorIndex = std::max(0, totalItems - 1);
   }
 
-  const int menuCount = static_cast<int>(menuItems.size());
+  const int menuCount = static_cast<int>(menuEntries.size());
   const HomeScreenLayout layout = computeHomeScreenLayout(metrics, contentRect.height, menuCount);
 
   GUI.drawRecentBookCover(renderer,
@@ -367,8 +334,8 @@ void HomeActivity::render(RenderLock&&) {
       Rect{contentRect.x, metrics.homeTopPadding + layout.recentTileHeight + layout.recentToMenuGap, contentRect.width,
            layout.menuHeight},
       menuCount, selectorIndex - static_cast<int>(recentBooks.size()),
-      [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+      [this](int index) { return std::string(I18N.get(menuEntries[index].label)); },
+      [this](int index) { return menuEntries[index].icon; });
 
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -383,16 +350,31 @@ void HomeActivity::render(RenderLock&&) {
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.pushReader(path); }
 
-void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
-
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
-
-void HomeActivity::onGlobalBookmarksOpen() { activityManager.goToGlobalBookmarks(); }
-
-void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
-
-void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
-
-void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
-
-void HomeActivity::onWeatherOpen() { activityManager.goToWeather(); }
+void HomeActivity::dispatchMenuAction(MenuAction action) {
+  switch (action) {
+    case MenuAction::FileBrowser:
+      activityManager.goToFileBrowser();
+      break;
+    case MenuAction::Recents:
+      activityManager.goToRecentBooks();
+      break;
+    case MenuAction::GlobalBookmarks:
+      activityManager.goToGlobalBookmarks();
+      break;
+    case MenuAction::OpdsBrowser:
+      activityManager.goToBrowser();
+      break;
+    case MenuAction::FileTransfer:
+      activityManager.goToFileTransfer();
+      break;
+    case MenuAction::Weather:
+      activityManager.goToWeather();
+      break;
+    case MenuAction::Settings:
+      activityManager.goToSettings();
+      break;
+    default:
+      LOG_ERR("HOME", "Unexpected menu action: %d", static_cast<int>(action));
+      break;
+  }
+}

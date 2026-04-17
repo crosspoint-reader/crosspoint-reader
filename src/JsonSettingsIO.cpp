@@ -95,9 +95,23 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   jump["spineIndex"] = s.pendingBookmarkJump.spineIndex;
   jump["pageNumber"] = s.pendingBookmarkJump.pageNumber;
 
-  String json;
-  serializeJson(doc, json);
-  return Storage.writeFile(path, json);
+  if (doc.overflowed()) {
+    LOG_ERR("CPS", "JSON document overflowed while building state");
+    return false;
+  }
+
+  FsFile file;
+  if (!Storage.openFileForWrite("CPS", path, file)) {
+    return false;
+  }
+
+  const size_t expected = measureJson(doc);
+  const size_t written = serializeJson(doc, file);
+  file.flush();
+  if (!file.close()) {
+    return false;
+  }
+  return written == expected;
 }
 
 bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {

@@ -30,16 +30,22 @@ void SettingsActivity::onEnter() {
   controlsSettings.clear();
   systemSettings.clear();
   submenuData.clear();
+  displaySettings.reserve(20);
+  readerSettings.reserve(30);
+  controlsSettings.reserve(8);
+  systemSettings.reserve(20);
+  submenuData.reserve(4);
 
   StrId lastDisplaySub = StrId::STR_NONE_OPT;
   StrId lastReaderSub = StrId::STR_NONE_OPT;
   StrId lastControlsSub = StrId::STR_NONE_OPT;
   StrId lastSystemSub = StrId::STR_NONE_OPT;
 
-  auto addTo = [this](std::vector<SettingInfo>& vec, StrId& lastSub, SettingInfo s) {
+  // Shared placement logic — locates submenu target or inserts separator.
+  // Returns the vector the caller should push into (either `vec` or a submenu's items).
+  auto locateTarget = [this](std::vector<SettingInfo>& vec, StrId& lastSub,
+                             const SettingInfo& s) -> std::vector<SettingInfo>* {
     if (s.submenu != StrId::STR_NONE_OPT) {
-      // Item belongs to a submenu — collect it and insert a placeholder in the main
-      // list the first time this submenu ID is encountered.
       auto it = std::find_if(submenuData.begin(), submenuData.end(),
                              [&s](const SubmenuData& d) { return d.id == s.submenu; });
       if (it == submenuData.end()) {
@@ -47,14 +53,21 @@ void SettingsActivity::onEnter() {
         submenuData.push_back({s.submenu, {}});
         it = submenuData.end() - 1;
       }
-      it->items.push_back(std::move(s));
-      return;
+      return &it->items;
     }
     if (s.subcategory != StrId::STR_NONE_OPT && s.subcategory != lastSub) {
       vec.push_back(SettingInfo::Separator(s.subcategory));
       lastSub = s.subcategory;
     }
-    vec.push_back(std::move(s));
+    return &vec;
+  };
+
+  auto addTo = [&locateTarget](std::vector<SettingInfo>& vec, StrId& lastSub, const SettingInfo& s) {
+    locateTarget(vec, lastSub, s)->push_back(s);
+  };
+  auto addToMoved = [&locateTarget](std::vector<SettingInfo>& vec, StrId& lastSub, SettingInfo&& s) {
+    auto* target = locateTarget(vec, lastSub, s);
+    target->push_back(std::move(s));
   };
 
   for (const auto& setting : getSettingsList()) {
@@ -80,34 +93,34 @@ void SettingsActivity::onEnter() {
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
 
-  addTo(readerSettings, lastReaderSub,
-        SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  addToMoved(readerSettings, lastReaderSub,
+             SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
-  addTo(systemSettings, lastSystemSub, SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network)
-            .withSubcategory(StrId::STR_MENU_SYS_NETWORK));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync)
-            .withSubcategory(StrId::STR_MENU_SYS_NETWORK));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser)
-            .withSubcategory(StrId::STR_MENU_SYS_NETWORK));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_CLOCK_SETTINGS, SettingAction::ClockSettings)
-            .withSubcategory(StrId::STR_MENU_SYS_TOOLS));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_WEATHER_SETTINGS, SettingAction::Weather)
-            .withSubcategory(StrId::STR_MENU_SYS_TOOLS));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache)
-            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates)
-            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM));
-  addTo(systemSettings, lastSystemSub,
-        SettingInfo::Action(StrId::STR_SYSTEM_INFO, SettingAction::SystemInfo)
-            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM));
+  addToMoved(systemSettings, lastSystemSub, SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network)
+                           .withSubcategory(StrId::STR_MENU_SYS_NETWORK)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync)
+                           .withSubcategory(StrId::STR_MENU_SYS_NETWORK)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser)
+                           .withSubcategory(StrId::STR_MENU_SYS_NETWORK)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_CLOCK_SETTINGS, SettingAction::ClockSettings)
+                           .withSubcategory(StrId::STR_MENU_SYS_TOOLS)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_WEATHER_SETTINGS, SettingAction::Weather)
+                           .withSubcategory(StrId::STR_MENU_SYS_TOOLS)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache)
+                           .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates)
+                           .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_SYSTEM_INFO, SettingAction::SystemInfo)
+                           .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
 
   // Reset selection to first category
   selectedCategoryIndex = 0;
@@ -212,9 +225,9 @@ void SettingsActivity::toggleCurrentSetting() {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     if (setting.action == SettingAction::Submenu) {
-      const auto it = std::find_if(submenuData.cbegin(), submenuData.cend(),
-                                   [&setting](const SubmenuData& d) { return d.id == setting.nameId; });
-      if (it != submenuData.cend()) {
+      auto it = std::find_if(submenuData.begin(), submenuData.end(),
+                             [&setting](const SubmenuData& d) { return d.id == setting.nameId; });
+      if (it != submenuData.end()) {
         startActivityForResult(
             std::make_unique<SettingsSubmenuActivity>(renderer, mappedInput, setting.nameId, it->items), resultHandler);
       }

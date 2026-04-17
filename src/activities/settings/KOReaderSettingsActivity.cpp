@@ -16,6 +16,7 @@ KOReaderSettingsActivity::KOReaderSettingsActivity(GfxRenderer& renderer, Mapped
 }
 
 void KOReaderSettingsActivity::buildMenuItems() {
+  menuItems.reserve(6);
   // Username, Password, Server URL: ACTION items with custom value display
   menuItems.push_back(SettingInfo::Action(StrId::STR_SYNC_SERVER_URL, SettingAction::None)
                           .withSubcategory(StrId::STR_MENU_KOSYNC_SERVER));
@@ -25,8 +26,8 @@ void KOReaderSettingsActivity::buildMenuItems() {
   // Document matching: DynamicEnum toggling between Filename and Binary
   menuItems.push_back(SettingInfo::DynamicEnum(
       StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
-      [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
-      [](uint8_t v) {
+      [](void*) { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
+      [](void*, uint8_t v) {
         KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
         KOREADER_STORE.saveToFile();
       }));

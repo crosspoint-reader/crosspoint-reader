@@ -19,7 +19,7 @@ std::string SettingInfo::getDisplayValue() const {
       if (valuePtr)
         value = SETTINGS.*(valuePtr);
       else if (valueGetter)
-        value = valueGetter();
+        value = callValueGetter();
       else
         return {};
       return std::string(value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
@@ -29,7 +29,7 @@ std::string SettingInfo::getDisplayValue() const {
       if (valuePtr)
         value = SETTINGS.*(valuePtr);
       else if (valueGetter)
-        value = valueGetter();
+        value = callValueGetter();
       else
         return {};
       if (value < enumValues.size()) return std::string(I18N.get(enumValues[value]));
@@ -37,7 +37,7 @@ std::string SettingInfo::getDisplayValue() const {
     }
     case SettingType::VALUE: {
       if (valuePtr) return std::to_string(SETTINGS.*(valuePtr));
-      if (valueGetter) return std::to_string(valueGetter());
+      if (valueGetter) return std::to_string(callValueGetter());
       return {};
     }
     case SettingType::ACTION:
@@ -56,7 +56,7 @@ void SettingInfo::toggleValue() const {
       if (valuePtr) {
         SETTINGS.*(valuePtr) = !(SETTINGS.*(valuePtr));
       } else if (valueGetter && valueSetter) {
-        valueSetter(!valueGetter());
+        callValueSetter(!callValueGetter());
       }
       break;
 
@@ -66,7 +66,7 @@ void SettingInfo::toggleValue() const {
       if (valuePtr) {
         SETTINGS.*(valuePtr) = (SETTINGS.*(valuePtr) + 1) % count;
       } else if (valueGetter && valueSetter) {
-        valueSetter((valueGetter() + 1) % count);
+        callValueSetter((callValueGetter() + 1) % count);
       }
       break;
     }

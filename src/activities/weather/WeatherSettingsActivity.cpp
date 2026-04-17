@@ -14,6 +14,7 @@
 #include "fontIds.h"
 
 void WeatherSettingsActivity::buildMenuItems() {
+  menuItems.reserve(10);
   menuItems.push_back(SettingInfo::Separator(StrId::STR_SETTINGS_TITLE));
   menuItems.push_back(SettingInfo::Toggle(StrId::STR_USE_WEATHER, &CrossPointSettings::useWeather, "useWeather",
                                           StrId::STR_CAT_SYSTEM));

@@ -50,44 +50,57 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   // --- Appearance ---
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_APPEARANCE));
 
+  auto* self = this;
+
   // Embedded style: cycles default(-1) -> ON(1) -> OFF(0) via DynamicEnum indices 0/1/2
-  menuItems.push_back(SettingInfo::DynamicEnum(
-      StrId::STR_EMBEDDED_STYLE, {StrId::STR_DEFAULT_VALUE, StrId::STR_STATE_ON, StrId::STR_STATE_OFF},
-      [this]() -> uint8_t {
-        if (pendingEmbeddedStyleOverride < 0) return 0;
-        if (pendingEmbeddedStyleOverride > 0) return 1;
+  menuItems.push_back(SettingInfo::DynamicEnumCtx(
+      StrId::STR_EMBEDDED_STYLE, {StrId::STR_DEFAULT_VALUE, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, self,
+      [](void* ctx) -> uint8_t {
+        const auto* s = static_cast<const EpubReaderMenuActivity*>(ctx);
+        if (s->pendingEmbeddedStyleOverride < 0) return 0;
+        if (s->pendingEmbeddedStyleOverride > 0) return 1;
         return 2;
       },
-      [this](uint8_t v) {
+      [](void* ctx, uint8_t v) {
+        auto* s = static_cast<EpubReaderMenuActivity*>(ctx);
         if (v == 0)
-          pendingEmbeddedStyleOverride = -1;
+          s->pendingEmbeddedStyleOverride = -1;
         else if (v == 1)
-          pendingEmbeddedStyleOverride = 1;
+          s->pendingEmbeddedStyleOverride = 1;
         else
-          pendingEmbeddedStyleOverride = 0;
+          s->pendingEmbeddedStyleOverride = 0;
       }));
 
   // Image rendering: cycles default(-1) -> display(0) -> placeholder(1) -> suppress(2)
-  menuItems.push_back(SettingInfo::DynamicEnum(
+  menuItems.push_back(SettingInfo::DynamicEnumCtx(
       StrId::STR_IMAGES,
       {StrId::STR_DEFAULT_VALUE, StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
-      [this]() -> uint8_t { return (pendingImageRenderingOverride < 0) ? 0 : (pendingImageRenderingOverride + 1); },
-      [this](uint8_t v) { pendingImageRenderingOverride = (v == 0) ? -1 : static_cast<int8_t>(v - 1); }));
+      self,
+      [](void* ctx) -> uint8_t {
+        const auto* s = static_cast<const EpubReaderMenuActivity*>(ctx);
+        return (s->pendingImageRenderingOverride < 0) ? 0 : (s->pendingImageRenderingOverride + 1);
+      },
+      [](void* ctx, uint8_t v) {
+        auto* s = static_cast<EpubReaderMenuActivity*>(ctx);
+        s->pendingImageRenderingOverride = (v == 0) ? -1 : static_cast<int8_t>(v - 1);
+      }));
 
   // Text darkness: straightforward 0-3 cycle
-  menuItems.push_back(SettingInfo::DynamicEnum(
-      StrId::STR_TEXT_DARKNESS, {StrId::STR_NORMAL, StrId::STR_DARK, StrId::STR_EXTRA_DARK, StrId::STR_MAX_DARK},
-      [this]() -> uint8_t { return pendingTextDarkness; }, [this](uint8_t v) { pendingTextDarkness = v; }));
+  menuItems.push_back(SettingInfo::DynamicEnumCtx(
+      StrId::STR_TEXT_DARKNESS, {StrId::STR_NORMAL, StrId::STR_DARK, StrId::STR_EXTRA_DARK, StrId::STR_MAX_DARK}, self,
+      [](void* ctx) -> uint8_t { return static_cast<EpubReaderMenuActivity*>(ctx)->pendingTextDarkness; },
+      [](void* ctx, uint8_t v) { static_cast<EpubReaderMenuActivity*>(ctx)->pendingTextDarkness = v; }));
 
   // Helper functions, reading ruler, auto page turn, orientation
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_UTILS));
   // Auto page turn: ACTION type with custom cycling in onActionSelected
   menuItems.push_back(SettingInfo::Action(StrId::STR_AUTO_TURN_PAGES_PER_MIN, SettingAction::None));
   // Orientation: straightforward 0-3 cycle
-  menuItems.push_back(SettingInfo::DynamicEnum(
+  menuItems.push_back(SettingInfo::DynamicEnumCtx(
       StrId::STR_ORIENTATION,
-      {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW},
-      [this]() -> uint8_t { return pendingOrientation; }, [this](uint8_t v) { pendingOrientation = v; }));
+      {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW}, self,
+      [](void* ctx) -> uint8_t { return static_cast<EpubReaderMenuActivity*>(ctx)->pendingOrientation; },
+      [](void* ctx, uint8_t v) { static_cast<EpubReaderMenuActivity*>(ctx)->pendingOrientation = v; }));
 
   // --- Synchronisation (only if credentials are set) ---
   if (KOREADER_STORE.hasCredentials()) {
