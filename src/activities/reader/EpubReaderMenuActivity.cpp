@@ -55,7 +55,7 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   // Embedded style: cycles default(-1) -> ON(1) -> OFF(0) via DynamicEnum indices 0/1/2
   menuItems.push_back(SettingInfo::DynamicEnumCtx(
       StrId::STR_EMBEDDED_STYLE, {StrId::STR_DEFAULT_VALUE, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, self,
-      [](void* ctx) -> uint8_t {
+      [](const void* ctx) -> uint8_t {
         const auto* s = static_cast<const EpubReaderMenuActivity*>(ctx);
         if (s->pendingEmbeddedStyleOverride < 0) return 0;
         if (s->pendingEmbeddedStyleOverride > 0) return 1;
@@ -76,7 +76,7 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
       StrId::STR_IMAGES,
       {StrId::STR_DEFAULT_VALUE, StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
       self,
-      [](void* ctx) -> uint8_t {
+      [](const void* ctx) -> uint8_t {
         const auto* s = static_cast<const EpubReaderMenuActivity*>(ctx);
         return (s->pendingImageRenderingOverride < 0) ? 0 : (s->pendingImageRenderingOverride + 1);
       },
