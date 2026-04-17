@@ -157,6 +157,10 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
+  if (strcmp(name, "p") == 0) {
+    self->xpathParagraphIndex++;
+  }
+
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
     self->depth += 1;
@@ -428,6 +432,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
+                  self->paragraphIndexPerPage.push_back(self->xpathParagraphIndex);
                   self->completePageFn(std::move(self->currentPage));
                   self->completedPageCount++;
                   self->currentPage.reset(new Page());
@@ -1066,6 +1071,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
     }
+    paragraphIndexPerPage.push_back(xpathParagraphIndex);
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset();
@@ -1084,6 +1090,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
+    paragraphIndexPerPage.push_back(xpathParagraphIndex);
     completePageFn(std::move(currentPage));
     completedPageCount++;
     currentPage.reset(new Page());

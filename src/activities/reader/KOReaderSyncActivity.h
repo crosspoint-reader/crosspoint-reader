@@ -22,13 +22,16 @@ class KOReaderSyncActivity final : public Activity {
  public:
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                 const std::shared_ptr<Epub>& epub, const std::string& epubPath, int currentSpineIndex,
-                                int currentPage, int totalPagesInSpine)
+                                int currentPage, int totalPagesInSpine, uint16_t currentParagraphIndex = 0,
+                                bool hasCurrentParagraphIndex = false)
       : Activity("KOReaderSync", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
         totalPagesInSpine(totalPagesInSpine),
+        currentParagraphIndex(currentParagraphIndex),
+        hasCurrentParagraphIndex(hasCurrentParagraphIndex),
         remoteProgress{},
         remotePosition{},
         localProgress{} {}
@@ -58,6 +61,8 @@ class KOReaderSyncActivity final : public Activity {
   int currentSpineIndex;
   int currentPage;
   int totalPagesInSpine;
+  uint16_t currentParagraphIndex = 0;
+  bool hasCurrentParagraphIndex = false;
 
   State state = WIFI_SELECTION;
   std::string statusMessage;

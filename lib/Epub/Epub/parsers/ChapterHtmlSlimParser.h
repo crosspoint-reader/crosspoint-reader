@@ -74,6 +74,8 @@ class ChapterHtmlSlimParser {
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
+  uint16_t xpathParagraphIndex = 0;
+  std::vector<uint16_t> paragraphIndexPerPage;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -126,4 +128,5 @@ class ChapterHtmlSlimParser {
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::vector<uint16_t>& getParagraphIndexPerPage() const { return paragraphIndexPerPage; }
 };
