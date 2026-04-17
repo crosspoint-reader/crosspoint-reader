@@ -21,7 +21,6 @@ Therefore this branch focuses on real fixes and real improvements while trying t
 - Weather information panel
 - Multiple under-the-hood performance improvements
 - Book information screen
-- Reading ruler
 - ...
 
 # Choosing the _right_ reader...
