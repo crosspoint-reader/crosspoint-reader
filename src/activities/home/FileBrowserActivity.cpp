@@ -156,7 +156,8 @@ void FileBrowserActivity::loop() {
       loadFiles();
       const auto pos = oldPath.find_last_of('/');
       const std::string dirName = oldPath.substr(pos + 1) + "/";
-      selectorIndex = findEntry(dirName);
+      const size_t idx = findEntry(dirName);
+      selectorIndex = (idx < files.size()) ? idx : 0;
       requestUpdate();
     } else {
       onGoHome();
