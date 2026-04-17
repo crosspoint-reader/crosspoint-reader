@@ -5,12 +5,31 @@
 
 #include "../Activity.h"
 #include "./FileBrowserActivity.h"
+#include "components/UITheme.h"
 #include "util/ButtonNavigator.h"
 
 struct RecentBook;
 struct Rect;
 
 class HomeActivity final : public Activity {
+ public:
+  enum class MenuAction {
+    FileBrowser,
+    Recents,
+    GlobalBookmarks,
+    OpdsBrowser,
+    FileTransfer,
+    Weather,
+    Settings,
+  };
+
+ private:
+  struct MenuEntry {
+    MenuAction action;
+    StrId label;
+    UIIcon icon;
+  };
+
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool recentsLoading = false;
@@ -22,16 +41,12 @@ class HomeActivity final : public Activity {
   size_t nextRecentCoverIndex = 0;
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
   std::vector<RecentBook> recentBooks;
-  void onSelectBook(const std::string& path);
-  void onFileBrowserOpen();
-  void onRecentsOpen();
-  void onGlobalBookmarksOpen();
-  void onSettingsOpen();
-  void onFileTransferOpen();
-  void onOpdsBrowserOpen();
-  void onWeatherOpen();
+  std::vector<MenuEntry> menuEntries;
 
-  int getMenuItemCount() const;
+  void onSelectBook(const std::string& path);
+  void dispatchMenuAction(MenuAction action);
+
+  void rebuildMenuEntries();
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
