@@ -205,6 +205,9 @@ static time_t nvsReadSyncTime() {
 
 static float readChipTemperatureC() {
   // ESP32 and ESP32-C3 use the internal ADC temperature sensor.
+  if (initExternalRTC()) {
+    return readExternalTemp();
+  }
   return (float)temperatureRead();
 }
 
@@ -235,21 +238,21 @@ static bool initExternalRTC() {
 // Write time to DS3231
 static void writeExternalRTC(time_t t) {
   struct tm timeinfo;
-  gmtime_r(&t, &timeinfo);  // DS3231 wird meist in UTC betrieben
+  gmtime_r(&t, &timeinfo);  // DS3231 gets usually operated in UTC
 
   Wire.beginTransmission(DS3231_ADDRESS);
-  Wire.write(0x00);  // Start-Register (Sekunden)
+  Wire.write(0x00);  // start-register (seconds)
   Wire.write(bin2bcd(timeinfo.tm_sec));
   Wire.write(bin2bcd(timeinfo.tm_min));
   Wire.write(bin2bcd(timeinfo.tm_hour));
-  Wire.write(bin2bcd(0));  // Wochentag (hier ignoriert)
+  Wire.write(bin2bcd(0));  // weekday (ignored here)
   Wire.write(bin2bcd(timeinfo.tm_mday));
   Wire.write(bin2bcd(timeinfo.tm_mon + 1));
-  Wire.write(bin2bcd(timeinfo.tm_year - 100));  // DS3231 speichert Jahre seit 2000
+  Wire.write(bin2bcd(timeinfo.tm_year - 100));  // DS3231 stores years since 2000
   Wire.endTransmission();
 }
 
-// Liest die Zeit vom DS3231
+// Read time from DS3231
 static time_t readExternalRTC() {
   Wire.beginTransmission(DS3231_ADDRESS);
   Wire.write(0x00);
