@@ -345,8 +345,8 @@ static double computeCorrectedElapsedSec(uint64_t lpNow, float tempNow) {
 /// Capture current time + LP timer into RTC memory, and epoch into NVS.
 static void capture(bool lpValid) {
   rtcEpoch = time(nullptr);
-  // Update DS3231
-  if (initExternalRTC()) {
+  // Update DS3231 only when the current time is authoritative.
+  if (initExternalRTC() && !clockApproximate) {
     writeExternalRTC(rtcEpoch);
   }
   rtcLpTimeUs = esp_clk_rtc_time();
@@ -393,6 +393,8 @@ bool syncNtp() {
     return false;
   }
 
+  // NTP sync yields authoritative time; allow DS3231 to be updated.
+  clockApproximate = false;
   capture(false);
   nvsWriteSyncTime(rtcEpoch);
 
