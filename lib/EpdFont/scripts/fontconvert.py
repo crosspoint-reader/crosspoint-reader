@@ -1056,19 +1056,19 @@ if kern_map:
     print(f"    {kern_left_class_count},")
     print(f"    {kern_right_class_count},")
 else:
-    print(f"    nullptr,")
-    print(f"    nullptr,")
-    print(f"    nullptr,")
-    print(f"    0,")
-    print(f"    0,")
-    print(f"    0,")
-    print(f"    0,")
+    print("    nullptr,")
+    print("    nullptr,")
+    print("    nullptr,")
+    print("    0,")
+    print("    0,")
+    print("    0,")
+    print("    0,")
 if ligature_pairs:
     print(f"    {font_name}LigaturePairs,")
     print(f"    {len(ligature_pairs)},")
 else:
-    print(f"    nullptr,")
-    print(f"    0,")
+    print("    nullptr,")
+    print("    0,")
 # Dual-position alt glyph fields
 if dual_position:
     print(f"    {font_name}AltBitmaps,")
