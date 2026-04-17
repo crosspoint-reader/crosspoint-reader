@@ -13,6 +13,9 @@
  * Can be started from any activity that needs text entry via startActivityForResult()
  */
 class KeyboardEntryActivity : public Activity {
+  struct KeyBlock {
+    const char* row[3];
+  };
  public:
   /**
    * Constructor
@@ -39,6 +42,7 @@ class KeyboardEntryActivity : public Activity {
   void render(RenderLock&&) override;
 
  private:
+
   std::string title;
   std::string text;
   size_t maxLength;
@@ -47,29 +51,23 @@ class KeyboardEntryActivity : public Activity {
   ButtonNavigator buttonNavigator;
 
   // Keyboard state
-  int selectedRow = 0;
-  int selectedCol = 0;
-  int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
+  int selectedTopLevel = -1;
+  int selectedMidLevel = -1;
+  int selectedBottomLevel = -1;
+  int keyPage = 0;
+
+  void setLevelOnPress(int level);
+  void resetLevels();
 
   // Handlers
   void onComplete(std::string text);
   void onCancel();
 
-  // Keyboard layout
-  static constexpr int NUM_ROWS = 5;
-  static constexpr int KEYS_PER_ROW = 13;  // Max keys per row (rows 0 and 1 have 13 keys)
-  static const char* const keyboard[NUM_ROWS];
-  static const char* const keyboardShift[NUM_ROWS];
-  static const char* const shiftString[3];
-
-  // Special key positions (bottom row)
-  static constexpr int SPECIAL_ROW = 4;
-  static constexpr int SHIFT_COL = 0;
-  static constexpr int SPACE_COL = 2;
-  static constexpr int BACKSPACE_COL = 7;
-  static constexpr int DONE_COL = 9;
 
   char getSelectedChar() const;
   bool handleKeyPress();  // false if onComplete was triggered
   int getRowLength(int row) const;
+
+  static KeyBlock keyboard[];
+  static int pages;
 };

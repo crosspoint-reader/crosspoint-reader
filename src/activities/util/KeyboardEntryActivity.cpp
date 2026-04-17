@@ -6,19 +6,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-// Keyboard layouts - lowercase
-const char* const KeyboardEntryActivity::keyboard[NUM_ROWS] = {
-    "`1234567890-=", "qwertyuiop[]\\", "asdfghjkl;'", "zxcvbnm,./",
-    "^  _____<OK"  // ^ = shift, _ = space, < = backspace, OK = done
-};
-
-// Keyboard layouts - uppercase/symbols
-const char* const KeyboardEntryActivity::keyboardShift[NUM_ROWS] = {"~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"",
-                                                                    "ZXCVBNM<>?", "SPECIAL ROW"};
-
-// Shift state strings
-const char* const KeyboardEntryActivity::shiftString[3] = {"shift", "SHIFT", "LOCK"};
-
 void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
 
@@ -28,65 +15,26 @@ void KeyboardEntryActivity::onEnter() {
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
-int KeyboardEntryActivity::getRowLength(const int row) const {
-  if (row < 0 || row >= NUM_ROWS) return 0;
-
-  // Return actual length of each row based on keyboard layout
-  switch (row) {
-    case 0:
-      return 13;  // `1234567890-=
-    case 1:
-      return 13;  // qwertyuiop[]backslash
-    case 2:
-      return 11;  // asdfghjkl;'
-    case 3:
-      return 10;  // zxcvbnm,./
-    case 4:
-      return 11;  // shift (2 wide), space (5 wide), backspace (2 wide), OK (2 wide)
-    default:
-      return 0;
-  }
-}
+KeyboardEntryActivity::KeyBlock KeyboardEntryActivity::keyboard[] = {
+  {.row = {"abc", "def", "ghi"}}, {.row = {"jkl", "mno", "pqr"}}, {.row = {"stu", "vwx", "yz`"}},
+  {.row = {"ABC", "DEF", "GHI"}}, {.row = {"JKL", "MNO", "PQR"}}, {.row = {"STU", "VWX", "YZ~"}},
+  {.row = {"123", "456", "789"}}, {.row = {"0!@", "#$%", "^&*"}}, {.row = {"()-", "_=+", "[]\\"}},
+  {.row = {"{}|", ";:'", "\",."}}, {.row = {"/<>", "   ", "   "}}, {.row = {"   ", "   ", "   "}}
+};
 
 char KeyboardEntryActivity::getSelectedChar() const {
-  const char* const* layout = shiftState ? keyboardShift : keyboard;
+  return keyboard[selectedTopLevel + keyPage * 3].row[selectedMidLevel][selectedBottomLevel];
+}
 
-  if (selectedRow < 0 || selectedRow >= NUM_ROWS) return '\0';
-  if (selectedCol < 0 || selectedCol >= getRowLength(selectedRow)) return '\0';
-
-  return layout[selectedRow][selectedCol];
+void KeyboardEntryActivity::resetLevels(){
+  selectedTopLevel = -1;
+  selectedMidLevel = -1;
+  selectedBottomLevel = -1;
 }
 
 bool KeyboardEntryActivity::handleKeyPress() {
-  // Handle special row (bottom row with shift, space, backspace, done)
-  if (selectedRow == SPECIAL_ROW) {
-    if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-      // Shift toggle (0 = lower case, 1 = upper case, 2 = shift lock)
-      shiftState = (shiftState + 1) % 3;
-      return true;
-    }
-
-    if (selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL) {
-      // Space bar
-      if (maxLength == 0 || text.length() < maxLength) {
-        text += ' ';
-      }
-      return true;
-    }
-
-    if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
-      // Backspace
-      if (!text.empty()) {
-        text.pop_back();
-      }
-      return true;
-    }
-
-    if (selectedCol >= DONE_COL) {
-      // Done button
-      onComplete(text);
-      return false;
-    }
+  if(selectedBottomLevel == -1){
+    return false;
   }
 
   // Regular character
@@ -97,96 +45,92 @@ bool KeyboardEntryActivity::handleKeyPress() {
 
   if (maxLength == 0 || text.length() < maxLength) {
     text += c;
-    // Auto-disable shift after typing a character in non-lock mode
-    if (shiftState == 1) {
-      shiftState = 0;
-    }
+    resetLevels();
   }
 
   return true;
 }
 
+void KeyboardEntryActivity::setLevelOnPress(int level) {
+  if (selectedTopLevel == -1) {
+    selectedTopLevel = level;
+  } else if (selectedMidLevel == -1) {
+    selectedMidLevel = level;
+  } else {
+    selectedBottomLevel = level;
+  }
+}
+
 void KeyboardEntryActivity::loop() {
   // Handle navigation
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
-    selectedRow = ButtonNavigator::previousIndex(selectedRow, NUM_ROWS);
-
-    const int maxCol = getRowLength(selectedRow) - 1;
-    if (selectedCol > maxCol) selectedCol = maxCol;
+    int pages = sizeof(KeyboardEntryActivity::keyboard) / (sizeof(KeyboardEntryActivity::KeyBlock) * 3);
+    keyPage = (keyPage - 1 + pages) % pages;
     requestUpdate();
   });
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
-    selectedRow = ButtonNavigator::nextIndex(selectedRow, NUM_ROWS);
-
-    const int maxCol = getRowLength(selectedRow) - 1;
-    if (selectedCol > maxCol) selectedCol = maxCol;
+    int pages = sizeof(KeyboardEntryActivity::keyboard) / (sizeof(KeyboardEntryActivity::KeyBlock) * 3);
+    keyPage = (keyPage + 1 + pages) % pages;
     requestUpdate();
   });
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] {
-    const int maxCol = getRowLength(selectedRow) - 1;
-
-    // Special bottom row case
-    if (selectedRow == SPECIAL_ROW) {
-      // Bottom row has special key widths
-      if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-        // In shift key, wrap to end of row
-        selectedCol = maxCol;
-      } else if (selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL) {
-        // In space bar, move to shift
-        selectedCol = SHIFT_COL;
-      } else if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
-        // In backspace, move to space
-        selectedCol = SPACE_COL;
-      } else if (selectedCol >= DONE_COL) {
-        // At done button, move to backspace
-        selectedCol = BACKSPACE_COL;
-      }
-    } else {
-      selectedCol = ButtonNavigator::previousIndex(selectedCol, maxCol + 1);
-    }
-
+  buttonNavigator.onPress({MappedInputManager::Button::Left}, [this] {
+    setLevelOnPress(1);
+    handleKeyPress();
     requestUpdate();
   });
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] {
-    const int maxCol = getRowLength(selectedRow) - 1;
-
-    // Special bottom row case
-    if (selectedRow == SPECIAL_ROW) {
-      // Bottom row has special key widths
-      if (selectedCol >= SHIFT_COL && selectedCol < SPACE_COL) {
-        // In shift key, move to space
-        selectedCol = SPACE_COL;
-      } else if (selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL) {
-        // In space bar, move to backspace
-        selectedCol = BACKSPACE_COL;
-      } else if (selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL) {
-        // In backspace, move to done
-        selectedCol = DONE_COL;
-      } else if (selectedCol >= DONE_COL) {
-        // At done button, wrap to beginning of row
-        selectedCol = SHIFT_COL;
-      }
-    } else {
-      selectedCol = ButtonNavigator::nextIndex(selectedCol, maxCol + 1);
-    }
+  buttonNavigator.onPress({MappedInputManager::Button::Right}, [this] {
+    setLevelOnPress(2);
+    handleKeyPress();
     requestUpdate();
   });
 
   // Selection
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (handleKeyPress()) {
-      requestUpdate();
-    }
-    // If handleKeyPress returns false, it means onComplete was triggered, no update needed
-  }
+  buttonNavigator.onPress({MappedInputManager::Button::Confirm}, [this] {
+    setLevelOnPress(0);
+    handleKeyPress();
+    requestUpdate();
+  });
 
   // Cancel
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  buttonNavigator.onPress({MappedInputManager::Button::Back}, [this] {
+    if (selectedMidLevel != -1){
+      selectedBottomLevel = -1;
+      selectedMidLevel = -1;
+    } else if (selectedTopLevel != -1) {
+      resetLevels();
+    } else {
+      onCancel();
+    }
+    requestUpdate();
+  });
+
+  buttonNavigator.onContinuous({MappedInputManager::Button::Back}, [this] {
     onCancel();
-  }
+  });
+
+  buttonNavigator.onContinuous({MappedInputManager::Button::Confirm}, [this] {
+    onComplete(text);
+  });
+
+
+  buttonNavigator.onContinuous({MappedInputManager::Button::Left}, [this] {
+    if (!text.empty()) {
+        text.pop_back();
+        resetLevels();
+        requestUpdate();
+    }
+  });
+
+  buttonNavigator.onContinuous({MappedInputManager::Button::Right}, [this] {
+    if (maxLength == 0 || text.length() <maxLength) {
+        text += ' ';
+        resetLevels();
+        requestUpdate();
+    }
+  });
 }
 
 void KeyboardEntryActivity::render(RenderLock&&) {
@@ -240,76 +184,57 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   }
 
   GUI.drawTextField(renderer, Rect{0, inputStartY, pageWidth, inputHeight}, textWidth);
-
-  // Draw keyboard - use compact spacing to fit 5 rows on screen
   const int keyboardStartY = metrics.keyboardBottomAligned
-                                 ? pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
-                                       (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * NUM_ROWS
-                                 : inputStartY + inputHeight + metrics.verticalSpacing * 4;
+                                   ? pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
+                                         (metrics.keyboardKeyHeight + metrics.keyboardKeySpacing) * 4
+                                   : inputStartY + inputHeight + metrics.verticalSpacing * 4;
+
+  char buffer[] = "\0\0\0\0\0"; // Big enough for any single utf8 rune
+
   const int keyWidth = metrics.keyboardKeyWidth;
   const int keyHeight = metrics.keyboardKeyHeight;
   const int keySpacing = metrics.keyboardKeySpacing;
+  const int width = keyWidth * 3 + keySpacing * 2;
+  const int requiredSpace = pageWidth - width * 3;
 
-  const char* const* layout = shiftState ? keyboardShift : keyboard;
+  for(int i = 0; i < 3; i++){
+    int x = (pageWidth - requiredSpace) / 3 * (i + 1);
+    renderer.drawRect(x - 1, keyboardStartY, width, keyHeight * 3 + 1);
+  }
 
-  // Calculate left margin to center the longest row (13 keys)
-  const int maxRowWidth = KEYS_PER_ROW * (keyWidth + keySpacing);
-  const int leftMargin = (pageWidth - maxRowWidth) / 2;
 
-  for (int row = 0; row < NUM_ROWS; row++) {
-    const int rowY = keyboardStartY + row * (keyHeight + keySpacing);
-
-    // Left-align all rows for consistent navigation
-    const int startX = leftMargin;
-
-    // Handle bottom row (row 4) specially with proper multi-column keys
-    if (row == SPECIAL_ROW) {
-      // Bottom row layout: SHIFT (2 cols) | SPACE (5 cols) | <- (2 cols) | OK (2 cols)
-      // Total: 11 visual columns, but we use logical positions for selection
-
-      int currentX = startX;
-
-      // SHIFT key (logical col 0, spans 2 key widths)
-      const bool shiftSelected = (selectedRow == SPECIAL_ROW && selectedCol >= SHIFT_COL && selectedCol < SPACE_COL);
-      const int shiftWidth = SPACE_COL - SHIFT_COL;
-      const int shiftXWidth = shiftWidth * (keyWidth + keySpacing);
-      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, shiftXWidth, keyHeight}, shiftString[shiftState],
-                          shiftSelected);
-      currentX += shiftXWidth;
-
-      // Space bar (logical cols 2-6, spans 5 key widths)
-      const bool spaceSelected =
-          (selectedRow == SPECIAL_ROW && selectedCol >= SPACE_COL && selectedCol < BACKSPACE_COL);
-      const int spaceWidth = BACKSPACE_COL - SPACE_COL;
-      const int spaceXWidth = spaceWidth * (keyWidth + keySpacing);
-      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, spaceXWidth, keyHeight}, "_____", spaceSelected);
-      currentX += spaceXWidth;
-
-      // Backspace key (logical col 7, spans 2 key widths)
-      const bool bsSelected = (selectedRow == SPECIAL_ROW && selectedCol >= BACKSPACE_COL && selectedCol < DONE_COL);
-      const int backspaceWidth = DONE_COL - BACKSPACE_COL;
-      const int backspaceXWidth = backspaceWidth * (keyWidth + keySpacing);
-      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, backspaceXWidth, keyHeight}, "<-", bsSelected);
-      currentX += backspaceXWidth;
-
-      // OK button (logical col 9, spans 2 key widths)
-      const bool okSelected = (selectedRow == SPECIAL_ROW && selectedCol >= DONE_COL);
-      const int okWidth = getRowLength(row) - DONE_COL;
-      const int okXWidth = okWidth * (keyWidth + keySpacing);
-      GUI.drawKeyboardKey(renderer, Rect{currentX, rowY, okXWidth, keyHeight}, tr(STR_OK_BUTTON), okSelected);
-    } else {
-      // Regular rows: render each key individually
-      for (int col = 0; col < getRowLength(row); col++) {
-        // Get the character to display
-        const char c = layout[row][col];
-        std::string keyLabel(1, c);
-
-        const int keyX = startX + col * (keyWidth + keySpacing);
-        const bool isSelected = row == selectedRow && col == selectedCol;
-        GUI.drawKeyboardKey(renderer, Rect{keyX, rowY, keyWidth, keyHeight}, keyLabel.c_str(), isSelected);
+  if (selectedTopLevel == -1) {
+    for(int i = 0; i < 3; i++) {
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1);
+      for(int row = 0; row < 3; row++){
+        int startX = x;
+        for(int j = 0; j < 3; j++){
+          buffer[0] = keyboard[i + keyPage * 3].row[row][j];
+          GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY + row * keyHeight, keyWidth, keyHeight}, buffer, false);
+          x += keyWidth + keySpacing;
+        }
+        x = startX;
       }
     }
+  } else if (selectedMidLevel == -1){
+    for(int i = 0; i < 3; i++) {
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1);
+      for(int j = 0; j < 3; j++){
+        buffer[0] = keyboard[selectedTopLevel + keyPage * 3].row[i][j];
+        GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY, keyWidth, keyHeight}, buffer, false);
+        x += keyWidth + keySpacing;
+      }
+    }
+  } else {
+    for(int i = 0; i < 3; i++){
+      int x = (pageWidth - requiredSpace) / 3 * (i + 1) + keyWidth + keySpacing;
+      buffer[0] = keyboard[selectedTopLevel + keyPage * 3].row[selectedMidLevel][i];
+      buffer[1] = '\0';
+      GUI.drawKeyboardKey(renderer, Rect{x, keyboardStartY, keyWidth, keyHeight}, buffer, false);
+    }
   }
+
+
 
   // Draw help text
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
