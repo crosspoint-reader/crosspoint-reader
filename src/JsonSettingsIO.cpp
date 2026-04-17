@@ -68,7 +68,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
 // ---- CrossPointState ----
 
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
-  StaticJsonDocument<4096> doc;
+  JsonDocument doc;
   doc["openEpubPath"] = s.openEpubPath;
   doc["lastSleepImage"] = s.lastSleepImage;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
