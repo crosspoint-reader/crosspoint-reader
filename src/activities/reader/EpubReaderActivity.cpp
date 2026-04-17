@@ -1092,6 +1092,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
+  logReaderMemSnapshot("render_start");
   auto* fcm = renderer.getFontCacheManager();
   fcm->resetStats();
 
@@ -1106,14 +1107,17 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   LOG_DBG("ERS", "Heap: before=%lu after=%lu delta=%ld", heapBefore, heapAfter,
           (int32_t)heapAfter - (int32_t)heapBefore);
+  logReaderMemSnapshot("prewarm_end");
 
   // Force special handling for pages with images when anti-aliasing is on
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
+  logReaderMemSnapshot("before_bw_render");
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
   fcm->logStats("bw_render");
   const auto tBwRender = millis();
+  logReaderMemSnapshot("after_bw_render");
 
   if (imagePageWithAA) {
     // Double FAST_REFRESH with selective image blanking (pablohc's technique):
@@ -1140,34 +1144,44 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto tDisplay = millis();
 
   // Save bw buffer to reset buffer state after grayscale data sync
+  logReaderMemSnapshot("bw_store_begin");
   renderer.storeBwBuffer();
   const auto tBwStore = millis();
+  logReaderMemSnapshot("bw_store_end");
 
   // grayscale rendering
   // TODO: Only do this if font supports it
   if (SETTINGS.textAntiAliasing) {
+    logReaderMemSnapshot("gray_lsb_begin");
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleLsbBuffers();
     const auto tGrayLsb = millis();
+    logReaderMemSnapshot("gray_lsb_end");
 
     // Render and copy to MSB buffer
+    logReaderMemSnapshot("gray_msb_begin");
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleMsbBuffers();
     const auto tGrayMsb = millis();
+    logReaderMemSnapshot("gray_msb_end");
 
     // display grayscale part
+    logReaderMemSnapshot("gray_display_begin");
     renderer.displayGrayBuffer();
     const auto tGrayDisplay = millis();
     renderer.setRenderMode(GfxRenderer::BW);
     fcm->logStats("gray");
+    logReaderMemSnapshot("gray_display_end");
 
     // restore the bw data
+    logReaderMemSnapshot("bw_restore_begin");
     renderer.restoreBwBuffer();
     const auto tBwRestore = millis();
+    logReaderMemSnapshot("bw_restore_end");
 
     const auto tEnd = millis();
     LOG_DBG("ERS",
@@ -1177,8 +1191,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
             tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
   } else {
     // restore the bw data
+    logReaderMemSnapshot("bw_restore_begin");
     renderer.restoreBwBuffer();
     const auto tBwRestore = millis();
+    logReaderMemSnapshot("bw_restore_end");
 
     const auto tEnd = millis();
     LOG_DBG("ERS",
