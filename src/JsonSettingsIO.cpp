@@ -68,7 +68,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
 // ---- CrossPointState ----
 
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
-  JsonDocument doc;
+  StaticJsonDocument<4096> doc;
   doc["openEpubPath"] = s.openEpubPath;
   doc["lastSleepImage"] = s.lastSleepImage;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
@@ -95,9 +95,14 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   jump["spineIndex"] = s.pendingBookmarkJump.spineIndex;
   jump["pageNumber"] = s.pendingBookmarkJump.pageNumber;
 
-  String json;
-  serializeJson(doc, json);
-  return Storage.writeFile(path, json);
+  FsFile file;
+  if (!Storage.openFileForWrite("CPS", path, file)) {
+    return false;
+  }
+
+  const size_t written = serializeJson(doc, file);
+  file.close();
+  return written > 0;
 }
 
 bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
