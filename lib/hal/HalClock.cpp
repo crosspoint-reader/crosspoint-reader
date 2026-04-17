@@ -22,6 +22,30 @@ static constexpr int I2C_SCL = 9;
 static uint8_t bin2bcd(uint8_t val) { return val + 6 * (val / 10); }
 static uint8_t bcd2bin(uint8_t val) { return val - 6 * (val >> 4); }
 
+/**
+ * Convert struct tm (interpreted as UTC) to Unix epoch seconds.
+ * Replaces mktime(), as mktime considers the local timezone (TZ).
+ */
+static time_t timegm_compat(const struct tm* tm) {
+  int32_t year = tm->tm_year + 1900;
+  int32_t month = tm->tm_mon;  // 0-11
+
+  // Helper calculation: days since the beginning of the year
+  static const uint16_t days_before_month[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+
+  // Days since 1970 (considering leap years)
+  time_t days = (year - 1970) * 365 + (year - 1969) / 4;
+  days += days_before_month[month];
+
+  // Leap year correction for the current year (no extra day before March)
+  if (month > 1 && (year % 4 == 0)) {
+    days++;
+  }
+  days += tm->tm_mday - 1;
+
+  return days * 86400 + tm->tm_hour * 3600 + tm->tm_min * 60 + tm->tm_sec;
+}
+
 // ---- RTC-memory state (survives deep sleep, not cold boot) ----------------
 
 static constexpr uint32_t CLOCK_RTC_MAGIC = 0xC10C4B1D;
@@ -244,7 +268,7 @@ static time_t readExternalRTC() {
   timeinfo.tm_year = bcd2bin(Wire.read()) + 100;
   timeinfo.tm_isdst = 0;
 
-  return mktime(&timeinfo);
+  return timegm_compat(&timeinfo);
 }
 
 // Read temperature (Register 0x11)
