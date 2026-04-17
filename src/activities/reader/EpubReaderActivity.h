@@ -1,6 +1,7 @@
 #pragma once
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/LinkEntry.h>
 #include <Epub/Section.h>
 
 #include "EpubReaderMenuActivity.h"
@@ -53,6 +54,10 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+
+  // Link cursor navigation
+  int linkCursorIndex = -1;  // -1 = cursor mode inactive
+  std::vector<LinkEntry> currentPageLinks;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
