@@ -314,11 +314,15 @@ bool HalGPIO::isUsbConnected() const {
     for (uint8_t attempt = 0; attempt < 2; ++attempt) {
       int16_t currentMa = 0;
       if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        return currentMa > 0;
+        if (currentMa > 0) {
+          return true;
+        }
+        break;
       }
       delay(2);
     }
-    return false;
+    // Fall back to the same USB pin-level detection used by X4.
+    return digitalRead(UART0_RXD) == HIGH;
   }
   // U0RXD/GPIO20 reads HIGH when USB is connected
   return digitalRead(UART0_RXD) == HIGH;
