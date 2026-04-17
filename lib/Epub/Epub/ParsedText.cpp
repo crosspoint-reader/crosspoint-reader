@@ -180,8 +180,10 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
 
         if (currentBadness > naturalSpace) {
           int bestBadness = currentBadness;
+          // Trial range = half of cap (cap = naturalSpace_px/8 in FP4 = naturalSpace_px*2 FP4)
+          const int8_t trialRange = static_cast<int8_t>(naturalSpace);
 
-          for (int8_t tryTracking = -4; tryTracking <= 4; tryTracking++) {
+          for (int8_t tryTracking = -trialRange; tryTracking <= trialRange; tryTracking++) {
             if (tryTracking == 0) continue;
 
             // Restore pre-hyphenation state for this trial
@@ -644,10 +646,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       const int trackSlots = totalChars - static_cast<int>(lineWordCount);
       if (trackSlots > 0) {
         int32_t trackPerCharFP = trackingSpaceFP / trackSlots;
-        // Cap total tracking (paragraph + per-line) at 0.5px per character
-        constexpr int32_t MAX_TRACKING_FP = 8;  // 0.5px in FP4
+        // Cap = naturalSpaceWidth / 8 in FP4 = naturalSpace_px * 2 FP4 (scales with font size)
+        const int32_t MAX_TRACKING_FP = static_cast<int32_t>(naturalSpace) * 2;
         int32_t totalTrackingFP = static_cast<int32_t>(paragraphTracking) + trackPerCharFP;
         if (totalTrackingFP > MAX_TRACKING_FP) totalTrackingFP = MAX_TRACKING_FP;
+        // No negative-direction floor needed: per-line tracking is only added here when
+        // spareSpace > 0, so trackPerCharFP >= 0 and totalTrackingFP >= paragraphTracking.
+        // Negative paragraphTracking is already bounded by trialRange (±naturalSpace FP4).
         trackingFP = static_cast<int8_t>(totalTrackingFP);
         // Any space not absorbed by per-line tracking goes back to gaps
         const int32_t perLineAbsorbed = (totalTrackingFP - paragraphTracking) * trackSlots;
