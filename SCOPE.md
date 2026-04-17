@@ -27,7 +27,7 @@ usability over "swiss-army-knife" functionality.
 * **Language Support:** E.g. Support for multiple languages both in the reader and in the interfaces.
 * **Reference Tools:** E.g. Local dictionary lookup. Providing quick, offline definitions to enhance comprehension 
   without breaking focus.
-* **Clock Display (device dependent):** The X4 relies on the ESP32-C3's internal RTC, which drifts significantly during deep sleep. While NTP sync could partially correct this, CrossPoint does not connect to the internet on every boot. The X3 uses a dedicated DS3231 RTC, which maintains accurate time across sleep and power cycles and can be treated as a reliable wall clock.
+* **Clock Display (device dependent):** The X4 relies on the ESP32-C3's internal RTC, which drifts significantly during deep sleep. While NTP sync could partially correct this, CrossPoint does not connect to the internet on every boot. The X3 uses a dedicated DS3231 RTC, which maintains accurate time across sleep cycles and can be treated as a reliable wall clock.
 
 ### Out-of-Scope
 
