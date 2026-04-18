@@ -3,8 +3,10 @@
 #include <HalStorage.h>
 #include <InflateReader.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
+#include <cstring>
 
 struct ZipInflateCtx {
   InflateReader reader;  // Must be first — callback casts uzlib_uncomp* to ZipInflateCtx*
@@ -229,44 +231,75 @@ bool ZipFile::loadZipDetails() {
     return false;  // Minimum EOCD size is 22 bytes
   }
 
-  // We scan the last 1KB (or the whole file if smaller) for the EOCD signature
-  // 0x06054b50 is stored as 0x50, 0x4b, 0x05, 0x06 in little-endian
-  const int scanRange = fileSize > 1024 ? 1024 : fileSize;
-  const auto buffer = static_cast<uint8_t*>(malloc(scanRange));
+  // Scan backwards from end-of-file for the EOCD signature (0x06054b50).
+  // ZIP spec allows up to 65535+22 bytes of comment after EOCD, so the
+  // signature can be up to 65557 bytes from the end.  To avoid a large
+  // heap allocation on the memory-constrained ESP32-C3, we use a fixed
+  // 4KB window that starts at end-of-file and steps backwards only when
+  // no signature is found, checking the window nearest EOF first.  This
+  // guarantees we resolve to the EOCD nearest EOF (the correct one per
+  // spec) instead of a false PK\x05\x06 sequence earlier in the file,
+  // and it keeps the common case (no archive comment) to a single 4KB
+  // read instead of scanning the full 65557-byte region.  Each step
+  // overlaps the previous window by 21 bytes so an EOCD record spanning
+  // a window boundary is never missed (EOCD minimum size is 22 bytes).
+  constexpr size_t BUF_SIZE = 4096;
+  constexpr size_t MAX_SCAN = 65557;
+  constexpr size_t OVERLAP = 21;  // EOCD min size - 1
+
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(BUF_SIZE);
   if (!buffer) {
-    LOG_ERR("ZIP", "Failed to allocate memory for EOCD scan buffer");
+    LOG_ERR("ZIP", "Failed to allocate EOCD scan buffer (%zu bytes)", BUF_SIZE);
     return false;
   }
 
-  file.seek(fileSize - scanRange);
-  file.read(buffer, scanRange);
+  const size_t totalScannable = fileSize < MAX_SCAN ? fileSize : MAX_SCAN;
+  const size_t scanFloor = fileSize - totalScannable;
 
-  // Scan backwards for the signature
-  int foundOffset = -1;
-  for (int i = scanRange - 22; i >= 0; i--) {
-    constexpr uint32_t signature = 0x06054b50;
-    if (*reinterpret_cast<uint32_t*>(&buffer[i]) == signature) {
-      foundOffset = i;
-      break;
+  size_t windowEnd = fileSize;
+  while (true) {
+    const size_t windowStart = windowEnd > scanFloor + BUF_SIZE ? windowEnd - BUF_SIZE : scanFloor;
+    const size_t windowLen = windowEnd - windowStart;
+    if (windowLen < 22) break;  // Not enough bytes left to hold an EOCD record
+
+    if (!file.seek(windowStart)) {
+      LOG_ERR("ZIP", "EOCD scan: seek to %zu failed", windowStart);
+      return false;
     }
+
+    size_t filled = 0;
+    while (filled < windowLen) {
+      const int n = file.read(buffer.get() + filled, windowLen - filled);
+      if (n <= 0) {
+        LOG_ERR("ZIP", "EOCD scan: read failed in window [%zu, %zu), got %zu/%zu bytes", windowStart, windowEnd, filled,
+                windowLen);
+        return false;
+      }
+      filled += static_cast<size_t>(n);
+    }
+
+    // Search this window from the end towards the start so the match
+    // nearest EOF wins within the window (only one EOCD exists per valid
+    // ZIP, but this keeps behaviour well-defined if a comment happens to
+    // contain the signature bytes).
+    for (int i = static_cast<int>(windowLen) - 22; i >= 0; i--) {
+      uint32_t candidate;
+      memcpy(&candidate, &buffer[i], sizeof(candidate));
+      if (candidate == 0x06054b50) {
+        memcpy(&zipDetails.totalEntries, &buffer[i + 10], sizeof(zipDetails.totalEntries));
+        memcpy(&zipDetails.centralDirOffset, &buffer[i + 16], sizeof(zipDetails.centralDirOffset));
+        zipDetails.isSet = true;
+        LOG_DBG("ZIP", "EOCD found at offset %zu in file", windowStart + static_cast<size_t>(i));
+        return true;
+      }
+    }
+
+    if (windowStart <= scanFloor) break;
+    windowEnd = windowStart + OVERLAP;
   }
 
-  if (foundOffset == -1) {
-    LOG_ERR("ZIP", "EOCD signature not found in zip file");
-    free(buffer);
-    return false;
-  }
-
-  // Now extract the values we need from the EOCD record
-  // Relative positions within EOCD:
-  // Offset 10: Total number of entries (2 bytes)
-  // Offset 16: Offset of start of central directory with respect to the starting disk number (4 bytes)
-  zipDetails.totalEntries = *reinterpret_cast<uint16_t*>(&buffer[foundOffset + 10]);
-  zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
-  zipDetails.isSet = true;
-
-  free(buffer);
-  return true;
+  LOG_ERR("ZIP", "EOCD signature not found in zip file (scanned last %zu bytes)", totalScannable);
+  return false;
 }
 
 bool ZipFile::open() {
