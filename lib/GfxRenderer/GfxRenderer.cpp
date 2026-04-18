@@ -216,7 +216,8 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);
   int lastBaseX = x;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
   int lastBaseTop = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
@@ -236,24 +237,17 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
   const auto& font = fontIt->second;
-  constexpr int MIN_COMBINING_GAP_PX = 1;
 
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      int raiseBy = 0;
-      if (combiningGlyph) {
-        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
-        if (currentGap < MIN_COMBINING_GAP_PX) {
-          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
-        }
-      }
-
-      const int combiningX = lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2);
-      const int combiningY = yPos - raiseBy;
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      if (!combiningGlyph) continue;
+      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+      const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
+                                                       combiningGlyph->width);
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
       continue;
     }
 
@@ -269,9 +263,10 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    lastBaseLeft = glyph ? glyph->left : 0;
+    lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
-    prevAdvanceFP = lastBaseAdvanceFP;
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
     renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
     prevCp = cp;
@@ -348,17 +343,40 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
                           const int lineWidth, const bool state) const {
   const int stroke = std::min(lineWidth, maxRadius);
   const int innerRadius = std::max(maxRadius - stroke, 0);
-  const int outerRadiusSq = maxRadius * maxRadius;
+  const int outerRadius = maxRadius;
+
+  if (outerRadius <= 0) {
+    return;
+  }
+
+  const int outerRadiusSq = outerRadius * outerRadius;
   const int innerRadiusSq = innerRadius * innerRadius;
-  for (int dy = 0; dy <= maxRadius; ++dy) {
-    for (int dx = 0; dx <= maxRadius; ++dx) {
-      const int distSq = dx * dx + dy * dy;
-      if (distSq > outerRadiusSq || distSq < innerRadiusSq) {
-        continue;
-      }
-      const int px = cx + xDir * dx;
-      const int py = cy + yDir * dy;
-      drawPixel(px, py, state);
+
+  int xOuter = outerRadius;
+  int xInner = innerRadius;
+
+  for (int dy = 0; dy <= outerRadius; ++dy) {
+    while (xOuter > 0 && (xOuter * xOuter + dy * dy) > outerRadiusSq) {
+      --xOuter;
+    }
+    // Keep the smallest x that still lies outside/at the inner radius,
+    // i.e. (x^2 + y^2) >= innerRadiusSq.
+    while (xInner > 0 && ((xInner - 1) * (xInner - 1) + dy * dy) >= innerRadiusSq) {
+      --xInner;
+    }
+
+    if (xOuter < xInner) {
+      continue;
+    }
+
+    const int x0 = cx + xDir * xInner;
+    const int x1 = cx + xDir * xOuter;
+    const int left = std::min(x0, x1);
+    const int width = std::abs(x1 - x0) + 1;
+    const int py = cy + yDir * dy;
+
+    if (width > 0) {
+      fillRect(left, py, width, 1, state);
     }
   }
 };
@@ -477,15 +495,39 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
 
 template <Color color>
 void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir) const {
+  if (maxRadius <= 0) return;
+
+  if constexpr (color == Color::Clear) {
+    return;
+  }
+
   const int radiusSq = maxRadius * maxRadius;
+
+  // Avoid sqrt by scanning from outer radius inward while y grows.
+  int x = maxRadius;
   for (int dy = 0; dy <= maxRadius; ++dy) {
-    for (int dx = 0; dx <= maxRadius; ++dx) {
-      const int distSq = dx * dx + dy * dy;
-      const int px = cx + xDir * dx;
-      const int py = cy + yDir * dy;
-      if (distSq <= radiusSq) {
-        drawPixelDither<color>(px, py);
-      }
+    while (x > 0 && (x * x + dy * dy) > radiusSq) {
+      --x;
+    }
+    if (x < 0) break;
+
+    const int py = cy + yDir * dy;
+    if (py < 0 || py >= getScreenHeight()) continue;
+
+    int x0 = cx;
+    int x1 = cx + xDir * x;
+    if (x0 > x1) std::swap(x0, x1);
+    const int width = x1 - x0 + 1;
+
+    if (width <= 0) continue;
+
+    if constexpr (color == Color::Black) {
+      fillRect(x0, py, width, 1, true);
+    } else if constexpr (color == Color::White) {
+      fillRect(x0, py, width, 1, false);
+    } else {
+      // LightGray / DarkGray: use existing dithered fill path.
+      fillRectDither(x0, py, width, 1, color);
     }
   }
 }
@@ -1079,26 +1121,21 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   const auto& font = fontIt->second;
 
   int lastBaseY = y;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
   int lastBaseTop = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
-  constexpr int MIN_COMBINING_GAP_PX = 1;
 
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      int raiseBy = 0;
-      if (combiningGlyph) {
-        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
-        if (currentGap < MIN_COMBINING_GAP_PX) {
-          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
-        }
-      }
-
+      if (!combiningGlyph) continue;
+      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
       const int combiningX = x - raiseBy;
-      const int combiningY = lastBaseY - fp4::toPixel(lastBaseAdvanceFP / 2);
+      const int combiningY = combiningMark::centerOverRotated90CW(lastBaseY, lastBaseLeft, lastBaseWidth,
+                                                                  combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
       continue;
     }
@@ -1114,9 +1151,10 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
+    lastBaseLeft = glyph ? glyph->left : 0;
+    lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
-    prevAdvanceFP = lastBaseAdvanceFP;
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
     prevCp = cp;

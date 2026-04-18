@@ -75,7 +75,6 @@ void FileBrowserActivity::loadFiles() {
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
-    if (root) root.close();
     return;
   }
 
@@ -85,7 +84,6 @@ void FileBrowserActivity::loadFiles() {
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
     if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
-      file.close();
       continue;
     }
 
@@ -99,9 +97,7 @@ void FileBrowserActivity::loadFiles() {
         files.emplace_back(filename);
       }
     }
-    file.close();
   }
-  root.close();
   sortFileList(files);
 }
 
@@ -115,7 +111,6 @@ void FileBrowserActivity::onEnter() {
     basepath = "/";
     loadFiles();
   } else if (!root.isDirectory()) {
-    root.close();
     lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
 
     const std::string oldPath = basepath;
@@ -126,7 +121,6 @@ void FileBrowserActivity::onEnter() {
     const std::string fileName = oldPath.substr(pos + 1);
     selectorIndex = findEntry(fileName);
   } else {
-    root.close();
     loadFiles();
   }
 
