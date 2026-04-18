@@ -524,9 +524,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
     int gap = 0;
     if (hasFollowingWord) {
-      gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                     firstCodepoint(words[lastBreakAt + wordIdx + 1]),
-                                     wordStyles[lastBreakAt + wordIdx]);
+      gap =
+          renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                   firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
     }
     if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
       gap += justifyExtra + gapBonus;

@@ -7,16 +7,16 @@
 static int testsPassed = 0;
 static int testsFailed = 0;
 
-#define ASSERT_EQ(a, b)                                                                                    \
-  do {                                                                                                     \
-    const auto _assertEqLhs = (a);                                                                         \
-    const auto _assertEqRhs = (b);                                                                         \
-    if (_assertEqLhs != _assertEqRhs) {                                                                    \
-      fprintf(stderr, "  FAIL: %s:%d: %s == %d, expected %d\n", __FILE__, __LINE__, #a,                    \
-              static_cast<int>(_assertEqLhs), static_cast<int>(_assertEqRhs));                             \
-      testsFailed++;                                                                                       \
-      return;                                                                                              \
-    }                                                                                                      \
+#define ASSERT_EQ(a, b)                                                                 \
+  do {                                                                                  \
+    const auto _assertEqLhs = (a);                                                      \
+    const auto _assertEqRhs = (b);                                                      \
+    if (_assertEqLhs != _assertEqRhs) {                                                 \
+      fprintf(stderr, "  FAIL: %s:%d: %s == %d, expected %d\n", __FILE__, __LINE__, #a, \
+              static_cast<int>(_assertEqLhs), static_cast<int>(_assertEqRhs));          \
+      testsFailed++;                                                                    \
+      return;                                                                           \
+    }                                                                                   \
   } while (0)
 
 #define ASSERT_TRUE(cond)                                                \
