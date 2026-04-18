@@ -63,91 +63,95 @@ void HalTiltSensor::begin() {
   if (!readReg(QMI8658_WHO_AM_I_REG, &whoami) || whoami != QMI8658_WHO_AM_I_VALUE) {
     _i2cAddr = I2C_ADDR_QMI8658_ALT;
     if (!readReg(QMI8658_WHO_AM_I_REG, &whoami) || whoami != QMI8658_WHO_AM_I_VALUE) {
-      LOG_INF("TILT", "QMI8658 IMU not found");
+      LOG_ERR("GYR", "QMI8658 IMU not found");
       _available = false;
       return;
     }
   }
 
-  LOG_INF("TILT", "QMI8658 IMU found at 0x%02X", _i2cAddr);
+  LOG_INF("GYR", "QMI8658 IMU found at 0x%02X", _i2cAddr);
 
-  // CTRL1: enable address auto-increment (bit 6) AND set SensorDisable (bit 0)
-  if (!writeReg(REG_CTRL1, 0x41) ||
-      // CTRL3: gyro config — ±512dps full scale (101), ODR 28.025 Hz (1000)
-      !writeReg(REG_CTRL3, 0x58) ||
-      // CTRL7: Initialize in SLEEP mode (0x00)
-      !writeReg(REG_CTRL7, 0x00)) {
-    LOG_INF("TILT", "QMI8658 register configuration failed");
+  if (!writeReg(REG_CTRL7, CTRL7_DISABLE_ALL) || !writeReg(REG_CTRL3, CTRL3_FS_512DPS | CTRL3_ODR_28HZ) ||
+      !writeReg(REG_CTRL1, CTRL1_BASE | CTRL1_SENSOR_DISABLE)) {
+    LOG_ERR("GYR", "QMI8658 register configuration failed");
     _available = false;
     return;
   }
 
   _available = true;
+  _initMs = millis();
   _lastPollMs = millis();
-  LOG_INF("TILT", "QMI8658 gyro initialized and put to sleep");
+  LOG_INF("GYR", "QMI8658 gyro initialized and put to sleep");
 }
 
-void HalTiltSensor::wake() {
+bool HalTiltSensor::wake() {
   if (!_available) {
-    return;
+    return false;
   }
 
-  // REG_CTRL1 (0x02): Writing 0x40 clears SensorDisable (bit 0)
-  // REG_CTRL7 (0x08): Write 0x02 to re-enable the Gyroscope
-  if (writeReg(REG_CTRL1, 0x40) && writeReg(REG_CTRL7, 0x02)) {
+  // Wait for init to complete before waking
+  if ((millis() - _initMs) < SLEEP_STABILIZE_MS) {
+    return false;
+  }
+
+  if (writeReg(REG_CTRL1, CTRL1_BASE) && writeReg(REG_CTRL7, CTRL7_GYRO_ENABLE)) {
     _lastPollMs = millis();
     _lastTiltMs = millis();
     _wakeMs = millis();
-    _calibSamples = 0;
-    _calibAccX = _calibAccY = _calibAccZ = 0.0f;
-    _calibrated = false;
-    LOG_INF("TILT", "QMI8658 woke up");
+    LOG_INF("GYR", "QMI8658 woke up");
+    return true;
   } else {
-    LOG_INF("TILT", "Failed to wake QMI8658");
+    LOG_ERR("GYR", "Failed to wake QMI8658");
+    return false;
   }
 }
 
-void HalTiltSensor::deepSleep() {
+bool HalTiltSensor::deepSleep() {
   if (!_available) {
-    return;
+    return false;
   }
 
-  // REG_CTRL7 (0x08): Writing 0x00 disables both Accel and Gyro
-  // REG_CTRL1 (0x02): Writing 0x41 enables SensorDisable (bit 0)
-  if (writeReg(REG_CTRL7, 0x00) && writeReg(REG_CTRL1, 0x41)) {
-    LOG_INF("TILT", "QMI8658 entered sleep mode");
+  if ((millis() - _wakeMs) < SLEEP_STABILIZE_MS) {
+    return false;
+  }
+
+  if (writeReg(REG_CTRL7, CTRL7_DISABLE_ALL) && writeReg(REG_CTRL1, CTRL1_BASE | CTRL1_SENSOR_DISABLE)) {
+    // Clear any residual state so it doesn't immediately trigger upon waking
+    clearPendingEvents();
+    _inTilt = false;
+    LOG_INF("GYR", "QMI8658 entered sleep mode");
+    return true;
   } else {
-    LOG_INF("TILT", "Failed to put QMI8658 to sleep");
+    LOG_ERR("GYR", "Failed to put QMI8658 to sleep");
+    return false;
   }
-
-  // Clear any residual state so it doesn't immediately trigger upon waking
-  clearPendingEvents();
-  _inTilt = false;
-  _calibrated = false;
 }
 
-void HalTiltSensor::update(bool enabled, uint8_t orientation) {
+void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const bool inReader) {
   if (!_available) {
     return;
   }
 
   // State machine: wake up or sleep based on the enabled flag
-  if (enabled && !_isAwake) {
-    wake();
-    _isAwake = true;
+  if ((mode != CrossPointTiltPageTurn::TILT_OFF) && !_isAwake) {
+    _isAwake = wake();
     return;
-  } else if (!enabled && _isAwake) {
-    deepSleep();
-    _isAwake = false;
+  } else if ((mode == CrossPointTiltPageTurn::TILT_OFF) && _isAwake) {
+    _isAwake = !deepSleep();
     return;
   }
 
-  // If disabled, skip the rest of the polling logic
-  if (!enabled) {
+  // If disabled, skip the rest of the polling logic and avoid unnecessary I2C traffic in non-reader activities
+  if ((mode == CrossPointTiltPageTurn::TILT_OFF) || !inReader) {
     return;
   }
 
   const unsigned long now = millis();
+  // Stabilization: discard readings during gyro startup transient
+  if ((now - _wakeMs) < WAKE_STABILIZE_MS) {
+    return;
+  }
+
   if ((now - _lastPollMs) < POLL_INTERVAL_MS) {
     return;
   }
@@ -158,50 +162,24 @@ void HalTiltSensor::update(bool enabled, uint8_t orientation) {
     return;
   }
 
-  // Stabilization: discard readings during gyro startup transient
-  if ((now - _wakeMs) < WAKE_STABILIZE_MS) {
-    return;
-  }
-
-  // Zero-rate offset calibration: average the first few stable samples
-  if (!_calibrated) {
-    _calibAccX += gx;
-    _calibAccY += gy;
-    _calibAccZ += gz;
-    _calibSamples++;
-    if (_calibSamples >= CALIB_SAMPLE_COUNT) {
-      _biasX = _calibAccX / CALIB_SAMPLE_COUNT;
-      _biasY = _calibAccY / CALIB_SAMPLE_COUNT;
-      _biasZ = _calibAccZ / CALIB_SAMPLE_COUNT;
-      _calibrated = true;
-      LOG_INF("TILT", "Gyro calibrated: bias=(%.1f, %.1f, %.1f) dps", _biasX, _biasY, _biasZ);
-    }
-    return;
-  }
-
-  // Subtract zero-rate offset
-  gx -= _biasX;
-  gy -= _biasY;
-  gz -= _biasZ;
-
   // Map the gyro axis to left/right tilt based on reader orientation.
   // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
   float tiltAxis;
   switch (orientation) {
     case CrossPointOrientation::PORTRAIT:
-      tiltAxis = -gx;
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
       break;
     case CrossPointOrientation::INVERTED:
-      tiltAxis = gx;
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
       break;
     case CrossPointOrientation::LANDSCAPE_CW:
-      tiltAxis = gy;
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
       break;
     case CrossPointOrientation::LANDSCAPE_CCW:
-      tiltAxis = -gy;
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
       break;
     default:
-      tiltAxis = -gx;
+      tiltAxis = gx;
       break;
   }
 
@@ -218,11 +196,13 @@ void HalTiltSensor::update(bool enabled, uint8_t orientation) {
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
+        LOG_INF("GYR", "Forward Trigger=(%.1f) dps", tiltAxis);
       } else if (tiltAxis < -RATE_THRESHOLD_DPS) {
         _tiltBackEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
+        LOG_INF("GYR", "Backward Trigger=(%.1f) dps", tiltAxis);
       }
     }
   }
