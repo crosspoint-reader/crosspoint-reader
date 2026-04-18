@@ -74,6 +74,58 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
+int nearestPreviousGapDistance(const std::vector<int16_t>& previousLineGapCenters, const int16_t candidateCenter) {
+  if (previousLineGapCenters.empty()) {
+    return std::numeric_limits<int>::max();
+  }
+
+  int bestDistance = std::numeric_limits<int>::max();
+  for (const int16_t previousCenter : previousLineGapCenters) {
+    const int distance = std::abs(static_cast<int>(candidateCenter) - static_cast<int>(previousCenter));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+    }
+  }
+
+  return bestDistance;
+}
+
+std::vector<int> allocateJustifyRemainderBonuses(const std::vector<int16_t>& previousLineGapCenters,
+                                                 const std::vector<int16_t>& candidateGapCenters,
+                                                 const int justifyRemainder) {
+  std::vector<int> gapBonuses(candidateGapCenters.size(), 0);
+  if (justifyRemainder <= 0 || candidateGapCenters.empty()) {
+    return gapBonuses;
+  }
+
+  for (int pixel = 0; pixel < justifyRemainder; ++pixel) {
+    size_t bestIndex = 0;
+    int bestDistance = std::numeric_limits<int>::min();
+
+    for (size_t i = 0; i < candidateGapCenters.size(); ++i) {
+      const int candidateDistance = nearestPreviousGapDistance(previousLineGapCenters, candidateGapCenters[i]);
+
+      if (candidateDistance > bestDistance) {
+        bestDistance = candidateDistance;
+        bestIndex = i;
+        continue;
+      }
+
+      if (candidateDistance != bestDistance) {
+        continue;
+      }
+
+      if (gapBonuses[i] < gapBonuses[bestIndex]) {
+        bestIndex = i;
+      }
+    }
+
+    gapBonuses[bestIndex]++;
+  }
+
+  return gapBonuses;
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -485,6 +537,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const int justifyExtra = (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
                                ? spareSpace / static_cast<int>(actualGapCount)
                                : 0;
+  const bool useRiverAwareRemainder =
+      blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 2 && spareSpace > 0;
+  const int justifyRemainder =
+      useRiverAwareRemainder ? spareSpace % static_cast<int>(actualGapCount) : 0;
 
   // Calculate initial x position (first line starts at indent for left/justified text;
   // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
@@ -494,15 +550,60 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   } else if (blockStyle.alignment == CssTextAlign::Center) {
     xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
   }
+  const int16_t lineStartX = xpos;
+
+  std::vector<int> gapBonusAfterWord(lineWordCount, 0);
+  if (useRiverAwareRemainder) {
+    std::vector<int16_t> candidateGapCenters;
+    std::vector<size_t> gapWordIndexes;
+    candidateGapCenters.reserve(actualGapCount);
+    gapWordIndexes.reserve(actualGapCount);
+
+    int16_t candidateX = lineStartX;
+    for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+      const bool hasFollowingWord = wordIdx + 1 < lineWordCount;
+      const bool nextIsContinuation = hasFollowingWord && continuesVec[lastBreakAt + wordIdx + 1];
+      if (nextIsContinuation) {
+        int advance = wordWidths[lastBreakAt + wordIdx];
+        advance +=
+            renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
+        candidateX += advance;
+        continue;
+      }
+
+      if (hasFollowingWord) {
+        const int naturalGap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
+                                                        firstCodepoint(words[lastBreakAt + wordIdx + 1]),
+                                                        wordStyles[lastBreakAt + wordIdx]);
+        const int baselineGap = naturalGap + justifyExtra;
+        const int gapStartX = candidateX + wordWidths[lastBreakAt + wordIdx];
+        candidateGapCenters.push_back(static_cast<int16_t>(gapStartX + baselineGap / 2));
+        gapWordIndexes.push_back(wordIdx);
+        candidateX += wordWidths[lastBreakAt + wordIdx] + baselineGap;
+      } else {
+        candidateX += wordWidths[lastBreakAt + wordIdx];
+      }
+    }
+
+    const auto gapBonuses =
+        allocateJustifyRemainderBonuses(previousLineGapCenters, candidateGapCenters, justifyRemainder);
+    for (size_t i = 0; i < gapBonuses.size(); ++i) {
+      gapBonusAfterWord[gapWordIndexes[i]] = gapBonuses[i];
+    }
+  }
 
   // Pre-calculate X positions for words
   // Continuation words attach to the previous word with no space before them
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
+  std::vector<int16_t> currentLineGapCenters;
+  currentLineGapCenters.reserve(actualGapCount);
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
     lineXPos.push_back(xpos);
 
+    const bool hasFollowingWord = wordIdx + 1 < lineWordCount;
     const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
     if (nextIsContinuation) {
       int advance = wordWidths[lastBreakAt + wordIdx];
@@ -513,16 +614,25 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       xpos += advance;
     } else {
       int gap = 0;
-      if (wordIdx + 1 < lineWordCount) {
+      if (hasFollowingWord) {
         gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
                                        firstCodepoint(words[lastBreakAt + wordIdx + 1]),
                                        wordStyles[lastBreakAt + wordIdx]);
       }
       if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
-        gap += justifyExtra;
+        gap += justifyExtra + gapBonusAfterWord[wordIdx];
+      }
+      if (hasFollowingWord) {
+        currentLineGapCenters.push_back(static_cast<int16_t>(xpos + wordWidths[lastBreakAt + wordIdx] + gap / 2));
       }
       xpos += wordWidths[lastBreakAt + wordIdx] + gap;
     }
+  }
+
+  if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && !currentLineGapCenters.empty()) {
+    previousLineGapCenters = std::move(currentLineGapCenters);
+  } else {
+    previousLineGapCenters.clear();
   }
 
   // Build line data by moving from the original vectors using index range
