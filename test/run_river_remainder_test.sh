@@ -9,7 +9,7 @@ mkdir -p "$BUILD_DIR"
 
 SOURCES=(
   "$ROOT_DIR/test/river_remainder/JustifyRemainderAllocatorTest.cpp"
-  "$ROOT_DIR/test/river_remainder/JustifyRemainderAllocator.cpp"
+  "$ROOT_DIR/lib/Epub/Epub/JustifyRemainderAllocator.cpp"
 )
 
 CXXFLAGS=(
@@ -19,8 +19,9 @@ CXXFLAGS=(
   -Wextra
   -pedantic
   -I"$ROOT_DIR"
+  -I"$ROOT_DIR/lib/Epub/Epub"
 )
 
-c++ "${CXXFLAGS[@]}" "${SOURCES[@]}" -o "$BINARY"
+"${CXX:-c++}" "${CXXFLAGS[@]}" "${SOURCES[@]}" -o "$BINARY"
 
 "$BINARY" "$@"
