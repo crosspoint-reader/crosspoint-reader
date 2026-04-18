@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <vector>
 
 #include "test/river_remainder/JustifyRemainderAllocator.h"

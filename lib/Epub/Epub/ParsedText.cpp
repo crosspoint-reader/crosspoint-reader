@@ -539,8 +539,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                : 0;
   const bool useRiverAwareRemainder =
       blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 2 && spareSpace > 0;
-  const int justifyRemainder =
-      useRiverAwareRemainder ? spareSpace % static_cast<int>(actualGapCount) : 0;
+  const int justifyRemainder = useRiverAwareRemainder ? spareSpace % static_cast<int>(actualGapCount) : 0;
 
   // Calculate initial x position (first line starts at indent for left/justified text;
   // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
