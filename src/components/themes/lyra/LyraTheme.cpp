@@ -35,7 +35,6 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int popupMarginX = 16;
 constexpr int popupMarginY = 12;
-constexpr int maxSubtitleWidth = 100;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
@@ -150,8 +149,15 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
-  int maxTitleWidth =
-      rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);
+  int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
+  int maxSubtitleWidth = subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
+  if (maxTitleWidth + maxSubtitleWidth > rect.width - LyraMetrics::values.contentSidePadding * 3) {
+    if (maxTitleWidth > maxSubtitleWidth) {
+      maxTitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 3 - maxSubtitleWidth;
+    } else {
+      maxSubtitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 3 - maxTitleWidth;
+    }
+  }
 
   if (title) {
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
