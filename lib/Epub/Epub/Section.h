@@ -42,6 +42,10 @@ class Section {
     std::string imageBasePath;
     std::string htmlPath;
     std::string tmpHtmlPath;
+    // Transient sanitized copy of the HTML (void elements self-closed) when the raw HTML
+    // needed fixing; parsePath points at it. Empty when parsing the raw HTML directly.
+    // Removed by finalizeBuild/suspendBuild/abandonBuild.
+    std::string sanitizedPath;
     bool reusedHtml = false;
     CssParser* cssParser = nullptr;
     // HTML byte progress, for estimating the section's total page count while it's still building.
