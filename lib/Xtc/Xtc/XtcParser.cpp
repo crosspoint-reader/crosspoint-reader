@@ -43,6 +43,7 @@ XtcError XtcParser::open(const char* filepath) {
   m_lastError = readHeader();
   if (m_lastError != XtcError::OK) {
     LOG_DBG("XTC", "Failed to read header: %s", errorToString(m_lastError));
+    // Explicit close() required: member variable persists beyond function scope
     m_file.close();
     return m_lastError;
   }
@@ -52,12 +53,14 @@ XtcError XtcParser::open(const char* filepath) {
     m_lastError = readTitle();
     if (m_lastError != XtcError::OK) {
       LOG_DBG("XTC", "Failed to read title: %s", errorToString(m_lastError));
+      // Explicit close() required: member variable persists beyond function scope
       m_file.close();
       return m_lastError;
     }
     m_lastError = readAuthor();
     if (m_lastError != XtcError::OK) {
       LOG_DBG("XTC", "Failed to read author: %s", errorToString(m_lastError));
+      // Explicit close() required: member variable persists beyond function scope
       m_file.close();
       return m_lastError;
     }
@@ -67,6 +70,7 @@ XtcError XtcParser::open(const char* filepath) {
   m_lastError = readPageTable();
   if (m_lastError != XtcError::OK) {
     LOG_DBG("XTC", "Failed to read page table: %s", errorToString(m_lastError));
+    // Explicit close() required: member variable persists beyond function scope
     m_file.close();
     return m_lastError;
   }
@@ -75,6 +79,7 @@ XtcError XtcParser::open(const char* filepath) {
   m_lastError = readChapters();
   if (m_lastError != XtcError::OK) {
     LOG_DBG("XTC", "Failed to read chapters: %s", errorToString(m_lastError));
+    // Explicit close() required: member variable persists beyond function scope
     m_file.close();
     return m_lastError;
   }
@@ -86,6 +91,7 @@ XtcError XtcParser::open(const char* filepath) {
 
 void XtcParser::close() {
   if (m_isOpen) {
+    // Explicit close() required: member variable persists beyond function scope
     m_file.close();
     m_isOpen = false;
   }
