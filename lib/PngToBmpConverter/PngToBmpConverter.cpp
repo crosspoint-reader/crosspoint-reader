@@ -39,7 +39,7 @@ inline void write32Signed(Print& out, const int32_t value) {
   out.write((value >> 24) & 0xFF);
 }
 
-// Path predictor function per PNG spec
+// Paeth predictor function per PNG spec
 inline uint8_t paethPredictor(uint8_t a, uint8_t b, uint8_t c) {
   int p = static_cast<int>(a) + b - c;
   int pa = p > a ? p - a : a - p;
