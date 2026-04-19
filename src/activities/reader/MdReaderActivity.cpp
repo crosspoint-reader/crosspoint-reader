@@ -342,7 +342,7 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
           // Don't advance pos — next page re-processes this source line
         } else {
           // First line on page is longer than a full page — accept truncation, advance past it
-          pos = lineEnd + 1;
+          pos = lineComplete ? lineEnd + 1 : lineEnd;
         }
         break;
       }
@@ -611,6 +611,12 @@ bool MdReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, numPages);
 
   pageOffsets.clear();
+  // Sanity check: reject corrupt cache with absurd page count
+  if (numPages == 0 || numPages > 100000) {
+    LOG_DBG("MDR", "Cache page count out of range (%u), rebuilding", numPages);
+    return false;
+  }
+
   pageOffsets.reserve(numPages);
   pageCodeBlockState.clear();
   pageCodeBlockState.reserve(numPages);

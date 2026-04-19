@@ -167,6 +167,8 @@ static std::string handleTaskList(const std::string& content, std::string& listP
       listPrefix = "[x] ";
     } else if (mark == ' ') {
       listPrefix = "[ ] ";
+    } else {
+      return content;  // Not a checkbox — keep content as-is
     }
     size_t skip = 3;
     if (skip < content.size() && content[skip] == ' ') skip++;
