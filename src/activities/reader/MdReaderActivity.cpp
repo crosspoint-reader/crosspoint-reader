@@ -7,6 +7,8 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <numeric>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -18,7 +20,7 @@
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 constexpr uint32_t CACHE_MAGIC = 0x4D4B4449;  // "MKDI"
-constexpr uint8_t CACHE_VERSION = 3;  // Bumped: nested list indent + task checkboxes
+constexpr uint8_t CACHE_VERSION = 3;          // Bumped: nested list indent + task checkboxes
 }  // namespace
 
 void MdReaderActivity::onEnter() {
@@ -121,13 +123,9 @@ void MdReaderActivity::initializeReader() {
 }
 
 int MdReaderActivity::measureSpans(const std::vector<MdParser::Span>& spans) const {
-  int width = 0;
-  for (const auto& span : spans) {
-    if (!span.text.empty()) {
-      width += renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
-    }
-  }
-  return width;
+  return std::accumulate(spans.begin(), spans.end(), 0, [this](int acc, const MdParser::Span& span) {
+    return acc + (span.text.empty() ? 0 : renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style));
+  });
 }
 
 bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
@@ -202,9 +200,8 @@ bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
 
       size_t breakPos = remaining.size();
 
-      while (breakPos > 0 &&
-             renderer.getTextAdvanceX(cachedFontId, remaining.substr(0, breakPos).c_str(), style) >
-                 availableWidth - currentWidth) {
+      while (breakPos > 0 && renderer.getTextAdvanceX(cachedFontId, remaining.substr(0, breakPos).c_str(), style) >
+                                 availableWidth - currentWidth) {
         size_t spacePos = remaining.rfind(' ', breakPos - 1);
         if (spacePos != std::string::npos && spacePos > 0) {
           breakPos = spacePos;
@@ -252,9 +249,8 @@ done:
   return fullyConsumed;
 }
 
-bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock,
-                                        std::vector<RenderedLine>& outLines, size_t& nextOffset,
-                                        bool& endInCodeBlock) {
+bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, std::vector<RenderedLine>& outLines,
+                                        size_t& nextOffset, bool& endInCodeBlock) {
   outLines.clear();
   endInCodeBlock = startInCodeBlock;
   const size_t fileSize = txt->getFileSize();
@@ -437,7 +433,8 @@ void MdReaderActivity::render(RenderLock&&) {
 
   // Load current page
   size_t offset = pageOffsets[currentPage];
-  bool startCodeBlock = (currentPage < static_cast<int>(pageCodeBlockState.size())) ? pageCodeBlockState[currentPage] : false;
+  bool startCodeBlock =
+      (currentPage < static_cast<int>(pageCodeBlockState.size())) ? pageCodeBlockState[currentPage] : false;
   size_t nextOffset;
   bool endCodeBlock;
   currentPageLines.clear();
@@ -458,8 +455,7 @@ void MdReaderActivity::renderPage() {
       if (line.isHR) {
         // Draw horizontal rule as a thin line
         int hrY = y + lineHeight / 2;
-        renderer.drawLine(cachedOrientedMarginLeft + line.indent, hrY,
-                          cachedOrientedMarginLeft + viewportWidth, hrY);
+        renderer.drawLine(cachedOrientedMarginLeft + line.indent, hrY, cachedOrientedMarginLeft + viewportWidth, hrY);
       } else if (!line.spans.empty()) {
         int x = cachedOrientedMarginLeft + line.indent;
 
@@ -468,19 +464,11 @@ void MdReaderActivity::renderPage() {
           int contentWidth = viewportWidth;
           switch (cachedParagraphAlignment) {
             case CrossPointSettings::CENTER_ALIGN: {
-              int textWidth = 0;
-              for (const auto& span : line.spans) {
-                textWidth += renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
-              }
-              x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
+              x = cachedOrientedMarginLeft + (contentWidth - measureSpans(line.spans)) / 2;
               break;
             }
             case CrossPointSettings::RIGHT_ALIGN: {
-              int textWidth = 0;
-              for (const auto& span : line.spans) {
-                textWidth += renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
-              }
-              x = cachedOrientedMarginLeft + contentWidth - textWidth;
+              x = cachedOrientedMarginLeft + contentWidth - measureSpans(line.spans);
               break;
             }
             default:

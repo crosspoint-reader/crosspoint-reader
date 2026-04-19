@@ -18,8 +18,8 @@ class MdReaderActivity final : public Activity {
   // A single rendered line on screen (after word-wrapping)
   struct RenderedLine {
     std::vector<MdParser::Span> spans;
-    int indent = 0;   // left indent in pixels
-    bool isHR = false; // draw as horizontal rule
+    int indent = 0;     // left indent in pixels
+    bool isHR = false;  // draw as horizontal rule
   };
 
   // Streaming reader state
@@ -48,8 +48,8 @@ class MdReaderActivity final : public Activity {
   void renderStatusBar() const;
 
   void initializeReader();
-  bool loadPageAtOffset(size_t offset, bool startInCodeBlock, std::vector<RenderedLine>& outLines,
-                        size_t& nextOffset, bool& endInCodeBlock);
+  bool loadPageAtOffset(size_t offset, bool startInCodeBlock, std::vector<RenderedLine>& outLines, size_t& nextOffset,
+                        bool& endInCodeBlock);
   void buildPageIndex();
   bool loadPageIndexCache();
   void savePageIndexCache() const;
@@ -58,8 +58,8 @@ class MdReaderActivity final : public Activity {
 
   // Word-wrap a parsed markdown line into one or more RenderedLines.
   // Returns true if all content was emitted, false if truncated by maxLines.
-  bool wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
-                          std::vector<RenderedLine>& outLines, int maxLines);
+  bool wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent, std::vector<RenderedLine>& outLines,
+                          int maxLines);
 
   // Measure total pixel width of a span list
   int measureSpans(const std::vector<MdParser::Span>& spans) const;
