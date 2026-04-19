@@ -14,6 +14,7 @@
 #include "components/UITheme.h"
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
+#include "components/icons/bookmark.h"
 #include "components/icons/cover.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
@@ -100,6 +101,8 @@ const uint8_t* iconForName(UIIcon icon, int size) {
         return WifiIcon;
       case UIIcon::Hotspot:
         return HotspotIcon;
+      case UIIcon::Bookmark:
+        return BookmarkIcon;
       default:
         return nullptr;
     }
@@ -221,6 +224,11 @@ void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::ve
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
 }
 
+int LyraTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
+  int rowHeight = (hasSubtitle) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
+  return contentHeight / rowHeight;
+}
+
 void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                          const std::function<std::string(int index)>& rowTitle,
                          const std::function<std::string(int index)>& rowSubtitle,
@@ -249,9 +257,9 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       rect.width -
       (totalPages > 1 ? (LyraMetrics::values.scrollBarWidth + LyraMetrics::values.scrollBarRightOffset) : 1);
   if (selectedIndex >= 0) {
-    renderer.fillRoundedRect(LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
-                             contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight, cornerRadius,
-                             Color::LightGray);
+    renderer.fillRoundedRect(
+        rect.x + LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
+        contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight, cornerRadius, Color::LightGray);
   }
 
   int textX = rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection;
