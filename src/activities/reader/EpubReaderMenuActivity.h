@@ -12,7 +12,7 @@ class EpubReaderMenuActivity final : public Activity {
  public:
   // Index of the Smart (WPM-based) option inside pageTurnLabels / PAGE_TURN_PPM.
   // A static_assert in EpubReaderActivity.cpp enforces this stays in sync with PAGE_TURN_PPM.
-  static constexpr uint8_t SMART_PAGE_TURN_OPTION = 5;
+  static constexpr uint8_t SMART_PAGE_TURN_OPTION = 1;
 
   // Menu actions available from the reader menu.
   enum class MenuAction {
@@ -58,8 +58,8 @@ class EpubReaderMenuActivity final : public Activity {
   uint8_t selectedPageTurnOption = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
-  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF),      "1", "3", "6", "12",
-                                                   I18N.get(StrId::STR_AUTO_TURN_SMART)};
+  const std::vector<const char*> pageTurnLabels = {
+      I18N.get(StrId::STR_STATE_OFF), I18N.get(StrId::STR_AUTO_TURN_SMART), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

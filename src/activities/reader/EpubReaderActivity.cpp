@@ -29,11 +29,11 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long skipChapterMs = 700;
 // Pages per minute for each auto-turn option (index matches EpubReaderMenuActivity::pageTurnLabels).
-// Index 0 is unused (off); index 1 is 1 to prevent division-by-zero if accessed.
-// Index SMART_PAGE_TURN_OPTION has no fixed ppm (0); duration is computed per page from WPM.
-const std::vector<int> PAGE_TURN_PPM = {1, 1, 3, 6, 12, 0};
-static_assert(EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION == 5,
-              "SMART_PAGE_TURN_OPTION must equal the last index of PAGE_TURN_PPM (update both together)");
+// Index 0 is unused (off) — placeholder value 1 prevents division-by-zero if ever accessed.
+// Index SMART_PAGE_TURN_OPTION (1) has no fixed ppm (0); duration is computed per page from WPM.
+const std::vector<int> PAGE_TURN_PPM = {1, 0, 1, 3, 6, 12};
+static_assert(EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION == 1,
+              "SMART_PAGE_TURN_OPTION must match the Smart entry index in PAGE_TURN_PPM (update both together)");
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -986,7 +986,7 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
     LOG_DBG("ERS", "Adaptive WPM: fwd turn skipped (partial page after back), %u skips remaining",
             skipForwardAdaptCount);
     return;
-    }
+  }
 
   const uint16_t currentWpm = SETTINGS.readingSpeedWpm > 0 ? SETTINGS.readingSpeedWpm : 200;
   uint16_t observedWpm;
@@ -995,12 +995,12 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
     // User advanced before the timer fired: measure actual reading speed from elapsed time.
     const unsigned long raw = (static_cast<unsigned long>(currentPageWordCount) * 60000UL) / elapsedMs;
     observedWpm = static_cast<uint16_t>(raw > WPM_ADAPT_MAX ? WPM_ADAPT_MAX : raw);
-    } else {
+  } else {
     // Backward turn: user signalled the pace was too fast; schedule skip for the matching
     // forward turn (partial-page re-read), then apply a gentle slow-down signal.
     skipForwardAdaptCount++;
     observedWpm = static_cast<uint16_t>((static_cast<uint32_t>(currentWpm) * 9U) / 10U);
-}
+  }
 
   // EMA blend (alpha = 0.2): newWpm = 0.2 * observed + 0.8 * current
   // Integer arithmetic: (2 * observed + 8 * current) / 10
