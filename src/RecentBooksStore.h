@@ -7,6 +7,7 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  bool pinned = false;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -47,6 +48,10 @@ class RecentBooksStore {
 
   bool loadFromFile();
   RecentBook getDataFromBook(std::string path) const;
+  bool isPinned(const std::string& path) const;
+  void setPinned(const std::string& path, bool pinned);
+  bool togglePinned(const std::string& path);
+  int getPinnedCount() const;
 
  private:
   bool loadFromBinaryFile();
