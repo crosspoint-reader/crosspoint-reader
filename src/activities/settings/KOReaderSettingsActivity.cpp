@@ -5,6 +5,7 @@
 
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -13,9 +14,9 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+constexpr int MENU_ITEMS = 6;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,     StrId::STR_SYNC_SERVER_URL,
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE, StrId::STR_KO_AUTO_SYNC};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -104,6 +105,11 @@ void KOReaderSettingsActivity::handleSelection() {
       return;
     }
     startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+  } else if (selectedIndex == 5) {
+    // Auto Sync - cycle Off → 10 pages → 15 pages → Off
+    SETTINGS.koAutoSync = (SETTINGS.koAutoSync + 1) % CrossPointSettings::KO_AUTO_SYNC_COUNT;
+    SETTINGS.saveToFile();
+    requestUpdate();
   }
 }
 
@@ -137,6 +143,15 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        } else if (index == 5) {
+          switch (SETTINGS.koAutoSync) {
+            case CrossPointSettings::KO_AUTO_SYNC_10:
+              return std::string(tr(STR_PAGES_10));
+            case CrossPointSettings::KO_AUTO_SYNC_15:
+              return std::string(tr(STR_PAGES_15));
+            default:
+              return std::string(tr(STR_NONE_OPT));
+          }
         }
         return std::string(tr(STR_NOT_SET));
       },

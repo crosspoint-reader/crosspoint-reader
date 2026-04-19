@@ -27,6 +27,14 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  // Auto-sync state
+  float lastAutoSyncedProgress = -1.0f;  // book progress (0.0-1.0) at last successful push
+  bool hasSyncedWithRemote = false;      // true only after a real push (manual or auto)
+  bool pendingAutoSync = false;
+  bool isSyncing = false;                   // true while HTTP sync requests are in flight
+  bool skipExitSync = false;                // set to bypass the exit sync (e.g. Go Home no sync)
+  unsigned long lastAutoSyncAttemptMs = 0;  // millis() when tryAutoSync last ran
+  static constexpr unsigned long AUTO_SYNC_TIMER_MS = 5UL * 60UL * 1000UL;  // 5 min timer
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -53,6 +61,10 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+  // alwaysUpload=true: upload even if behind remote (used on exit so position is always current)
+  // showIndicator=false: skip requestUpdateAndWait() — required when called from onExit()
+  //   because onExit() runs with RenderLock held and requestUpdateAndWait() would deadlock/assert
+  void tryAutoSync(bool attemptWifiConnect = false, bool alwaysUpload = false, bool showIndicator = true);
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)

@@ -21,6 +21,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [3.6.3 Controls](#363-controls)
       - [3.6.4 System](#364-system)
       - [3.6.5 KOReader Sync Quick Setup](#365-koreader-sync-quick-setup)
+      - [3.6.6 Auto KOReader Sync](#366-auto-koreader-sync)
     - [3.7 Sleep Screen](#37-sleep-screen)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
@@ -305,6 +306,34 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
    - Choose **Apply Remote** to jump to remote progress.
    - Choose **Upload Local** to push current progress.
+
+#### 3.6.6 Auto KOReader Sync
+
+CrossPoint can automatically sync your reading progress in the background without opening the sync menu. Auto-sync requires KOReader credentials to be configured (see [3.6.5](#365-koreader-sync-quick-setup)).
+
+##### Auto-sync setting
+
+In **Settings → Reader → Auto KOReader Sync**, choose how often CrossPoint syncs automatically while you read. Options are **OFF** (default), **10 pages**, or **15 pages** — syncing after that many page turns. In addition to the page-count trigger, CrossPoint will also attempt a sync approximately every 5 minutes while reading if your position has moved since the last sync.
+
+##### WiFi behavior
+
+Auto-sync connects to WiFi automatically when a sync is needed, then disconnects when done. It uses the last saved WiFi network. If the connection fails, a small indicator appears on the status bar and the sync is skipped silently — reading is never interrupted.
+
+##### Sync progress indicator
+
+While an auto-sync is in progress, three small dots appear near the right end of the progress bar. A small marker tick is drawn above the progress bar at the position that was last successfully synced to the server, so you can see at a glance how far ahead of your synced position you are.
+
+If a sync attempt fails (e.g. no WiFi), a failure indicator appears on the status bar. Further auto-sync attempts are suppressed for the rest of the session — there is no point retrying WiFi that is unavailable. The indicator can only be cleared by opening **Sync Progress** from the reader menu and completing a successful sync. It also resets automatically after the device sleeps and wakes back up.
+
+##### Exit sync
+
+When you leave a book by pressing **Back** or by sleeping (manually or via auto-sleep), CrossPoint uploads your current position to the sync server. A **"Syncing progress..."** message is shown briefly while this happens. The exit sync always uploads the current position, even if it has moved backward.
+
+The exit sync is skipped if your position has not changed since the last successful sync, or if a sync attempt already failed this session.
+
+##### Going home without syncing
+
+**Go Home** in the reader menu exits the book immediately without triggering a sync. Use this when you want a quick exit and do not need to update the server (for example, when switching books frequently or when WiFi is not available).
 
 ### 3.7 Sleep Screen
 

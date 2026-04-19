@@ -1,10 +1,13 @@
 #include "KOReaderSyncActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
+
+#include <cstring>
 
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
@@ -181,6 +184,18 @@ void KOReaderSyncActivity::performUpload() {
     }
     requestUpdate();
     return;
+  }
+
+  // Persist sync position so the progress bar marker appears on next book open
+  if (epub) {
+    FsFile syncFile;
+    if (Storage.openFileForWrite("KOSync", epub->getCachePath() + "/ko_autosync.bin", syncFile)) {
+      float pct = koPos.percentage;
+      uint8_t buf[4];
+      memcpy(buf, &pct, sizeof(pct));
+      syncFile.write(buf, sizeof(buf));
+      syncFile.close();
+    }
   }
 
   wifiOff();
