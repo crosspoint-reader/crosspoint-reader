@@ -14,6 +14,11 @@ constexpr uint8_t SECTION_FILE_VERSION = 20;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
+
+struct PageLutEntry {
+  uint32_t fileOffset;
+  uint16_t paragraphIndex;
+};
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -192,7 +197,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
                          viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering);
-  std::vector<uint32_t> lut = {};
+  std::vector<PageLutEntry> lut = {};
 
   // Derive the content base directory and image cache path prefix for the parser
   size_t lastSlash = localPath.find_last_of('/');
@@ -212,7 +217,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   ChapterHtmlSlimParser visitor(
       epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled,
-      [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
+      [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex) {
+        lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex});
+      },
       embeddedStyle, contentBase, imageBasePath, imageRendering, popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   success = visitor.parseAndBuildPages();
@@ -232,12 +239,12 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const uint32_t lutOffset = file.position();
   bool hasFailedLutRecords = false;
   // Write LUT
-  for (const uint32_t& pos : lut) {
-    if (pos == 0) {
+  for (const auto& entry : lut) {
+    if (entry.fileOffset == 0) {
       hasFailedLutRecords = true;
       break;
     }
-    serialization::writePod(file, pos);
+    serialization::writePod(file, entry.fileOffset);
   }
 
   if (hasFailedLutRecords) {
@@ -258,10 +265,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   const uint32_t paragraphLutOffset = file.position();
-  const auto& paragraphPerPage = visitor.getParagraphIndexPerPage();
-  serialization::writePod(file, static_cast<uint16_t>(paragraphPerPage.size()));
-  for (const uint16_t pIdx : paragraphPerPage) {
-    serialization::writePod(file, pIdx);
+  serialization::writePod(file, static_cast<uint16_t>(lut.size()));
+  for (const auto& entry : lut) {
+    serialization::writePod(file, entry.paragraphIndex);
   }
 
   // Patch header with final pageCount, lutOffset, anchorMapOffset, and paragraphLutOffset

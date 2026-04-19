@@ -25,7 +25,7 @@ class ChapterHtmlSlimParser {
   std::shared_ptr<Epub> epub;
   const std::string& filepath;
   GfxRenderer& renderer;
-  std::function<void(std::unique_ptr<Page>)> completePageFn;
+  std::function<void(std::unique_ptr<Page>, uint16_t)> completePageFn;
   std::function<void()> popupFn;  // Popup callback
   int depth = 0;
   int skipUntilDepth = INT_MAX;
@@ -75,7 +75,6 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
   uint16_t xpathParagraphIndex = 0;
-  std::vector<uint16_t> paragraphIndexPerPage;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -101,7 +100,7 @@ class ChapterHtmlSlimParser {
                                  const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
-                                 const std::function<void(std::unique_ptr<Page>)>& completePageFn,
+                                 const std::function<void(std::unique_ptr<Page>, uint16_t)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
                                  const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
@@ -128,5 +127,4 @@ class ChapterHtmlSlimParser {
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
-  const std::vector<uint16_t>& getParagraphIndexPerPage() const { return paragraphIndexPerPage; }
 };
