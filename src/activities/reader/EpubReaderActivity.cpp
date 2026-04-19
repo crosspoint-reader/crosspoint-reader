@@ -99,6 +99,12 @@ void EpubReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  // Flush any WPM adaptations accumulated during this session in one write.
+  if (dirtyReadingSpeedWpm) {
+    SETTINGS.saveToFile();
+    dirtyReadingSpeedWpm = false;
+  }
+
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   section.reset();
@@ -197,6 +203,11 @@ void EpubReaderActivity::loop() {
   }
 
   const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
+
+  // Don't skip chapter or turn page after screenshot (BTN_POWER + BTN_DOWN combo).
+  if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
+    return;
+  }
 
   if (skipChapter) {
     lastPageTurnTime = millis();
@@ -338,9 +349,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::CALIBRATE_READING_SPEED: {
+    case EpubReaderMenuActivity::MenuAction::RESET_READING_SPEED: {
       SETTINGS.readingSpeedWpm = 0;
       SETTINGS.saveToFile();
+      dirtyReadingSpeedWpm = false;  // just persisted; no redundant write needed on exit
       skipForwardAdaptCount = 0;
       requestUpdate();
       break;
@@ -690,14 +702,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (computed > 0) {
         pageTurnDuration = computed;
       }
-      // Reset the countdown from now (end of render) so render time isn't
-      // charged against the reader — and the new duration takes effect immediately.
-      lastPageTurnTime = millis();
     }
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
+
+    // Reset the countdown after renderContents() so panel refresh time isn't
+    // charged against the reader — the full Smart duration starts when the page is visible.
+    if (automaticPageTurnActive && activePageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION) {
+      lastPageTurnTime = millis();
+    }
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
@@ -969,21 +984,26 @@ unsigned long EpubReaderActivity::smartPageDurationMs(const uint16_t wordCount, 
   // duration = (wordCount / wpm) * 60000  ms
   // Computed with integer arithmetic to avoid floating point:
   //   = wordCount * 60000 / wpm
-  return (static_cast<unsigned long>(wordCount) * 60000UL) / static_cast<unsigned long>(wpm);
+  const unsigned long computed = (static_cast<unsigned long>(wordCount) * 60000UL) / static_cast<unsigned long>(wpm);
+  return computed < MIN_SMART_DURATION_MS ? MIN_SMART_DURATION_MS : computed;
 }
 
 void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsigned long elapsedMs) {
-  if (elapsedMs < MIN_ADAPT_ELAPSED_MS) {
-    return;  // Too short — likely an accidental tap; ignore.
-  }
-
-  if (isForwardTurn && skipForwardAdaptCount > 0) {
+  // Update the partial-page skip counter before any early-out: page navigation happens
+  // regardless of speed, so the counter must reflect it even for accidental-tap turns.
+  if (!isForwardTurn) {
+    skipForwardAdaptCount++;
+  } else if (skipForwardAdaptCount > 0) {
     // This forward turn follows a backward one: the user only read the remainder of the page
     // they returned to, not the full page, so elapsed time is not a valid speed sample.
     skipForwardAdaptCount--;
     LOG_DBG("ERS", "Adaptive WPM: fwd turn skipped (partial page after back), %u skips remaining",
             skipForwardAdaptCount);
     return;
+  }
+
+  if (elapsedMs < MIN_ADAPT_ELAPSED_MS) {
+    return;  // Too short — likely an accidental tap; skip WPM update.
   }
 
   const uint16_t currentWpm = SETTINGS.readingSpeedWpm > 0 ? SETTINGS.readingSpeedWpm : 200;
@@ -994,9 +1014,8 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
     const unsigned long raw = (static_cast<unsigned long>(currentPageWordCount) * 60000UL) / elapsedMs;
     observedWpm = static_cast<uint16_t>(raw > WPM_ADAPT_MAX ? WPM_ADAPT_MAX : raw);
   } else {
-    // Backward turn: user signalled the pace was too fast; schedule skip for the matching
-    // forward turn (partial-page re-read), then apply a gentle slow-down signal.
-    skipForwardAdaptCount++;
+    // Backward turn long enough to be intentional: apply a gentle slow-down signal.
+    // (skipForwardAdaptCount was already incremented above.)
     observedWpm = static_cast<uint16_t>((static_cast<uint32_t>(currentWpm) * 9U) / 10U);
   }
 
@@ -1014,5 +1033,5 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
           elapsedMs, observedWpm, currentWpm, newWpm);
 
   SETTINGS.readingSpeedWpm = newWpm;
-  SETTINGS.saveToFile();
+  dirtyReadingSpeedWpm = true;
 }

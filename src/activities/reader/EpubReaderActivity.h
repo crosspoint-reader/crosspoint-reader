@@ -30,9 +30,10 @@ class EpubReaderActivity final : public Activity {
   uint8_t activePageTurnOption = 0;  // Which option index is currently active (0 = off)
 
   // Adaptive reading-speed constants (Smart auto-page-turn mode).
-  static constexpr unsigned long MIN_ADAPT_ELAPSED_MS = 2000UL;  // Ignore turns faster than 2 s (accidental taps)
-  static constexpr uint16_t WPM_ADAPT_MIN = 30;                  // Floor to prevent runaway slowdowns
-  static constexpr uint16_t WPM_ADAPT_MAX = 1000;                // Ceiling
+  static constexpr unsigned long MIN_ADAPT_ELAPSED_MS = 2000UL;   // Ignore turns faster than 2 s (accidental taps)
+  static constexpr unsigned long MIN_SMART_DURATION_MS = 2000UL;  // Floor for tiny pages (e.g. 1-word chapter titles)
+  static constexpr uint16_t WPM_ADAPT_MIN = 30;                   // Floor to prevent runaway slowdowns
+  static constexpr uint16_t WPM_ADAPT_MAX = 1000;                 // Ceiling
   // After a backward turn the next N forward turns are partial-page reads (user re-read what was
   // left of the page they returned to), so they are not valid speed samples and must be skipped.
   // Each backward adaptation increments this; each forward turn decrements and skips adaptation.
@@ -40,6 +41,9 @@ class EpubReaderActivity final : public Activity {
 
   // Word count of the page currently on screen (set in render(), consumed in adaptReadingSpeed()).
   uint16_t currentPageWordCount = 0;
+  // True when readingSpeedWpm was updated in RAM but not yet flushed to flash.
+  // Flushed once in onExit() to avoid a flash write on every page turn.
+  bool dirtyReadingSpeedWpm = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

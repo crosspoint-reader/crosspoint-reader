@@ -20,7 +20,7 @@ class EpubReaderMenuActivity final : public Activity {
     FOOTNOTES,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
-    CALIBRATE_READING_SPEED,
+    RESET_READING_SPEED,
     ROTATE_SCREEN,
     SCREENSHOT,
     DISPLAY_QR,
