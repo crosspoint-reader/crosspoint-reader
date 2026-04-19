@@ -34,10 +34,15 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
                                  .keyboardKeyWidth = 31,
-                                 .keyboardKeyHeight = 50,
+                                 .keyboardKeyHeight = 40,
                                  .keyboardKeySpacing = 0,
+                                 .keyboardBottomKeyHeight = 35,
+                                 .keyboardBottomKeySpacing = 5,
                                  .keyboardBottomAligned = true,
-                                 .keyboardCenteredText = true};
+                                 .keyboardCenteredText = false,
+                                 .keyboardVerticalOffset = -7,
+                                 .keyboardTextFieldWidthPercent = 85,
+                                 .keyboardWidthPercent = 90};
 }
 
 class Lyra3CoversTheme : public LyraTheme {

@@ -781,18 +781,70 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
 }
 
-void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
-  renderer.drawText(UI_12_FONT_ID, rect.x + 10, rect.y, "[");
-  renderer.drawText(UI_12_FONT_ID, rect.x + rect.width - 15, rect.y + rect.height, "]");
+void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
+                              int contentStartX, int contentWidth) const {
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int lineY = rect.y + rect.height + lineHeight + BaseMetrics::values.verticalSpacing;
+  const int thickness = cursorMode ? 3 : 1;
+  if (contentWidth > 0) {
+    renderer.drawLine(rect.x + contentStartX, lineY, rect.x + contentStartX + contentWidth, lineY, thickness, true);
+  } else {
+    const int hPadding = 4;
+    const int lineW = textWidth + hPadding * 2;
+    renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, thickness,
+                      true);
+  }
 }
 
-void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label,
-                                const bool isSelected) const {
-  const int itemWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
-  const int textX = rect.x + (rect.width - itemWidth) / 2;
+void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
+                                const char* secondaryLabel, const KeyboardKeyType keyType,
+                                const bool inactiveSelection) const {
   if (isSelected) {
-    renderer.drawText(UI_10_FONT_ID, textX - 6, rect.y, "[");
-    renderer.drawText(UI_10_FONT_ID, textX + itemWidth, rect.y, "]");
+    if (inactiveSelection) {
+      renderer.drawRect(rect.x, rect.y, rect.width, rect.height, 2, true);
+    } else if (keyType == KeyboardKeyType::Disabled) {
+      renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
+    } else {
+      renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+    }
+  } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode || keyType == KeyboardKeyType::Del ||
+             keyType == KeyboardKeyType::Space || keyType == KeyboardKeyType::Ok ||
+             keyType == KeyboardKeyType::Disabled) {
+    renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
   }
-  renderer.drawText(UI_10_FONT_ID, textX, rect.y, label);
+
+  const bool invert = isSelected && !inactiveSelection;
+
+  if (keyType == KeyboardKeyType::Space) {
+    const int lineHalfWidth = rect.width * 3 / 10;
+    const int centerX = rect.x + rect.width / 2;
+    const int lineY = rect.y + rect.height / 2 + 3;
+    renderer.drawLine(centerX - lineHalfWidth, lineY, centerX + lineHalfWidth, lineY, 3, !invert);
+    return;
+  }
+
+  if (keyType == KeyboardKeyType::Del) {
+    const int centerX = rect.x + rect.width / 2;
+    const int centerY = rect.y + rect.height / 2;
+    const int arrowLen = rect.width / 4;
+    const int arrowHead = arrowLen / 2;
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX + arrowLen / 2, centerY, 3, !invert);
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY - arrowHead, 3,
+                      !invert);
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY + arrowHead, 3,
+                      !invert);
+    return;
+  }
+
+  const bool hasSecondary = secondaryLabel != nullptr && secondaryLabel[0] != '\0';
+  const int itemWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
+  const int textX = rect.x + (rect.width - itemWidth) / 2;
+  const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+
+  if (hasSecondary) {
+    const int secWidth = renderer.getTextWidth(SMALL_FONT_ID, secondaryLabel);
+    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - secWidth - 1, rect.y, secondaryLabel, !invert);
+  }
+
+  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !invert);
 }

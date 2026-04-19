@@ -14,7 +14,7 @@ for size in ${BOOKERLY_FONT_SIZES[@]}; do
     font_name="bookerly_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Bookerly/Bookerly-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
     echo "Generated $output_path"
   done
 done
@@ -24,7 +24,7 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
     echo "Generated $output_path"
   done
 done
