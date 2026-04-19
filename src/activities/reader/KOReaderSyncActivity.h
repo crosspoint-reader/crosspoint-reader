@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "KOReaderSyncClient.h"
 #include "ProgressMapper.h"
@@ -22,8 +23,8 @@ class KOReaderSyncActivity final : public Activity {
  public:
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                 const std::shared_ptr<Epub>& epub, const std::string& epubPath, int currentSpineIndex,
-                                int currentPage, int totalPagesInSpine, uint16_t currentParagraphIndex = 0,
-                                bool hasCurrentParagraphIndex = false)
+                                int currentPage, int totalPagesInSpine,
+                                std::optional<uint16_t> currentParagraphIndex = std::nullopt)
       : Activity("KOReaderSync", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
@@ -31,7 +32,6 @@ class KOReaderSyncActivity final : public Activity {
         currentPage(currentPage),
         totalPagesInSpine(totalPagesInSpine),
         currentParagraphIndex(currentParagraphIndex),
-        hasCurrentParagraphIndex(hasCurrentParagraphIndex),
         remoteProgress{},
         remotePosition{},
         localProgress{} {}
@@ -61,8 +61,7 @@ class KOReaderSyncActivity final : public Activity {
   int currentSpineIndex;
   int currentPage;
   int totalPagesInSpine;
-  uint16_t currentParagraphIndex = 0;
-  bool hasCurrentParagraphIndex = false;
+  std::optional<uint16_t> currentParagraphIndex;
 
   State state = WIFI_SELECTION;
   std::string statusMessage;

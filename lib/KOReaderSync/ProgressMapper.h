@@ -61,8 +61,10 @@ class ProgressMapper {
 
  private:
   /**
-   * Generate XPath by streaming the spine item's XHTML and counting <p> tags
-   * up to the current byte offset. Produces e.g. /body/DocFragment[3]/body/p[42].
+   * Generate a fallback XPath by streaming the spine item's XHTML and resolving
+   * a paragraph/text position from intra-spine progress.
+   * Produces a full ancestry path such as
+   * /body/DocFragment[3]/body/p[42]/text().17.
    */
   static std::string generateXPath(const std::shared_ptr<Epub>& epub, int spineIndex, float intraSpineProgress);
 };

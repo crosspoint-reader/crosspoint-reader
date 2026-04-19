@@ -10,6 +10,8 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <limits>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -193,7 +195,8 @@ void EpubReaderActivity::loop() {
       onGoHome();
     } else {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
-      nextPageNumber = UINT16_MAX;
+      nextPageNumber = 0;
+      pendingPageJump = std::numeric_limits<uint16_t>::max();
       requestUpdate();
     }
     return;
@@ -399,19 +402,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : nextPageNumber;
         const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
-        uint16_t paragraphIndex = 0;
-        bool hasParagraphIndex = false;
+        std::optional<uint16_t> paragraphIndex;
         if (section && currentPage >= 0 && currentPage < section->pageCount) {
           const uint16_t paragraphPage =
               currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
           if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
             paragraphIndex = *pIdx;
-            hasParagraphIndex = true;
           }
         }
         startActivityForResult(
             std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages, paragraphIndex, hasParagraphIndex),
+                                                   currentPage, totalPages, paragraphIndex),
             [this](const ActivityResult& result) {
               if (!result.isCancelled) {
                 const auto& sync = std::get<SyncResult>(result.data);
@@ -420,7 +421,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                   currentSpineIndex = sync.spineIndex;
                   nextPageNumber = sync.page;
                   cachedChapterTotalPageCount = 0;  // Prevent rescaling sync page
-                  pendingLastPageJump = false;
+                  pendingPageJump.reset();
                   saveProgress(currentSpineIndex, nextPageNumber, 0);
                   section.reset();
                 }
@@ -505,7 +506,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
       {
         RenderLock lock(*this);
         nextPageNumber = 0;
-        pendingLastPageJump = true;
+        pendingPageJump = std::numeric_limits<uint16_t>::max();
         currentSpineIndex--;
         section.reset();
       }
@@ -587,9 +588,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       LOG_DBG("ERS", "Cache found, skipping build...");
     }
 
-    if (pendingLastPageJump) {
-      section->currentPage = section->pageCount - 1;
-      pendingLastPageJump = false;
+    if (pendingPageJump.has_value()) {
+      if (*pendingPageJump >= section->pageCount && section->pageCount > 0) {
+        section->currentPage = section->pageCount - 1;
+      } else {
+        section->currentPage = *pendingPageJump;
+      }
+      pendingPageJump.reset();
     } else {
       section->currentPage = nextPageNumber;
       if (section->currentPage < 0) {

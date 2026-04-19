@@ -6,7 +6,9 @@
 #include <XmlParserUtils.h>
 #include <expat.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,7 +19,7 @@ std::string stripPrefix(const XML_Char* name) {
     return "";
   }
 
-  const char* local = strrchr(name, ':');
+  const char* local = std::strrchr(name, ':');
   return local ? std::string(local + 1) : std::string(name);
 }
 
@@ -67,19 +69,7 @@ size_t countUtf8Codepoints(const XML_Char* data, const int len) {
   const unsigned char* ptr = reinterpret_cast<const unsigned char*>(data);
   const unsigned char* end = ptr + len;
   while (ptr < end) {
-    const unsigned char lead = *ptr;
-    size_t advance = 1;
-    if (lead < 0x80) {
-      advance = 1;
-    } else if ((lead >> 5) == 0x6 && (ptr + 1) < end && (ptr[1] & 0xC0) == 0x80) {
-      advance = 2;
-    } else if ((lead >> 4) == 0xE && (ptr + 2) < end && (ptr[1] & 0xC0) == 0x80 && (ptr[2] & 0xC0) == 0x80) {
-      advance = 3;
-    } else if ((lead >> 3) == 0x1E && (ptr + 3) < end && (ptr[1] & 0xC0) == 0x80 && (ptr[2] & 0xC0) == 0x80 &&
-               (ptr[3] & 0xC0) == 0x80) {
-      advance = 4;
-    }
-    ptr += advance;
+    utf8NextCodepoint(&ptr);
     count++;
   }
 

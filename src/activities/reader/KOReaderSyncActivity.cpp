@@ -16,10 +16,10 @@
 
 namespace {
 CrossPointPosition makeLocalPositionWithParagraph(const int spineIndex, const int page, const int totalPages,
-                                                  const uint16_t paragraphIndex, const bool hasParagraphIndex) {
+                                                  const std::optional<uint16_t>& paragraphIndex) {
   CrossPointPosition pos = {spineIndex, page, totalPages};
-  if (hasParagraphIndex) {
-    pos.paragraphIndex = paragraphIndex;
+  if (paragraphIndex.has_value()) {
+    pos.paragraphIndex = *paragraphIndex;
     pos.hasParagraphIndex = true;
   }
   return pos;
@@ -159,8 +159,8 @@ void KOReaderSyncActivity::performSync() {
   }
 
   // Calculate local progress in KOReader format (for display)
-  CrossPointPosition localPos = makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine,
-                                                               currentParagraphIndex, hasCurrentParagraphIndex);
+  CrossPointPosition localPos =
+      makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine, currentParagraphIndex);
   localProgress = ProgressMapper::toKOReader(epub, localPos);
 
   {
@@ -186,8 +186,8 @@ void KOReaderSyncActivity::performUpload() {
   requestUpdateAndWait();
 
   // Convert current position to KOReader format
-  CrossPointPosition localPos = makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine,
-                                                               currentParagraphIndex, hasCurrentParagraphIndex);
+  CrossPointPosition localPos =
+      makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine, currentParagraphIndex);
   KOReaderPosition koPos = ProgressMapper::toKOReader(epub, localPos);
 
   KOReaderProgress progress;

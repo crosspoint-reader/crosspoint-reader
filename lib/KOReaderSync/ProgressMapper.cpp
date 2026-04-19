@@ -1,11 +1,14 @@
 #include "ProgressMapper.h"
 
+#include <algorithm>
 #include <Logging.h>
 
 #include <cmath>
 #include <cstring>
 
 #include "ChapterXPathResolver.h"
+#include "Epub/htmlEntities.h"
+#include "Utf8.h"
 
 namespace {
 int parseIndex(const std::string& xpath, const char* prefix, bool last = false) {
@@ -39,7 +42,11 @@ int parseCharOffset(const std::string& xpath) {
 class ParagraphStreamer final : public Print {
   size_t bytesWritten = 0;
   bool globalInTag = false;
+  bool globalInEntity = false;
   enum { IDLE, SAW_LT, SAW_LT_P } pState = IDLE;
+  static constexpr size_t MAX_ENTITY_SIZE = 16;
+  char entityBuffer[MAX_ENTITY_SIZE] = {};
+  size_t entityLen = 0;
 
   // Forward mode: count paragraphs at a byte offset
   size_t fwdTarget;
@@ -68,6 +75,47 @@ class ParagraphStreamer final : public Print {
     }
   }
 
+  void onVisibleCodepoint() {
+    totalVisChars++;
+    if (revPFound && !revDone) {
+      revVisChars++;
+      if (revVisChars >= revChar) {
+        targetVisChars = totalVisChars;
+        revDone = true;
+      }
+    }
+  }
+
+  void onVisibleText(const char* text) {
+    if (!text) {
+      return;
+    }
+
+    const unsigned char* ptr = reinterpret_cast<const unsigned char*>(text);
+    while (*ptr != 0) {
+      utf8NextCodepoint(&ptr);
+      onVisibleCodepoint();
+    }
+  }
+
+  void flushEntityAsLiteral() {
+    for (size_t i = 0; i < entityLen; i++) {
+      onVisibleCodepoint();
+    }
+  }
+
+  void finishEntity() {
+    entityBuffer[entityLen] = '\0';
+    const char* resolved = lookupHtmlEntity(entityBuffer, entityLen);
+    if (resolved) {
+      onVisibleText(resolved);
+    } else {
+      flushEntityAsLiteral();
+    }
+    globalInEntity = false;
+    entityLen = 0;
+  }
+
  public:
   explicit ParagraphStreamer(size_t targetByte) : fwdTarget(targetByte), revParagraph(0), revChar(0) {}
   ParagraphStreamer(int paragraph, int charOff) : fwdTarget(SIZE_MAX), revParagraph(paragraph), revChar(charOff) {}
@@ -79,20 +127,37 @@ class ParagraphStreamer final : public Print {
     }
     bytesWritten++;
 
-    if (c == '<') {
+    if (globalInEntity) {
+      if (entityLen + 1 < MAX_ENTITY_SIZE) {
+        entityBuffer[entityLen++] = static_cast<char>(c);
+      } else {
+        flushEntityAsLiteral();
+        globalInEntity = false;
+        entityLen = 0;
+      }
+
+      if (globalInEntity) {
+        if (c == ';') {
+          finishEntity();
+        } else if (c == '<' || c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+          flushEntityAsLiteral();
+          globalInEntity = false;
+          entityLen = 0;
+        }
+      }
+    } else if (c == '<') {
       globalInTag = true;
     } else if (c == '>') {
       globalInTag = false;
     } else if (!globalInTag) {
-      const bool startsCodepoint = (c & 0xC0) != 0x80;
-      if (startsCodepoint) {
-        totalVisChars++;
-        if (revPFound && !revDone) {
-          revVisChars++;
-          if (revVisChars >= revChar) {
-            targetVisChars = totalVisChars;
-            revDone = true;
-          }
+      if (c == '&') {
+        globalInEntity = true;
+        entityBuffer[0] = '&';
+        entityLen = 1;
+      } else {
+        const bool startsCodepoint = (c & 0xC0) != 0x80;
+        if (startsCodepoint) {
+          onVisibleCodepoint();
         }
       }
     }
