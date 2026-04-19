@@ -29,6 +29,8 @@ class Activity {
   virtual ~Activity() = default;
   virtual void onEnter();
   virtual void onExit();
+  /// Called when this activity becomes current again after a stacked subactivity is popped.
+  virtual void onRestoredFromStack() {}
   virtual void loop() {}
 
   virtual void render(RenderLock&&) {}

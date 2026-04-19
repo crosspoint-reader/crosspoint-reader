@@ -102,6 +102,29 @@ if (parsedSize != fileSize) {
 }
 ```
 
+## Bookmark files
+
+Each EPUB has a bookmark file stored in `/.crosspoint/bookmarks` with the filename format `<epub-key>.bookmarks`.
+
+> Note: These aren't stored in the cache so that they are persisted beyond cache clearing.
+
+```c++
+// byte 0      : u8 bookmark file version
+// byte 1      : u8 number of bookmarks (limit of 255 bookmarks)
+```
+
+After the above, each bookmark follows the following format, saved in order of newest to oldest:
+
+```c++
+// byte  0      : percentage of total book completion
+// bytes 1-2    : current chapter total page count
+// bytes 3-4    : current chapter page progress
+// bytes 5-6    : spine index
+// bytes 7-8    : page index
+// bytes 9      : summary text length
+// bytes 10+    : summary text
+```
+
 ## `section.bin`
 
 ### Version 8

@@ -28,8 +28,10 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
-  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
+  - [6. Bookmarks](#6-bookmarks)
+  - [7. Clippings (captures)](#7-clippings-captures)
+  - [8. Current Limitations \& Roadmap](#8-current-limitations--roadmap)
+  - [9. Troubleshooting Issues \& Escaping Bootloop](#9-troubleshooting-issues--escaping-bootloop)
 
 
 ## 1. Hardware Overview
@@ -388,7 +390,31 @@ Accessible by pressing **Confirm** while inside a book.
 
 ---
 
-## 6. Current Limitations & Roadmap
+## 6. Bookmarks
+
+Bookmarks can be created to quickly save and restore your place in a book.
+
+To create a bookmark, hold **Confirm** for 1 second while inside a book. A popup will appear letting you know a bookmark was created. Press **Back**, **Confirm** or change page to dismiss the popup.
+
+To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for 1 second, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
+
+Each book can have up to 255 bookmarks; attempting to add more will display a "Too many bookmarks!" popup.
+
+## 7. Clippings (captures)
+
+Clippings let you save a passage that may span more than one page. Text is stored on the SD card under `.crosspoint/clippings/` (per book).
+
+**Start capture:** From the reader menu, choose **Capture**. The first page is captured immediately. The status bar shows **Capturing** and how many pages are in the current capture.
+
+**Add more pages:** Use the **page forward** control (same as normal reading). Each forward adds the new page to the capture.
+
+**Finish and save:** Press **page back** once. The clipping is saved, a confirmation popup appears, and you **stay on the current page** (the back action ends capture; it does not move you to the previous page).
+
+**Cancel:** Press **short Back** to discard the in-progress capture without saving. Opening the reader menu (**Confirm**) while capturing also **discards** the capture and opens the menu.
+
+**View or delete:** From the reader menu, open **Clippings**. Pick a clipping to read it full-screen; hold **Confirm** to delete (same pattern as bookmarks). The list is ordered by position in the book (earlier passages first).
+
+## 8. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
@@ -397,7 +423,7 @@ Please note that this firmware is currently in active development. The following
 
 ---
 
-## 7. Troubleshooting Issues & Escaping Bootloop
+## 9. Troubleshooting Issues & Escaping Bootloop
 
 If an issue or crash is encountered while using Crosspoint, feel free to raise an issue ticket and attach the serial monitor logs. The logs can be obtained by connecting the device to a computer and starting a serial monitor. Either [Serial Monitor](https://www.serialmonitor.org/) or the following command can be used:
 

@@ -3,6 +3,11 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <string>
+#include <vector>
+
+#include "BookmarkStore.h"
+#include "ClippingStore.h"
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
 
@@ -27,6 +32,17 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  bool showBookmarkMessage = false;
+  bool maxBookmarksError = false;
+  bool showCaptureFinishMessage = false;
+  bool captureSaveFailed = false;
+
+  std::string statusBarOverride;
+  enum class CaptureState { IDLE, CAPTURING };
+  CaptureState captureState = CaptureState::IDLE;
+  std::vector<CapturedPage> captureBuffer;
+  bool pendingCaptureAfterRender = false;
+  std::vector<ClippingEntry> cachedClippings;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -49,6 +65,12 @@ class EpubReaderActivity final : public Activity {
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
+  void addBookmark();
+
+  void captureCurrentPage();
+  void startCapture();
+  void stopCapture();
+  void cancelCapture();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
@@ -59,6 +81,7 @@ class EpubReaderActivity final : public Activity {
       : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
   void onEnter() override;
   void onExit() override;
+  void onRestoredFromStack() override;
   void loop() override;
   void render(RenderLock&& lock) override;
   bool isReaderActivity() const override { return true; }
