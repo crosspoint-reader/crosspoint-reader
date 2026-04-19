@@ -10,13 +10,22 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+
+  // Show popup with reader orientation only when going to sleep from reader
+  if (APP_STATE.lastSleepFromReader) {
+    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  } else {
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  }
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
@@ -43,7 +52,6 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (dir && dir.isDirectory()) {
     sleepDir = "/.sleep";
   } else {
-    if (dir) dir.close();
     dir = Storage.open("/sleep");
     if (dir && dir.isDirectory()) {
       sleepDir = "/sleep";
@@ -56,29 +64,24 @@ void SleepActivity::renderCustomSleepScreen() const {
     // collect all valid BMP files
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
       if (file.isDirectory()) {
-        file.close();
         continue;
       }
       file.getName(name, sizeof(name));
       auto filename = std::string(name);
       if (filename[0] == '.') {
-        file.close();
         continue;
       }
 
       if (!FsHelpers::hasBmpExtension(filename)) {
         LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name);
-        file.close();
         continue;
       }
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
         LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-        file.close();
         continue;
       }
       files.emplace_back(filename);
-      file.close();
     }
     const auto numFiles = files.size();
     if (numFiles > 0) {
@@ -98,16 +101,11 @@ void SleepActivity::renderCustomSleepScreen() const {
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           renderBitmapSleepScreen(bitmap);
-          file.close();
-          dir.close();
           return;
         }
-        file.close();
       }
     }
   }
-  if (dir) dir.close();
-
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   FsFile file;
@@ -116,10 +114,8 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
-      file.close();
       return;
     }
-    file.close();
   }
 
   renderDefaultSleepScreen();
@@ -286,10 +282,8 @@ void SleepActivity::renderCoverSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
       renderBitmapSleepScreen(bitmap);
-      file.close();
       return;
     }
-    file.close();
   }
 
   return (this->*renderNoCoverSleepScreen)();

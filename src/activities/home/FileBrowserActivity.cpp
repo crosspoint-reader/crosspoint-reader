@@ -75,7 +75,6 @@ void FileBrowserActivity::loadFiles() {
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
-    if (root) root.close();
     return;
   }
 
@@ -85,7 +84,6 @@ void FileBrowserActivity::loadFiles() {
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
     if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
-      file.close();
       continue;
     }
 
@@ -99,9 +97,7 @@ void FileBrowserActivity::loadFiles() {
         files.emplace_back(filename);
       }
     }
-    file.close();
   }
-  root.close();
   sortFileList(files);
 }
 
@@ -115,7 +111,6 @@ void FileBrowserActivity::onEnter() {
     basepath = "/";
     loadFiles();
   } else if (!root.isDirectory()) {
-    root.close();
     lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
 
     const std::string oldPath = basepath;
@@ -126,7 +121,6 @@ void FileBrowserActivity::onEnter() {
     const std::string fileName = oldPath.substr(pos + 1);
     selectorIndex = findEntry(fileName);
   } else {
-    root.close();
     loadFiles();
   }
 
@@ -164,7 +158,8 @@ void FileBrowserActivity::loop() {
     return;
   }
 
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
+  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
+  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) return;
@@ -294,8 +289,11 @@ void FileBrowserActivity::render(RenderLock&&) {
   std::string folderName = (basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
+  const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int pathReserved = pathLineHeight + metrics.verticalSpacing;
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
   } else {
@@ -304,6 +302,33 @@ void FileBrowserActivity::render(RenderLock&&) {
         [this](int index) { return getFileName(files[index]); }, nullptr,
         [this](int index) { return UITheme::getFileIcon(files[index]); },
         [this](int index) { return getFileExtension(files[index]); }, false);
+  }
+
+  // Full path display
+  {
+    const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
+    const int separatorY = pathY - metrics.verticalSpacing / 2;
+    renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
+    const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;
+    // Left-truncate so the deepest directory is always visible
+    const char* pathStr = basepath.c_str();
+    const char* pathDisplay = pathStr;
+    char leftTruncBuf[256];
+    if (renderer.getTextWidth(SMALL_FONT_ID, pathStr) > pathMaxWidth) {
+      const char ellipsis[] = "\xe2\x80\xa6";  // UTF-8 ellipsis (…)
+      const int ellipsisWidth = renderer.getTextWidth(SMALL_FONT_ID, ellipsis);
+      const int available = pathMaxWidth - ellipsisWidth;
+      // Walk forward from the start until the suffix fits, skipping UTF-8 continuation bytes
+      const char* p = pathStr;
+      while (*p) {
+        if (renderer.getTextWidth(SMALL_FONT_ID, p) <= available) break;
+        ++p;
+        while (*p && (static_cast<unsigned char>(*p) & 0xC0) == 0x80) ++p;
+      }
+      snprintf(leftTruncBuf, sizeof(leftTruncBuf), "%s%s", ellipsis, p);
+      pathDisplay = leftTruncBuf;
+    }
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, pathY, pathDisplay);
   }
 
   // Help text

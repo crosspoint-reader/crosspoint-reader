@@ -37,7 +37,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
   uint16_t cachedWidth, cachedHeight;
   if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
-    cacheFile.close();
     return false;
   }
 
@@ -47,7 +46,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   if (widthDiff > 1 || heightDiff > 1) {
     LOG_ERR("IMG", "Cache dimension mismatch: %dx%d vs %dx%d", cachedWidth, cachedHeight, expectedWidth,
             expectedHeight);
-    cacheFile.close();
     return false;
   }
 
@@ -62,7 +60,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   uint8_t* rowBuffer = (uint8_t*)malloc(bytesPerRow);
   if (!rowBuffer) {
     LOG_ERR("IMG", "Failed to allocate row buffer");
-    cacheFile.close();
     return false;
   }
 
@@ -73,7 +70,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     if (cacheFile.read(rowBuffer, bytesPerRow) != bytesPerRow) {
       LOG_ERR("IMG", "Cache read error at row %d", row);
       free(rowBuffer);
-      cacheFile.close();
       return false;
     }
 
@@ -89,7 +85,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   }
 
   free(rowBuffer);
-  cacheFile.close();
   LOG_DBG("IMG", "Cache render complete");
   return true;
 }
