@@ -336,7 +336,8 @@ To use custom sleep images, set the sleep screen mode to **Custom** or **Cover +
 > [!TIP]
 > For best results:
 > - Use uncompressed BMP files with 24-bit color depth
-> - Use a resolution of 480x800 pixels to match the device's screen resolution.
+> - X4: Use a resolution of 480x800 pixels to match the device's screen resolution.
+> - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
 
 ---
 

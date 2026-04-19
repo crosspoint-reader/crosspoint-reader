@@ -69,7 +69,10 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   JsonDocument doc;
   doc["openEpubPath"] = s.openEpubPath;
-  doc["lastSleepImage"] = s.lastSleepImage;
+  JsonArray recentArr = doc["recentSleepImages"].to<JsonArray>();
+  for (int i = 0; i < CrossPointState::SLEEP_RECENT_COUNT; i++) recentArr.add(s.recentSleepImages[i]);
+  doc["recentSleepPos"] = s.recentSleepPos;
+  doc["recentSleepFill"] = s.recentSleepFill;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
 
@@ -87,8 +90,24 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   }
 
   s.openEpubPath = doc["openEpubPath"] | std::string("");
-  s.lastSleepImage = doc["lastSleepImage"] | (uint8_t)UINT8_MAX;
-  s.readerActivityLoadCount = doc["readerActivityLoadCount"] | (uint8_t)0;
+  memset(s.recentSleepImages, 0, sizeof(s.recentSleepImages));
+  JsonArrayConst recentArr = doc["recentSleepImages"];
+  const int actualCount = recentArr.isNull() ? 0
+                                             : std::min(static_cast<int>(recentArr.size()),
+                                                        static_cast<int>(CrossPointState::SLEEP_RECENT_COUNT));
+  for (int i = 0; i < actualCount; i++) s.recentSleepImages[i] = recentArr[i] | static_cast<uint16_t>(0);
+  s.recentSleepPos = doc["recentSleepPos"] | static_cast<uint8_t>(0);
+  if (s.recentSleepPos >= CrossPointState::SLEEP_RECENT_COUNT)
+    s.recentSleepPos = actualCount > 0 ? s.recentSleepPos % CrossPointState::SLEEP_RECENT_COUNT : 0;
+  s.recentSleepFill = doc["recentSleepFill"] | static_cast<uint8_t>(0);
+  s.recentSleepFill = static_cast<uint8_t>(std::min(static_cast<int>(s.recentSleepFill), actualCount));
+  // Migrate legacy single-image field from old state.json (pre-recency-buffer).
+  // Only seeds the buffer if the new buffer is empty (fresh migration, not a resave).
+  if (s.recentSleepFill == 0 && !doc["lastSleepImage"].isNull()) {
+    const uint8_t legacy = doc["lastSleepImage"] | static_cast<uint8_t>(UINT8_MAX);
+    if (legacy != UINT8_MAX) s.pushRecentSleep(static_cast<uint16_t>(legacy));
+  }
+  s.readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
   return true;
 }
