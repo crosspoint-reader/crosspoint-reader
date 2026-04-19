@@ -343,17 +343,40 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
                           const int lineWidth, const bool state) const {
   const int stroke = std::min(lineWidth, maxRadius);
   const int innerRadius = std::max(maxRadius - stroke, 0);
-  const int outerRadiusSq = maxRadius * maxRadius;
+  const int outerRadius = maxRadius;
+
+  if (outerRadius <= 0) {
+    return;
+  }
+
+  const int outerRadiusSq = outerRadius * outerRadius;
   const int innerRadiusSq = innerRadius * innerRadius;
-  for (int dy = 0; dy <= maxRadius; ++dy) {
-    for (int dx = 0; dx <= maxRadius; ++dx) {
-      const int distSq = dx * dx + dy * dy;
-      if (distSq > outerRadiusSq || distSq < innerRadiusSq) {
-        continue;
-      }
-      const int px = cx + xDir * dx;
-      const int py = cy + yDir * dy;
-      drawPixel(px, py, state);
+
+  int xOuter = outerRadius;
+  int xInner = innerRadius;
+
+  for (int dy = 0; dy <= outerRadius; ++dy) {
+    while (xOuter > 0 && (xOuter * xOuter + dy * dy) > outerRadiusSq) {
+      --xOuter;
+    }
+    // Keep the smallest x that still lies outside/at the inner radius,
+    // i.e. (x^2 + y^2) >= innerRadiusSq.
+    while (xInner > 0 && ((xInner - 1) * (xInner - 1) + dy * dy) >= innerRadiusSq) {
+      --xInner;
+    }
+
+    if (xOuter < xInner) {
+      continue;
+    }
+
+    const int x0 = cx + xDir * xInner;
+    const int x1 = cx + xDir * xOuter;
+    const int left = std::min(x0, x1);
+    const int width = std::abs(x1 - x0) + 1;
+    const int py = cy + yDir * dy;
+
+    if (width > 0) {
+      fillRect(left, py, width, 1, state);
     }
   }
 };
@@ -472,15 +495,39 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
 
 template <Color color>
 void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir) const {
+  if (maxRadius <= 0) return;
+
+  if constexpr (color == Color::Clear) {
+    return;
+  }
+
   const int radiusSq = maxRadius * maxRadius;
+
+  // Avoid sqrt by scanning from outer radius inward while y grows.
+  int x = maxRadius;
   for (int dy = 0; dy <= maxRadius; ++dy) {
-    for (int dx = 0; dx <= maxRadius; ++dx) {
-      const int distSq = dx * dx + dy * dy;
-      const int px = cx + xDir * dx;
-      const int py = cy + yDir * dy;
-      if (distSq <= radiusSq) {
-        drawPixelDither<color>(px, py);
-      }
+    while (x > 0 && (x * x + dy * dy) > radiusSq) {
+      --x;
+    }
+    if (x < 0) break;
+
+    const int py = cy + yDir * dy;
+    if (py < 0 || py >= getScreenHeight()) continue;
+
+    int x0 = cx;
+    int x1 = cx + xDir * x;
+    if (x0 > x1) std::swap(x0, x1);
+    const int width = x1 - x0 + 1;
+
+    if (width <= 0) continue;
+
+    if constexpr (color == Color::Black) {
+      fillRect(x0, py, width, 1, true);
+    } else if constexpr (color == Color::White) {
+      fillRect(x0, py, width, 1, false);
+    } else {
+      // LightGray / DarkGray: use existing dithered fill path.
+      fillRectDither(x0, py, width, 1, color);
     }
   }
 }
