@@ -18,7 +18,7 @@
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 constexpr uint32_t CACHE_MAGIC = 0x4D4B4449;  // "MKDI"
-constexpr uint8_t CACHE_VERSION = 1;
+constexpr uint8_t CACHE_VERSION = 3;  // Bumped: nested list indent + task checkboxes
 }  // namespace
 
 void MdReaderActivity::onEnter() {
@@ -130,19 +130,20 @@ int MdReaderActivity::measureSpans(const std::vector<MdParser::Span>& spans) con
   return width;
 }
 
-void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
+bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
                                           std::vector<RenderedLine>& outLines, int maxLines) {
+  const size_t startSize = outLines.size();
+
   if (parsed.spans.empty()) {
-    // Blank or HR line — emit a single empty/HR line
     RenderedLine rl;
     rl.indent = indent;
     rl.isHR = (parsed.blockType == MdParser::BlockType::HorizontalRule);
     outLines.push_back(std::move(rl));
-    return;
+    return true;
   }
 
   const int availableWidth = viewportWidth - indent;
-  if (availableWidth <= 0) return;
+  if (availableWidth <= 0) return true;
 
   // Build a flat list of all spans, prepending the list prefix if present
   std::vector<MdParser::Span> allSpans;
@@ -158,13 +159,14 @@ void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
     rl.spans = std::move(allSpans);
     rl.indent = indent;
     outLines.push_back(std::move(rl));
-    return;
+    return true;
   }
 
   // Word-wrap across spans
   RenderedLine currentLine;
   currentLine.indent = indent;
   int currentWidth = 0;
+  bool fullyConsumed = true;
 
   for (size_t si = 0; si < allSpans.size(); si++) {
     const auto& span = allSpans[si];
@@ -173,7 +175,6 @@ void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
     int spanWidth = renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
 
     if (currentWidth + spanWidth <= availableWidth) {
-      // Entire span fits
       currentLine.spans.push_back(span);
       currentWidth += spanWidth;
       continue;
@@ -183,31 +184,32 @@ void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
     std::string remaining = span.text;
     auto style = span.style;
 
-    while (!remaining.empty() && static_cast<int>(outLines.size()) < maxLines) {
+    while (!remaining.empty()) {
+      // Check line limit (using lines added, not total size)
+      if (static_cast<int>(outLines.size() - startSize) >= maxLines) {
+        fullyConsumed = false;
+        goto done;
+      }
+
       int remWidth = renderer.getTextAdvanceX(cachedFontId, remaining.c_str(), style);
 
       if (currentWidth + remWidth <= availableWidth) {
-        // Rest fits on current line
         currentLine.spans.push_back({remaining, style});
         currentWidth += remWidth;
         remaining.clear();
         break;
       }
 
-      // Find break point in remaining text
       size_t breakPos = remaining.size();
 
-      // Binary-ish search: try to find where text overflows
       while (breakPos > 0 &&
              renderer.getTextAdvanceX(cachedFontId, remaining.substr(0, breakPos).c_str(), style) >
                  availableWidth - currentWidth) {
-        // Try to break at a space
         size_t spacePos = remaining.rfind(' ', breakPos - 1);
         if (spacePos != std::string::npos && spacePos > 0) {
           breakPos = spacePos;
         } else {
           breakPos--;
-          // Don't break in the middle of a UTF-8 sequence
           while (breakPos > 0 && (remaining[breakPos] & 0xC0) == 0x80) {
             breakPos--;
           }
@@ -216,13 +218,11 @@ void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
 
       if (breakPos == 0) {
         if (currentLine.spans.empty()) {
-          // Nothing on this line yet and even a single char doesn't fit — force at least one char
           breakPos = 1;
           while (breakPos < remaining.size() && (remaining[breakPos] & 0xC0) == 0x80) {
             breakPos++;
           }
         } else {
-          // Push current line, start fresh
           outLines.push_back(std::move(currentLine));
           currentLine = RenderedLine();
           currentLine.indent = indent;
@@ -237,7 +237,6 @@ void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
       currentLine.indent = indent;
       currentWidth = 0;
 
-      // Skip space at break point
       size_t skip = breakPos;
       if (skip < remaining.size() && remaining[skip] == ' ') {
         skip++;
@@ -246,10 +245,11 @@ void MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
     }
   }
 
-  // Emit any remaining content on the current line
+done:
   if (!currentLine.spans.empty()) {
     outLines.push_back(std::move(currentLine));
   }
+  return fullyConsumed;
 }
 
 bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock,
@@ -316,12 +316,12 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock,
       parsed = MdParser::parseLine(rawLine, inCodeBlock);
     }
 
-    // Determine indent
+    // Determine indent (base + nesting level)
     int indent = 0;
     switch (parsed.blockType) {
       case MdParser::BlockType::UnorderedList:
       case MdParser::BlockType::OrderedList:
-        indent = LIST_INDENT;
+        indent = LIST_INDENT + parsed.indentLevel * LIST_INDENT;
         break;
       case MdParser::BlockType::Blockquote:
         indent = BLOCKQUOTE_INDENT;
@@ -335,11 +335,24 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock,
 
     // Word-wrap and add to output (skip fence lines)
     if (!wasFence) {
+      size_t linesBefore = outLines.size();
       int remainingLines = linesPerPage - static_cast<int>(outLines.size());
-      wordWrapParsedLine(parsed, indent, outLines, remainingLines);
+      bool fullyConsumed = wordWrapParsedLine(parsed, indent, outLines, remainingLines);
+
+      if (!fullyConsumed) {
+        if (linesBefore > 0) {
+          // Page was partially filled — rollback this line and save it for next page
+          outLines.resize(linesBefore);
+          // Don't advance pos — next page re-processes this source line
+        } else {
+          // First line on page is longer than a full page — accept truncation, advance past it
+          pos = lineEnd + 1;
+        }
+        break;
+      }
     }
 
-    // Advance past the newline
+    // Advance past the newline (only if source line was fully consumed)
     pos = lineEnd + 1;
   }
 

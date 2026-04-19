@@ -158,6 +158,23 @@ bool isCodeFence(const std::string& line) {
   return false;
 }
 
+// Detect task list checkbox at start of list content, update prefix accordingly.
+// Returns content with the checkbox marker stripped.
+static std::string handleTaskList(const std::string& content, std::string& listPrefix) {
+  if (content.size() >= 3 && content[0] == '[' && content[2] == ']') {
+    char mark = content[1];
+    if (mark == 'x' || mark == 'X') {
+      listPrefix = "[x] ";
+    } else if (mark == ' ') {
+      listPrefix = "[ ] ";
+    }
+    size_t skip = 3;
+    if (skip < content.size() && content[skip] == ' ') skip++;
+    return content.substr(skip);
+  }
+  return content;
+}
+
 ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock) {
   ParsedLine result;
 
@@ -165,7 +182,6 @@ ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock) {
   if (inCodeBlock) {
     if (isCodeFence(rawLine)) {
       result.blockType = BlockType::CodeBlock;
-      // Fence line itself produces no visible content
       return result;
     }
     result.blockType = BlockType::CodeBlock;
@@ -178,6 +194,18 @@ ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock) {
     result.blockType = BlockType::CodeBlock;
     return result;
   }
+
+  // Count leading whitespace for nesting level before trimming
+  size_t leadingSpaces = 0;
+  for (size_t i = 0; i < rawLine.size(); i++) {
+    if (rawLine[i] == ' ')
+      leadingSpaces++;
+    else if (rawLine[i] == '\t')
+      leadingSpaces += 2;  // Treat tab as 2 spaces
+    else
+      break;
+  }
+  result.indentLevel = static_cast<uint8_t>(leadingSpaces / 2);
 
   std::string trimmed = trimLeft(rawLine);
 
@@ -232,7 +260,8 @@ ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock) {
   if (trimmed.size() > 1 && trimmed[1] == ' ' && (trimmed[0] == '-' || trimmed[0] == '*' || trimmed[0] == '+')) {
     result.blockType = BlockType::UnorderedList;
     result.listPrefix = "\xe2\x80\xa2 ";  // "• "
-    result.spans = parseInline(trimmed.substr(2));
+    std::string content = handleTaskList(trimmed.substr(2), result.listPrefix);
+    result.spans = parseInline(content);
     return result;
   }
 
@@ -250,7 +279,8 @@ ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock) {
       if (allDigits) {
         result.blockType = BlockType::OrderedList;
         result.listPrefix = trimmed.substr(0, dotPos + 2);  // e.g. "1. "
-        result.spans = parseInline(trimmed.substr(dotPos + 2));
+        std::string content = handleTaskList(trimmed.substr(dotPos + 2), result.listPrefix);
+        result.spans = parseInline(content);
         return result;
       }
     }

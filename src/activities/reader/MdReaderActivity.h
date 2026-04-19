@@ -56,8 +56,9 @@ class MdReaderActivity final : public Activity {
   void saveProgress() const;
   void loadProgress();
 
-  // Word-wrap a parsed markdown line into one or more RenderedLines
-  void wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
+  // Word-wrap a parsed markdown line into one or more RenderedLines.
+  // Returns true if all content was emitted, false if truncated by maxLines.
+  bool wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
                           std::vector<RenderedLine>& outLines, int maxLines);
 
   // Measure total pixel width of a span list

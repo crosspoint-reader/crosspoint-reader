@@ -29,7 +29,8 @@ enum class BlockType : uint8_t {
 struct ParsedLine {
   BlockType blockType;
   std::vector<Span> spans;
-  std::string listPrefix;  // "• " or "1. " etc.
+  std::string listPrefix;   // "• " or "1. " etc.
+  uint8_t indentLevel = 0;  // Nesting depth (each 2 spaces = 1 level)
 };
 
 // Parse a single raw line of markdown into block type and styled spans.
