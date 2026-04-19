@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CrossPoint Reader - Files</title>
+  <title>Files - CrossPoint Reader</title>
   <script src="/js/jszip.min.js"></script>
   <style>
     :root {
@@ -1734,6 +1734,11 @@
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+
+  if (currentPath !== '/') {
+    const leaf = currentPath.split('/').filter(Boolean).pop();
+    if (leaf) document.title = leaf + ' - Files - CrossPoint Reader';
+  }
 
   // Network status monitoring
   let isNetworkOnline = navigator.onLine;
