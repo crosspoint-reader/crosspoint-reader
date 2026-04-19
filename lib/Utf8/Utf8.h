@@ -18,6 +18,11 @@ int utf8SafeTruncateBuffer(const char* buf, int len);
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.
 inline bool utf8IsCombiningMark(const uint32_t cp) {
   return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks
+         || (cp >= 0x0591 && cp <= 0x05BD)   // Hebrew cantillation marks + nikkud
+         || (cp == 0x05BF)                   // Hebrew point rafe
+         || (cp >= 0x05C1 && cp <= 0x05C2)   // Hebrew point shin/sin dot
+         || (cp >= 0x05C4 && cp <= 0x05C5)   // Hebrew mark upper/lower dot
+         || (cp == 0x05C7)                   // Hebrew point qamats qatan
          || (cp >= 0x1DC0 && cp <= 0x1DFF)   // Combining Diacritical Marks Supplement
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
