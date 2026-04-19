@@ -29,22 +29,16 @@ class EpubReaderActivity final : public Activity {
   bool automaticPageTurnActive = false;
   uint8_t activePageTurnOption = 0;  // Which option index is currently active (0 = off)
 
-  // Reading-speed calibration state machine.
-  // When active, the user reads N pages manually; we accumulate word counts and time.
-  // NOTE: the first turn starts the timer without recording words (the user was already
-  // mid-read on that page), so calibration measures (CALIBRATION_PAGE_TURNS - 1) pages
-  // of data. Changing this value changes the number of *turn events*, not measured pages.
-  static constexpr uint8_t CALIBRATION_PAGE_TURNS = 5;  // measures 4 pages
-  bool calibrationActive = false;
-  unsigned long calibrationDoneAtMs = 0UL;       // millis() when calibration succeeded (0 = never/expired).
-  unsigned long calibrationCancelledAtMs = 0UL;  // millis() when calibration was cancelled (0 = never/expired).
-  uint8_t calibrationPagesRemaining = 0;
-  uint32_t calibrationTotalWords = 0;
-  // 0 means "not started yet"; set on the first forward page turn.
-  // Words from the first page are NOT counted (the user was already reading it before the
-  // timer started), so calibration measures pages 2..N against the time from turn 1 onward.
-  unsigned long calibrationStartMs = 0UL;
-  // Word count of the page currently on screen (set in render(), consumed in pageTurn()).
+  // Adaptive reading-speed constants (Smart auto-page-turn mode).
+  static constexpr unsigned long MIN_ADAPT_ELAPSED_MS = 2000UL;  // Ignore turns faster than 2 s (accidental taps)
+  static constexpr uint16_t WPM_ADAPT_MIN = 30;                  // Floor to prevent runaway slowdowns
+  static constexpr uint16_t WPM_ADAPT_MAX = 1000;                // Ceiling
+  // After a backward turn the next N forward turns are partial-page reads (user re-read what was
+  // left of the page they returned to), so they are not valid speed samples and must be skipped.
+  // Each backward adaptation increments this; each forward turn decrements and skips adaptation.
+  uint8_t skipForwardAdaptCount = 0;
+
+  // Word count of the page currently on screen (set in render(), consumed in adaptReadingSpeed()).
   uint16_t currentPageWordCount = 0;
 
   // Footnote support
@@ -71,9 +65,9 @@ class EpubReaderActivity final : public Activity {
   // Compute autoflip duration from current page's word count and calibrated WPM.
   // Returns 0 if WPM is uncalibrated or word count is 0 (caller should keep previous duration).
   unsigned long smartPageDurationMs(uint16_t wordCount, uint16_t wpm) const;
-  void startCalibration();
-  void finishCalibration();
-  void cancelCalibration(bool showMessage);
+  // Adapt readingSpeedWpm via EMA when the user manually turns a page in Smart auto-page-turn mode.
+  // elapsedMs is the time spent on the page being left (millis() - lastPageTurnTime).
+  void adaptReadingSpeed(bool isForwardTurn, unsigned long elapsedMs);
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

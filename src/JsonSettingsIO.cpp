@@ -201,9 +201,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)S::FRONT_HW_RIGHT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_RIGHT);
   CrossPointSettings::validateFrontButtonMapping(s);
-  // Reading speed calibration — uint16_t, stored outside the uint8_t SettingsList loop.
-  // Clamp to the same 1000-WPM ceiling that finishCalibration() enforces so a stale/corrupt
-  // JSON value cannot enable smart auto-turn with timings the calibration flow would never produce.
+  // Reading speed — uint16_t, stored outside the uint8_t SettingsList loop.
+  // Clamp to 1000 WPM to guard against stale/corrupt JSON values.
   {
     const uint16_t rawWpm = doc["readingSpeedWpm"] | (uint16_t)0;
     s.readingSpeedWpm = rawWpm > 1000U ? 1000U : rawWpm;
