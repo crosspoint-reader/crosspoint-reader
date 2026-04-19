@@ -400,7 +400,7 @@ The **Auto Page Turn** option turns pages automatically at a set pace. Available
 - If you press **Next Page** before the timer fires, the speed adjusts upward.
 - If you press **Previous Page**, the speed adjusts downward. The following forward page turn is not used as a speed sample, since you only read the remainder of the page you returned to.
 
-Adjustments use an exponential moving average, so recent behaviour carries more weight than older interactions. The current WPM is shown in the status bar (e.g. `Auto Turn 230 wpm`).
+Adjustments use an exponential moving average, so recent behaviour carries more weight than older interactions. The current WPM is shown in the status bar (e.g. `Auto Turn 230 wpm`). Before any speed has been learned it shows `Auto Turn Uncalibrated`.
 
 To clear the learned speed and start fresh, select **Reset Reading Speed** from the Reader Menu.
 
