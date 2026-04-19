@@ -6,7 +6,6 @@
 #include <Logging.h>
 
 #include <cstdint>
-#include <cstring>
 #include <string>
 
 #include "I18n.h"
@@ -630,8 +629,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom,
-                              const int etaMinutesToChapterEnd) const {
+                              const int pageCount, std::string title, const int paddingBottom) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -653,13 +651,6 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
     } else {
       snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
-    }
-
-    if (etaMinutesToChapterEnd >= 0) {
-      char progressWithEtaStr[48];
-      snprintf(progressWithEtaStr, sizeof(progressWithEtaStr), "%s  %d m", progressStr, etaMinutesToChapterEnd);
-      strncpy(progressStr, progressWithEtaStr, sizeof(progressStr) - 1);
-      progressStr[sizeof(progressStr) - 1] = '\0';
     }
 
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);

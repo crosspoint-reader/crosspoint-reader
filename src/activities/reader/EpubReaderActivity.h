@@ -22,9 +22,6 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
   bool pendingGoHome = false;           // Defer go home to avoid race condition with display task
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
-  uint32_t lastPageTurnMs = 0;
-  uint32_t lastRenderedPageKey = 0;
-  float avgMsPerPage = 0.0f;
   const std::function<void()> onGoBack;
   const std::function<void()> onGoHome;
 
@@ -32,8 +29,6 @@ class EpubReaderActivity final : public ActivityWithSubactivity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
   void saveProgress(int spineIndex, int currentPage, int pageCount);
-  void onPageTurnForEta();
-  int getEtaMinutesToEndOfChapter() const;
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void onReaderMenuBack(uint8_t orientation);
