@@ -214,7 +214,7 @@ bool MalayalamShaper::containsMalayalam(const char* text, size_t len) {
   const char* end = text + len;
   while (p < end) {
     uint32_t cp = nextCodepoint(p, end);
-    if (cp >= 0x0D00 && cp <= 0x0D7F) return true;
+    if ((cp >= 0x0D00 && cp <= 0x0D7F) || (cp >= PUA_START && cp <= PUA_END)) return true;
   }
   return false;
 }

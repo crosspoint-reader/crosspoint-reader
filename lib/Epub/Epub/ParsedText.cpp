@@ -1,6 +1,7 @@
 #include "ParsedText.h"
 
 #include <GfxRenderer.h>
+#include <MalayalamShaper.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -79,6 +80,15 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious) {
   if (word.empty()) return;
+
+  // Shape Malayalam text before storing — shaped output is cached in section.bin
+  if (MalayalamShaper::containsMalayalam(word.c_str(), word.size())) {
+    char shaped[256];
+    size_t shapedLen = MalayalamShaper::shape(word.c_str(), word.size(), shaped, sizeof(shaped));
+    if (shapedLen > 0) {
+      word.assign(shaped, shapedLen);
+    }
+  }
 
   words.push_back(std::move(word));
   EpdFontFamily::Style combinedStyle = fontStyle;
@@ -361,6 +371,11 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   const std::string& word = words[wordIndex];
   const auto style = wordStyles[wordIndex];
+
+  // Malayalam words are already shaped; do not attempt English hyphenation on them.
+  if (MalayalamShaper::containsMalayalam(word.c_str(), word.size())) {
+    return false;
+  }
 
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
   auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
