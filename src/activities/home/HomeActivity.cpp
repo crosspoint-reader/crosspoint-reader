@@ -43,8 +43,6 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 
     if (book.pinned) {
       if (!Storage.exists(book.path.c_str())) {
-        // Book was deleted from SD card, unpin it
-        RECENT_BOOKS.setPinned(book.path, false);
         continue;
       }
       recentBooks.push_back(book);
