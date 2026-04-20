@@ -1267,9 +1267,11 @@ void CrossPointWebServer::handleGetSettings() const {
     }
 
     const size_t written = serializeJson(doc, output, outputSize);
+    const char* jsonEntry = output;
+    String dynBuffer;
     if (written >= outputSize) {
-      LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
-      continue;
+      serializeJson(doc, dynBuffer);
+      jsonEntry = dynBuffer.c_str();
     }
 
     if (seenFirst) {
@@ -1277,7 +1279,7 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    result += output;
+    result += jsonEntry;
   }
 
   result += "]";

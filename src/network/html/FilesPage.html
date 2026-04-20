@@ -2155,8 +2155,9 @@
         document.body.appendChild(notification);
       }
 
-      // Cancel any in-flight hide timer so a new message is not prematurely dismissed
+      // Cancel any in-flight hide/removal timers so a new message is not prematurely dismissed
       clearTimeout(notification._hideTimeout);
+      clearTimeout(notification._removeTimeout);
 
       // Set styles based on type
       const styles = {
@@ -2176,7 +2177,7 @@
       notification._hideTimeout = setTimeout(() => {
         notification.style.opacity = '0';
         notification.style.transform = 'translateX(100%)';
-        setTimeout(() => {
+        notification._removeTimeout = setTimeout(() => {
           if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
           }
@@ -2334,9 +2335,9 @@
           fileTableContent += '<td>Folder</td>';
           fileTableContent += '<td>-</td>';
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModalForItem('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Move folder">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Rename folder">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button>`;
+          fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-is-folder="true" title="Move folder">📂</button>`;
+          fileTableContent += `<button class="rename-btn" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-is-folder="true" title="Rename folder">✏️</button>`;
+          fileTableContent += `<button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-is-folder="true" title="Delete folder">🗑️</button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         } else {
@@ -2353,9 +2354,9 @@
           fileTableContent += `<td>${file.name.includes('.') ? file.name.split('.').pop().toUpperCase() : '-'}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModalForItem('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
+          fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Move file">📂</button>`;
+          fileTableContent += `<button class="rename-btn" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Rename file">✏️</button>`;
+          fileTableContent += `<button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Delete file">🗑️</button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         }
@@ -2365,6 +2366,17 @@
       fileTable.innerHTML = fileTableContent;
       document.getElementById('file-table').addEventListener('change', function(e) {
         if (e.target.classList.contains('select-item')) updateToolbarState();
+      });
+      document.getElementById('file-table').addEventListener('click', function(e) {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const name = btn.dataset.name;
+        const path = btn.dataset.path;
+        const isFolder = btn.dataset.isFolder === 'true';
+        const action = btn.dataset.action;
+        if (action === 'move') openMoveModalForItem(name, path, isFolder);
+        else if (action === 'rename') openRenameModal(name, path, isFolder);
+        else if (action === 'delete') openDeleteModal(name, path, isFolder);
       });
       updateToolbarState();
     }
@@ -5736,7 +5748,7 @@
 
     function openMoveModal(items) {
       const label = items.length === 1
-        ? '📄 ' + items[0].name
+        ? (items[0].isFolder ? '📁' : '📄') + ' ' + items[0].name
         : `📄 ${items.length} files`;
       document.getElementById('moveItemName').textContent = label;
       document.getElementById('moveItemPath').value = JSON.stringify(items.map(it => it.path));
@@ -5751,8 +5763,7 @@
     }
 
     function openMoveModalForItem(name, path, isFolder) {
-      const icon = isFolder ? '📁' : '📄';
-      openMoveModal([{ name: icon + ' ' + name, path: path, isFolder: !!isFolder }]);
+      openMoveModal([{ name: name, path: path, isFolder: !!isFolder }]);
     }
 
     function closeMoveModal() {
@@ -5770,10 +5781,11 @@
 
       closeMoveModal();
       let hasErrors = false;
+      let successfulMoves = 0;
 
       function moveNext(index) {
         if (index >= paths.length) {
-          if (!hasErrors) window.location.reload();
+          if (successfulMoves > 0) window.location.reload();
           return;
         }
         const formData = new FormData();
@@ -5783,7 +5795,9 @@
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/move', true);
         xhr.onload = function() {
-          if (xhr.status !== 200) {
+          if (xhr.status === 200) {
+            successfulMoves++;
+          } else {
             hasErrors = true;
             showNotification('Failed to move ' + paths[index] + ': ' + xhr.responseText, 'error');
           }
