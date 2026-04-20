@@ -108,10 +108,14 @@ class SdCardFont {
     // Full intervals loaded from file (kept in RAM for codepoint lookup)
     EpdUnicodeInterval* fullIntervals = nullptr;
 
-    // Persistent kern/ligature data (lazy-loaded on first prewarm)
+    // Persistent kern-class + ligature tables (lazy-loaded on first prewarm).
+    // The full kern MATRIX is NOT resident — on Literata-class fonts a single
+    // style's matrix is ~36-42KB contiguous, and 4 styles' worth won't fit
+    // alongside bitmaps + framebuffer on a 380KB device. Only kernLeftClasses
+    // and kernRightClasses (small codepoint→classId tables, ~3KB each) stay
+    // resident; the matrix is reconstructed per-page as miniKernMatrix.
     EpdKernClassEntry* kernLeftClasses = nullptr;
     EpdKernClassEntry* kernRightClasses = nullptr;
-    int8_t* kernMatrix = nullptr;
     EpdLigaturePair* ligaturePairs = nullptr;
     bool kernLigLoaded = false;
 
@@ -125,6 +129,20 @@ class SdCardFont {
     uint8_t* miniBitmap = nullptr;
     uint32_t miniIntervalCount = 0;
     uint32_t miniGlyphCount = 0;
+
+    // Per-page mini kern matrix (built by buildMiniKernMatrix on each full
+    // prewarm). miniKernLeftClasses/miniKernRightClasses map ONLY the codepoints
+    // used on the current page to renumbered class IDs (1..miniKern*ClassCount).
+    // miniKernMatrix is a small miniKernLeftClassCount × miniKernRightClassCount
+    // flat matrix. Typical Latin page: ~25×25 matrix = ~625 bytes per style vs
+    // ~36KB for the full Literata matrix — ~50× reduction.
+    EpdKernClassEntry* miniKernLeftClasses = nullptr;
+    EpdKernClassEntry* miniKernRightClasses = nullptr;
+    uint16_t miniKernLeftEntryCount = 0;
+    uint16_t miniKernRightEntryCount = 0;
+    uint8_t miniKernLeftClassCount = 0;
+    uint8_t miniKernRightClassCount = 0;
+    int8_t* miniKernMatrix = nullptr;
 
     // The EpdFont whose data pointer we manage
     EpdFont epdFont{&stubData};
@@ -174,7 +192,9 @@ class SdCardFont {
   void freeStyleMiniData(PerStyle& s);
   void freeStyleAll(PerStyle& s);
   void freeStyleKernLigatureData(PerStyle& s);
+  void freeStyleMiniKern(PerStyle& s);
   bool loadStyleKernLigatureData(PerStyle& s);
+  bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;

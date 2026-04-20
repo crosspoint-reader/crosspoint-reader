@@ -5,6 +5,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <climits>
 #include <cstring>
 #include <memory>
 
@@ -49,6 +50,7 @@ void SdCardFont::freeStyleMiniData(PerStyle& s) {
   s.miniBitmap = nullptr;
   s.miniIntervalCount = 0;
   s.miniGlyphCount = 0;
+  freeStyleMiniKern(s);
   memset(&s.miniData, 0, sizeof(s.miniData));
   s.epdFont.data = &s.stubData;
 }
@@ -58,11 +60,22 @@ void SdCardFont::freeStyleKernLigatureData(PerStyle& s) {
   s.kernLeftClasses = nullptr;
   delete[] s.kernRightClasses;
   s.kernRightClasses = nullptr;
-  delete[] s.kernMatrix;
-  s.kernMatrix = nullptr;
   delete[] s.ligaturePairs;
   s.ligaturePairs = nullptr;
   s.kernLigLoaded = false;
+}
+
+void SdCardFont::freeStyleMiniKern(PerStyle& s) {
+  delete[] s.miniKernLeftClasses;
+  s.miniKernLeftClasses = nullptr;
+  delete[] s.miniKernRightClasses;
+  s.miniKernRightClasses = nullptr;
+  delete[] s.miniKernMatrix;
+  s.miniKernMatrix = nullptr;
+  s.miniKernLeftEntryCount = 0;
+  s.miniKernRightEntryCount = 0;
+  s.miniKernLeftClassCount = 0;
+  s.miniKernRightClassCount = 0;
 }
 
 void SdCardFont::freeStyleAll(PerStyle& s) {
@@ -99,13 +112,16 @@ void SdCardFont::clearOverflow() {
 // --- Per-style kern/ligature ---
 
 void SdCardFont::applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const {
-  data.kernLeftClasses = s.kernLeftClasses;
-  data.kernRightClasses = s.kernRightClasses;
-  data.kernMatrix = s.kernMatrix;
-  data.kernLeftEntryCount = s.header.kernLeftEntryCount;
-  data.kernRightEntryCount = s.header.kernRightEntryCount;
-  data.kernLeftClassCount = s.header.kernLeftClassCount;
-  data.kernRightClassCount = s.header.kernRightClassCount;
+  // Kern data uses the per-page mini tables (renumbered class IDs). The full
+  // kern matrix is never resident — see PerStyle::miniKernMatrix comment.
+  data.kernLeftClasses = s.miniKernLeftClasses;
+  data.kernRightClasses = s.miniKernRightClasses;
+  data.kernMatrix = s.miniKernMatrix;
+  data.kernLeftEntryCount = s.miniKernLeftEntryCount;
+  data.kernRightEntryCount = s.miniKernRightEntryCount;
+  data.kernLeftClassCount = s.miniKernLeftClassCount;
+  data.kernRightClassCount = s.miniKernRightClassCount;
+  // Ligatures are small (typically < 1KB) so they stay resident.
   data.ligaturePairs = s.ligaturePairs;
   data.ligaturePairCount = s.header.ligaturePairCount;
 }
@@ -126,14 +142,15 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
   }
 
   if (hasKern) {
+    // Load only the small class-lookup tables (~3KB each). The full matrix
+    // (~36KB contiguous for Literata) is built per-page from SD in
+    // buildMiniKernMatrix().
     s.kernLeftClasses = new (std::nothrow) EpdKernClassEntry[s.header.kernLeftEntryCount];
     s.kernRightClasses = new (std::nothrow) EpdKernClassEntry[s.header.kernRightEntryCount];
-    uint32_t matrixSize = static_cast<uint32_t>(s.header.kernLeftClassCount) * s.header.kernRightClassCount;
-    s.kernMatrix = new (std::nothrow) int8_t[matrixSize];
 
-    if (!s.kernLeftClasses || !s.kernRightClasses || !s.kernMatrix) {
-      LOG_ERR("SDCF", "Failed to allocate kern data (%u+%u+%u bytes)", s.header.kernLeftEntryCount * 3u,
-              s.header.kernRightEntryCount * 3u, matrixSize);
+    if (!s.kernLeftClasses || !s.kernRightClasses) {
+      LOG_ERR("SDCF", "Failed to allocate kern classes (%u+%u bytes)", s.header.kernLeftEntryCount * 3u,
+              s.header.kernRightEntryCount * 3u);
       freeStyleKernLigatureData(s);
       file.close();
       return false;
@@ -148,9 +165,8 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     size_t leftSz = s.header.kernLeftEntryCount * sizeof(EpdKernClassEntry);
     size_t rightSz = s.header.kernRightEntryCount * sizeof(EpdKernClassEntry);
     if (file.read(reinterpret_cast<uint8_t*>(s.kernLeftClasses), leftSz) != static_cast<int>(leftSz) ||
-        file.read(reinterpret_cast<uint8_t*>(s.kernRightClasses), rightSz) != static_cast<int>(rightSz) ||
-        file.read(reinterpret_cast<uint8_t*>(s.kernMatrix), matrixSize) != static_cast<int>(matrixSize)) {
-      LOG_ERR("SDCF", "Failed to read kern data");
+        file.read(reinterpret_cast<uint8_t*>(s.kernRightClasses), rightSz) != static_cast<int>(rightSz)) {
+      LOG_ERR("SDCF", "Failed to read kern classes");
       freeStyleKernLigatureData(s);
       file.close();
       return false;
@@ -183,11 +199,174 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
   file.close();
   s.kernLigLoaded = true;
 
-  // Update stubData so kern/ligature is available even before prewarm
-  applyKernLigaturePointers(s, s.stubData);
+  // Make ligatures visible to the stub (used when no mini data built yet).
+  // Kern stays nullptr on the stub — it is only wired in miniData via
+  // applyKernLigaturePointers() after buildMiniKernMatrix() runs.
+  s.stubData.ligaturePairs = s.ligaturePairs;
+  s.stubData.ligaturePairCount = s.header.ligaturePairCount;
 
-  LOG_DBG("SDCF", "Kern/lig loaded: kernL=%u, kernR=%u, ligs=%u", s.header.kernLeftEntryCount,
+  LOG_DBG("SDCF", "Kern classes + lig loaded: kernL=%u, kernR=%u, ligs=%u", s.header.kernLeftEntryCount,
           s.header.kernRightEntryCount, s.header.ligaturePairCount);
+  return true;
+}
+
+// --- Per-page mini kern matrix ---
+
+// Local copy of EpdFont.cpp's lookupKernClass (that one is file-static there).
+// Returns the 1-based class ID for `cp`, or 0 if the codepoint has no kerning class.
+static uint8_t miniLookupKernClass(const EpdKernClassEntry* entries, uint16_t count, uint32_t cp) {
+  if (!entries || count == 0 || cp > 0xFFFF) return 0;
+  const auto target = static_cast<uint16_t>(cp);
+  const auto* end = entries + count;
+  const auto it = std::lower_bound(entries, end, target, [](const EpdKernClassEntry& e, uint16_t v) {
+    return e.codepoint < v;
+  });
+  return (it != end && it->codepoint == target) ? it->classId : 0;
+}
+
+// Build a small per-page kern matrix containing ONLY the (leftClass, rightClass)
+// pairs reachable from codepoints in the current text. Class IDs are renumbered
+// to a dense 1..N range so the resulting matrix is usedLeft × usedRight (typical
+// Latin page: ~25×25 bytes) instead of the font's full ~180×200 (~36KB).
+//
+// Correctness: EpdFont::getKerning only touches `kernLeftClasses` /
+// `kernRightClasses` / `kernMatrix` / the count fields — we swap all of them to
+// the mini versions together in applyKernLigaturePointers, so a codepoint not
+// on this page simply returns class 0 (no kerning), which was the pre-existing
+// behavior for any codepoint outside the kern classes.
+bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount) {
+  freeStyleMiniKern(s);
+  if (!s.kernLeftClasses || !s.kernRightClasses || s.header.kernLeftEntryCount == 0 ||
+      s.header.kernRightEntryCount == 0) {
+    return true;  // font has no kern classes — nothing to build
+  }
+
+  // Step 1: mark used left/right classes via a 256-wide bitmap (class IDs are uint8_t).
+  bool usedLeft[256] = {};
+  bool usedRight[256] = {};
+  for (uint32_t i = 0; i < cpCount; i++) {
+    uint8_t lc = miniLookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, codepoints[i]);
+    if (lc) usedLeft[lc] = true;
+    uint8_t rc = miniLookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, codepoints[i]);
+    if (rc) usedRight[rc] = true;
+  }
+
+  // Step 2: build renumber maps (oldClassId -> newClassId, 1-based) and
+  // reverse maps (newClassId -> oldClassId) for the SD read step.
+  uint8_t leftRenumber[256] = {};
+  uint8_t rightRenumber[256] = {};
+  uint8_t newToOldLeft[256] = {};
+  uint8_t newToOldRight[256] = {};
+  uint8_t numLeft = 0, numRight = 0;
+  for (int i = 1; i < 256; i++) {
+    if (usedLeft[i]) {
+      numLeft++;
+      leftRenumber[i] = numLeft;
+      newToOldLeft[numLeft] = static_cast<uint8_t>(i);
+    }
+    if (usedRight[i]) {
+      numRight++;
+      rightRenumber[i] = numRight;
+      newToOldRight[numRight] = static_cast<uint8_t>(i);
+    }
+  }
+  if (numLeft == 0 || numRight == 0) {
+    return true;  // no kern pairs applicable on this page
+  }
+
+  // Step 3: count how many codepoint→classId entries the mini class tables need.
+  // Each resident class table has one entry per kerned codepoint in the page.
+  uint16_t miniLeftCount = 0;
+  uint16_t miniRightCount = 0;
+  for (uint32_t i = 0; i < cpCount; i++) {
+    if (miniLookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, codepoints[i]) != 0) miniLeftCount++;
+    if (miniLookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, codepoints[i]) != 0) miniRightCount++;
+  }
+
+  // Step 4: allocate the three mini buffers. The matrix is <1KB in practice
+  // (<30 × <30 × 1 byte) so fragmentation is a non-issue.
+  const uint32_t matrixBytes = static_cast<uint32_t>(numLeft) * numRight;
+  s.miniKernLeftClasses = new (std::nothrow) EpdKernClassEntry[miniLeftCount];
+  s.miniKernRightClasses = new (std::nothrow) EpdKernClassEntry[miniRightCount];
+  s.miniKernMatrix = new (std::nothrow) int8_t[matrixBytes];
+  if (!s.miniKernLeftClasses || !s.miniKernRightClasses || !s.miniKernMatrix) {
+    LOG_ERR("SDCF", "Failed to allocate mini kern (%u+%u+%u bytes)", miniLeftCount * 3u, miniRightCount * 3u,
+            matrixBytes);
+    freeStyleMiniKern(s);
+    return false;
+  }
+
+  // Step 5: populate mini class tables. `codepoints` is already sorted (see
+  // prewarm()) so the output is sorted by codepoint — required for binary
+  // search in lookupKernClass during render.
+  uint16_t lIdx = 0, rIdx = 0;
+  for (uint32_t i = 0; i < cpCount; i++) {
+    uint32_t cp = codepoints[i];
+    if (cp > 0xFFFF) continue;  // kern class entries are uint16_t
+    uint8_t lc = miniLookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, cp);
+    if (lc) {
+      s.miniKernLeftClasses[lIdx].codepoint = static_cast<uint16_t>(cp);
+      s.miniKernLeftClasses[lIdx].classId = leftRenumber[lc];
+      lIdx++;
+    }
+    uint8_t rc = miniLookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, cp);
+    if (rc) {
+      s.miniKernRightClasses[rIdx].codepoint = static_cast<uint16_t>(cp);
+      s.miniKernRightClasses[rIdx].classId = rightRenumber[rc];
+      rIdx++;
+    }
+  }
+
+  // Step 6: read the full matrix's rows for each used left class, keep only
+  // columns for used right classes. One SD seek + one read per used left class;
+  // a row is kernRightClassCount bytes (~200 for Literata).
+  FsFile file;
+  if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+    LOG_ERR("SDCF", "Failed to open .cpfont for mini kern: %s", filePath_);
+    freeStyleMiniKern(s);
+    return false;
+  }
+
+  std::unique_ptr<int8_t[]> rowBuf(new (std::nothrow) int8_t[s.header.kernRightClassCount]);
+  if (!rowBuf) {
+    LOG_ERR("SDCF", "Failed to allocate row buffer (%u bytes)", s.header.kernRightClassCount);
+    file.close();
+    freeStyleMiniKern(s);
+    return false;
+  }
+
+  for (uint8_t newL = 1; newL <= numLeft; newL++) {
+    const uint8_t oldL = newToOldLeft[newL];
+    const uint32_t rowFileOff = s.kernMatrixFileOffset + (oldL - 1u) * s.header.kernRightClassCount;
+    if (!file.seekSet(rowFileOff)) {
+      LOG_ERR("SDCF", "Failed to seek to kern row %u", oldL);
+      file.close();
+      freeStyleMiniKern(s);
+      return false;
+    }
+    if (file.read(reinterpret_cast<uint8_t*>(rowBuf.get()), s.header.kernRightClassCount) !=
+        static_cast<int>(s.header.kernRightClassCount)) {
+      LOG_ERR("SDCF", "Failed to read kern row %u", oldL);
+      file.close();
+      freeStyleMiniKern(s);
+      return false;
+    }
+    int8_t* miniRow = s.miniKernMatrix + (newL - 1u) * numRight;
+    for (uint8_t newR = 1; newR <= numRight; newR++) {
+      miniRow[newR - 1] = rowBuf[newToOldRight[newR] - 1u];
+    }
+  }
+
+  file.close();
+
+  s.miniKernLeftEntryCount = lIdx;
+  s.miniKernRightEntryCount = rIdx;
+  s.miniKernLeftClassCount = numLeft;
+  s.miniKernRightClassCount = numRight;
+
+  LOG_DBG("SDCF", "Built mini kern: %u×%u matrix (%u bytes, full was %u×%u = %u bytes)", numLeft, numRight,
+          matrixBytes, s.header.kernLeftClassCount, s.header.kernRightClassCount,
+          static_cast<uint32_t>(s.header.kernLeftClassCount) * s.header.kernRightClassCount);
   return true;
 }
 
@@ -579,8 +758,12 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   unsigned long sdStart = millis();
   uint32_t seekCount = 0;
 
-  // Read glyph metadata (lastReadIndex tracks sequential reads to skip seeks;
-  // INT32_MIN ensures the first iteration always seeks to the correct offset)
+  // Read glyph metadata. lastReadIndex tracks sequential reads to skip redundant
+  // seeks; INT32_MIN guarantees the first iteration always seeks to the correct
+  // offset (otherwise when gIdx == 0, the "gIdx != lastReadIndex + 1" check would
+  // be false and we'd read from the file's current position — the header — which
+  // decodes to a garbage EpdGlyph with a massive advanceX, inflating any word
+  // containing that codepoint beyond page width).
   int32_t lastReadIndex = INT32_MIN;
   for (uint32_t i = 0; i < validCount; i++) {
     uint32_t mapIdx = readOrder[i];
@@ -660,11 +843,16 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   delete[] readOrder;
   delete[] mappings;
 
-  // Lazy-load kern/ligature data (skip during metadata-only prewarm to avoid
-  // ~22KB per style allocation during layout measurement — layout only needs advanceX)
+  // Full render prewarm: load the persistent kern classes + ligatures (one-time
+  // per style, small — the big matrix is NOT loaded here) and then build the
+  // per-page mini kern matrix restricted to class pairs reachable from this
+  // page's codepoints. Skip during metadata-only prewarm — layout only needs
+  // advanceX and the mini kern would be thrown away before rendering.
   bool kernLigOk = false;
   if (!metadataOnly) {
-    kernLigOk = loadStyleKernLigatureData(s);
+    if (loadStyleKernLigatureData(s)) {
+      kernLigOk = buildMiniKernMatrix(s, codepoints, cpCount);
+    }
   }
 
   // Populate miniData and swap

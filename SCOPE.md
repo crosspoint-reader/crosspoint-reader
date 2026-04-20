@@ -27,6 +27,12 @@ usability over "swiss-army-knife" functionality.
 * **Language Support:** E.g. Support for multiple languages both in the reader and in the interfaces.
 * **Reference Tools:** E.g. Local dictionary lookup. Providing quick, offline definitions to enhance comprehension 
   without breaking focus.
+* **Clock Display (device dependent):** 
+
+| Device | Scope |
+| -- | -- |
+| X3 | The X3 uses a dedicated DS3231 RTC, which maintains accurate time across sleep cycles and can be treated as a reliable wall clock. |
+| X4 | The X4 relies on the ESP32-C3's internal RTC, which drifts significantly during deep sleep. NTP sync could correct this, with an appropriate user experience around connecting to the internet on wake or on demand. This causes some tension with the **Active Connectivity** section below, so please open a discussion about this UX if it's a feature you would find useful. |
 
 ### Out-of-Scope
 
@@ -42,8 +48,6 @@ usability over "swiss-army-knife" functionality.
 ### In-scope — Technically Unsupported
 
 *These features align with CrossPoint's goals but are impractical on the current hardware or produce poor UX.*
-
-* **Clock Display:** The ESP32-C3's RTC drifts significantly during deep sleep; making the clock untrustworthy after any sleep cycle. NTP sync could help, but CrossPoint doesn't connect to the internet on every boot.
 
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text — resulting in constant panning and zooming that makes for a poor reading experience on e-ink.
 

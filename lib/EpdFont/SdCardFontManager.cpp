@@ -6,6 +6,8 @@
 #include <SdCardFont.h>
 #include <SdCardFontRegistry.h>
 
+#include <cstdlib>
+
 SdCardFontManager::~SdCardFontManager() {
   for (auto& lf : loaded_) {
     delete lf.font;
@@ -28,67 +30,60 @@ int SdCardFontManager::computeFontId(uint32_t contentHash, const char* familyNam
   return id != 0 ? id : 1;  // 0 is reserved as "not found" sentinel
 }
 
-bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer) {
+bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize) {
   // Unload any previously loaded family first
   if (!loadedFamilyName_.empty()) {
     unloadAll(renderer);
   }
 
-  // Load all font files from SD card
-  loaded_.reserve(family.files.size());
+  // Pick the single file whose size is closest to targetPtSize. Loading
+  // only one size bounds resident memory (intervals + kern/ligature tables
+  // per style) to one file's worth, vs. N_sizes × per-file overhead.
+  const SdCardFontFileInfo* selected = nullptr;
+  int bestDiff = INT32_MAX;
   for (const auto& fileInfo : family.files) {
-    auto* font = new (std::nothrow) SdCardFont();
-    if (!font) {
-      LOG_ERR("SDMGR", "Failed to allocate SdCardFont for %s", fileInfo.path.c_str());
-      continue;
+    int diff = std::abs(static_cast<int>(fileInfo.pointSize) - static_cast<int>(targetPtSize));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      selected = &fileInfo;
     }
-
-    if (!font->load(fileInfo.path.c_str())) {
-      LOG_ERR("SDMGR", "Failed to load %s", fileInfo.path.c_str());
-      delete font;
-      continue;
-    }
-
-    // Check for duplicate point size (e.g. two files for the same family at the same size)
-    bool duplicate = false;
-    for (const auto& lf : loaded_) {
-      if (lf.size == fileInfo.pointSize) {
-        LOG_ERR("SDMGR", "Duplicate size %u for family %s, skipping %s", fileInfo.pointSize, family.name.c_str(),
-                fileInfo.path.c_str());
-        duplicate = true;
-        break;
-      }
-    }
-    if (duplicate) {
-      delete font;
-      continue;
-    }
-
-    int fontId = computeFontId(font->contentHash(), family.name.c_str(), fileInfo.pointSize);
-    // Guard against collision with built-in font IDs (astronomically unlikely
-    // with FNV-1a hashes, but provides a safety net)
-    if (renderer.getFontMap().count(fontId) != 0) {
-      LOG_ERR("SDMGR", "Font ID %d collides with existing font, skipping %s", fontId, fileInfo.path.c_str());
-      delete font;
-      continue;
-    }
-    renderer.registerSdCardFont(fontId, font);
-    loaded_.push_back({font, fontId, fileInfo.pointSize});
-
-    LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u", fileInfo.path.c_str(), fileInfo.pointSize, fontId,
-            font->styleCount());
+  }
+  if (!selected) {
+    LOG_ERR("SDMGR", "Family %s has no files to load", family.name.c_str());
+    return false;
   }
 
-  if (loaded_.empty()) return false;
-
-  // Build EpdFontFamily objects: each v4 SdCardFont has all styles
-  for (const auto& lf : loaded_) {
-    EpdFontFamily fontFamily(lf.font->getEpdFont(0), lf.font->getEpdFont(1), lf.font->getEpdFont(2),
-                             lf.font->getEpdFont(3));
-    renderer.insertFont(lf.fontId, fontFamily);
+  auto* font = new (std::nothrow) SdCardFont();
+  if (!font) {
+    LOG_ERR("SDMGR", "Failed to allocate SdCardFont for %s", selected->path.c_str());
+    return false;
   }
+
+  if (!font->load(selected->path.c_str())) {
+    LOG_ERR("SDMGR", "Failed to load %s", selected->path.c_str());
+    delete font;
+    return false;
+  }
+
+  int fontId = computeFontId(font->contentHash(), family.name.c_str(), selected->pointSize);
+  // Guard against collision with built-in font IDs (astronomically unlikely
+  // with FNV-1a hashes, but provides a safety net)
+  if (renderer.getFontMap().count(fontId) != 0) {
+    LOG_ERR("SDMGR", "Font ID %d collides with existing font, skipping %s", fontId, selected->path.c_str());
+    delete font;
+    return false;
+  }
+  renderer.registerSdCardFont(fontId, font);
+  loaded_.push_back({font, fontId, selected->pointSize});
+
+  LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u (target=%u)", selected->path.c_str(), selected->pointSize, fontId,
+          font->styleCount(), targetPtSize);
+
+  EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2), font->getEpdFont(3));
+  renderer.insertFont(fontId, fontFamily);
 
   loadedFamilyName_ = family.name;
+  loadedPointSize_ = selected->pointSize;
   return true;
 }
 
@@ -100,12 +95,10 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   }
   loaded_.clear();
   loadedFamilyName_.clear();
+  loadedPointSize_ = 0;
 }
 
-int SdCardFontManager::getFontId(const std::string& familyName, uint8_t size, uint8_t /*style*/) const {
-  if (familyName != loadedFamilyName_) return 0;
-  for (const auto& lf : loaded_) {
-    if (lf.size == size) return lf.fontId;
-  }
-  return 0;
+int SdCardFontManager::getFontId(const std::string& familyName) const {
+  if (familyName != loadedFamilyName_ || loaded_.empty()) return 0;
+  return loaded_.front().fontId;
 }
