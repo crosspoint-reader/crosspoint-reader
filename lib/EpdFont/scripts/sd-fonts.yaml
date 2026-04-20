@@ -189,7 +189,7 @@ families:
 
   # ── Accessibility ──────────────────────────────────────────────────────
 
-  - name: AtkinsonHyperlegible
+  - name: AtkinsonHyperlegibleNext
     description: "Accessibility font for low vision (Latin)"
     intervals: latin-ext
     sizes: [12, 14, 16, 18]
