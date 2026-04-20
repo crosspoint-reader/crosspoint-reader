@@ -2,11 +2,13 @@
 #include "HalStorage.h"
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
+#include <HalClock.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <SdFat.h>
 
 #include <cassert>
+#include <ctime>
 #include <new>
 
 #define SDCard SDCardManager::getInstance()
@@ -20,7 +22,18 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+bool HalStorage::begin() {
+  if (!SDCard.begin()) return false;
+  FsDateTime::setCallback([](uint16_t* date, uint16_t* time) {
+    if (!HalClock::isSynced()) return;
+    const time_t t = HalClock::now();
+    const struct tm* tm = localtime(&t);
+    if (!tm) return;
+    *date = FS_DATE(tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+    *time = FS_TIME(tm->tm_hour, tm->tm_min, tm->tm_sec);
+  });
+  return true;
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
