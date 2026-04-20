@@ -302,7 +302,7 @@
     notification.textContent = message;
     notification.style.opacity = '1';
     notification.style.transform = 'translateX(0)';
-    setTimeout(function() {
+    _hideTimer = setTimeout(function() {
       notification.style.opacity = '0';
       notification.style.transform = 'translateX(100%)';
       setTimeout(function() { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 300);
