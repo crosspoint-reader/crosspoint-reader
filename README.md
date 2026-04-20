@@ -12,7 +12,7 @@ Xteink firmware. It aims to match or improve upon the standard EPUB reading expe
 
 E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited 
 customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
-CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truely unlock the device's
+CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truly unlock the device's
 potential.
 
 CrossPoint Reader aims to:
@@ -179,7 +179,7 @@ If you are new to the codebase, start with the [contributing docs](./docs/contri
 If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
 
-Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community 
+Everyone here is a volunteer, so please be respectful and patient. For more details on our governance and community 
 principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 
 ### To submit a contribution:

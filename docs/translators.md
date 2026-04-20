@@ -26,6 +26,7 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 ## Italian
 - [andreaturchet](https://github.com/andreaturchet)
 - [fragolinux](https://github.com/fragolinux)
+- [alan0ford](https://github.com/alan0ford)
 
 ## Russian
 - [madebyKir](https://github.com/madebyKir)

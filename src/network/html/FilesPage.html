@@ -1875,7 +1875,10 @@
       totalSize += file.size;
     });
 
-    document.getElementById('folder-summary').innerHTML = `${folderCount} folders, ${files.length - folderCount} files, ${formatFileSize(totalSize)}`;
+    const fileCount = files.length - folderCount;
+    const folderLabel = folderCount === 1 ? 'folder' : 'folders';
+    const fileLabel = fileCount === 1 ? 'file' : 'files';
+    document.getElementById('folder-summary').innerHTML = `${folderCount} ${folderLabel}, ${fileCount} ${fileLabel}, ${formatFileSize(totalSize)}`;
 
     if (files.length === 0) {
       fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
