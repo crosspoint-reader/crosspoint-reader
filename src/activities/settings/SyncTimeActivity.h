@@ -19,6 +19,7 @@ class SyncTimeActivity final : public Activity {
   time_t prevSyncTime = 0;
   int32_t driftSeconds = 0;
   bool hadTimeBeforeSync = false;
+  char syncErrorMsg[64] = {};
   void onWifiSelectionComplete(bool success);
   void onWifiSelectionCancelled();
   void performSync();
