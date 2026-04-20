@@ -95,7 +95,17 @@ bool ChapterXPathIndexer::tryExtractParagraphIndexFromXPath(const std::string& x
   // cannot be mapped to our flat LUT index — the p[4] there is the 4th sibling inside
   // div[2], not the 4th <p> child of <body>.  Deeply-nested XPaths fall through to
   // ChapterXPathIndexer::findProgressForXPath which handles full-ancestry matching.
-  const size_t bodyEnd = (secondBody != std::string::npos ? secondBody : 0) + bodyKey.size();
+  size_t bodyEnd = (secondBody != std::string::npos ? secondBody : 0) + bodyKey.size();
+  if (bodyEnd < normalized.size() && normalized[bodyEnd] == '[') {
+    const size_t idxStart = bodyEnd + 1;
+    size_t idxEnd = idxStart;
+    while (idxEnd < normalized.size() && std::isdigit(static_cast<unsigned char>(normalized[idxEnd]))) {
+      idxEnd++;
+    }
+    if (idxEnd < normalized.size() && normalized[idxEnd] == ']') {
+      bodyEnd = idxEnd + 1;
+    }
+  }
   if (pos != bodyEnd) {
     return false;
   }
