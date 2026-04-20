@@ -8,9 +8,11 @@
  * CrossPoint position representation.
  */
 struct CrossPointPosition {
-  int spineIndex;  // Current spine item (chapter) index
-  int pageNumber;  // Current page within the spine item
-  int totalPages;  // Total pages in the current spine item
+  int spineIndex;                  // Current spine item (chapter) index
+  int pageNumber;                  // Current page within the spine item
+  int totalPages;                  // Total pages in the current spine item
+  uint16_t paragraphIndex = 0;     // 1-based synthetic paragraph index from XPath p[N]
+  bool hasParagraphIndex = false;  // True when paragraphIndex was resolved from XPath
 };
 
 /**
@@ -59,9 +61,10 @@ class ProgressMapper {
 
  private:
   /**
-   * Generate XPath for KOReader compatibility.
-   * Format: /body/DocFragment[spineIndex+1]/body
-   * Since CrossPoint doesn't preserve HTML structure, we rely on percentage for positioning.
+   * Generate a fallback XPath by streaming the spine item's XHTML and resolving
+   * a paragraph/text position from intra-spine progress.
+   * Produces a full ancestry path such as
+   * /body/DocFragment[3]/body/p[42]/text().17.
    */
-  static std::string generateXPath(int spineIndex, int pageNumber, int totalPages);
+  static std::string generateXPath(const std::shared_ptr<Epub>& epub, int spineIndex, float intraSpineProgress);
 };
