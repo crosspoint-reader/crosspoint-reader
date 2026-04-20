@@ -7,6 +7,7 @@
 #include <WiFi.h>
 
 #include <cstdlib>
+#include <string>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -93,8 +94,9 @@ void SyncTimeActivity::performSync() {
   hadTimeBeforeSync = HalClock::isSynced();
   preSyncTime = hadTimeBeforeSync ? time(nullptr) : 0;
   prevSyncTime = HalClock::lastSyncTime();
+  syncErrorMsg[0] = '\0';
 
-  bool ok = HalClock::syncNtp();
+  bool ok = HalClock::syncNtp(syncErrorMsg, sizeof(syncErrorMsg));
 
   if (ok && hadTimeBeforeSync) {
     driftSeconds = (int32_t)(time(nullptr) - preSyncTime);
@@ -184,10 +186,17 @@ void SyncTimeActivity::render(RenderLock&&) {
   }
 
   if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, bodyRect.y + bodyRect.height / 2, tr(STR_TIME_SYNC_FAILED), true,
-                              EpdFontFamily::BOLD);
+    int y = bodyRect.y + bodyRect.height / 2 - 10;
+    renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_TIME_SYNC_FAILED), true, EpdFontFamily::BOLD);
 
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    if (syncErrorMsg[0] != '\0') {
+      y += 25;
+      const std::string errorText =
+          renderer.truncatedText(UI_10_FONT_ID, syncErrorMsg, bodyRect.width, EpdFontFamily::REGULAR);
+      renderer.drawCenteredText(UI_10_FONT_ID, y, errorText.c_str(), true, EpdFontFamily::REGULAR);
+    }
+
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -198,6 +207,14 @@ void SyncTimeActivity::loop() {
   if (state == SUCCESS || state == FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
+      return;
+    }
+
+    if (state == FAILED && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      RenderLock lock(*this);
+      state = SYNCING;
+      requestUpdateAndWait();
+      performSync();
     }
   }
 }
