@@ -49,6 +49,14 @@
 #include <builtinFonts/opendyslexic_8_bolditalic.h>
 #include <builtinFonts/opendyslexic_8_italic.h>
 #include <builtinFonts/opendyslexic_8_regular.h>
+#include <builtinFonts/manjari_12_bold.h>
+#include <builtinFonts/manjari_12_regular.h>
+#include <builtinFonts/manjari_14_bold.h>
+#include <builtinFonts/manjari_14_regular.h>
+#include <builtinFonts/manjari_16_bold.h>
+#include <builtinFonts/manjari_16_regular.h>
+#include <builtinFonts/manjari_18_bold.h>
+#include <builtinFonts/manjari_18_regular.h>
 #include <builtinFonts/ubuntu_10_bold.h>
 #include <builtinFonts/ubuntu_10_regular.h>
 #include <builtinFonts/ubuntu_12_bold.h>

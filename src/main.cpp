@@ -109,6 +109,18 @@ EpdFont opendyslexic14ItalicFont(&opendyslexic_14_italic);
 EpdFont opendyslexic14BoldItalicFont(&opendyslexic_14_bolditalic);
 EpdFontFamily opendyslexic14FontFamily(&opendyslexic14RegularFont, &opendyslexic14BoldFont, &opendyslexic14ItalicFont,
                                        &opendyslexic14BoldItalicFont);
+EpdFont manjari12RegularFont(&manjari_12_regular);
+EpdFont manjari12BoldFont(&manjari_12_bold);
+EpdFontFamily manjari12FontFamily(&manjari12RegularFont, &manjari12BoldFont);
+EpdFont manjari14RegularFont(&manjari_14_regular);
+EpdFont manjari14BoldFont(&manjari_14_bold);
+EpdFontFamily manjari14FontFamily(&manjari14RegularFont, &manjari14BoldFont);
+EpdFont manjari16RegularFont(&manjari_16_regular);
+EpdFont manjari16BoldFont(&manjari_16_bold);
+EpdFontFamily manjari16FontFamily(&manjari16RegularFont, &manjari16BoldFont);
+EpdFont manjari18RegularFont(&manjari_18_regular);
+EpdFont manjari18BoldFont(&manjari_18_bold);
+EpdFontFamily manjari18FontFamily(&manjari18RegularFont, &manjari18BoldFont);
 #endif  // OMIT_FONTS
 
 EpdFont smallFont(&notosans_8_regular);
@@ -217,6 +229,11 @@ void setupDisplayAndFonts() {
   renderer.insertFont(OPENDYSLEXIC_10_FONT_ID, opendyslexic10FontFamily);
   renderer.insertFont(OPENDYSLEXIC_12_FONT_ID, opendyslexic12FontFamily);
   renderer.insertFont(OPENDYSLEXIC_14_FONT_ID, opendyslexic14FontFamily);
+
+  renderer.insertFont(MANJARI_12_FONT_ID, manjari12FontFamily);
+  renderer.insertFont(MANJARI_14_FONT_ID, manjari14FontFamily);
+  renderer.insertFont(MANJARI_16_FONT_ID, manjari16FontFamily);
+  renderer.insertFont(MANJARI_18_FONT_ID, manjari18FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
