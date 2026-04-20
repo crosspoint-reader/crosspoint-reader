@@ -2438,7 +2438,7 @@
     updateToolbarState();
   }
 
-  fileTable.addEventListener('click', function(e) {
+  document.getElementById('file-table').addEventListener('click', function(e) {
     var btn = e.target.closest('.rename-btn');
     if (!btn) return;
     openRenameModal(
@@ -5606,6 +5606,7 @@ async function uploadSleepImages(files) {
         console.log('WebSocket failed, falling back to HTTP');
         useWebSocket = false;
         try {
+          if (!processedFile) throw error;
           await uploadFileHTTP(processedFile,
             (loaded, total) => {
               progressFill.style.width = Math.round((loaded / total) * 100) + '%';
