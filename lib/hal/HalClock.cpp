@@ -377,7 +377,32 @@ void applyTimezone(uint8_t timeZoneSetting) {
   LOG_DBG("CLK", "Timezone applied: %s", TIMEZONES[index].tz);
 }
 
-bool syncNtp() {
+static const char* sntpStatusName(sntp_sync_status_t status) {
+  switch (status) {
+    case SNTP_SYNC_STATUS_RESET:
+      return "reset";
+    case SNTP_SYNC_STATUS_IN_PROGRESS:
+      return "in progress";
+    case SNTP_SYNC_STATUS_COMPLETED:
+      return "completed";
+    default:
+      return "unknown";
+  }
+}
+
+bool syncNtp(char* errorBuf, size_t errorBufSize) {
+  if (errorBuf && errorBufSize > 0) {
+    errorBuf[0] = '\0';
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    if (errorBuf && errorBufSize > 0) {
+      snprintf(errorBuf, errorBufSize, "WiFi disconnected");
+    }
+    LOG_ERR("CLK", "NTP sync failed: WiFi disconnected");
+    return false;
+  }
+
   time_t preSyncTime = time(nullptr);
   time_t prevSyncTime = nvsReadSyncTime();
   float prevSyncTemp = nvsReadLastSyncTemp();
@@ -398,7 +423,11 @@ bool syncNtp() {
   }
 
   if (retry >= maxRetries) {
-    LOG_ERR("CLK", "NTP sync timeout");
+    const char* statusName = sntpStatusName(sntp_get_sync_status());
+    if (errorBuf && errorBufSize > 0) {
+      snprintf(errorBuf, errorBufSize, "NTP timeout (%s)", statusName);
+    }
+    LOG_ERR("CLK", "NTP sync timeout (%s)", statusName);
     return false;
   }
 
@@ -452,6 +481,8 @@ bool syncNtp() {
   LOG_INF("CLK", "NTP synced, epoch %lld", (long long)rtcEpoch);
   return true;
 }
+
+bool syncNtp() { return syncNtp(nullptr, 0); }
 
 void saveBeforeSleep(bool keepLpAlive) {
   if (!isSynced()) {

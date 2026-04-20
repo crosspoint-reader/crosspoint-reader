@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 
@@ -29,6 +30,10 @@ namespace HalClock {
 /// waits up to 5 seconds for completion, then captures the result.
 /// Returns true if the sync succeeded.
 bool syncNtp();
+
+/// Same as syncNtp(), but fills `errorBuf` with a short failure reason when
+/// the sync fails.
+bool syncNtp(char* errorBuf, size_t errorBufSize);
 
 /// Apply timezone/DST rules via the POSIX TZ string for the given setting.
 void applyTimezone(uint8_t timeZoneSetting);
