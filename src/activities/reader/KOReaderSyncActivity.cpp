@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 
+#include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
@@ -232,12 +233,18 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
 
   if (state == SYNCING || state == UPLOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, 300, statusMessage.c_str(), true, EpdFontFamily::BOLD);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -300,6 +307,9 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     // Bottom button hints
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -310,6 +320,9 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_UPLOAD), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -319,6 +332,9 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
@@ -329,6 +345,9 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    if (SETTINGS.invertReaderScreen) {
+      renderer.invertScreen();
+    }
     renderer.displayBuffer();
     return;
   }
