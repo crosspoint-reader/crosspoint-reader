@@ -21,7 +21,7 @@ struct SdCardFontFamilyInfo {
 
 class SdCardFontRegistry {
  public:
-  static constexpr int MAX_SD_FAMILIES = 8;
+  static constexpr int MAX_SD_FAMILIES = 128;
   static constexpr const char* FONTS_DIR = "/.crosspoint/fonts";
 
   // Scan SD card, populate families_. Returns true if any families found.
