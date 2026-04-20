@@ -148,7 +148,11 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   float cropX = 0, cropY = 0;
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
-  if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+  // Always run scale/crop branch when dimensions differ (covers upscale case too, e.g. X4-sized
+  // sleep bitmaps on X3's 528x792 panel). Previously this only triggered when the bitmap exceeded
+  // the screen in either dimension, so smaller X4 images rendered at 1:1 with letterbox offsets.
+  const bool exactFit = (bitmap.getWidth() == pageWidth && bitmap.getHeight() == pageHeight);
+  if (!exactFit) {
     // image will scale, make sure placement is right
     float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
     const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
@@ -187,7 +191,9 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   const bool hasGreyscale = bitmap.hasGreyscale() &&
                             SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
-  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+  // allowUpscale=true: sleep images authored for a different panel size (e.g. X4 480x800 on X3
+  // 528x792) should be scaled up to fill the screen in CONTAIN/CROP modes, not left at 1:1.
+  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, /*allowUpscale=*/true);
 
   if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
@@ -199,13 +205,13 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, /*allowUpscale=*/true);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, /*allowUpscale=*/true);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();

@@ -633,10 +633,13 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, const bool allowUpscale) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
-  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
-  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
+  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit).
+  // Skip the fast path when the caller opts in to upscaling, since drawBitmap1Bit() only
+  // downscales; falling through to the span-aware 2-bit path here lets 1-bit sleep images
+  // authored for a different panel size fill the screen.
+  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f && !allowUpscale) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
     return;
   }
@@ -664,9 +667,15 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     hasTargetBounds = true;
   }
 
-  if (hasTargetBounds && fitScale < 1.0f) {
-    scale = fitScale;
-    isScaled = true;
+  // Downscale whenever the cropped bitmap overflows the target bounds (pre-existing behavior).
+  // Upscale is opt-in via `allowUpscale`: callers with CONTAIN/COVER semantics (SleepActivity)
+  // set the flag so an X4-sized sleep image on an X3 panel fills the screen in CROP mode, while
+  // callers like BmpViewer keep native-size rendering for undersized bitmaps.
+  if (hasTargetBounds) {
+    if (fitScale < 1.0f || (allowUpscale && fitScale > 1.0f)) {
+      scale = fitScale;
+      isScaled = true;
+    }
   }
   LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
 
@@ -683,18 +692,9 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     return;
   }
 
+  // When upscaling, each source pixel must cover multiple dest pixels or we leave gap-lines.
+  // We compute a dest-span per source pixel so both downscale and upscale render correctly.
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
-    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
-    // Screen's (0, 0) is the top-left corner.
-    int screenY = -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
-    if (isScaled) {
-      screenY = std::floor(screenY * scale);
-    }
-    screenY += y;  // the offset should not be scaled
-    if (screenY >= getScreenHeight()) {
-      break;
-    }
-
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
       free(outputRow);
@@ -702,36 +702,68 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       return;
     }
 
-    if (screenY < 0) {
-      continue;
-    }
-
     if (bmpY < cropPixY) {
       // Skip the row if it's outside the crop area
       continue;
     }
 
+    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
+    // Screen's (0, 0) is the top-left corner.
+    const int bmpRowFromTop = (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY) - cropPixY;
+    int screenYStart, screenYEnd;
+    if (isScaled) {
+      screenYStart = y + static_cast<int>(std::floor(bmpRowFromTop * scale));
+      screenYEnd = y + static_cast<int>(std::floor((bmpRowFromTop + 1) * scale)) - 1;
+      if (screenYEnd < screenYStart) screenYEnd = screenYStart;
+    } else {
+      screenYStart = y + bmpRowFromTop;
+      screenYEnd = screenYStart;
+    }
+
+    if (screenYStart >= getScreenHeight()) {
+      if (bitmap.isTopDown()) break;
+      continue;
+    }
+    if (screenYEnd < 0) {
+      continue;
+    }
+
+    const int yLo = std::max(screenYStart, 0);
+    const int yHi = std::min(screenYEnd, getScreenHeight() - 1);
+
     for (int bmpX = cropPixX; bmpX < bitmap.getWidth() - cropPixX; bmpX++) {
-      int screenX = bmpX - cropPixX;
+      const int bmpColFromLeft = bmpX - cropPixX;
+      int screenXStart, screenXEnd;
       if (isScaled) {
-        screenX = std::floor(screenX * scale);
+        screenXStart = x + static_cast<int>(std::floor(bmpColFromLeft * scale));
+        screenXEnd = x + static_cast<int>(std::floor((bmpColFromLeft + 1) * scale)) - 1;
+        if (screenXEnd < screenXStart) screenXEnd = screenXStart;
+      } else {
+        screenXStart = x + bmpColFromLeft;
+        screenXEnd = screenXStart;
       }
-      screenX += x;  // the offset should not be scaled
-      if (screenX >= getScreenWidth()) {
+      if (screenXStart >= getScreenWidth()) {
         break;
       }
-      if (screenX < 0) {
+      if (screenXEnd < 0) {
         continue;
       }
 
+      const int xLo = std::max(screenXStart, 0);
+      const int xHi = std::min(screenXEnd, getScreenWidth() - 1);
+
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
-      if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+      for (int sy = yLo; sy <= yHi; sy++) {
+        for (int sx = xLo; sx <= xHi; sx++) {
+          if (renderMode == BW && val < 3) {
+            drawPixel(sx, sy);
+          } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+            drawPixel(sx, sy, false);
+          } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+            drawPixel(sx, sy, false);
+          }
+        }
       }
     }
   }
