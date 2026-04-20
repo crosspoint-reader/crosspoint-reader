@@ -783,13 +783,14 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
 
 void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
                               int contentStartX, int contentWidth) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int lineY = rect.y + rect.height + lineHeight + BaseMetrics::values.verticalSpacing;
+  const int lineY = rect.y + rect.height + lineHeight + metrics.verticalSpacing;
   const int thickness = cursorMode ? 3 : 1;
   if (contentWidth > 0) {
     renderer.drawLine(rect.x + contentStartX, lineY, rect.x + contentStartX + contentWidth, lineY, thickness, true);
   } else {
-    const int hPadding = 4;
+    const int hPadding = 6;
     const int lineW = textWidth + hPadding * 2;
     renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, thickness,
                       true);
@@ -799,18 +800,37 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
                                 const char* secondaryLabel, const KeyboardKeyType keyType,
                                 const bool inactiveSelection) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int cr = metrics.keyboardKeyCornerRadius;
+
   if (isSelected) {
     if (inactiveSelection) {
-      renderer.drawRect(rect.x, rect.y, rect.width, rect.height, 2, true);
+      if (cr > 0) {
+        renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cr, Color::LightGray);
+      } else {
+        renderer.drawRect(rect.x, rect.y, rect.width, rect.height, 2, true);
+      }
     } else if (keyType == KeyboardKeyType::Disabled) {
-      renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
+      if (cr > 0) {
+        renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cr, Color::LightGray);
+      } else {
+        renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
+      }
     } else {
-      renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+      if (cr > 0) {
+        renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cr, Color::Black);
+      } else {
+        renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+      }
     }
   } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode || keyType == KeyboardKeyType::Del ||
              keyType == KeyboardKeyType::Space || keyType == KeyboardKeyType::Ok ||
              keyType == KeyboardKeyType::Disabled) {
-    renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+    if (cr > 0) {
+      renderer.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 1, cr, true);
+    } else {
+      renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+    }
   }
 
   const bool invert = isSelected && !inactiveSelection;
@@ -841,10 +861,10 @@ void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const ch
   const int textX = rect.x + (rect.width - itemWidth) / 2;
   const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
 
+  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !invert);
+
   if (hasSecondary) {
     const int secWidth = renderer.getTextWidth(SMALL_FONT_ID, secondaryLabel);
     renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - secWidth - 1, rect.y, secondaryLabel, !invert);
   }
-
-  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !invert);
 }
