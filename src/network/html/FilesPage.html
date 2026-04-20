@@ -2403,7 +2403,7 @@
         fileTableContent += '<td class="size-cell"></td>';
         fileTableContent += isProtected
           ? '<td class="actions-col"></td>'
-          : `<td class="actions-col"><button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Rename folder">✏️</button></td>`;
+          : `<td class="actions-col"><button class="rename-btn" data-name="${encodeURIComponent(file.name)}" data-path="${encodeURIComponent(folderPath)}" data-type="folder" title="Rename folder">✏️</button></td>`;
         fileTableContent += '</tr>';
       } else {
         let filePath = currentPath;
@@ -2423,7 +2423,7 @@
         fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link" title="${escapeHtml(file.name).replace(/"/g, '&quot;')}">${escapeHtml(file.name)}</a></div>`;
         fileTableContent += `<td style="text-align:center">${typeCell}</td>`;
         fileTableContent += `<td class="size-cell"><div class="size-cell-inner">${formatFileSizeCell(file.size)}</div></td>`;
-        fileTableContent += `<td class="actions-col"><button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button></td>`;
+        fileTableContent += `<td class="actions-col"><button class="rename-btn" data-name="${encodeURIComponent(file.name)}" data-path="${encodeURIComponent(filePath)}" data-type="file" title="Rename file">✏️</button></td>`;
         fileTableContent += '</tr>';
       }
     });
@@ -2432,6 +2432,16 @@
     fileTable.innerHTML = fileTableContent;
     updateToolbarState();
   }
+
+  fileTable.addEventListener('click', function(e) {
+    var btn = e.target.closest('.rename-btn');
+    if (!btn) return;
+    openRenameModal(
+      decodeURIComponent(btn.dataset.name),
+      decodeURIComponent(btn.dataset.path),
+      btn.dataset.type === 'folder'
+    );
+  });
 
   // Modal functions
   function openUploadModal() {
