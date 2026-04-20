@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 
+#include "BookFusionTokenStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -259,6 +260,36 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
   store.matchMethod = static_cast<DocumentMatchMethod>(method);
 
   LOG_DBG("KRS", "Loaded KOReader credentials for user: %s", store.username.c_str());
+  return true;
+}
+
+// ---- BookFusionTokenStore ----
+
+bool JsonSettingsIO::saveBookFusion(const BookFusionTokenStore& store, const char* path) {
+  JsonDocument doc;
+  doc["token_obf"] = obfuscation::obfuscateToBase64(store.accessToken);
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadBookFusion(BookFusionTokenStore& store, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("BFS", "JSON parse error loading BookFusion token: %s", error.c_str());
+    return false;
+  }
+
+  bool ok = false;
+  store.accessToken = obfuscation::deobfuscateFromBase64(doc["token_obf"] | "", &ok);
+  if (!ok) {
+    store.accessToken.clear();
+    return false;
+  }
+
+  LOG_DBG("BFS", "Loaded BookFusion token (%zu chars)", store.accessToken.size());
   return true;
 }
 
