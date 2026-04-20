@@ -10,6 +10,9 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include "BookFusionBookIdStore.h"
+#include "BookFusionSyncActivity.h"
+#include "BookFusionTokenStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -389,23 +392,30 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
-      if (KOREADER_STORE.hasCredentials()) {
-        const int currentPage = section ? section->currentPage : 0;
-        const int totalPages = section ? section->pageCount : 0;
-        startActivityForResult(
-            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& sync = std::get<SyncResult>(result.data);
-                if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
-                  RenderLock lock(*this);
-                  currentSpineIndex = sync.spineIndex;
-                  nextPageNumber = sync.page;
-                  section.reset();
-                }
-              }
-            });
+      const int currentPage = section ? section->currentPage : 0;
+      const int totalPages = section ? section->pageCount : 0;
+
+      auto applySyncResult = [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& sync = std::get<SyncResult>(result.data);
+          if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
+            RenderLock lock(*this);
+            currentSpineIndex = sync.spineIndex;
+            nextPageNumber = sync.page;
+            section.reset();
+          }
+        }
+      };
+
+      // BookFusion takes priority when the book has a BookFusion sidecar.
+      if (BF_TOKEN_STORE.hasToken() && BookFusionBookIdStore::loadBookId(epub->getPath().c_str()) != 0) {
+        startActivityForResult(std::make_unique<BookFusionSyncActivity>(renderer, mappedInput, epub, epub->getPath(),
+                                                                        currentSpineIndex, currentPage, totalPages),
+                               applySyncResult);
+      } else if (KOREADER_STORE.hasCredentials()) {
+        startActivityForResult(std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(),
+                                                                      currentSpineIndex, currentPage, totalPages),
+                               applySyncResult);
       }
       break;
     }
