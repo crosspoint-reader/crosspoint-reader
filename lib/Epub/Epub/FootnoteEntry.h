@@ -2,8 +2,8 @@
 
 #include <cstring>
 
-#define FOOTNOTE_NUMBER_LEN 24
-#define FOOTNOTE_HREF_LEN 64
+#define FOOTNOTE_NUMBER_LEN 32
+#define FOOTNOTE_HREF_LEN 96
 
 struct FootnoteEntry {
   char number[FOOTNOTE_NUMBER_LEN];
