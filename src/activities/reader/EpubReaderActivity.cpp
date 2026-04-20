@@ -108,6 +108,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (pendingSleep) {
+    pendingSleep = false;
+    enterDeepSleep();
+    return;
+  }
+
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -404,6 +410,21 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                   nextPageNumber = sync.page;
                   section.reset();
                 }
+              }
+            });
+      }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::PUSH_AND_SLEEP: {
+      if (KOREADER_STORE.hasCredentials()) {
+        const int cp = section ? section->currentPage : 0;
+        const int tp = section ? section->pageCount : 0;
+        startActivityForResult(
+            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex, cp,
+                                                   tp, KOReaderSyncActivity::SyncMode::PUSH_ONLY),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                pendingSleep = true;
               }
             });
       }

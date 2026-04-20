@@ -81,6 +81,12 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   performSync();
 }
 
+void KOReaderSyncActivity::deferFinish(ActivityResult&& result) {
+  RenderLock lock(*this);
+  pendingFinishResult = std::move(result);
+  pendingFinish = true;
+}
+
 void KOReaderSyncActivity::performSync() {
   // Calculate document hash based on user's preferred method
   if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
@@ -89,6 +95,12 @@ void KOReaderSyncActivity::performSync() {
     documentHash = KOReaderDocumentId::calculate(epubPath);
   }
   if (documentHash.empty()) {
+    if (syncMode == SyncMode::PUSH_ONLY) {
+      ActivityResult cancelResult;
+      cancelResult.isCancelled = true;
+      deferFinish(std::move(cancelResult));
+      return;
+    }
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -99,6 +111,12 @@ void KOReaderSyncActivity::performSync() {
   }
 
   LOG_DBG("KOSync", "Document hash: %s", documentHash.c_str());
+
+  // In SyncMode::PUSH_ONLY skip fetching remote and upload right away
+  if (syncMode == SyncMode::PUSH_ONLY) {
+    performUpload();
+    return;
+  }
 
   {
     RenderLock lock(*this);
@@ -173,6 +191,12 @@ void KOReaderSyncActivity::performUpload() {
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   if (result != KOReaderSyncClient::OK) {
+    if (syncMode == SyncMode::PUSH_ONLY) {
+      ActivityResult cancelResult;
+      cancelResult.isCancelled = true;
+      deferFinish(std::move(cancelResult));
+      return;
+    }
     wifiOff();
     {
       RenderLock lock(*this);
@@ -180,6 +204,11 @@ void KOReaderSyncActivity::performUpload() {
       statusMessage = KOReaderSyncClient::errorString(result);
     }
     requestUpdate();
+    return;
+  }
+
+  if (syncMode == SyncMode::PUSH_ONLY) {
+    deferFinish(SyncResult{currentSpineIndex, currentPage});
     return;
   }
 
@@ -335,6 +364,18 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
+  if (syncMode == SyncMode::PUSH_ONLY) {
+    RenderLock lock(*this);
+    if (pendingFinish) {
+      pendingFinish = false;
+      auto finishResult = std::move(pendingFinishResult);
+      lock.unlock();
+      setResult(std::move(finishResult));
+      finish();
+      return;
+    }
+  }
+
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ActivityResult result;

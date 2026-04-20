@@ -110,3 +110,4 @@ class ActivityManager {
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp
+extern void enterDeepSleep();            // defined in main.cpp
