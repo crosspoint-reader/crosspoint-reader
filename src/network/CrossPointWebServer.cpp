@@ -3,8 +3,12 @@
 #include <ArduinoJson.h>
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalDisplay.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
+#include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PngToBmpConverter.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
@@ -45,11 +49,82 @@ unsigned long wsLastCompleteAt = 0;
 
 // Helper function to clear epub cache after upload
 void clearEpubCacheIfNeeded(const String& filePath) {
-  // Only clear cache for .epub files
   if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
   }
+}
+
+static bool convertSleepImageToBmp(const String& filePath) {
+  if (!filePath.startsWith("/.sleep/")) {
+    return true;
+  }
+
+  String lowerPath = filePath;
+  lowerPath.toLowerCase();
+
+  if (!lowerPath.endsWith(".jpg") && !lowerPath.endsWith(".jpeg") && !lowerPath.endsWith(".png")) {
+    return true;
+  }
+
+  LOG_DBG("WEB", "[SLEEP] Converting to BMP: %s", filePath.c_str());
+
+  FsFile srcFile;
+  if (!Storage.openFileForRead("SLEEP", filePath, srcFile)) {
+    return false;
+  }
+  if (srcFile.isDirectory()) {
+    srcFile.close();
+    return false;
+  }
+
+  String bmpPath = filePath.substring(0, filePath.lastIndexOf('.')) + ".bmp";
+  String bmpTmpPath = bmpPath + ".tmp";
+  FsFile bmpFile;
+  if (!Storage.openFileForWrite("SLEEP", bmpTmpPath, bmpFile)) {
+    srcFile.close();
+    LOG_ERR("WEB", "[SLEEP] Cannot create temp BMP: %s", bmpTmpPath.c_str());
+    Storage.remove(filePath.c_str());
+    return false;
+  }
+
+  bool success = false;
+  if (lowerPath.endsWith(".png")) {
+    success = PngToBmpConverter::pngFileToBmpStream(srcFile, bmpFile, false);
+  } else {
+    success = JpegToBmpConverter::jpegFileToBmpStream(srcFile, bmpFile, false);
+  }
+
+  bmpFile.close();
+  srcFile.close();
+
+  if (success) {
+    FsFile tmp = Storage.open(bmpTmpPath.c_str());
+    if (tmp) {
+      Storage.remove(bmpPath.c_str());
+      if (tmp.rename(bmpPath.c_str())) {
+        Storage.remove(filePath.c_str());
+        LOG_DBG("WEB", "[SLEEP] Conversion complete: %s", bmpPath.c_str());
+      } else {
+        Storage.remove(bmpTmpPath.c_str());
+        Storage.remove(filePath.c_str());
+        LOG_ERR("WEB", "[SLEEP] Rename failed, cleaned up source: %s", filePath.c_str());
+        success = false;
+      }
+      tmp.close();
+    } else {
+      Storage.remove(bmpTmpPath.c_str());
+      Storage.remove(filePath.c_str());
+      LOG_ERR("WEB", "[SLEEP] Cannot reopen temp BMP, cleaned up source: %s", bmpTmpPath.c_str());
+      success = false;
+    }
+  } else {
+    Storage.remove(bmpTmpPath.c_str());
+    Storage.remove(filePath.c_str());
+    LOG_ERR("WEB", "[SLEEP] Conversion failed, cleaned up source: %s", filePath.c_str());
+  }
+
+  return success;
 }
 
 String normalizeWebPath(const String& inputPath) {
@@ -351,6 +426,11 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+  // Physical panel dimensions (landscape: 800×480).
+  // The web UI intentionally swaps W/H to derive portrait logical dimensions (480×800).
+  doc["screenWidth"] = display.getDisplayWidth();
+  doc["screenHeight"] = display.getDisplayHeight();
+  doc["device"] = gpio.deviceIsX3() ? "x3" : "x4";
 
   String json;
   serializeJson(doc, json);
@@ -638,6 +718,9 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       Storage.remove(filePath.c_str());
     }
 
+    // Ensure /.sleep/ exists on first sleep-image upload (new devices may lack this directory)
+    if (filePath.startsWith("/.sleep/")) Storage.ensureDirectoryExists("/.sleep");
+
     // Open file for writing - this can be slow due to FAT cluster allocation
     esp_task_wdt_reset();
     if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
@@ -708,6 +791,13 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearEpubCacheIfNeeded(filePath);
+
+        // Convert sleep screen images (JPG/PNG → BMP)
+        if (!convertSleepImageToBmp(filePath)) {
+          LOG_ERR("WEB", "[UPLOAD] Sleep image conversion failed for: %s", filePath.c_str());
+          state.error = "Sleep image conversion failed";
+          state.success = false;
+        }
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -831,12 +921,6 @@ void CrossPointWebServer::handleRename() const {
     server->send(500, "text/plain", "Failed to open file");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be renamed");
-    return;
-  }
-
   String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
   if (parentPath.isEmpty()) {
     parentPath = "/";
@@ -888,13 +972,6 @@ void CrossPointWebServer::handleMove() const {
   if (isProtectedItemName(itemName)) {
     server->send(403, "text/plain", "Cannot move protected item");
     return;
-  }
-  if (destPath != "/") {
-    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
-    if (isProtectedItemName(destName)) {
-      server->send(403, "text/plain", "Cannot move into protected folder");
-      return;
-    }
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -1089,9 +1166,9 @@ void CrossPointWebServer::handleSettingsPage() const {
 void CrossPointWebServer::handleGetSettings() const {
   const auto& settings = getSettingsList();
 
-  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server->send(200, "application/json", "");
-  server->sendContent("[");
+  String result;
+  result.reserve(4096);
+  result += "[";
 
   char output[512];
   constexpr size_t outputSize = sizeof(output);
@@ -1157,15 +1234,15 @@ void CrossPointWebServer::handleGetSettings() const {
     }
 
     if (seenFirst) {
-      server->sendContent(",");
+      result += ",";
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    result += output;
   }
 
-  server->sendContent("]");
-  server->sendContent("");
+  result += "]";
+  server->send(200, "application/json", result);
   LOG_DBG("WEB", "Served settings API");
 }
 
@@ -1331,6 +1408,9 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             Storage.remove(filePath.c_str());
           }
 
+          // Ensure /.sleep/ exists on first sleep-image upload (new devices may lack this directory)
+          if (filePath.startsWith("/.sleep/")) Storage.ensureDirectoryExists("/.sleep");
+
           // Open file for writing
           esp_task_wdt_reset();
           if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
@@ -1350,7 +1430,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearEpubCacheIfNeeded(filePath);
-            wsServer->sendTXT(num, "DONE");
+            if (!convertSleepImageToBmp(filePath)) {
+              wsServer->sendTXT(num, "ERROR:Sleep image conversion failed");
+            } else {
+              wsServer->sendTXT(num, "DONE");
+            }
             wsLastProgressSent = 0;
             break;
           }
@@ -1420,7 +1504,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         filePath += wsUploadFileName;
         clearEpubCacheIfNeeded(filePath);
 
-        wsServer->sendTXT(num, "DONE");
+        // Convert sleep screen images (JPG/PNG → BMP)
+        if (!convertSleepImageToBmp(filePath)) {
+          wsServer->sendTXT(num, "ERROR:Sleep image conversion failed");
+        } else {
+          wsServer->sendTXT(num, "DONE");
+        }
         wsLastProgressSent = 0;
       }
       break;

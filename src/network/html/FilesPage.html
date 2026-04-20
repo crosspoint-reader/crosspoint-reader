@@ -28,6 +28,9 @@
         color-scheme: dark;
       }
     }
+    html {
+      scrollbar-gutter: stable;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Oxygen, Ubuntu, sans-serif;
@@ -36,10 +39,6 @@
       padding: 20px;
       background-color: var(--bg);
       color: var(--font-color);
-    }
-    h1 {
-      color: var(--title-color);
-      margin-bottom: 5px;
     }
     h2 {
       color: var(--title-color);
@@ -52,61 +51,89 @@
       margin: 15px 0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
-    .page-header {
+    .app-header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid var(--accent-color);
+      gap: 10px;
+      padding: 16px 0 0;
     }
-    .page-header-left {
+    .app-icon { font-size: 28px; line-height: 1; }
+    .app-title { font-size: 1.375rem; font-weight: 700; color: var(--title-color); margin: 0; }
+    .app-separator {
+      height: 3px;
+      background: linear-gradient(to right, var(--accent-color) 60%, transparent);
+      margin-top: 12px;
+    }
+    .app-nav {
       display: flex;
-      align-items: baseline;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 0;
+      padding: 0;
     }
-    .breadcrumb-inline {
+    .app-nav a {
+      padding: 8px 16px;
+      font-size: 14px;
       color: var(--label-color);
-      font-size: 1.1em;
-    }
-    .breadcrumb-inline a {
-      color: var(--accent-color);
       text-decoration: none;
+      border-radius: 0 0 7px 7px;
+      border: 1px solid transparent;
+      border-top: none;
+      white-space: nowrap;
     }
-    .breadcrumb-inline a:hover {
-      text-decoration: underline;
+    .app-nav a:not(.active):hover {
+      background: var(--card-bg);
+      color: var(--font-color);
+      border-color: var(--border-color);
+      border-top: none;
     }
-    .breadcrumb-inline .sep {
-      margin: 0 6px;
-      color: var(--border-color);
-    }
-    .breadcrumb-inline .current {
-      color: var(--title-color);
+    .app-nav a.active {
+      background: var(--accent-color);
+      color: white;
       font-weight: 500;
     }
-    .nav-links {
-      margin: 20px 0;
+    .path-bar {
       display: flex;
-      gap: 10px;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-color-10);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin-bottom: 12px;
+      margin-top: 16px;
+      font-size: 15px;
+      font-weight: 500;
+      overflow: hidden;
+      transition: border-color 0.2s;
     }
-    .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
+    .path-bar:hover {
+      border-color: var(--accent-color);
+    }
+    .path-bar .path-icon { flex-shrink: 0; }
+    .path-bar a.path-icon { text-decoration: none !important; }
+    .path-bar a {
+      color: var(--accent-color);
       text-decoration: none;
-      border-radius: 4px;
+      white-space: nowrap;
+      font-weight: 500;
     }
-    .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
+    .path-bar a:hover { text-decoration: underline; }
+    .path-bar .path-current {
+      color: var(--title-color);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
-      color: white;
+    .path-bar .path-sep {
+      color: var(--label-color);
+      margin: 0 4px;
+      flex-shrink: 0;
     }
-    /* Action buttons */
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
     .action-buttons {
       display: flex;
       gap: 10px;
@@ -115,13 +142,25 @@
       color: white;
       padding: 10px 16px;
       border: none;
-      border-radius: 4px;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 0.95em;
       font-weight: 600;
       display: flex;
       align-items: center;
       gap: 6px;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    }
+    .action-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    .action-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    .action-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
     .upload-action-btn {
       background-color: #27ae60;
@@ -134,6 +173,12 @@
     }
     .folder-action-btn:hover {
       background-color: #d68910;
+    }
+    .move-action-btn {
+      background-color: #2980b9;
+    }
+    .move-action-btn:hover {
+      background-color: #2471a3;
     }
     .delete-action-btn {
       background-color: #e74c3c;
@@ -169,6 +214,138 @@
     }
     .modal.picker-mode {
       max-width: 920px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .modal.drag-over {
+      border-color: var(--accent-color);
+    }
+    .drop-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 20px 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .drop-zone:hover {
+      border-color: var(--accent-color);
+    }
+    .drop-zone.has-files {
+      border: none;
+      padding: 0;
+      background: none;
+      margin-bottom: 12px;
+    }
+    .drop-zone.has-files .drag-drop-hint {
+      display: none;
+    }
+    .drop-zone.has-files .choose-file-btn {
+      width: 100%;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .choose-file-btn {
+      background-color: #bdc3c7;
+      color: #2c3e50;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      user-select: none;
+    }
+    .choose-file-btn:hover {
+      background-color: #95a5a6;
+    }
+    .drop-zone.has-files .choose-file-btn {
+      background-color: #7f8c8d;
+      color: white;
+    }
+    .drag-drop-hint {
+      text-align: center;
+      color: var(--label-color);
+      font-size: 0.82em;
+      opacity: 0.7;
+    }
+    .modal.drag-over .drop-zone {
+      border-color: var(--accent-color);
+      box-shadow: inset 0 0 0 3px var(--accent-color-10);
+    }
+    .sleep-preview-wrapper {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      margin-top: 10px;
+      min-height: 204px;
+    }
+    .sleep-preview-wrapper .fit-crop-controls-col {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 90px;
+    }
+    .sleep-preview-wrapper .fit-crop-controls-col .setting-title {
+      font-size: 0.78em;
+      color: var(--label-color);
+      margin-bottom: 4px;
+    }
+    .fit-crop-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .fit-crop-btn {
+      padding: 3px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--card-bg);
+      color: var(--label-color);
+      cursor: pointer;
+      font-size: 0.8em;
+      font-weight: 600;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .fit-crop-btn.active {
+      background-color: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+    .fit-crop-btn:disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+    .image-optimizer-preview {
+      text-align: center;
+    }
+    .image-optimizer-preview canvas {
+      width: 120px;
+      height: 200px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: #fff;
+    }
+    .image-optimizer-preview .preview-info {
+      font-size: 0.78em;
+      color: var(--label-color);
+      margin-top: 6px;
+      line-height: 1.3;
     }
     .picker-columns.picker-active {
       display: flex;
@@ -227,6 +404,22 @@
     .file-table {
       width: 100%;
       border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .file-table .col-name {
+      width: auto;
+      vertical-align: middle;
+      padding: 8px 12px;
+    }
+    .name-cell {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .name-cell .file-icon {
+      flex-shrink: 0;
+      margin-right: 0;
+      line-height: 1.35;
     }
     .file-table th,
     .file-table td {
@@ -237,52 +430,115 @@
     .file-table th {
       font-weight: 600;
       color: var(--label-color);
+      text-align: center;
+      vertical-align: middle;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--card-bg);
+      border-bottom: 2px solid var(--accent-color);
     }
-    .file-table tr:hover {
+    .file-table th.col-name {
+      text-align: left;
+      padding-left: 12px;
+    }
+    .file-table th.sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s, color 0.15s;
+    }
+    .file-table th.sortable:hover {
+      background: var(--accent-color-10);
+      color: var(--accent-color);
+    }
+    .sort-indicator {
+      font-size: 0.7em;
+      margin-left: 3px;
+      opacity: 0.6;
+    }
+    .file-table tr {
+      transition: background-color 0.15s;
+    }
+    .file-table td {
+      padding: 10px 12px;
+      height: 44px;
+      vertical-align: middle;
+    }
+    .file-table tbody tr:nth-child(even) {
+      background-color: rgba(128, 128, 128, 0.03);
+    }
+    .file-table tbody tr:hover {
       background-color: var(--accent-color-10);
     }
-    .epub-badge {
+    .badge {
       display: inline-block;
       padding: 2px 8px;
-      background-color: #27ae60;
       color: white;
       border-radius: 10px;
       font-size: 0.75em;
-      margin-left: 8px;
+      font-weight: 600;
     }
-    .folder-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      background-color: #f39c12;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
-      margin-left: 8px;
-    }
+    .badge-epub { background-color: #219a52; }
+    .badge-xtc { background-color: #2980b9; }
+    .badge-txt { background-color: #7f8c8d; }
+    .badge-image { background-color: #9b59b6; }
+    .badge-pdf { background-color: #e74c3c; }
+    .badge-folder { background-color: #f39c12; }
     .file-icon {
       margin-right: 8px;
     }
     .folder-link,
     .file-link {
-      color: var(--accent-color);
       text-decoration: none;
       cursor: pointer;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+      line-height: 1.35;
     }
-    .folder-link:hover,
-    .file-link:hover {
+    .folder-link {
+      color: var(--accent-color);
+      font-weight: 500;
+    }
+    .folder-link:hover {
       color: var(--accent-hover-color);
       text-decoration: underline;
     }
+    .file-link {
+      color: var(--title-color);
+    }
+    .file-link:hover {
+      color: var(--accent-color);
+      text-decoration: underline;
+    }
+    .parent-folder-row {
+      background-color: rgba(128, 128, 128, 0.04);
+    }
+    .parent-folder-row:hover {
+      background-color: var(--accent-color-10);
+    }
+    .up-folder-link {
+      color: var(--label-color);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .up-folder-link:hover {
+      color: var(--accent-color);
+      text-decoration: underline;
+    }
     .upload-form {
-      margin-bottom: 10px;
+      margin-bottom: 0;
     }
     .upload-form input[type="file"] {
       margin: 10px 0;
       width: 100%;
     }
     .upload-form input[type="file"]::file-selector-button {
-      background-color: #27ae60;
-      color: white;
+      background-color: #bdc3c7;
+      color: #2c3e50;
       border: none;
       padding: 6px 14px;
       border-radius: 4px;
@@ -290,8 +546,12 @@
       font-size: 0.9em;
       margin-right: 8px;
     }
-    .upload-form input[type="file"].has-files::file-selector-button {
+    .upload-form input[type="file"]:hover::file-selector-button {
       background-color: #95a5a6;
+    }
+    .upload-form input[type="file"].has-files::file-selector-button {
+      background-color: #7f8c8d;
+      color: white;
     }
     .upload-btn {
       background-color: #27ae60;
@@ -302,7 +562,7 @@
       cursor: pointer;
       font-size: 1em;
       width: 100%;
-      margin-top: 12px;
+      margin-top: 16px;
     }
     .upload-btn:hover {
       background-color: #219a52;
@@ -319,10 +579,12 @@
     }
     /* Convert options */
     .convert-options {
-      margin-bottom: 10px;
       padding: 12px;
       border-radius: 6px;
-      border: 1px solid var(--accent-color);
+      border: 1px solid #27ae60;
+    }
+    .convert-options.violet {
+      border-color: #9b59b6;
     }
     .convert-checkbox {
       display: flex;
@@ -342,14 +604,13 @@
       box-shadow: none;
     }
     .convert-warning {
-      font-size: 0.85em;
+      font-size: 0.8em;
       color: #d68910;
-      background-color: rgba(214, 137, 16, 0.1);
-      border: 1px solid #d68910;
+      background-color: rgba(214, 137, 16, 0.08);
+      border: 1px solid rgba(214, 137, 16, 0.35);
       border-radius: 4px;
-      padding: 8px 12px;
+      padding: 6px 10px;
       margin-top: 8px;
-      margin-bottom: 12px;
       line-height: 1.4;
       text-align: center;
     }
@@ -360,16 +621,23 @@
       line-height: 1.4;
     }
     .convert-settings {
-      font-size: 0.8em;
-      color: var(--label-color);
-      margin-top: 6px;
-      padding-left: 26px;
+      margin-top: 8px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
+      flex-wrap: nowrap;
+      justify-content: center;
+      gap: 6px;
+      overflow: hidden;
     }
     .convert-settings span {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      background: var(--accent-color-10);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 3px 9px;
+      font-size: 0.78em;
+      color: var(--label-color);
     }
     /* Convert row - compact layout with checkbox and advanced options toggle */
     .convert-row {
@@ -413,21 +681,18 @@
     /* Settings content - hidden by default, shown when expanded */
     .advanced-settings-content {
       display: none;
-      margin-top: 12px;
-      padding-left: 4px;
+      margin-top: 10px;
     }
     .advanced-settings-content.visible {
       display: block;
     }
+
     .advanced-setting-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      margin-top: 12px;
-    }
-    .advanced-setting-row:first-child {
-      margin-top: 10px;
+      padding: 8px 0;
     }
     .quality-row {
       flex-wrap: wrap;
@@ -441,9 +706,9 @@
     }
     .setting-controls {
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
+      align-items: center;
       gap: 8px;
+      flex-shrink: 0;
     }
     .setting-row-header {
       display: flex;
@@ -452,9 +717,9 @@
       margin-bottom: 8px;
     }
     .setting-title {
-      font-size: 0.85em;
+      font-size: 0.875em;
       color: var(--title-color);
-      font-weight: 500;
+      font-weight: 600;
     }
     .setting-value {
       font-size: 0.8em;
@@ -544,7 +809,7 @@
       background: var(--border-color);
       border-radius: 6px;
       padding: 3px;
-      width: fit-content;
+      width: 100%;
     }
     .quality-preset {
       padding: 6px 14px;
@@ -558,6 +823,7 @@
       cursor: pointer;
       transition: all 0.15s;
       white-space: nowrap;
+      flex: 1;
     }
     .quality-preset:hover {
       background: var(--accent-color-10);
@@ -913,21 +1179,6 @@
       padding: 40px;
       font-style: italic;
     }
-    .message {
-      padding: 15px;
-      border-radius: 4px;
-      margin: 15px 0;
-    }
-    .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
-    }
-    .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
-    }
     .contents-header {
       display: flex;
       justify-content: space-between;
@@ -981,12 +1232,15 @@
       font-size: 1em;
       margin-bottom: 10px;
       box-sizing: border-box;
+      background: var(--card-bg);
+      color: var(--font-color);
     }
     .folder-btn {
       background-color: #f39c12;
       color: white;
       padding: 10px 20px;
       border: none;
+      margin-top: 24px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 1em;
@@ -1007,9 +1261,12 @@
       border: none;
       cursor: pointer;
       font-size: 1.1em;
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 6px 8px;
+      border-radius: 6px;
       transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     .delete-btn {
       color: #95a5a6;
@@ -1025,20 +1282,75 @@
       background-color: #e8f4fd;
     }
     .move-btn {
-      color: #16a085;
+      color: #2980b9;
     }
     .move-btn:hover {
-      background-color: #e6f7f4;
+      background-color: #e8f4fd;
     }
     .actions-col {
-      width: 140px;
+      width: 48px;
+      white-space: nowrap;
       text-align: center;
+      vertical-align: middle;
+      padding: 4px 4px;
+    }
+    .size-cell {
+      text-align: right;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .size-cell-inner {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      justify-content: flex-end;
+      width: 100%;
+    }
+    .size-value {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      flex: 1;
+    }
+    .size-unit {
+      text-align: left;
+      color: var(--label-color);
+      font-size: 0.85em;
+      min-width: 24px;
     }
     .action-icon-group {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
+    }
+    /* Failed delete banner */
+    .failed-delete-banner {
+      display: none;
+      background: #fdf2f2;
+      border: 1px solid #f5c6cb;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+    }
+    .failed-delete-banner.show {
+      display: block;
+    }
+    .failed-delete-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .failed-delete-title {
+      font-weight: 600;
+      color: #721c24;
+      margin: 0;
+      font-size: 0.9em;
+    }
+    .failed-delete-items {
+      margin-top: 8px;
+      font-size: 0.82em;
+      color: #721c24;
+      line-height: 1.6;
     }
     /* Failed uploads banner */
     .failed-uploads-banner {
@@ -1140,6 +1452,7 @@
       color: white;
       padding: 10px 20px;
       border: none;
+      margin-top: 24px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 1em;
@@ -1160,11 +1473,43 @@
       margin-top: 10px;
     }
     .delete-btn-cancel:hover {
-      background-color: var(--label-color);
+      background-color: #7f8c8d;
+    }
+    .rename-input-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+    }
+    .rename-input-row .folder-input {
+      flex: 1;
+      min-width: 0;
+      width: auto;
+      margin-bottom: 0;
+      border-radius: 4px 0 0 4px;
+      border-right: none;
+    }
+    .rename-ext-suffix {
+      display: inline-flex;
+      align-items: center;
+      align-self: stretch;
+      padding: 0 12px;
+      background: var(--bg-alt, #f0f0f0);
+      border: 1px solid #ddd;
+      border-left: none;
+      border-radius: 0 4px 4px 0;
+      color: var(--label-color);
+      font-size: 1em;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .rename-ext-suffix:empty {
+      display: none;
     }
     .rename-btn-confirm {
-      background-color: #3498db;
+      background-color: #27ae60;
       color: white;
+      margin-top: 24px;
       padding: 10px 20px;
       border: none;
       border-radius: 4px;
@@ -1173,10 +1518,14 @@
       width: 100%;
     }
     .rename-btn-confirm:hover {
-      background-color: #2e86c1;
+      background-color: #219a52;
+    }
+    .rename-btn-confirm:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
     }
     .move-btn-confirm {
-      background-color: #16a085;
+      background-color: #27ae60;
       color: white;
       padding: 10px 20px;
       border: none;
@@ -1184,9 +1533,10 @@
       cursor: pointer;
       font-size: 1em;
       width: 100%;
+      margin-top: 24px;
     }
     .move-btn-confirm:hover {
-      background-color: #138d75;
+      background-color: #219a52;
     }
     .loader-container {
       display: flex;
@@ -1222,24 +1572,12 @@
         padding: 12px;
         margin: 10px 0;
       }
-      .page-header {
-        gap: 10px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
+      .app-title {
+        font-size: 1.125rem;
       }
-      .page-header-left {
-        gap: 8px;
-      }
-      h1 {
-        font-size: 1.3em;
-      }
-      .breadcrumb-inline {
-        font-size: 0.95em;
-      }
-      .nav-links a {
-        padding: 8px 12px;
-        margin-right: 6px;
-        font-size: 0.9em;
+      .app-nav a {
+        padding: 7px 11px;
+        font-size: 13px;
       }
       .action-buttons {
         gap: 6px;
@@ -1259,12 +1597,6 @@
       .file-icon {
         margin-right: 4px;
       }
-      .epub-badge,
-      .folder-badge {
-        padding: 2px 5px;
-        font-size: 0.65em;
-        margin-left: 4px;
-      }
       .contents-header {
         margin-bottom: 8px;
         flex-wrap: wrap;
@@ -1281,9 +1613,6 @@
       }
       .modal h3 {
         font-size: 1.1em;
-      }
-      .actions-col {
-        width: 120px;
       }
       .delete-btn,
       .rename-btn,
@@ -1460,26 +1789,54 @@
     .log-summary-table .increased {
       color: #f39c12;
     }
+    @media (max-width: 600px) and (orientation: portrait) {
+      .file-table th:first-child,
+      .file-table td:first-child { padding-right: 3px; }
+      .file-table td.col-name,
+      .file-table th.col-name { padding-left: 3px; padding-right: 3px; }
+      .file-table th:nth-child(3),
+      .file-table td:nth-child(3) { width: 40px !important; padding-left: 3px; padding-right: 3px; overflow: hidden; }
+      .file-table th:nth-child(4),
+      .file-table td:nth-child(4) { width: 52px !important; padding-left: 3px; padding-right: 3px; overflow: hidden; }
+      .actions-col { width: 32px !important; padding: 4px 2px; }
+      .badge { padding: 2px 4px; }
+      .size-cell { text-align: right !important; }
+      .size-cell-inner { display: inline-flex; width: auto; gap: 2px; }
+      .size-cell-inner .size-value { flex: none; }
+    }
   </style>
 </head>
 <body>
-<div class="nav-links">
-  <a href="/">Home</a>
-  <a href="/files" class="active">File Manager</a>
-  <a href="/settings">Settings</a>
-</div>
+  <div class="app-header">
+    <span class="app-icon">📚</span>
+    <h1 class="app-title">CrossPoint Reader</h1>
+  </div>
+  <div class="app-separator"></div>
+  <nav class="app-nav">
+    <a href="/">Home</a>
+    <a href="/files" class="active">File Manager</a>
+    <a href="/settings">Settings</a>
+  </nav>
 
-<div class="page-header">
-  <div class="page-header-left">
-    <h1>📁 File Manager</h1>
-    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
+  <div class="path-bar" id="directory-breadcrumbs">
+    <span class="path-icon">📁</span>
+    <span class="path-current">Loading...</span>
   </div>
 
-  <div class="action-buttons">
+  <div class="toolbar action-buttons">
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
-    <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
+    <button id="moveActionBtn" class="action-btn move-action-btn" onclick="openMoveSelectedModal()" disabled>➡️ Move</button>
+    <button id="deleteActionBtn" class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()" disabled>🗑️ Delete</button>
   </div>
+
+<!-- Failed Delete Banner -->
+<div class="failed-delete-banner" id="failedDeleteBanner">
+  <div class="failed-delete-header">
+    <h3 class="failed-delete-title" id="failedDeleteTitle"></h3>
+    <button class="dismiss-btn" onclick="dismissFailedDelete()" title="Dismiss">&times;</button>
+  </div>
+  <div class="failed-delete-items" id="failedDeleteItems"></div>
 </div>
 
 <!-- Failed Uploads Banner -->
@@ -1518,8 +1875,12 @@
     <h3>📤 Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
-      <div class="picker-columns" id="pickerColumns">
+      <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" class="sr-only" onchange="validateFile()" multiple tabindex="-1" aria-hidden="true">
+        <button type="button" class="choose-file-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">📁 Choose Files</button>
+        <div class="drag-drop-hint">or drag &amp; drop files here</div>
+      </div>
+      <div class="picker-columns" id="pickerColumns" style="display:none;">
         <div class="convert-options" id="convertOptions" style="display:none;">
           <div class="convert-row">
             <label class="convert-checkbox">
@@ -1536,12 +1897,12 @@
           <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
           </div>
 
-          <div class="convert-settings" id="convertSettings" style="display:block;">
-            <span>⚫ True-Grayscale</span>
-          <span>📏 Max 480×800px</span>
-          <span>📦 85% JPEG</span>
-          <span>🔧 Fix SVG</span>
-        </div>
+          <div class="convert-settings" id="convertSettings">
+            <span>480×800px</span>
+            <span>True-Grayscale</span>
+            <span>JPEG 85%</span>
+            <span>SVG fix</span>
+          </div>
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
           <!-- JPEG Quality -->
@@ -1563,7 +1924,7 @@
           <div class="advanced-setting-row" style="display:none;">
             <div class="setting-toggle">
               <div>
-                <div class="setting-title">⚫ True-Grayscale</div>
+                <div class="setting-title">True-Grayscale</div>
                 <div class="setting-desc">BT.601 luminance formula (recommended for e-ink)</div>
               </div>
               <label class="toggle-switch">
@@ -1648,10 +2009,41 @@
         <div class="image-grid" id="imageGrid"></div>
       </div>
       </div><!-- end picker-columns -->
-      <!-- Sync compatibility warning - outside picker-columns -->
       <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
-        ⚠️ Converting will modify files and can break hash‑based sync. ⚠️<br>
-        Please back up or disable sync before proceeding.
+        ⚠️ Converting modifies files and may break hash-based sync — back up or disable sync first.
+      </div>
+      <!-- Image Optimizer Section (for standalone images -> sleep screen) -->
+      <div class="convert-options" id="imageOptimizerOptions" style="display:none;">
+        <div class="convert-row">
+          <label class="convert-checkbox">
+            <input type="checkbox" id="imageOptimizerEnabled" onchange="toggleImageOptimizer()">
+            <span>Optimize for Sleep Screen</span>
+          </label>
+        </div>
+        <div class="convert-settings" id="imageOptimizerSettings">
+          <span id="sleepScreenSizeLabel">480×800px</span>
+          <span>True-Grayscale</span>
+          <span>JPEG 85%</span>
+          <span>Auto-rotate</span>
+        </div>
+        <div class="sleep-preview-wrapper" id="sleepPreviewWrapper" style="display:none;">
+          <div id="imageControlsRow" class="fit-crop-controls-col" style="display:none;">
+            <div class="setting-title">📐 Resize</div>
+            <div class="fit-crop-controls">
+              <button class="fit-crop-btn" data-value="fit" onclick="setImageResizeMode('fit')">FIT</button>
+              <button class="fit-crop-btn" data-value="crop" onclick="setImageResizeMode('crop')">CROP</button>
+            </div>
+            <div id="imageBgControls">
+              <div class="setting-title" style="margin-top:8px;">🎨 Background</div>
+              <div class="fit-crop-controls">
+                <button class="fit-crop-btn active" data-value="white" onclick="setSleepBgColor('white')">WHITE</button>
+                <button class="fit-crop-btn" data-value="black" onclick="setSleepBgColor('black')">BLACK</button>
+              </div>
+            </div>
+          </div>
+          <div id="imageOptimizerPreview" style="display:none;" class="image-optimizer-preview"></div>
+        </div>
+        <div id="imageOptimizerWarning" style="display:none;" class="convert-warning"></div>
       </div>
       <!-- Optimize & Upload button - shown when picker is visible, replaces Upload -->
       <button id="startConversionBtn" class="upload-btn optimize" style="display:none;" onclick="startConversionWithImageStates()">Optimize & Upload</button>
@@ -1704,12 +2096,17 @@
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
     <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <h3 id="renameModalTitle">✏️ Rename</h3>
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
-      <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
+      <div class="rename-input-row">
+        <input type="text" id="renameNewName" class="folder-input" placeholder="New name..." oninput="validateRenameInput()">
+        <span id="renameExtSuffix" class="rename-ext-suffix"></span>
+      </div>
       <input type="hidden" id="renameItemPath">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
+      <input type="hidden" id="renameExtension">
+      <input type="hidden" id="renameIsFolder">
+      <button id="confirmRenameBtn" class="rename-btn-confirm" onclick="confirmRename()" disabled>Rename</button>
       <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
     </div>
   </div>
@@ -1719,11 +2116,10 @@
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
     <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <h3>➡️ Move File</h3>
     <div class="folder-form">
       <p class="file-info">Moving <strong id="moveItemName"></strong></p>
-      <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
-      <datalist id="moveFolderOptions"></datalist>
+      <select id="moveDestPath" class="folder-input"></select>
       <input type="hidden" id="moveItemPath">
       <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
       <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
@@ -1734,6 +2130,10 @@
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+
+  // Sort state
+  let sortState = { column: 'default', dir: 1 };
+  let currentFiles = [];
 
   // Network status monitoring
   let isNetworkOnline = navigator.onLine;
@@ -1763,12 +2163,17 @@
       .replaceAll("'", "&#039;");
   }
 
+  let _hideTimer;
+
   function showNotification(message, type = 'info') {
+    clearTimeout(_hideTimer);
     // Create notification element if it doesn't exist
     let notification = document.getElementById('notification');
     if (!notification) {
       notification = document.createElement('div');
       notification.id = 'notification';
+      notification.setAttribute('role', 'status');
+      notification.setAttribute('aria-live', 'polite');
       notification.style.cssText = `
         position: fixed;
         top: 20px;
@@ -1800,7 +2205,7 @@
     notification.style.transform = 'translateX(0)';
 
     // Auto-hide after 5 seconds
-    setTimeout(() => {
+    _hideTimer = setTimeout(() => {
       notification.style.opacity = '0';
       notification.style.transform = 'translateX(100%)';
       setTimeout(() => {
@@ -1814,14 +2219,47 @@
   function formatFileSize(bytes) {
     if (bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = Math.floor(Math.log(bytes) / Math.log(k));
+    let val = bytes / Math.pow(k, i);
+    if (val >= 1000 && i < sizes.length - 1) { i++; val = bytes / Math.pow(k, i); }
+    return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function formatFileSizeCell(bytes) {
+    if (bytes === 0) return '<span class="size-value">0</span><span class="size-unit">B</span>';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = Math.floor(Math.log(bytes) / Math.log(k));
+    let val = bytes / Math.pow(k, i);
+    if (val >= 1000 && i < sizes.length - 1) { i++; val = bytes / Math.pow(k, i); }
+    const formatted = val % 1 === 0 ? val.toFixed(0) : val.toFixed(1);
+    return `<span class="size-value">${formatted}</span><span class="size-unit">${sizes[i]}</span>`;
+  }
+
+  const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','webp','avif','svg']);
+  function getFileCategory(ext) {
+    if (ext === 'epub') return { order: 1, cls: 'badge-epub', icon: '📗' };
+    if (ext === 'xtc' || ext === 'xtch') return { order: 2, cls: 'badge-xtc', icon: '📘' };
+    if (ext === 'txt') return { order: 3, cls: 'badge-txt', icon: '📄' };
+    if (ext === 'md' || ext === 'markdown') return { order: 3, cls: 'badge-txt', icon: '📓' };
+    if (IMAGE_EXTS.has(ext)) return { order: 4, cls: 'badge-image', icon: '🖼️' };
+    if (ext === 'pdf') return { order: 5, cls: 'badge-pdf', icon: '📕' };
+    return { order: 6, cls: '', icon: '📄' };
   }
 
   async function hydrate() {
     // Fetch CrossPoint version
     fetchVersion();
+
+    // Show pending delete errors from sessionStorage
+    const failedDeleteData = sessionStorage.getItem('failedDeleteItems');
+    if (failedDeleteData) {
+      sessionStorage.removeItem('failedDeleteItems');
+      try {
+        showFailedDeleteBanner(JSON.parse(failedDeleteData));
+      } catch (e) { console.error('Failed to parse delete errors:', e); }
+    }
 
     // Close modals when clicking overlay - call proper cleanup functions
     document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
@@ -1841,27 +2279,32 @@
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
-    let breadcrumbContent = '<span class="sep">/</span>';
+    let pathContent;
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      pathContent = '<span class="path-current">🏠 root</span>';
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
-      const pathSegments = currentPath.split('/');
-      pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
-        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
+      pathContent = '<a href="/files?path=%2F" class="path-icon" title="Go to root">🏠</a>';
+      const segments = currentPath.split('/').filter(Boolean);
+      let builtPath = '';
+      segments.forEach(function(segment, i) {
+        builtPath += '/' + segment;
+        const isLast = i === segments.length - 1;
+        pathContent += '<span class="path-sep">/</span>';
+        if (isLast) {
+          pathContent += '<span class="path-current">' + escapeHtml(segment) + '</span>';
+        } else {
+          pathContent += '<a href="/files?path=' + encodeURIComponent(builtPath) + '">' + escapeHtml(segment) + '</a>';
+        }
       });
-      breadcrumbContent += '<span class="sep">/</span>';
-      breadcrumbContent += '<span class="current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
     }
-    breadcrumbs.innerHTML = breadcrumbContent;
+    breadcrumbs.innerHTML = pathContent;
 
-    let files = [];
     try {
       const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
-      files = await response.json();
+      currentFiles = await response.json();
     } catch (e) {
       console.error(e);
       fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
@@ -1870,75 +2313,151 @@
 
     let folderCount = 0;
     let totalSize = 0;
-    files.forEach(file => {
+    currentFiles.forEach(file => {
       if (file.isDirectory) folderCount++;
       totalSize += file.size;
     });
 
-    const fileCount = files.length - folderCount;
+    const fileCount = currentFiles.length - folderCount;
     const folderLabel = folderCount === 1 ? 'folder' : 'folders';
     const fileLabel = fileCount === 1 ? 'file' : 'files';
     document.getElementById('folder-summary').innerHTML = `${folderCount} ${folderLabel}, ${fileCount} ${fileLabel}, ${formatFileSize(totalSize)}`;
 
-    if (files.length === 0) {
-      fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
-    } else {
-      let fileTableContent = '<table class="file-table">';
-
-				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
-
-
-      const sortedFiles = files.sort((a, b) => {
-        // Directories first, then epub files, then other files, alphabetically within each group
-        if (a.isDirectory && !b.isDirectory) return -1;
-        if (!a.isDirectory && b.isDirectory) return 1;
-        if (a.isEpub && !b.isEpub) return -1;
-        if (!a.isEpub && b.isEpub) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      sortedFiles.forEach(file => {
-        if (file.isDirectory) {
-          let folderPath = currentPath;
-          if (!folderPath.endsWith("/")) folderPath += "/";
-          folderPath += file.name;
-
-         // Checkbox cell + folder row
-          fileTableContent += `<tr class="folder-row">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
-          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
-          fileTableContent += '<td>Folder</td>';
-          fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
-          fileTableContent += '</tr>';
-        } else {
-          let filePath = currentPath;
-          if (!filePath.endsWith("/")) filePath += "/";
-          filePath += file.name;
-
-          // Checkbox cell + file row
-          fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
-          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
-          if (file.isEpub) fileTableContent += '<span class="epub-badge">EPUB</span>';
-          fileTableContent += '</td>';
-          fileTableContent += `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
-          fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
-          fileTableContent += `</div></td>`;
-          fileTableContent += '</tr>';
-        }
-      });
-
-      fileTableContent += '</table>';
-      fileTable.innerHTML = fileTableContent;
-    }
+    renderFileTable();
+    document.getElementById('file-table').addEventListener('change', function(e) {
+      if (e.target.classList.contains('select-item')) updateToolbarState();
+    });
   }
+
+  function getSortIndicator(column) {
+    if (sortState.column !== column) return '';
+    return `<span class="sort-indicator">${sortState.dir === 1 ? '▲' : '▼'}</span>`;
+  }
+
+  function sortBy(column) {
+    if (sortState.column === column) {
+      sortState.dir *= -1;
+    } else {
+      sortState.column = column;
+      sortState.dir = 1;
+    }
+    renderFileTable();
+  }
+
+  function renderFileTable() {
+    const fileTable = document.getElementById('file-table');
+
+    let fileTableContent = '<table class="file-table">';
+    fileTableContent += '<tr>';
+    fileTableContent += '<th style="width:32px; text-align:center"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>';
+    fileTableContent += `<th class="col-name sortable" onclick="sortBy('name')">Name${getSortIndicator('name')}</th>`;
+    fileTableContent += `<th style="width:72px" class="sortable" onclick="sortBy('type')">Type${getSortIndicator('type')}</th>`;
+    fileTableContent += `<th style="width:80px" class="sortable" onclick="sortBy('size')">Size${getSortIndicator('size')}</th>`;
+    fileTableContent += '<th class="actions-col"></th>';
+    fileTableContent += '</tr>';
+
+    // Parent directory row (when not in root) — always shown regardless of folder content
+    if (currentPath !== '/') {
+      let parentPath = currentPath;
+      if (parentPath.endsWith('/')) parentPath = parentPath.slice(0, -1);
+      parentPath = parentPath.substring(0, parentPath.lastIndexOf('/') + 1) || '/';
+      fileTableContent += `<tr class="parent-folder-row">`;
+      fileTableContent += `<td></td>`;
+      fileTableContent += `<td class="col-name" colspan="4"><div class="name-cell"><span class="file-icon">📂</span><a href="/files?path=${encodeURIComponent(parentPath)}" class="up-folder-link" title="Go to parent directory">Up</a></div></td>`;
+      fileTableContent += '</tr>';
+    }
+
+    if (currentFiles.length === 0) {
+      fileTableContent += '</table>';
+      fileTable.innerHTML = fileTableContent + '<div class="no-files">This folder is empty</div>';
+      updateToolbarState();
+      return;
+    }
+
+    const sortedFiles = [...currentFiles].sort((a, b) => {
+      // Directories always first
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+
+      if (sortState.column === 'name') {
+        return sortState.dir * a.name.localeCompare(b.name);
+      }
+      if (sortState.column === 'type') {
+        const aExt = a.name.includes('.') ? a.name.split('.').pop().toLowerCase() : '';
+        const bExt = b.name.includes('.') ? b.name.split('.').pop().toLowerCase() : '';
+        const aOrder = getFileCategory(aExt).order;
+        const bOrder = getFileCategory(bExt).order;
+        if (aOrder !== bOrder) return sortState.dir * (aOrder - bOrder);
+        return sortState.dir * a.name.localeCompare(b.name);
+      }
+      if (sortState.column === 'size') {
+        if (a.size !== b.size) return sortState.dir * (a.size - b.size);
+        return sortState.dir * a.name.localeCompare(b.name);
+      }
+      // default: by type then name
+      const aExt = a.name.includes('.') ? a.name.split('.').pop().toLowerCase() : '';
+      const bExt = b.name.includes('.') ? b.name.split('.').pop().toLowerCase() : '';
+      const aOrder = getFileCategory(aExt).order;
+      const bOrder = getFileCategory(bExt).order;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.name.localeCompare(b.name);
+    });
+
+    sortedFiles.forEach(file => {
+      if (file.isDirectory) {
+        let folderPath = currentPath;
+        if (!folderPath.endsWith("/")) folderPath += "/";
+        folderPath += file.name;
+
+        const isProtected = file.name.startsWith('.');
+        fileTableContent += `<tr class="folder-row">`;
+        fileTableContent += isProtected
+          ? '<td style="text-align:center"></td>'
+          : `<td style="text-align:center"><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
+        fileTableContent += `<td class="col-name"><div class="name-cell"><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link" title="${escapeHtml(file.name).replace(/"/g, '&quot;')}">${escapeHtml(file.name)}</a></div></td>`;
+        fileTableContent += '<td style="text-align:center"><span class="badge badge-folder">DIR</span></td>';
+        fileTableContent += '<td class="size-cell"></td>';
+        fileTableContent += isProtected
+          ? '<td class="actions-col"></td>'
+          : `<td class="actions-col"><button class="rename-btn" data-name="${encodeURIComponent(file.name)}" data-path="${encodeURIComponent(folderPath)}" data-type="folder" title="Rename folder">✏️</button></td>`;
+        fileTableContent += '</tr>';
+      } else {
+        let filePath = currentPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += file.name;
+
+        const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+        const cat = getFileCategory(ext);
+        const extUpper = ext.toUpperCase();
+        const typeCell = cat.cls
+          ? `<span class="badge ${cat.cls}">${extUpper}</span>`
+          : extUpper;
+
+        fileTableContent += `<tr class="${ext === 'epub' ? 'epub-file' : ''}">`;
+        fileTableContent += `<td style="text-align:center"><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
+        fileTableContent += `<td class="col-name"><div class="name-cell"><span class="file-icon">${cat.icon}</span>`;
+        fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link" title="${escapeHtml(file.name).replace(/"/g, '&quot;')}">${escapeHtml(file.name)}</a></div>`;
+        fileTableContent += `<td style="text-align:center">${typeCell}</td>`;
+        fileTableContent += `<td class="size-cell"><div class="size-cell-inner">${formatFileSizeCell(file.size)}</div></td>`;
+        fileTableContent += `<td class="actions-col"><button class="rename-btn" data-name="${encodeURIComponent(file.name)}" data-path="${encodeURIComponent(filePath)}" data-type="file" title="Rename file">✏️</button></td>`;
+        fileTableContent += '</tr>';
+      }
+    });
+
+    fileTableContent += '</table>';
+    fileTable.innerHTML = fileTableContent;
+    updateToolbarState();
+  }
+
+  document.getElementById('file-table').addEventListener('click', function(e) {
+    var btn = e.target.closest('.rename-btn');
+    if (!btn) return;
+    openRenameModal(
+      decodeURIComponent(btn.dataset.name),
+      decodeURIComponent(btn.dataset.path),
+      btn.dataset.type === 'folder'
+    );
+  });
 
   // Modal functions
   function openUploadModal() {
@@ -1954,6 +2473,7 @@
     if (convertOptions) {
       convertOptions.style.display = 'none';
     }
+    document.getElementById('pickerColumns').style.display = 'none';
 
     // Reset rotation and overlap UI
     setHandedness('right');
@@ -2006,6 +2526,9 @@
     const fileInput = document.getElementById('fileInput');
     fileInput.value = '';
     fileInput.classList.remove('has-files');
+    const dropZone = fileInput.closest('.drop-zone');
+    dropZone.classList.remove('has-files');
+    dropZone.querySelector('.choose-file-btn').textContent = '📁 Choose Files';
     const uploadBtn = document.getElementById('uploadBtn');
     uploadBtn.disabled = true;
     uploadBtn.style.display = 'block';
@@ -2018,6 +2541,9 @@
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
+    document.getElementById('imageOptimizerOptions').style.display = 'none';
+    document.getElementById('imageOptimizerEnabled').checked = false;
+    resetImageOptimizer();
     // Clear image picker cache and reset layout
     epubImagesCache = [];
     imageStates = {};
@@ -2095,7 +2621,6 @@
     
     content.classList.toggle('visible');
     arrow.classList.toggle('expanded');
-    
     // When expanding, show image picker if an EPUB is selected
     if (isExpanding) {
       const fileInput = document.getElementById('fileInput');
@@ -2506,7 +3031,7 @@
     // Check if JSZip is available
     if (typeof JSZip === 'undefined') {
       console.error('JSZip not loaded');
-      alert('JSZip library not available. Conversion will proceed without image picker.');
+      showNotification('JSZip library not available. Conversion will proceed without image picker.', 'info');
       startConversionWithImageStates();
       return;
     }
@@ -2558,7 +3083,7 @@
 
     } catch (error) {
       console.error('Failed to extract images:', error);
-      alert('Failed to preview images: ' + error.message + '\n\nConversion will proceed normally.');
+      showNotification('Failed to preview images: ' + error.message + '. Conversion will proceed normally.', 'warning');
       // Fallback: start conversion directly
       startConversionWithImageStates();
     }
@@ -2748,16 +3273,61 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/status').then(r => r.json()).then(d => {
+      if (d.screenWidth && d.screenHeight) {
+        // The API exposes physical panel dimensions (landscape-native: screenWidth=800, screenHeight=480).
+        // The device operates in portrait mode, so swap to get logical portrait dimensions:
+        // MAX_WIDTH=480 (portrait width = physical height), MAX_HEIGHT=800 (portrait height = physical width).
+        DEFAULT_MAX_WIDTH = d.screenHeight;
+        DEFAULT_MAX_HEIGHT = d.screenWidth;
+        const label = `${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}px`;
+        const labelEl = document.getElementById('sleepScreenSizeLabel');
+        if (labelEl) labelEl.textContent = label;
+      }
+    }).catch(err => console.error('[sleep-optimizer] Failed to fetch screen dimensions:', err));
+
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityInput = document.getElementById('qualityInput');
 
     // Initialize advanced mode toggle state based on Optimize EPUB checkbox
     const convertCheckbox = document.getElementById('convertBeforeUpload');
-    const advancedToggle = document.getElementById('advancedOptionsToggle');
-    if (convertCheckbox && advancedToggle) {
-      const isOptimizeEnabled = convertCheckbox.checked;
-      advancedToggle.style.opacity = isOptimizeEnabled ? '1' : '0.5';
-      advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
+    if (convertCheckbox) {
+      setAdvancedOptionsEnabled(convertCheckbox.checked);
+    }
+
+    // Drag & drop for upload modal
+    const uploadModal = document.getElementById('uploadModal');
+    if (uploadModal) {
+      let dragCounter = 0;
+      uploadModal.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter++;
+        if (!isUploadInProgress) uploadModal.querySelector('.modal').classList.add('drag-over');
+      });
+      uploadModal.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      uploadModal.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter--;
+        if (dragCounter <= 0) { dragCounter = 0; uploadModal.querySelector('.modal').classList.remove('drag-over'); }
+      });
+      uploadModal.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter = 0;
+        uploadModal.querySelector('.modal').classList.remove('drag-over');
+        if (isUploadInProgress) return;
+        const dt = e.dataTransfer;
+        if (!dt || !dt.files || dt.files.length === 0) return;
+        const fileInput = document.getElementById('fileInput');
+        fileInput.files = dt.files;
+        fileInput.classList.add('has-files');
+        validateFile();
+      });
     }
 
     if (qualitySlider && qualityInput) {
@@ -2807,6 +3377,7 @@
     document.querySelectorAll('.select-item').forEach(cb => {
       cb.checked = checked;
     });
+    updateToolbarState();
   }
 
   function getSelectedItems() {
@@ -2821,14 +3392,22 @@
     return items;
   }
 
+  function updateToolbarState() {
+    const items = getSelectedItems();
+    const fileCount = items.filter(it => !it.isFolder).length;
+    const folderCount = items.filter(it => it.isFolder).length;
+    document.getElementById('deleteActionBtn').disabled = items.length === 0;
+    document.getElementById('moveActionBtn').disabled = fileCount === 0 || folderCount > 0;
+  }
+
+  // Open move modal for selected files
+  function openMoveSelectedModal() {
+    openMoveModal(getSelectedItems().filter(it => !it.isFolder));
+  }
+
   // Open delete modal for currently selected checkboxes
   function openDeleteSelectedModal() {
-    const items = getSelectedItems();
-    if (items.length === 0) {
-      alert('Please select at least one item to delete.');
-      return;
-    }
-    openDeleteModalForItems(items);
+    openDeleteModalForItems(getSelectedItems());
   }
 
   // Open delete modal for a single item (keeps backwards compatibility with per-row delete button)
@@ -2878,12 +3457,31 @@
         window.location.reload();
       } else {
         const text = await res.text();
-        alert('Failed to delete: ' + text);
-        closeDeleteModal();
+        const prefix = 'Failed to delete some items: ';
+        let failedItems = [];
+        if (text.startsWith(prefix)) {
+          const details = text.substring(prefix.length);
+          const entries = details.split('; ').filter(e => e.trim());
+          entries.forEach(e => {
+            const lastParen = e.lastIndexOf(' (');
+            const failedPath = lastParen > 0 ? e.substring(0, lastParen) : e;
+            const reason = lastParen > 0 ? e.substring(lastParen + 2, e.length - 1) : '';
+            const item = deleteItemsGlobal.find(it => it.path === failedPath || '/' + it.path === failedPath);
+            failedItems.push({
+              name: item ? item.name : failedPath.split('/').pop(),
+              isFolder: item ? !!item.isFolder : reason.includes('folder'),
+              reason: reason
+            });
+          });
+        } else {
+          failedItems = [{ name: 'Delete failed', isFolder: false, reason: text }];
+        }
+        sessionStorage.setItem('failedDeleteItems', JSON.stringify(failedItems));
+        window.location.reload();
       }
     }).catch(() => {
-      alert('Failed to delete - network error');
-      closeDeleteModal();
+      sessionStorage.setItem('failedDeleteItems', JSON.stringify([{ name: 'Delete failed', isFolder: false, reason: 'Network error' }]));
+      window.location.reload();
     });
   }
 
@@ -2926,36 +3524,90 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const files = fileInput.files;
     const convertOptions = document.getElementById('convertOptions');
+    const imageOptimizer = document.getElementById('imageOptimizerOptions');
     fileInput.classList.toggle('has-files', files.length > 0);
-
-    // Show/hide convert options based on file selection
+    const dropZone = fileInput.closest('.drop-zone');
+    dropZone.classList.toggle('has-files', files.length > 0);
+    const chooseBtn = dropZone.querySelector('.choose-file-btn');
     if (files.length > 0) {
-      convertOptions.style.display = 'block';
+      chooseBtn.textContent = files.length === 1 ? files[0].name : `${files.length} files selected`;
     } else {
-      clearImagePicker();
+      chooseBtn.textContent = '📁 Choose Files';
     }
 
-    if (files.length > 0) {
-      // If advanced settings is expanded and single EPUB, show image picker
+    const pickerColumns = document.getElementById('pickerColumns');
+    if (files.length === 0) {
+      clearImagePicker();
+      convertOptions.style.display = 'none';
+      imageOptimizer.style.display = 'none';
+      pickerColumns.style.display = 'none';
+      updateBatchModeUI(false);
+      uploadBtn.disabled = true;
+      resetImageOptimizer();
+      return;
+    }
+    pickerColumns.style.display = '';
+
+    const fileList = Array.from(files);
+    const UNSUPPORTED_IMAGE_EXTS = new Set(['tiff','tif','ico']);
+    const imageFiles = fileList.filter(f => {
+      if (!f.type.startsWith('image/')) return false;
+      const ext = f.name.split('.').pop().toLowerCase();
+      return !UNSUPPORTED_IMAGE_EXTS.has(ext);
+    });
+    const epubFiles = fileList.filter(f => f.name.toLowerCase().endsWith('.epub'));
+    const hasImages = imageFiles.length > 0;
+    const hasEpubs = epubFiles.length > 0;
+
+    if (hasImages && !hasEpubs) {
+      clearImagePicker();
+      const convertCheckbox = document.getElementById('convertBeforeUpload');
+      if (convertCheckbox) convertCheckbox.checked = false;
+      const advancedSettingsContent = document.getElementById('advancedSettingsContent');
+      if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
+      const advancedOptionsArrow = document.getElementById('advancedOptionsArrow');
+      if (advancedOptionsArrow) advancedOptionsArrow.classList.remove('expanded');
+      setAdvancedOptionsEnabled(false);
+      updateBatchModeUI(false);
+      document.getElementById('convertWarning').style.display = 'none';
+      const warningEl = document.getElementById('imageOptimizerWarning');
+      warningEl.style.display = 'none';
+      warningEl.innerHTML = '';
+      convertOptions.style.display = 'none';
+      imageOptimizer.style.display = 'block';
+      setupImageOptimizer(imageFiles);
+      const optChecked = document.getElementById('imageOptimizerEnabled').checked;
+      const pathDisplay = document.getElementById('uploadPathDisplay');
+      if (pathDisplay) pathDisplay.textContent = optChecked ? '.sleep/' : (currentPath === '/' ? '/ 🏠' : currentPath);
+      uploadBtn.textContent = optChecked ? 'Optimize & Upload' : 'Upload';
+      if (optChecked) uploadBtn.classList.add('optimize');
+      else uploadBtn.classList.remove('optimize');
+      uploadBtn.disabled = false;
+    } else if (hasEpubs) {
+      imageOptimizer.style.display = 'none';
+      resetImageOptimizer();
+      convertOptions.style.display = 'block';
       const advancedContent = document.getElementById('advancedSettingsContent');
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+      document.getElementById('convertWarning').style.display = convertEnabled ? 'block' : 'none';
       if (advancedContent.classList.contains('visible') && files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
         showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
+      } else if (advancedContent.classList.contains('visible') && files.length !== 1) {
+        clearImagePicker();
       }
-
-      // If multiple files with conversion, inform user about batch mode
-      if (files.length > 1 && convertEnabled) {
-        const epubCount = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.epub')).length;
-        if (epubCount > 0) {
-          console.log(`Batch mode: ${epubCount} EPUB(s) will use auto settings`);
-        }
+      if (files.length > 1 && convertEnabled && epubFiles.length > 0) {
+        console.log(`Batch mode: ${epubFiles.length} EPUB(s) will use auto settings`);
       }
-
       updateBatchModeUI(files.length > 1);
       uploadBtn.disabled = false;
     } else {
-      updateBatchModeUI(false);
-      uploadBtn.disabled = true;
+      document.getElementById('convertWarning').style.display = 'none';
+      convertOptions.style.display = 'none';
+      imageOptimizer.style.display = 'none';
+      resetImageOptimizer();
+      uploadBtn.textContent = 'Upload';
+      uploadBtn.classList.remove('optimize');
+      uploadBtn.disabled = false;
     }
   }
 
@@ -2966,6 +3618,350 @@ let operationCancelled = false; // Set by Cancel to stop conversion loops and up
 let uploadGeneration = 0;       // Incremented each uploadFile() call; guards stale restoreAfterCancel()
 let currentUploadWs = null;     // Active WebSocket reference for external abort
 let currentUploadXhr = null;    // Active XHR reference for external abort
+// ============================================================================
+// Sleep Screen Image Optimizer
+// ============================================================================
+
+let imageResizeMode = 'fit'; // 'fit' or 'crop'
+let sleepBgColor = 'white';
+let sleepImageFiles = [];     // Files to process for sleep screen
+
+let sleepPreviewImage = null;
+let sleepOrigW = 0, sleepOrigH = 0;
+let sleepTotalRotation = 0;  // total CW rotation in degrees: 0, 90, 180, or 270
+let sleepAspectExact = false;
+const SLEEP_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const exifOrientationCache = new Map();
+
+function validateSleepImage(file) {
+  if (!file.type.startsWith('image/')) {
+    return { valid: false, reason: `Not an image (${file.type || 'unknown type'}).` };
+  }
+  if (file.size > SLEEP_MAX_FILE_SIZE) {
+    return { valid: false, reason: `File too large (${formatBytes(file.size)}). Maximum is ${formatBytes(SLEEP_MAX_FILE_SIZE)}.` };
+  }
+  if (file.size === 0) {
+    return { valid: false, reason: 'Empty file.' };
+  }
+  return { valid: true };
+}
+
+function readExifOrientation(file) {
+  const cacheKey = file.name + file.size;
+  if (exifOrientationCache.has(cacheKey)) {
+    return Promise.resolve(exifOrientationCache.get(cacheKey));
+  }
+  return new Promise((resolve) => {
+    const cacheAndResolve = (val) => { exifOrientationCache.set(cacheKey, val); resolve(val); };
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const view = new DataView(e.target.result);
+        if (view.getUint16(0, false) !== 0xFFD8) { cacheAndResolve(1); return; }
+        let offset = 2;
+        while (offset < view.byteLength - 4) {
+          const marker = view.getUint16(offset, false);
+          if (marker === 0xFFE1) {
+            const length = view.getUint16(offset + 2, false);
+            const tiffStart = offset + 10;
+            if (tiffStart + 8 > view.byteLength) { cacheAndResolve(1); return; }
+            const isLE = view.getUint16(tiffStart, false) === 0x4949;
+            const ifdOffset = view.getUint32(tiffStart + 4, isLE);
+            const ifdStart = tiffStart + ifdOffset;
+            if (ifdStart + 2 > view.byteLength) { cacheAndResolve(1); return; }
+            const numEntries = view.getUint16(ifdStart, isLE);
+            for (let i = 0; i < numEntries; i++) {
+              const entryOff = ifdStart + 2 + i * 12;
+              if (entryOff + 12 > view.byteLength) break;
+              if (view.getUint16(entryOff, isLE) === 0x0112) {
+                const val = view.getUint16(entryOff + 8, isLE);
+                cacheAndResolve(val >= 1 && val <= 8 ? val : 1);
+                return;
+              }
+            }
+            cacheAndResolve(1); return;
+          } else if ((marker & 0xFF00) === 0xFF00) {
+            const length = view.getUint16(offset + 2, false);
+            offset += 2 + length;
+          } else {
+            offset += 2;
+          }
+        }
+      } catch (ex) { /* ignore parse errors */ }
+      cacheAndResolve(1);
+    };
+    reader.onerror = () => cacheAndResolve(1);
+    reader.readAsArrayBuffer(file.slice(0, 65536));
+  });
+}
+
+const EXIF_ROTATION_MAP = { 1: 0, 2: 0, 3: 180, 4: 180, 5: 90, 6: 90, 7: 270, 8: 270 };
+
+// Returns total CW rotation in degrees (0, 90, 180, 270) combining:
+// 1. EXIF correction to display the image upright
+// 2. Auto-rotate landscape images to portrait to fill the sleep screen vertically
+function computeTotalRotation(origW, origH, exifOrientation) {
+  const exifRot = EXIF_ROTATION_MAP[exifOrientation] || 0;
+  const exifSwaps = exifRot === 90 || exifRot === 270;
+  const displayW = exifSwaps ? origH : origW;
+  const displayH = exifSwaps ? origW : origH;
+  const autoRot = displayW > displayH ? 90 : 0;
+  return (exifRot + autoRot) % 360;
+}
+
+function setImageResizeMode(mode) {
+  imageResizeMode = mode;
+  document.querySelectorAll('.fit-crop-btn[data-value="fit"],.fit-crop-btn[data-value="crop"]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === mode);
+  });
+  document.querySelectorAll('#imageBgControls .fit-crop-btn').forEach(btn => {
+    btn.disabled = (mode === 'crop');
+  });
+  if (sleepPreviewImage) renderSleepPreview();
+}
+
+function setSleepBgColor(color) {
+  sleepBgColor = color;
+  document.querySelectorAll('.fit-crop-btn[data-value="white"],.fit-crop-btn[data-value="black"]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === color);
+  });
+  if (sleepPreviewImage) renderSleepPreview();
+}
+
+function setAdvancedOptionsEnabled(enabled) {
+  const toggle = document.getElementById('advancedOptionsToggle');
+  if (!toggle) return;
+  toggle.style.opacity = enabled ? '1' : '0.5';
+  toggle.style.pointerEvents = enabled ? 'auto' : 'none';
+}
+
+function resetImageOptimizer() {
+  sleepImageFiles = [];
+  sleepPreviewImage = null;
+  sleepOrigW = 0; sleepOrigH = 0;
+  sleepTotalRotation = 0;
+  sleepAspectExact = false;
+  imageResizeMode = 'fit';
+  sleepBgColor = 'white';
+  exifOrientationCache.clear();
+  document.querySelectorAll('.fit-crop-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === 'fit' || btn.dataset.value === 'white');
+    btn.disabled = false;
+  });
+  document.querySelectorAll('#imageBgControls .fit-crop-btn').forEach(btn => {
+    btn.disabled = true;
+  });
+  const controlsRow = document.getElementById('imageControlsRow');
+  if (controlsRow) controlsRow.style.display = 'none';
+  const wrapper = document.getElementById('sleepPreviewWrapper');
+  if (wrapper) wrapper.style.display = 'none';
+  const preview = document.getElementById('imageOptimizerPreview');
+  if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  const warning = document.getElementById('imageOptimizerWarning');
+  if (warning) { warning.style.display = 'none'; warning.innerHTML = ''; }
+  const pathDisplay = document.getElementById('uploadPathDisplay');
+  if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+  const optimizerCheckbox = document.getElementById('imageOptimizerEnabled');
+  if (optimizerCheckbox) optimizerCheckbox.checked = false;
+}
+
+function toggleImageOptimizer() {
+  const checked = document.getElementById('imageOptimizerEnabled').checked;
+  const uploadBtn = document.getElementById('uploadBtn');
+  const settingsEl = document.getElementById('imageOptimizerSettings');
+  const controlsRow = document.getElementById('imageControlsRow');
+  const preview = document.getElementById('imageOptimizerPreview');
+  const pathDisplay = document.getElementById('uploadPathDisplay');
+
+  const optsBox = document.getElementById('imageOptimizerOptions');
+  if (checked) {
+    uploadBtn.textContent = 'Optimize & Upload';
+    uploadBtn.classList.add('optimize');
+    if (optsBox) optsBox.classList.add('violet');
+    if (pathDisplay) pathDisplay.textContent = '.sleep/';
+    if (sleepImageFiles.length === 1) {
+      if (controlsRow && !sleepAspectExact) controlsRow.style.display = 'block';
+      if (preview) renderSleepPreview();
+    }
+  } else {
+    uploadBtn.textContent = 'Upload';
+    uploadBtn.classList.remove('optimize');
+    if (optsBox) optsBox.classList.remove('violet');
+    if (pathDisplay) pathDisplay.textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    if (controlsRow) controlsRow.style.display = 'none';
+    setImageResizeMode('fit');
+  }
+}
+
+async function setupImageOptimizer(imageFiles) {
+  sleepImageFiles = imageFiles;
+  const controlsRow = document.getElementById('imageControlsRow');
+  const preview = document.getElementById('imageOptimizerPreview');
+  const wrapper = document.getElementById('sleepPreviewWrapper');
+
+  if (imageFiles.length === 1) {
+    if (wrapper) wrapper.style.display = 'flex';
+    try {
+      const exifOrientation = await readExifOrientation(imageFiles[0]);
+      const url = URL.createObjectURL(imageFiles[0]);
+      const img = new Image();
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        sleepPreviewImage = img;
+        sleepOrigW = img.width;
+        sleepOrigH = img.height;
+        sleepTotalRotation = computeTotalRotation(img.width, img.height, exifOrientation);
+        const rotated = sleepTotalRotation === 90 || sleepTotalRotation === 270;
+        const effW = rotated ? sleepOrigH : sleepOrigW;
+        const effH = rotated ? sleepOrigW : sleepOrigH;
+        sleepAspectExact = Math.abs(effW / effH - DEFAULT_MAX_WIDTH / DEFAULT_MAX_HEIGHT) < 0.01;
+        const optChecked = document.getElementById('imageOptimizerEnabled').checked;
+        if (controlsRow) controlsRow.style.display = (optChecked && !sleepAspectExact) ? 'block' : 'none';
+        if (sleepAspectExact) imageResizeMode = 'fit';
+        document.querySelectorAll('.fit-crop-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.value === 'fit' || btn.dataset.value === 'white');
+        });
+        renderSleepPreview();
+      };
+      img.onerror = () => { if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; } };
+      img.src = url;
+    } catch (ex) {
+      if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+    }
+  } else {
+    if (wrapper) wrapper.style.display = 'none';
+    if (controlsRow) controlsRow.style.display = 'none';
+    if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  }
+}
+
+function drawSleepImageOnCanvas(ctx, img, origW, origH, targetW, targetH, totalRotation) {
+  const rotated = totalRotation === 90 || totalRotation === 270;
+  const effW = rotated ? origH : origW;
+  const effH = rotated ? origW : origH;
+  const scale = imageResizeMode === 'fit'
+    ? Math.min(targetW / effW, targetH / effH)
+    : Math.max(targetW / effW, targetH / effH);
+  // Source draw dimensions in image space (before rotation)
+  const drawSrcW = origW * scale;
+  const drawSrcH = origH * scale;
+  ctx.save();
+  ctx.translate(targetW / 2, targetH / 2);
+  ctx.rotate((totalRotation * Math.PI) / 180);
+  ctx.drawImage(img, -drawSrcW / 2, -drawSrcH / 2, drawSrcW, drawSrcH);
+  ctx.restore();
+  // Return scaled display dimensions (canvas space, after rotation)
+  return { scaledW: effW * scale, scaledH: effH * scale };
+}
+
+function renderSleepPreview() {
+  const preview = document.getElementById('imageOptimizerPreview');
+  if (!preview || !sleepPreviewImage) return;
+  preview.style.display = 'block';
+
+  const img = sleepPreviewImage;
+  const rotated = sleepTotalRotation === 90 || sleepTotalRotation === 270;
+  const effW = rotated ? sleepOrigH : sleepOrigW;
+  const effH = rotated ? sleepOrigW : sleepOrigH;
+
+  const PW = 120, PH = Math.round(120 * DEFAULT_MAX_HEIGHT / DEFAULT_MAX_WIDTH);
+  const c = document.createElement('canvas');
+  c.width = PW; c.height = PH;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = sleepBgColor === 'black' ? '#000' : '#fff';
+  ctx.fillRect(0, 0, PW, PH);
+
+  const { scaledW, scaledH } = drawSleepImageOnCanvas(ctx, img, sleepOrigW, sleepOrigH, PW, PH, sleepTotalRotation);
+
+  if (!sleepAspectExact && imageResizeMode === 'fit') {
+    ctx.fillStyle = sleepBgColor === 'black' ? 'rgba(0,0,0,0.3)' : 'rgba(100,100,100,0.3)';
+    if (scaledW < PW) { ctx.fillRect(0, 0, (PW - scaledW) / 2, PH); ctx.fillRect(PW - (PW - scaledW) / 2, 0, (PW - scaledW) / 2, PH); }
+    if (scaledH < PH) { ctx.fillRect(0, 0, PW, (PH - scaledH) / 2); ctx.fillRect(0, PH - (PH - scaledH) / 2, PW, (PH - scaledH) / 2); }
+  }
+  if (!sleepAspectExact && imageResizeMode === 'crop') {
+    ctx.strokeStyle = 'rgba(231,76,60,0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(1, 1, PW - 2, PH - 2);
+    ctx.setLineDash([]);
+  }
+
+  let info = `${effW}×${effH}`;
+  if (sleepTotalRotation !== 0) info += ` ↻${sleepTotalRotation}°`;
+  if (sleepAspectExact) {
+    info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, exact fit`;
+  } else {
+    if (imageResizeMode === 'fit') {
+      const scaleW = PW / effW, scaleH = PH / effH;
+      if (scaleW <= scaleH) {
+        const letterbox = Math.round((PH - effH * scaleW) / 2 / PH * DEFAULT_MAX_HEIGHT);
+        if (letterbox > 0) info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, letterbox ${letterbox}px`;
+        else info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, exact fit`;
+      } else {
+        const pillarbox = Math.round((PW - effW * scaleH) / 2 / PW * DEFAULT_MAX_WIDTH);
+        if (pillarbox > 0) info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, pillarbox ${pillarbox}px`;
+        else info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, exact fit`;
+      }
+    } else {
+      const cropScaleW = PW / effW, cropScaleH = PH / effH;
+      if (cropScaleW >= cropScaleH) {
+        const cropPx = Math.round((effW * cropScaleH - PW) / 2 / PW * DEFAULT_MAX_WIDTH);
+        if (cropPx > 0) info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, crops ${cropPx}px sides`;
+        else info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, exact fit`;
+      } else {
+        const cropPx = Math.round((effH * cropScaleW - PH) / 2 / PH * DEFAULT_MAX_HEIGHT);
+        if (cropPx > 0) info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, crops ${cropPx}px top/bottom`;
+        else info += ` → ${DEFAULT_MAX_WIDTH}×${DEFAULT_MAX_HEIGHT}, exact fit`;
+      }
+    }
+  }
+  preview.innerHTML = `<div class="image-optimizer-preview"><canvas></canvas><div class="preview-info">${info}</div></div>`;
+  const pc = preview.querySelector('canvas');
+  pc.width = PW; pc.height = PH;
+  pc.getContext('2d').drawImage(c, 0, 0);
+}
+
+async function processSleepImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    const timeoutId = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Image load timeout')); }, 30000);
+    img.onload = async function() {
+      clearTimeout(timeoutId);
+      URL.revokeObjectURL(url);
+      const exifOrientation = await readExifOrientation(file);
+      const totalRotation = computeTotalRotation(img.width, img.height, exifOrientation);
+      const origW = img.width, origH = img.height;
+      const outW = DEFAULT_MAX_WIDTH, outH = DEFAULT_MAX_HEIGHT;
+      const c = document.createElement('canvas');
+      c.width = outW; c.height = outH;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = sleepBgColor === 'black' ? '#000' : '#fff';
+      ctx.fillRect(0, 0, outW, outH);
+      drawSleepImageOnCanvas(ctx, img, origW, origH, outW, outH, totalRotation);
+
+      const imgData = ctx.getImageData(0, 0, outW, outH);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        d[i] = d[i + 1] = d[i + 2] = gray;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      c.toBlob(function(blob) {
+        if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        resolve(new File([blob], baseName + '.jpg', { type: 'image/jpeg' }));
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function() {
+      clearTimeout(timeoutId);
+      URL.revokeObjectURL(url);
+      reject(new Error('Image load failed'));
+    };
+    img.src = url;
+  });
+}
+
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 
@@ -2974,8 +3970,8 @@ const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 // ============================================================================
 
 // Default conversion settings
-const DEFAULT_MAX_WIDTH = 480;
-const DEFAULT_MAX_HEIGHT = 800;
+let DEFAULT_MAX_WIDTH = 480;
+let DEFAULT_MAX_HEIGHT = 800;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
 // Note: Overlap is now always centered distribution (min 5%)
@@ -4521,8 +5517,151 @@ function getWsUrl() {
   return `ws://${host}:${WS_PORT}/`;
 }
 
+// Upload sleep screen images to /.sleep/
+async function uploadSleepImages(files) {
+  isUploadInProgress = true;
+  uploadGeneration++;
+  const myGeneration = uploadGeneration;
+  document.getElementById('uploadModalClose').classList.add('disabled');
+
+  const progressContainer = document.getElementById('progress-container');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  const uploadBtn = document.getElementById('uploadBtn');
+
+  progressContainer.style.display = 'block';
+  uploadBtn.disabled = true;
+  progressFill.style.backgroundColor = '#9b59b6';
+
+  const failedFiles = [];
+  let processedCount = 0;
+  let useWebSocket = true;
+  let existingBaseNames = new Set();
+
+  try {
+    const res = await fetch('/api/files?path=/.sleep/&_=' + Date.now());
+    const sleepFiles = await res.json();
+    sleepFiles.forEach(f => {
+      if (!f.isDirectory) {
+        existingBaseNames.add(f.name.replace(/\.[^.]+$/, '').toLowerCase());
+      }
+    });
+  } catch (e) { console.warn('Could not check existing sleep files:', e); }
+
+  const renames = [];
+
+  for (let i = 0; i < files.length; i++) {
+    if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
+    const file = files[i];
+
+    progressFill.classList.add('no-transition');
+    progressFill.style.width = '0%';
+    setTimeout(() => progressFill.classList.remove('no-transition'), 50);
+
+    progressText.style.color = '';
+    progressText.textContent = `Processing ${file.name} (${i + 1}/${files.length})...`;
+
+    try {
+      const validation = validateSleepImage(file);
+      if (!validation.valid) {
+        failedFiles.push({ name: file.name, error: validation.reason, file: file });
+        progressText.style.color = '#e74c3c';
+        progressText.textContent = `Skipped: ${file.name} — ${validation.reason}`;
+        await new Promise(r => setTimeout(r, 1500));
+        continue;
+      }
+
+      processedFile = await processSleepImage(file);
+
+      let baseName = processedFile.name.replace(/\.jpg$/i, '');
+      let baseNameLower = baseName.toLowerCase();
+      if (existingBaseNames.has(baseNameLower)) {
+        let counter = 1;
+        while (existingBaseNames.has(`${baseNameLower} (${counter})`)) counter++;
+        baseName = `${baseName} (${counter})`;
+        const newName = baseName + '.jpg';
+        processedFile = new File([processedFile], newName, { type: 'image/jpeg' });
+        existingBaseNames.add(baseName.toLowerCase());
+        renames.push({ original: file.name, renamed: newName });
+      } else {
+        existingBaseNames.add(baseNameLower);
+      }
+
+      progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length})...`;
+      progressFill.style.backgroundColor = '#27ae60';
+
+      if (useWebSocket) {
+        await uploadFileWebSocket(processedFile,
+          (loaded, total) => {
+            progressFill.style.width = Math.round((loaded / total) * 100) + '%';
+            progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length}) [WS] — ${Math.round((loaded / total) * 100)}%`;
+          },
+          null, null, '/.sleep'
+        );
+      } else {
+        await uploadFileHTTP(processedFile,
+          (loaded, total) => {
+            progressFill.style.width = Math.round((loaded / total) * 100) + '%';
+            progressText.textContent = `Uploading ${processedFile.name} (${i + 1}/${files.length}) [HTTP] — ${Math.round((loaded / total) * 100)}%`;
+          },
+          null, null, '/.sleep'
+        );
+      }
+      progressFill.style.width = '100%';
+      progressText.textContent = `Done: ${processedFile.name}`;
+      processedCount++;
+    } catch (error) {
+      if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
+      console.error(`Sleep image error for ${file.name}:`, error);
+      if (useWebSocket && (error.message === 'WebSocket connection failed' || error.message.includes('WebSocket'))) {
+        console.log('WebSocket failed, falling back to HTTP');
+        useWebSocket = false;
+        try {
+          if (!processedFile) throw error;
+          await uploadFileHTTP(processedFile,
+            (loaded, total) => {
+              progressFill.style.width = Math.round((loaded / total) * 100) + '%';
+            },
+            null, null, '/.sleep'
+          );
+          progressFill.style.width = '100%';
+          processedCount++;
+        } catch (httpError) {
+          failedFiles.push({ name: file.name, error: httpError.message, file: file });
+        }
+      } else {
+        failedFiles.push({ name: file.name, error: error.message, file: file });
+      }
+    }
+  }
+
+  isUploadInProgress = false;
+  document.getElementById('uploadModalClose').classList.remove('disabled');
+
+  if (failedFiles.length === 0) {
+    const nonImageCount = files.length - processedCount;
+    let msg = `All ${processedCount} image(s) uploaded to /.sleep/!`;
+    if (renames.length > 0) {
+      msg += ` (${renames.length} renamed)`;
+      console.warn('Renamed sleep images:', renames);
+    }
+    if (nonImageCount > 0) msg += ` — ${nonImageCount} non-image file(s) not optimized`;
+    progressFill.style.backgroundColor = '#4caf50';
+    progressText.textContent = msg;
+    setTimeout(() => window.location.reload(), 1500);
+  } else {
+    progressFill.style.backgroundColor = '#e74c3c';
+    const failedList = failedFiles.map(f => f.name).join(', ');
+    progressText.textContent = `${processedCount}/${processedCount + failedFiles.length} uploaded. Failed: ${failedList}`;
+    failedUploadsGlobal = failedUploadsGlobal.concat(failedFiles);
+    closeUploadModal();
+    showFailedUploadsBanner();
+  }
+}
+
 // Upload file via WebSocket (faster, binary protocol)
-function uploadFileWebSocket(file, onProgress, onComplete, onError) {
+function uploadFileWebSocket(file, onProgress, onComplete, onError, targetPath) {
+  const uploadTarget = targetPath || currentPath;
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(getWsUrl());
     currentUploadWs = ws;
@@ -4535,7 +5674,7 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
       // Send start message: START:<filename>:<size>:<path>
-      ws.send(`START:${file.name}:${file.size}:${currentPath}`);
+      ws.send(`START:${file.name}:${file.size}:${uploadTarget}`);
     };
 
     ws.onmessage = async function(event) {
@@ -4631,14 +5770,15 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 }
 
 // Upload file via HTTP (fallback method)
-function uploadFileHTTP(file, onProgress, onComplete, onError) {
+function uploadFileHTTP(file, onProgress, onComplete, onError, targetPath) {
+  const uploadTarget = targetPath || currentPath;
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
     currentUploadXhr = xhr;
-    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+    xhr.open('POST', '/upload?path=' + encodeURIComponent(uploadTarget), true);
 
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable && onProgress) {
@@ -4678,9 +5818,11 @@ function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+  const imageOptimizerEnabled = document.getElementById('imageOptimizerEnabled').checked;
+  const isSleepImageMode = sleepImageFiles.length > 0 && imageOptimizerEnabled;
 
-  if (files.length === 0) {
-    alert('Please select at least one file!');
+  if (isSleepImageMode) {
+    uploadSleepImages(files);
     return;
   }
 
@@ -4917,6 +6059,25 @@ function uploadFile() {
   uploadNextFile();
 }
 
+function showFailedDeleteBanner(items) {
+  const banner = document.getElementById('failedDeleteBanner');
+  const title = document.getElementById('failedDeleteTitle');
+  const itemsEl = document.getElementById('failedDeleteItems');
+
+  title.textContent = `${items.length} item(s) could not be deleted`;
+  itemsEl.innerHTML = items.map(item => {
+    const icon = item.isFolder ? '📁' : '📄';
+    return `<div>${icon} <strong>${item.name}</strong>${item.reason ? ' — ' + item.reason : ''}</div>`;
+  }).join('');
+
+  banner.classList.add('show');
+}
+
+function dismissFailedDelete() {
+  const banner = document.getElementById('failedDeleteBanner');
+  if (banner) banner.classList.remove('show');
+}
+
 function showFailedUploadsBanner() {
   const banner = document.getElementById('failedUploadsBanner');
   const filesList = document.getElementById('failedFilesList');
@@ -4994,18 +6155,15 @@ function retryAllFailedUploads() {
   validateFile();
 }
 
+  function isValidName(name) {
+    return /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(name);
+  }
+
   function createFolder() {
     const folderName = document.getElementById('folderName').value.trim();
 
-    if (!folderName) {
-      alert('Please enter a folder name!');
-      return;
-    }
-
-    // Validate folder name
-    const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(folderName);
-    if (!validName) {
-      alert('Folder name cannot contain \" * : < > ? / \\ | and must not be . or ..');
+    if (!isValidName(folderName)) {
+      showNotification('Folder name cannot contain " * : < > ? / \\ | and must not be . or ..', 'warning');
       return;
     }
 
@@ -5020,28 +6178,49 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to create folder: ' + xhr.responseText);
+        showNotification('Failed to create folder: ' + xhr.responseText, 'error');
       }
     };
 
     xhr.onerror = function() {
-      alert('Failed to create folder - network error');
+      showNotification('Failed to create folder - network error', 'error');
     };
 
     xhr.send(formData);
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+  function openRenameModal(name, path, isFolder = false) {
+    const dotIndex = name.lastIndexOf('.');
+    const hasExt = !isFolder && dotIndex > 0; // never strip extension from folder names
+    const baseName = hasExt ? name.substring(0, dotIndex) : name;
+    const ext = hasExt ? name.substring(dotIndex) : '';
+
+    document.getElementById('renameModalTitle').textContent = isFolder ? '✏️ Rename Folder' : '✏️ Rename File';
+    document.getElementById('renameItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
     document.getElementById('renameItemPath').value = path;
-    document.getElementById('renameNewName').value = name;
+    document.getElementById('renameExtension').value = ext;
+    document.getElementById('renameExtSuffix').textContent = ext;
+    document.getElementById('renameIsFolder').value = isFolder ? '1' : '';
+    document.getElementById('renameNewName').value = baseName;
     document.getElementById('renameModal').classList.add('open');
     setTimeout(() => {
       const input = document.getElementById('renameNewName');
       input.focus();
       input.select();
+      validateRenameInput();
     }, 50);
+  }
+
+  function validateRenameInput() {
+    const input = document.getElementById('renameNewName');
+    const hiddenPath = document.getElementById('renameItemPath').value;
+    const isFolder = document.getElementById('renameIsFolder').value === '1';
+    const baseName = hiddenPath.includes('/') ? hiddenPath.split('/').pop() : hiddenPath;
+    const originalBase = isFolder ? baseName : (baseName.includes('.') ? baseName.substring(0, baseName.lastIndexOf('.')) : baseName);
+    const newName = input.value.trim();
+    const btn = document.getElementById('confirmRenameBtn');
+    btn.disabled = !newName || newName === originalBase || !isValidName(newName);
   }
 
   function closeRenameModal() {
@@ -5050,14 +6229,11 @@ function retryAllFailedUploads() {
 
   function confirmRename() {
     const path = document.getElementById('renameItemPath').value;
-    const newName = document.getElementById('renameNewName').value.trim();
+    const ext = document.getElementById('renameExtension').value;
+    const newName = document.getElementById('renameNewName').value.trim() + ext;
 
-    if (!newName) {
-      alert('Please enter a new name.');
-      return;
-    }
-    if (newName.includes('/') || newName.includes('\\')) {
-      alert('File name cannot include slashes.');
+    if (!isValidName(newName)) {
+      showNotification('Name cannot contain " * : < > ? / \\ | and must not be . or ..', 'warning');
       return;
     }
 
@@ -5072,13 +6248,13 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to rename: ' + xhr.responseText);
+        showNotification('Failed to rename: ' + xhr.responseText, 'error');
       }
       closeRenameModal();
     };
 
     xhr.onerror = function() {
-      alert('Failed to rename - network error');
+      showNotification('Failed to rename - network error', 'error');
       closeRenameModal();
     };
 
@@ -5125,10 +6301,12 @@ function retryAllFailedUploads() {
         options.add('/' + file.name);
       }
     });
+    options.add('/.sleep');
+    options.add('/.crosspoint');
 
     if (currentPath !== '/') {
-      const currentFiles = await fetchFolders(currentPath);
-      currentFiles.forEach(file => {
+      const dirFiles = await fetchFolders(currentPath);
+      dirFiles.forEach(file => {
         if (file.isDirectory) {
           let folderPath = currentPath;
           if (!folderPath.endsWith('/')) folderPath += '/';
@@ -5138,24 +6316,56 @@ function retryAllFailedUploads() {
       });
     }
 
-    const dataList = document.getElementById('moveFolderOptions');
-    dataList.innerHTML = '';
-    Array.from(options).sort().forEach(path => {
+    const select = document.getElementById('moveDestPath');
+    const prevValue = select.value;
+    select.innerHTML = '';
+    const currentNormalized = currentPath === '/' ? '/' : currentPath;
+    const normalFolders = Array.from(options).filter(p => !p.startsWith('/.'));
+    const currentFolder = normalFolders.find(p => p === currentNormalized);
+    const otherFolders = normalFolders.filter(p => p !== currentNormalized);
+    const protectedFolders = Array.from(options).filter(p => p === '/.crosspoint' || p === '/.sleep');
+    if (currentFolder) {
+      const option = document.createElement('option');
+      option.value = currentFolder;
+      option.textContent = currentFolder + ' (current)';
+      option.disabled = true;
+      option.selected = true;
+      select.appendChild(option);
+    }
+    otherFolders.sort().forEach(path => {
       const option = document.createElement('option');
       option.value = path;
-      dataList.appendChild(option);
+      option.textContent = path;
+      select.appendChild(option);
     });
+    if (protectedFolders.length > 0) {
+      const sep = document.createElement('option');
+      sep.disabled = true;
+      sep.textContent = '── System ──';
+      select.appendChild(sep);
+      protectedFolders.sort().forEach(path => {
+        const option = document.createElement('option');
+        option.value = path;
+        option.textContent = path;
+        select.appendChild(option);
+      });
+    }
+    select.value = prevValue;
+    if (!select.value || select.options[select.selectedIndex].disabled) {
+      for (let i = 0; i < select.options.length; i++) {
+        if (!select.options[i].disabled) { select.value = select.options[i].value; break; }
+      }
+    }
   }
 
-  function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
-    document.getElementById('moveItemPath').value = path;
-    document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
+  function openMoveModal(items) {
+    const label = items.length === 1
+      ? '📄 ' + items[0].name
+      : `📄 ${items.length} files`;
+    document.getElementById('moveItemName').textContent = label;
+    document.getElementById('moveItemPath').value = JSON.stringify(items.map(it => it.path));
     document.getElementById('moveModal').classList.add('open');
     loadMoveFolderOptions();
-    setTimeout(() => {
-      document.getElementById('moveDestPath').focus();
-    }, 50);
   }
 
   function closeMoveModal() {
@@ -5163,36 +6373,49 @@ function retryAllFailedUploads() {
   }
 
   function confirmMove() {
-    const path = document.getElementById('moveItemPath').value;
+    const paths = JSON.parse(document.getElementById('moveItemPath').value);
     const destPath = normalizePath(document.getElementById('moveDestPath').value);
 
     if (!destPath) {
-      alert('Please enter a destination folder.');
+      showNotification('Please enter a destination folder.', 'warning');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('path', path);
-    formData.append('dest', destPath);
+    if (destPath === currentPath) {
+      showNotification('File is already in the selected folder.', 'warning');
+      return;
+    }
 
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/move', true);
+    closeMoveModal();
+    let hasErrors = false;
 
-    xhr.onload = function() {
-      if (xhr.status === 200) {
-        window.location.reload();
-      } else {
-        alert('Failed to move: ' + xhr.responseText);
+    function moveNext(index) {
+      if (index >= paths.length) {
+        if (!hasErrors) window.location.reload();
+        return;
       }
-      closeMoveModal();
-    };
+      const formData = new FormData();
+      formData.append('path', paths[index]);
+      formData.append('dest', destPath);
 
-    xhr.onerror = function() {
-      alert('Failed to move - network error');
-      closeMoveModal();
-    };
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/move', true);
+      xhr.onload = function() {
+        if (xhr.status !== 200) {
+          hasErrors = true;
+          showNotification('Failed to move ' + paths[index] + ': ' + xhr.responseText, 'error');
+        }
+        moveNext(index + 1);
+      };
+      xhr.onerror = function() {
+        hasErrors = true;
+        showNotification('Failed to move ' + paths[index] + ' - network error', 'error');
+        moveNext(index + 1);
+      };
+      xhr.send(formData);
+    }
 
-    xhr.send(formData);
+    moveNext(0);
   }
   hydrate();
 </script>

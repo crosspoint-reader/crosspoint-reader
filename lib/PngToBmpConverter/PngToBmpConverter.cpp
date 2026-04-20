@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <InflateReader.h>
 #include <Logging.h>
+#include <esp_task_wdt.h>
 
 #include <cstdio>
 #include <cstring>
@@ -666,6 +667,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
 
   // Process each scanline
   for (uint32_t y = 0; y < height; y++) {
+    if ((y & 15) == 0) esp_task_wdt_reset();
     // Decode one scanline
     if (!decodeScanline(ctx)) {
       LOG_ERR("PNG", "Failed to decode scanline %u", y);

@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <JPEGDEC.h>
 #include <Logging.h>
+#include <esp_task_wdt.h>
 
 #include <cstdio>
 #include <cstring>
@@ -329,6 +330,8 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 
   // Wait for the last MCU column before processing any rows
   if (blockX + validW < ctx->srcWidth) return 1;
+
+  esp_task_wdt_reset();
 
   // Process each complete source row in this MCU row
   const int endRow = blockY + blockH;
