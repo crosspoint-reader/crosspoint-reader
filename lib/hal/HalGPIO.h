@@ -23,10 +23,12 @@
 #define X3_I2C_FREQ 400000
 
 // TI BQ27220 Fuel gauge I2C
-#define I2C_ADDR_BQ27220 0x55  // Fuel gauge I2C address
-#define BQ27220_SOC_REG 0x2C   // StateOfCharge() command code (%)
-#define BQ27220_CUR_REG 0x0C   // Current() command code (signed mA)
-#define BQ27220_VOLT_REG 0x08  // Voltage() command code (mV)
+#define I2C_ADDR_BQ27220 0x55    // Fuel gauge I2C address
+#define BQ27220_SOC_REG 0x2C     // StateOfCharge() command code (%)
+#define BQ27220_CUR_REG 0x0C     // Current() command code (signed mA)
+#define BQ27220_VOLT_REG 0x08    // Voltage() command code (mV)
+#define BQ27220_FLAGS_REG 0x0A   // BatteryStatus() / Flags() command code (bit0=DSG)
+#define BQ27220_FLAG_DSG 0x0001  // DSG bit: 1 = discharging, 0 = charging or at rest
 
 // Analog DS3231 RTC I2C
 #define I2C_ADDR_DS3231 0x68  // RTC I2C address

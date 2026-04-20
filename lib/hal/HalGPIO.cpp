@@ -309,28 +309,43 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 
 bool HalGPIO::isUsbConnected() const {
   if (deviceIsX3()) {
-    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
+    // X3: GPIO20 is repurposed as I2C SDA, so the X4 pin-level USB detect is
+    // unusable here — the I2C pull-ups would always report HIGH. Probe the
+    // BQ27220 fuel gauge instead. Using just Current() mis-reports "not
+    // connected" when the battery is full (current ~= 0 mA); combine it with
+    // the Flags() DSG bit so we report true whenever the charger is present
+    // (DSG=0 means charging or fully charged, not discharging).
     for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-      int16_t currentMa = 0;
-      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        if (currentMa > 0) {
+      uint16_t flags = 0;
+      if (X3GPIO::readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_FLAGS_REG, &flags)) {
+        if ((flags & BQ27220_FLAG_DSG) == 0) {
           return true;
         }
-        break;
+        int16_t currentMa = 0;
+        if (X3GPIO::readBQ27220CurrentMA(&currentMa) && currentMa > 0) {
+          return true;
+        }
+        return false;
       }
       delay(2);
     }
-    // Fall back to the same USB pin-level detection used by X4.
-    return digitalRead(UART0_RXD) == HIGH;
+    return false;
   }
-  // U0RXD/GPIO20 reads HIGH when USB is connected
+  // X4: U0RXD/GPIO20 reads HIGH when USB is connected
   return digitalRead(UART0_RXD) == HIGH;
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
+
+  // X3: USB alone cannot cold-boot the MCU — the battery-latch MOSFET must be
+  // closed by a physical power-button press. So any POWERON reset on X3 is a
+  // button press, regardless of whether USB happens to be plugged in as well.
+  // Short-circuit before isUsbConnected() to skip the BQ27220 I2C probe/retry.
+  if (deviceIsX3() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) {
+    return WakeupReason::PowerButton;
+  }
 
   const bool usbConnected = isUsbConnected();
   LOG_DBG("GPIO", "getWakeupReason: wakeupCause=%d, resetReason=%d, usbConnected=%d", static_cast<int>(wakeupCause),
