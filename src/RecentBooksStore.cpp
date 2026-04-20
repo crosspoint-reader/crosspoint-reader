@@ -221,7 +221,9 @@ bool RecentBooksStore::togglePinned(const std::string& path) {
 int RecentBooksStore::getPinnedCount() const {
   int count = 0;
   for (const RecentBook& book : recentBooks) {
-    if (book.pinned) count++;
+    if (book.pinned && Storage.exists(book.path.c_str())) {
+      count++;
+    }
   }
   return count;
 }
