@@ -11,6 +11,8 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "SdCardFontGlobals.h"
+#include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
@@ -1028,7 +1030,10 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  const auto& settings = getSettingsList();
+  // Pass the SD font registry so the fontFamily setting's enumStringValues
+  // includes SD-resident families — otherwise the web API only exposes the
+  // three built-in fonts.
+  const auto& settings = getSettingsList(&sdFontSystem.registry());
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1130,7 +1135,7 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList();
+  const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
 
   for (const auto& s : settings) {

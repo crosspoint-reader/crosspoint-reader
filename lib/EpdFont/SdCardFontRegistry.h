@@ -5,9 +5,11 @@
 #include <vector>
 
 struct SdCardFontFileInfo {
-  std::string path;   // e.g. "/.crosspoint/fonts/NotoSansCJK/NotoSansCJK_14_regular.cpfont"
+  std::string path;   // v4 on-disk naming: "/.crosspoint/fonts/<Family>/<Family>_<size>.cpfont"
+                      // e.g. "/.crosspoint/fonts/NotoSansCJK/NotoSansCJK_14.cpfont"
   uint8_t pointSize;  // parsed from filename: 14
-  uint8_t style;      // 0=regular, 1=bold, 2=italic, 3=bold-italic
+  uint8_t style;      // always 0 in v4 (all 4 styles bundled in one file);
+                      // kept for potential future formats
 };
 
 struct SdCardFontFamilyInfo {
