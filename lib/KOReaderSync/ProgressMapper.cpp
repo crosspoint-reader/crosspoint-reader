@@ -1,8 +1,8 @@
 #include "ProgressMapper.h"
 
-#include <algorithm>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
