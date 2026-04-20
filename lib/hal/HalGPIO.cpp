@@ -339,16 +339,17 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
 
-  const bool usbConnected = isUsbConnected();
-  LOG_DBG("GPIO", "getWakeupReason: wakeupCause=%d, resetReason=%d, usbConnected=%d", static_cast<int>(wakeupCause),
-          static_cast<int>(resetReason), usbConnected);
-
   // X3: USB alone cannot cold-boot the MCU — the battery-latch MOSFET must be
   // closed by a physical power-button press. So any POWERON reset on X3 is a
   // button press, regardless of whether USB happens to be plugged in as well.
+  // Short-circuit before isUsbConnected() to skip the BQ27220 I2C probe/retry.
   if (deviceIsX3() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) {
     return WakeupReason::PowerButton;
   }
+
+  const bool usbConnected = isUsbConnected();
+  LOG_DBG("GPIO", "getWakeupReason: wakeupCause=%d, resetReason=%d, usbConnected=%d", static_cast<int>(wakeupCause),
+          static_cast<int>(resetReason), usbConnected);
 
   if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
