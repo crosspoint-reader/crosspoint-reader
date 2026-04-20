@@ -1,9 +1,11 @@
 #pragma once
 
 #include <EpdFontFamily.h>
-#include <FontDecompressor.h>
 #include <HalDisplay.h>
 
+class FontCacheManager;
+
+#include <cstring>
 #include <map>
 #include <string>
 #include <vector>
@@ -28,18 +30,26 @@ class GfxRenderer {
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
-  static constexpr size_t BW_BUFFER_NUM_CHUNKS = HalDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
-  static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == HalDisplay::BUFFER_SIZE,
-                "BW buffer chunking does not line up with display buffer size");
 
   HalDisplay& display;
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
-  uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
+  uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
+  uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
+  uint16_t panelWidthBytes = HalDisplay::DISPLAY_WIDTH_BYTES;
+  uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
+  std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
-  FontDecompressor* fontDecompressor = nullptr;
+
+  // Mutable because drawText() is const but needs to delegate scan-mode
+  // recording to the (non-const) FontCacheManager. Same pragmatic compromise
+  // as before, concentrated in a single pointer instead of four fields.
+  mutable FontCacheManager* fontCacheManager_ = nullptr;
+
+  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
+                  EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
   template <Color color>
   void drawPixelDither(int x, int y) const;
@@ -59,10 +69,9 @@ class GfxRenderer {
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
-  void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
-  void clearFontCache() {
-    if (fontDecompressor) fontDecompressor->clearCache();
-  }
+  void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
+  FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
+  const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -110,9 +119,10 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  /// Returns the kerning adjustment for a space between two codepoints:
-  /// kern(leftCp, ' ') + kern(' ', rightCp). Returns 0 if kerning is unavailable.
-  int getSpaceKernAdjust(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
+  /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
+  /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
+  /// snapped separately and then added as integers.
+  int getSpaceAdvance(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   /// Returns the kerning adjustment between two adjacent codepoints.
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
@@ -146,5 +156,8 @@ class GfxRenderer {
 
   // Low level functions
   uint8_t* getFrameBuffer() const;
-  static size_t getBufferSize();
+  size_t getBufferSize() const;
+  uint16_t getDisplayWidth() const { return panelWidth; }
+  uint16_t getDisplayHeight() const { return panelHeight; }
+  uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }
 };
