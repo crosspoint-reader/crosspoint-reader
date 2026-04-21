@@ -42,7 +42,7 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   {
     unsigned long ms = millis();
     int len = snprintf(c, sizeof(buf), "[%lu] [%s] [%s] ", ms, level, origin);
-    // erro while writing => return
+    // error while writing => return
     if (len < 0) {
       va_end(args);
       return;

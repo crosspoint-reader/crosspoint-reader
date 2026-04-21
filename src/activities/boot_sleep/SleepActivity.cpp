@@ -85,13 +85,16 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
     const auto numFiles = files.size();
     if (numFiles > 0) {
-      // Generate a random number between 1 and numFiles
-      auto randomFileIndex = random(numFiles);
-      // If we picked the same image as last time, reroll
-      while (numFiles > 1 && APP_STATE.lastSleepImage != UINT8_MAX && randomFileIndex == APP_STATE.lastSleepImage) {
-        randomFileIndex = random(numFiles);
+      // Pick a random wallpaper, excluding recently shown ones.
+      // Window: up to SLEEP_RECENT_COUNT entries, capped at numFiles-1.
+      const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
+      const uint8_t window =
+          static_cast<uint8_t>(std::min(static_cast<size_t>(APP_STATE.recentSleepFill), numFiles - 1));
+      auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
+      for (uint8_t attempt = 0; attempt < 20 && APP_STATE.isRecentSleep(randomFileIndex, window); attempt++) {
+        randomFileIndex = static_cast<uint16_t>(random(fileCount));
       }
-      APP_STATE.lastSleepImage = randomFileIndex;
+      APP_STATE.pushRecentSleep(randomFileIndex);
       APP_STATE.saveToFile();
       const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
       FsFile file;

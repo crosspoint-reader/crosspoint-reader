@@ -227,7 +227,10 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
-  currentPath = entry.href;
+  // Resolve to a full URL so sub-sub-navigation retains parent path context
+  const std::string feedUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, currentPath);
+  currentPath = UrlUtils::buildUrl(feedUrl, entry.href);
+
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
   entries.clear();
@@ -257,10 +260,12 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
-  std::string downloadUrl = (book.href.find("http") == 0) ? book.href : UrlUtils::buildUrl(server.url, book.href);
-
+  // Build full download URL relative to the current feed, not the root server URL
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
   std::string filename =
       "/" + StringUtils::sanitizeFilename(book.title + (book.author.empty() ? "" : " - " + book.author)) + ".epub";
+  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
