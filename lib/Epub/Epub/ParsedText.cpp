@@ -80,7 +80,7 @@ bool isWordCharacter(uint32_t cp) {
   if (cp < 128) {
     // Bitwise trick: (cp | 0x20) converts uppercase ASCII to lowercase.
     // This checks for A-Z and a-z mathematically, avoiding memory lookups and <cctype>
-    return ((cp | 0x20) >= 'a' && (cp | 0x20) <= 'z') || cp == '\'' || cp == '-';
+    return ((cp | 0x20) >= 'a' && (cp | 0x20) <= 'z') || cp == '\'';
   }
 
   // General Punctuation Block, Currency, Math, Arrows, & Symbols (0x2000 - 0x2BFF)
