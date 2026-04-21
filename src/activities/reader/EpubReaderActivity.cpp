@@ -103,8 +103,11 @@ void EpubReaderActivity::onExit() {
 
   // Flush any WPM adaptations accumulated during this session in one write.
   if (dirtyReadingSpeedWpm) {
-    SETTINGS.saveToFile();
-    dirtyReadingSpeedWpm = false;
+    if (SETTINGS.saveToFile()) {
+      dirtyReadingSpeedWpm = false;
+    } else {
+      LOG_ERR("ERS", "Failed to persist adapted reading speed");
+    }
   }
 
   APP_STATE.readerActivityLoadCount = 0;
@@ -355,8 +358,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::RESET_READING_SPEED: {
       SETTINGS.readingSpeedWpm = 0;
-      SETTINGS.saveToFile();
-      dirtyReadingSpeedWpm = false;  // just persisted; no redundant write needed on exit
+      dirtyReadingSpeedWpm = !SETTINGS.saveToFile();  // retry on exit if immediate persistence failed
+      if (dirtyReadingSpeedWpm) {
+        LOG_ERR("ERS", "Failed to persist reading speed reset");
+      }
       skipForwardAdaptCount = 0;
       requestUpdate();
       break;
