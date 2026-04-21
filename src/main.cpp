@@ -349,18 +349,22 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
-  static bool screenshotButtonsReleased = true;
+  static bool screenshotChordActive = false;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
-    if (screenshotButtonsReleased) {
-      screenshotButtonsReleased = false;
+    if (!screenshotChordActive) {
+      screenshotChordActive = true;
       {
         RenderLock lock;
         ScreenshotUtil::takeScreenshot(renderer);
       }
     }
     return;
-  } else {
-    screenshotButtonsReleased = true;
+  }
+  if (screenshotChordActive) {
+    if (gpio.isPressed(HalGPIO::BTN_POWER) || gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      return;
+    }
+    screenshotChordActive = false;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
