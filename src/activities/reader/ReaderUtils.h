@@ -37,6 +37,12 @@ inline bool isPageButtonHeld(const MappedInputManager& input) {
 }
 
 // Returns the new orientation index if a long-press rotation was detected, or -1.
+//
+// Orientation is named from the device perspective (LANDSCAPE_CW = device is
+// rotated CW from portrait). A user is typically thinking in terms of on-screen
+// content though. Pressing the physically-bottom side button should rotate
+// on-screen content clockwise, which requires physically rotating the device
+// CCW to stay upright -- so the enum steps backwards.
 inline int8_t detectRotation(const MappedInputManager& input) {
   if (SETTINGS.sideButtonLongPress != CrossPointSettings::LONGPRESS_ROTATE) return -1;
   if (input.getHeldTime() < LONGPRESS_ACTION_MS) return -1;
@@ -46,9 +52,10 @@ inline int8_t detectRotation(const MappedInputManager& input) {
       input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(MappedInputManager::Button::Left);
   if (!isNextHeld && !isPrevHeld) return -1;
   const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? isNextHeld : isPrevHeld;
-  return isBottom ? (SETTINGS.orientation + CrossPointSettings::ORIENTATION_COUNT - 1) %
-                        CrossPointSettings::ORIENTATION_COUNT
-                  : (SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT;
+  constexpr uint8_t N = CrossPointSettings::ORIENTATION_COUNT;
+  const uint8_t nextContentCw = (SETTINGS.orientation + N - 1) % N;
+  const uint8_t nextContentCcw = (SETTINGS.orientation + 1) % N;
+  return isBottom ? nextContentCw : nextContentCcw;
 }
 
 struct PageTurnResult {
