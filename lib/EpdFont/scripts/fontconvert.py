@@ -123,6 +123,8 @@ intervals = [
     ### Alphabetic Presentation Forms (Latin ligatures) ###
     # ff, fi, fl, ffi, ffl, long-st, st
     (0xFB00, 0xFB06),
+    ### Private Use Area (font-specific ligatures: Th, fb, fh, etc.) ###
+    (0xE000, 0xE008),
     ### Specials
     # Replacement Character
     (0xFFFD, 0xFFFD),
@@ -224,11 +226,92 @@ if args.pnum:
         if count > 0:
             print(f"pnum: {count} glyph substitutions from {font_path}", file=sys.stderr)
 
+# Ligature codepoints for known input sequences.
+# Used as a fallback when the GSUB substitute glyph has no cmap entry.
+# Standard entries map to Unicode Alphabetic Presentation Forms (U+FB00+).
+# Font-specific entries map to PUA codepoints (U+E000+).
+STANDARD_LIGATURE_MAP = {
+    (0x66, 0x66):       0xFB00,  # ff
+    (0x66, 0x69):       0xFB01,  # fi
+    (0x66, 0x6C):       0xFB02,  # fl
+    (0x66, 0x66, 0x69): 0xFB03,  # ffi
+    (0x66, 0x66, 0x6C): 0xFB04,  # ffl
+    (0x17F, 0x74):      0xFB05,  # long-s + t
+    (0x73, 0x74):       0xFB06,  # st
+    # Literata ligatures (PUA codepoints -- no standard Unicode assignments)
+    (0x54, 0x68):       0xE000,  # Th
+    (0x66, 0x62):       0xE001,  # fb
+    (0x66, 0x68):       0xE002,  # fh
+    (0x66, 0x6B):       0xE003,  # fk
+    (0x66, 0x74):       0xE004,  # ft
+    (0x66, 0xED):       0xE005,  # fí
+    (0x66, 0x66, 0x62): 0xE006,  # ffb
+    (0x66, 0x66, 0x6B): 0xE007,  # ffk
+    (0x66, 0x66, 0x74): 0xE008,  # fft
+}
+
+# Build PUA glyph overrides for font-specific ligatures.
+# PUA ligatures (U+E000+) have GSUB substitution rules but no cmap entry,
+# so load_glyph() can't find them by codepoint. We scan the GSUB 'liga'
+# feature here to discover their glyph indices.
+lig_pua_overrides = {}
+_pua_seqs = {seq: cp for seq, cp in STANDARD_LIGATURE_MAP.items() if cp >= 0xE000}
+if _pua_seqs:
+    for face_idx, font_path in enumerate(args.fontstack):
+        tt_font = TTFont(font_path)
+        cmap = tt_font.getBestCmap() or {}
+        glyph_order = tt_font.getGlyphOrder()
+        name_to_idx = {name: idx for idx, name in enumerate(glyph_order)}
+        glyph_to_cp = {name: cp for cp, name in cmap.items()}
+
+        if 'GSUB' in tt_font:
+            gsub = tt_font['GSUB'].table
+            liga_indices = set()
+            if gsub.FeatureList:
+                for fr in gsub.FeatureList.FeatureRecord:
+                    if fr.FeatureTag == 'liga':
+                        liga_indices.update(fr.Feature.LookupListIndex)
+            for li in liga_indices:
+                if li >= len(gsub.LookupList.Lookup):
+                    continue
+                lookup = gsub.LookupList.Lookup[li]
+                for st in lookup.SubTable:
+                    actual = st
+                    if lookup.LookupType == 7 and hasattr(st, 'ExtSubTable'):
+                        actual = st.ExtSubTable
+                    if hasattr(actual, 'ligatures'):
+                        for first_glyph, ligs in actual.ligatures.items():
+                            if first_glyph not in glyph_to_cp:
+                                continue
+                            first_cp = glyph_to_cp[first_glyph]
+                            for lig in ligs:
+                                comp_cps = []
+                                valid = True
+                                for comp in lig.Component:
+                                    if comp not in glyph_to_cp:
+                                        valid = False
+                                        break
+                                    comp_cps.append(glyph_to_cp[comp])
+                                if not valid:
+                                    continue
+                                seq = tuple([first_cp] + comp_cps)
+                                if seq in _pua_seqs and lig.LigGlyph not in glyph_to_cp:
+                                    pua_cp = _pua_seqs[seq]
+                                    glyph_idx = name_to_idx.get(lig.LigGlyph, 0)
+                                    if glyph_idx > 0:
+                                        lig_pua_overrides[(face_idx, pua_cp)] = glyph_idx
+        tt_font.close()
+    if lig_pua_overrides:
+        print(f"ligatures: {len(lig_pua_overrides)} PUA glyph overrides for "
+              f"font-specific ligatures", file=sys.stderr)
+
 def load_glyph(code_point):
     face_index = 0
     while face_index < len(font_stack):
         face = font_stack[face_index]
         glyph_index = pnum_glyph_overrides.get((face_index, code_point))
+        if glyph_index is None:
+            glyph_index = lig_pua_overrides.get((face_index, code_point))
         if glyph_index is None:
             glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
@@ -593,18 +676,6 @@ if kern_map:
 
 all_codepoints_set = set(all_codepoints)
 
-# Standard Unicode ligature codepoints for known input sequences.
-# Used as a fallback when the GSUB substitute glyph has no cmap entry.
-STANDARD_LIGATURE_MAP = {
-    (0x66, 0x66):       0xFB00,  # ff
-    (0x66, 0x69):       0xFB01,  # fi
-    (0x66, 0x6C):       0xFB02,  # fl
-    (0x66, 0x66, 0x69): 0xFB03,  # ffi
-    (0x66, 0x66, 0x6C): 0xFB04,  # ffl
-    (0x17F, 0x74):      0xFB05,  # long-s + t
-    (0x73, 0x74):       0xFB06,  # st
-}
-
 def extract_ligatures_fonttools(font_path, codepoints):
     """Extract ligature substitution pairs from a font file using fonttools.
 
@@ -805,6 +876,7 @@ if compress:
         (0x20A0, 0x20CF),   # Currency Symbols
         (0x2190, 0x21FF),   # Arrows
         (0x2200, 0x22FF),   # Math Operators
+        (0xE000, 0xE008),   # PUA (font-specific ligatures)
         (0xFB00, 0xFB06),   # Alphabetic Presentation Forms (ligatures)
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
