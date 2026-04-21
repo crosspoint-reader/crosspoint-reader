@@ -30,14 +30,23 @@ class EpubReaderActivity final : public Activity {
   uint8_t activePageTurnOption = 0;  // Which option index is currently active (0 = off)
 
   // Adaptive reading-speed constants (Smart auto-page-turn mode).
-  static constexpr unsigned long MIN_ADAPT_ELAPSED_MS = 2000UL;   // Ignore turns faster than 2 s (accidental taps)
+  static constexpr unsigned long MIN_ADAPT_ELAPSED_MS = 2000UL;   // Ignore fwd turns faster than 2 s (accidental taps)
   static constexpr unsigned long MIN_SMART_DURATION_MS = 2000UL;  // Floor for tiny pages (e.g. 1-word chapter titles)
   static constexpr uint16_t WPM_ADAPT_MIN = 30;                   // Floor to prevent runaway slowdowns
-  static constexpr uint16_t WPM_ADAPT_MAX = 1000;                 // Ceiling
-  // After a backward turn the next N forward turns are partial-page reads (user re-read what was
-  // left of the page they returned to), so they are not valid speed samples and must be skipped.
-  // Each backward adaptation increments this; each forward turn decrements and skips adaptation.
+  static constexpr unsigned long BACK_SLOWDOWN_WINDOW_MS =
+      3000UL;  // Only slow down if back press within 3 s of auto-turn
+  // Tracks how many pages behind the furthest-read position the user currently is.
+  // Incremented on every manual backward turn; decremented on every manual forward turn.
+  // Auto-turn is paused (timer reset) while this is > 0.
   uint8_t skipForwardAdaptCount = 0;
+  // True after the first backward turn following an auto-advance. Additional backward turns (user
+  // browsing back further) must not trigger extra slowdowns; only the first one counts.
+  // Reset to false each time an auto-turn fires so the cycle can repeat.
+  bool backwardSlowdownApplied = false;
+  // Set when a forward turn is classified as accidental (elapsed < MIN_ADAPT_ELAPSED_MS).
+  // The immediately following backward turn is treated as a correction: skipForwardAdaptCount
+  // is not incremented and no slowdown is applied. Cleared on any real forward event.
+  bool lastForwardWasAccidental = false;
 
   // Word count of the page currently on screen (set in render(), consumed in adaptReadingSpeed()).
   uint16_t currentPageWordCount = 0;
@@ -78,6 +87,7 @@ class EpubReaderActivity final : public Activity {
   void restoreSavedPosition();
 
  public:
+  static constexpr uint16_t WPM_ADAPT_MAX = 1000;  // Ceiling; must equal CrossPointSettings::READING_SPEED_WPM_MAX
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
       : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
   void onEnter() override;

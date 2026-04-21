@@ -34,6 +34,8 @@ constexpr unsigned long skipChapterMs = 700;
 const std::vector<int> PAGE_TURN_PPM = {1, 0, 1, 3, 6, 12};
 static_assert(EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION == 1,
               "SMART_PAGE_TURN_OPTION must match the Smart entry index in PAGE_TURN_PPM (update both together)");
+static_assert(EpubReaderActivity::WPM_ADAPT_MAX == CrossPointSettings::READING_SPEED_WPM_MAX,
+              "WPM_ADAPT_MAX and READING_SPEED_WPM_MAX must be equal — update both together");
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -138,7 +140,9 @@ void EpubReaderActivity::loop() {
       return;
     }
 
-    if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
+    if (skipForwardAdaptCount == 0 && (millis() - lastPageTurnTime) >= pageTurnDuration) {
+      backwardSlowdownApplied = false;
+      lastForwardWasAccidental = false;
       pageTurn(true);
       return;
     }
@@ -472,6 +476,8 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 
   lastPageTurnTime = millis();
   skipForwardAdaptCount = 0;
+  backwardSlowdownApplied = false;
+  lastForwardWasAccidental = false;
 
   activePageTurnOption = selectedPageTurnOption;
 
@@ -992,21 +998,40 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
   // Update the partial-page skip counter before any early-out: page navigation happens
   // regardless of speed, so the counter must reflect it even for accidental-tap turns.
   if (!isForwardTurn) {
+    if (lastForwardWasAccidental) {
+      // User is correcting an accidental tap — treat the forward as if it never happened.
+      lastForwardWasAccidental = false;
+      return;
+    }
     skipForwardAdaptCount++;
+    if (backwardSlowdownApplied || elapsedMs > BACK_SLOWDOWN_WINDOW_MS) {
+      return;  // Already slowed down, or back press is navigation not a speed signal.
+    }
   } else if (skipForwardAdaptCount > 0) {
     // This forward turn follows a backward one: the user only read the remainder of the page
     // they returned to, not the full page, so elapsed time is not a valid speed sample.
+    lastForwardWasAccidental = false;
     skipForwardAdaptCount--;
     LOG_DBG("ERS", "Adaptive WPM: fwd turn skipped (partial page after back), %u skips remaining",
             skipForwardAdaptCount);
     return;
   }
 
-  if (elapsedMs < MIN_ADAPT_ELAPSED_MS) {
-    return;  // Too short — likely an accidental tap; skip WPM update.
+  if (isForwardTurn && elapsedMs < MIN_ADAPT_ELAPSED_MS) {
+    lastForwardWasAccidental = true;
+    return;
   }
+  lastForwardWasAccidental = false;
 
   const uint16_t currentWpm = SETTINGS.readingSpeedWpm > 0 ? SETTINGS.readingSpeedWpm : 200;
+
+  // Page too short: its natural duration (without the MIN_SMART_DURATION_MS floor) is below 2 s.
+  // A manual forward turn on such a page is not a meaningful speed sample, so skip adaptation.
+  if (isForwardTurn &&
+      (static_cast<unsigned long>(currentPageWordCount) * 60000UL) / currentWpm < MIN_SMART_DURATION_MS) {
+    return;
+  }
+
   uint16_t observedWpm;
 
   if (isForwardTurn) {
@@ -1014,9 +1039,11 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
     const unsigned long raw = (static_cast<unsigned long>(currentPageWordCount) * 60000UL) / elapsedMs;
     observedWpm = static_cast<uint16_t>(raw > WPM_ADAPT_MAX ? WPM_ADAPT_MAX : raw);
   } else {
-    // Backward turn long enough to be intentional: apply a gentle slow-down signal.
+    // Backward turn: observed=0.75*current so EMA yields 5% net slowdown.
+    // Derivation: (2*0.75C + 8C)/10 = 9.5C/10 = 0.95C.
     // (skipForwardAdaptCount was already incremented above.)
-    observedWpm = static_cast<uint16_t>((static_cast<uint32_t>(currentWpm) * 9U) / 10U);
+    observedWpm = static_cast<uint16_t>((static_cast<uint32_t>(currentWpm) * 3U) / 4U);
+    backwardSlowdownApplied = true;
   }
 
   // EMA blend (alpha = 0.2): newWpm = 0.2 * observed + 0.8 * current
