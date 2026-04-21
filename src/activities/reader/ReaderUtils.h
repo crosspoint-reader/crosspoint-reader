@@ -53,9 +53,8 @@ inline int8_t detectRotation(const MappedInputManager& input) {
   if (!isNextHeld && !isPrevHeld) return -1;
   const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? isNextHeld : isPrevHeld;
   constexpr uint8_t N = CrossPointSettings::ORIENTATION_COUNT;
-  const uint8_t nextContentCw = (SETTINGS.orientation + N - 1) % N;
-  const uint8_t nextContentCcw = (SETTINGS.orientation + 1) % N;
-  return isBottom ? nextContentCw : nextContentCcw;
+  const uint8_t step = isBottom ? N - 1 : 1;  // N-1 ≡ -1 (mod N): rotate content CW
+  return (SETTINGS.orientation + step) % N;
 }
 
 struct PageTurnResult {
