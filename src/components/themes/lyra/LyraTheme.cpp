@@ -150,7 +150,8 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    showBatteryPercentage);
 
   int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
-  int maxSubtitleWidth = subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
+  int maxSubtitleWidth =
+      subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
   if (maxTitleWidth + maxSubtitleWidth > rect.width - LyraMetrics::values.contentSidePadding * 3) {
     if (maxTitleWidth > maxSubtitleWidth) {
       maxTitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 3 - maxSubtitleWidth;
