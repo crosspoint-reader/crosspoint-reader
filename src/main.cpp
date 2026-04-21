@@ -203,11 +203,11 @@ void setupDisplayAndFonts() {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(BOOKERLY_14_FONT_ID, literata14FontFamily);
+  renderer.insertFont(LITERATA_14_FONT_ID, literata14FontFamily);
 #ifndef OMIT_FONTS
-  renderer.insertFont(BOOKERLY_12_FONT_ID, literata12FontFamily);
-  renderer.insertFont(BOOKERLY_16_FONT_ID, literata16FontFamily);
-  renderer.insertFont(BOOKERLY_18_FONT_ID, literata18FontFamily);
+  renderer.insertFont(LITERATA_12_FONT_ID, literata12FontFamily);
+  renderer.insertFont(LITERATA_16_FONT_ID, literata16FontFamily);
+  renderer.insertFont(LITERATA_18_FONT_ID, literata18FontFamily);
 
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
