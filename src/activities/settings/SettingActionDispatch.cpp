@@ -1,13 +1,13 @@
 #include "SettingActionDispatch.h"
 
 #include "ButtonRemapActivity.h"
-#include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockSettingsActivity.h"
 #include "DetectTimezoneActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "OtaUpdateActivity.h"
+#include "OpdsServerListActivity.h"
 #include "StatusBarSettingsActivity.h"
 #include "SyncTimeActivity.h"
 #include "SystemInformationActivity.h"
@@ -26,7 +26,7 @@ std::unique_ptr<Activity> createActivityForAction(SettingAction action, GfxRende
     case SettingAction::KOReaderSync:
       return std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput);
     case SettingAction::OPDSBrowser:
-      return std::make_unique<CalibreSettingsActivity>(renderer, mappedInput);
+      return std::make_unique<OpdsServerListActivity>(renderer, mappedInput);
     case SettingAction::Network:
       return std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false);
     case SettingAction::ClearCache:

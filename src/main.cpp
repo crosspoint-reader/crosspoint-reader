@@ -22,6 +22,7 @@
 #include "GlobalBookmarkIndex.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "WeatherSettingsStore.h"
 #include "activities/Activity.h"
@@ -204,6 +205,24 @@ void setup() {
 #endif
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
+
+  // SD Card Initialization
+  // We need 6 open files concurrently when parsing a new chapter
+  if (!Storage.begin()) {
+    LOG_ERR("MAIN", "SD card initialization failed");
+    setupDisplayAndFonts();
+    activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
+    return;
+  }
+
+  HalSystem::checkPanic();
+
+  SETTINGS.loadFromFile();
+  I18N.loadSettings();
+  KOREADER_STORE.loadFromFile();
+  OPDS_STORE.loadFromFile();
+  UITheme::getInstance().reload();
+  ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   const auto wakeupReason = gpio.getWakeupReason();
   LOG_DBG("MAIN", "Wakeup reason: %d, millis=%lu, rawPowerPin=%d", static_cast<int>(wakeupReason), millis(),

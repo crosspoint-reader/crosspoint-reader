@@ -14,7 +14,6 @@
 #include <cstdio>
 #include <memory>
 
-#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "OpdsFormatLabel.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -191,7 +190,9 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
   const int midY = contentRect.y + contentRect.height / 2;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  // Show server name in header if available, otherwise generic title
+  const char* headerTitle = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
 
   if (state == BrowserState::CHECK_WIFI) {
     renderer.drawCenteredText(UI_10_FONT_ID, midY, statusMessage.c_str());
@@ -303,21 +304,21 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
-  if (strlen(SETTINGS.opdsServerUrl) == 0) {
+  if (server.url.empty()) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_SERVER_URL);
     requestUpdate();
     return;
   }
 
-  std::string url = (path.rfind("http", 0) == 0) ? path : UrlUtils::buildUrl(SETTINGS.opdsServerUrl, path);
+  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(server.url, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
 
   OpdsParser parser;
 
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream)) {
+    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
       state = BrowserState::ERROR;
       errorMessage = tr(STR_FETCH_FEED_FAILED);
       requestUpdate();
@@ -419,12 +420,14 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
 
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
-  const auto result =
-      HttpDownloader::downloadToFile(downloadUrl, filename, [this](const size_t downloaded, const size_t total) {
+  const auto result = HttpDownloader::downloadToFile(
+      downloadUrl, filename,
+      [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);
-      });
+      },
+      server.username, server.password);
 
   if (result == HttpDownloader::OK) {
     FsFile downloadedFile;
@@ -564,7 +567,6 @@ void OpdsBookBrowserActivity::checkAndConnectWifi() {
 }
 
 void OpdsBookBrowserActivity::launchWifiSelection() {
-  consumeBack = consumeConfirm = true;
   state = BrowserState::WIFI_SELECTION;
   requestUpdate();
 
