@@ -23,7 +23,7 @@ constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format cha
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
-        Activity::onEnter();
+  Activity::onEnter();
 
   if (!txt) {
     return;

@@ -13,23 +13,14 @@ while IFS= read -r -d '' file; do
   staged_files+=("${file}")
 done < <(git diff --cached --name-only -z --diff-filter=ACMR)
 
-# Skip formatter invocation when there are no modified C/C++ files.
-format_candidates="$(
-  git ls-files --exclude-standard --modified \
-    | grep -E '\.(c|cpp|h|hpp)$' \
-    | grep -v -E '^lib/EpdFont/builtinFonts/' \
-    | grep -v -E '^lib/Epub/Epub/hyphenation/generated/' \
-    | grep -v -E '^lib/uzlib/' \
-    || true
-)"
-
-if [[ -n "${format_candidates}" ]]; then
-  echo "Running clang-format fix before commit..."
-  ./bin/clang-format-fix -g
-fi
+# Intentionally format all currently modified tracked C/C++ files.
+# The helper handles no-op cases and exits 0 when nothing matches.
+echo "Running clang-format fix before commit..."
+./bin/clang-format-fix -g
 
 # Ensure formatting changes are included in the pending commit without
-# staging unrelated tracked modifications from the working tree.
+# staging unrelated tracked modifications from other files in the
+# working tree.
 if ((${#staged_files[@]})); then
   git add -- "${staged_files[@]}"
 fi
