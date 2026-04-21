@@ -217,9 +217,8 @@ static uint8_t miniLookupKernClass(const EpdKernClassEntry* entries, uint16_t co
   if (!entries || count == 0 || cp > 0xFFFF) return 0;
   const auto target = static_cast<uint16_t>(cp);
   const auto* end = entries + count;
-  const auto it = std::lower_bound(entries, end, target, [](const EpdKernClassEntry& e, uint16_t v) {
-    return e.codepoint < v;
-  });
+  const auto it =
+      std::lower_bound(entries, end, target, [](const EpdKernClassEntry& e, uint16_t v) { return e.codepoint < v; });
   return (it != end && it->codepoint == target) ? it->classId : 0;
 }
 
@@ -363,8 +362,8 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   s.miniKernLeftClassCount = numLeft;
   s.miniKernRightClassCount = numRight;
 
-  LOG_DBG("SDCF", "Built mini kern: %u×%u matrix (%u bytes, full was %u×%u = %u bytes)", numLeft, numRight,
-          matrixBytes, s.header.kernLeftClassCount, s.header.kernRightClassCount,
+  LOG_DBG("SDCF", "Built mini kern: %u×%u matrix (%u bytes, full was %u×%u = %u bytes)", numLeft, numRight, matrixBytes,
+          s.header.kernLeftClassCount, s.header.kernRightClassCount,
           static_cast<uint32_t>(s.header.kernLeftClassCount) * s.header.kernRightClassCount);
   return true;
 }
