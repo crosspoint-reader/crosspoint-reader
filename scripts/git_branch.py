@@ -1,8 +1,8 @@
 """
-PlatformIO pre-build script: inject git branch into CROSSPOINT_VERSION for
-the default (dev) environment.
+PlatformIO pre-build script: inject git branch and short SHA into
+CROSSPOINT_VERSION for the default (dev) environment.
 
-Results in a version string like:  1.1.0-dev+feat-koysnc-xpath
+Results in a version string like:  1.1.0-dev-feat-kosync-xpath-05c6cf8
 Release environments are unaffected; they set CROSSPOINT_VERSION in the ini.
 """
 
@@ -22,22 +22,50 @@ def get_git_branch(project_dir):
             ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
             text=True, stderr=subprocess.PIPE, cwd=project_dir
         ).strip()
-        # Detached HEAD — show the short SHA instead
+        # Detached HEAD has no branch name.
         if branch == 'HEAD':
-            branch = subprocess.check_output(
-                ['git', 'rev-parse', '--short', 'HEAD'],
-                text=True, stderr=subprocess.PIPE, cwd=project_dir
-            ).strip()
+            branch = 'detached'
         # Strip characters that would break a C string literal
         return ''.join(c for c in branch if c not in '"\\')
     except FileNotFoundError:
         warn('git not found on PATH; branch suffix will be "unknown"')
         return 'unknown'
     except subprocess.CalledProcessError as e:
-        warn(f'git command failed (exit {e.returncode}): {e.stderr.strip()}; branch suffix will be "unknown"')
+        warn(
+            f'git command failed (exit {e.returncode}): '
+            f'{e.stderr.strip()}; branch suffix will be "unknown"'
+        )
         return 'unknown'
-    except Exception as e:
-        warn(f'Unexpected error reading git branch: {e}; branch suffix will be "unknown"')
+    except OSError as e:
+        warn(
+            f'OS error reading git branch: {e}; '
+            'branch suffix will be "unknown"'
+        )
+        return 'unknown'
+
+
+def get_git_short_sha(project_dir):
+    try:
+        short_sha = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            text=True, stderr=subprocess.PIPE, cwd=project_dir
+        ).strip()
+        # Strip characters that would break a C string literal
+        return ''.join(c for c in short_sha if c not in '"\\')
+    except FileNotFoundError:
+        warn('git not found on PATH; short SHA suffix will be "unknown"')
+        return 'unknown'
+    except subprocess.CalledProcessError as e:
+        warn(
+            f'git command failed (exit {e.returncode}): '
+            f'{e.stderr.strip()}; short SHA suffix will be "unknown"'
+        )
+        return 'unknown'
+    except OSError as e:
+        warn(
+            f'OS error reading git short SHA: {e}; '
+            'short SHA suffix will be "unknown"'
+        )
         return 'unknown'
 
 
@@ -63,7 +91,8 @@ def inject_version(env):
     project_dir = env['PROJECT_DIR']
     base_version = get_base_version(project_dir)
     branch = get_git_branch(project_dir)
-    version_string = f'{base_version}-dev+{branch}'
+    short_sha = get_git_short_sha(project_dir)
+    version_string = f'{base_version}-dev-{branch}-{short_sha}'
 
     env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
     print(f'CrossPoint build version: {version_string}')
