@@ -3,7 +3,9 @@
 #include <functional>
 #include <string>
 
-#include "esp_https_ota.h"
+// Avoid pulling in esp_https_ota.h here — it transitively includes lwip/sockets.h
+// which defines INADDR_NONE as a numeric macro, conflicting with Arduino's IPAddress.h.
+typedef void* esp_https_ota_handle_t;
 
 class OtaUpdater {
   bool updateAvailable = false;
@@ -27,6 +29,7 @@ class OtaUpdater {
     OOM_ERROR,
     UPDATE_CANCELLED,
     UPDATE_IN_PROGRESS,
+    VALIDATE_FAILED,
   };
 
   size_t getOtaSize() const { return otaSize; }

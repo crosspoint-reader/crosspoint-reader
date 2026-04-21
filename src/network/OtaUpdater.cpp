@@ -52,14 +52,18 @@ esp_err_t event_handler(esp_http_client_event_t* event) {
 } /* namespace */
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
+  // Reset globals so retries start clean regardless of previous outcome
+  local_buf = nullptr;
+  output_len = 0;
+
   JsonDocument filter;
   esp_err_t esp_err;
   JsonDocument doc;
 
   esp_http_client_config_t client_config = {
       .url = latestReleaseUrl,
-      .event_handler = event_handler,
       .timeout_ms = 10000,
+      .event_handler = event_handler,
       /* Default HTTP client buffer size 512 byte only */
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
@@ -282,6 +286,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::performInstallUpdateStep() {
   if (finish_err != ESP_OK) {
     LOG_ERR("OTA", "esp_https_ota_finish Failed: %s", esp_err_to_name(finish_err));
     cleanupUpdate();
+    if (finish_err == ESP_ERR_OTA_VALIDATE_FAILED) {
+      return VALIDATE_FAILED;
+    }
     return INTERNAL_UPDATE_ERROR;
   }
 
