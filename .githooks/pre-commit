@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Run formatter from repository root regardless of current directory.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+
+echo "Running clang-format fix before commit..."
+./bin/clang-format-fix
+
+# Ensure formatting changes are included in the pending commit.
+git add -u
