@@ -114,20 +114,22 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name, 63, false),
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SERVER_NAME), editServer.name, 63,
+                                                InputType::Text),
         handler);
   } else if (selectedIndex == 1) {
     // Server URL
+    const std::string prefillUrl = editServer.url.empty() ? "https://" : editServer.url;
     auto handler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
         const auto& kb = std::get<KeyboardResult>(result.data);
-        editServer.url = kb.text;
+        editServer.url = (kb.text == "https://" || kb.text == "http://") ? "" : kb.text;
         saveServer();
         requestUpdate();
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL),
-                                                                   editServer.url, 127, false),
+                                                                   prefillUrl, 127, InputType::Url),
                            handler);
   } else if (selectedIndex == 2) {
     // Username
@@ -140,7 +142,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
-                                                                   editServer.username, 63, false),
+                                                                   editServer.username, 63, InputType::Text),
                            handler);
   } else if (selectedIndex == 3) {
     // Password
@@ -153,7 +155,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
-                                                                   editServer.password, 63, false),
+                                                                   editServer.password, 63, InputType::Password),
                            handler);
   } else if (selectedIndex == 4 && !isNewServer) {
     // Delete flow is only available for existing servers.
