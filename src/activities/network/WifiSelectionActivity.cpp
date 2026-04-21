@@ -280,6 +280,11 @@ bool WifiSelectionActivity::checkCaptivePortal() {
   String location = http.getLocation();
   http.end();
 
+  if (code < 0) {
+    LOG_DBG("WIFI", "Captive portal probe failed (connection error %d)", code);
+    return false;
+  }
+
   if (code == 204) {
     return false;  // Open internet, no captive portal
   }

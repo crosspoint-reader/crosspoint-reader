@@ -31,7 +31,6 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
@@ -182,7 +181,13 @@ void setupDisplayAndFonts() {
 }
 
 void setup() {
-  esp_ota_mark_app_valid_cancel_rollback();
+  {
+    esp_ota_img_states_t otaState;
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    if (esp_ota_get_state_partition(running, &otaState) == ESP_OK && otaState == ESP_OTA_IMG_PENDING_VERIFY) {
+      esp_ota_mark_app_valid_cancel_rollback();
+    }
+  }
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();

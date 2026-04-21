@@ -29,26 +29,7 @@ jobs:
         run: pio run -e gh_release
 
       - name: Patch min_chip_rev_full to 0
-        run: |
-          python3 - <<'EOF'
-          import struct, sys
-          # esp_image_header_t (8 bytes) + extended header:
-          #   offset 0: wp_pin (B)
-          #   offset 1: clk/q drv (B)
-          #   offset 2: d/cs drv (B)
-          #   offset 3: hd/wp drv (B)
-          #   offset 4: chip_id (H, 2 bytes)
-          #   offset 6: min_rev (B)
-          #   offset 7: min_rev_full (H, 2 bytes)  <-- patch target
-          MIN_REV_FULL_OFFSET = 8 + 7
-          path = ".pio/build/gh_release/firmware.bin"
-          with open(path, "r+b") as f:
-              f.seek(MIN_REV_FULL_OFFSET)
-              old = struct.unpack("<H", f.read(2))[0]
-              print(f"min_chip_rev_full: {old // 100}.{old % 100} -> 0.0")
-              f.seek(MIN_REV_FULL_OFFSET)
-              f.write(struct.pack("<H", 0))
-          EOF
+        run: python3 scripts/patch_min_chip_rev.py .pio/build/gh_release/firmware.bin
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

@@ -51,7 +51,6 @@ class OtaUpdater {
   OtaUpdaterError performInstallUpdateStep();
   void cancelUpdate();
   void cleanupUpdate();
-  OtaUpdaterError installUpdate();
 
  private:
   static int forceSetOtaBootPartition();

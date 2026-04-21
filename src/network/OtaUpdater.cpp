@@ -201,7 +201,10 @@ const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; 
 
 void OtaUpdater::cleanupUpdate() {
   if (otaHandle) {
-    esp_https_ota_finish(otaHandle);
+    const esp_err_t err = esp_https_ota_finish(otaHandle);
+    if (err != ESP_OK) {
+      LOG_ERR("OTA", "esp_https_ota_finish on cleanup: %s", esp_err_to_name(err));
+    }
     otaHandle = nullptr;
   }
   cancelRequested = false;
@@ -364,21 +367,4 @@ OtaUpdater::OtaUpdaterError OtaUpdater::performInstallUpdateStep() {
 
   LOG_INF("OTA", "Update completed");
   return OK;
-}
-
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
-  const auto beginResult = beginInstallUpdate();
-  if (beginResult != UPDATE_IN_PROGRESS) {
-    return beginResult;
-  }
-
-  OtaUpdaterError result;
-  do {
-    result = performInstallUpdateStep();
-    if (result == UPDATE_IN_PROGRESS) {
-      delay(100);
-    }
-  } while (result == UPDATE_IN_PROGRESS);
-
-  return result;
 }
