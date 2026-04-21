@@ -9,6 +9,7 @@
 #include "Epub/Section.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
+#include "KoInsightClient.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -82,6 +83,15 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 
   // Sync time with NTP before making API requests
   syncTimeWithNTP();
+
+  if (KOREADER_STORE.hasKoInsightServerUrl()) {
+    {
+      RenderLock lock(*this);
+      statusMessage = tr(STR_KOINSIGHT_UPLOADING);
+    }
+    requestUpdate(true);
+    KoInsightClient::pushReadingSnapshotIfConfigured(epub, epubPath, currentSpineIndex, currentPage, totalPagesInSpine);
+  }
 
   {
     RenderLock lock(*this);

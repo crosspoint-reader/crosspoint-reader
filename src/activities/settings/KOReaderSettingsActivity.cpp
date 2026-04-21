@@ -13,9 +13,10 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+constexpr int MENU_ITEMS = 6;
+const StrId menuNames[MENU_ITEMS] = {
+    StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL, StrId::STR_KOINSIGHT_SERVER_URL,
+    StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -90,6 +91,20 @@ void KOReaderSettingsActivity::handleSelection() {
                              }
                            });
   } else if (selectedIndex == 3) {
+    const std::string currentKi = KOREADER_STORE.getKoInsightServerUrl();
+    const std::string prefillKi = currentKi.empty() ? "http://" : currentKi;
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOINSIGHT_SERVER_URL),
+                                                                   prefillKi, 128, InputType::Url),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& kb = std::get<KeyboardResult>(result.data);
+                               const std::string urlToSave =
+                                   (kb.text == "https://" || kb.text == "http://") ? "" : kb.text;
+                               KOREADER_STORE.setKoInsightServerUrl(urlToSave);
+                               KOREADER_STORE.saveToFile();
+                             }
+                           });
+  } else if (selectedIndex == 4) {
     // Document Matching - toggle between Filename and Binary
     const auto current = KOREADER_STORE.getMatchMethod();
     const auto newMethod =
@@ -97,7 +112,7 @@ void KOReaderSettingsActivity::handleSelection() {
     KOREADER_STORE.setMatchMethod(newMethod);
     KOREADER_STORE.saveToFile();
     requestUpdate();
-  } else if (selectedIndex == 4) {
+  } else if (selectedIndex == 5) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -133,9 +148,12 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
           auto serverUrl = KOREADER_STORE.getServerUrl();
           return serverUrl.empty() ? std::string(tr(STR_DEFAULT_VALUE)) : serverUrl;
         } else if (index == 3) {
+          auto ki = KOREADER_STORE.getKoInsightServerUrl();
+          return ki.empty() ? std::string(tr(STR_NOT_SET)) : ki;
+        } else if (index == 4) {
           return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
                                                                                   : std::string(tr(STR_BINARY));
-        } else if (index == 4) {
+        } else if (index == 5) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));

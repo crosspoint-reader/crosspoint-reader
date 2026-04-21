@@ -23,6 +23,7 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "ReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -44,6 +45,31 @@ int clampPercent(int percent) {
 }
 
 }  // namespace
+
+void EpubReaderActivity::flushReadingStatsCheckpoint() {
+  uint8_t progress = 0;
+  const char* title = epub ? epub->getTitle().c_str() : nullptr;
+  if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
+    const float chapterProgress =
+        static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    progress = static_cast<uint8_t>(
+        clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f)));
+  }
+  const char* bookPath = epub ? epub->getPath().c_str() : nullptr;
+  uint16_t page1 = 0;
+  uint16_t chTot = 0;
+  if (section && section->pageCount > 0) {
+    page1 = static_cast<uint16_t>(section->currentPage + 1);
+    chTot = static_cast<uint16_t>(section->pageCount);
+  }
+  READ_STATS.endSession(title, progress, bookPath, page1, chTot);
+}
+
+void EpubReaderActivity::resumeReadingStatsSession() {
+  if (epub) {
+    READ_STATS.startSession();
+  }
+}
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
@@ -94,12 +120,16 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  READ_STATS.startSession();
+
   // Trigger first update
   requestUpdate();
 }
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  flushReadingStatsCheckpoint();
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -153,6 +183,7 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+    flushReadingStatsCheckpoint();
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
                                SETTINGS.orientation, !currentPageFootnotes.empty()),
@@ -161,8 +192,14 @@ void EpubReaderActivity::loop() {
                              const auto& menu = std::get<MenuResult>(result.data);
                              applyOrientation(menu.orientation);
                              toggleAutoPageTurn(menu.pageTurnOption);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                             if (result.isCancelled) {
+                               resumeReadingStatsSession();
+                               return;
+                             }
+                             const auto action = static_cast<EpubReaderMenuActivity::MenuAction>(menu.action);
+                             const bool deferResume = onReaderMenuConfirm(action);
+                             if (!deferResume) {
+                               resumeReadingStatsSession();
                              }
                            });
   }
@@ -298,7 +335,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   }
 }
 
-void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
+bool EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
@@ -312,8 +349,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               nextPageNumber = 0;
               section.reset();
             }
+            resumeReadingStatsSession();
           });
-      break;
+      return true;
     }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
       startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
@@ -323,8 +361,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  navigateToHref(footnoteResult.href, true);
                                }
                                requestUpdate();
+                               resumeReadingStatsSession();
                              });
-      break;
+      return true;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
       float bookProgress = 0.0f;
@@ -339,8 +378,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             if (!result.isCancelled) {
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
+            resumeReadingStatsSession();
           });
-      break;
+      return true;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
@@ -361,18 +401,21 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }
           if (!fullText.empty()) {
             startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
-                                   [this](const ActivityResult& result) {});
-            break;
+                                   [this](const ActivityResult& result) {
+                                     (void)result;
+                                     resumeReadingStatsSession();
+                                   });
+            return true;
           }
         }
       }
       // If no text or page loading failed, just close menu
       requestUpdate();
-      break;
+      return false;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();
-      return;
+      return true;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
       {
@@ -388,7 +431,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         }
       }
       onGoHome();
-      return;
+      return true;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
       {
@@ -396,7 +439,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         pendingScreenshot = true;
       }
       requestUpdate();
-      break;
+      return false;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
@@ -426,11 +469,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                   section.reset();
                 }
               }
+              resumeReadingStatsSession();
             });
+        return true;
       }
-      break;
+      return false;
     }
   }
+  return false;
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {

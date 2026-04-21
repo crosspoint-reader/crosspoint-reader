@@ -26,6 +26,7 @@ class KOReaderCredentialStore {
   std::string username;
   std::string password;
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
+  std::string koinsightServerUrl;                                   // KoInsight server base URL (empty = disabled)
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
 
   // Private constructor for singleton
@@ -66,8 +67,15 @@ class KOReaderCredentialStore {
   void setServerUrl(const std::string& url);
   const std::string& getServerUrl() const { return serverUrl; }
 
+  // KoInsight (separate from KOReader progress sync server)
+  void setKoInsightServerUrl(const std::string& url);
+  const std::string& getKoInsightServerUrl() const { return koinsightServerUrl; }
+  bool hasKoInsightServerUrl() const;
+
   // Get base URL for API calls (with http:// normalization if no protocol, falls back to default)
   std::string getBaseUrl() const;
+  // KoInsight base URL: trim, optional scheme default http:// — empty if not configured
+  std::string getKoInsightBaseUrl() const;
 
   // Document matching method
   void setMatchMethod(DocumentMatchMethod method);

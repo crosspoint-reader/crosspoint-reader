@@ -8,6 +8,9 @@
 
 #include "../../src/JsonSettingsIO.h"
 
+#include <algorithm>
+#include <cctype>
+
 // Initialize the static instance
 KOReaderCredentialStore KOReaderCredentialStore::instance;
 
@@ -148,6 +151,40 @@ void KOReaderCredentialStore::clearCredentials() {
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
   serverUrl = url;
   LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
+}
+
+void KOReaderCredentialStore::setKoInsightServerUrl(const std::string& url) {
+  koinsightServerUrl = url;
+  LOG_DBG("KRS", "Set KoInsight URL: %s", url.empty() ? "(disabled)" : url.c_str());
+}
+
+namespace {
+void trimInPlace(std::string& s) {
+  const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+  s.erase(s.begin(), std::find_if(s.begin(), s.end(), notSpace));
+  s.erase(std::find_if(s.rbegin(), s.rend(), notSpace).base(), s.end());
+}
+}  // namespace
+
+bool KOReaderCredentialStore::hasKoInsightServerUrl() const {
+  std::string copy = koinsightServerUrl;
+  trimInPlace(copy);
+  return !copy.empty();
+}
+
+std::string KOReaderCredentialStore::getKoInsightBaseUrl() const {
+  std::string url = koinsightServerUrl;
+  trimInPlace(url);
+  if (url.empty()) {
+    return "";
+  }
+  while (!url.empty() && url.back() == '/') {
+    url.pop_back();
+  }
+  if (url.find("://") == std::string::npos) {
+    return "http://" + url;
+  }
+  return url;
 }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {

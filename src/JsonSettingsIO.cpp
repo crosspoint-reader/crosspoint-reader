@@ -231,6 +231,7 @@ bool JsonSettingsIO::saveKOReader(const KOReaderCredentialStore& store, const ch
   doc["username"] = store.getUsername();
   doc["password_obf"] = obfuscation::obfuscateToBase64(store.getPassword());
   doc["serverUrl"] = store.getServerUrl();
+  doc["koinsightServerUrl"] = store.getKoInsightServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(store.getMatchMethod());
 
   String json;
@@ -255,6 +256,7 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
     if (!store.password.empty() && needsResave) *needsResave = true;
   }
   store.serverUrl = doc["serverUrl"] | std::string("");
+  store.koinsightServerUrl = doc["koinsightServerUrl"] | std::string("");
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
   store.matchMethod = static_cast<DocumentMatchMethod>(method);
 
