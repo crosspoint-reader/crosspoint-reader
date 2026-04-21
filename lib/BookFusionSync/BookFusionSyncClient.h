@@ -88,7 +88,8 @@ class BookFusionSyncClient {
   static Error setProgress(uint32_t bookId, const BookFusionPosition& pos);
 
   // --- Library Browse & Download ---
-  static Error searchBooks(int page, BookFusionSearchResult& out);
+  static Error searchBooks(int page, BookFusionSearchResult& out, const char* list = nullptr,
+                           const char* sort = nullptr);
   static Error getDownloadUrl(uint32_t bookId, char* outUrl, size_t maxLen);
 
   static const char* errorString(Error error);

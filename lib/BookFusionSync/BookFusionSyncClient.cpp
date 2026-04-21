@@ -211,7 +211,8 @@ BookFusionSyncClient::Error BookFusionSyncClient::setProgress(uint32_t bookId, c
 
 // --- Library Browse & Download ---
 
-BookFusionSyncClient::Error BookFusionSyncClient::searchBooks(int page, BookFusionSearchResult& out) {
+BookFusionSyncClient::Error BookFusionSyncClient::searchBooks(int page, BookFusionSearchResult& out, const char* list,
+                                                              const char* sort) {
   if (!BF_TOKEN_STORE.hasToken()) return NO_TOKEN;
 
   char url[128];
@@ -234,7 +235,10 @@ BookFusionSyncClient::Error BookFusionSyncClient::searchBooks(int page, BookFusi
   JsonDocument reqBody;
   reqBody["page"] = page;
   reqBody["per_page"] = BOOKS_PER_PAGE + 1;
-  reqBody["sort"] = "added_at-desc";
+  reqBody["sort"] = (sort != nullptr) ? sort : "added_at-desc";
+  if (list != nullptr) {
+    reqBody["list"] = list;
+  }
   String bodyStr;
   serializeJson(reqBody, bodyStr);
 

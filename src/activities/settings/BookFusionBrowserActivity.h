@@ -28,14 +28,18 @@ class BookFusionBrowserActivity final : public Activity {
   bool preventAutoSleep() override { return true; }
 
  private:
-  enum State { WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, DOWNLOAD_COMPLETE, ERROR };
+  enum State { CATEGORY_SELECTION, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, DOWNLOAD_COMPLETE, ERROR };
 
-  State state = WIFI_SELECTION;
+  State state = CATEGORY_SELECTION;
   ButtonNavigator buttonNavigator;
 
   BookFusionSearchResult searchResult;  // Current page of 20 books (~2.5 KB on heap)
   int selectedIndex = 0;
   int currentPage = 1;
+
+  // Category menu: which item is highlighted, and which one we're browsing.
+  int selectedCategory = 0;
+  int currentCategory = 0;
 
   // Large enough for pre-signed S3 URLs (typically 500–900 chars).
   char downloadUrl[1024] = {};
@@ -46,6 +50,7 @@ class BookFusionBrowserActivity final : public Activity {
   char errorMsg[128] = {};
 
   void onWifiSelectionComplete(bool success);
+  void handleCategorySelection();
   void loadPage(int page);
   void startDownload(int bookIndex);
 };

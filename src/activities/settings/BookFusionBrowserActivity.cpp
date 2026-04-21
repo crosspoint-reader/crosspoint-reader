@@ -22,6 +22,21 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 21;  // 20 books + optional "Next page" sentinel
+
+struct Category {
+  StrId nameId;
+  const char* list;
+  const char* sort;
+};
+
+constexpr Category CATEGORIES[] = {
+    {StrId::STR_BF_CURRENTLY_READING, "currently_reading", "last_read_at-desc"},
+    {StrId::STR_BF_FAVORITES, "favorites", nullptr},
+    {StrId::STR_BF_PLAN_TO_READ, "planned_to_read", nullptr},
+    {StrId::STR_BF_COMPLETED, "completed", nullptr},
+    {StrId::STR_BF_ALL_BOOKS, nullptr, nullptr},
+};
+constexpr int NUM_CATEGORIES = sizeof(CATEGORIES) / sizeof(CATEGORIES[0]);
 }  // namespace
 
 void BookFusionBrowserActivity::onEnter() {
@@ -34,8 +49,16 @@ void BookFusionBrowserActivity::onEnter() {
     return;
   }
 
+  state = CATEGORY_SELECTION;
+  requestUpdate();
+}
+
+void BookFusionBrowserActivity::handleCategorySelection() {
+  currentCategory = selectedCategory;
+  currentPage = 1;
+
   if (WiFi.status() == WL_CONNECTED) {
-    onWifiSelectionComplete(true);
+    loadPage(1);
     return;
   }
 
@@ -68,7 +91,8 @@ void BookFusionBrowserActivity::loadPage(int page) {
   }
   requestUpdate(true);
 
-  const auto err = BookFusionSyncClient::searchBooks(page, searchResult);
+  const auto& cat = CATEGORIES[currentCategory];
+  const auto err = BookFusionSyncClient::searchBooks(page, searchResult, cat.list, cat.sort);
 
   if (err != BookFusionSyncClient::OK) {
     {
@@ -183,9 +207,37 @@ void BookFusionBrowserActivity::loop() {
     return;
   }
 
+  if (state == CATEGORY_SELECTION) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      finish();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      handleCategorySelection();
+      return;
+    }
+    buttonNavigator.onNextRelease([this] {
+      selectedCategory = ButtonNavigator::nextIndex(selectedCategory, NUM_CATEGORIES);
+      requestUpdate();
+    });
+    buttonNavigator.onPreviousRelease([this] {
+      selectedCategory = ButtonNavigator::previousIndex(selectedCategory, NUM_CATEGORIES);
+      requestUpdate();
+    });
+    return;
+  }
+
   if (state == ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      finish();
+      if (BF_TOKEN_STORE.hasToken()) {
+        {
+          RenderLock lock(*this);
+          state = CATEGORY_SELECTION;
+        }
+        requestUpdate();
+      } else {
+        finish();
+      }
     }
     return;
   }
@@ -209,12 +261,16 @@ void BookFusionBrowserActivity::loop() {
       if (currentPage > 1) {
         loadPage(currentPage - 1);
       } else {
-        finish();
+        {
+          RenderLock lock(*this);
+          state = CATEGORY_SELECTION;
+        }
+        requestUpdate();
       }
       return;
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (selectedIndex < searchResult.count) {
         startDownload(selectedIndex);
       } else if (searchResult.hasMore) {
@@ -252,7 +308,24 @@ void BookFusionBrowserActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_BF_BROWSE_LIBRARY));
+  const char* headerTitle =
+      (state == CATEGORY_SELECTION) ? tr(STR_BF_BROWSE_LIBRARY) : I18N.get(CATEGORIES[currentCategory].nameId);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerTitle);
+
+  if (state == CATEGORY_SELECTION) {
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, NUM_CATEGORIES, selectedCategory,
+        [](int index) -> std::string { return std::string(I18N.get(CATEGORIES[index].nameId)); }, nullptr, nullptr,
+        nullptr, true);
+
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
 
   if (state == WIFI_SELECTION || state == LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_LOADING));
