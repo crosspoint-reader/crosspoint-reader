@@ -6,8 +6,15 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
+# Capture the files already staged for commit so we only re-stage those
+# paths after formatting.
+mapfile -d '' -t staged_files < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
 echo "Running clang-format fix before commit..."
 ./bin/clang-format-fix
 
-# Ensure formatting changes are included in the pending commit.
-git add -u
+# Ensure formatting changes are included in the pending commit without
+# staging unrelated tracked modifications from the working tree.
+if ((${#staged_files[@]})); then
+  git add -- "${staged_files[@]}"
+fi
