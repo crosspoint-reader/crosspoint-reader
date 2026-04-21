@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <Logging.h>
 
+#ifndef SIMULATOR
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_wifi.h"
@@ -270,3 +271,21 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   LOG_INF("OTA", "Update completed");
   return OK;
 }
+#else
+bool OtaUpdater::isUpdateNewer() const { return false; }
+
+const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
+
+OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
+  updateAvailable = false;
+  latestVersion.clear();
+  otaUrl.clear();
+  otaSize = 0;
+  processedSize = 0;
+  totalSize = 0;
+  render = false;
+  return NO_UPDATE;
+}
+
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() { return NO_UPDATE; }
+#endif
