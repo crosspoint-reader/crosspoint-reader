@@ -15,6 +15,26 @@ RTC_NOINIT_ATTR size_t logHead = 0;
 // never properly initialized.
 RTC_NOINIT_ATTR uint32_t rtcLogMagic;
 static constexpr uint32_t LOG_RTC_MAGIC = 0xDEADBEEF;
+MySerialImpl MySerialImpl::instance;
+
+size_t MySerialImpl::printf(const char* format, ...) {
+  char buf[256];
+  va_list args;
+  va_start(args, format);
+  const int len = vsnprintf(buf, sizeof(buf), format, args);
+  va_end(args);
+  if (len <= 0) {
+    return 0;
+  }
+  const size_t writeLen = std::min(static_cast<size_t>(len), sizeof(buf) - 1);
+  return logSerial.write(reinterpret_cast<const uint8_t*>(buf), writeLen);
+}
+
+size_t MySerialImpl::write(uint8_t b) { return logSerial.write(b); }
+
+size_t MySerialImpl::write(const uint8_t* buffer, size_t size) { return logSerial.write(buffer, size); }
+
+void MySerialImpl::flush() { logSerial.flush(); }
 
 void addToLogRingBuffer(const char* message) {
   // Add the message to the ring buffer, overwriting old messages if necessary.

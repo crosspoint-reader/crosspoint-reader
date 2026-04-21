@@ -1,5 +1,6 @@
 #pragma once
 #include <HalStorage.h>
+#include <Stream.h>
 
 #include <functional>
 #include <string>

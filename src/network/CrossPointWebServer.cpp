@@ -555,7 +555,9 @@ void CrossPointWebServer::handleDownload() const {
       totalWritten += wrote;
     }
   }
+#ifndef SIMULATOR
   client.clear();
+#endif
   file.close();
 }
 
@@ -1007,26 +1009,26 @@ void CrossPointWebServer::handleDelete() const {
   String failedItems;
 
   for (const auto& p : paths) {
-    auto itemPath = p.as<String>();
+    std::string itemPath = p.as<std::string>();
 
     // Validate path
-    if (itemPath.isEmpty() || itemPath == "/") {
-      failedItems += itemPath + " (cannot delete root); ";
+    if (itemPath.empty() || itemPath == "/") {
+      failedItems += String(itemPath.c_str()) + " (cannot delete root); ";
       allSuccess = false;
       continue;
     }
 
     // Ensure path starts with /
-    if (!itemPath.startsWith("/")) {
+    if (itemPath.front() != '/') {
       itemPath = "/" + itemPath;
     }
 
     // Security check: prevent deletion of protected items
-    const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+    const std::string itemName = itemPath.substr(itemPath.find_last_of('/') + 1);
 
     // Hidden/system files are protected
-    if (itemName.startsWith(".")) {
-      failedItems += itemPath + " (hidden/system file); ";
+    if (!itemName.empty() && itemName.front() == '.') {
+      failedItems += String(itemPath.c_str()) + " (hidden/system file); ";
       allSuccess = false;
       continue;
     }
@@ -1034,20 +1036,20 @@ void CrossPointWebServer::handleDelete() const {
     // Check against explicitly protected items
     bool isProtected = false;
     for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-      if (itemName.equals(HIDDEN_ITEMS[i])) {
+      if (itemName == HIDDEN_ITEMS[i]) {
         isProtected = true;
         break;
       }
     }
     if (isProtected) {
-      failedItems += itemPath + " (protected file); ";
+      failedItems += String(itemPath.c_str()) + " (protected file); ";
       allSuccess = false;
       continue;
     }
 
     // Check if item exists
     if (!Storage.exists(itemPath.c_str())) {
-      failedItems += itemPath + " (not found); ";
+      failedItems += String(itemPath.c_str()) + " (not found); ";
       allSuccess = false;
       continue;
     }
@@ -1061,7 +1063,7 @@ void CrossPointWebServer::handleDelete() const {
       if (entry) {
         entry.close();
         f.close();
-        failedItems += itemPath + " (folder not empty); ";
+        failedItems += String(itemPath.c_str()) + " (folder not empty); ";
         allSuccess = false;
         continue;
       }
@@ -1071,11 +1073,11 @@ void CrossPointWebServer::handleDelete() const {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
       success = Storage.remove(itemPath.c_str());
-      clearEpubCacheIfNeeded(itemPath);
+      clearEpubCacheIfNeeded(String(itemPath.c_str()));
     }
 
     if (!success) {
-      failedItems += itemPath + " (deletion failed); ";
+      failedItems += String(itemPath.c_str()) + " (deletion failed); ";
       allSuccess = false;
     }
   }
