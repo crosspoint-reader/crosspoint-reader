@@ -10,37 +10,37 @@ echo ""
 
 echo "#define BOOKERLY_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./bookerly_12_regular.h",
-  "./bookerly_12_bold.h",
-  "./bookerly_12_bolditalic.h",
-  "./bookerly_12_italic.h",
+  "./literata_12_regular.h",
+  "./literata_12_bold.h",
+  "./literata_12_bolditalic.h",
+  "./literata_12_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define BOOKERLY_14_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./bookerly_14_regular.h",
-  "./bookerly_14_bold.h",
-  "./bookerly_14_bolditalic.h",
-  "./bookerly_14_italic.h",
+  "./literata_14_regular.h",
+  "./literata_14_bold.h",
+  "./literata_14_bolditalic.h",
+  "./literata_14_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define BOOKERLY_16_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./bookerly_16_regular.h",
-  "./bookerly_16_bold.h",
-  "./bookerly_16_bolditalic.h",
-  "./bookerly_16_italic.h",
+  "./literata_16_regular.h",
+  "./literata_16_bold.h",
+  "./literata_16_bolditalic.h",
+  "./literata_16_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define BOOKERLY_18_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./bookerly_18_regular.h",
-  "./bookerly_18_bold.h",
-  "./bookerly_18_bolditalic.h",
-  "./bookerly_18_italic.h",
+  "./literata_18_regular.h",
+  "./literata_18_bold.h",
+  "./literata_18_bolditalic.h",
+  "./literata_18_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 

@@ -34,31 +34,31 @@ FontDecompressor fontDecompressor;
 FontCacheManager fontCacheManager(renderer.getFontMap());
 
 // Fonts
-EpdFont bookerly14RegularFont(&bookerly_14_regular);
-EpdFont bookerly14BoldFont(&bookerly_14_bold);
-EpdFont bookerly14ItalicFont(&bookerly_14_italic);
-EpdFont bookerly14BoldItalicFont(&bookerly_14_bolditalic);
-EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
-                                   &bookerly14BoldItalicFont);
+EpdFont literata14RegularFont(&literata_14_regular);
+EpdFont literata14BoldFont(&literata_14_bold);
+EpdFont literata14ItalicFont(&literata_14_italic);
+EpdFont literata14BoldItalicFont(&literata_14_bolditalic);
+EpdFontFamily literata14FontFamily(&literata14RegularFont, &literata14BoldFont, &literata14ItalicFont,
+                                   &literata14BoldItalicFont);
 #ifndef OMIT_FONTS
-EpdFont bookerly12RegularFont(&bookerly_12_regular);
-EpdFont bookerly12BoldFont(&bookerly_12_bold);
-EpdFont bookerly12ItalicFont(&bookerly_12_italic);
-EpdFont bookerly12BoldItalicFont(&bookerly_12_bolditalic);
-EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont, &bookerly12ItalicFont,
-                                   &bookerly12BoldItalicFont);
-EpdFont bookerly16RegularFont(&bookerly_16_regular);
-EpdFont bookerly16BoldFont(&bookerly_16_bold);
-EpdFont bookerly16ItalicFont(&bookerly_16_italic);
-EpdFont bookerly16BoldItalicFont(&bookerly_16_bolditalic);
-EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
-                                   &bookerly16BoldItalicFont);
-EpdFont bookerly18RegularFont(&bookerly_18_regular);
-EpdFont bookerly18BoldFont(&bookerly_18_bold);
-EpdFont bookerly18ItalicFont(&bookerly_18_italic);
-EpdFont bookerly18BoldItalicFont(&bookerly_18_bolditalic);
-EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont, &bookerly18ItalicFont,
-                                   &bookerly18BoldItalicFont);
+EpdFont literata12RegularFont(&literata_12_regular);
+EpdFont literata12BoldFont(&literata_12_bold);
+EpdFont literata12ItalicFont(&literata_12_italic);
+EpdFont literata12BoldItalicFont(&literata_12_bolditalic);
+EpdFontFamily literata12FontFamily(&literata12RegularFont, &literata12BoldFont, &literata12ItalicFont,
+                                   &literata12BoldItalicFont);
+EpdFont literata16RegularFont(&literata_16_regular);
+EpdFont literata16BoldFont(&literata_16_bold);
+EpdFont literata16ItalicFont(&literata_16_italic);
+EpdFont literata16BoldItalicFont(&literata_16_bolditalic);
+EpdFontFamily literata16FontFamily(&literata16RegularFont, &literata16BoldFont, &literata16ItalicFont,
+                                   &literata16BoldItalicFont);
+EpdFont literata18RegularFont(&literata_18_regular);
+EpdFont literata18BoldFont(&literata_18_bold);
+EpdFont literata18ItalicFont(&literata_18_italic);
+EpdFont literata18BoldItalicFont(&literata_18_bolditalic);
+EpdFontFamily literata18FontFamily(&literata18RegularFont, &literata18BoldFont, &literata18ItalicFont,
+                                   &literata18BoldItalicFont);
 
 EpdFont notosans12RegularFont(&notosans_12_regular);
 EpdFont notosans12BoldFont(&notosans_12_bold);
@@ -203,11 +203,11 @@ void setupDisplayAndFonts() {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
+  renderer.insertFont(BOOKERLY_14_FONT_ID, literata14FontFamily);
 #ifndef OMIT_FONTS
-  renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
-  renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
-  renderer.insertFont(BOOKERLY_18_FONT_ID, bookerly18FontFamily);
+  renderer.insertFont(BOOKERLY_12_FONT_ID, literata12FontFamily);
+  renderer.insertFont(BOOKERLY_16_FONT_ID, literata16FontFamily);
+  renderer.insertFont(BOOKERLY_18_FONT_ID, literata18FontFamily);
 
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);

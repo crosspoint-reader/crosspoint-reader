@@ -11,8 +11,8 @@ OPENDYSLEXIC_FONT_SIZES=(8 10 12 14)
 
 for size in ${BOOKERLY_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
-    font_name="bookerly_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../builtinFonts/source/Bookerly/Bookerly-${style}.ttf"
+    font_name="literata_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+    font_path="../builtinFonts/source/Literata/Literata-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
     python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
     echo "Generated $output_path"

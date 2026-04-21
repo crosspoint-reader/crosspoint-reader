@@ -151,12 +151,12 @@ except ImportError:
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BOOKERLY_FONT = os.path.join(
     _PROJECT_ROOT, "lib", "EpdFont", "builtinFonts", "source",
-    "Bookerly", "Bookerly-Regular.ttf",
+    "Literata", "Literata-Regular.ttf",
 )
 
 
 def _get_font(size=20):
-    """Get the Bookerly font at the requested size, with system fallbacks."""
+    """Get the Literata font at the requested size, with system fallbacks."""
     paths = [_BOOKERLY_FONT]
     for path in paths:
         try:
