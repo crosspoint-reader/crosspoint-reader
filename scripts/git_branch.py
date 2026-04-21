@@ -16,57 +16,51 @@ def warn(msg):
     print(f'WARNING [git_branch.py]: {msg}', file=sys.stderr)
 
 
-def get_git_branch(project_dir):
+def run_git_value(project_dir, args, label):
     try:
-        branch = subprocess.check_output(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+        value = subprocess.check_output(
+            ['git', *args],
             text=True, stderr=subprocess.PIPE, cwd=project_dir
         ).strip()
-        # Detached HEAD has no branch name.
-        if branch == 'HEAD':
-            branch = 'detached'
         # Strip characters that would break a C string literal
-        return ''.join(c for c in branch if c not in '"\\')
+        return ''.join(c for c in value if c not in '"\\')
     except FileNotFoundError:
-        warn('git not found on PATH; branch suffix will be "unknown"')
+        warn(f'git not found on PATH; {label} suffix will be "unknown"')
         return 'unknown'
     except subprocess.CalledProcessError as e:
         warn(
             f'git command failed (exit {e.returncode}): '
-            f'{e.stderr.strip()}; branch suffix will be "unknown"'
+            f'{e.stderr.strip()}; {label} suffix will be "unknown"'
         )
         return 'unknown'
     except OSError as e:
         warn(
-            f'OS error reading git branch: {e}; '
-            'branch suffix will be "unknown"'
+            f'OS error reading git {label}: {e}; '
+            f'{label} suffix will be "unknown"'
         )
         return 'unknown'
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        warn(
+            f'Unexpected error reading git {label}: {e}; '
+            f'{label} suffix will be "unknown"'
+        )
+        return 'unknown'
+
+
+def get_git_branch(project_dir):
+    branch = run_git_value(
+        project_dir, ['rev-parse', '--abbrev-ref', 'HEAD'], 'branch'
+    )
+    # Detached HEAD has no branch name.
+    if branch == 'HEAD':
+        return 'detached'
+    return branch
 
 
 def get_git_short_sha(project_dir):
-    try:
-        short_sha = subprocess.check_output(
-            ['git', 'rev-parse', '--short', 'HEAD'],
-            text=True, stderr=subprocess.PIPE, cwd=project_dir
-        ).strip()
-        # Strip characters that would break a C string literal
-        return ''.join(c for c in short_sha if c not in '"\\')
-    except FileNotFoundError:
-        warn('git not found on PATH; short SHA suffix will be "unknown"')
-        return 'unknown'
-    except subprocess.CalledProcessError as e:
-        warn(
-            f'git command failed (exit {e.returncode}): '
-            f'{e.stderr.strip()}; short SHA suffix will be "unknown"'
-        )
-        return 'unknown'
-    except OSError as e:
-        warn(
-            f'OS error reading git short SHA: {e}; '
-            'short SHA suffix will be "unknown"'
-        )
-        return 'unknown'
+    return run_git_value(
+        project_dir, ['rev-parse', '--short', 'HEAD'], 'short SHA'
+    )
 
 
 def get_base_version(project_dir):
