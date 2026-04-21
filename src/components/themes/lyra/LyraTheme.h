@@ -40,7 +40,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = -7,
                                  .keyboardTextFieldWidthPercent = 85,
-                                 .keyboardWidthPercent = 90};
+                                 .keyboardWidthPercent = 90,
+                                 .keyboardKeyCornerRadius = 6};
 }
 
 class LyraTheme : public BaseTheme {
@@ -71,10 +72,5 @@ class LyraTheme : public BaseTheme {
   void drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) const;
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
-  void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
-                     int contentStartX = 0, int contentWidth = 0) const override;
-  void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
-                       const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
-                       bool inactiveSelection = false) const override;
   bool showsFileIcons() const override { return true; }
 };

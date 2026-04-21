@@ -214,7 +214,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
       .url = otaUrl.c_str(),
       .timeout_ms = 15000,
       /* Default HTTP client buffer size 512 byte only
-       * not sufficent to handle URL redirection cases or
+       * not sufficient to handle URL redirection cases or
        * parsing of large HTTP headers.
        */
       .buffer_size = 8192,

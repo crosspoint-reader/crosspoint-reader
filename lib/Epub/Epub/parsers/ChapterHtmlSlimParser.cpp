@@ -163,6 +163,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
+  if (strcmp(name, "p") == 0) {
+    self->xpathParagraphIndex++;
+  }
+
   // Extract class, style, and id attributes
   std::string classAttr;
   std::string styleAttr;
@@ -428,7 +432,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
-                  self->completePageFn(std::move(self->currentPage));
+                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
                   self->completedPageCount++;
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
@@ -535,9 +539,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
-      strncpy(self->currentFootnoteLinkHref, href, sizeof(self->currentFootnoteLinkHref) - 1);
-      self->currentFootnoteLinkHref[sizeof(self->currentFootnoteLinkHref) - 1] = '\0';
-      self->currentFootnoteLinkText[0] = '\0';
+      strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
+      self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
+      self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
       // Apply underline style to visually indicate the link
@@ -716,11 +720,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     }
 
     // Extract footnote link text
-    for (int i = start; (self->currentFootnoteLinkTextLen < sizeof(self->currentFootnoteLinkText) - 1) && (i <= end);
+    for (int i = start; (self->currentFootnoteLinkTextLen < sizeof(self->currentFootnote.number) - 1) && (i <= end);
          ++i) {
-      self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = s[i];
+      self->currentFootnote.number[self->currentFootnoteLinkTextLen++] = s[i];
     }
-    self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
+    self->currentFootnote.number[self->currentFootnoteLinkTextLen] = '\0';
   }
 
   for (int i = 0; i < len; i++) {
@@ -911,11 +915,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // Closing a footnote link — create entry from collected text and href
   if (self->insideFootnoteLink && self->depth == self->footnoteLinkDepth) {
-    if (self->currentFootnoteLinkText[0] != '\0' && self->currentFootnoteLinkHref[0] != '\0') {
+    if (self->currentFootnote.number[0] != '\0' && self->currentFootnote.href[0] != '\0') {
       FootnoteEntry entry;
-      strncpy(entry.number, self->currentFootnoteLinkText, sizeof(entry.number) - 1);
+      strncpy(entry.number, self->currentFootnote.number, sizeof(entry.number) - 1);
       entry.number[sizeof(entry.number) - 1] = '\0';
-      strncpy(entry.href, self->currentFootnoteLinkHref, sizeof(entry.href) - 1);
+      strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
       int wordIndex =
           self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
@@ -1066,7 +1070,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
     }
-    completePageFn(std::move(currentPage));
+    completePageFn(std::move(currentPage), xpathParagraphIndex);
     completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
@@ -1084,7 +1088,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
-    completePageFn(std::move(currentPage));
+    completePageFn(std::move(currentPage), xpathParagraphIndex);
     completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
