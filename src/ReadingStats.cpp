@@ -1,8 +1,5 @@
 #include "ReadingStats.h"
 
-#include "BookStats.h"
-#include "KoInsightPendingSessions.h"
-
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -10,6 +7,9 @@
 
 #include <cstring>
 #include <ctime>
+
+#include "BookStats.h"
+#include "KoInsightPendingSessions.h"
 
 namespace {
 constexpr uint8_t STATS_FILE_VERSION = 2;

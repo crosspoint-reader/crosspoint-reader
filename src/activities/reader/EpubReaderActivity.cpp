@@ -22,8 +22,8 @@
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
-#include "RecentBooksStore.h"
 #include "ReadingStats.h"
+#include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -50,8 +50,7 @@ void EpubReaderActivity::flushReadingStatsCheckpoint() {
   uint8_t progress = 0;
   const char* title = epub ? epub->getTitle().c_str() : nullptr;
   if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
-    const float chapterProgress =
-        static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
     progress = static_cast<uint8_t>(
         clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f)));
   }

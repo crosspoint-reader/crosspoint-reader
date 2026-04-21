@@ -6,10 +6,10 @@
 #include <ObfuscationUtils.h>
 #include <Serialization.h>
 
-#include "../../src/JsonSettingsIO.h"
-
 #include <algorithm>
 #include <cctype>
+
+#include "../../src/JsonSettingsIO.h"
 
 // Initialize the static instance
 KOReaderCredentialStore KOReaderCredentialStore::instance;

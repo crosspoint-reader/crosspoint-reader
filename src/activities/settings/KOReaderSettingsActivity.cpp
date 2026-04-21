@@ -14,9 +14,9 @@
 
 namespace {
 constexpr int MENU_ITEMS = 6;
-const StrId menuNames[MENU_ITEMS] = {
-    StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL, StrId::STR_KOINSIGHT_SERVER_URL,
-    StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,
+                                     StrId::STR_SYNC_SERVER_URL,   StrId::STR_KOINSIGHT_SERVER_URL,
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {

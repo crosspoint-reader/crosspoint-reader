@@ -13,13 +13,12 @@
 #include <ctime>
 #include <unordered_set>
 
-#include "KOReaderCredentialStore.h"
-#include "KOReaderDocumentId.h"
-
 #include "../../src/BookStats.h"
 #include "../../src/KoInsightPendingSessions.h"
 #include "../../src/ReadingStats.h"
 #include "../../src/RecentBooksStore.h"
+#include "KOReaderCredentialStore.h"
+#include "KOReaderDocumentId.h"
 
 namespace {
 constexpr int64_t MIN_VALID_UNIX = 1704067200;  // 2024-01-01 UTC (same as ReadingStats NTP gate)
@@ -194,7 +193,8 @@ std::string buildImportPayload(const std::shared_ptr<Epub>& epub, const std::str
     const std::string md5Open = hashForBookPath(openEpubPath);
     if (!md5Open.empty() && !bookMd5s.count(md5Open)) {
       bookMd5s.insert(md5Open);
-      const int chPages = (openChapterTotalPages > 0) ? openChapterTotalPages : readProgressBin(openEpubPath).chapterPages;
+      const int chPages =
+          (openChapterTotalPages > 0) ? openChapterTotalPages : readProgressBin(openEpubPath).chapterPages;
       const int pagesField = (chPages > 0) ? chPages : 1;
       addBookJson(books, bookId, md5Open, epub->getTitle(), epub->getAuthor(), epub->getLanguage(), pagesField,
                   static_cast<uint32_t>(time(nullptr)), liveSecs, 0);
@@ -261,8 +261,7 @@ void KoInsightClient::pushReadingSnapshotIfConfigured(const std::shared_ptr<Epub
     LOG_ERR("KoInsight", "device POST failed; continuing with import (same as plugin)");
   }
 
-  const std::string importBody =
-      buildImportPayload(epub, epubPath, currentSpineIndex, currentPage, chapterTotalPages);
+  const std::string importBody = buildImportPayload(epub, epubPath, currentSpineIndex, currentPage, chapterTotalPages);
   const std::string importUrl = base + API_IMPORT;
   if (httpPostJson(importUrl, importBody, "KoInsight")) {
     KoInsightPendingSessions::clear();

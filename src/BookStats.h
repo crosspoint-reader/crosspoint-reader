@@ -11,10 +11,10 @@ class BookStats {
  public:
   struct BookEntry {
     char title[64];
-    uint32_t totalSeconds;         // cumulative reading time for this book
-    uint32_t lastReadTimestamp;    // epoch seconds of last session end
-    uint8_t progress;              // 0-100%
-    uint16_t sessions;             // number of reading sessions
+    uint32_t totalSeconds;       // cumulative reading time for this book
+    uint32_t lastReadTimestamp;  // epoch seconds of last session end
+    uint8_t progress;            // 0-100%
+    uint16_t sessions;           // number of reading sessions
   };
 
   static BookStats& getInstance() { return instance; }

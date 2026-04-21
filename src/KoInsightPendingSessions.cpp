@@ -95,6 +95,4 @@ std::vector<KoInsightPendingStat> KoInsightPendingSessions::loadAll() {
   return out;
 }
 
-void KoInsightPendingSessions::clear() {
-  Storage.remove(PENDING_FILE);
-}
+void KoInsightPendingSessions::clear() { Storage.remove(PENDING_FILE); }
