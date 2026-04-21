@@ -57,6 +57,13 @@ class CrossPointSettings {
     STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
   };
   enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
+  // Stable page numbers in status bar: hide; only when configured for the book; or then else book %
+  enum STATUS_BAR_STABLE_PAGES {
+    STABLE_PAGES_HIDE = 0,
+    STABLE_PAGES_WHEN_SET = 1,
+    STABLE_PAGES_FALLBACK_PERCENT = 2,
+    STABLE_PAGES_MODE_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -147,6 +154,7 @@ class CrossPointSettings {
   uint8_t statusBar = FULL;
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
+  uint8_t statusBarStablePages = STABLE_PAGES_WHEN_SET;
   uint8_t statusBarProgressBar = HIDE_PROGRESS;
   uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
   uint8_t statusBarTitle = CHAPTER_TITLE;
@@ -226,6 +234,16 @@ class CrossPointSettings {
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
 };
+
+// Shared by status bar and reader menu progress line (stable pages vs book %).
+inline void computeStatusBarBookDisplayFlags(uint8_t stablePagesSetting, bool bookPctSetting, int stableBookTotal,
+                                             bool& showStable, bool& showBookPct) {
+  using CP = CrossPointSettings;
+  const auto m = static_cast<CP::STATUS_BAR_STABLE_PAGES>(stablePagesSetting);
+  const bool hasStable = stableBookTotal > 0;
+  showStable = (m == CP::STABLE_PAGES_WHEN_SET || m == CP::STABLE_PAGES_FALLBACK_PERCENT) && hasStable;
+  showBookPct = bookPctSetting || (m == CP::STABLE_PAGES_FALLBACK_PERCENT && !hasStable);
+}
 
 // Helper macro to access settings
 #define SETTINGS CrossPointSettings::getInstance()
