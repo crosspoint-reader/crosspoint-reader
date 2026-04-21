@@ -197,6 +197,11 @@ class CrossPointSettings {
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // File browser sort settings
+  enum FILE_SORT_MODE { SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2, FILE_SORT_MODE_COUNT };
+  enum FILE_SORT_DIR { SORT_ASC = 0, SORT_DESC = 1, FILE_SORT_DIR_COUNT };
+  uint8_t fileSortMode = SORT_NAME;
+  uint8_t fileSortDirection = SORT_ASC;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
 

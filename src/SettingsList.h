@@ -80,6 +80,11 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         "sleepTimeout", StrId::STR_CAT_SYSTEM),
       SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                           StrId::STR_CAT_SYSTEM),
+      SettingInfo::Enum(StrId::STR_SORT_BY, &CrossPointSettings::fileSortMode,
+                        {StrId::STR_SORT_NAME, StrId::STR_SORT_DATE, StrId::STR_SORT_SIZE}, "fileSortMode",
+                        StrId::STR_CAT_SYSTEM),
+      SettingInfo::Enum(StrId::STR_SORT_DIR, &CrossPointSettings::fileSortDirection,
+                        {StrId::STR_SORT_ASC, StrId::STR_SORT_DESC}, "fileSortDirection", StrId::STR_CAT_SYSTEM),
 
       // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
       SettingInfo::DynamicString(
