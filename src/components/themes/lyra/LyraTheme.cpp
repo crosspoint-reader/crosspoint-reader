@@ -152,11 +152,22 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
   int maxSubtitleWidth =
       subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
-  if (maxTitleWidth + maxSubtitleWidth > rect.width - LyraMetrics::values.contentSidePadding * 3) {
-    if (maxTitleWidth > maxSubtitleWidth) {
-      maxTitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 3 - maxSubtitleWidth;
+
+  // Available space is the distance between the side paddings, and a with side padding between title and subtitle.
+  const int availableSpace = rect.width - LyraMetrics::values.contentSidePadding * 3;
+
+  if (maxTitleWidth + maxSubtitleWidth > availableSpace) {
+    if ((maxTitleWidth > availableSpace / 2) && (maxSubtitleWidth > availableSpace / 2)) {
+      // Both are wider then half the space, truncate both.
+      maxTitleWidth = availableSpace / 2;
+      maxSubtitleWidth = availableSpace / 2;
     } else {
-      maxSubtitleWidth = rect.width - LyraMetrics::values.contentSidePadding * 3 - maxTitleWidth;
+      // Truncate the the longest one
+      if (maxTitleWidth > maxSubtitleWidth) {
+        maxTitleWidth = availableSpace - maxSubtitleWidth;
+      } else {
+        maxSubtitleWidth = availableSpace - maxTitleWidth;
+      }
     }
   }
 
