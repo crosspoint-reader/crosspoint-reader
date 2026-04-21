@@ -237,8 +237,8 @@ void EpubReaderActivity::loop() {
 
   // In Smart auto-page-turn mode, a manual turn is a reading-speed signal: adapt WPM via EMA
   // before advancing so the next page's duration is computed with the updated value.
-  if (automaticPageTurnActive && activePageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION &&
-      currentPageWordCount > 0) {
+  // Always call even on zero-word pages so skip-counter bookkeeping stays consistent.
+  if (automaticPageTurnActive && activePageTurnOption == EpubReaderMenuActivity::SMART_PAGE_TURN_OPTION) {
     adaptReadingSpeed(!prevTriggered, millis() - lastPageTurnTime);
   }
 
@@ -1008,7 +1008,7 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
       lastForwardWasAccidental = false;
       return;
     }
-    skipForwardAdaptCount++;
+    if (skipForwardAdaptCount < UINT8_MAX) skipForwardAdaptCount++;
     if (backwardSlowdownApplied || elapsedMs > BACK_SLOWDOWN_WINDOW_MS) {
       return;  // Already slowed down, or back press is navigation not a speed signal.
     }
@@ -1019,6 +1019,11 @@ void EpubReaderActivity::adaptReadingSpeed(const bool isForwardTurn, const unsig
     skipForwardAdaptCount--;
     LOG_DBG("ERS", "Adaptive WPM: fwd turn skipped (partial page after back), %u skips remaining",
             skipForwardAdaptCount);
+    return;
+  }
+
+  // Image-only pages carry no WPM signal; counter was still updated above.
+  if (currentPageWordCount == 0) {
     return;
   }
 
