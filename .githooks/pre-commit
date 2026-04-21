@@ -8,10 +8,25 @@ cd "${REPO_ROOT}"
 
 # Capture the files already staged for commit so we only re-stage those
 # paths after formatting.
-mapfile -d '' -t staged_files < <(git diff --cached --name-only -z --diff-filter=ACMR)
+staged_files=()
+while IFS= read -r -d '' file; do
+  staged_files+=("${file}")
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
 
-echo "Running clang-format fix before commit..."
-./bin/clang-format-fix
+# Skip formatter invocation when there are no modified C/C++ files.
+format_candidates="$(
+  git ls-files --exclude-standard --modified \
+    | grep -E '\.(c|cpp|h|hpp)$' \
+    | grep -v -E '^lib/EpdFont/builtinFonts/' \
+    | grep -v -E '^lib/Epub/Epub/hyphenation/generated/' \
+    | grep -v -E '^lib/uzlib/' \
+    || true
+)"
+
+if [[ -n "${format_candidates}" ]]; then
+  echo "Running clang-format fix before commit..."
+  ./bin/clang-format-fix -g
+fi
 
 # Ensure formatting changes are included in the pending commit without
 # staging unrelated tracked modifications from the working tree.
