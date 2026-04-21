@@ -148,7 +148,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
         reason = "No firmware asset found";
         break;
       case OtaUpdater::VALIDATE_FAILED:
-        reason = "Image validation failed - please flash via USB";
+        reason = "Bootloader incompatible - reflash via USB with PlatformIO";
         break;
       default:
         break;

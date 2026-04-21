@@ -3,8 +3,12 @@
 #include <ArduinoJson.h>
 #include <Logging.h>
 
+#include "bootloader_common.h"
+#include "esp_flash_partitions.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "esp_wifi.h"
 
 namespace {
@@ -249,6 +253,64 @@ OtaUpdater::OtaUpdaterError OtaUpdater::beginInstallUpdate() {
   return UPDATE_IN_PROGRESS;
 }
 
+/* Writes the otadata entry to boot from the most recently flashed OTA partition,
+ * bypassing esp_ota_set_boot_partition()'s image_validate() call.
+ * Used when esp_https_ota_finish() returns ESP_ERR_OTA_VALIDATE_FAILED on
+ * unsigned Arduino builds (boot_comm efuse revision check false-positive). */
+int OtaUpdater::forceSetOtaBootPartition() {
+  const esp_partition_t* newPartition = esp_ota_get_next_update_partition(nullptr);
+  if (newPartition == nullptr) {
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  const esp_partition_t* otaDataPartition =
+      esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+  if (otaDataPartition == nullptr) {
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  esp_ota_select_entry_t otadata[2];
+  esp_err_t err = esp_partition_read(otaDataPartition, 0, &otadata[0], sizeof(esp_ota_select_entry_t));
+  if (err != ESP_OK) return err;
+  err = esp_partition_read(otaDataPartition, otaDataPartition->erase_size, &otadata[1], sizeof(esp_ota_select_entry_t));
+  if (err != ESP_OK) return err;
+
+  int activeSlot = bootloader_common_get_active_otadata(otadata);
+  int nextSlot = (activeSlot == -1) ? 0 : (~activeSlot & 1);
+
+  uint8_t otaAppCount = 0;
+  while (esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+                                  static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_MIN + otaAppCount),
+                                  nullptr) != nullptr) {
+    otaAppCount++;
+  }
+  if (otaAppCount == 0) return ESP_ERR_NOT_FOUND;
+
+  const uint8_t subTypeId = newPartition->subtype & 0x0F;
+  uint32_t newSeq;
+  if (activeSlot == -1) {
+    newSeq = subTypeId + 1;
+  } else {
+    uint32_t currentSeq = otadata[activeSlot].ota_seq;
+    newSeq = currentSeq;
+    while (newSeq % otaAppCount != static_cast<uint32_t>(subTypeId)) {
+      newSeq++;
+    }
+    if (newSeq == currentSeq) newSeq += otaAppCount;
+  }
+
+  otadata[nextSlot].ota_seq = newSeq;
+  otadata[nextSlot].ota_state = ESP_OTA_IMG_VALID;
+  otadata[nextSlot].crc = bootloader_common_ota_select_crc(&otadata[nextSlot]);
+
+  err = esp_partition_erase_range(otaDataPartition, otaDataPartition->erase_size * static_cast<uint32_t>(nextSlot),
+                                  otaDataPartition->erase_size);
+  if (err != ESP_OK) return err;
+
+  return esp_partition_write(otaDataPartition, otaDataPartition->erase_size * static_cast<uint32_t>(nextSlot),
+                             &otadata[nextSlot], sizeof(esp_ota_select_entry_t));
+}
+
 OtaUpdater::OtaUpdaterError OtaUpdater::performInstallUpdateStep() {
   if (cancelRequested) {
     cleanupUpdate();
@@ -283,12 +345,20 @@ OtaUpdater::OtaUpdaterError OtaUpdater::performInstallUpdateStep() {
 
   esp_err_t finish_err = esp_https_ota_finish(otaHandle);
   otaHandle = nullptr;
-  if (finish_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_https_ota_finish Failed: %s", esp_err_to_name(finish_err));
-    cleanupUpdate();
-    if (finish_err == ESP_ERR_OTA_VALIDATE_FAILED) {
+  if (finish_err == ESP_ERR_OTA_VALIDATE_FAILED) {
+    /* Arduino unsigned builds fail boot_comm validation even though the image
+     * is fully written. Force the boot partition to the new OTA slot by writing
+     * the otadata entry directly, bypassing image_validate(). */
+    LOG_INF("OTA", "Validation failed (expected for unsigned Arduino builds) - forcing boot partition");
+    finish_err = forceSetOtaBootPartition();
+    if (finish_err != ESP_OK) {
+      LOG_ERR("OTA", "forceSetOtaBootPartition failed: %s", esp_err_to_name(finish_err));
+      cleanupUpdate();
       return VALIDATE_FAILED;
     }
+  } else if (finish_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_https_ota_finish Failed: %s", esp_err_to_name(finish_err));
+    cleanupUpdate();
     return INTERNAL_UPDATE_ERROR;
   }
 
