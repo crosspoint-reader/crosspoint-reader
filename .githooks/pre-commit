@@ -16,7 +16,7 @@ done < <(git diff --cached --name-only -z --diff-filter=ACMR)
 # Intentionally format all currently modified tracked C/C++ files.
 # The helper handles no-op cases and exits 0 when nothing matches.
 echo "Running clang-format fix before commit..."
-./bin/clang-format-fix -g
+./bin/clang-format-fix
 
 # Ensure formatting changes are included in the pending commit without
 # staging unrelated tracked modifications from other files in the
