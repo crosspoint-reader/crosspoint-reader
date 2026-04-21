@@ -162,6 +162,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     applyLegacyStatusBarSettings(s);
   }
 
+  // Legacy migration: rename "longPressChapterSkip" -> "sideButtonLongPress".
+  if (doc["sideButtonLongPress"].isNull() && !doc["longPressChapterSkip"].isNull()) {
+    doc["sideButtonLongPress"] = doc["longPressChapterSkip"];
+    if (needsResave) *needsResave = true;
+  }
+
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
