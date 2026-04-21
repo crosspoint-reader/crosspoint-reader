@@ -18,7 +18,74 @@
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+
+bool isSupportedFile(std::string_view name) {
+  return FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) || FsHelpers::hasTxtExtension(name) ||
+         FsHelpers::hasMarkdownExtension(name) || FsHelpers::hasBmpExtension(name);
+}
+
+// Natural case-insensitive string compare: returns negative/zero/positive.
+// unsigned char casts keep isdigit/tolower defined on non-ASCII (UTF-8) bytes.
+int naturalCompare(const std::string& str1, const std::string& str2) {
+  const char* s1 = str1.c_str();
+  const char* s2 = str2.c_str();
+
+  while (*s1 && *s2) {
+    if (isdigit(static_cast<unsigned char>(*s1)) && isdigit(static_cast<unsigned char>(*s2))) {
+      // Compare digit runs numerically: skip leading zeros, shorter run = smaller value
+      while (*s1 == '0') s1++;
+      while (*s2 == '0') s2++;
+
+      int len1 = 0, len2 = 0;
+      while (isdigit(static_cast<unsigned char>(s1[len1]))) len1++;
+      while (isdigit(static_cast<unsigned char>(s2[len2]))) len2++;
+
+      if (len1 != len2) return len1 - len2;
+
+      for (int i = 0; i < len1; i++) {
+        if (s1[i] != s2[i]) return s1[i] - s2[i];
+      }
+      s1 += len1;
+      s2 += len2;
+    } else {
+      const int c1 = tolower(static_cast<unsigned char>(*s1));
+      const int c2 = tolower(static_cast<unsigned char>(*s2));
+      if (c1 != c2) return c1 - c2;
+      s1++;
+      s2++;
+    }
+  }
+
+  if (*s1 == '\0' && *s2 == '\0') return 0;
+  return (*s1 == '\0') ? -1 : 1;
+}
 }  // namespace
+
+void FileBrowserActivity::sortFileList(std::vector<FileEntry>& entries) {
+  const auto sortMode = SETTINGS.fileSortMode;
+  const bool descending = SETTINGS.fileSortDirection == CrossPointSettings::SORT_DESC;
+
+  std::sort(begin(entries), end(entries), [sortMode, descending](const FileEntry& a, const FileEntry& b) {
+    // Directories first, regardless of sort mode or direction
+    const bool aDir = a.name.back() == '/';
+    const bool bDir = b.name.back() == '/';
+    if (aDir != bDir) return aDir;
+
+    int cmp;
+    switch (sortMode) {
+      case CrossPointSettings::SORT_DATE:
+        cmp = (a.dateTime != b.dateTime) ? (a.dateTime < b.dateTime ? -1 : 1) : naturalCompare(a.name, b.name);
+        break;
+      case CrossPointSettings::SORT_SIZE:
+        cmp = (a.size != b.size) ? (a.size < b.size ? -1 : 1) : naturalCompare(a.name, b.name);
+        break;
+      default:  // SORT_NAME
+        cmp = naturalCompare(a.name, b.name);
+        break;
+    }
+    return descending ? (cmp > 0) : (cmp < 0);
+  });
+}
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
@@ -36,6 +103,7 @@ void FileBrowserActivity::loadFiles() {
     return;
   }
 
+  files.reserve(64);
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
@@ -43,24 +111,32 @@ void FileBrowserActivity::loadFiles() {
       continue;
     }
 
+    // FAT timestamp for date sort: take max(mtime, ctime) so files copied onto the
+    // card (which keep their original mtime but get a fresh ctime) sort by when
+    // they were added to the device.
+    uint16_t mdate = 0, mtime = 0, cdate = 0, ctime = 0;
+    file.getModifyDateTime(&mdate, &mtime);
+    file.getCreateDateTime(&cdate, &ctime);
+    const uint32_t modTs = (static_cast<uint32_t>(mdate) << 16) | mtime;
+    const uint32_t crtTs = (static_cast<uint32_t>(cdate) << 16) | ctime;
+    const uint32_t dateTime = modTs > crtTs ? modTs : crtTs;
+
     if (file.isDirectory()) {
-      files.emplace_back(std::string(fileNameBuffer.get()) + "/");
+      files.push_back({std::string(fileNameBuffer.get()) + "/", 0, dateTime});
     } else {
       std::string_view filename{fileNameBuffer.get()};
       if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
         if (FsHelpers::checkFileExtension(filename, ".bin")) {
-          files.emplace_back(filename);
+          files.push_back({std::string(filename), static_cast<uint32_t>(file.fileSize()), dateTime});
         }
-      } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-                 FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename)) {
-        files.emplace_back(filename);
+      } else if (isSupportedFile(filename)) {
+        files.push_back({std::string(filename), static_cast<uint32_t>(file.fileSize()), dateTime});
       }
     }
   }
   root.close();
-  FsHelpers::sortFileList(files);
+  sortFileList(files);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -213,7 +289,7 @@ void FileBrowserActivity::loop() {
     }
     if (files.empty()) return;
 
-    const std::string& entry = files[selectorIndex];
+    const std::string& entry = files[selectorIndex].name;
     bool isDirectory = (entry.back() == '/');
 
     // Firmware picker: select file -> return path; navigate into directories normally.
@@ -368,9 +444,9 @@ void FileBrowserActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); }, false);
+        [this](int index) { return getFileName(files[index].name); }, nullptr,
+        [this](int index) { return UITheme::getFileIcon(files[index].name); },
+        [this](int index) { return getFileExtension(files[index].name); }, false);
   }
 
   // Full path display
@@ -404,7 +480,8 @@ void FileBrowserActivity::render(RenderLock&&) {
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
+  const bool selectingFirmwareFile =
+      mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].name.back() != '/';
   const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));
@@ -415,6 +492,6 @@ void FileBrowserActivity::render(RenderLock&&) {
 
 size_t FileBrowserActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
-    if (files[i] == name) return i;
+    if (files[i].name == name) return i;
   return 0;
 }

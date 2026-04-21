@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -15,6 +16,12 @@ class FileBrowserActivity final : public Activity {
   enum class Mode { Books, PickFirmware };
 
  private:
+  struct FileEntry {
+    std::string name;   // filename; trailing '/' = directory
+    uint32_t size;      // file size in bytes; 0 for directories
+    uint32_t dateTime;  // FAT timestamp packed as (date << 16) | time; 0 = unknown
+  };
+
   // Deletion
   bool removeDirFile(const std::string& fullPath);
 
@@ -31,11 +38,12 @@ class FileBrowserActivity final : public Activity {
 
   // Files state
   std::string basepath = "/";
-  std::vector<std::string> files;
+  std::vector<FileEntry> files;
   std::unique_ptr<char[]> fileNameBuffer;
 
   // Data loading
   void loadFiles();
+  static void sortFileList(std::vector<FileEntry>& entries);
   size_t findEntry(const std::string& name) const;
 
  public:

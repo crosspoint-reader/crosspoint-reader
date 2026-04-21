@@ -244,6 +244,11 @@ class CrossPointSettings {
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
   uint8_t moveFinishedToReadFolder = 0;
+  // File browser sort settings
+  enum FILE_SORT_MODE { SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2, FILE_SORT_MODE_COUNT };
+  enum FILE_SORT_DIR { SORT_ASC = 0, SORT_DESC = 1, FILE_SORT_DIR_COUNT };
+  uint8_t fileSortMode = SORT_NAME;
+  uint8_t fileSortDirection = SORT_ASC;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
