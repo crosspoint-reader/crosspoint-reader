@@ -10,6 +10,7 @@
 void WriterActivity::onEnter() {
   Activity::onEnter();
 
+  inputBuffer = "Text to append\n";
   draftStore.ensureDraft();
   draftStore.readDraft(draftText);
   requestUpdate();
@@ -20,7 +21,7 @@ void WriterActivity::loop() {
     finish();
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    draftStore.appendToDraft("\nAppended text.");
+    draftStore.appendToDraft(inputBuffer);
     draftStore.readDraft(draftText);
     requestUpdate();
   }
