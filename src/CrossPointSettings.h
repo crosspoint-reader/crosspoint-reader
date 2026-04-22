@@ -235,7 +235,6 @@ class CrossPointSettings {
   int getRefreshFrequency() const;
 };
 
-// Shared by status bar and reader menu progress line (stable pages vs book %).
 inline void computeStatusBarBookDisplayFlags(uint8_t stablePagesSetting, bool bookPctSetting, int stableBookTotal,
                                              bool& showStable, bool& showBookPct) {
   using CP = CrossPointSettings;
@@ -243,6 +242,13 @@ inline void computeStatusBarBookDisplayFlags(uint8_t stablePagesSetting, bool bo
   const bool hasStable = stableBookTotal > 0;
   showStable = (m == CP::STABLE_PAGES_WHEN_SET || m == CP::STABLE_PAGES_FALLBACK_PERCENT) && hasStable;
   showBookPct = bookPctSetting || (m == CP::STABLE_PAGES_FALLBACK_PERCENT && !hasStable);
+}
+
+inline bool statusBarBookBarUsesStableFraction(uint8_t stablePagesSetting, bool bookPctSetting, int stableBookTotal) {
+  if (bookPctSetting || stableBookTotal <= 0) return false;
+  using CP = CrossPointSettings;
+  const auto m = static_cast<CP::STATUS_BAR_STABLE_PAGES>(stablePagesSetting);
+  return m == CP::STABLE_PAGES_WHEN_SET || m == CP::STABLE_PAGES_FALLBACK_PERCENT;
 }
 
 // Helper macro to access settings

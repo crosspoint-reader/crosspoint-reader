@@ -9,8 +9,6 @@ class Epub;
 
 namespace BookSyntheticIndex {
 
-// KOReader crengine: ldomDocument::buildSyntheticPageMap (lvtinydom.cpp).
-
 struct BuiltIndex {
   uint32_t charsPerPage = 0;
   uint32_t totalPages = 0;

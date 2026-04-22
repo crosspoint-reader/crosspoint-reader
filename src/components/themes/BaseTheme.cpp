@@ -693,13 +693,13 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int progressTextWidth = 0;
 
   const bool showChapter = SETTINGS.statusBarChapterPageCount;
-  const auto stableMode = static_cast<CrossPointSettings::STATUS_BAR_STABLE_PAGES>(SETTINGS.statusBarStablePages);
-  const bool hasStable = stableBookTotal > 0;
   bool showStable = false;
   bool showBookPct = false;
   computeStatusBarBookDisplayFlags(SETTINGS.statusBarStablePages, SETTINGS.statusBarBookProgressPercentage != 0,
                                    stableBookTotal, showStable, showBookPct);
   const bool showAnyBookProgress = showBookPct || showStable;
+  const bool barStableFrac = statusBarBookBarUsesStableFraction(
+      SETTINGS.statusBarStablePages, SETTINGS.statusBarBookProgressPercentage != 0, stableBookTotal);
 
   if (showChapter || showAnyBookProgress) {
     char progressStr[72];
@@ -737,13 +737,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       if (SETTINGS.statusBarBookProgressPercentage) {
         progress = static_cast<size_t>(bookProgress);
-      } else if (hasStable && (stableMode == CrossPointSettings::STABLE_PAGES_WHEN_SET ||
-                               stableMode == CrossPointSettings::STABLE_PAGES_FALLBACK_PERCENT)) {
+      } else if (barStableFrac) {
         progress = static_cast<size_t>((100.0f * static_cast<float>(stableBookPage)) /
                                        static_cast<float>(stableBookTotal));
-        if (progress > 100) {
-          progress = 100;
-        }
+        if (progress > 100) progress = 100;
       } else {
         progress = static_cast<size_t>(bookProgress);
       }

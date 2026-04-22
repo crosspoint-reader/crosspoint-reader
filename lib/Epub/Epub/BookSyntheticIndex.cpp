@@ -19,7 +19,6 @@ namespace {
 
 constexpr uint32_t kFileMagic = static_cast<uint32_t>('S') | (static_cast<uint32_t>('Y') << 8) |
                                 (static_cast<uint32_t>('T') << 16) | (static_cast<uint32_t>('P') << 24);
-// 3: index built with streaming spine parse (readFileToMemory OOM produced ~spine-count-only totals on device)
 constexpr uint32_t kFileVersion = 3;
 constexpr size_t kParseBufferSize = 1024;
 
@@ -83,6 +82,11 @@ struct ParseMeter {
   int skipDepth = 0;
 };
 
+static void feedText(ParseMeter* m, const char* s, int len) {
+  if (m->skipDepth > 0 || len <= 0 || m->st == nullptr) return;
+  m->st->onText(s, len);
+}
+
 static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char**) {
   auto* m = static_cast<ParseMeter*>(userData);
   if (m->skipDepth > 0) {
@@ -102,31 +106,22 @@ static void XMLCALL endElement(void* userData, const XML_Char*) {
 }
 
 static void XMLCALL charData(void* userData, const XML_Char* s, int len) {
-  auto* m = static_cast<ParseMeter*>(userData);
-  if (m->skipDepth > 0 || len <= 0 || m->st == nullptr) {
-    return;
-  }
-  m->st->onText(reinterpret_cast<const char*>(s), len);
+  feedText(static_cast<ParseMeter*>(userData), reinterpret_cast<const char*>(s), len);
 }
 
 static void XMLCALL defaultHandlerExpand(void* userData, const XML_Char* s, int len) {
   auto* m = static_cast<ParseMeter*>(userData);
-  if (m->skipDepth > 0 || len <= 0 || m->st == nullptr) {
-    return;
-  }
   if (len >= 3 && s[0] == '&' && s[len - 1] == ';') {
     const auto* entity = reinterpret_cast<const char*>(s);
     const char* utf8Value = lookupHtmlEntity(entity, static_cast<size_t>(len));
     if (utf8Value != nullptr) {
-      m->st->onText(utf8Value, static_cast<int>(strlen(utf8Value)));
+      feedText(m, utf8Value, static_cast<int>(strlen(utf8Value)));
       return;
     }
-    m->st->onText(entity, len);
+    feedText(m, entity, len);
   }
 }
 
-// Stream to disk then chunked Expat — same as Section::createSectionFile. readFileToMemory often fails on device
-// for full chapters (heap), which leaves only per-spine DocFragment pages (~ spine count).
 static bool parseOneSpine(const Epub& epub, const std::string& itemHref, KoreaderSyntheticState& st) {
   const std::string path = FsHelpers::normalisePath(itemHref);
   const std::string tmpPath = epub.getCachePath() + "/.syntp_parse.tmp";
