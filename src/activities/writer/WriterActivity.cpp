@@ -34,10 +34,29 @@ void WriterActivity::render(RenderLock&&) {
 
   int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
-  auto draftLines = renderer.wrappedText(UI_10_FONT_ID, draftText.c_str(), contentWidth, 10);
-  for (const auto& line : draftLines) {
-    renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
-    y += lineHeight;
+  constexpr int maxVisibleLines = 10;
+  int renderedLines = 0;
+
+  size_t start = 0;
+  while (start <= draftText.size() && renderedLines < maxVisibleLines) {
+    size_t end = draftText.find('\n', start);
+    std::string paragraph = draftText.substr(start, end == std::string::npos ? std::string::npos : end - start);
+
+    if (paragraph.empty()) {
+      y += lineHeight;
+      renderedLines++;
+    } else {
+      auto wrapped =
+          renderer.wrappedText(UI_10_FONT_ID, paragraph.c_str(), contentWidth, maxVisibleLines - renderedLines);
+      for (const auto& line : wrapped) {
+        renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
+        y += lineHeight;
+        renderedLines++;
+      }
+    }
+
+    if (end == std::string::npos) break;
+    start = end + 1;
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
