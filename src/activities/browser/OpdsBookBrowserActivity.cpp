@@ -309,7 +309,15 @@ void OpdsBookBrowserActivity::fetchOsdTemplate(const std::string& osdUrl) {
   }
   XML_SetUserData(p, &osdState);
   XML_SetElementHandler(p, OsdState::onStart, nullptr);
-  XML_Parse(p, content.c_str(), static_cast<int>(content.size()), XML_TRUE);
+  const XML_Status parseStatus = XML_Parse(p, content.c_str(), static_cast<int>(content.size()), XML_TRUE);
+  if (parseStatus == XML_STATUS_ERROR) {
+    const XML_Size errorLine = XML_GetCurrentLineNumber(p);
+    const enum XML_Error errorCode = XML_GetErrorCode(p);
+    LOG_ERR("OPDS", "Failed to parse OSD at line %lu: %s", static_cast<unsigned long>(errorLine),
+            XML_ErrorString(errorCode));
+    XML_ParserFree(p);
+    return;
+  }
   XML_ParserFree(p);
 
   if (!osdState.templateUrl.empty()) {
