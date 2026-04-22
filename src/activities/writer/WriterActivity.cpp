@@ -19,6 +19,11 @@ void WriterActivity::loop() {
   if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
     finish();
   }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    draftStore.appendToDraft("\nAppended text.");
+    draftStore.readDraft(draftText);
+    requestUpdate();
+  }
 }
 
 void WriterActivity::render(RenderLock&&) {
@@ -59,7 +64,7 @@ void WriterActivity::render(RenderLock&&) {
     start = end + 1;
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Append", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

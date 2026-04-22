@@ -10,4 +10,5 @@ class WriterDraftStore {
 
   bool ensureDraft();
   bool readDraft(std::string& out);
+  bool appendToDraft(const std::string& text);
 };
