@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <vector>
+
 #include "WriterDraftStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -36,33 +38,44 @@ void WriterActivity::render(RenderLock&&) {
   const auto x = metrics.contentSidePadding;
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_WRITER));
+  std::vector<std::string> visibleLines;  // Small screen buffer for the last 'x' lines
 
-  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-
+  // Read the file and keep the last 'x' lines
   constexpr int maxVisibleLines = 10;
-  int renderedLines = 0;
+
+  auto keepLastVisibleLines = [&] {
+    while (visibleLines.size() > maxVisibleLines) {
+      visibleLines.erase(visibleLines.begin());
+    }
+  };
 
   size_t start = 0;
-  while (start <= draftText.size() && renderedLines < maxVisibleLines) {
+  while (start <= draftText.size()) {
     size_t end = draftText.find('\n', start);
     std::string paragraph = draftText.substr(start, end == std::string::npos ? std::string::npos : end - start);
 
     if (paragraph.empty()) {
-      y += lineHeight;
-      renderedLines++;
+      visibleLines.push_back("");
+      keepLastVisibleLines();
     } else {
-      auto wrapped =
-          renderer.wrappedText(UI_10_FONT_ID, paragraph.c_str(), contentWidth, maxVisibleLines - renderedLines);
+      auto wrapped = renderer.wrappedText(UI_10_FONT_ID, paragraph.c_str(), contentWidth, maxVisibleLines);
       for (const auto& line : wrapped) {
-        renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
-        y += lineHeight;
-        renderedLines++;
+        visibleLines.push_back(line);
+        keepLastVisibleLines();
       }
     }
-
     if (end == std::string::npos) break;
     start = end + 1;
+  }
+
+  // Draw the screen
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_WRITER));
+
+  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+
+  for (const auto& line : visibleLines) {
+    renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
+    y += lineHeight;
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Append", "", "");
