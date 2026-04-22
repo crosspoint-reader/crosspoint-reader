@@ -47,6 +47,7 @@ class ClipSelectionActivity final : public Activity {
   uint8_t* savedBuffer = nullptr;
   size_t savedBufferSize = 0;
   int currentDisplayPage = 0;
+  int savedSectionPage = 0;
 
   int cursorIdx = 0;
   int startMarkIdx = -1;

@@ -59,6 +59,11 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 }
 
 void HalDisplay::displayWindow(int x, int y, int w, int h) {
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
+  if (w <= 0 || h <= 0 || x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT) return;
+  if (x + w > DISPLAY_WIDTH) w = DISPLAY_WIDTH - x;
+  if (y + h > DISPLAY_HEIGHT) h = DISPLAY_HEIGHT - y;
   einkDisplay.displayWindow(static_cast<uint16_t>(x), static_cast<uint16_t>(y), static_cast<uint16_t>(w),
                             static_cast<uint16_t>(h));
 }
