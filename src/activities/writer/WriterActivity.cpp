@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "WriterDraftStore.h"
@@ -37,12 +38,15 @@ void WriterActivity::render(RenderLock&&) {
   const auto contentWidth = pageWidth - 2 * metrics.contentSidePadding;
   const auto x = metrics.contentSidePadding;
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int textTop = metrics.topPadding;
+  const auto footer = getFooterLayout();
+
+  const int availableTextHeight = footer.top - textTop - metrics.verticalSpacing;
+  const int maxVisibleLines = std::max(1, availableTextHeight / lineHeight);
 
   std::vector<std::string> visibleLines;  // Small screen buffer for the last 'x' lines
 
   // Read the file and keep the last 'x' lines
-  constexpr int maxVisibleLines = 10;
-
   auto keepLastVisibleLines = [&] {
     while (visibleLines.size() > maxVisibleLines) {
       visibleLines.erase(visibleLines.begin());
@@ -97,16 +101,21 @@ int WriterActivity::countWords() const {
   return words;
 }
 
-// Standard footer isn't writer-ready, so we'll keep our version local.
-void WriterActivity::renderFooter() const {
+WriterActivity::FooterLayout WriterActivity::getFooterLayout() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
 
-  const auto screenHeight = renderer.getScreenHeight();
-  const auto footerY = screenHeight - metrics.statusBarVerticalMargin - orientedMarginBottom - 4;
+  return FooterLayout{renderer.getScreenHeight() - metrics.statusBarVerticalMargin - orientedMarginBottom - 4,
+                      orientedMarginLeft, orientedMarginRight};
+}
+
+// Standard footer isn't writer-ready, so we'll keep our version local.
+void WriterActivity::renderFooter() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto footer = getFooterLayout();
 
   // Battery display as per user settings
   const bool showBatteryPercentage =
@@ -114,24 +123,23 @@ void WriterActivity::renderFooter() const {
 
   if (SETTINGS.statusBarBattery) {
     GUI.drawBatteryLeft(renderer,
-                        Rect{metrics.statusBarHorizontalMargin + orientedMarginLeft + 1, footerY, metrics.batteryWidth,
-                             metrics.batteryHeight},
+                        Rect{metrics.statusBarHorizontalMargin + footer.marginLeft + 1, footer.top,
+                             metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage);
   }
 
   // Filename we're working on
   std::string title = draftStore.getDraftDisplayName();
   int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-  renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - titleWidth) / 2, footerY, title.c_str());
+  renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - titleWidth) / 2, footer.top, title.c_str());
 
   // Current wordcount
   std::string wordCount = std::to_string(countWords()) + " words";
   int wordCountWidth = renderer.getTextWidth(SMALL_FONT_ID, wordCount.c_str());
 
-  renderer.drawText(
-      SMALL_FONT_ID,
-      renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - wordCountWidth, footerY,
-      wordCount.c_str());
+  renderer.drawText(SMALL_FONT_ID,
+                    renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - footer.marginRight - wordCountWidth,
+                    footer.top, wordCount.c_str());
 
   return;
 }
