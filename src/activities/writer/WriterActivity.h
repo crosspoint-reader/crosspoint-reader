@@ -4,6 +4,7 @@
 
 class WriterActivity final : public Activity {
   WriterDraftStore draftStore;
+  std::string draftText;
 
  public:
   explicit WriterActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

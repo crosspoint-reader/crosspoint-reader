@@ -10,9 +10,8 @@
 void WriterActivity::onEnter() {
   Activity::onEnter();
 
-  WriterDraftStore draftStore;
   draftStore.ensureDraft();
-
+  draftStore.readDraft(draftText);
   requestUpdate();
 }
 
@@ -27,11 +26,19 @@ void WriterActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto contentWidth = pageWidth - 2 * metrics.contentSidePadding;
   const auto x = metrics.contentSidePadding;
+  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_WRITER));
-  renderer.drawText(UI_10_FONT_ID, x, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing,
-                    "Writer Mode PlaceHolder");
+
+  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+
+  auto draftLines = renderer.wrappedText(UI_10_FONT_ID, draftText.c_str(), contentWidth, 10);
+  for (const auto& line : draftLines) {
+    renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
+    y += lineHeight;
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
