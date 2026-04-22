@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
 #include "SettingsList.h"
+#include "WifiCredentialStore.h"
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -165,6 +166,11 @@ void CrossPointWebServer::begin() {
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
   server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
   server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
+
+  // Wi-Fi credential endpoints
+  server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
+  server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
+  server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -1363,6 +1369,140 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
 
   OPDS_STORE.removeServer(static_cast<size_t>(idx));
   LOG_DBG("WEB", "Deleted OPDS server at index %d", idx);
+  server->send(200, "text/plain", "OK");
+}
+
+// ---- Wi-Fi Credentials API ----
+
+void CrossPointWebServer::handleGetWifiNetworks() const {
+  const auto& credentials = WIFI_STORE.getCredentials();
+  const std::string& lastConnectedSsid = WIFI_STORE.getLastConnectedSsid();
+
+  // Stream JSON array incrementally to avoid allocating the full response in memory
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("[");
+
+  char output[320];
+  constexpr size_t outputSize = sizeof(output);
+  JsonDocument doc;
+
+  for (size_t i = 0; i < credentials.size(); i++) {
+    doc.clear();
+    doc["index"] = i;
+    doc["ssid"] = credentials[i].ssid;
+    // Never expose Wi-Fi passwords over the API — only indicate whether one is set
+    doc["hasPassword"] = !credentials[i].password.empty();
+    doc["isLastConnected"] = credentials[i].ssid == lastConnectedSsid;
+
+    const size_t written = serializeJson(doc, output, outputSize);
+    if (written >= outputSize) continue;
+
+    if (i > 0) server->sendContent(",");
+    server->sendContent(output);
+  }
+
+  server->sendContent("]");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served Wi-Fi credentials API (%zu network(s))", credentials.size());
+}
+
+void CrossPointWebServer::handlePostWifiNetwork() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  std::string ssid = doc["ssid"] | std::string("");
+  if (ssid.empty()) {
+    server->send(400, "text/plain", "SSID is required");
+    return;
+  }
+
+  // The password field is optional in the JSON payload. When absent (vs. present but empty),
+  // preserve the existing password for updates. Empty passwords are valid for open networks.
+  bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
+  std::string password = doc["password"] | std::string("");
+
+  if (doc["index"].is<int>()) {
+    int idx = doc["index"].as<int>();
+    const auto& credentials = WIFI_STORE.getCredentials();
+    if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+      server->send(400, "text/plain", "Invalid network index");
+      return;
+    }
+
+    const std::string oldSsid = credentials[static_cast<size_t>(idx)].ssid;
+    if (!hasPasswordField) {
+      password = credentials[static_cast<size_t>(idx)].password;
+    }
+
+    bool ok = true;
+    if (oldSsid != ssid) {
+      ok = WIFI_STORE.removeCredential(oldSsid) && WIFI_STORE.addCredential(ssid, password);
+    } else {
+      ok = WIFI_STORE.addCredential(ssid, password);
+    }
+
+    if (!ok) {
+      server->send(400, "text/plain", "Failed to update Wi-Fi network");
+      return;
+    }
+
+    LOG_DBG("WEB", "Updated Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
+  } else {
+    if (!WIFI_STORE.addCredential(ssid, password)) {
+      server->send(400, "text/plain", "Cannot add network (limit reached)");
+      return;
+    }
+    LOG_DBG("WEB", "Added Wi-Fi network: %s", ssid.c_str());
+  }
+
+  server->send(200, "text/plain", "OK");
+}
+
+// Uses POST (not HTTP DELETE) because ESP32 WebServer doesn't support DELETE with body.
+void CrossPointWebServer::handleDeleteWifiNetwork() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  if (!doc["index"].is<int>()) {
+    server->send(400, "text/plain", "Missing index");
+    return;
+  }
+
+  int idx = doc["index"].as<int>();
+  const auto& credentials = WIFI_STORE.getCredentials();
+  if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+    server->send(400, "text/plain", "Invalid network index");
+    return;
+  }
+
+  const std::string ssid = credentials[static_cast<size_t>(idx)].ssid;
+  if (!WIFI_STORE.removeCredential(ssid)) {
+    server->send(400, "text/plain", "Failed to delete Wi-Fi network");
+    return;
+  }
+
+  LOG_DBG("WEB", "Deleted Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
   server->send(200, "text/plain", "OK");
 }
 
