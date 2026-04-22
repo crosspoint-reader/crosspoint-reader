@@ -208,7 +208,8 @@ std::string buildImportPayload(const std::shared_ptr<Epub>& epub, const std::str
     s["start_time"] = ps.startTime;
     s["duration"] = ps.durationSec;
     s["total_pages"] = ps.totalPages > 0 ? ps.totalPages : 1;
-    s["book_md5"] = ps.md5;
+    const std::string md5Now = hashForBookPath(ps.path);
+    s["book_md5"] = !md5Now.empty() ? md5Now : ps.md5;
     s["device_id"] = devId;
   }
 

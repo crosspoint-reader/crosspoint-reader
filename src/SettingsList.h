@@ -109,7 +109,7 @@ inline const std::vector<SettingInfo>& getSettingsList() {
             KOREADER_STORE.setKoInsightServerUrl(v);
             KOREADER_STORE.saveToFile();
           },
-          "koInsightServerUrl", StrId::STR_KOREADER_SYNC),
+          "koinsightServerUrl", StrId::STR_KOREADER_SYNC),
       SettingInfo::DynamicEnum(
           StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
           [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },

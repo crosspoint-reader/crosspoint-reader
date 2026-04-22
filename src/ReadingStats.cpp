@@ -154,6 +154,7 @@ bool ReadingStats::loadFromFile() {
   if (version != 1 && version != STATS_FILE_VERSION) {
     LOG_ERR("RST", "Unknown reading_stats.bin version %u", version);
     file.close();
+    BOOK_STATS.loadFromFile();
     return false;
   }
   serialization::readPod(file, totalReadSeconds);
