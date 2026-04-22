@@ -376,7 +376,7 @@ Press **Confirm** while reading to open the Reader Menu. Use **Left**/**Right** 
 | Option | Description |
 | ------ | ----------- |
 | **Select Chapter** | Jump to any chapter in the book |
-| **Auto Page Turn** | Automatically advance pages (see below) |
+| **Auto Turn (Pages Per Minute)** | Automatically advance pages (see below) |
 | **Reset Reading Speed** | Clear the learned reading speed back to default |
 | **Go To Percent** | Jump to a specific position in the book |
 | **Rotate Screen** | Change screen orientation |
@@ -387,7 +387,7 @@ Press **Confirm** while reading to open the Reader Menu. Use **Left**/**Right** 
 
 #### Auto Page Turn
 
-The **Auto Page Turn** option turns pages automatically at a set pace. Available modes:
+The **Auto Turn (Pages Per Minute)** option turns pages automatically at a set pace. Available modes:
 
 | Mode | Description |
 | ---- | ----------- |
@@ -398,11 +398,13 @@ The **Auto Page Turn** option turns pages automatically at a set pace. Available
 **Smart (WPM) mode** times each page based on its word count and your current reading speed in words-per-minute (WPM). Your reading speed is learned automatically while you read — no manual calibration needed:
 
 - If you press **Next Page** before the timer fires, the speed adjusts upward.
-- If you press **Previous Page**, the speed adjusts downward. The following forward page turn is not used as a speed sample, since you only read the remainder of the page you returned to.
+- If you press **Previous Page**, the auto-turn timer pauses. Auto-turn resumes only after you manually press **Next Page** enough times to return to where you left off — one forward press is required for each backward press. The forward turns used to catch up are not counted as speed samples, since you only read the tail of the page you returned to.
+  - If you go back **within ~3 seconds** of a page appearing, it is treated as a signal that the page was moving too fast — the speed adjusts downward slightly.
+  - If you go back **after ~3 seconds**, it is treated as you browsing back through the book — the auto-turn still pauses, but your speed is left unchanged.
 
-Adjustments use an exponential moving average, so recent behaviour carries more weight than older interactions. The current WPM is shown in the status bar (e.g. `Auto Turn 230 wpm`). Before any speed has been learned it shows `Auto Turn Uncalibrated`.
+Adjustments use an exponential moving average, so recent behaviour carries more weight than older interactions. The current WPM is shown in the status bar (e.g. `Auto Turn Enabled: 230 wpm`). Before any speed has been learned it shows `Auto Turn Enabled: Uncalibrated`.
 
-To clear the learned speed and start fresh, select **Reset Reading Speed** from the Reader Menu.
+To clear the learned speed and start fresh, or to un-pause a suspended auto-turn, select **Reset Reading Speed** from the Reader Menu.
 
 ### Supported Languages
 

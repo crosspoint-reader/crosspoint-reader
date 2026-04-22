@@ -55,3 +55,26 @@ This document show most common issues and possible solutions while using the dev
 2. Select **Yes** to remove the saved password
 3. Reconnect and enter the password again
 4. Choose to save the new password
+
+### Smart (WPM) Auto Page Turn Flipping Too Fast or Too Slow
+
+**Problem:** In Smart mode, pages turn faster or slower than you read.
+
+**Solutions:**
+
+1. Open the **Reader Menu** (press **Confirm** while reading) and select **Reset Reading Speed** to clear the learned WPM and start fresh.
+2. The status bar shows the current learned speed (e.g. `Auto Turn Enabled: 230 wpm`) or `Auto Turn Enabled: Uncalibrated` if no speed has been learned yet. Use this to confirm the mode is active.
+3. Speed is learned from manual page turns: pressing **Next Page** before the timer fires nudges the speed up; pressing **Previous Page** nudges it down. Turning pages consistently will calibrate the speed over several pages.
+4. Very short page turns (under 2 seconds) are ignored as accidental taps and do not affect the learned speed.
+5. If you walked away mid-page, the stored WPM may have drifted lower than your actual reading speed — use **Reset Reading Speed** to recover.
+
+### Auto Page Turn Timer Does Not Advance
+
+**Problem:** In Smart mode the page does not flip automatically.
+
+**Solutions:**
+
+1. Ensure **Auto Turn (Pages Per Minute)** is set to **Smart (WPM)** and not **Off** — check via **Reader Menu → Auto Turn (Pages Per Minute)**.
+2. If you pressed **Previous Page** one or more times, the auto-turn timer is paused until you manually press **Next Page** enough times to return to where you left off (one forward press required per backward press). This prevents an unwanted auto-flip while you are browsing back through the book.
+3. Selecting **Reset Reading Speed** from the Reader Menu will also un-pause the timer immediately.
+4. As a last resort, open the **Reader Menu**, set **Auto Turn (Pages Per Minute)** to **Off**, then set it back to **Smart (WPM)** — this resets the counter and restarts the timer.
