@@ -69,48 +69,29 @@ static void decomposeMatras(uint32_t* cps, size_t& count) {
 // Reorder pre-base matras to appear before their base consonant cluster.
 // In Unicode order: consonant [+ virama + consonant]* + matra
 // After reorder:    matra + consonant [+ virama + consonant]*
+// Works in-place to avoid value-based index searching (which breaks when
+// a cluster contains duplicate consonants, e.g. ച്ചെ).
 static void reorderPreBaseMatras(uint32_t* cps, size_t& count) {
-  uint32_t tmp[MAX_WORD_CPS];
-  size_t tmpCount = 0;
+  for (size_t i = 1; i < count; i++) {
+    if (!isPreBaseMatra(cps[i])) continue;
 
-  for (size_t i = 0; i < count && tmpCount < MAX_WORD_CPS; i++) {
-    if (isPreBaseMatra(cps[i]) && i > 0) {
-      // Find the start of the consonant cluster this matra belongs to.
-      // Walk backwards past (virama + consonant) pairs to find the base.
-      size_t clusterStart = i - 1;
-      while (clusterStart >= 2 && isVirama(cps[clusterStart]) && isMalayalamConsonant(cps[clusterStart - 1])) {
-        clusterStart -= 2;
-      }
+    // The consonant immediately before the matra is the last in the cluster.
+    size_t lastCons = i - 1;
+    if (!isMalayalamConsonant(cps[lastCons])) continue;
 
-      // Only reorder if we found a consonant base (not a PUA glyph or other)
-      if (isMalayalamConsonant(cps[clusterStart])) {
-        // Find where clusterStart maps to in tmp (it's already been copied)
-        // We need to insert the matra before the cluster in the output.
-        // Since we process left-to-right and the cluster is already in tmp,
-        // find the position in tmp corresponding to clusterStart.
-        size_t insertPos = tmpCount;
-        for (size_t j = tmpCount; j > 0; j--) {
-          if (tmp[j - 1] == cps[clusterStart]) {
-            insertPos = j - 1;
-            break;
-          }
-        }
-        // Shift everything from insertPos to tmpCount right by 1
-        if (tmpCount < MAX_WORD_CPS) {
-          memmove(&tmp[insertPos + 1], &tmp[insertPos], (tmpCount - insertPos) * sizeof(uint32_t));
-          tmp[insertPos] = cps[i];
-          tmpCount++;
-        }
-      } else {
-        tmp[tmpCount++] = cps[i];
-      }
-    } else {
-      tmp[tmpCount++] = cps[i];
+    // Walk backwards past (virama + consonant) pairs to find the cluster start.
+    size_t clusterStart = lastCons;
+    while (clusterStart >= 2 && isVirama(cps[clusterStart - 1]) && isMalayalamConsonant(cps[clusterStart - 2])) {
+      clusterStart -= 2;
     }
-  }
 
-  memcpy(cps, tmp, tmpCount * sizeof(uint32_t));
-  count = tmpCount;
+    // Move the matra from position i to position clusterStart.
+    // Shift cps[clusterStart .. i-1] right by 1 to make room.
+    uint32_t matra = cps[i];
+    memmove(&cps[clusterStart + 1], &cps[clusterStart], (i - clusterStart) * sizeof(uint32_t));
+    cps[clusterStart] = matra;
+    // i stays the same — the matra moved behind us, nothing to skip.
+  }
 }
 
 uint32_t MalayalamShaper::nextCodepoint(const char*& p, const char* end) {
