@@ -54,8 +54,12 @@ struct FilePathResult {
   std::string path;
 };
 
+struct ClippingResult {
+  std::string text;
+};
+
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, ClippingResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
