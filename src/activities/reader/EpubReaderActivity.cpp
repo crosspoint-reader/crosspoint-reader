@@ -36,6 +36,11 @@ constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
 
+constexpr uint32_t kStableCharsPerPageMin = 100;
+constexpr uint32_t kStableCharsPerPageMax = 200000;
+constexpr uint32_t kStablePrefsMagic = 0x53544142;
+constexpr uint32_t kStablePrefsVersion = 1;
+
 int clampPercent(int percent) {
   if (percent < 0) {
     return 0;
@@ -367,8 +372,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                 stableCharsPerPage = 0;
                 stableSyntheticIndex = {};
               } else {
-                const unsigned long clamped = std::max(100UL, std::min(v, 200000UL));
-                if (v < 100) {
+                const unsigned long clamped = std::max(static_cast<unsigned long>(kStableCharsPerPageMin),
+                                                       std::min(v, static_cast<unsigned long>(kStableCharsPerPageMax)));
+                if (v < kStableCharsPerPageMin) {
                   LOG_DBG("ERS", "Stable pages chars/page %u clamped to %u", static_cast<unsigned>(v),
                           static_cast<unsigned>(clamped));
                 }
@@ -916,13 +922,6 @@ void EpubReaderActivity::renderStatusBar() const {
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, stableCur, stableTot);
 }
 
-namespace {
-
-constexpr uint32_t kStablePrefsMagic = 0x53544142;
-constexpr uint32_t kStablePrefsVersion = 1;
-
-}  // namespace
-
 void EpubReaderActivity::loadStablePagesSettings() {
   stableCharsPerPage = 0;
   if (!epub) {
@@ -945,7 +944,9 @@ void EpubReaderActivity::loadStablePagesSettings() {
   if (f.read(reinterpret_cast<uint8_t*>(&cpp), sizeof(cpp)) != sizeof(cpp)) {
     return;
   }
-  stableCharsPerPage = cpp;
+  if (cpp >= kStableCharsPerPageMin && cpp <= kStableCharsPerPageMax) {
+    stableCharsPerPage = cpp;
+  }
 }
 
 void EpubReaderActivity::saveStablePagesSettings() {
