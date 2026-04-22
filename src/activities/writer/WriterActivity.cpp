@@ -18,6 +18,7 @@ void WriterActivity::onEnter() {
   Activity::onEnter();
 
   inputBuffer.clear();
+  showSaveError = false;
   draftStore.ensureDraft();
   draftStore.readDraft(draftText);
   requestUpdate();
@@ -27,20 +28,20 @@ void WriterActivity::loop() {
   std::string inputText;
   if (WriterInput::readAvailable(inputText)) {
     inputBuffer += inputText;
+    showSaveError = false;
     requestUpdate();
   }
 
-  if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (!flushInputBuffer()) {
+      requestUpdate();
+      return;
+    }
     finish();
   }
   if (!inputBuffer.empty() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (draftStore.appendToDraft(inputBuffer)) {
-      inputBuffer.clear();
-      draftStore.readDraft(draftText);
-      requestUpdate();
-    } else {
-      LOG_ERR("Writer", "Failed to write to draft file: %s", WriterDraftStore::DraftPath);
-    }
+    flushInputBuffer();
+    requestUpdate();
   }
 }
 
@@ -87,7 +88,29 @@ void WriterActivity::render(RenderLock&&) {
 
   WriterActivity::renderFooter();
 
+  if (showSaveError) {
+    GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
+  }
+
   renderer.displayBuffer();
+}
+
+bool WriterActivity::flushInputBuffer() {
+  if (inputBuffer.empty()) {
+    showSaveError = false;
+    return true;
+  }
+
+  if (!draftStore.appendToDraft(inputBuffer)) {
+    showSaveError = true;
+    LOG_ERR("Writer", "Failed to write to draft file: %s", WriterDraftStore::DraftPath);
+    return false;
+  }
+
+  inputBuffer.clear();
+  showSaveError = false;
+  draftStore.readDraft(draftText);
+  return true;
 }
 
 std::string WriterActivity::getRenderedText() const { return draftText + inputBuffer; }
