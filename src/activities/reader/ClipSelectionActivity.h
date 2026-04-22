@@ -18,8 +18,8 @@ class ClipSelectionActivity final : public Activity {
   };
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::vector<WordRef> words,
-                        std::string bookTitle, std::string author, std::string chapterTitle, int pageNumber,
-                        int fontId, Section& section, int startPageInSection, int marginTop, int marginLeft);
+                        std::string bookTitle, std::string author, std::string chapterTitle, int pageNumber, int fontId,
+                        Section& section, int startPageInSection, int marginTop, int marginLeft);
 
   void onEnter() override;
   void onExit() override;

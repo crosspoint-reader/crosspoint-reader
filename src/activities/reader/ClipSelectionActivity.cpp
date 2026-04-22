@@ -168,7 +168,8 @@ void ClipSelectionActivity::drawHighlights() {
     for (int i = from; i <= to; ++i) {
       if (i == cursorIdx) continue;
       if (words[i].pageIdx != currentDisplayPage) continue;
-      renderer.fillRectDither(words[i].x, words[i].y, words[i].w, words[i].h, Color::LightGray);
+      const auto r = alignedRect(words[i].x, words[i].y, words[i].w, words[i].h);
+      renderer.fillRectDither(r.x, r.y, r.w, r.h, Color::LightGray);
       renderer.drawText(fontId, words[i].x, words[i].y, words[i].text.c_str(), true);
     }
   }
@@ -176,7 +177,8 @@ void ClipSelectionActivity::drawHighlights() {
   // Draw cursor highlight (always on top)
   const auto& cw = words[cursorIdx];
   if (cw.pageIdx == currentDisplayPage) {
-    renderer.fillRectDither(cw.x, cw.y, cw.w, cw.h, Color::LightGray);
+    const auto r = alignedRect(cw.x, cw.y, cw.w, cw.h);
+    renderer.fillRectDither(r.x, r.y, r.w, r.h, Color::LightGray);
     renderer.drawText(fontId, cw.x, cw.y, cw.text.c_str(), true);
   }
 }

@@ -5,8 +5,7 @@
 #include <common/FsApiConstants.h>
 
 bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::string& author,
-                                    const std::string& chapterTitle, int pageNumber,
-                                    const std::string& selectedText) {
+                                    const std::string& chapterTitle, int pageNumber, const std::string& selectedText) {
   HalFile file = Storage.open(CLIPPINGS_PATH, O_RDWR | O_CREAT | O_AT_END);
   if (!file) {
     LOG_ERR("CLIP", "Failed to open %s for append", CLIPPINGS_PATH);
@@ -29,10 +28,8 @@ bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::str
   static constexpr size_t MAX_TEXT = 2000;
   const size_t textLen = selectedText.size() < MAX_TEXT ? selectedText.size() : MAX_TEXT;
 
-  char quote[8];
-  snprintf(quote, sizeof(quote), "\n\"");
-
-  char separator[] = "\"\n\n==========\n\n";
+  static constexpr char quote[] = "\n\"";
+  static constexpr char separator[] = "\"\n\n==========\n\n";
 
   file.write(header, strlen(header));
   file.write(location, strlen(location));
