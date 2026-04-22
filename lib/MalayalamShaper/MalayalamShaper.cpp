@@ -14,6 +14,105 @@ static inline bool isMalayalam(uint32_t cp) {
   return (cp >= 0x0D00 && cp <= 0x0D7F) || (cp >= PUA_START && cp <= PUA_END);
 }
 
+static inline bool isMalayalamConsonant(uint32_t cp) { return cp >= 0x0D15 && cp <= 0x0D39; }
+
+static inline bool isVirama(uint32_t cp) { return cp == 0x0D4D; }
+
+// Pre-base (left-side) matras that must be visually reordered before the base consonant.
+static inline bool isPreBaseMatra(uint32_t cp) {
+  return cp == 0x0D46    // െ  VOWEL SIGN E
+         || cp == 0x0D47 // േ  VOWEL SIGN EE
+         || cp == 0x0D48 // ൈ  VOWEL SIGN AI
+      ;
+}
+
+// Decompose composite vowel signs into left + right parts.
+// Returns true if decomposed, writing to out1 (pre-base) and out2 (post-base).
+static bool decomposeComposite(uint32_t cp, uint32_t& out1, uint32_t& out2) {
+  switch (cp) {
+    case 0x0D4A:  // ൊ  -> െ + ാ
+      out1 = 0x0D46;
+      out2 = 0x0D3E;
+      return true;
+    case 0x0D4B:  // ോ  -> േ + ാ
+      out1 = 0x0D47;
+      out2 = 0x0D3E;
+      return true;
+    case 0x0D4C:  // ൌ  -> െ + ൗ
+      out1 = 0x0D46;
+      out2 = 0x0D57;
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Decompose composite matras in-place, expanding the codepoint array.
+static void decomposeMatras(uint32_t* cps, size_t& count) {
+  uint32_t tmp[MAX_WORD_CPS];
+  size_t tmpCount = 0;
+
+  for (size_t i = 0; i < count && tmpCount < MAX_WORD_CPS - 1; i++) {
+    uint32_t left, right;
+    if (decomposeComposite(cps[i], left, right)) {
+      tmp[tmpCount++] = left;
+      if (tmpCount < MAX_WORD_CPS) tmp[tmpCount++] = right;
+    } else {
+      tmp[tmpCount++] = cps[i];
+    }
+  }
+
+  memcpy(cps, tmp, tmpCount * sizeof(uint32_t));
+  count = tmpCount;
+}
+
+// Reorder pre-base matras to appear before their base consonant cluster.
+// In Unicode order: consonant [+ virama + consonant]* + matra
+// After reorder:    matra + consonant [+ virama + consonant]*
+static void reorderPreBaseMatras(uint32_t* cps, size_t& count) {
+  uint32_t tmp[MAX_WORD_CPS];
+  size_t tmpCount = 0;
+
+  for (size_t i = 0; i < count && tmpCount < MAX_WORD_CPS; i++) {
+    if (isPreBaseMatra(cps[i]) && i > 0) {
+      // Find the start of the consonant cluster this matra belongs to.
+      // Walk backwards past (virama + consonant) pairs to find the base.
+      size_t clusterStart = i - 1;
+      while (clusterStart >= 2 && isVirama(cps[clusterStart]) && isMalayalamConsonant(cps[clusterStart - 1])) {
+        clusterStart -= 2;
+      }
+
+      // Only reorder if we found a consonant base (not a PUA glyph or other)
+      if (isMalayalamConsonant(cps[clusterStart])) {
+        // Find where clusterStart maps to in tmp (it's already been copied)
+        // We need to insert the matra before the cluster in the output.
+        // Since we process left-to-right and the cluster is already in tmp,
+        // find the position in tmp corresponding to clusterStart.
+        size_t insertPos = tmpCount;
+        for (size_t j = tmpCount; j > 0; j--) {
+          if (tmp[j - 1] == cps[clusterStart]) {
+            insertPos = j - 1;
+            break;
+          }
+        }
+        // Shift everything from insertPos to tmpCount right by 1
+        if (tmpCount < MAX_WORD_CPS) {
+          memmove(&tmp[insertPos + 1], &tmp[insertPos], (tmpCount - insertPos) * sizeof(uint32_t));
+          tmp[insertPos] = cps[i];
+          tmpCount++;
+        }
+      } else {
+        tmp[tmpCount++] = cps[i];
+      }
+    } else {
+      tmp[tmpCount++] = cps[i];
+    }
+  }
+
+  memcpy(cps, tmp, tmpCount * sizeof(uint32_t));
+  count = tmpCount;
+}
+
 uint32_t MalayalamShaper::nextCodepoint(const char*& p, const char* end) {
   if (p >= end) return 0;
   uint8_t b = static_cast<uint8_t>(*p);
@@ -173,6 +272,12 @@ size_t MalayalamShaper::shape(const char* input, size_t inputLen, char* output, 
   while (p < end && cpCount < MAX_WORD_CPS) {
     cps[cpCount++] = nextCodepoint(p, end);
   }
+
+  // Pre-processing: decompose composite matras and reorder pre-base matras
+  // before the base consonant cluster. This matches the Unicode Indic shaping
+  // model where reordering happens before GSUB feature application.
+  decomposeMatras(cps, cpCount);
+  reorderPreBaseMatras(cps, cpCount);
 
   // Apply shaping rules with greedy longest-match, iterating until stable.
   // Multi-pass needed because some rules chain (e.g., conjunct + vowel sign).

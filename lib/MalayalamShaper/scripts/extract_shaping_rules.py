@@ -24,8 +24,41 @@ PUA_START = 0xE000  # Start of Private Use Area
 MALAYALAM_FEATURES = ['akhn', 'half', 'blwf', 'pref', 'pres', 'pstf', 'psts', 'blws']
 
 
+def extract_ligatures_from_lookup(table, lookup_idx):
+    """Extract ligature rules from a single Type 4 lookup."""
+    lookup = table.LookupList.Lookup[lookup_idx]
+    results = []
+    if lookup.LookupType != 4:
+        return results
+    for subtable in lookup.SubTable:
+        for first_glyph, ligatures in subtable.ligatures.items():
+            for lig in ligatures:
+                components = [first_glyph] + lig.Component
+                output = lig.LigGlyph
+                results.append((components, output))
+    return results
+
+
+def collect_chained_lookups(table, lookup_idx):
+    """Follow Type 6 (ChainingContext) lookups and return referenced lookup indices."""
+    lookup = table.LookupList.Lookup[lookup_idx]
+    if lookup.LookupType != 6:
+        return set()
+    referenced = set()
+    for subtable in lookup.SubTable:
+        if hasattr(subtable, 'SubstLookupRecord'):
+            for rec in subtable.SubstLookupRecord:
+                referenced.add(rec.LookupListIndex)
+    return referenced
+
+
 def extract_ligature_rules(font_path):
-    """Extract all ligature substitution rules from Malayalam GSUB features."""
+    """Extract all ligature substitution rules from Malayalam GSUB features.
+
+    Handles Type 4 (LigatureSubst) directly and follows Type 6
+    (ChainingContext) references to reach indirectly-referenced Type 4
+    lookups.
+    """
     font = TTFont(font_path)
     gsub = font['GSUB']
     table = gsub.table
@@ -39,19 +72,22 @@ def extract_ligature_rules(font_path):
         if rec.FeatureTag not in MALAYALAM_FEATURES:
             continue
         tag = rec.FeatureTag
+
+        # Collect all lookup indices: direct + indirectly referenced via Type 6
+        all_lookup_indices = set()
         for lookup_idx in rec.Feature.LookupListIndex:
+            all_lookup_indices.add(lookup_idx)
+            # Follow Type 6 chains
+            chained = collect_chained_lookups(table, lookup_idx)
+            all_lookup_indices.update(chained)
+
+        for lookup_idx in sorted(all_lookup_indices):
             if lookup_idx in seen_lookups:
                 continue
             seen_lookups.add(lookup_idx)
-            lookup = table.LookupList.Lookup[lookup_idx]
-            if lookup.LookupType != 4:  # LigatureSubst only
-                continue
-            for subtable in lookup.SubTable:
-                for first_glyph, ligatures in subtable.ligatures.items():
-                    for lig in ligatures:
-                        components = [first_glyph] + lig.Component
-                        output = lig.LigGlyph
-                        rules_by_feature.setdefault(tag, []).append((components, output))
+            rules = extract_ligatures_from_lookup(table, lookup_idx)
+            for components, output in rules:
+                rules_by_feature.setdefault(tag, []).append((components, output))
 
     return font, cmap, rev_cmap, rules_by_feature
 

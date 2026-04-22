@@ -793,6 +793,21 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
+    // U+200B (Zero Width Space) — an invisible line break opportunity.
+    // UTF-8: 0xE2 0x80 0x8B.  Flush the current word and reset continuation
+    // so the layout engine may break the line here.  Common in Indic scripts
+    // (Malayalam, Hindi, etc.) where ZWSP marks permissible word breaks inside
+    // long text runs that lack regular ASCII spaces.
+    if (static_cast<uint8_t>(s[i]) == 0xE2 && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0x80 &&
+        static_cast<uint8_t>(s[i + 2]) == 0x8B) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+      self->nextWordContinues = false;
+      i += 2;  // Skip the remaining two bytes (0x80 0x8B)
+      continue;
+    }
+
     // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
     const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
     const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
