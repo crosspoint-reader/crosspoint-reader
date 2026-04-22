@@ -63,8 +63,8 @@ void EpubReaderActivity::onEnter() {
 
   loadStablePagesSettings();
   if (stableCharsPerPage > 0 && !ensureStableSyntheticIndex()) {
-    stableCharsPerPage = 0;
-    saveStablePagesSettings();
+    stableSyntheticIndex = {};
+    LOG_DBG("ERS", "Stable index load/build failed on open; keeping chars/page for retry");
   }
 
   FsFile f;
@@ -367,10 +367,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                 stableCharsPerPage = 0;
                 stableSyntheticIndex = {};
               } else {
-                stableCharsPerPage = static_cast<uint32_t>(std::max(100UL, std::min(v, 200000UL)));
+                const unsigned long clamped = std::max(100UL, std::min(v, 200000UL));
+                if (v < 100) {
+                  LOG_DBG("ERS", "Stable pages chars/page %u clamped to %u", static_cast<unsigned>(v),
+                          static_cast<unsigned>(clamped));
+                }
+                stableCharsPerPage = static_cast<uint32_t>(clamped);
                 if (!epub || !ensureStableSyntheticIndex()) {
-                  stableCharsPerPage = 0;
                   stableSyntheticIndex = {};
+                  LOG_DBG("ERS", "Stable index build failed after menu; chars/page kept for retry");
                 }
               }
               saveStablePagesSettings();

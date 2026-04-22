@@ -135,8 +135,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         while (!mid.empty() && mid.back() == ' ') {
           mid.pop_back();
         }
+        progressLine += mid;
       }
-      progressLine += mid;
     }
   }
 

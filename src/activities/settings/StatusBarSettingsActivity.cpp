@@ -173,6 +173,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   const auto stablePreviewMode =
       static_cast<CrossPointSettings::STATUS_BAR_STABLE_PAGES>(SETTINGS.statusBarStablePages);
+  // WHEN_SET: sample N/M. FALLBACK/HIDE: no sample totals so preview matches "no stable index" (% path).
   const bool previewStableSample = stablePreviewMode == CrossPointSettings::STABLE_PAGES_WHEN_SET;
   const int previewStableCur = previewStableSample ? 400 : -1;
   const int previewStableTot = previewStableSample ? 602 : -1;
