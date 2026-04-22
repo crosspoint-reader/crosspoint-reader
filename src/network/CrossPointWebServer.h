@@ -46,7 +46,7 @@ class CrossPointWebServer {
     size_t bufferPos = 0;
 
     UploadState() { buffer.resize(UPLOAD_BUFFER_SIZE); }
-  } upload;
+  } upload, settingsUpload;
 
   CrossPointWebServer();
   ~CrossPointWebServer();
@@ -107,6 +107,9 @@ class CrossPointWebServer {
   void handleSettingsPage() const;
   void handleGetSettings() const;
   void handlePostSettings();
+  void handleBackupSettings() const;
+  void handleRestoreSettings(UploadState& state) const;
+  void handleRestoreSettingsPost(UploadState& state) const;
 
   // OPDS server handlers
   void handleGetOpdsServers() const;

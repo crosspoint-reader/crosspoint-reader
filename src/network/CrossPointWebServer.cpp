@@ -160,6 +160,10 @@ void CrossPointWebServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+  server->on("/api/settings/backup", HTTP_GET, [this] { handleBackupSettings(); });
+  server->on(
+      "/api/settings/restore", HTTP_POST, [this] { handleRestoreSettingsPost(settingsUpload); },
+      [this] { handleRestoreSettings(settingsUpload); });
 
   // OPDS server endpoints
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
@@ -1364,6 +1368,86 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
   OPDS_STORE.removeServer(static_cast<size_t>(idx));
   LOG_DBG("WEB", "Deleted OPDS server at index %d", idx);
   server->send(200, "text/plain", "OK");
+}
+
+void CrossPointWebServer::handleBackupSettings() const {
+  if (!Storage.exists("/.crosspoint/settings.json")) {
+    SETTINGS.saveToFile();
+  }
+
+  if (!Storage.exists("/.crosspoint/settings.json")) {
+    server->send(404, "text/plain", "Settings file not found");
+    return;
+  }
+
+  FsFile file = Storage.open("/.crosspoint/settings.json");
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open settings file");
+    return;
+  }
+
+  server->setContentLength(file.size());
+  server->sendHeader("Content-Disposition", "attachment; filename=\"crosspoint_settings.json\"");
+  server->send(200, "application/json", "");
+
+  NetworkClient client = server->client();
+  const size_t chunkSize = 4096;
+  uint8_t buffer[chunkSize];
+
+  while (file.available()) {
+    int result = file.read(buffer, chunkSize);
+    if (result <= 0) break;
+    client.write(buffer, result);
+    esp_task_wdt_reset();
+  }
+
+  file.close();
+}
+
+void CrossPointWebServer::handleRestoreSettings(UploadState& state) const {
+  const HTTPUpload& u = server->upload();
+
+  if (u.status == UPLOAD_FILE_START) {
+    state.success = false;
+    state.error = "";
+    if (Storage.exists("/.crosspoint/settings.json")) {
+      if (Storage.exists("/.crosspoint/settings.json.bak")) {
+        Storage.remove("/.crosspoint/settings.json.bak");
+      }
+      Storage.rename("/.crosspoint/settings.json", "/.crosspoint/settings.json.bak");
+    }
+    if (!Storage.openFileForWrite("WEB", "/.crosspoint/settings.json", state.file)) {
+      state.error = "Failed to open settings file for writing";
+      return;
+    }
+  } else if (u.status == UPLOAD_FILE_WRITE) {
+    if (state.file && state.error.isEmpty()) {
+      state.file.write(u.buf, u.currentSize);
+    }
+  } else if (u.status == UPLOAD_FILE_END) {
+    if (state.file) {
+      state.file.close();
+      state.success = true;
+      SETTINGS.loadFromFile();
+    }
+  } else if (u.status == UPLOAD_FILE_ABORTED) {
+    if (state.file) {
+      state.file.close();
+      Storage.remove("/.crosspoint/settings.json");
+      if (Storage.exists("/.crosspoint/settings.json.bak")) {
+        Storage.rename("/.crosspoint/settings.json.bak", "/.crosspoint/settings.json");
+      }
+    }
+    state.error = "Upload aborted";
+  }
+}
+
+void CrossPointWebServer::handleRestoreSettingsPost(UploadState& state) const {
+  if (state.success) {
+    server->send(200, "text/plain", "Settings restored successfully");
+  } else {
+    server->send(400, "text/plain", state.error.isEmpty() ? "Restore failed" : state.error);
+  }
 }
 
 // WebSocket callback trampoline

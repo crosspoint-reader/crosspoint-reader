@@ -295,6 +295,16 @@
     </div>
   </div>
 
+  <div class="card" style="text-align: center; margin-top: 20px;">
+    <h2>Backup & Restore</h2>
+    <p style="color: var(--label-color); margin-bottom: 15px;">Backup your settings to a file, or restore them from a previous backup.</p>
+    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+      <a href="/api/settings/backup" download="crosspoint_settings.json" class="save-btn" style="text-decoration: none; display: inline-block;">Backup Settings</a>
+      <button class="save-btn" onclick="document.getElementById('restoreInput').click()" style="background-color: #3498db;">Restore Settings</button>
+      <input type="file" id="restoreInput" style="display: none;" accept=".json" onchange="restoreSettings(event)">
+    </div>
+  </div>
+
   <div class="save-container" id="save-container" style="display:none;">
     <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
   </div>
@@ -476,6 +486,39 @@
     }
 
     btn.textContent = 'Save Settings';
+  }
+
+  async function restoreSettings(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!confirm('Are you sure you want to restore settings from this backup? Your current settings will be overwritten.')) {
+      event.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/settings/restore', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Restore failed');
+      }
+
+      showMessage('Settings restored successfully! Reloading...', false);
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) {
+      console.error(e);
+      showMessage('Error: ' + e.message, true);
+    }
+    
+    event.target.value = '';
   }
 
   loadSettings();
