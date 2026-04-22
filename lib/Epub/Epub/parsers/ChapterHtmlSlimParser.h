@@ -60,12 +60,16 @@ class ChapterHtmlSlimParser {
     bool hasBold = false, bold = false;
     bool hasItalic = false, italic = false;
     bool hasUnderline = false, underline = false;
+    bool hasDirection = false;
+    CssTextDirection direction = CssTextDirection::Ltr;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
+  bool effectiveDirectionDefined = false;
+  CssTextDirection effectiveDirection = CssTextDirection::Ltr;
   int tableDepth = 0;
   int tableRowIndex = 0;
   int tableColIndex = 0;
