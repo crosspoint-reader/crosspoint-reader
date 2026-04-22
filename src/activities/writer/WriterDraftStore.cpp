@@ -96,3 +96,9 @@ bool WriterDraftStore::readDraft(std::string& out) {
   LOG_DBG("Writer", "Read draft file: %s (%zu bytes)", DraftPath, out.size());
   return true;
 }
+
+std::string WriterDraftStore::getDraftDisplayName() const {
+  std::string path = DraftPath;
+  const size_t slash = path.find_last_of('/');
+  return slash == std::string::npos ? path : path.substr(slash + 1);
+};
