@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "WriterFile.h"
+
 // Check draft folder exists
 bool WriterDraftStore::ensureDraft() {
   const std::string folderPath = DraftDir;
@@ -27,6 +29,31 @@ bool WriterDraftStore::ensureDraft() {
     file.close();
   }
 
+  return true;
+}
+
+bool WriterDraftStore::appendToDraft(const std::string& text) {
+  const std::string draftPath = DraftPath;
+
+  if (!ensureDraft()) {
+    return false;
+  }
+
+  HalFile file;
+  if (!WriterFile::openForAppend(draftPath.c_str(), file)) {
+    LOG_ERR("Writer", "Failed to open draft file for append: %s", draftPath.c_str());
+    return false;
+  }
+
+  const size_t bytesWritten = file.write(text.data(), text.size());
+  file.close();
+
+  if (bytesWritten != text.size()) {
+    LOG_ERR("Writer", "Failed to append full text: %s (%zu/%zu bytes)", draftPath.c_str(), bytesWritten, text.size());
+    return false;
+  }
+
+  LOG_DBG("Writer", "Appended to draft file: %s (%zu bytes)", draftPath.c_str(), bytesWritten);
   return true;
 }
 
