@@ -40,6 +40,7 @@ void ClipSelectionActivity::onEnter() {
     return;
   }
 
+  savedSectionPage = section.currentPage;
   savedBufferSize = renderer.getBufferSize();
   savedBuffer = static_cast<uint8_t*>(malloc(savedBufferSize));
   if (!savedBuffer) {
@@ -58,6 +59,7 @@ void ClipSelectionActivity::onEnter() {
 }
 
 void ClipSelectionActivity::onExit() {
+  section.currentPage = savedSectionPage;
   free(savedBuffer);
   savedBuffer = nullptr;
   Activity::onExit();

@@ -448,23 +448,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
           if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
 
-          startActivityForResult(
-              std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
-                                                      epub->getAuthor(), chapterTitle, startPage + 1, readerFontId,
-                                                      *section, startPage, mTop, mLeft),
-              [this](const ActivityResult& result) {
-                if (!result.isCancelled) {
-                  const auto& clip = std::get<ClippingResult>(result.data);
-                  if (!clip.text.empty()) {
-                    std::string clipChapterTitle;
-                    const int clipTocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
-                    if (clipTocIdx >= 0) clipChapterTitle = epub->getTocItem(clipTocIdx).title;
-                    ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), clipChapterTitle,
-                                                   section ? section->currentPage + 1 : 0, clip.text);
-                  }
-                }
-                requestUpdate();
-              });
+          startActivityForResult(std::make_unique<ClipSelectionActivity>(
+                                     renderer, mappedInput, std::move(words), epub->getTitle(), epub->getAuthor(),
+                                     chapterTitle, startPage + 1, readerFontId, *section, startPage, mTop, mLeft),
+                                 [this, chapterTitle, startPage](const ActivityResult& result) {
+                                   if (!result.isCancelled) {
+                                     const auto& clip = std::get<ClippingResult>(result.data);
+                                     if (!clip.text.empty()) {
+                                       ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle,
+                                                                      startPage + 1, clip.text);
+                                     }
+                                   }
+                                   requestUpdate();
+                                 });
         } else {
           requestUpdate();
         }
