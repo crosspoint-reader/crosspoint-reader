@@ -95,7 +95,13 @@ bool isWordCharacter(uint32_t cp) {
     return cp == 0x00AA || cp == 0x00B5 || cp == 0x00BA;
   }
 
+  // Rejects Two-em dash, Three-em dash, Double oblique hyphen, etc.
+  if (cp >= 0x2E00 && cp <= 0x2E7F) return false;
+
+  // Rejects Modifier Minus (0x02D7), Small Hyphen (0xFE63), and Fullwidth Hyphen (0xFF0D)
+  if (cp == 0x02D7 || cp == 0xFE63 || cp == 0xFF0D) return false;
   // Assume all other Unicode ranges (accented letters, Cyrillic, Greek, etc.) are valid
+
   return true;
 }
 
