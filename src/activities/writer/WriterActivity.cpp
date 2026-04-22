@@ -4,29 +4,42 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cctype>
 #include <vector>
 
+#include "Logging.h"
 #include "WriterDraftStore.h"
+#include "WriterInput.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 void WriterActivity::onEnter() {
   Activity::onEnter();
 
-  inputBuffer = "Text to append\n";
+  inputBuffer.clear();
   draftStore.ensureDraft();
   draftStore.readDraft(draftText);
   requestUpdate();
 }
 
 void WriterActivity::loop() {
+  std::string inputText;
+  if (WriterInput::readAvailable(inputText)) {
+    inputBuffer += inputText;
+    requestUpdate();
+  }
+
   if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
     finish();
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    draftStore.appendToDraft(inputBuffer);
-    draftStore.readDraft(draftText);
-    requestUpdate();
+  if (!inputBuffer.empty() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (draftStore.appendToDraft(inputBuffer)) {
+      inputBuffer.clear();
+      draftStore.readDraft(draftText);
+      requestUpdate();
+    } else {
+      LOG_ERR("Writer", "Failed to write to draft file: %s", WriterDraftStore::DraftPath);
+    }
   }
 }
 
@@ -44,6 +57,7 @@ void WriterActivity::render(RenderLock&&) {
   const int availableTextHeight = footer.top - textTop - metrics.verticalSpacing;
   const int maxVisibleLines = std::max(1, availableTextHeight / lineHeight);
 
+  const std::string renderedText = getRenderedText();
   std::vector<std::string> visibleLines;  // Small screen buffer for the last 'x' lines
 
   // Read the file and keep the last 'x' lines
@@ -54,9 +68,9 @@ void WriterActivity::render(RenderLock&&) {
   };
 
   size_t start = 0;
-  while (start <= draftText.size()) {
-    size_t end = draftText.find('\n', start);
-    std::string paragraph = draftText.substr(start, end == std::string::npos ? std::string::npos : end - start);
+  while (start <= renderedText.size()) {
+    size_t end = renderedText.find('\n', start);
+    std::string paragraph = renderedText.substr(start, end == std::string::npos ? std::string::npos : end - start);
 
     if (paragraph.empty()) {
       visibleLines.push_back("");
@@ -85,11 +99,13 @@ void WriterActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-int WriterActivity::countWords() const {
+std::string WriterActivity::getRenderedText() const { return draftText + inputBuffer; }
+
+int WriterActivity::countWords(const std::string& text) const {
   int words = 0;
   bool inWord = false;
 
-  for (const unsigned char ch : draftText) {
+  for (const unsigned char ch : text) {
     if (std::isspace(ch)) {
       inWord = false;
     } else if (!inWord) {
@@ -134,7 +150,7 @@ void WriterActivity::renderFooter() const {
   renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - titleWidth) / 2, footer.top, title.c_str());
 
   // Current wordcount
-  std::string wordCount = std::to_string(countWords()) + " words";
+  std::string wordCount = std::to_string(countWords(getRenderedText())) + " words";
   int wordCountWidth = renderer.getTextWidth(SMALL_FONT_ID, wordCount.c_str());
 
   renderer.drawText(SMALL_FONT_ID,
