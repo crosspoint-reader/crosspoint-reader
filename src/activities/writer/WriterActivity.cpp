@@ -10,6 +10,7 @@
 #include "Logging.h"
 #include "WriterDraftStore.h"
 #include "WriterInput.h"
+#include "WriterVisibleLines.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -60,27 +61,17 @@ void WriterActivity::render(RenderLock&&) {
   const std::string renderedText = getRenderedText();
   std::vector<std::string> visibleLines;  // Small screen buffer for the last 'x' lines
 
-  // Read the file and keep the last 'x' lines
-  auto keepLastVisibleLines = [&] {
-    while (visibleLines.size() > maxVisibleLines) {
-      visibleLines.erase(visibleLines.begin());
-    }
-  };
-
   size_t start = 0;
   while (start <= renderedText.size()) {
     size_t end = renderedText.find('\n', start);
     std::string paragraph = renderedText.substr(start, end == std::string::npos ? std::string::npos : end - start);
 
     if (paragraph.empty()) {
-      visibleLines.push_back("");
-      keepLastVisibleLines();
+      WriterVisibleLines::appendWrappedLines(visibleLines, {""}, maxVisibleLines);
     } else {
-      auto wrapped = renderer.wrappedText(UI_10_FONT_ID, paragraph.c_str(), contentWidth, maxVisibleLines);
-      for (const auto& line : wrapped) {
-        visibleLines.push_back(line);
-        keepLastVisibleLines();
-      }
+      const int maxParagraphLines = std::max(maxVisibleLines, static_cast<int>(paragraph.size() + 1));
+      auto wrapped = renderer.wrappedText(UI_10_FONT_ID, paragraph.c_str(), contentWidth, maxParagraphLines);
+      WriterVisibleLines::appendWrappedLines(visibleLines, wrapped, maxVisibleLines);
     }
     if (end == std::string::npos) break;
     start = end + 1;
