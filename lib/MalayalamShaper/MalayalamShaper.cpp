@@ -279,30 +279,61 @@ size_t MalayalamShaper::shape(const char* input, size_t inputLen, char* output, 
   decomposeMatras(cps, cpCount);
   reorderPreBaseMatras(cps, cpCount);
 
-  // Apply shaping rules with greedy longest-match, iterating until stable.
-  // Multi-pass needed because some rules chain (e.g., conjunct + vowel sign).
-  bool changed = true;
-  while (changed) {
-    changed = false;
-    uint32_t newCps[MAX_WORD_CPS];
-    size_t newCount = 0;
-    size_t pos = 0;
-
-    while (pos < cpCount) {
-      if (isMalayalam(cps[pos])) {
-        uint32_t out_cp = tryMatch(cps, cpCount, pos);
-        if (out_cp) {
-          newCps[newCount++] = out_cp;
+  // Phase 1: Form conjuncts RIGHT-TO-LEFT within consonant clusters.
+  //
+  // In Indic shaping the "base" consonant is the rightmost in a cluster, so
+  // conjuncts must form from the right.  Example: സ്ക്ക (sa+virama+ka+virama+ka)
+  //   Right-to-left: ka+virama+ka → kka first, then sa+virama+kka → skka.
+  //   Left-to-right would wrongly grab sa+virama+ka → ska, orphaning virama+ka.
+  //
+  // We repeatedly scan right-to-left for the rightmost 3-char C+virama+C match
+  // (or PUA+virama+C for triple+ stacking) and replace it, until no more form.
+  {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (int i = static_cast<int>(cpCount) - 3; i >= 0; i--) {
+        if (!isVirama(cps[i + 1])) continue;
+        if (!isMalayalam(cps[i]) || !isMalayalam(cps[i + 2])) continue;
+        uint32_t out = matchRule3(cps[i], cps[i + 1], cps[i + 2]);
+        if (out) {
+          cps[i] = out;
+          memmove(&cps[i + 1], &cps[i + 3], (cpCount - i - 3) * sizeof(uint32_t));
+          cpCount -= 2;
           changed = true;
-          continue;
+          break;  // restart scan from right after each replacement
         }
       }
-      newCps[newCount++] = cps[pos++];
     }
+  }
 
-    if (changed) {
-      memcpy(cps, newCps, newCount * sizeof(uint32_t));
-      cpCount = newCount;
+  // Phase 2: Left-to-right rule application for remaining substitutions
+  // (vowel signs, PUA+vowel chaining, chillu forms, etc.).
+  // Multi-pass needed because some rules chain (e.g., conjunct + vowel sign).
+  {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      uint32_t newCps[MAX_WORD_CPS];
+      size_t newCount = 0;
+      size_t pos = 0;
+
+      while (pos < cpCount) {
+        if (isMalayalam(cps[pos])) {
+          uint32_t out_cp = tryMatch(cps, cpCount, pos);
+          if (out_cp) {
+            newCps[newCount++] = out_cp;
+            changed = true;
+            continue;
+          }
+        }
+        newCps[newCount++] = cps[pos++];
+      }
+
+      if (changed) {
+        memcpy(cps, newCps, newCount * sizeof(uint32_t));
+        cpCount = newCount;
+      }
     }
   }
 
