@@ -8,6 +8,13 @@ class WriterActivity final : public Activity {
   std::string inputBuffer;  // Text in the input buffer, not yet committed to file
   int countWords() const;
   void renderFooter() const;
+  struct FooterLayout {
+    int top;
+    int marginLeft;
+    int marginRight;
+  };
+
+  FooterLayout getFooterLayout() const;
 
  public:
   explicit WriterActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
