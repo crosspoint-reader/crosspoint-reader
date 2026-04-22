@@ -47,8 +47,7 @@ void StatusBarSettingsActivity::onEnter() {
   }
 
   if (SETTINGS.statusBarProgressBarThickness >= PROGRESS_BAR_THICKNESS_ITEMS) {
-    SETTINGS.statusBarProgressBarThickness =
-        CrossPointSettings::STATUS_BAR_PROGRESS_BAR_THICKNESS::PROGRESS_BAR_NORMAL;
+    SETTINGS.statusBarProgressBarThickness = CrossPointSettings::STATUS_BAR_PROGRESS_BAR_THICKNESS::PROGRESS_BAR_NORMAL;
   }
 
   if (SETTINGS.statusBarTitle >= TITLE_ITEMS) {
@@ -183,9 +182,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
                             verticalPreviewPadding - verticalPreviewTextPadding;
   if (selectedIndex == 2) {
     const int hintY = previewLabelY - renderer.getLineHeight(UI_10_FONT_ID) - 6;
-    const std::string hint =
-        renderer.truncatedText(UI_10_FONT_ID, tr(STR_STABLE_PAGES_STATUS_BAR_HINT),
-                               pageWidth - metrics.contentSidePadding * 2);
+    const std::string hint = renderer.truncatedText(UI_10_FONT_ID, tr(STR_STABLE_PAGES_STATUS_BAR_HINT),
+                                                    pageWidth - metrics.contentSidePadding * 2);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, hintY, hint.c_str());
   }
 

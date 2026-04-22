@@ -993,7 +993,7 @@ bool EpubReaderActivity::ensureStableSyntheticIndex() {
 void EpubReaderActivity::computeStablePageNumbers(int& stableCurrent, int& stableTotal) const {
   stableCurrent = -1;
   stableTotal = -1;
-  if (!epub || stableCharsPerPage == 0 || !section || section->pageCount <= 0) {
+  if (!epub || stableCharsPerPage == 0 || !section || section->pageCount == 0) {
     return;
   }
   const auto& idx = stableSyntheticIndex;
@@ -1004,11 +1004,12 @@ void EpubReaderActivity::computeStablePageNumbers(int& stableCurrent, int& stabl
   const float pageCount = static_cast<float>(section->pageCount);
   const float sectionChapterProg = (pageCount > 0.0f) ? (static_cast<float>(currentPage) / pageCount) : 0.0f;
   const float bookProg = epub->calculateProgress(currentSpineIndex, sectionChapterProg);
-  const uint32_t pos = idx.totalTextCodepoints > 0
-                           ? std::min(static_cast<uint32_t>(static_cast<double>(bookProg) *
-                                                              static_cast<double>(idx.totalTextCodepoints) + 0.5),
-                                      idx.totalTextCodepoints)
-                           : 0;
+  const uint32_t pos =
+      idx.totalTextCodepoints > 0
+          ? std::min(static_cast<uint32_t>(
+                         static_cast<double>(bookProg) * static_cast<double>(idx.totalTextCodepoints) + 0.5),
+                     idx.totalTextCodepoints)
+          : 0;
   stableTotal = static_cast<int>(idx.totalPages);
   const auto it = std::upper_bound(idx.pageStartChar.begin(), idx.pageStartChar.end(), pos);
   stableCurrent = std::clamp(static_cast<int>(it - idx.pageStartChar.begin()), 1, stableTotal);

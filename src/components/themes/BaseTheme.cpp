@@ -738,8 +738,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       if (SETTINGS.statusBarBookProgressPercentage) {
         progress = static_cast<size_t>(bookProgress);
       } else if (barStableFrac) {
-        progress = static_cast<size_t>((100.0f * static_cast<float>(stableBookPage)) /
-                                       static_cast<float>(stableBookTotal));
+        progress =
+            static_cast<size_t>((100.0f * static_cast<float>(stableBookPage)) / static_cast<float>(stableBookTotal));
         if (progress > 100) progress = 100;
       } else {
         progress = static_cast<size_t>(bookProgress);

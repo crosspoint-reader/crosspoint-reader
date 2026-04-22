@@ -124,8 +124,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
                                    stableBookTotal, showStable, showPct);
 
   if (showChapter && totalPages > 0) {
-    progressLine =
-        std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages);
+    progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages);
     if (showStable || showPct) {
       progressLine += std::string(tr(STR_PAGES_SEPARATOR));
     } else {
@@ -146,8 +145,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
     bookPart = std::string(tr(STR_BOOK_PREFIX)) + std::to_string(stableBookPage) + "/" +
                std::to_string(stableBookTotal) + " · " + std::to_string(bookProgressPercent) + "%";
   } else if (showStable) {
-    bookPart = std::string(tr(STR_BOOK_PREFIX)) + std::to_string(stableBookPage) + "/" +
-               std::to_string(stableBookTotal);
+    bookPart =
+        std::string(tr(STR_BOOK_PREFIX)) + std::to_string(stableBookPage) + "/" + std::to_string(stableBookTotal);
   } else if (showPct) {
     bookPart = std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
   }

@@ -1,7 +1,5 @@
 #include "BookSyntheticIndex.h"
 
-#include "htmlEntities.h"
-
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -12,6 +10,8 @@
 #include <algorithm>
 #include <climits>
 #include <cstring>
+
+#include "htmlEntities.h"
 
 namespace BookSyntheticIndex {
 
