@@ -2,10 +2,9 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <cctype>
-
-#include <Logging.h>
 
 #include "MappedInputManager.h"
 #include "ReadestAuthActivity.h"
@@ -59,7 +58,8 @@ void ReadestSyncSettingsActivity::handleSelection() {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
                                READEST_STORE.setCredentials(kb.text, READEST_STORE.getPassword());
-                               if (!READEST_STORE.saveToFile()) LOG_ERR("RSS", "Storage.writeFile() failed saving username");
+                               if (!READEST_STORE.saveToFile())
+                                 LOG_ERR("RSS", "Storage.writeFile() failed saving username");
                              }
                            });
   } else if (selectedIndex == 1) {
