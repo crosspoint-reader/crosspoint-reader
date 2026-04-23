@@ -113,3 +113,25 @@ device must not sleep during preparation or the test will be interrupted.</p>
 <li><em>Preparation complete</em>.</li>
 </ol>
 
+<h2>Test F: Generate dictionary offset file then generate optimized index</h2>
+<p>Confirmation screen must list exactly two steps in order.
+Each step must show in-progress bold while running, then [OK] regular
+on completion. <em>Preparation complete</em> must appear after both finish.
+This test prepares the <em>prep-cspt-prefix-collision</em> dictionary so it
+is available for Ch 21.</p>
+<h3>Dictionary</h3>
+<p><em>prep-cspt-prefix-collision</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>prep-cspt-prefix-collision</em> in the picker.</li>
+<li>Confirmation screen lists in order:
+  <ul>
+    <li><em>Generate dictionary offset file</em></li>
+    <li><em>Generate optimized index</em></li>
+  </ul>
+</li>
+<li>Press <em>Confirm</em>.</li>
+<li>Both steps run sequentially, each showing [ &gt; ] then [OK].</li>
+<li><em>Preparation complete</em>.</li>
+</ol>
+
