@@ -71,9 +71,12 @@ bool WriterDraftStore::readDraft(std::string& out) {
     return false;
   }
 
-  constexpr size_t MaxDraftBytes = 16 * 1024;
-  if (file.size() > MaxDraftBytes) {
-    LOG_ERR("Writer", "Draft too large to load: %s (%zu bytes)", DraftPath, file.size());
+  constexpr size_t MaxDraftDisplayBytes = 64 * 1024;
+  const size_t fileSize = file.size();
+  const size_t startOffset = fileSize > MaxDraftDisplayBytes ? fileSize - MaxDraftDisplayBytes : 0;
+
+  if (startOffset > 0 && !file.seekSet(startOffset)) {
+    LOG_ERR("Writer", "Failed to seek draft file: %s (%zu/%zu bytes)", DraftPath, startOffset, fileSize);
     file.close();
     return false;
   }
@@ -93,7 +96,7 @@ bool WriterDraftStore::readDraft(std::string& out) {
   }
 
   file.close();
-  LOG_DBG("Writer", "Read draft file: %s (%zu bytes)", DraftPath, out.size());
+  LOG_DBG("Writer", "Read draft file: %s (%zu/%zu bytes)", DraftPath, out.size(), fileSize);
   return true;
 }
 
