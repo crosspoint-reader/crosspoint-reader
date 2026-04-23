@@ -1,9 +1,11 @@
 #pragma once
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include "../Activity.h"
 #include "WriterDraftStore.h"
+#include "WriterWrappedLayout.h"
 
 class WriterActivity final : public Activity {
   WriterDraftStore draftStore;
@@ -18,6 +20,9 @@ class WriterActivity final : public Activity {
   int countWords(const std::string& text) const;
   void moveCursorLeft();
   void moveCursorRight();
+  size_t estimateWrapColumns(int contentWidth) const;
+  int findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines,
+                            const std::string& renderedText) const;
   void renderFooter() const;
   struct FooterLayout {
     int top;
