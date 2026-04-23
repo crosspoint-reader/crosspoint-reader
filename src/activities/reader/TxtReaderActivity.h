@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "TxtReaderMenuActivity.h"
 #include "activities/Activity.h"
 
 class TxtReaderActivity final : public Activity {
@@ -47,6 +48,20 @@ class TxtReaderActivity final : public Activity {
   int cachedOrientedMarginBottom = 0;
   int cachedOrientedMarginLeft = 0;
 
+  // Reader-menu-driven options (ephemeral; not persisted to global settings)
+  bool automaticPageTurnActive = false;
+  unsigned long lastPageTurnTime = 0UL;
+  unsigned long pageTurnDuration = 0UL;
+  uint8_t currentPageTurnOption = 0;  // index into the menu's pageTurnLabels
+  uint8_t currentPageJumpOption = 0;  // index into the menu's pageJumpLabels (0 = off)
+  bool pendingScreenshot = false;
+  // Set when the user picks a percent jump from the menu; consumed in render().
+  bool pendingPercentJump = false;
+  int pendingJumpPercent = 0;
+  // Suppress one frame of input after returning from a sub-activity so the
+  // release event that closed the menu doesn't immediately retrigger here.
+  bool skipNextButtonCheck = false;
+
   void renderPage();
   void renderStatusBar() const;
 
@@ -60,6 +75,18 @@ class TxtReaderActivity final : public Activity {
 
   int estimatedTotalPages() const;
   int estimatedCurrentPage() const;
+
+  // Menu-driven actions
+  void onReaderMenuConfirm(TxtReaderMenuActivity::MenuAction action);
+  void applyOrientation(uint8_t orientation);
+  void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
+  void pageTurn(bool isForwardTurn);
+  // Multi-page navigation. Positive delta moves forward, negative backward.
+  // Uses the running bytes-per-page estimate to skip without re-paginating.
+  void jumpPages(int deltaPages);
+  // Translate a 0-100 percent into an absolute byte offset and reset state to
+  // render that position on the next frame.
+  void jumpToPercent(int percent);
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)

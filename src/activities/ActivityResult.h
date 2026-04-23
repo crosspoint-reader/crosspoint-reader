@@ -21,6 +21,9 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
+  // TXT reader uses this to communicate the long-press multi-page jump step
+  // (0 = off, otherwise an index into a fixed step table). EPUB ignores it.
+  uint8_t pageJumpOption = 0;
 };
 
 struct ChapterResult {
