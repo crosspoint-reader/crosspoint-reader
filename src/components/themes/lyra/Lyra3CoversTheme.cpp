@@ -38,28 +38,34 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         if (coverPath.empty()) {
           hasCover = false;
         } else {
-          const std::string coverBmpPath =
-              UITheme::getCoverThumbPath(coverPath, Lyra3CoversMetrics::values.homeCoverHeight);
+          const bool skipCover = recentBooks[i].coverDisabled;
+          if (skipCover) {
+            hasCover = false;
+          } else {
+            const std::string coverBmpPath =
+                UITheme::getCoverThumbPath(coverPath, Lyra3CoversMetrics::values.homeCoverHeight);
 
-          // First time: load cover from SD and render
-          FsFile file;
-          if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
-            Bitmap bitmap(file);
-            if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-              float coverHeight = static_cast<float>(bitmap.getHeight());
-              float coverWidth = static_cast<float>(bitmap.getWidth());
-              float ratio = coverWidth / coverHeight;
-              const float tileRatio = static_cast<float>(tileWidth - 2 * hPaddingInSelection) /
-                                      static_cast<float>(Lyra3CoversMetrics::values.homeCoverHeight);
-              float cropX = 1.0f - (tileRatio / ratio);
+            FsFile file;
+            if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
+              Bitmap bitmap(file);
+              if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+                float coverHeight = static_cast<float>(bitmap.getHeight());
+                float coverWidth = static_cast<float>(bitmap.getWidth());
+                float ratio = coverWidth / coverHeight;
+                const float tileRatio = static_cast<float>(tileWidth - 2 * hPaddingInSelection) /
+                                        static_cast<float>(Lyra3CoversMetrics::values.homeCoverHeight);
+                float cropX = 1.0f - (tileRatio / ratio);
 
-              renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                                  tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::values.homeCoverHeight,
-                                  cropX);
-            } else {
-              hasCover = false;
+                if (!renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
+                                         tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::homeCoverHeight,
+                                         cropX)) {
+                  hasCover = false;
+                }
+              } else {
+                hasCover = false;
+              }
+              file.close();
             }
-            file.close();
           }
         }
         // Draw either way

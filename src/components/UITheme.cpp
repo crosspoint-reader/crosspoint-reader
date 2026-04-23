@@ -80,6 +80,8 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
   return coverBmpPath;
 }
 
+std::vector<int> UITheme::getAllCoverHeights() { return {226, 400}; }
+
 UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (filename.back() == '/') {
     return Folder;

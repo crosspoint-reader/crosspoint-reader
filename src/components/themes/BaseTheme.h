@@ -9,6 +9,11 @@
 class GfxRenderer;
 struct RecentBook;
 
+struct BookCoverParams {
+  std::string title;
+  std::string author;
+};
+
 struct Rect {
   int x;
   int y;
@@ -163,6 +168,8 @@ class BaseTheme {
                                const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
                                bool inactiveSelection = false) const;
   virtual bool showsFileIcons() const { return false; }
+  void drawClassicalBookCover(GfxRenderer& renderer, int x, int y, int w, int h, const BookCoverParams& params,
+                              bool inverted = false, int continueTextWidth = 0) const;
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;
