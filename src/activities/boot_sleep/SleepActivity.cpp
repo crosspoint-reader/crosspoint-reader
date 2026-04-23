@@ -403,6 +403,7 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
+<<<<<<< HEAD
     if (lastXtc.getBitDepth() == 2) {
       const size_t planeSize = (static_cast<size_t>(lastXtc.getPageWidth()) * lastXtc.getPageHeight() + 7) / 8;
       uint8_t* plane1 = static_cast<uint8_t*>(malloc(planeSize));
@@ -435,6 +436,27 @@ void SleepActivity::renderCoverSleepScreen() const {
       free(plane1);
       free(plane2);
       return;
+    }
+
+    if (lastXtc.getBitDepth() == 1) {
+      const size_t bufferSize = (static_cast<size_t>(lastXtc.getPageWidth() + 7) / 8) * lastXtc.getPageHeight();
+      uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(bufferSize));
+      if (!pageBuffer) {
+        LOG_ERR("SLP", "Failed to alloc page buffer for direct XTC render (%lu bytes)", static_cast<unsigned long>(bufferSize));
+        return (this->*renderNoCoverSleepScreen)();
+      }
+      if (lastXtc.loadPage(0, pageBuffer, bufferSize) == 0) {
+        LOG_ERR("SLP", "Failed to load XTC page for sleep cover");
+        free(pageBuffer);
+        return (this->*renderNoCoverSleepScreen)();
+      }
+      LOG_DBG("SLP", "Direct XTC page render: %ux%u", lastXtc.getPageWidth(), lastXtc.getPageHeight());
+      renderer.clearScreen();
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.displayXtcBwPage(pageBuffer, lastXtc.getPageWidth(), lastXtc.getPageHeight());
+      free(pageBuffer);
+      return;
+    }
     }
 
     if (!lastXtc.generateCoverBmp()) {
