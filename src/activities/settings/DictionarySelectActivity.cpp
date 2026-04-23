@@ -173,6 +173,13 @@ void DictionarySelectActivity::scanDictionaries() {
     int ifoCount = 0;
     for (auto subEntry = subDir.openNextFile(); subEntry; subEntry = subDir.openNextFile()) {
       subEntry.getName(subName, sizeof(subName));
+
+      // Skip macOS metadata files (AppleDouble resource forks, .DS_Store)
+      if (strncmp(subName, "._", 2) == 0 || strcasecmp(subName, ".DS_Store") == 0) {
+        subEntry.close();
+        continue;
+      }
+
       const size_t subLen = strlen(subName);
       const bool isIdx = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".idx") == 0;
       const bool isIfo = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".ifo") == 0;

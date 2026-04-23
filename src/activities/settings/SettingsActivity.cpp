@@ -68,6 +68,8 @@ void SettingsActivity::onEnter() {
     };
     readerSettings.push_back(std::move(dictSetting));
   }
+  // These are in SettingsList.h for persistence but with STR_NONE_OPT category,
+  // so we add them here manually to appear after the Dictionary selector.
   readerSettings.push_back(SettingInfo::Value(
       StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
       {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},

@@ -32,4 +32,5 @@ class EpubReaderChapterSelectionActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool isReaderActivity() const override { return true; }
 };

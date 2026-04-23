@@ -86,6 +86,7 @@ class ActivityManager {
   void goToSleep();
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  void goToCrashReport();
   void goHome();
 
   // This will move current activity to stack instead of deleting it
@@ -97,6 +98,7 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
+  bool isInReaderContext() const;
   bool skipLoopDelay() const;
 
   // If immediate is true, the update will be triggered immediately.
