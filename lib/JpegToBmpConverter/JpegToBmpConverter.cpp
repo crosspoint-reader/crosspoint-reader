@@ -226,6 +226,7 @@ struct BmpConvertCtx {
   Atkinson1BitDitherer* atkinson1BitDitherer;
 
   bool error;
+  uint32_t deadline;  // 0 = no limit
 };
 
 // Write a fully-assembled output row (grayscale bytes, length outWidth) to BMP
@@ -330,6 +331,12 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
   // Wait for the last MCU column before processing any rows
   if (blockX + validW < ctx->srcWidth) return 1;
 
+  if (ctx->deadline != 0 && static_cast<int32_t>(millis() - ctx->deadline) >= 0) {
+    LOG_ERR("JPG", "Decode deadline exceeded at MCU row %d", blockY);
+    ctx->error = true;
+    return 0;
+  }
+
   // Process each complete source row in this MCU row
   const int endRow = blockY + blockH;
 
@@ -377,7 +384,7 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                     bool oneBit, bool crop) {
+                                                     bool oneBit, bool crop, uint32_t deadline) {
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -471,6 +478,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   ctx.scaleX_fp = scaleX_fp;
   ctx.scaleY_fp = scaleY_fp;
   ctx.error = false;
+  ctx.deadline = deadline;
 
   // RAII guard: frees all heap resources on any return path
   struct Cleanup {
@@ -553,6 +561,6 @@ bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(FsFile& jpegFile, Print& bm
 
 // Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering
 bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
-                                                         int targetMaxHeight) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+                                                         int targetMaxHeight, uint32_t deadline) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true, deadline);
 }
