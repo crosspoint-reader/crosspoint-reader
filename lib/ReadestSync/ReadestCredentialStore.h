@@ -4,7 +4,7 @@
 class ReadestCredentialStore;
 namespace JsonSettingsIO {
 bool saveReadest(const ReadestCredentialStore& store, const char* path);
-bool loadReadest(ReadestCredentialStore& store, const char* json, bool* needsResave = nullptr);
+bool loadReadest(ReadestCredentialStore& store, const char* json, bool* needsResave);
 }  // namespace JsonSettingsIO
 
 /**
