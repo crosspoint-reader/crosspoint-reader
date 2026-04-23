@@ -421,6 +421,7 @@ bool JsonSettingsIO::saveReadest(const ReadestCredentialStore& store, const char
 }
 
 bool JsonSettingsIO::loadReadest(ReadestCredentialStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
