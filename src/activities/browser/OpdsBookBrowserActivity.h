@@ -1,11 +1,12 @@
 #pragma once
 #include <OpdsParser.h>
 
-#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../Activity.h"
+#include "OpdsServerStore.h"
 #include "util/ButtonNavigator.h"
 
 /**
@@ -16,8 +17,8 @@ class OpdsBookBrowserActivity final : public Activity {
  public:
   enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
 
-  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("OpdsBookBrowser", renderer, mappedInput), buttonNavigator() {}
+  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
+      : Activity("OpdsBookBrowser", renderer, mappedInput), buttonNavigator(), server(std::move(server)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -38,6 +39,8 @@ class OpdsBookBrowserActivity final : public Activity {
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
+
+  OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
   void checkAndConnectWifi();
   void launchWifiSelection();

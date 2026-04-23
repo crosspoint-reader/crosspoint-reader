@@ -2,8 +2,8 @@
 # Fonts like NotoSansCJK are downloaded on demand by generate-sd-fonts.sh.
 *
 !.gitignore
-!Bookerly/
-!Bookerly/**
+!NotoSerif/
+!NotoSerif/**
 !NotoSans/
 !NotoSans/**
 !OpenDyslexic/
