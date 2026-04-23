@@ -129,7 +129,6 @@ class CrossPointWebServer {
     FontUploadState() { buffer.resize(BUFFER_SIZE); }
   } fontUpload;
 
-
   // OPDS server handlers
   void handleGetOpdsServers() const;
   void handlePostOpdsServer();
