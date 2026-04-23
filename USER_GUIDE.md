@@ -156,7 +156,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 #### 3.6.2 Reader
 - **Reader Font Family**: Choose the font used for reading:
-  - "Noto Serif" (default) - Google's serif font
+  - "Bookerly" (default) - Amazon's reading font
   - "Noto Sans" - Google's sans-serif font
   - "Open Dyslexic" - Font designed for readers with dyslexia
 - **Reader Font Size**: Adjust the text size for reading; options are "Small", "Medium" (default), "Large", or "X Large".

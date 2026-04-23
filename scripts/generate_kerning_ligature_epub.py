@@ -149,15 +149,15 @@ except ImportError:
 
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_NOTOSERIF_FONT = os.path.join(
+_BOOKERLY_FONT = os.path.join(
     _PROJECT_ROOT, "lib", "EpdFont", "builtinFonts", "source",
-    "NotoSerif", "NotoSerif-Regular.ttf",
+    "Bookerly", "Bookerly-Regular.ttf",
 )
 
 
 def _get_font(size=20):
-    """Get the NotoSerif font at the requested size, with system fallbacks."""
-    paths = [_NOTOSERIF_FONT]
+    """Get the Bookerly font at the requested size, with system fallbacks."""
+    paths = [_BOOKERLY_FONT]
     for path in paths:
         try:
             return ImageFont.truetype(path, size)
