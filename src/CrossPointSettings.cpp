@@ -238,7 +238,7 @@ float CrossPointSettings::getReaderLineCompression() const {
   }
 
   switch (fontFamily) {
-    case BOOKERLY:
+    case NOTOSERIF:
     default:
       switch (lineSpacing) {
         case TIGHT:
@@ -313,18 +313,18 @@ int CrossPointSettings::getReaderFontId() const {
   }
 
   switch (fontFamily) {
-    case BOOKERLY:
+    case NOTOSERIF:
     default:
       switch (fontSize) {
         case SMALL:
-          return BOOKERLY_12_FONT_ID;
+          return NOTOSERIF_12_FONT_ID;
         case MEDIUM:
         default:
-          return BOOKERLY_14_FONT_ID;
+          return NOTOSERIF_14_FONT_ID;
         case LARGE:
-          return BOOKERLY_16_FONT_ID;
+          return NOTOSERIF_16_FONT_ID;
         case EXTRA_LARGE:
-          return BOOKERLY_18_FONT_ID;
+          return NOTOSERIF_18_FONT_ID;
       }
     case NOTOSANS:
       switch (fontSize) {
