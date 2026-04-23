@@ -137,6 +137,14 @@ Expected component responsibilities after this stage begins:
 - `WriterVisibleLines`
   - may evolve or be replaced if viewport rendering needs a more cursor-aware helper
 
+The existing TXT reader is a useful reference for:
+
+- viewport sizing
+- UTF-8-safe wrapping
+- page/progress bookkeeping
+
+However, it is not a drop-in editor layout engine because it tracks reader pagination and file offsets rather than caret positions within wrapped lines. Writer will likely need its own cursor-aware wrapped-line layout helper, even if that helper borrows wrapping rules from `TxtReaderActivity`.
+
 ## Error Handling
 
 - Existing save-failure behavior should remain in place.

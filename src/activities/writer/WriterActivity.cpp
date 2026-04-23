@@ -11,6 +11,7 @@
 #include "Logging.h"
 #include "WriterDraftStore.h"
 #include "WriterInput.h"
+#include "WriterCursor.h"
 #include "WriterVisibleLines.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -23,6 +24,8 @@ void WriterActivity::onEnter() {
   showSaveError = false;
   draftStore.ensureDraft();
   draftStore.readDraft(draftText);
+  cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  viewportTopLine = 0;
   requestUpdate();
 }
 
@@ -43,7 +46,18 @@ void WriterActivity::loop() {
         inputBuffer.push_back(ch);
       }
     }
+    cursorIndex = getRenderedText().size();
     showSaveError = false;
+    requestUpdate();
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    moveCursorLeft();
+    requestUpdate();
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    moveCursorRight();
     requestUpdate();
   }
 
@@ -127,6 +141,7 @@ bool WriterActivity::flushInputBuffer() {
   inputBuffer.clear();
   showSaveError = false;
   draftStore.readDraft(draftText);
+  cursorIndex = WriterCursor::clamp(draftText, draftText.size());
   return true;
 }
 
@@ -147,6 +162,10 @@ int WriterActivity::countWords(const std::string& text) const {
 
   return words;
 }
+
+void WriterActivity::moveCursorLeft() { cursorIndex = WriterCursor::moveLeft(getRenderedText(), cursorIndex); }
+
+void WriterActivity::moveCursorRight() { cursorIndex = WriterCursor::moveRight(getRenderedText(), cursorIndex); }
 
 WriterActivity::FooterLayout WriterActivity::getFooterLayout() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
