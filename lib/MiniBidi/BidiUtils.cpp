@@ -115,7 +115,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
         break;
       }
       line[count].origwc = line[count].wc = ' ';
-      line[count].index = static_cast<uint16_t>(w);
+      line[count].index = static_cast<uint16_t>(nWords);
       count++;
     }
   }

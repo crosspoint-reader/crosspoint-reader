@@ -9,7 +9,7 @@
 #include "FontCacheManager.h"
 
 namespace {
-const char* resolveVisualText(const char* text, std::string& visualBuffer);
+const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -199,7 +199,8 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
-int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style,
+                              const int paragraphLevel) const {
   if (text == nullptr || *text == '\0') {
     return 0;
   }
@@ -211,7 +212,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   }
 
   std::string visual;
-  const char* renderedText = resolveVisualText(text, visual);
+  const char* renderedText = resolveVisualText(text, visual, paragraphLevel);
 
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
@@ -219,20 +220,20 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style) const {
-  const int x = (getScreenWidth() - getTextWidth(fontId, text, style)) / 2;
-  drawText(fontId, x, y, text, black, style);
+                                   const EpdFontFamily::Style style, const int paragraphLevel) const {
+  const int x = (getScreenWidth() - getTextWidth(fontId, text, style, paragraphLevel)) / 2;
+  drawText(fontId, x, y, text, black, style, paragraphLevel);
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style) const {
+                           const EpdFontFamily::Style style, const int paragraphLevel) const {
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
   }
 
   std::string visual;
-  const char* renderedText = resolveVisualText(text, visual);
+  const char* renderedText = resolveVisualText(text, visual, paragraphLevel);
 
   const int yPos = y + getFontAscenderSize(fontId);
   int lastBaseX = x;
@@ -296,7 +297,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 namespace {
-const char* resolveVisualText(const char* text, std::string& visualBuffer) {
+const char* resolveVisualText(const char* text, std::string& visualBuffer, const int paragraphLevel) {
   if (!text || *text == '\0') return text;
   bool hasNonAscii = false;
   for (const unsigned char* q = reinterpret_cast<const unsigned char*>(text); *q; ++q) {
@@ -306,7 +307,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer) {
     }
   }
   if (!hasNonAscii) return text;
-  visualBuffer = BidiUtils::applyBidiVisual(text, /*paragraphLevel=*/-1);
+  visualBuffer = BidiUtils::applyBidiVisual(text, paragraphLevel);
   return visualBuffer.empty() ? text : visualBuffer.c_str();
 }
 }  // namespace
@@ -314,8 +315,8 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer) {
 void GfxRenderer::drawTextRtl(const int fontId, const int rightX, const int y, const char* text, const bool black,
                               const EpdFontFamily::Style style) const {
   if (!text || *text == '\0') return;
-  const int width = getTextWidth(fontId, text, style);
-  drawText(fontId, rightX - width, y, text, black, style);
+  const int width = getTextWidth(fontId, text, style, /*paragraphLevel=*/1);
+  drawText(fontId, rightX - width, y, text, black, style, /*paragraphLevel=*/1);
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
