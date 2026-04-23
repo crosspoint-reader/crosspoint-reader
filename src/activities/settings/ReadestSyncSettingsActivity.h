@@ -23,6 +23,7 @@ class ReadestSyncSettingsActivity final : public Activity {
  private:
   ButtonNavigator buttonNavigator;
   size_t selectedIndex = 0;
+  bool showCredentialsError = false;
 
   void handleSelection();
 };

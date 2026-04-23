@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <cctype>
+
 #include <Logging.h>
 
 #include "MappedInputManager.h"
@@ -21,6 +23,7 @@ const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, S
 void ReadestSyncSettingsActivity::onEnter() {
   Activity::onEnter();
   selectedIndex = 0;
+  showCredentialsError = false;
   requestUpdate();
 }
 
@@ -78,14 +81,22 @@ void ReadestSyncSettingsActivity::handleSelection() {
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
-                               const std::string urlToSave =
-                                   (kb.text == "https://" || kb.text == "http://") ? "" : kb.text;
+                               std::string trimmed = kb.text;
+                               while (!trimmed.empty() && isspace(static_cast<unsigned char>(trimmed.back()))) trimmed.pop_back();
+                               size_t start = 0;
+                               while (start < trimmed.size() && isspace(static_cast<unsigned char>(trimmed[start]))) ++start;
+                               trimmed.erase(0, start);
+                               std::string lower = trimmed;
+                               for (auto& c : lower) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+                               const std::string urlToSave = (lower == "http://" || lower == "https://") ? "" : trimmed;
                                READEST_STORE.setServerUrl(urlToSave);
                                if (!READEST_STORE.saveToFile()) LOG_ERR("RSS", "Storage.writeFile() failed saving server URL");
                              }
                            });
   } else if (selectedIndex == 3) {
     if (!READEST_STORE.hasCredentials() || READEST_STORE.getServerUrl().empty()) {
+      showCredentialsError = true;
+      requestUpdate();
       return;
     }
     startActivityForResult(std::make_unique<ReadestAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
@@ -126,6 +137,11 @@ void ReadestSyncSettingsActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (showCredentialsError) {
+    showCredentialsError = false;
+    GUI.drawPopup(renderer, tr(STR_SET_CREDENTIALS_FIRST));
+  }
 
   renderer.displayBuffer();
 }
