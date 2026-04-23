@@ -6,13 +6,12 @@
 
 #include <algorithm>
 #include <cctype>
-#include <vector>
 
 #include "Logging.h"
 #include "WriterDraftStore.h"
 #include "WriterInput.h"
 #include "WriterCursor.h"
-#include "WriterVisibleLines.h"
+#include "WriterWrappedLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -89,29 +88,33 @@ void WriterActivity::render(RenderLock&&) {
   const int maxVisibleLines = std::max(1, availableTextHeight / lineHeight);
 
   const std::string renderedText = getRenderedText();
-  std::vector<std::string> visibleLines;  // Small screen buffer for the last 'x' lines
-
-  size_t start = 0;
-  while (start <= renderedText.size()) {
-    size_t end = renderedText.find('\n', start);
-    std::string paragraph = renderedText.substr(start, end == std::string::npos ? std::string::npos : end - start);
-
-    if (paragraph.empty()) {
-      WriterVisibleLines::appendWrappedLines(visibleLines, {""}, maxVisibleLines);
-    } else {
-      const int maxParagraphLines = std::max(maxVisibleLines, static_cast<int>(paragraph.size() + 1));
-      auto wrapped = renderer.wrappedText(UI_10_FONT_ID, paragraph.c_str(), contentWidth, maxParagraphLines);
-      WriterVisibleLines::appendWrappedLines(visibleLines, wrapped, maxVisibleLines);
-    }
-    if (end == std::string::npos) break;
-    start = end + 1;
+  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, estimateWrapColumns(contentWidth));
+  const int cursorLine = findWrappedCursorLine(wrappedLines, renderedText);
+  const int maxTopLine = std::max(0, static_cast<int>(wrappedLines.size()) - maxVisibleLines);
+  viewportTopLine = std::clamp(viewportTopLine, 0, maxTopLine);
+  if (cursorLine < viewportTopLine) {
+    viewportTopLine = cursorLine;
+  } else if (cursorLine >= viewportTopLine + maxVisibleLines) {
+    viewportTopLine = cursorLine - maxVisibleLines + 1;
   }
 
   // Draw the screen
   int y = metrics.topPadding + metrics.verticalSpacing;
-
-  for (const auto& line : visibleLines) {
-    renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
+  for (int lineIndex = viewportTopLine;
+       lineIndex < static_cast<int>(wrappedLines.size()) && lineIndex < viewportTopLine + maxVisibleLines; ++lineIndex) {
+    const auto& line = wrappedLines[lineIndex];
+    renderer.drawText(UI_10_FONT_ID, x, y, line.text.c_str());
+    if (lineIndex == cursorLine) {
+      const size_t caretOffset = std::clamp(cursorIndex, line.startOffset, line.endOffset);
+      const std::string prefix = renderedText.substr(line.startOffset, caretOffset - line.startOffset);
+      const int caretX = x + renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
+      const int caretBottom = y + lineHeight - 1;
+      renderer.fillRect(caretX, y, 2, lineHeight, true);
+      renderer.drawLine(caretX - 2, y, caretX - 1, y, true);
+      renderer.drawLine(caretX + 2, y, caretX + 3, y, true);
+      renderer.drawLine(caretX - 2, caretBottom, caretX - 1, caretBottom, true);
+      renderer.drawLine(caretX + 2, caretBottom, caretX + 3, caretBottom, true);
+    }
     y += lineHeight;
   }
 
@@ -166,6 +169,32 @@ int WriterActivity::countWords(const std::string& text) const {
 void WriterActivity::moveCursorLeft() { cursorIndex = WriterCursor::moveLeft(getRenderedText(), cursorIndex); }
 
 void WriterActivity::moveCursorRight() { cursorIndex = WriterCursor::moveRight(getRenderedText(), cursorIndex); }
+
+size_t WriterActivity::estimateWrapColumns(const int contentWidth) const {
+  const int glyphWidth = std::max(1, renderer.getTextWidth(UI_10_FONT_ID, "M"));
+  return std::max<size_t>(1, static_cast<size_t>(contentWidth / glyphWidth));
+}
+
+int WriterActivity::findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines,
+                                          const std::string& renderedText) const {
+  if (lines.empty()) {
+    return 0;
+  }
+
+  const size_t clampedCursor = WriterCursor::clamp(renderedText, cursorIndex);
+  for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
+    const auto& line = lines[i];
+    const bool isLastLine = i == static_cast<int>(lines.size()) - 1;
+    if (clampedCursor >= line.startOffset && (clampedCursor < line.endOffset || isLastLine)) {
+      return i;
+    }
+    if (clampedCursor == line.endOffset) {
+      return i;
+    }
+  }
+
+  return static_cast<int>(lines.size()) - 1;
+}
 
 WriterActivity::FooterLayout WriterActivity::getFooterLayout() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
