@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
@@ -17,6 +18,7 @@
 void WriterActivity::onEnter() {
   Activity::onEnter();
 
+  WriterInput::setActive(true);
   inputBuffer.clear();
   showSaveError = false;
   draftStore.ensureDraft();
@@ -24,10 +26,23 @@ void WriterActivity::onEnter() {
   requestUpdate();
 }
 
+void WriterActivity::onExit() {
+  WriterInput::setActive(false);
+  Activity::onExit();
+}
+
 void WriterActivity::loop() {
   std::string inputText;
   if (WriterInput::readAvailable(inputText)) {
-    inputBuffer += inputText;
+    for (const char ch : inputText) {
+      if (ch == '\b') {
+        if (!inputBuffer.empty()) {
+          utf8RemoveLastChar(inputBuffer);
+        }
+      } else {
+        inputBuffer.push_back(ch);
+      }
+    }
     showSaveError = false;
     requestUpdate();
   }
