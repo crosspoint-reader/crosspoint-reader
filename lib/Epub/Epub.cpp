@@ -638,9 +638,15 @@ bool Epub::generateThumbBmp(int height, uint32_t deadline) const {
     if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
-    readItemContentsToStream(coverImageHref, coverJpg, 1024, deadline);
+    const bool extractedJpg = readItemContentsToStream(coverImageHref, coverJpg, 1024, deadline);
     // Explicitly close() file before reopening for reading
     coverJpg.close();
+
+    if (!extractedJpg) {
+      LOG_ERR("EBP", "Failed to extract JPG cover (deadline or error)");
+      Storage.remove(coverJpgTempPath.c_str());
+      return false;
+    }
 
     if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
       return false;
@@ -675,9 +681,15 @@ bool Epub::generateThumbBmp(int height, uint32_t deadline) const {
     if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
       return false;
     }
-    readItemContentsToStream(coverImageHref, coverPng, 1024, deadline);
+    const bool extractedPng = readItemContentsToStream(coverImageHref, coverPng, 1024, deadline);
     // Explicitly close() file before reopening for reading
     coverPng.close();
+
+    if (!extractedPng) {
+      LOG_ERR("EBP", "Failed to extract PNG cover (deadline or error)");
+      Storage.remove(coverPngTempPath.c_str());
+      return false;
+    }
 
     if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
       return false;
