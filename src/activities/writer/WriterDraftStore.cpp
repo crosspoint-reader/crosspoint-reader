@@ -71,6 +71,8 @@ bool WriterDraftStore::readDraft(std::string& out) {
     return false;
   }
 
+  // For Stage 1 the editor follows the newest text, so large drafts are loaded
+  // from the tail instead of building paging or scroll state yet.
   constexpr size_t MaxDraftDisplayBytes = 64 * 1024;
   const size_t fileSize = file.size();
   const size_t startOffset = fileSize > MaxDraftDisplayBytes ? fileSize - MaxDraftDisplayBytes : 0;

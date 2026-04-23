@@ -10,6 +10,8 @@ bool WriterInput::readAvailable(std::string& out) {
   out.clear();
 
 #ifdef SIMULATOR
+  // Stage 1 uses terminal stdin as a temporary stand-in for keyboard events.
+  // The host terminal stays line-buffered, so text only reaches Writer after Enter.
   static bool stdinConfigured = false;
   if (!stdinConfigured) {
     const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);

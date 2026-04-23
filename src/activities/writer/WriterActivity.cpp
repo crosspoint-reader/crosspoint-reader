@@ -101,6 +101,8 @@ bool WriterActivity::flushInputBuffer() {
     return true;
   }
 
+  // Confirm and Back both route through the same flush path so buffered text
+  // is treated consistently whether the user saves in place or exits Writer.
   if (!draftStore.appendToDraft(inputBuffer)) {
     showSaveError = true;
     LOG_ERR("Writer", "Failed to write to draft file: %s", WriterDraftStore::DraftPath);
