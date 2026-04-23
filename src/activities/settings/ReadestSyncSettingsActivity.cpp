@@ -82,15 +82,18 @@ void ReadestSyncSettingsActivity::handleSelection() {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
                                std::string trimmed = kb.text;
-                               while (!trimmed.empty() && isspace(static_cast<unsigned char>(trimmed.back()))) trimmed.pop_back();
+                               while (!trimmed.empty() && isspace(static_cast<unsigned char>(trimmed.back())))
+                                 trimmed.pop_back();
                                size_t start = 0;
-                               while (start < trimmed.size() && isspace(static_cast<unsigned char>(trimmed[start]))) ++start;
+                               while (start < trimmed.size() && isspace(static_cast<unsigned char>(trimmed[start])))
+                                 ++start;
                                trimmed.erase(0, start);
                                std::string lower = trimmed;
                                for (auto& c : lower) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
                                const std::string urlToSave = (lower == "http://" || lower == "https://") ? "" : trimmed;
                                READEST_STORE.setServerUrl(urlToSave);
-                               if (!READEST_STORE.saveToFile()) LOG_ERR("RSS", "Storage.writeFile() failed saving server URL");
+                               if (!READEST_STORE.saveToFile())
+                                 LOG_ERR("RSS", "Storage.writeFile() failed saving server URL");
                              }
                            });
   } else if (selectedIndex == 3) {
