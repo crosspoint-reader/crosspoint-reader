@@ -13,16 +13,22 @@ class WriterActivity final : public Activity {
   std::string inputBuffer;  // Text in the input buffer, not yet committed to file
   size_t cursorIndex = 0;
   int viewportTopLine = 0;
+  int preferredCursorX = 0;
+  bool hasPreferredCursorX = false;
   bool showSaveError = false;
 
   bool flushInputBuffer();
   std::string getRenderedText() const;
   int countWords(const std::string& text) const;
+  void clearPreferredCursorX();
   void moveCursorLeft();
   void moveCursorRight();
+  void moveCursorVertical(int lineDelta);
   size_t estimateWrapColumns(int contentWidth) const;
-  int findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines,
-                            const std::string& renderedText) const;
+  int findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines, const std::string& renderedText) const;
+  int measureCursorX(const WriterWrappedLayout::Line& line, const std::string& renderedText, size_t cursorOffset) const;
+  size_t findClosestCursorOffsetOnLine(const WriterWrappedLayout::Line& line, const std::string& renderedText,
+                                       int preferredX) const;
   void renderFooter() const;
   struct FooterLayout {
     int top;
