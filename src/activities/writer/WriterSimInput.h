@@ -2,7 +2,7 @@
 
 #include <string>
 
-class WriterInput {
+class WriterSimInput {
  public:
   static void setActive(bool active);
   static bool readAvailable(std::string& out);

@@ -26,6 +26,7 @@ class WriterActivity final : public Activity {
   explicit WriterActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("Writer", renderer, mappedInput) {}
   void onEnter() override;
+  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
 };
