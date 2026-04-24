@@ -22,7 +22,7 @@ Stage 1 adds a fork-local writer mode:
 
 - a `Write` activity alongside CrossPoint reader functionality
 - one active plain-text draft
-- Bluetooth keyboard input
+- simulator-driven keyboard input, with hardware/Bluetooth input deferred
 - basic line-oriented editing
 - e-ink rendering of the live writing surface
 - manual save, Enter commit, idle checkpoint, and save before sleep
