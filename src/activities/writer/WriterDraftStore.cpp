@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "WriterCursor.h"
 #include "WriterFile.h"
 
 // Check draft folder exists
@@ -81,6 +82,26 @@ bool WriterDraftStore::readDraft(std::string& out) {
     LOG_ERR("Writer", "Failed to seek draft file: %s (%zu/%zu bytes)", DraftPath, startOffset, fileSize);
     file.close();
     return false;
+  }
+
+  if (startOffset > 0) {
+    while (file.available()) {
+      const int nextByte = file.read();
+      if (nextByte < 0) {
+        file.close();
+        LOG_ERR("Writer", "Failed while aligning draft file: %s", DraftPath);
+        return false;
+      }
+
+      if (!WriterCursor::isUtf8ContinuationByte(static_cast<unsigned char>(nextByte))) {
+        if (!file.seekCur(-1)) {
+          file.close();
+          LOG_ERR("Writer", "Failed to rewind aligned draft file: %s", DraftPath);
+          return false;
+        }
+        break;
+      }
+    }
   }
 
   constexpr size_t bufferSize = 256;

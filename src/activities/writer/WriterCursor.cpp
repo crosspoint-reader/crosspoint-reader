@@ -25,11 +25,13 @@ size_t WriterCursor::clamp(const std::string& text, size_t cursor) {
     return text.size();
   }
 
-  while (cursor > 0 && (static_cast<unsigned char>(text[cursor]) & 0xC0) == 0x80) {
+  while (cursor > 0 && isUtf8ContinuationByte(static_cast<unsigned char>(text[cursor]))) {
     --cursor;
   }
   return cursor;
 }
+
+bool WriterCursor::isUtf8ContinuationByte(const unsigned char byte) { return (byte & 0xC0) == 0x80; }
 
 size_t WriterCursor::moveLeft(const std::string& text, size_t cursor) {
   cursor = clamp(text, cursor);

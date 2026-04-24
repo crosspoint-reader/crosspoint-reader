@@ -15,13 +15,33 @@ void expectEqual(size_t actual, size_t expected, const char* testName) {
   std::exit(1);
 }
 
+void expectTrue(bool condition, const char* testName, const char* message) {
+  if (condition) {
+    return;
+  }
+
+  std::cerr << "FAILED: " << testName << "\n" << message << "\n";
+  std::exit(1);
+}
+
 void clampsToUtf8CodepointBoundaries() {
-  const std::string text = "a\xC3\xA9" "\xF0\x9D\x84\x9E" "b";
+  const std::string text =
+      "a\xC3\xA9"
+      "\xF0\x9D\x84\x9E"
+      "b";
 
   expectEqual(WriterCursor::clamp(text, 0), 0, "clamp keeps start");
   expectEqual(WriterCursor::clamp(text, 2), 1, "clamp moves inside 2-byte codepoint left");
   expectEqual(WriterCursor::clamp(text, 5), 3, "clamp moves inside 4-byte codepoint left");
   expectEqual(WriterCursor::clamp(text, 99), text.size(), "clamp bounds to end");
+}
+
+void detectsUtf8ContinuationBytes() {
+  expectTrue(!WriterCursor::isUtf8ContinuationByte('a'), "detectsUtf8ContinuationBytes", "ASCII is not continuation");
+  expectTrue(!WriterCursor::isUtf8ContinuationByte(0xC3), "detectsUtf8ContinuationBytes",
+             "UTF-8 lead byte is not continuation");
+  expectTrue(WriterCursor::isUtf8ContinuationByte(0xA9), "detectsUtf8ContinuationBytes",
+             "UTF-8 continuation byte is detected");
 }
 
 void handlesEmptyAndAsciiText() {
@@ -37,7 +57,9 @@ void handlesEmptyAndAsciiText() {
 }
 
 void keepsCombiningMarksAttachedToBaseCodepoint() {
-  const std::string text = "e\xCC\x81" "x";
+  const std::string text =
+      "e\xCC\x81"
+      "x";
 
   expectEqual(WriterCursor::clamp(text, 2), 1, "clamp backs out of combining continuation byte");
   expectEqual(WriterCursor::moveRight(text, 0), 3, "moveRight skips base plus combining mark");
@@ -49,7 +71,10 @@ void keepsCombiningMarksAttachedToBaseCodepoint() {
 }
 
 void movesLeftByWholeCodepoints() {
-  const std::string text = "a\xC3\xA9" "\xF0\x9D\x84\x9E" "b";
+  const std::string text =
+      "a\xC3\xA9"
+      "\xF0\x9D\x84\x9E"
+      "b";
 
   expectEqual(WriterCursor::moveLeft(text, text.size()), 7, "moveLeft from end");
   expectEqual(WriterCursor::moveLeft(text, 7), 3, "moveLeft over 1-byte codepoint");
@@ -58,7 +83,10 @@ void movesLeftByWholeCodepoints() {
 }
 
 void movesRightByWholeCodepoints() {
-  const std::string text = "a\xC3\xA9" "\xF0\x9D\x84\x9E" "b";
+  const std::string text =
+      "a\xC3\xA9"
+      "\xF0\x9D\x84\x9E"
+      "b";
 
   expectEqual(WriterCursor::moveRight(text, 0), 1, "moveRight from start");
   expectEqual(WriterCursor::moveRight(text, 1), 3, "moveRight over 2-byte codepoint");
@@ -70,6 +98,7 @@ void movesRightByWholeCodepoints() {
 
 int main() {
   clampsToUtf8CodepointBoundaries();
+  detectsUtf8ContinuationBytes();
   handlesEmptyAndAsciiText();
   keepsCombiningMarksAttachedToBaseCodepoint();
   movesLeftByWholeCodepoints();
