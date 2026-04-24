@@ -23,7 +23,9 @@ void WriterActivity::onEnter() {
   WriterInput::setActive(true);
   inputBuffer.clear();
   showSaveError = false;
-  draftStore.ensureDraft();
+  if (!draftStore.ensureDraft()) {
+    LOG_ERR("Writer", "Failed to ensure draft file: %s", WriterDraftStore::DraftPath);
+  }
   std::string loadedDraft;
   if (draftStore.readDraft(loadedDraft)) {
     draftText = std::move(loadedDraft);
