@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <Logging.h>
+#include <base64.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 
@@ -54,25 +55,6 @@ esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
   return ESP_OK;
 }
 
-// Base64 encode for HTTP Basic Auth
-std::string base64Encode(const std::string& input) {
-  static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  std::string out;
-  out.reserve(((input.size() + 2) / 3) * 4);
-  int val = 0, valb = -6;
-  for (unsigned char c : input) {
-    val = (val << 8) + c;
-    valb += 8;
-    while (valb >= 0) {
-      out.push_back(table[(val >> valb) & 0x3F]);
-      valb -= 6;
-    }
-  }
-  if (valb > -6) out.push_back(table[((val << 8) >> (valb + 8)) & 0x3F]);
-  while (out.size() % 4) out.push_back('=');
-  return out;
-}
-
 // Create configured esp_http_client with small TLS buffers
 esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
                                       esp_http_client_method_t method = HTTP_METHOD_GET) {
@@ -90,20 +72,30 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   if (!client) return nullptr;
 
   // KOSync auth headers
-  esp_http_client_set_header(client, "Accept", "application/vnd.koreader.v1+json");
-  esp_http_client_set_header(client, "x-auth-user", KOREADER_STORE.getUsername().c_str());
-  esp_http_client_set_header(client, "x-auth-key", KOREADER_STORE.getMd5Password().c_str());
+  if (esp_http_client_set_header(client, "Accept", "application/vnd.koreader.v1+json") != ESP_OK ||
+      esp_http_client_set_header(client, "x-auth-user", KOREADER_STORE.getUsername().c_str()) != ESP_OK ||
+      esp_http_client_set_header(client, "x-auth-key", KOREADER_STORE.getMd5Password().c_str()) != ESP_OK) {
+    LOG_ERR("KOSync", "Failed to set auth headers");
+    esp_http_client_cleanup(client);
+    return nullptr;
+  }
 
   // HTTP Basic Auth for Calibre-Web-Automated compatibility
   std::string credentials = KOREADER_STORE.getUsername() + ":" + KOREADER_STORE.getPassword();
-  std::string authHeader = "Basic " + base64Encode(credentials);
-  esp_http_client_set_header(client, "Authorization", authHeader.c_str());
+  String encoded = base64::encode(reinterpret_cast<const uint8_t*>(credentials.data()), credentials.size());
+  std::string authHeader = "Basic " + std::string(encoded.c_str());
+  if (esp_http_client_set_header(client, "Authorization", authHeader.c_str()) != ESP_OK) {
+    LOG_ERR("KOSync", "Failed to set Authorization header");
+    esp_http_client_cleanup(client);
+    return nullptr;
+  }
 
   return client;
 }
 }  // namespace
 
 KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
+  lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
@@ -131,6 +123,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 
 KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& documentHash,
                                                           KOReaderProgress& outProgress) {
+  lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
@@ -178,6 +171,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 }
 
 KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgress& progress) {
+  lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
@@ -203,8 +197,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_PUT);
   if (!client) return NETWORK_ERROR;
 
-  esp_http_client_set_header(client, "Content-Type", "application/json");
-  esp_http_client_set_post_field(client, body.c_str(), body.length());
+  if (esp_http_client_set_header(client, "Content-Type", "application/json") != ESP_OK ||
+      esp_http_client_set_post_field(client, body.c_str(), body.length()) != ESP_OK) {
+    LOG_ERR("KOSync", "Failed to set request body");
+    esp_http_client_cleanup(client);
+    return NETWORK_ERROR;
+  }
 
   esp_err_t err = esp_http_client_perform(client);
   const int httpCode = esp_http_client_get_status_code(client);
