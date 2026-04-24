@@ -32,7 +32,15 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
   // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
-  if (shouldShowPopup()) owner.requestUpdateAndWait();
+  if (shouldShowPopup()) {
+    // Toast overlay: draw popup directly over whatever the user is currently viewing.
+    // RenderLock serializes against the render task — without it, a prior requestUpdate()
+    // (e.g. from navigation) may still be mid-refresh, and concurrent framebuffer / SPI
+    // access from two tasks crashes the e-ink driver.
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
   task = std::make_unique<DictLookupTask>(*this);
   task->start("DictLookup", 4096, 1);
 }
@@ -157,11 +165,10 @@ bool DictionaryLookupController::render() {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   if (state == LookupState::LookingUp) {
-    // CLEANUP: on Auto-only commit, delete only this line (gate below stays)
-    if (!shouldShowPopup()) return false;
-    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return true;
+    // Popup is drawn inline as a toast in startLookup(); nothing to do from the render task.
+    // Returning false lets the activity's normal render run (e.g. on cancel, the page repaints
+    // which naturally wipes the toast overlay).
+    return false;
   }
 
   if (state == LookupState::AltFormPrompt) {
@@ -223,8 +230,12 @@ void DictionaryLookupController::lookupOrPopup(const std::string& rawWord) {
 }
 
 void DictionaryLookupController::showNoWordPopup() {
-  GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  {
+    // Serialize with render task — see comment in startLookup() for the race this prevents.
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   owner.requestUpdate();
 }
