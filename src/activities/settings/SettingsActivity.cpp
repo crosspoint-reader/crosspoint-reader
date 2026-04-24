@@ -29,6 +29,10 @@ void SettingsActivity::rebuildSettingsLists() {
   controlsSettings.clear();
   systemSettings.clear();
 
+  // Pick up any fonts uploaded/deleted over the web server since the last
+  // reader activity ran — otherwise the font-family picker shows stale list.
+  sdFontSystem.refreshIfDirty();
+
   for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {

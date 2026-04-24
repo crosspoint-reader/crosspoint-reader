@@ -140,12 +140,10 @@
     <div class="card">
       <h2>Upload Font</h2>
       <form class="upload-form" id="uploadForm">
-        <label>Family:
-          <input type="text" id="familyName" placeholder="e.g. Bookerly-SD" required pattern="[A-Za-z0-9_-]+" />
-        </label>
-        <input type="file" id="fontFile" accept=".cpfont" required />
+        <input type="file" id="fontFiles" webkitdirectory directory multiple required />
         <button type="submit" class="btn btn-primary">Upload</button>
       </form>
+      <p id="pickedInfo" class="family-meta" style="margin: 8px 0 0;"></p>
       <div id="status"></div>
     </div>
 
@@ -185,57 +183,102 @@
 
     async function deleteFamily(name) {
       if (!confirm('Delete font family "' + name + '"?')) return;
-      const res = await fetch('/api/fonts/delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({family: name})
-      });
-      if (res.ok) loadFonts();
-      else alert('Delete failed');
+      const status = document.getElementById('status');
+      status.className = '';
+      status.style.display = 'block';
+      status.textContent = 'Deleting ' + name + '...';
+      try {
+        const res = await fetch('/api/fonts/delete', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({family: name})
+        });
+        if (res.ok) {
+          status.className = 'status-ok';
+          status.textContent = 'Deleted "' + name + '".';
+        } else {
+          status.className = 'status-err';
+          status.textContent = 'Failed to delete "' + name + '".';
+        }
+      } catch (err) {
+        status.className = 'status-err';
+        status.textContent = 'Delete error: ' + err.message;
+      }
+      await loadFonts();
     }
 
-    // Auto-detect family name from filename
-    document.getElementById('fontFile').addEventListener('change', function() {
-      const name = this.files[0]?.name;
-      if (name && name.endsWith('.cpfont')) {
-        const parts = name.replace('.cpfont', '').split('_');
-        if (parts.length >= 2) {
-          parts.pop(); // remove size
-          document.getElementById('familyName').value = parts.join('_');
-        }
+    // Derive family name from a .cpfont filename: take everything before the
+    // last '-' or '_' (that separator precedes the size suffix, e.g. Bookerly_12.cpfont).
+    function familyFromFilename(name) {
+      const stem = name.replace(/\.cpfont$/i, '');
+      const cut = Math.max(stem.lastIndexOf('-'), stem.lastIndexOf('_'));
+      return cut > 0 ? stem.slice(0, cut) : stem;
+    }
+
+    // Sanitize to match firmware's [A-Za-z0-9_-]+ pattern.
+    function sanitizeFamily(raw) {
+      return raw.replace(/[^A-Za-z0-9_-]/g, '_');
+    }
+
+    function cpfontFilesOnly(fileList) {
+      return Array.from(fileList).filter(f => /\.cpfont$/i.test(f.name));
+    }
+
+    document.getElementById('fontFiles').addEventListener('change', function() {
+      const info = document.getElementById('pickedInfo');
+      const files = cpfontFilesOnly(this.files);
+      if (files.length === 0) {
+        info.textContent = 'No .cpfont files found in the selected folder.';
+        return;
       }
+      const family = sanitizeFamily(familyFromFilename(files[0].name));
+      info.textContent = files.length + ' file' + (files.length === 1 ? '' : 's') +
+        ' → family "' + family + '"';
     });
 
     document.getElementById('uploadForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       const status = document.getElementById('status');
-      const family = document.getElementById('familyName').value;
-      const file = document.getElementById('fontFile').files[0];
-      if (!file) return;
+      const files = cpfontFilesOnly(document.getElementById('fontFiles').files);
+      if (files.length === 0) {
+        status.className = 'status-err';
+        status.textContent = 'No .cpfont files selected.';
+        return;
+      }
 
-      const formData = new FormData();
-      formData.append('family', family);
-      formData.append('file', file, file.name);
+      const family = sanitizeFamily(familyFromFilename(files[0].name));
 
       status.className = '';
       status.style.display = 'block';
-      status.textContent = 'Uploading...';
 
-      try {
-        const res = await fetch('/api/fonts/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (data.ok) {
-          status.className = 'status-ok';
-          status.textContent = 'Upload successful!';
-          loadFonts();
-        } else {
+      let uploaded = 0;
+      for (const file of files) {
+        status.textContent = 'Uploading ' + (uploaded + 1) + '/' + files.length + ': ' + file.name;
+        const formData = new FormData();
+        formData.append('family', family);
+        formData.append('file', file, file.name);
+        try {
+          const res = await fetch('/api/fonts/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (!data.ok) {
+            status.className = 'status-err';
+            status.textContent = 'Failed on ' + file.name + ': ' + (data.error || 'unknown error');
+            await loadFonts();
+            return;
+          }
+        } catch (err) {
           status.className = 'status-err';
-          status.textContent = data.error || 'Upload failed';
+          status.textContent = 'Upload error on ' + file.name + ': ' + err.message;
+          await loadFonts();
+          return;
         }
-      } catch (err) {
-        status.className = 'status-err';
-        status.textContent = 'Upload error: ' + err.message;
+        uploaded++;
       }
+
+      status.className = 'status-ok';
+      status.textContent = 'Uploaded ' + uploaded + ' file' + (uploaded === 1 ? '' : 's') +
+        ' to family "' + family + '".';
+      await loadFonts();
     });
 
     loadFonts();
