@@ -339,7 +339,8 @@ void WriterActivity::renderFooter() const {
   renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - titleWidth) / 2, footer.top, title.c_str());
 
   // Current wordcount
-  std::string wordCount = std::to_string(countWords(getRenderedText())) + " words";
+  const int words = countWords(getRenderedText());
+  std::string wordCount = std::to_string(words) + (words == 1 ? " word" : " words");
   int wordCountWidth = renderer.getTextWidth(SMALL_FONT_ID, wordCount.c_str());
 
   renderer.drawText(SMALL_FONT_ID,
