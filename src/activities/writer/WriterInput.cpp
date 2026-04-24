@@ -4,7 +4,9 @@
 #include "WriterSimInput.h"
 #endif
 
-void WriterInput::setActive(bool active) {
+namespace WriterInput {
+
+void setActive(bool active) {
 #ifdef SIMULATOR
   WriterSimInput::setActive(active);
 #else
@@ -12,7 +14,7 @@ void WriterInput::setActive(bool active) {
 #endif
 }
 
-bool WriterInput::readAvailable(std::string& out) {
+bool readAvailable(std::string& out) {
 #ifdef SIMULATOR
   return WriterSimInput::readAvailable(out);
 #else
@@ -20,3 +22,5 @@ bool WriterInput::readAvailable(std::string& out) {
   return false;
 #endif
 }
+
+}  // namespace WriterInput
