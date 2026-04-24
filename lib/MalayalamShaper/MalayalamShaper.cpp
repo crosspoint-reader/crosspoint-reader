@@ -20,9 +20,9 @@ static inline bool isVirama(uint32_t cp) { return cp == 0x0D4D; }
 
 // Pre-base (left-side) matras that must be visually reordered before the base consonant.
 static inline bool isPreBaseMatra(uint32_t cp) {
-  return cp == 0x0D46    // െ  VOWEL SIGN E
-         || cp == 0x0D47 // േ  VOWEL SIGN EE
-         || cp == 0x0D48 // ൈ  VOWEL SIGN AI
+  return cp == 0x0D46     // െ  VOWEL SIGN E
+         || cp == 0x0D47  // േ  VOWEL SIGN EE
+         || cp == 0x0D48  // ൈ  VOWEL SIGN AI
       ;
 }
 
@@ -183,11 +183,9 @@ static uint32_t matchRule3(uint32_t in0, uint32_t in1, uint32_t in2) {
   while (lo <= hi) {
     int mid = (lo + hi) / 2;
     const auto& r = rules3[mid];
-    if (r.in0 < in0 || (r.in0 == in0 && r.in1 < in1) ||
-        (r.in0 == in0 && r.in1 == in1 && r.in2 < in2)) {
+    if (r.in0 < in0 || (r.in0 == in0 && r.in1 < in1) || (r.in0 == in0 && r.in1 == in1 && r.in2 < in2)) {
       lo = mid + 1;
-    } else if (r.in0 > in0 || (r.in0 == in0 && r.in1 > in1) ||
-               (r.in0 == in0 && r.in1 == in1 && r.in2 > in2)) {
+    } else if (r.in0 > in0 || (r.in0 == in0 && r.in1 > in1) || (r.in0 == in0 && r.in1 == in1 && r.in2 > in2)) {
       hi = mid - 1;
     } else {
       return r.out;
