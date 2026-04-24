@@ -224,6 +224,9 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
 
     if (result != HttpDownloader::OK) {
       LOG_ERR("FONT", "Download failed: %s (%d)", file.name.c_str(), result);
+      fontInstaller_.deleteFamily(family.name.c_str());
+      family.installed = false;
+      family.hasUpdate = false;
       RenderLock lock(*this);
       state_ = ERROR;
       errorMessage_ = "Download failed: " + file.name;
@@ -232,7 +235,9 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
 
     if (!fontInstaller_.validateCpfontFile(destPath)) {
       LOG_ERR("FONT", "Invalid .cpfont: %s", destPath);
-      Storage.remove(destPath);
+      fontInstaller_.deleteFamily(family.name.c_str());
+      family.installed = false;
+      family.hasUpdate = false;
       RenderLock lock(*this);
       state_ = ERROR;
       errorMessage_ = "Invalid font file: " + file.name;
@@ -300,10 +305,18 @@ void FontDownloadActivity::loop() {
       state_ = FAMILY_LIST;
     }
   } else if (state_ == ERROR) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       RenderLock lock(*this);
       state_ = FAMILY_LIST;
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      if (downloadingFamilyIndex_ >= 0 &&
+          downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
+        downloadFamily(families_[downloadingFamilyIndex_]);
+        requestUpdate();
+      } else {
+        RenderLock lock(*this);
+        state_ = FAMILY_LIST;
+      }
     }
   }
 }
@@ -435,7 +448,7 @@ void FontDownloadActivity::render(RenderLock&&) {
     if (!errorMessage_.empty()) {
       renderer.drawCenteredText(UI_10_FONT_ID, centerY + metrics.verticalSpacing, errorMessage_.c_str());
     }
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
