@@ -24,7 +24,6 @@ class WriterActivity final : public Activity {
   void moveCursorLeft();
   void moveCursorRight();
   void moveCursorVertical(int lineDelta);
-  size_t estimateWrapColumns(int contentWidth) const;
   int findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines, const std::string& renderedText) const;
   int measureCursorX(const WriterWrappedLayout::Line& line, const std::string& renderedText, size_t cursorOffset) const;
   size_t findClosestCursorOffsetOnLine(const WriterWrappedLayout::Line& line, const std::string& renderedText,

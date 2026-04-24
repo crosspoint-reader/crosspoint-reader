@@ -16,11 +16,9 @@ WriterWrappedLayout::Line makeLine(const std::string& text, size_t startOffset, 
   return WriterWrappedLayout::Line{text.substr(startOffset, endOffset - startOffset), startOffset, endOffset};
 }
 
-void appendWrappedParagraph(const std::string& text,
-                           size_t paragraphStart,
-                           size_t paragraphEnd,
-                           size_t maxColumns,
-                           std::vector<WriterWrappedLayout::Line>& lines) {
+void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size_t paragraphEnd, int maxWidth,
+                            const WriterWrappedLayout::MeasureText& measureText,
+                            std::vector<WriterWrappedLayout::Line>& lines) {
   if (paragraphStart == paragraphEnd) {
     lines.push_back({"", paragraphStart, paragraphStart});
     return;
@@ -29,21 +27,26 @@ void appendWrappedParagraph(const std::string& text,
   size_t lineStart = paragraphStart;
   while (lineStart < paragraphEnd) {
     size_t offset = lineStart;
-    size_t breakAtSpace = std::string::npos;
-    size_t codepoints = 0;
+    size_t lastSpace = std::string::npos;
+    size_t lastFit = lineStart;
 
-    while (offset < paragraphEnd && codepoints < maxColumns) {
+    while (offset < paragraphEnd) {
       const size_t nextOffset = nextCodepointOffset(text, offset);
       if (nextOffset <= offset) {
         break;
       }
 
-      if (text[offset] == ' ') {
-        breakAtSpace = offset;
+      const std::string candidate = text.substr(lineStart, nextOffset - lineStart);
+      if (measureText(candidate) > maxWidth) {
+        break;
       }
 
+      if (text[offset] == ' ') {
+        lastSpace = offset;
+      }
+
+      lastFit = nextOffset;
       offset = nextOffset;
-      ++codepoints;
     }
 
     if (offset >= paragraphEnd) {
@@ -51,29 +54,40 @@ void appendWrappedParagraph(const std::string& text,
       break;
     }
 
-    if (breakAtSpace != std::string::npos && breakAtSpace > lineStart) {
-      lines.push_back(makeLine(text, lineStart, breakAtSpace));
-      lineStart = breakAtSpace + 1;
+    if (lastSpace != std::string::npos && lastSpace > lineStart) {
+      lines.push_back(makeLine(text, lineStart, lastSpace));
+      lineStart = lastSpace + 1;
       continue;
     }
 
-    lines.push_back(makeLine(text, lineStart, offset));
-    lineStart = offset;
+    if (lastFit > lineStart) {
+      lines.push_back(makeLine(text, lineStart, lastFit));
+      lineStart = lastFit;
+      continue;
+    }
+
+    const size_t nextOffset = nextCodepointOffset(text, lineStart);
+    if (nextOffset <= lineStart) {
+      break;
+    }
+    lines.push_back(makeLine(text, lineStart, nextOffset));
+    lineStart = nextOffset;
   }
 }
 
 }  // namespace
 
-std::vector<WriterWrappedLayout::Line> WriterWrappedLayout::wrap(const std::string& renderedText, size_t maxColumns) {
+std::vector<WriterWrappedLayout::Line> WriterWrappedLayout::wrap(const std::string& renderedText, const int maxWidth,
+                                                                 const MeasureText& measureText) {
   std::vector<Line> lines;
-  maxColumns = std::max<size_t>(1, maxColumns);
+  const int wrappedWidth = std::max(1, maxWidth);
 
   size_t paragraphStart = 0;
   while (paragraphStart <= renderedText.size()) {
     const size_t newline = renderedText.find('\n', paragraphStart);
     const size_t paragraphEnd = newline == std::string::npos ? renderedText.size() : newline;
 
-    appendWrappedParagraph(renderedText, paragraphStart, paragraphEnd, maxColumns, lines);
+    appendWrappedParagraph(renderedText, paragraphStart, paragraphEnd, wrappedWidth, measureText, lines);
 
     if (newline == std::string::npos) {
       break;

@@ -107,7 +107,9 @@ void WriterActivity::render(RenderLock&&) {
   const int maxVisibleLines = std::max(1, availableTextHeight / lineHeight);
 
   const std::string renderedText = getRenderedText();
-  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, estimateWrapColumns(contentWidth));
+  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, contentWidth, [this](const std::string& text) {
+    return renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
+  });
   const int cursorLine = findWrappedCursorLine(wrappedLines, renderedText);
   const int maxTopLine = std::max(0, static_cast<int>(wrappedLines.size()) - maxVisibleLines);
   viewportTopLine = std::clamp(viewportTopLine, 0, maxTopLine);
@@ -211,7 +213,9 @@ void WriterActivity::moveCursorVertical(const int lineDelta) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentWidth = renderer.getScreenWidth() - 2 * metrics.contentSidePadding;
 
-  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, estimateWrapColumns(contentWidth));
+  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, contentWidth, [this](const std::string& text) {
+    return renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
+  });
   if (wrappedLines.empty()) {
     cursorIndex = 0;
     clearPreferredCursorX();
@@ -231,11 +235,6 @@ void WriterActivity::moveCursorVertical(const int lineDelta) {
   }
 
   cursorIndex = findClosestCursorOffsetOnLine(wrappedLines[targetLine], renderedText, preferredCursorX);
-}
-
-size_t WriterActivity::estimateWrapColumns(const int contentWidth) const {
-  const int glyphWidth = std::max(1, renderer.getTextWidth(UI_10_FONT_ID, "M"));
-  return std::max<size_t>(1, static_cast<size_t>(contentWidth / glyphWidth));
 }
 
 int WriterActivity::findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines,
