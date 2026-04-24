@@ -3,7 +3,7 @@
  * name: manjari_16_regular
  * size: 16
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py manjari_16_regular 16 ../fontsrc/Manjari-Regular.otf --2bit --compress --pua-mapping ../../MalayalamShaper/scripts/pua_mapping.json
+ * Command used: fontconvert.py manjari_16_regular 16 ../builtinFonts/source/Manjari/Manjari-Regular.otf --2bit --compress --pua-mapping ../../MalayalamShaper/scripts/pua_mapping.json
  */
 #pragma once
 #include "EpdFontData.h"

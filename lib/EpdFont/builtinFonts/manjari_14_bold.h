@@ -3,7 +3,7 @@
  * name: manjari_14_bold
  * size: 14
  * mode: 2-bit  compressed: true
- * Command used: fontconvert.py manjari_14_bold 14 ../fontsrc/Manjari-Bold.otf --2bit --compress --pua-mapping ../../MalayalamShaper/scripts/pua_mapping.json
+ * Command used: fontconvert.py manjari_14_bold 14 ../builtinFonts/source/Manjari/Manjari-Bold.otf --2bit --compress --pua-mapping ../../MalayalamShaper/scripts/pua_mapping.json
  */
 #pragma once
 #include "EpdFontData.h"
