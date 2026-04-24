@@ -1119,7 +1119,7 @@ int EpubReaderActivity::getEffectiveReaderFontId() const {
 }
 
 bool EpubReaderActivity::stepPageState(const bool isForwardTurn) {
-  if (!epub || !section || section->pageCount <= 0) {
+  if (!epub || !section || section->pageCount == 0) {
     return false;
   }
 
@@ -1565,8 +1565,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
             tEnd - t0);
   }
 
-  if (auto* cacheManager = renderer.getFontCacheManager()) {
-    if (auto* decompressor = cacheManager->getDecompressor()) {
+  if (const auto* cacheManager = renderer.getFontCacheManager()) {
+    if (const auto* decompressor = cacheManager->getDecompressor()) {
       const auto& stats = decompressor->getStats();
       lastRenderStats.fontCacheHits = stats.cacheHits;
       lastRenderStats.fontCacheMisses = stats.cacheMisses;

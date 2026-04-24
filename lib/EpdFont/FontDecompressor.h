@@ -67,7 +67,7 @@ class FontDecompressor {
 
   // Scratch buffer for compacting a single glyph after a getBitmap() miss.
   // Valid until the next getBitmap() call.
-  uint8_t _hotGlyphBuf[HOT_GLYPH_BUF_SIZE];
+  uint8_t _hotGlyphBuf[HOT_GLYPH_BUF_SIZE] = {};
 
   void freePageBuffer();
   uint16_t getGroupIndex(const EpdFontData* fontData, uint32_t glyphIndex);
