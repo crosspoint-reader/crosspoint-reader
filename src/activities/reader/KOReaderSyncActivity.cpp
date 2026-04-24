@@ -1,6 +1,7 @@
 #include "KOReaderSyncActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -10,6 +11,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
+#include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -64,10 +66,7 @@ void wifiOff() {
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_DBG("KOSync", "WiFi connection failed, exiting");
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
+    returnToReader();
     return;
   }
 
@@ -245,6 +244,25 @@ void KOReaderSyncActivity::onExit() {
   wifiOff();
 }
 
+void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
+  epub->setupCacheDir();
+  FsFile f;
+  if (Storage.openFileForWrite("KOSync", epub->getCachePath() + "/progress.bin", f)) {
+    uint8_t data[6];
+    data[0] = spineIndex & 0xFF;
+    data[1] = (spineIndex >> 8) & 0xFF;
+    data[2] = page & 0xFF;
+    data[3] = (page >> 8) & 0xFF;
+    data[4] = 0;
+    data[5] = 0;
+    f.write(data, 6);
+    LOG_DBG("KOSync", "Progress saved: Chapter %d, Page %d", spineIndex, page);
+  }
+  returnToReader();
+}
+
+void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
+
 void KOReaderSyncActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
 
@@ -362,10 +380,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 void KOReaderSyncActivity::loop() {
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      ActivityResult result;
-      result.isCancelled = true;
-      setResult(std::move(result));
-      finish();
+      returnToReader();
     }
     return;
   }
@@ -384,9 +399,7 @@ void KOReaderSyncActivity::loop() {
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (selectedOption == 0) {
-        // Wifi will be turned off in onExit()
-        setResult(SyncResult{remotePosition.spineIndex, remotePosition.pageNumber});
-        finish();
+        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
       } else if (selectedOption == 1) {
         // Upload local progress
         performUpload();
@@ -394,10 +407,7 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      ActivityResult result;
-      result.isCancelled = true;
-      setResult(std::move(result));
-      finish();
+      returnToReader();
     }
     return;
   }
@@ -416,10 +426,7 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      ActivityResult result;
-      result.isCancelled = true;
-      setResult(std::move(result));
-      finish();
+      returnToReader();
     }
     return;
   }
