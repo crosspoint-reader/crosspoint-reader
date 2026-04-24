@@ -459,7 +459,9 @@ bool SdCardFont::load(const char* path) {
     uint8_t styleId = tocBuf[0];
     if (styleId >= MAX_STYLES) {
       LOG_ERR("SDCF", "Invalid styleId %u in TOC", styleId);
-      continue;
+      file.close();
+      freeAll();
+      return false;
     }
 
     auto& s = styles_[styleId];
@@ -476,14 +478,19 @@ bool SdCardFont::load(const char* path) {
     s.header.ligaturePairCount = tocBuf[23];
     s.header.is2Bit = is2Bit;
 
-    // Sanity-check counts to reject malformed files before allocating
+    // Sanity-check counts to reject malformed files before allocating.
+    // Kern class counts are uint8 (bounded by type). Entry counts are uint16
+    // but in practice a sane font has far fewer than 4096 per-side kern entries.
     static constexpr uint32_t MAX_INTERVALS = 4096;
     static constexpr uint32_t MAX_GLYPHS = 65536;
-    if (s.header.intervalCount > MAX_INTERVALS || s.header.glyphCount > MAX_GLYPHS) {
-      LOG_ERR("SDCF", "Style %u: unreasonable counts (intervals=%u, glyphs=%u)", styleId, s.header.intervalCount,
-              s.header.glyphCount);
-      s.present = false;
-      continue;
+    static constexpr uint32_t MAX_KERN_ENTRIES = 4096;
+    if (s.header.intervalCount > MAX_INTERVALS || s.header.glyphCount > MAX_GLYPHS ||
+        s.header.kernLeftEntryCount > MAX_KERN_ENTRIES || s.header.kernRightEntryCount > MAX_KERN_ENTRIES) {
+      LOG_ERR("SDCF", "Style %u: unreasonable counts (iv=%u, gl=%u, kL=%u, kR=%u)", styleId, s.header.intervalCount,
+              s.header.glyphCount, s.header.kernLeftEntryCount, s.header.kernRightEntryCount);
+      file.close();
+      freeAll();
+      return false;
     }
 
     uint32_t dataOffset = readU32(tocBuf + 24);
@@ -937,26 +944,19 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
 
   unsigned long startMs = millis();
 
-  // Step 1: Extract unique codepoints (no limit).
-  // First pass: count total codepoints to size the dedup buffer.
-  uint32_t totalChars = 0;
-  {
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
-    while (*p) {
-      utf8NextCodepoint(&p);
-      totalChars++;
-    }
-  }
-  if (totalChars == 0) return 0;
-
-  // Allocate buffer for unique codepoints. Worst case: every character is unique.
-  // For typical CJK text this is 2000-4000 entries × 4 bytes = 8-16KB, temporary.
-  uint32_t* codepoints = new (std::nothrow) uint32_t[totalChars];
+  // Step 1: Extract unique codepoints, capped at MAX_UNIQUE_CODEPOINTS.
+  // The dedup buffer is sized to the cap, not total chars — a large EPUB section
+  // may contain 50K+ characters but real text has far fewer unique codepoints.
+  // 4096 × 4 bytes = 16KB temporary; bounded regardless of input size.
+  static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;
+  uint32_t* codepoints = new (std::nothrow) uint32_t[MAX_UNIQUE_CODEPOINTS];
   if (!codepoints) {
-    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", totalChars * 4);
+    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)",
+            MAX_UNIQUE_CODEPOINTS * 4);
     return -1;
   }
   uint32_t cpCount = 0;
+  bool hitCap = false;
 
   // Second pass: collect unique codepoints via O(n²) dedup.
   // Bounded by uniqueCount × totalChars comparisons. For 2000 unique from 2291 total,
@@ -975,8 +975,16 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
       }
     }
     if (!found) {
+      if (cpCount >= MAX_UNIQUE_CODEPOINTS) {
+        hitCap = true;
+        break;
+      }
       codepoints[cpCount++] = cp;
     }
+  }
+  if (hitCap) {
+    LOG_ERR("SDCF", "buildAdvanceTable: unique codepoint cap (%u) hit, layout may be approximate",
+            MAX_UNIQUE_CODEPOINTS);
   }
 
   // Sort for ordered glyph index mapping and final table output
@@ -1141,30 +1149,22 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   int32_t globalIdx = self->findGlobalGlyphIndex(s, codepoint);
   if (globalIdx < 0) return nullptr;
 
-  // Pick overflow slot (ring buffer). Read into temporaries first so the
-  // existing slot stays valid if SD I/O fails.
-  uint32_t slot = self->overflowNext_;
-  bool wasAtCapacity = (self->overflowCount_ == OVERFLOW_CAPACITY);
-  if (!wasAtCapacity) {
-    self->overflowCount_++;
-  }
-  self->overflowNext_ = (slot + 1) % OVERFLOW_CAPACITY;
-
-  // Read glyph metadata into temporary
+  // Read everything into temporaries first. Do NOT advance overflowNext_ or
+  // overflowCount_ until all reads succeed — otherwise a failed read would
+  // leave a skipped slot with default-zero state that the lookup loop would
+  // later false-match against U+0000.
   FsFile file;
   if (!Storage.openFileForRead("SDCF", self->filePath_, file)) {
     LOG_ERR("SDCF", "Overflow: failed to open .cpfont");
-    if (!wasAtCapacity) self->overflowCount_--;
     return nullptr;
   }
 
-  EpdGlyph tempGlyph;
+  EpdGlyph tempGlyph = {};
   uint32_t glyphFileOff = s.glyphsFileOffset + static_cast<uint32_t>(globalIdx) * sizeof(EpdGlyph);
   file.seekSet(glyphFileOff);
   if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
     LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X style %u", codepoint, styleIdx);
     file.close();
-    if (!wasAtCapacity) self->overflowCount_--;
     return nullptr;
   }
 
@@ -1175,7 +1175,6 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
     if (!tempBitmap) {
       LOG_ERR("SDCF", "Overflow: failed to allocate %u bytes for U+%04X bitmap", tempGlyph.dataLength, codepoint);
       file.close();
-      if (!wasAtCapacity) self->overflowCount_--;
       return nullptr;
     }
     file.seekSet(s.bitmapFileOffset + tempGlyph.dataOffset);
@@ -1183,17 +1182,21 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
       LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
       delete[] tempBitmap;
       file.close();
-      if (!wasAtCapacity) self->overflowCount_--;
       return nullptr;
     }
   }
 
   file.close();
 
-  // All reads succeeded — commit to slot (evict old entry if at capacity)
+  // All reads succeeded — NOW claim and commit the slot.
+  uint32_t slot = self->overflowNext_;
+  bool wasAtCapacity = (self->overflowCount_ == OVERFLOW_CAPACITY);
   if (wasAtCapacity) {
     delete[] self->overflow_[slot].bitmap;
+  } else {
+    self->overflowCount_++;
   }
+  self->overflowNext_ = (slot + 1) % OVERFLOW_CAPACITY;
   self->overflow_[slot].glyph = tempGlyph;
   self->overflow_[slot].bitmap = tempBitmap;
   self->overflow_[slot].codepoint = codepoint;
