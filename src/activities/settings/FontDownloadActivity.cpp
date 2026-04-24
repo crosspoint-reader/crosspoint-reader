@@ -308,8 +308,7 @@ void FontDownloadActivity::loop() {
       }
       requestUpdate();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (downloadingFamilyIndex_ >= 0 &&
-          downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
+      if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
         downloadFamily(families_[downloadingFamilyIndex_]);
         requestUpdateAndWait();
         return;

@@ -951,8 +951,7 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
   static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;
   uint32_t* codepoints = new (std::nothrow) uint32_t[MAX_UNIQUE_CODEPOINTS];
   if (!codepoints) {
-    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)",
-            MAX_UNIQUE_CODEPOINTS * 4);
+    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", MAX_UNIQUE_CODEPOINTS * 4);
     return -1;
   }
   uint32_t cpCount = 0;
