@@ -306,6 +306,23 @@ static int cistrcmp(const char* a, const char* b) {
   return std::tolower(static_cast<unsigned char>(*a)) - std::tolower(static_cast<unsigned char>(*b));
 }
 
+// CLEANUP: on Auto-only commit, delete only this line (readCsptEntryCount below stays)
+uint32_t Dictionary::readCsptEntryCount(const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return 0;
+  FsFile cspt;
+  if (!Storage.openFileForRead("DICT", DictPaths(folderPath).idxOftCspt().c_str(), cspt)) return 0;
+  uint8_t hdr[CSPT_HEADER_SIZE];
+  cspt.seekSet(0);
+  const bool read_ok = (cspt.read(hdr, CSPT_HEADER_SIZE) == static_cast<int>(CSPT_HEADER_SIZE));
+  cspt.close();
+  if (!read_ok) return 0;
+  if (memcmp(hdr, CSPT_MAGIC, 4) != 0 || hdr[4] != CSPT_VERSION) return 0;
+  uint32_t entryCount;
+  memcpy(&entryCount, hdr + 8, 4);  // LE, matches binarySearchCspt
+  return entryCount;
+}
+
 bool Dictionary::binarySearchCspt(FsFile& cspt, const char* target, uint32_t idxFileSize, uint32_t* startByte,
                                   uint32_t* endByte) {
   // Read and validate header (12 bytes).

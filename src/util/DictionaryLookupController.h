@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -112,6 +113,11 @@ class DictionaryLookupController {
   DictLocation foundLocation;
   std::string altFormWord;
   std::string pendingHistoryWord;  // Deferred history recording
+
+  // CLEANUP: on Auto-only commit, delete only this line (threshold/cache/method below drive Auto mode — keep)
+  static constexpr uint32_t AUTO_POPUP_CSPT_ENTRY_THRESHOLD = 50000;
+  uint32_t csptEntryCountCached = UINT32_MAX;  // sentinel: not yet read
+  bool shouldShowPopup();
 
   volatile int lookupProgress = 0;
   volatile bool lookupDone = false;

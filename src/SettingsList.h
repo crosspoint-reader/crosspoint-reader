@@ -81,6 +81,10 @@ inline const std::vector<SettingInfo>& getSettingsList() {
           "lookupHistoryCap", StrId::STR_NONE_OPT),
       SettingInfo::Toggle(StrId::STR_DICT_HOLD_TO_LOOKUP, &CrossPointSettings::holdToLookup, "holdToLookup",
                           StrId::STR_NONE_OPT),
+      // CLEANUP: on Auto-only commit, delete these 4 lines (this comment + the SettingInfo::Enum entry below)
+      SettingInfo::Enum(StrId::STR_DEBUG_LOOKUP_POPUP, &CrossPointSettings::debugLookupPopupMode,
+                        {StrId::STR_DBG_AUTO, StrId::STR_DBG_ON, StrId::STR_DBG_OFF}, "debugLookupPopupMode",
+                        StrId::STR_CAT_READER),
       // --- Controls ---
       SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV}, "sideButtonLayout", StrId::STR_CAT_CONTROLS),

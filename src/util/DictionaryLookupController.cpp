@@ -8,6 +8,7 @@
 
 #include "../activities/Activity.h"
 #include "../activities/reader/DictionarySuggestionsActivity.h"
+#include "CrossPointSettings.h"
 #include "DictLookupTask.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -30,8 +31,8 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   lookupCancelRequested = false;
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
-  // Skip requestUpdateAndWait() - lookup is fast (~30ms), no need to show "looking up..."
-  // overlay. This avoids triggering an e-ink refresh that would block the activity transition.
+  // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
+  if (shouldShowPopup()) owner.requestUpdateAndWait();
   task = std::make_unique<DictLookupTask>(*this);
   task->start("DictLookup", 4096, 1);
 }
@@ -156,7 +157,11 @@ bool DictionaryLookupController::render() {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   if (state == LookupState::LookingUp) {
-    return false;  // Skip popup, let lookup proceed silently
+    // CLEANUP: on Auto-only commit, delete only this line (gate below stays)
+    if (!shouldShowPopup()) return false;
+    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    return true;
   }
 
   if (state == LookupState::AltFormPrompt) {
@@ -249,7 +254,7 @@ void DictionaryLookupController::handleLookupFailed() {
 void DictionaryLookupController::progressCallback(void* ctx, int percent) {
   auto* self = static_cast<DictionaryLookupController*>(ctx);
   self->lookupProgress = percent;
-  self->owner.requestUpdate(true);
+  // Intentionally no requestUpdate() here — popup is a single static frame.
 }
 
 bool DictionaryLookupController::cancelCallback(void* ctx) {
@@ -273,5 +278,21 @@ void DictionaryLookupController::recordPendingHistory() {
   if (!pendingHistoryWord.empty() && !cachePath.empty()) {
     LookupHistory::addWord(cachePath, pendingHistoryWord, toHistStatus(foundStatus));
     pendingHistoryWord.clear();
+  }
+}
+
+// CLEANUP: on Auto-only commit, delete this line AND collapse the switch below to keep only the DBG_POPUP_AUTO branch
+bool DictionaryLookupController::shouldShowPopup() {
+  switch (SETTINGS.debugLookupPopupMode) {
+    case CrossPointSettings::DBG_POPUP_ON:
+      return true;
+    case CrossPointSettings::DBG_POPUP_OFF:
+      return false;
+    case CrossPointSettings::DBG_POPUP_AUTO:
+    default:
+      if (csptEntryCountCached == UINT32_MAX) {
+        csptEntryCountCached = Dictionary::readCsptEntryCount(cachePath.c_str());
+      }
+      return csptEntryCountCached == 0 || csptEntryCountCached > AUTO_POPUP_CSPT_ENTRY_THRESHOLD;
   }
 }
