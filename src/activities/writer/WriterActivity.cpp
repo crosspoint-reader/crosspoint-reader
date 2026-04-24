@@ -150,9 +150,11 @@ bool WriterActivity::flushInputBuffer() {
     return true;
   }
 
+  const std::string flushedText = inputBuffer;
+
   // Confirm and Back both route through the same flush path so buffered text
   // is treated consistently whether the user saves in place or exits Writer.
-  if (!draftStore.appendToDraft(inputBuffer)) {
+  if (!draftStore.appendToDraft(flushedText)) {
     showSaveError = true;
     LOG_ERR("Writer", "Failed to write to draft file: %s", WriterDraftStore::DraftPath);
     return false;
@@ -163,8 +165,11 @@ bool WriterActivity::flushInputBuffer() {
   std::string loadedDraft;
   if (draftStore.readDraft(loadedDraft)) {
     draftText = std::move(loadedDraft);
-    cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  } else {
+    draftText += flushedText;
+    LOG_ERR("Writer", "Draft append succeeded but reload failed; preserving in-memory text");
   }
+  cursorIndex = WriterCursor::clamp(draftText, draftText.size());
   clearPreferredCursorX();
   return true;
 }
