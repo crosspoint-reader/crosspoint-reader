@@ -77,8 +77,8 @@ void movesLeftByWholeCodepoints() {
       "b";
 
   expectEqual(WriterCursor::moveLeft(text, text.size()), 7, "moveLeft from end");
-  expectEqual(WriterCursor::moveLeft(text, 7), 3, "moveLeft over 1-byte codepoint");
-  expectEqual(WriterCursor::moveLeft(text, 3), 1, "moveLeft over 4-byte codepoint");
+  expectEqual(WriterCursor::moveLeft(text, 7), 3, "moveLeft over 4-byte codepoint");
+  expectEqual(WriterCursor::moveLeft(text, 3), 1, "moveLeft over 2-byte codepoint");
   expectEqual(WriterCursor::moveLeft(text, 1), 0, "moveLeft to start");
 }
 
