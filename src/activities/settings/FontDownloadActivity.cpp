@@ -279,43 +279,46 @@ void FontDownloadActivity::loop() {
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (!families_.empty()) {
-        RenderLock lock(*this);
-        state_ = CONFIRM_DOWNLOAD;
+        if (isDownloadAllSelected()) {
+          downloadAll();
+        } else {
+          const auto& family = families_[familyIndexFromList(selectedIndex_)];
+          if (!family.installed || family.hasUpdate) {
+            downloadFamily(families_[familyIndexFromList(selectedIndex_)]);
+          }
+        }
+        requestUpdateAndWait();
+        return;
       }
-    }
-  } else if (state_ == CONFIRM_DOWNLOAD) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      RenderLock lock(*this);
-      state_ = FAMILY_LIST;
-      return;
-    }
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (isDownloadAllSelected()) {
-        downloadAll();
-      } else {
-        downloadFamily(families_[familyIndexFromList(selectedIndex_)]);
-      }
-      requestUpdate();
     }
   } else if (state_ == COMPLETE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      RenderLock lock(*this);
-      state_ = FAMILY_LIST;
+      {
+        RenderLock lock(*this);
+        state_ = FAMILY_LIST;
+      }
+      requestUpdate();
     }
   } else if (state_ == ERROR) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      RenderLock lock(*this);
-      state_ = FAMILY_LIST;
+      {
+        RenderLock lock(*this);
+        state_ = FAMILY_LIST;
+      }
+      requestUpdate();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (downloadingFamilyIndex_ >= 0 &&
           downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
         downloadFamily(families_[downloadingFamilyIndex_]);
-        requestUpdate();
+        requestUpdateAndWait();
+        return;
       } else {
-        RenderLock lock(*this);
-        state_ = FAMILY_LIST;
+        {
+          RenderLock lock(*this);
+          state_ = FAMILY_LIST;
+        }
+        requestUpdate();
       }
     }
   }
@@ -382,41 +385,9 @@ void FontDownloadActivity::render(RenderLock&&) {
             return f.installed && !f.hasUpdate;
           });
 
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DOWNLOAD), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
-  } else if (state_ == CONFIRM_DOWNLOAD) {
-    int y = contentTop;
-
-    if (isDownloadAllSelected()) {
-      std::string confirmText = std::string(tr(STR_DOWNLOAD_ALL)) + "?";
-      renderer.drawCenteredText(UI_10_FONT_ID, y, confirmText.c_str());
-      y += lineHeight + metrics.verticalSpacing;
-
-      size_t totalFiles = 0;
-      for (const auto& f : families_) {
-        if (!f.installed) totalFiles += f.files.size();
-      }
-      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
-                        (std::string(tr(STR_FILES_LABEL)) + std::to_string(totalFiles)).c_str());
-      y += lineHeight + metrics.verticalSpacing;
-      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
-                        (std::string(tr(STR_SIZE_LABEL)) + formatSize(totalUninstalledSize())).c_str());
-    } else {
-      const auto& family = families_[familyIndexFromList(selectedIndex_)];
-      std::string confirmText = (family.installed ? std::string(tr(STR_REDOWNLOAD)) : std::string(tr(STR_DOWNLOAD))) +
-                                " " + family.name + "?";
-      renderer.drawCenteredText(UI_10_FONT_ID, y, confirmText.c_str());
-      y += lineHeight + metrics.verticalSpacing;
-      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
-                        (std::string(tr(STR_FILES_LABEL)) + std::to_string(family.files.size())).c_str());
-      y += lineHeight + metrics.verticalSpacing;
-      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y,
-                        (std::string(tr(STR_SIZE_LABEL)) + formatSize(family.totalSize)).c_str());
-    }
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CONFIRM), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == DOWNLOADING) {
     const auto& family = families_[downloadingFamilyIndex_];
 

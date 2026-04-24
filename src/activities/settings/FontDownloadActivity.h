@@ -27,7 +27,6 @@ class FontDownloadActivity : public Activity {
     WIFI_SELECTION,
     LOADING_MANIFEST,
     FAMILY_LIST,
-    CONFIRM_DOWNLOAD,
     DOWNLOADING,
     COMPLETE,
     ERROR,
