@@ -1628,6 +1628,7 @@ void CrossPointWebServer::handleFontUploadData() {
       esp_task_wdt_reset();
       String family = server->arg("family");
       fontUpload.valid = false;
+      fontUpload.magicChecked = false;
       fontUpload.bytesWritten = 0;
       fontUpload.bufferPos = 0;
 
@@ -1669,13 +1670,14 @@ void CrossPointWebServer::handleFontUploadData() {
       if (!fontUpload.valid) break;
       esp_task_wdt_reset();
 
-      // Validate magic bytes on first chunk
-      if (fontUpload.bytesWritten == 0 && upload.currentSize >= 8) {
+      // Validate magic bytes on first chunk only
+      if (!fontUpload.magicChecked && upload.currentSize >= 8) {
         if (memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
           LOG_ERR("WEB", "Invalid .cpfont magic bytes");
           fontUpload.valid = false;
           break;
         }
+        fontUpload.magicChecked = true;
       }
 
       // Buffer writes for efficiency
