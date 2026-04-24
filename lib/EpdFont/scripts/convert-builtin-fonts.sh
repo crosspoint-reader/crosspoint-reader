@@ -45,7 +45,7 @@ MANJARI_FONT_STYLES=("Regular" "Bold")
 for size in ${MANJARI_FONT_SIZES[@]}; do
   for style in ${MANJARI_FONT_STYLES[@]}; do
     font_name="manjari_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../fontsrc/Manjari-${style}.otf"
+    font_path="../builtinFonts/source/Manjari/Manjari-${style}.otf"
     output_path="../builtinFonts/${font_name}.h"
     python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
     echo "Generated $output_path"

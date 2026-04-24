@@ -10,7 +10,7 @@ Usage:
     python extract_shaping_rules.py <font.otf> <output_dir>
 
 Example:
-    python extract_shaping_rules.py ../../fontsrc/Manjari-Regular.otf ..
+    python extract_shaping_rules.py ../../EpdFont/builtinFonts/source/Manjari/Manjari-Regular.otf ..
 """
 
 import sys
