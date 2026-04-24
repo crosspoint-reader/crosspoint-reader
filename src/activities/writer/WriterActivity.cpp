@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <utility>
 
 #include "Logging.h"
 #include "WriterCursor.h"
@@ -23,8 +24,11 @@ void WriterActivity::onEnter() {
   inputBuffer.clear();
   showSaveError = false;
   draftStore.ensureDraft();
-  draftStore.readDraft(draftText);
-  cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  std::string loadedDraft;
+  if (draftStore.readDraft(loadedDraft)) {
+    draftText = std::move(loadedDraft);
+    cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  }
   viewportTopLine = 0;
   clearPreferredCursorX();
   requestUpdate();
@@ -156,8 +160,11 @@ bool WriterActivity::flushInputBuffer() {
 
   inputBuffer.clear();
   showSaveError = false;
-  draftStore.readDraft(draftText);
-  cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  std::string loadedDraft;
+  if (draftStore.readDraft(loadedDraft)) {
+    draftText = std::move(loadedDraft);
+    cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  }
   clearPreferredCursorX();
   return true;
 }
