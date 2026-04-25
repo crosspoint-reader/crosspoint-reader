@@ -550,13 +550,13 @@ bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut, bo
   // Use runtime display dimensions (swapped for portrait cover sizing)
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop);
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop, 0);
 }
 
 // Convert with custom target size (for thumbnails, 2-bit)
 bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                                      int targetMaxHeight) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, false, 0);
 }
 
 // Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering
