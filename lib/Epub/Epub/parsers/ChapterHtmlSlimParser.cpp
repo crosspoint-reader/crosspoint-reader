@@ -1381,9 +1381,8 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
 size_t ChapterHtmlSlimParser::write(const uint8_t data) { return write(&data, 1); }
 
 size_t ChapterHtmlSlimParser::write(const uint8_t* buffer, const size_t size) {
-  if (!activeParser || streamFailed || size == 0) {
-    return streamFailed ? 0 : size;
-  }
+  if (size == 0) return 0;
+  if (!activeParser || streamFailed) return 0;
 
   size_t remaining = size;
   const uint8_t* cursor = buffer;
