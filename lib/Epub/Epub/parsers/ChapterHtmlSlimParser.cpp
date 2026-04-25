@@ -22,11 +22,11 @@ constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 // Size thresholds (bytes of XHTML) controlling indexing popup behavior.
 // Each progress callback costs ~640ms of e-ink refresh, so we trade granularity off
 // against indexing time based on expected duration.
-//   <  10KB:  no popup at all - indexing finishes faster than the popup would draw
+//   < 15KB:  no popup at all - indexing finishes faster than the popup would draw
 //   < 30KB:  popup only (one refresh up-front, no mid-parse updates)
 //   < 80KB:  popup + one heartbeat at 50%
 //   >= 80KB: popup + ticks at 25/50/75%
-constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;
+constexpr size_t MIN_SIZE_FOR_POPUP = 15 * 1024;
 constexpr size_t SIZE_FOR_PROGRESS_HEARTBEAT = 30 * 1024;
 constexpr size_t SIZE_FOR_PROGRESS_FINE = 80 * 1024;
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
@@ -1321,7 +1321,17 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 }
 
-bool ChapterHtmlSlimParser::parseAndBuildPages() {
+ChapterHtmlSlimParser::~ChapterHtmlSlimParser() {
+  if (activeParser) {
+    XML_StopParser(activeParser, XML_FALSE);
+    XML_SetElementHandler(activeParser, nullptr, nullptr);
+    XML_SetCharacterDataHandler(activeParser, nullptr);
+    XML_ParserFree(activeParser);
+    activeParser = nullptr;
+  }
+}
+
+bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
   // Resolve None sentinel to Justify for initial block (no CSS context yet)
@@ -1331,113 +1341,117 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
-  const XML_Parser parser = XML_ParserCreate(nullptr);
-  int done;
-
+  XML_Parser parser = XML_ParserCreate(nullptr);
   if (!parser) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
     return false;
   }
 
-  // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
-  // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
+  // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD.
+  // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE.
   XML_SetDefaultHandlerExpand(parser, defaultHandlerExpand);
-
-  FsFile file;
-  if (!Storage.openFileForRead("EHP", filepath, file)) {
-    XML_ParserFree(parser);
-    return false;
-  }
-
-  const size_t totalFileSize = file.size();
-  size_t bytesRead = 0;
-  int lastReportedProgress = -1;
-
-  // Choose progress granularity by chapter size. Each callback drives a full-screen
-  // e-ink refresh (~640ms), so smaller chapters skip mid-parse ticks entirely.
-  // progressStepPercent == 0 means "popup only, no mid-parse updates".
-  int progressStepPercent = 0;
-  if (totalFileSize >= SIZE_FOR_PROGRESS_FINE) {
-    progressStepPercent = 25;
-  } else if (totalFileSize >= SIZE_FOR_PROGRESS_HEARTBEAT) {
-    progressStepPercent = 50;
-  }
-
-  // Show initial progress popup for files above threshold.
-  if (progressFn && totalFileSize >= MIN_SIZE_FOR_POPUP) {
-    progressFn(0);
-  }
-
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
   activeParser = parser;
 
-  // Compute the time taken to parse and build pages
-  const uint32_t chapterStartTime = millis();
-  do {
-    void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
+  totalStreamSize = totalInflatedSize;
+  bytesStreamed = 0;
+  lastReportedProgress = -1;
+  streamFailed = false;
+  streamStartTimeMs = millis();
+
+  // Choose progress granularity by chapter size. Each callback drives a full-screen
+  // e-ink refresh (~640ms), so smaller chapters skip mid-parse ticks entirely.
+  // progressStepPercent == 0 means "popup only, no mid-parse updates".
+  progressStepPercent = 0;
+  if (totalStreamSize >= SIZE_FOR_PROGRESS_FINE) {
+    progressStepPercent = 25;
+  } else if (totalStreamSize >= SIZE_FOR_PROGRESS_HEARTBEAT) {
+    progressStepPercent = 50;
+  }
+
+  // Show initial progress popup for files above threshold.
+  if (progressFn && totalStreamSize >= MIN_SIZE_FOR_POPUP) {
+    progressFn(0);
+  }
+  return true;
+}
+
+size_t ChapterHtmlSlimParser::write(const uint8_t data) { return write(&data, 1); }
+
+size_t ChapterHtmlSlimParser::write(const uint8_t* buffer, const size_t size) {
+  if (!activeParser || streamFailed || size == 0) {
+    return streamFailed ? 0 : size;
+  }
+
+  size_t remaining = size;
+  const uint8_t* cursor = buffer;
+  while (remaining > 0) {
+    const size_t chunk = remaining < PARSE_BUFFER_SIZE ? remaining : PARSE_BUFFER_SIZE;
+    void* const buf = XML_GetBuffer(activeParser, static_cast<int>(chunk));
     if (!buf) {
-      LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      activeParser = nullptr;
-      XML_ParserFree(parser);
-      file.close();
-      return false;
+      LOG_ERR("EHP", "Couldn't allocate buffer");
+      streamFailed = true;
+      return 0;
+    }
+    memcpy(buf, cursor, chunk);
+
+    bytesStreamed += chunk;
+    // The streaming source doesn't know "this was the last chunk" — pass isFinal=false
+    // here and let finalize() emit the terminating empty parse with isFinal=true.
+    if (XML_ParseBuffer(activeParser, static_cast<int>(chunk), 0) == XML_STATUS_ERROR) {
+      LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(activeParser),
+              XML_ErrorString(XML_GetErrorCode(activeParser)));
+      streamFailed = true;
+      return 0;
     }
 
-    const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
-    bytesRead += len;
+    cursor += chunk;
+    remaining -= chunk;
+  }
 
-    // Report progress at the granularity chosen up-front (see progressStepPercent).
-    // Skip the 100% callback — the page render that follows immediately replaces the popup,
-    // so the final tick is wasted work.
-    if (progressFn && progressStepPercent > 0) {
-      const int progress = static_cast<int>(bytesRead * 100 / totalFileSize);
-      if (progress < 100 && progress / progressStepPercent > lastReportedProgress / progressStepPercent) {
-        lastReportedProgress = progress;
-        progressFn(progress);
-      }
+  // Report progress at the granularity chosen up-front (see progressStepPercent).
+  // Skip the 100% callback — the page render that follows immediately replaces the popup,
+  // so the final tick is wasted work.
+  if (progressFn && progressStepPercent > 0 && totalStreamSize > 0) {
+    const int progress = static_cast<int>(bytesStreamed * 100 / totalStreamSize);
+    if (progress < 100 && progress / progressStepPercent > lastReportedProgress / progressStepPercent) {
+      lastReportedProgress = progress;
+      progressFn(progress);
     }
+  }
 
-    if (len == 0 && file.available() > 0) {
-      LOG_ERR("EHP", "File read error");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      activeParser = nullptr;
-      XML_ParserFree(parser);
-      file.close();
-      return false;
+  return size;
+}
+
+bool ChapterHtmlSlimParser::finalize() {
+  if (!activeParser) {
+    return false;
+  }
+
+  bool success = !streamFailed;
+  if (success) {
+    // Emit terminating empty parse so Expat finalizes any pending tokens.
+    if (XML_ParseBuffer(activeParser, 0, 1) == XML_STATUS_ERROR) {
+      LOG_ERR("EHP", "Parse error at line %lu (finalize):\n%s", XML_GetCurrentLineNumber(activeParser),
+              XML_ErrorString(XML_GetErrorCode(activeParser)));
+      success = false;
+      streamFailed = true;
     }
+  }
 
-    done = file.available() == 0;
+  XML_StopParser(activeParser, XML_FALSE);
+  XML_SetElementHandler(activeParser, nullptr, nullptr);
+  XML_SetCharacterDataHandler(activeParser, nullptr);
+  XML_ParserFree(activeParser);
+  activeParser = nullptr;
 
-    if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
-      LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
-              XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      activeParser = nullptr;
-      XML_ParserFree(parser);
-      file.close();
-      return false;
-    }
-  } while (!done);
-  const uint32_t totalTimeMs = millis() - chapterStartTime;
+  const uint32_t totalTimeMs = millis() - streamStartTimeMs;
   LOG_DBG("EHP", "Time to parse and build pages: %lu ms", totalTimeMs);
 
-  XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-  XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-  XML_SetCharacterDataHandler(parser, nullptr);
-  activeParser = nullptr;
-  XML_ParserFree(parser);
-  file.close();
-
-  // Process last page if there is still text
+  // Process last page if there is still text. Done unconditionally so that a partial
+  // success scenario still flushes whatever pages were produced.
   if (currentTextBlock) {
     makePages();
     if (!pendingAnchorId.empty()) {
@@ -1449,7 +1463,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     currentTextBlock.reset();
   }
 
-  return true;
+  return success;
 }
 
 ParsedText::LineProcessResult ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line,

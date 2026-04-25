@@ -191,7 +191,6 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const uint8_t imageRendering, const std::function<void(int)>& progressFn) {
   const uint32_t phaseTotalStart = millis();
   const auto localPath = epub->getSpineItem(spineIndex).href;
-  const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
 
   // Create cache directory if it doesn't exist
   {
@@ -199,45 +198,14 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     Storage.mkdir(sectionsDir.c_str());
   }
 
-  // Retry logic for SD card timing issues
-  const uint32_t phaseStreamStart = millis();
-  bool success = false;
-  uint32_t fileSize = 0;
-  for (int attempt = 0; attempt < 3 && !success; attempt++) {
-    if (attempt > 0) {
-      LOG_DBG("SCT", "Retrying stream (attempt %d)...", attempt + 1);
-      delay(50);  // Brief delay before retry
-    }
-
-    // Remove any incomplete file from previous attempt before retrying
-    if (Storage.exists(tmpHtmlPath.c_str())) {
-      Storage.remove(tmpHtmlPath.c_str());
-    }
-
-    FsFile tmpHtml;
-    if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
-      continue;
-    }
-    success = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
-    fileSize = tmpHtml.size();
-    tmpHtml.close();
-
-    // If streaming failed, remove the incomplete file immediately
-    if (!success && Storage.exists(tmpHtmlPath.c_str())) {
-      Storage.remove(tmpHtmlPath.c_str());
-      LOG_DBG("SCT", "Removed incomplete temp file after failed attempt");
-    }
-  }
-
-  if (!success) {
-    LOG_ERR("SCT", "Failed to stream item contents to temp file after retries");
+  // Get inflated size up-front so the parser can choose progress granularity.
+  const uint32_t phaseSetupStart = millis();
+  size_t inflatedSize = 0;
+  if (!epub->getItemSize(localPath, &inflatedSize)) {
+    LOG_ERR("SCT", "Failed to get inflated size for %s", localPath.c_str());
     return false;
   }
 
-  const uint32_t streamMs = millis() - phaseStreamStart;
-  LOG_DBG("SCT", "Streamed temp HTML to %s (%d bytes)", tmpHtmlPath.c_str(), fileSize);
-
-  const uint32_t phaseSetupStart = millis();
   if (!Storage.openFileForWrite("SCT", filePath, file)) {
     return false;
   }
@@ -274,20 +242,14 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   ChapterHtmlSlimParser visitor(
-      epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-      viewportHeight, hyphenationEnabled,
+      epub, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
+      hyphenationEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), progressFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
-  const uint32_t setupMs = millis() - phaseSetupStart;
-  const uint32_t phaseParseStart = millis();
-  success = visitor.parseAndBuildPages();
-  const uint32_t parseMs = millis() - phaseParseStart;
 
-  const uint32_t phaseFinalizeStart = millis();
-  Storage.remove(tmpHtmlPath.c_str());
-  if (!success) {
-    LOG_ERR("SCT", "Failed to parse XML and build pages");
+  if (!visitor.setup(inflatedSize)) {
+    LOG_ERR("SCT", "Failed to set up chapter parser");
     file.close();
     Storage.remove(filePath.c_str());
     if (cssParser) {
@@ -295,6 +257,29 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
     return false;
   }
+  const uint32_t setupMs = millis() - phaseSetupStart;
+
+  // Stream EPUB item content directly into the parser — no temp file, no second SD pass.
+  const uint32_t phaseParseStart = millis();
+  const bool streamOk = epub->readItemContentsToStream(localPath, visitor, 1024);
+  const bool finalizeOk = visitor.finalize();
+  bool success = streamOk && finalizeOk && visitor.streamSucceeded();
+  const uint32_t parseMs = millis() - phaseParseStart;
+  // streamMs is no longer a separate phase (SD-write of temp file is gone); keep the
+  // log breakdown stable by reporting it as 0.
+  constexpr uint32_t streamMs = 0;
+
+  const uint32_t phaseFinalizeStart = millis();
+  if (!success) {
+    LOG_ERR("SCT", "Failed to parse XML and build pages (stream=%d finalize=%d)", streamOk ? 1 : 0, finalizeOk ? 1 : 0);
+    file.close();
+    Storage.remove(filePath.c_str());
+    if (cssParser) {
+      cssParser->clear();
+    }
+    return false;
+  }
+  const uint32_t fileSize = static_cast<uint32_t>(inflatedSize);
 
   const uint32_t lutOffset = file.position();
   bool hasFailedLutRecords = false;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Print.h>
 #include <expat.h>
 
 #include <climits>
@@ -22,9 +23,8 @@ class Epub;
 
 #define MAX_WORD_SIZE 200
 
-class ChapterHtmlSlimParser {
+class ChapterHtmlSlimParser final : public Print {
   std::shared_ptr<Epub> epub;
-  const std::string& filepath;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>)> completePageFn;
   std::function<void(int)> progressFn;  // Progress callback (0-100)
@@ -105,10 +105,18 @@ class ChapterHtmlSlimParser {
   };
   std::vector<ParagraphLutEntry> paragraphLutPerPage;  // deep LUT: one entry per page
 
-  // Active parser handle during parseAndBuildPages(), nullptr otherwise.
+  // Active parser handle during streaming, nullptr otherwise.
   // Stored as a member so page-break sites (addLineToPage, image breaks) can call
   // XML_GetCurrentByteIndex without needing the parser threaded through every call.
   XML_Parser activeParser = nullptr;
+
+  // Streaming state for the Print-derived parsing API.
+  size_t totalStreamSize = 0;
+  size_t bytesStreamed = 0;
+  int lastReportedProgress = -1;
+  int progressStepPercent = 0;
+  bool streamFailed = false;
+  uint32_t streamStartTimeMs = 0;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -138,8 +146,8 @@ class ChapterHtmlSlimParser {
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
-  explicit ChapterHtmlSlimParser(std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer,
-                                 const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+  explicit ChapterHtmlSlimParser(std::shared_ptr<Epub> epub, GfxRenderer& renderer, const int fontId,
+                                 const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const std::function<void(std::unique_ptr<Page>)>& completePageFn,
@@ -150,7 +158,6 @@ class ChapterHtmlSlimParser {
                                  const CssParser* cssParser = nullptr)
 
       : epub(epub),
-        filepath(filepath),
         renderer(renderer),
         fontId(fontId),
         lineCompression(lineCompression),
@@ -168,8 +175,22 @@ class ChapterHtmlSlimParser {
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {}
 
-  ~ChapterHtmlSlimParser() = default;
-  bool parseAndBuildPages();
+  ~ChapterHtmlSlimParser() override;
+
+  // Streaming parse lifecycle. Caller flow:
+  //   parser.setup(totalInflatedSize);
+  //   epub->readItemContentsToStream(href, parser, ...);
+  //   parser.finalize();
+  // Returns false from setup() on parser allocation failure; check streamSucceeded()
+  // after finalize() to detect a parse error mid-stream.
+  bool setup(size_t totalInflatedSize);
+  bool finalize();
+  [[nodiscard]] bool streamSucceeded() const { return !streamFailed; }
+
+  // Print interface — fed by Epub::readItemContentsToStream.
+  size_t write(uint8_t) override;
+  size_t write(const uint8_t* buffer, size_t size) override;
+
   ParsedText::LineProcessResult addLineToPage(std::shared_ptr<TextBlock> line, bool lineEndsWithHyphenatedWord,
                                               bool suppressHyphenationRetry);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
