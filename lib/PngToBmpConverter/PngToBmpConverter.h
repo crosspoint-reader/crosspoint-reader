@@ -6,7 +6,7 @@ class Print;
 
 class PngToBmpConverter {
   static bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight, bool oneBit,
-                                          bool crop, uint32_t deadline);
+                                         bool crop, uint32_t deadline);
 
  public:
   static bool pngFileToBmpStream(FsFile& pngFile, Print& bmpOut, bool crop = true);
