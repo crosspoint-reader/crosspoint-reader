@@ -107,9 +107,7 @@ void WriterActivity::render(RenderLock&&) {
   const int maxVisibleLines = std::max(1, availableTextHeight / lineHeight);
 
   const std::string renderedText = getRenderedText();
-  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, contentWidth, [this](const std::string& text) {
-    return renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
-  });
+  const auto& wrappedLines = getWrappedLines(renderedText, contentWidth);
   const int cursorLine = findWrappedCursorLine(wrappedLines, renderedText);
   const int maxTopLine = std::max(0, static_cast<int>(wrappedLines.size()) - maxVisibleLines);
   viewportTopLine = std::clamp(viewportTopLine, 0, maxTopLine);
@@ -180,6 +178,21 @@ bool WriterActivity::flushInputBuffer() {
 
 std::string WriterActivity::getRenderedText() const { return draftText + inputBuffer; }
 
+const std::vector<WriterWrappedLayout::Line>& WriterActivity::getWrappedLines(const std::string& renderedText,
+                                                                              const int contentWidth) {
+  if (!wrappedLayoutCache.valid || wrappedLayoutCache.contentWidth != contentWidth ||
+      wrappedLayoutCache.renderedText != renderedText) {
+    wrappedLayoutCache.renderedText = renderedText;
+    wrappedLayoutCache.contentWidth = contentWidth;
+    wrappedLayoutCache.lines = WriterWrappedLayout::wrap(
+        wrappedLayoutCache.renderedText, contentWidth,
+        [this](const std::string& text) { return renderer.getTextWidth(UI_10_FONT_ID, text.c_str()); });
+    wrappedLayoutCache.valid = true;
+  }
+
+  return wrappedLayoutCache.lines;
+}
+
 int WriterActivity::countWords(const std::string& text) const {
   int words = 0;
   bool inWord = false;
@@ -213,9 +226,7 @@ void WriterActivity::moveCursorVertical(const int lineDelta) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentWidth = renderer.getScreenWidth() - 2 * metrics.contentSidePadding;
 
-  const auto wrappedLines = WriterWrappedLayout::wrap(renderedText, contentWidth, [this](const std::string& text) {
-    return renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
-  });
+  const auto& wrappedLines = getWrappedLines(renderedText, contentWidth);
   if (wrappedLines.empty()) {
     cursorIndex = 0;
     clearPreferredCursorX();

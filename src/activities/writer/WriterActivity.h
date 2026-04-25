@@ -16,9 +16,17 @@ class WriterActivity final : public Activity {
   int preferredCursorX = 0;
   bool hasPreferredCursorX = false;
   bool showSaveError = false;
+  struct WrappedLayoutCache {
+    bool valid = false;
+    int contentWidth = 0;
+    std::string renderedText;
+    std::vector<WriterWrappedLayout::Line> lines;
+  };
+  WrappedLayoutCache wrappedLayoutCache;
 
   bool flushInputBuffer();
   std::string getRenderedText() const;
+  const std::vector<WriterWrappedLayout::Line>& getWrappedLines(const std::string& renderedText, int contentWidth);
   int countWords(const std::string& text) const;
   void clearPreferredCursorX();
   void moveCursorLeft();
