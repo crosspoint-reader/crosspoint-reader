@@ -3,6 +3,7 @@ _language_code: "UK"
 _order: "10"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "ЗАВАНТАЖЕННЯ"
 STR_SLEEPING: "СПИТЬ"
 STR_ENTERING_SLEEP: "Перехід у режим сну"

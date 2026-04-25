@@ -3,6 +3,7 @@ _language_code: "KK"
 _order: "18"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "ЖҮКТЕЛУДЕ"
 STR_SLEEPING: "ҰЙҚЫ РЕЖИМІ"
 STR_ENTERING_SLEEP: "Ұйқы режиміне өту"

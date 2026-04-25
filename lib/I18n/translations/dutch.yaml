@@ -3,6 +3,7 @@ _language_code: "NL"
 _order: "16"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "OPSTARTEN"
 STR_SLEEPING: "SLAAPSTAND"
 STR_ENTERING_SLEEP: "Gaat in slaapstand"

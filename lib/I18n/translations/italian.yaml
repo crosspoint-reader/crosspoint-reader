@@ -3,6 +3,7 @@ _language_code: "IT"
 _order: "12"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "AVVIO IN CORSO"
 STR_SLEEPING: "SOSPENSIONE"
 STR_ENTERING_SLEEP: "Sospensione..."

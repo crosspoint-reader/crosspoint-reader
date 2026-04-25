@@ -3,6 +3,7 @@ _language_code: "LT"
 _order: "20"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "KRAUNASI"
 STR_SLEEPING: "MIEGA"
 STR_ENTERING_SLEEP: "Užmiegama"

@@ -3,6 +3,7 @@ _language_code: "TR"
 _order: "17"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "BAŞLATILIYOR"
 STR_SLEEPING: "UYKU MODU"
 STR_ENTERING_SLEEP: "Uyku moduna geçiliyor"

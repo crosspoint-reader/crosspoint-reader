@@ -3,6 +3,7 @@ _language_code: "RO"
 _order: "8"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "PORNEŞTE"
 STR_SLEEPING: "REPAUS"
 STR_ENTERING_SLEEP: "Intră în repaus..."

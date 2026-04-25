@@ -3,6 +3,7 @@ _language_code: "HU"
 _order: "19"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "INDÍTÁS"
 STR_SLEEPING: "ALVÁS"
 STR_ENTERING_SLEEP: "Alvás..."

@@ -3,6 +3,7 @@ _language_code: "DA"
 _order: "15"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "STARTER"
 STR_SLEEPING: "HVILE"
 STR_ENTERING_SLEEP: "Går i hvile"

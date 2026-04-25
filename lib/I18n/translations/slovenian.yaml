@@ -3,6 +3,7 @@ _language_code: "SI"
 _order: "21"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "ZAGON"
 STR_SLEEPING: "SPANJE"
 STR_ENTERING_SLEEP: "Prehajanje v spanje"

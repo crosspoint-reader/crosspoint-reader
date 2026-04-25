@@ -3,6 +3,7 @@ _language_code: "FR"
 _order: "2"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "DÉMARRAGE EN COURS"
 STR_SLEEPING: "VEILLE"
 STR_ENTERING_SLEEP: "Mise en veille"

@@ -3,6 +3,7 @@ _language_code: "PT"
 _order: "5"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "INICIANDO"
 STR_SLEEPING: "EM REPOUSO"
 STR_ENTERING_SLEEP: "Entrando em repouso"

@@ -3,6 +3,7 @@ _language_code: "DE"
 _order: "3"
 
 STR_CROSSPOINT: "CrossPoint"
+STR_CROSSWRITE: "CrossWrite"
 STR_BOOTING: "STARTEN"
 STR_SLEEPING: "STANDBY"
 STR_ENTERING_SLEEP: "Standby"
