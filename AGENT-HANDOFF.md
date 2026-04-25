@@ -1,4 +1,4 @@
-# Codex Handoff: X4 WriterDeck
+# Agent Handoff: X4 WriterDeck
 
 ## Project Goal And Current Status
 
@@ -130,7 +130,7 @@ User preferences:
 - Go slowly, one small slice at a time.
 - Prefer one small commit per logical change.
 - Explain code and C++ concepts as we go.
-- User usually wants the exact git commands and will run them unless explicitly asking Codex to do it.
+- User usually wants the exact git commands and will run them unless explicitly asking Agent to do it.
 - Review code before committing; do not auto-commit unless asked.
 - Use test-driven development where practical.
 - Keep simulator-first development as long as possible.
@@ -282,7 +282,7 @@ git log --oneline --decorate -8
   - implement minimal code
   - rerun tests
 - For UI/simulator behavior, user often runs simulator and reports.
-- Stop before commits unless user asks Codex to commit.
+- Stop before commits unless user asks Agent to commit.
 - Provide suggested commit commands/messages.
 - Prefer small commits:
   - docs/spec
