@@ -3,6 +3,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-release:
     runs-on: ubuntu-latest
@@ -14,7 +17,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: "3.14"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -31,42 +34,15 @@ jobs:
       - name: Patch min_chip_rev_full to 0
         run: python3 scripts/patch_min_chip_rev.py .pio/build/gh_release/firmware.bin
 
-      - name: Upload bootloader.bin to Release
-        uses: actions/upload-release-asset@v1
+      - name: Upload release assets
+        if: ${{ env.ACT != 'true' }}
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: .pio/build/gh_release/bootloader.bin
-          asset_name: bootloader.bin
-          asset_content_type: application/octet-stream
-
-      - name: Upload firmware.bin to Release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: .pio/build/gh_release/firmware.bin
-          asset_name: firmware.bin
-          asset_content_type: application/octet-stream
-
-      - name: Upload firmware.elf to Release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: .pio/build/gh_release/firmware.elf
-          asset_name: firmware.elf
-          asset_content_type: application/octet-stream
-
-      - name: Upload firmware.map to Release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: .pio/build/gh_release/firmware.map
-          asset_name: firmware.map
-          asset_content_type: application/octet-stream
-
-      - name: Upload partitions.bin to Release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: .pio/build/gh_release/partitions.bin
-          asset_name: partitions.bin
-          asset_content_type: application/octet-stream
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            .pio/build/gh_release/bootloader.bin
+            .pio/build/gh_release/firmware.bin
+            .pio/build/gh_release/firmware.elf
+            .pio/build/gh_release/firmware.map
+            .pio/build/gh_release/partitions.bin
+          fail_on_unmatched_files: true

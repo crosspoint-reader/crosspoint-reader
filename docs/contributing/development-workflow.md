@@ -27,6 +27,7 @@ pio run
 CI enforces formatting, static analysis, and build checks.
 Use clang-format 21+ locally to match CI.
 If `clang-format` is missing or too old locally, see [Getting Started](./getting-started.md).
+If your change affects release automation, also dry-run the release workflows locally with `act` before opening the PR. See [Testing and Debugging](./testing-debugging.md#test-release-workflows-locally-with-act).
 
 ## 4) Open the PR
 
