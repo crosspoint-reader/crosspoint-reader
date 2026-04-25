@@ -135,3 +135,48 @@ ruby -rdigest -e 'puts [
   "./notosans_8_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
+
+echo "#define ATKINSON_8_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./atkinson_8_regular.h",
+  "./atkinson_8_bold.h",
+  "./atkinson_8_bolditalic.h",
+  "./atkinson_8_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define ATKINSON_12_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./atkinson_12_regular.h",
+  "./atkinson_12_bold.h",
+  "./atkinson_12_bolditalic.h",
+  "./atkinson_12_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define ATKINSON_14_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./atkinson_14_regular.h",
+  "./atkinson_14_bold.h",
+  "./atkinson_14_bolditalic.h",
+  "./atkinson_14_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define ATKINSON_16_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./atkinson_16_regular.h",
+  "./atkinson_16_bold.h",
+  "./atkinson_16_bolditalic.h",
+  "./atkinson_16_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define ATKINSON_18_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./atkinson_18_regular.h",
+  "./atkinson_18_bold.h",
+  "./atkinson_18_bolditalic.h",
+  "./atkinson_18_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
