@@ -42,6 +42,36 @@ EpdFont notoserif14BoldItalicFont(&notoserif_14_bolditalic);
 EpdFontFamily notoserif14FontFamily(&notoserif14RegularFont, &notoserif14BoldFont, &notoserif14ItalicFont,
                                     &notoserif14BoldItalicFont);
 #ifndef OMIT_FONTS
+EpdFont atkinson8RegularFont(&atkinson_8_regular);
+EpdFont atkinson8BoldFont(&atkinson_8_bold);
+EpdFont atkinson8ItalicFont(&atkinson_8_italic);
+EpdFont atkinson8BoldItalicFont(&atkinson_8_bolditalic);
+EpdFontFamily atkinson8FontFamily(&atkinson8RegularFont, &atkinson8BoldFont, &atkinson8ItalicFont,
+                                  &atkinson8BoldItalicFont);
+EpdFont atkinson12RegularFont(&atkinson_12_regular);
+EpdFont atkinson12BoldFont(&atkinson_12_bold);
+EpdFont atkinson12ItalicFont(&atkinson_12_italic);
+EpdFont atkinson12BoldItalicFont(&atkinson_12_bolditalic);
+EpdFontFamily atkinson12FontFamily(&atkinson12RegularFont, &atkinson12BoldFont, &atkinson12ItalicFont,
+                                   &atkinson12BoldItalicFont);
+EpdFont atkinson14RegularFont(&atkinson_14_regular);
+EpdFont atkinson14BoldFont(&atkinson_14_bold);
+EpdFont atkinson14ItalicFont(&atkinson_14_italic);
+EpdFont atkinson14BoldItalicFont(&atkinson_14_bolditalic);
+EpdFontFamily atkinson14FontFamily(&atkinson14RegularFont, &atkinson14BoldFont, &atkinson14ItalicFont,
+                                   &atkinson14BoldItalicFont);
+EpdFont atkinson16RegularFont(&atkinson_16_regular);
+EpdFont atkinson16BoldFont(&atkinson_16_bold);
+EpdFont atkinson16ItalicFont(&atkinson_16_italic);
+EpdFont atkinson16BoldItalicFont(&atkinson_16_bolditalic);
+EpdFontFamily atkinson16FontFamily(&atkinson16RegularFont, &atkinson16BoldFont, &atkinson16ItalicFont,
+                                   &atkinson16BoldItalicFont);
+EpdFont atkinson18RegularFont(&atkinson_18_regular);
+EpdFont atkinson18BoldFont(&atkinson_18_bold);
+EpdFont atkinson18ItalicFont(&atkinson_18_italic);
+EpdFont atkinson18BoldItalicFont(&atkinson_18_bolditalic);
+EpdFontFamily atkinson18FontFamily(&atkinson18RegularFont, &atkinson18BoldFont, &atkinson18ItalicFont,
+                                   &atkinson18BoldItalicFont);
 EpdFont notoserif12RegularFont(&notoserif_12_regular);
 EpdFont notoserif12BoldFont(&notoserif_12_bold);
 EpdFont notoserif12ItalicFont(&notoserif_12_italic);
@@ -209,7 +239,11 @@ void setupDisplayAndFonts() {
   renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
   renderer.insertFont(NOTOSERIF_16_FONT_ID, notoserif16FontFamily);
   renderer.insertFont(NOTOSERIF_18_FONT_ID, notoserif18FontFamily);
-
+  renderer.insertFont(ATKINSON_8_FONT_ID, atkinson8FontFamily);
+  renderer.insertFont(ATKINSON_12_FONT_ID, atkinson12FontFamily);
+  renderer.insertFont(ATKINSON_14_FONT_ID, atkinson14FontFamily);
+  renderer.insertFont(ATKINSON_16_FONT_ID, atkinson16FontFamily);
+  renderer.insertFont(ATKINSON_18_FONT_ID, atkinson18FontFamily);
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
