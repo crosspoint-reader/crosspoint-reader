@@ -57,8 +57,8 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                 float cropX = 1.0f - (tileRatio / ratio);
 
                 if (!renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                                         tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::homeCoverHeight,
-                                         cropX)) {
+                                         tileWidth - 2 * hPaddingInSelection,
+                                         Lyra3CoversMetrics::values.homeCoverHeight, cropX)) {
                   hasCover = false;
                 }
               } else {

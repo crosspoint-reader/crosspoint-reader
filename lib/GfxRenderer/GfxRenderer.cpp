@@ -667,7 +667,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
-void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
+bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
@@ -775,7 +775,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   return true;
 }
 
-void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
                                  const int maxHeight) const {
   float scale = 1.0f;
   bool isScaled = false;
@@ -806,7 +806,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
       free(outputRow);
       free(rowBytes);
-      return;
+      return false;
     }
 
     // Calculate screen Y based on whether BMP is top-down or bottom-up
