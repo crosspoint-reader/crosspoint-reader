@@ -701,9 +701,8 @@ bool Epub::generateThumbBmp(int height, uint32_t deadline) const {
     }
     int THUMB_TARGET_WIDTH = height * 0.6;
     int THUMB_TARGET_HEIGHT = height;
-    const bool success =
-        PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT,
-                                                           deadline);
+    const bool success = PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH,
+                                                                           THUMB_TARGET_HEIGHT, deadline);
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
     thumbBmp.close();
