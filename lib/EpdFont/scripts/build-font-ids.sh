@@ -171,12 +171,3 @@ ruby -rdigest -e 'puts [
   "./atkinson_16_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
-
-echo "#define ATKINSON_18_FONT_ID ($(
-ruby -rdigest -e 'puts [
-  "./atkinson_18_regular.h",
-  "./atkinson_18_bold.h",
-  "./atkinson_18_bolditalic.h",
-  "./atkinson_18_italic.h",
-].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
-))"

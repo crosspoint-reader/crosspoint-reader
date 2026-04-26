@@ -66,12 +66,6 @@ EpdFont atkinson16ItalicFont(&atkinson_16_italic);
 EpdFont atkinson16BoldItalicFont(&atkinson_16_bolditalic);
 EpdFontFamily atkinson16FontFamily(&atkinson16RegularFont, &atkinson16BoldFont, &atkinson16ItalicFont,
                                    &atkinson16BoldItalicFont);
-EpdFont atkinson18RegularFont(&atkinson_18_regular);
-EpdFont atkinson18BoldFont(&atkinson_18_bold);
-EpdFont atkinson18ItalicFont(&atkinson_18_italic);
-EpdFont atkinson18BoldItalicFont(&atkinson_18_bolditalic);
-EpdFontFamily atkinson18FontFamily(&atkinson18RegularFont, &atkinson18BoldFont, &atkinson18ItalicFont,
-                                   &atkinson18BoldItalicFont);
 EpdFont notoserif12RegularFont(&notoserif_12_regular);
 EpdFont notoserif12BoldFont(&notoserif_12_bold);
 EpdFont notoserif12ItalicFont(&notoserif_12_italic);
@@ -243,7 +237,6 @@ void setupDisplayAndFonts() {
   renderer.insertFont(ATKINSON_12_FONT_ID, atkinson12FontFamily);
   renderer.insertFont(ATKINSON_14_FONT_ID, atkinson14FontFamily);
   renderer.insertFont(ATKINSON_16_FONT_ID, atkinson16FontFamily);
-  renderer.insertFont(ATKINSON_18_FONT_ID, atkinson18FontFamily);
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);

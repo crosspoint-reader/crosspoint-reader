@@ -12,10 +12,6 @@
 #include <builtinFonts/atkinson_16_bolditalic.h>
 #include <builtinFonts/atkinson_16_italic.h>
 #include <builtinFonts/atkinson_16_regular.h>
-#include <builtinFonts/atkinson_18_bold.h>
-#include <builtinFonts/atkinson_18_bolditalic.h>
-#include <builtinFonts/atkinson_18_italic.h>
-#include <builtinFonts/atkinson_18_regular.h>
 #include <builtinFonts/atkinson_8_bold.h>
 #include <builtinFonts/atkinson_8_bolditalic.h>
 #include <builtinFonts/atkinson_8_italic.h>
