@@ -459,6 +459,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           LOG_DBG("THEME", "Rendering bmp");
 
+          const int originalBookX = bookX;
+          const int originalBookWidth = bookWidth;
           if (renderer.drawBitmap(bitmap, bookX, bookY, bookWidth, bookHeight)) {
             renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
             coverRendered = true;
@@ -471,6 +473,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
             }
           } else {
             LOG_DBG("THEME", "drawBitmap failed, falling back to placeholder");
+            renderer.fillRect(originalBookX, bookY, originalBookWidth, bookHeight, false);
             hasCoverImage = false;
             bookWidth = baseHeight * 2 / 3;
             bookX = rect.x + (rect.width - bookWidth) / 2;
