@@ -24,9 +24,9 @@
 {0x007B, 0x007D, BRACKo},   /* { */
 {0x007D, 0x007B, BRACKc},   /* } */
 
-/* Angle quotation marks — Hebrew typography, L4 mirror only (not bracket pairs) */
-{0x00AB, 0x00BB, BRACKo},   /* « → » (treated as bracket for N0 too) */
-{0x00BB, 0x00AB, BRACKc},   /* » → « */
+/* Angle quotation marks — L4 mirror only */
+{0x00AB, 0x00BB, BRACKx},   /* « → » */
+{0x00BB, 0x00AB, BRACKx},   /* » → « */
 
 /* Curly quotes — L4 mirror only */
 {0x2018, 0x2019, BRACKx},   /* ' → ' */

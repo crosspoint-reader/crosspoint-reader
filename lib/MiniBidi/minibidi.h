@@ -88,6 +88,13 @@ uchar bidi_class(ucschar ch);
 bool is_rtl_class(uchar bc);
 
 /*
+ * mirror(ch)
+ *   Returns the mirrored form of Unicode codepoint ch for UAX#9 rule L4.
+ *   If no mirror exists, returns ch unchanged.
+ */
+ucschar mirror(ucschar ch);
+
+/*
  * do_bidi(autodir, paragraphLevel, line, count)
  *
  *   Applies UAX#9 Bidirectional Algorithm (rules P–L) to `line[0..count-1]`.

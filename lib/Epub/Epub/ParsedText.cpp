@@ -19,7 +19,6 @@ namespace {
 // Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 constexpr size_t SOFT_HYPHEN_BYTES = 2;
-constexpr int RTL_DETECTION_SCAN_LETTERS = 5;
 constexpr size_t RTL_DETECTION_SCAN_WORDS = 3;
 
 // Returns the first rendered codepoint of a word (skipping leading soft hyphens).
@@ -52,11 +51,6 @@ void stripSoftHyphensInPlace(std::string& word) {
   while ((pos = word.find(SOFT_HYPHEN_UTF8, pos)) != std::string::npos) {
     word.erase(pos, SOFT_HYPHEN_BYTES);
   }
-}
-
-bool isNaturalAlignment(const BlockStyle& blockStyle) {
-  return blockStyle.alignment == CssTextAlign::Justify ||
-         (blockStyle.isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left);
 }
 
 // Returns the advance width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
@@ -97,6 +91,14 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   wordContinues.push_back(attachToPrevious);
 }
 
+int ParsedText::resolveFirstLineIndent(const bool isFirstLine) const {
+  if (isFirstLine && blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
+      isNaturalAlign) {
+    return blockStyle.textIndent;
+  }
+  return 0;
+}
+
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
@@ -111,12 +113,16 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     // Check the first few words for RTL letter codepoints (no heap allocation).
     const size_t wordsToScan = std::min(words.size(), RTL_DETECTION_SCAN_WORDS);
     for (size_t i = 0; i < wordsToScan; ++i) {
-      if (BidiUtils::startsWithRtl(words[i].c_str(), RTL_DETECTION_SCAN_LETTERS)) {
+      if (BidiUtils::startsWithRtl(words[i].c_str(), BidiUtils::RTL_DETECTION_SCAN_LETTERS)) {
         blockStyle.isRtl = true;
         break;
       }
     }
   }
+
+  isNaturalAlign =
+      blockStyle.alignment == CssTextAlign::Justify ||
+      (blockStyle.isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left);
 
   // Apply fixed transforms before any per-line layout work.
   applyParagraphIndent();
@@ -163,16 +169,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
-  // Calculate first line indent (only for naturally-aligned text).
-  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
-  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
-  // it is structural (positions the bullet/marker), not decorative.
-  // For RTL, natural alignment is Right/Justify; for LTR, it is Left/Justify.
-  const bool isNaturalAlign = isNaturalAlignment(blockStyle);
-  const int firstLineIndent =
-      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) && isNaturalAlign
-          ? blockStyle.textIndent
-          : 0;
+  const int firstLineIndent = resolveFirstLineIndent(true);
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -283,9 +280,6 @@ void ParsedText::applyParagraphIndent() {
     return;
   }
 
-  // For LTR, indent applies to Left/Justify; for RTL, indent applies to Right/Justify
-  const bool isNaturalAlign = isNaturalAlignment(blockStyle);
-
   if (blockStyle.textIndentDefined) {
     // CSS text-indent is explicitly set (even if 0) - don't use fallback EmSpace
     // The actual indent positioning is handled in extractLine()
@@ -299,16 +293,7 @@ void ParsedText::applyParagraphIndent() {
 std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
                                                             const int pageWidth, std::vector<uint16_t>& wordWidths,
                                                             std::vector<bool>& continuesVec) {
-  // Calculate first line indent (only for naturally-aligned text).
-  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
-  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
-  // it is structural (positions the bullet/marker), not decorative.
-  // For RTL, natural alignment is Right/Justify; for LTR, it is Left/Justify.
-  const bool isNaturalAlign = isNaturalAlignment(blockStyle);
-  const int firstLineIndent =
-      blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) && isNaturalAlign
-          ? blockStyle.textIndent
-          : 0;
+  const int firstLineIndent = resolveFirstLineIndent(true);
 
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
@@ -469,17 +454,22 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
-  // Calculate first line indent (only for naturally-aligned text).
-  // Positive text-indent (paragraph indent) is suppressed when extraParagraphSpacing is on.
-  // Negative text-indent (hanging indent, e.g. margin-left:3em; text-indent:-1em) always applies —
-  // it is structural (positions the bullet/marker), not decorative.
-  // For RTL, natural alignment is Right/Justify; for LTR, it is Left/Justify.
-  const bool isFirstLine = breakIndex == 0;
-  const bool isNaturalAlign = isNaturalAlignment(blockStyle);
-  const int firstLineIndent = isFirstLine && blockStyle.textIndentDefined &&
-                                      (blockStyle.textIndent < 0 || !extraParagraphSpacing) && isNaturalAlign
-                                  ? blockStyle.textIndent
-                                  : 0;
+  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0);
+
+  // Build line data by moving from the original vectors using index range
+  std::vector<std::string> lineWords;
+  lineWords.reserve(lineWordCount);
+  std::vector<EpdFontFamily::Style> lineWordStyles;
+  lineWordStyles.reserve(lineWordCount);
+
+  for (size_t i = 0; i < lineWordCount; ++i) {
+    std::string word = std::move(words[lastBreakAt + i]);
+    if (containsSoftHyphen(word)) {
+      stripSoftHyphensInPlace(word);
+    }
+    lineWords.push_back(std::move(word));
+    lineWordStyles.push_back(wordStyles[lastBreakAt + i]);
+  }
 
   // Calculate total word width for this line, count actual word gaps,
   // and accumulate total natural gap widths (including space kerning adjustments).
@@ -492,14 +482,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     // Count gaps: each word after the first creates a gap, unless it's a continuation
     if (wordIdx > 0 && !continuesVec[lastBreakAt + wordIdx]) {
       actualGapCount++;
-      totalNaturalGaps +=
-          renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
-                                   firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
+      totalNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
     } else if (wordIdx > 0 && continuesVec[lastBreakAt + wordIdx]) {
       // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
-      totalNaturalGaps +=
-          renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx - 1]),
-                              firstCodepoint(words[lastBreakAt + wordIdx]), wordStyles[lastBreakAt + wordIdx - 1]);
+      totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                              firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
     }
   }
 
@@ -520,184 +508,165 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                ? spareSpace / static_cast<int>(actualGapCount)
                                : 0;
 
-  // Pre-calculate X positions for words
-  // Continuation words attach to the previous word with no space before them
+  // BiDi processing: reorder words with UAX#9 in full-line context.
+  std::vector<uint16_t> visualOrder;
+  visualOrder.reserve(lineWords.size());
+  const bool willReorder = BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrder);
+
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
 
-  if (blockStyle.isRtl) {
-    // RTL: position words from right to left
-    auto xpos = static_cast<int>(effectivePageWidth);
-    if (effectiveAlignment == CssTextAlign::Left) {
-      // Explicit left alignment in RTL context
-      xpos = lineWordWidthSum + totalNaturalGaps;
-    } else if (effectiveAlignment == CssTextAlign::Center) {
-      xpos = (effectivePageWidth + lineWordWidthSum + totalNaturalGaps) / 2;
-    }
-    // For Right and Justify, start from right edge (xpos = effectivePageWidth)
+  if (willReorder) {
+    std::vector<std::string> newWords;
+    std::vector<EpdFontFamily::Style> newStyles;
+    std::vector<uint16_t> newWordWidths;
+    std::vector<bool> newWordContinues;
+    newWords.reserve(visualOrder.size());
+    newStyles.reserve(visualOrder.size());
+    newWordWidths.reserve(visualOrder.size());
+    newWordContinues.reserve(visualOrder.size());
 
-    for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-      xpos -= wordWidths[lastBreakAt + wordIdx];
+    for (size_t i = 0; i < visualOrder.size(); ++i) {
+      const uint16_t src = visualOrder[i];
+      newWords.push_back(std::move(lineWords[src]));
+      newStyles.push_back(lineWordStyles[src]);
+      newWordWidths.push_back(wordWidths[lastBreakAt + src]);
+
+      // A continuation relation is tied to (src-1 -> src). Keep it only if that
+      // predecessor remains immediately before src after visual reordering.
+      bool continues = false;
+      if (src > 0 && continuesVec[lastBreakAt + src] && i > 0) {
+        continues = visualOrder[i - 1] == static_cast<uint16_t>(src - 1);
+      }
+      newWordContinues.push_back(continues);
+    }
+
+    int reorderedWordWidthSum = 0;
+    size_t reorderedGapCount = 0;
+    int reorderedNaturalGaps = 0;
+    for (size_t wordIdx = 0; wordIdx < newWordWidths.size(); wordIdx++) {
+      reorderedWordWidthSum += newWordWidths[wordIdx];
+      if (wordIdx > 0 && !newWordContinues[wordIdx]) {
+        reorderedGapCount++;
+        reorderedNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(newWords[wordIdx - 1]),
+                                                         firstCodepoint(newWords[wordIdx]), newStyles[wordIdx - 1]);
+      } else if (wordIdx > 0 && newWordContinues[wordIdx]) {
+        reorderedNaturalGaps += renderer.getKerning(fontId, lastCodepoint(newWords[wordIdx - 1]),
+                                                    firstCodepoint(newWords[wordIdx]), newStyles[wordIdx - 1]);
+      }
+    }
+
+    const int reorderedSpare = effectivePageWidth - reorderedWordWidthSum - reorderedNaturalGaps;
+    const int reorderedJustifyExtra =
+        (effectiveAlignment == CssTextAlign::Justify && !isLastLine && reorderedGapCount >= 1)
+            ? reorderedSpare / static_cast<int>(reorderedGapCount)
+            : 0;
+
+    const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
+                                        ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount)
+                                        : 0;
+    const int contentWidth = reorderedWordWidthSum + reorderedNaturalGaps + justifyContribution;
+
+    int xpos = 0;
+    if (blockStyle.isRtl) {
+      if (effectiveAlignment == CssTextAlign::Right || effectiveAlignment == CssTextAlign::Justify) {
+        xpos = effectivePageWidth - contentWidth;
+      } else if (effectiveAlignment == CssTextAlign::Center) {
+        xpos = (effectivePageWidth - contentWidth) / 2;
+      }
+    } else {
+      xpos = firstLineIndent;
+      if (effectiveAlignment == CssTextAlign::Right) {
+        xpos = effectivePageWidth - contentWidth;
+      } else if (effectiveAlignment == CssTextAlign::Center) {
+        xpos = (effectivePageWidth - contentWidth) / 2;
+      }
+    }
+
+    for (size_t wordIdx = 0; wordIdx < newWordWidths.size(); wordIdx++) {
       lineXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
+      xpos += newWordWidths[wordIdx];
 
-      const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
+      const bool nextIsContinuation = wordIdx + 1 < newWordWidths.size() && newWordContinues[wordIdx + 1];
       if (nextIsContinuation) {
-        // Cross-boundary kerning for continuation words
-        xpos -=
-            renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
-      } else {
-        int gap = 0;
-        if (wordIdx + 1 < lineWordCount) {
-          gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                         firstCodepoint(words[lastBreakAt + wordIdx + 1]),
-                                         wordStyles[lastBreakAt + wordIdx]);
-        }
+        xpos += renderer.getKerning(fontId, lastCodepoint(newWords[wordIdx]), firstCodepoint(newWords[wordIdx + 1]),
+                                    newStyles[wordIdx]);
+      } else if (wordIdx + 1 < newWordWidths.size()) {
+        int gap = renderer.getSpaceAdvance(fontId, lastCodepoint(newWords[wordIdx]),
+                                           firstCodepoint(newWords[wordIdx + 1]), newStyles[wordIdx]);
         if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-          gap += justifyExtra;
+          gap += reorderedJustifyExtra;
         }
-        xpos -= gap;
+        xpos += gap;
       }
     }
+
+    lineWords = std::move(newWords);
+    lineWordStyles = std::move(newStyles);
   } else {
-    // LTR: position words from left to right
-    auto xpos = static_cast<int16_t>(firstLineIndent);
-    if (effectiveAlignment == CssTextAlign::Right) {
-      xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-    } else if (effectiveAlignment == CssTextAlign::Center) {
-      xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
-    }
-
-    for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-      lineXPos.push_back(xpos);
-
-      const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
-      if (nextIsContinuation) {
-        int advance = wordWidths[lastBreakAt + wordIdx];
-        advance +=
-            renderer.getKerning(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                firstCodepoint(words[lastBreakAt + wordIdx + 1]), wordStyles[lastBreakAt + wordIdx]);
-        xpos += advance;
-      } else {
-        int gap = 0;
-        if (wordIdx + 1 < lineWordCount) {
-          gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[lastBreakAt + wordIdx]),
-                                         firstCodepoint(words[lastBreakAt + wordIdx + 1]),
-                                         wordStyles[lastBreakAt + wordIdx]);
-        }
-        if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-          gap += justifyExtra;
-        }
-        xpos += wordWidths[lastBreakAt + wordIdx] + gap;
+    // Standard LTR/RTL positioning loop when no visual reordering is needed
+    if (blockStyle.isRtl) {
+      // RTL: position words from right to left
+      auto xpos = static_cast<int>(effectivePageWidth);
+      if (effectiveAlignment == CssTextAlign::Left) {
+        // Explicit left alignment in RTL context
+        xpos = lineWordWidthSum + totalNaturalGaps;
+      } else if (effectiveAlignment == CssTextAlign::Center) {
+        xpos = (effectivePageWidth + lineWordWidthSum + totalNaturalGaps) / 2;
       }
-    }
-  }
+      // For Right and Justify, start from right edge (xpos = effectivePageWidth)
 
-  // Build line data by moving from the original vectors using index range
-  std::vector<std::string> lineWords(std::make_move_iterator(words.begin() + lastBreakAt),
-                                     std::make_move_iterator(words.begin() + lineBreak));
-  std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
+      for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+        xpos -= wordWidths[lastBreakAt + wordIdx];
+        lineXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
 
-  for (auto& word : lineWords) {
-    if (containsSoftHyphen(word)) {
-      stripSoftHyphensInPlace(word);
-    }
-  }
-
-  // BiDi processing: reorder words with UAX#9 in full-line context.
-  {
-    std::vector<uint16_t> visualOrder;
-    visualOrder.reserve(lineWords.size());
-    if (BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrder)) {
-      std::vector<std::string> newWords;
-      std::vector<int16_t> newXPos;
-      std::vector<EpdFontFamily::Style> newStyles;
-      std::vector<uint16_t> newWordWidths;
-      std::vector<bool> newWordContinues;
-      newWords.reserve(visualOrder.size());
-      newXPos.reserve(visualOrder.size());
-      newStyles.reserve(visualOrder.size());
-      newWordWidths.reserve(visualOrder.size());
-      newWordContinues.reserve(visualOrder.size());
-
-      for (size_t i = 0; i < visualOrder.size(); ++i) {
-        const uint16_t src = visualOrder[i];
-        newWords.push_back(std::move(lineWords[src]));
-        newStyles.push_back(lineWordStyles[src]);
-        newWordWidths.push_back(wordWidths[lastBreakAt + src]);
-
-        // A continuation relation is tied to (src-1 -> src). Keep it only if that
-        // predecessor remains immediately before src after visual reordering.
-        bool continues = false;
-        if (src > 0 && continuesVec[lastBreakAt + src] && i > 0) {
-          continues = visualOrder[i - 1] == static_cast<uint16_t>(src - 1);
-        }
-        newWordContinues.push_back(continues);
-      }
-
-      int reorderedWordWidthSum = 0;
-      size_t reorderedGapCount = 0;
-      int reorderedNaturalGaps = 0;
-      for (size_t wordIdx = 0; wordIdx < newWordWidths.size(); wordIdx++) {
-        reorderedWordWidthSum += newWordWidths[wordIdx];
-        if (wordIdx > 0 && !newWordContinues[wordIdx]) {
-          reorderedGapCount++;
-          reorderedNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(newWords[wordIdx - 1]),
-                                                           firstCodepoint(newWords[wordIdx]), newStyles[wordIdx - 1]);
-        } else if (wordIdx > 0 && newWordContinues[wordIdx]) {
-          reorderedNaturalGaps += renderer.getKerning(fontId, lastCodepoint(newWords[wordIdx - 1]),
-                                                      firstCodepoint(newWords[wordIdx]), newStyles[wordIdx - 1]);
-        }
-      }
-
-      const int reorderedSpare = effectivePageWidth - reorderedWordWidthSum - reorderedNaturalGaps;
-      const int reorderedJustifyExtra =
-          (effectiveAlignment == CssTextAlign::Justify && !isLastLine && reorderedGapCount >= 1)
-              ? reorderedSpare / static_cast<int>(reorderedGapCount)
-              : 0;
-
-      const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                                          ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount)
-                                          : 0;
-      const int contentWidth = reorderedWordWidthSum + reorderedNaturalGaps + justifyContribution;
-
-      int xpos = 0;
-      if (blockStyle.isRtl) {
-        if (effectiveAlignment == CssTextAlign::Right || effectiveAlignment == CssTextAlign::Justify) {
-          xpos = effectivePageWidth - contentWidth;
-        } else if (effectiveAlignment == CssTextAlign::Center) {
-          xpos = (effectivePageWidth - contentWidth) / 2;
-        }
-      } else {
-        xpos = firstLineIndent;
-        if (effectiveAlignment == CssTextAlign::Right) {
-          xpos = effectivePageWidth - contentWidth;
-        } else if (effectiveAlignment == CssTextAlign::Center) {
-          xpos = (effectivePageWidth - contentWidth) / 2;
-        }
-      }
-
-      for (size_t wordIdx = 0; wordIdx < newWordWidths.size(); wordIdx++) {
-        newXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
-        xpos += newWordWidths[wordIdx];
-
-        const bool nextIsContinuation = wordIdx + 1 < newWordWidths.size() && newWordContinues[wordIdx + 1];
+        const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
-          xpos += renderer.getKerning(fontId, lastCodepoint(newWords[wordIdx]), firstCodepoint(newWords[wordIdx + 1]),
-                                      newStyles[wordIdx]);
-        } else if (wordIdx + 1 < newWordWidths.size()) {
-          int gap = renderer.getSpaceAdvance(fontId, lastCodepoint(newWords[wordIdx]),
-                                             firstCodepoint(newWords[wordIdx + 1]), newStyles[wordIdx]);
-          if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-            gap += reorderedJustifyExtra;
+          // Cross-boundary kerning for continuation words
+          xpos -= renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]), firstCodepoint(lineWords[wordIdx + 1]),
+                                      lineWordStyles[wordIdx]);
+        } else {
+          int gap = 0;
+          if (wordIdx + 1 < lineWordCount) {
+            gap = renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
+                                           firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
-          xpos += gap;
+          if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+            gap += justifyExtra;
+          }
+          xpos -= gap;
         }
       }
+    } else {
+      // LTR: position words from left to right
+      auto xpos = static_cast<int16_t>(firstLineIndent);
+      if (effectiveAlignment == CssTextAlign::Right) {
+        xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
+      } else if (effectiveAlignment == CssTextAlign::Center) {
+        xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
+      }
 
-      lineWords = std::move(newWords);
-      lineXPos = std::move(newXPos);
-      lineWordStyles = std::move(newStyles);
+      for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+        lineXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
+
+        const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
+        if (nextIsContinuation) {
+          int advance = wordWidths[lastBreakAt + wordIdx];
+          advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
+                                         firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+          xpos += advance;
+        } else {
+          int gap = 0;
+          if (wordIdx + 1 < lineWordCount) {
+            gap = renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
+                                           firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+          }
+          if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+            gap += justifyExtra;
+          }
+          xpos += wordWidths[lastBreakAt + wordIdx] + gap;
+        }
+      }
     }
   }
 

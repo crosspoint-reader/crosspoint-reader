@@ -13,24 +13,6 @@ extern "C" {
 
 namespace {
 
-void appendUtf8(uint32_t cp, std::string& out) {
-  if (cp < 0x80) {
-    out += static_cast<char>(cp);
-  } else if (cp < 0x800) {
-    out += static_cast<char>(0xC0 | (cp >> 6));
-    out += static_cast<char>(0x80 | (cp & 0x3F));
-  } else if (cp < 0x10000) {
-    out += static_cast<char>(0xE0 | (cp >> 12));
-    out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    out += static_cast<char>(0x80 | (cp & 0x3F));
-  } else {
-    out += static_cast<char>(0xF0 | (cp >> 18));
-    out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-    out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    out += static_cast<char>(0x80 | (cp & 0x3F));
-  }
-}
-
 bool isNaturalDirectionClass(const uchar cls) {
   switch (cls) {
     case L:
@@ -113,7 +95,7 @@ std::string applyBidiVisual(const char* utf8, int paragraphLevel) {
   std::string out;
   out.reserve(std::strlen(utf8));
   for (int i = 0; i < count; i++) {
-    appendUtf8(line[i].wc, out);
+    utf8AppendCodepoint(line[i].wc, out);
   }
   return out;
 }
@@ -154,6 +136,41 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
   }
 
   if (truncated || count == 0) return false;
+
+  // Fast-path for homogeneous lines: skip UAX#9 if there's no mixing.
+  bool hasL = false, hasR = false;
+  for (int i = 0; i < count; i++) {
+    uchar bc = bidi_class(line[i].wc);
+    if (bc == L || bc == EN || bc == AN)
+      hasL = true;
+    else if (bc == R || bc == AL)
+      hasR = true;
+  }
+
+  // Purely LTR line in RTL paragraph: identity order, but we might still need to reorder
+  // if some characters are mirrored or neutral resolution differs.
+  // Actually, UAX#9 rule L1/L2 says purely LTR in RTL para stays as is (identity).
+  // Purely RTL line: just reverse the words.
+  if (!hasL && hasR && paragraphIsRtl) {
+    visualOrder.reserve(nWords);
+    for (int i = static_cast<int>(nWords) - 1; i >= 0; i--) {
+      visualOrder.push_back(static_cast<uint16_t>(i));
+    }
+    return true;
+  }
+  if (!hasR) {
+    if (!paragraphIsRtl) {
+      // Pure LTR in LTR paragraph: nothing to do.
+      return false;
+    }
+    // Pure LTR in RTL paragraph: no word reordering, but must use the
+    // willReorder (left-to-right) positioning path, not the RTL right-to-left path.
+    visualOrder.reserve(nWords);
+    for (size_t i = 0; i < nWords; i++) {
+      visualOrder.push_back(static_cast<uint16_t>(i));
+    }
+    return true;
+  }
 
   do_bidi(/*autodir=*/false, paragraphIsRtl ? 1 : 0, line, count);
 
@@ -204,12 +221,6 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
       needsReorder = true;
       break;
     }
-  }
-
-  // If the paragraph is RTL, we MUST pass the array back to ParsedText
-  // so it uses the explicit Left-to-Right layout math loop.
-  if (paragraphIsRtl) {
-    needsReorder = true;
   }
 
   if (!needsReorder) {

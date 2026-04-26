@@ -302,14 +302,15 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
 
   // ASCII-only fast path is safe for autodir/LTR, but not for explicit RTL:
   // tokens like "123." or "," still need UAX#9 neutral resolution in RTL paragraphs.
-  if (paragraphLevel != 1) {
-    bool hasNonAscii = false;
-    for (const unsigned char* q = reinterpret_cast<const unsigned char*>(text); *q; ++q) {
-      if (*q >= 0x80) {
-        hasNonAscii = true;
-        break;
-      }
+  bool hasNonAscii = false;
+  for (const unsigned char* q = reinterpret_cast<const unsigned char*>(text); *q; ++q) {
+    if (*q >= 0x80) {
+      hasNonAscii = true;
+      break;
     }
+  }
+
+  if (paragraphLevel != 1) {
     if (!hasNonAscii) return text;
   }
 

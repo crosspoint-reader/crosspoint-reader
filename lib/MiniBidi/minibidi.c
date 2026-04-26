@@ -132,7 +132,7 @@ static ucschar bracket(ucschar c) {
  * mirror(c): returns the mirrored form for rule L4,
  *            or c unchanged if not in the table.
  */
-static ucschar mirror(ucschar c) {
+ucschar mirror(ucschar c) {
   const bidi_pair* p = find_pair(c);
   return p ? p->to : c;
 }
@@ -167,6 +167,11 @@ static inline void dss_pop(DirStatusStack* s, uchar* emb, uchar* ovr, bool* isol
     *emb = s->emb[s->top];
     *ovr = s->ovr[s->top];
     *isol = s->isol[s->top];
+  } else {
+    /* Stack underflow: return safe defaults (should not happen in valid input) */
+    *emb = 0;      /* LTR base level */
+    *ovr = ON;     /* No override */
+    *isol = false; /* No isolate */
   }
 }
 

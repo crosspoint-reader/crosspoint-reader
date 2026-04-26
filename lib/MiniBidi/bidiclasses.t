@@ -103,33 +103,16 @@
 {0x202E, 0x202E, RLO},
 {0x202F, 0x202F, WS},   /* narrow no-break space */
 {0x2060, 0x2063, BN},
-{0x206A, 0x206F, BN},
 /* Unicode 6.3 isolate markers */
 {0x2066, 0x2066, LRI},
 {0x2067, 0x2067, RLI},
 {0x2068, 0x2068, FSI},
 {0x2069, 0x2069, PDI},
+{0x206A, 0x206F, BN},
 
 /* ── Typographic punctuation ─────────────────────────────────────────── */
 {0x2030, 0x2034, ET},   /* ‰ ‱ ′ ″ */
 {0x2044, 0x2044, CS},   /* fraction slash */
-
-/* ── Currency symbols ────────────────────────────────────────────────── */
-/* U+20AA ₪ shekel sign is here — critical for Israeli Hebrew epubs */
-{0x20A0, 0x20CF, ET},
-
-/* ── Hebrew presentation forms ──────────────────────────────────────── */
-/* Older epub files may use precomposed forms directly */
-{0xFB1D, 0xFB1D, R},
-{0xFB1E, 0xFB1E, NSM},  /* Hebrew point VARIKA */
-{0xFB1F, 0xFB28, R},
-{0xFB29, 0xFB29, ET},
-{0xFB2A, 0xFB36, R},
-{0xFB38, 0xFB3C, R},
-{0xFB3E, 0xFB3E, R},
-{0xFB40, 0xFB41, R},
-{0xFB43, 0xFB44, R},
-{0xFB46, 0xFB4F, R},
 
 /* ── Byte Order Mark ────────────────────────────────────────────────── */
 {0xFEFF, 0xFEFF, BN},

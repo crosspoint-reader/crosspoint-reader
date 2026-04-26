@@ -6,7 +6,9 @@
 
 namespace BidiUtils {
 
-bool startsWithRtl(const char* utf8, int maxStrongChars = 5);
+inline constexpr int RTL_DETECTION_SCAN_LETTERS = 5;
+
+bool startsWithRtl(const char* utf8, int maxStrongChars = RTL_DETECTION_SCAN_LETTERS);
 
 int detectParagraphLevel(const char* utf8, int fallbackLevel = 0, int maxStrongChars = 64);
 
