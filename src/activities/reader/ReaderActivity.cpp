@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <I18n.h>
 
 #include "CrossPointSettings.h"
 #include "Epub.h"
@@ -12,6 +13,7 @@
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -106,27 +108,30 @@ void ReaderActivity::onEnter() {
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {
     onGoToBmpViewer(initialBookPath);
-  } else if (isXtcFile(initialBookPath)) {
-    auto xtc = loadXtc(initialBookPath);
-    if (!xtc) {
-      onGoBack();
-      return;
-    }
-    onGoToXtcReader(std::move(xtc));
-  } else if (isTxtFile(initialBookPath)) {
-    auto txt = loadTxt(initialBookPath);
-    if (!txt) {
-      onGoBack();
-      return;
-    }
-    onGoToTxtReader(std::move(txt));
   } else {
-    auto epub = loadEpub(initialBookPath);
-    if (!epub) {
-      onGoBack();
-      return;
+    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    if (isXtcFile(initialBookPath)) {
+      auto xtc = loadXtc(initialBookPath);
+      if (!xtc) {
+        onGoBack();
+        return;
+      }
+      onGoToXtcReader(std::move(xtc));
+    } else if (isTxtFile(initialBookPath)) {
+      auto txt = loadTxt(initialBookPath);
+      if (!txt) {
+        onGoBack();
+        return;
+      }
+      onGoToTxtReader(std::move(txt));
+    } else {
+      auto epub = loadEpub(initialBookPath);
+      if (!epub) {
+        onGoBack();
+        return;
+      }
+      onGoToEpubReader(std::move(epub));
     }
-    onGoToEpubReader(std::move(epub));
   }
 }
 

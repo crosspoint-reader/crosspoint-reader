@@ -23,6 +23,10 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
                         {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
                         "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(
+          StrId::STR_SLEEP_COVER_OVERLAY, &CrossPointSettings::sleepCoverOverlay,
+          {StrId::STR_OVERLAY_OFF, StrId::STR_OVERLAY_WHITE, StrId::STR_OVERLAY_GRAY, StrId::STR_OVERLAY_BLACK},
+          "sleepCoverOverlay", StrId::STR_CAT_DISPLAY),
       SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                         {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                         StrId::STR_CAT_DISPLAY),
@@ -35,6 +39,9 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         StrId::STR_CAT_DISPLAY),
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                           StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_HOME_COVER, &CrossPointSettings::coverMode,
+                        {StrId::STR_HOME_COVER_ENABLED, StrId::STR_HOME_COVER_TIMEOUT, StrId::STR_HOME_COVER_DISABLED},
+                        "coverMode", StrId::STR_CAT_DISPLAY),
 
       // --- Reader ---
       SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
