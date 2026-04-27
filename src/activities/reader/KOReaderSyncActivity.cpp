@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 
+#include "Epub/Section.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
@@ -14,6 +15,16 @@
 #include "fontIds.h"
 
 namespace {
+CrossPointPosition makeLocalPositionWithParagraph(const int spineIndex, const int page, const int totalPages,
+                                                  const std::optional<uint16_t>& paragraphIndex) {
+  CrossPointPosition pos = {spineIndex, page, totalPages};
+  if (paragraphIndex.has_value()) {
+    pos.paragraphIndex = *paragraphIndex;
+    pos.hasParagraphIndex = true;
+  }
+  return pos;
+}
+
 void syncTimeWithNTP() {
   // Stop SNTP if already running (can't reconfigure while running)
   if (esp_sntp_enabled()) {
@@ -135,8 +146,21 @@ void KOReaderSyncActivity::performSync() {
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
+  // If XPath carried a paragraph index, refine the page using the section cache's
+  // per-page paragraph LUT instead of anchor matching.
+  if (remotePosition.hasParagraphIndex) {
+    Section tempSection(epub, remotePosition.spineIndex, renderer);
+    const auto paragraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex);
+    if (paragraphPage.has_value()) {
+      LOG_DBG("KOSync", "Paragraph %u resolved to page %d (was %d)", remotePosition.paragraphIndex, *paragraphPage,
+              remotePosition.pageNumber);
+      remotePosition.pageNumber = *paragraphPage;
+    }
+  }
+
   // Calculate local progress in KOReader format (for display)
-  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  CrossPointPosition localPos =
+      makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine, currentParagraphIndex);
   localProgress = ProgressMapper::toKOReader(epub, localPos);
 
   {
@@ -162,7 +186,8 @@ void KOReaderSyncActivity::performUpload() {
   requestUpdateAndWait();
 
   // Convert current position to KOReader format
-  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  CrossPointPosition localPos =
+      makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine, currentParagraphIndex);
   KOReaderPosition koPos = ProgressMapper::toKOReader(epub, localPos);
 
   KOReaderProgress progress;

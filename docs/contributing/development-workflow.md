@@ -6,6 +6,7 @@ This page defines the expected local workflow before opening a pull request.
 
 - Fork the repository to your own GitHub account
 - Clone your fork locally and add the upstream repository if needed
+- Enable repo hooks once per clone: `git config core.hooksPath .githooks && chmod +x .githooks/pre-commit`
 
 - Branch from `master`
 - Keep each PR focused on one fix or feature area
