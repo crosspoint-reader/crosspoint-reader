@@ -110,7 +110,7 @@ void SleepActivity::renderCustomSleepScreen() const {
         }
         const int sw = renderer.getScreenWidth();
         const int sh = renderer.getScreenHeight();
-        if (abs(w - sw) > 1 || abs(h - sh) > 1) {
+        if (w != sw || h != sh) {
           LOG_DBG("SLP", "Skipping PXC size mismatch %dx%d (screen %dx%d): %s", w, h, sw, sh, name);
           file.close();
           continue;
@@ -135,7 +135,9 @@ void SleepActivity::renderCustomSleepScreen() const {
       LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
       delay(100);
       if (FsHelpers::hasPxcExtension(files[randomFileIndex])) {
-        renderPxcSleepScreen(filename);
+        if (!renderPxcSleepScreen(filename)) {
+          renderDefaultSleepScreen();
+        }
         dir.close();
         return;
       }
@@ -159,8 +161,9 @@ void SleepActivity::renderCustomSleepScreen() const {
   // Check root for sleep.pxc (preferred) or sleep.bmp
   if (Storage.exists("/sleep.pxc")) {
     LOG_DBG("SLP", "Loading: /sleep.pxc");
-    renderPxcSleepScreen("/sleep.pxc");
-    return;
+    if (renderPxcSleepScreen("/sleep.pxc")) {
+      return;
+    }
   }
 
   // Look for sleep.bmp on the root of the sd card to determine if we should
@@ -200,26 +203,26 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderPxcSleepScreen(const std::string& path) const {
+bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
   FsFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     LOG_ERR("SLP", "Cannot open PXC: %s", path.c_str());
-    return renderDefaultSleepScreen();
+    return false;
   }
 
   uint16_t pxcWidth, pxcHeight;
   if (file.read(&pxcWidth, 2) != 2 || file.read(&pxcHeight, 2) != 2) {
     LOG_ERR("SLP", "PXC header read failed: %s", path.c_str());
     file.close();
-    return renderDefaultSleepScreen();
+    return false;
   }
 
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
-  if (abs(pxcWidth - screenWidth) > 1 || abs(pxcHeight - screenHeight) > 1) {
+  if (pxcWidth != screenWidth || pxcHeight != screenHeight) {
     LOG_ERR("SLP", "PXC size %dx%d does not match screen %dx%d", pxcWidth, pxcHeight, screenWidth, screenHeight);
     file.close();
-    return renderDefaultSleepScreen();
+    return false;
   }
 
   const uint32_t dataOffset = file.position();  // right after the 4-byte header
@@ -270,14 +273,14 @@ void SleepActivity::renderPxcSleepScreen(const std::string& path) const {
     if (!file.seek(dataOffset)) {
       LOG_ERR("SLP", "PXC seek failed: %s", path.c_str());
       file.close();
-      return renderDefaultSleepScreen();
+      return false;
     }
 
     uint8_t* rowBuf = static_cast<uint8_t*>(malloc(bytesPerRow));
     if (!rowBuf) {
       LOG_ERR("SLP", "PXC malloc failed");
       file.close();
-      return renderDefaultSleepScreen();
+      return false;
     }
 
     for (int row = 0; row < pxcHeight; row++) {
@@ -296,6 +299,7 @@ void SleepActivity::renderPxcSleepScreen(const std::string& path) const {
   }
 
   file.close();
+  return true;
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
@@ -521,7 +525,9 @@ void SleepActivity::renderBlankSleepScreen() const {
 void SleepActivity::onScreenshotRequest() {
   if (lastGrayscalePath.empty()) return;
   if (lastGrayscaleIsPxc) {
-    renderPxcSleepScreen(lastGrayscalePath);
+    if (!renderPxcSleepScreen(lastGrayscalePath)) {
+      renderDefaultSleepScreen();
+    }
   } else {
     FsFile file;
     if (Storage.openFileForRead("SLP", lastGrayscalePath.c_str(), file)) {

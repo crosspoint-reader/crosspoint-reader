@@ -17,7 +17,7 @@ class SleepActivity final : public Activity {
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
   void renderBitmapSleepScreen(const Bitmap& bitmap) const;
-  void renderPxcSleepScreen(const std::string& path) const;
+  bool renderPxcSleepScreen(const std::string& path) const;
   void renderBlankSleepScreen() const;
 
   // Tracks the last factory-LUT render so onScreenshotRequest() can re-render the same image.

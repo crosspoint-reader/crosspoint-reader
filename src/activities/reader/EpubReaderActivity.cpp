@@ -827,9 +827,13 @@ void EpubReaderActivity::onScreenshotRequest() {
   auto p = section->loadPageFromSectionFile();
   if (!p) return;
 
+  // Preserve the BW page across the gray render so cleanupGrayscaleWithFrameBuffer
+  // syncs the controller to the actual page, not a cleared framebuffer.
+  if (!renderer.storeBwBuffer()) return;
+
   PageRenderCtx grayCtx{p.get(), SETTINGS.getReaderFontId(), lastFactoryMarginLeft, lastFactoryMarginTop, this};
   renderer.renderGrayscale(GfxRenderer::GrayscaleMode::FactoryQuality, &renderPageCallback, &grayCtx);
-  renderer.clearScreen();
+  renderer.restoreBwBuffer();
   renderer.cleanupGrayscaleWithFrameBuffer();
 }
 
