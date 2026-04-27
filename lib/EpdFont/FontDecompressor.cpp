@@ -284,6 +284,43 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
     }
   }
 
+  // Add ligature output glyphs: if both input codepoints of a ligature pair are
+  // in the needed set, the output glyph will be queried during rendering.
+  if (fontData->ligaturePairs && fontData->ligaturePairCount > 0) {
+    for (uint32_t li = 0; li < fontData->ligaturePairCount && glyphCount < MAX_PAGE_GLYPHS; li++) {
+      uint32_t leftCp = fontData->ligaturePairs[li].pair >> 16;
+      uint32_t rightCp = fontData->ligaturePairs[li].pair & 0xFFFF;
+
+      int32_t leftIdx = findGlyphIndex(fontData, leftCp);
+      int32_t rightIdx = findGlyphIndex(fontData, rightCp);
+      if (leftIdx < 0 || rightIdx < 0) continue;
+
+      // Check if both inputs are in neededGlyphs
+      bool hasLeft = false, hasRight = false;
+      for (uint16_t i = 0; i < glyphCount; i++) {
+        if (neededGlyphs[i] == static_cast<uint32_t>(leftIdx)) hasLeft = true;
+        if (neededGlyphs[i] == static_cast<uint32_t>(rightIdx)) hasRight = true;
+        if (hasLeft && hasRight) break;
+      }
+      if (!hasLeft || !hasRight) continue;
+
+      int32_t outIdx = findGlyphIndex(fontData, fontData->ligaturePairs[li].ligatureCp);
+      if (outIdx < 0) continue;
+
+      // Deduplicate
+      bool found = false;
+      for (uint16_t i = 0; i < glyphCount; i++) {
+        if (neededGlyphs[i] == static_cast<uint32_t>(outIdx)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        neededGlyphs[glyphCount++] = static_cast<uint32_t>(outIdx);
+      }
+    }
+  }
+
   if (glyphCount == 0) return 0;
 
   // Step 2: Compute total buffer size and collect unique groups

@@ -129,4 +129,16 @@ typedef struct {
   uint8_t kernRightClassCount;           ///< Number of distinct right classes (matrix cols)
   const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
   uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
+
+  /// On-demand glyph loading for fonts that don't keep all glyphs in RAM (e.g. SD card fonts).
+  /// Called by getGlyph() when a codepoint is not found in the interval table.
+  /// Returns a valid EpdGlyph* with correct metadata, or nullptr to fall back to the
+  /// replacement glyph.  The returned pointer is valid until the next glyphMissHandler
+  /// call that causes a ring-buffer eviction — callers must consume it (measure or draw)
+  /// before requesting another missed glyph.
+  const EpdGlyph* (*glyphMissHandler)(void* ctx, uint32_t codepoint);
+
+  /// Context pointer for glyphMissHandler (typically SdCardFont*).  Also used by
+  /// GfxRenderer::getGlyphBitmap() to retrieve overflow bitmaps via SdCardFont.
+  void* glyphMissCtx;
 } EpdFontData;
