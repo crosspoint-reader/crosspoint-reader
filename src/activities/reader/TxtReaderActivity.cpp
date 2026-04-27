@@ -23,11 +23,12 @@
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
-// Progress file magic and version. No longer stores a page-offset index — only
-// the current byte offset plus the layout settings used to produce it, so we
-// can reset to the start if the user changed font/margin/etc. since last read.
+// Progress file magic and version. Stores byte offset + layout settings that
+// were active when the offset was saved (settings are written for forward
+// compatibility / debugging only — byte offset is layout-independent so we
+// preserve the user's reading position across font/margin/spacing changes).
 constexpr uint32_t PROGRESS_MAGIC = 0x54585450;  // "TXTP"
-constexpr uint8_t PROGRESS_VERSION = 1;
+constexpr uint8_t PROGRESS_VERSION = 2;  // v2 adds extraParagraphSpacing
 
 // Auto page-turn options in pages-per-minute. Index 0 disables; the rest mirror
 // the EPUB reader's choices so users see consistent values across formats.
@@ -154,6 +155,7 @@ void TxtReaderActivity::onExit() {
   backHistory.clear();
   currentPageLines.clear();
   currentPageLineEndsParagraph.clear();
+  currentPageLineStartsParagraph.clear();
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   txt.reset();
@@ -418,15 +420,11 @@ void TxtReaderActivity::onReaderMenuConfirm(const TxtReaderMenuActivity::MenuAct
   }
 }
 
-void TxtReaderActivity::initializeReader() {
-  if (initialized) {
-    return;
-  }
-
-  // Store current settings for progress validation
+void TxtReaderActivity::recomputeLayout() {
   cachedFontId = SETTINGS.getReaderFontId();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
+  cachedExtraParagraphSpacing = SETTINGS.extraParagraphSpacing;
   cachedLineCompression = SETTINGS.getReaderLineCompression();
 
   // Calculate viewport dimensions
@@ -439,26 +437,48 @@ void TxtReaderActivity::initializeReader() {
       std::max(cachedScreenMargin, static_cast<uint8_t>(UITheme::getInstance().getStatusBarHeight()));
 
   viewportWidth = renderer.getScreenWidth() - cachedOrientedMarginLeft - cachedOrientedMarginRight;
-  const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
+  viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
   const int lineHeight = renderer.getLineHeight(cachedFontId) * cachedLineCompression;
 
-  linesPerPage = viewportHeight / lineHeight;
-  if (linesPerPage < 1) linesPerPage = 1;
+  // ~Half a line of space between paragraphs — matches the EPUB reader's
+  // visual feel for the same setting.
+  paragraphSpacingPx = cachedExtraParagraphSpacing ? lineHeight / 2 : 0;
+
+  // Conservative upper bound. Actual lines per page is determined by
+  // accumulated y in loadPageAtOffset so that paragraph spacing never causes
+  // the last line to overflow the viewport.
+  maxLinesPerPage = viewportHeight / lineHeight;
+  if (maxLinesPerPage < 1) maxLinesPerPage = 1;
 
   fileSize = txt->getFileSize();
-  LOG_DBG("TRS", "Viewport: %dx%d, lines per page: %d, file: %zu bytes", viewportWidth, viewportHeight, linesPerPage,
-          fileSize);
+  LOG_DBG("TRS", "Viewport: %dx%d, max lines/page: %d, paragraph spacing: %dpx, file: %zu bytes", viewportWidth,
+          viewportHeight, maxLinesPerPage, paragraphSpacingPx, fileSize);
+}
 
-  // Load saved offset (validates settings and resets to 0 if they changed)
-  loadProgress();
+void TxtReaderActivity::initializeReader() {
+  if (initialized) {
+    return;
+  }
+
+  recomputeLayout();
+
+  // Load saved offset only the first time we open this file. Settings-driven
+  // re-layouts later in the session must NOT call loadProgress — its early
+  // assignment of currentOffset = 0 would discard the user's position.
+  if (!progressLoaded) {
+    loadProgress();
+    progressLoaded = true;
+  }
 
   initialized = true;
 }
 
-bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines,
-                                         std::vector<bool>* outEndsParagraph, size_t& nextOffset) {
+bool TxtReaderActivity::loadPageAtOffset(size_t offset, bool firstLineIsParagraphStart,
+                                         std::vector<std::string>& outLines, std::vector<bool>* outEndsParagraph,
+                                         std::vector<bool>* outStartsParagraph, size_t& nextOffset) {
   outLines.clear();
   if (outEndsParagraph) outEndsParagraph->clear();
+  if (outStartsParagraph) outStartsParagraph->clear();
   const size_t totalSize = fileSize ? fileSize : txt->getFileSize();
 
   if (offset >= totalSize) {
@@ -479,10 +499,31 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   }
   buffer[chunkSize] = '\0';
 
-  // Parse lines from buffer
+  const int lineHeight = renderer.getLineHeight(cachedFontId) * cachedLineCompression;
+  // Track accumulated y to enforce height-based pagination. Extra paragraph
+  // spacing is added BEFORE the leading wrap of each new paragraph (except
+  // the page's first line) so partial-line wraps don't push content off-screen.
+  int accumulatedY = 0;
+  bool isFirstSourceLineOnPage = true;
+
+  // Helper: try to add a wrapped segment. Returns true if it fit, false if
+  // adding it would overflow the viewport (caller must stop).
+  auto tryAddLine = [&](const std::string& seg, bool endsParagraph, bool startsParagraph,
+                        bool needsExtraSpacing) -> bool {
+    int linePixelHeight = lineHeight + (needsExtraSpacing ? paragraphSpacingPx : 0);
+    if (accumulatedY + linePixelHeight > viewportHeight && !outLines.empty()) {
+      return false;
+    }
+    outLines.push_back(seg);
+    if (outEndsParagraph) outEndsParagraph->push_back(endsParagraph);
+    if (outStartsParagraph) outStartsParagraph->push_back(startsParagraph);
+    accumulatedY += linePixelHeight;
+    return true;
+  };
+
   size_t pos = 0;
 
-  while (pos < chunkSize && static_cast<int>(outLines.size()) < linesPerPage) {
+  while (pos < chunkSize && static_cast<int>(outLines.size()) < maxLinesPerPage) {
     // Find end of line
     size_t lineEnd = pos;
     while (lineEnd < chunkSize && buffer[lineEnd] != '\n') {
@@ -507,20 +548,35 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     // Extract line content for display (without CR/LF)
     std::string line(reinterpret_cast<char*>(buffer + pos), displayLen);
 
+    // The leading source line on the page is a paragraph start iff the
+    // caller says so (see isOffsetAtLineStart). Every subsequent source
+    // line is by definition a new paragraph (preceded by '\n').
+    const bool sourceLineStartsParagraph = isFirstSourceLineOnPage ? firstLineIsParagraphStart : true;
+    // Extra spacing precedes a new paragraph that is NOT the page's first.
+    const bool needsExtraSpacingBefore =
+        cachedExtraParagraphSpacing && sourceLineStartsParagraph && !outLines.empty();
+
     // Track position within this source line (in bytes from pos)
     size_t lineBytePos = 0;
+    bool isFirstSegmentOfSourceLine = true;
+    bool extraSpacingApplied = false;
 
     // Word wrap if needed - use binary search for performance with SD fonts
-    while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
+    while (!line.empty() && static_cast<int>(outLines.size()) < maxLinesPerPage) {
       // Use binary search to find break position (much faster than linear search)
       size_t breakPos = findBreakPosition(renderer, cachedFontId, line, viewportWidth);
+
+      const bool needsSpacing = needsExtraSpacingBefore && isFirstSegmentOfSourceLine && !extraSpacingApplied;
 
       if (breakPos >= line.length()) {
         // Whole line fits — this is the last segment of a source line, so
         // it marks the end of a paragraph (the next line in the source
         // starts a new paragraph).
-        outLines.push_back(line);
-        if (outEndsParagraph) outEndsParagraph->push_back(true);
+        if (!tryAddLine(line, true, isFirstSegmentOfSourceLine && sourceLineStartsParagraph, needsSpacing)) {
+          // Didn't fit — current source line stays unconsumed; stop the page.
+          goto pageFull;
+        }
+        if (needsSpacing) extraSpacingApplied = true;
         lineBytePos = displayLen;
         line.clear();
         break;
@@ -530,8 +586,12 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
         breakPos = 1;  // Ensure progress
       }
 
-      outLines.push_back(line.substr(0, breakPos));
-      if (outEndsParagraph) outEndsParagraph->push_back(false);
+      if (!tryAddLine(line.substr(0, breakPos), false, isFirstSegmentOfSourceLine && sourceLineStartsParagraph,
+                      needsSpacing)) {
+        goto pageFull;
+      }
+      if (needsSpacing) extraSpacingApplied = true;
+      isFirstSegmentOfSourceLine = false;
 
       // Skip space at break point
       size_t skipChars = breakPos;
@@ -552,7 +612,9 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       pos = pos + lineBytePos;
       break;
     }
+    isFirstSourceLineOnPage = false;
   }
+pageFull:
 
   // Ensure we make progress even if calculations go wrong
   if (pos == 0 && !outLines.empty()) {
@@ -570,6 +632,17 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   free(buffer);
 
   return !outLines.empty();
+}
+
+bool TxtReaderActivity::isOffsetAtLineStart(size_t offset) const {
+  if (offset == 0) return true;
+  uint8_t prev = 0;
+  if (!txt->readContent(&prev, offset - 1, 1)) {
+    // Read failure: assume paragraph start so spacing applies (visual glitch
+    // is less harmful than missing the spacing on every page).
+    return true;
+  }
+  return prev == '\n';
 }
 
 size_t TxtReaderActivity::snapToLineStart(size_t offset) const {
@@ -615,7 +688,10 @@ size_t TxtReaderActivity::findBackwardPageStart(size_t endOffset) const {
   // is our answer.
   while (cursor < endOffset) {
     size_t next = cursor;
-    if (!const_cast<TxtReaderActivity*>(this)->loadPageAtOffset(cursor, lines, nullptr, next)) {
+    // cursor is always at a snapped line start, so the leading source line
+    // on each synthetic page is a paragraph start.
+    if (!const_cast<TxtReaderActivity*>(this)->loadPageAtOffset(cursor, /*firstLineIsParagraphStart=*/true, lines,
+                                                                nullptr, nullptr, next)) {
       break;
     }
     if (next <= cursor) break;
@@ -650,14 +726,19 @@ void TxtReaderActivity::render(RenderLock&&) {
     const int currentFontId = SETTINGS.getReaderFontId();
     const int currentMargin = SETTINGS.screenMargin;
     const uint8_t currentAlignment = SETTINGS.paragraphAlignment;
+    const uint8_t currentExtraSpacing = SETTINGS.extraParagraphSpacing;
     const float currentLineCompression = SETTINGS.getReaderLineCompression();
 
     if (currentFontId != cachedFontId || currentMargin != cachedScreenMargin ||
-        currentAlignment != cachedParagraphAlignment || currentLineCompression != cachedLineCompression) {
-      LOG_DBG("TRS", "Settings changed, reinitializing (font: %d->%d)", cachedFontId, currentFontId);
-      initialized = false;
-      // Keep currentOffset but snap to the previous line boundary so the
-      // new layout doesn't render a partial line at the top.
+        currentAlignment != cachedParagraphAlignment || currentExtraSpacing != cachedExtraParagraphSpacing ||
+        currentLineCompression != cachedLineCompression) {
+      LOG_DBG("TRS", "Settings changed, recomputing layout (font: %d->%d)", cachedFontId, currentFontId);
+      // Keep currentOffset (the user's reading position), but snap to the
+      // previous line boundary so the new layout doesn't render a partial
+      // wrap segment at the top. Do NOT call loadProgress — its early
+      // assignment of currentOffset = 0 would discard the user's position
+      // every time they tweaked a setting.
+      recomputeLayout();
       currentOffset = snapToLineStart(currentOffset);
       currentEndOffset = currentOffset;
       backHistory.clear();
@@ -693,7 +774,10 @@ void TxtReaderActivity::render(RenderLock&&) {
   size_t nextOffset = currentOffset;
   currentPageLines.clear();
   currentPageLineEndsParagraph.clear();
-  loadPageAtOffset(currentOffset, currentPageLines, &currentPageLineEndsParagraph, nextOffset);
+  currentPageLineStartsParagraph.clear();
+  const bool pageStartsAtLineBegin = isOffsetAtLineStart(currentOffset);
+  loadPageAtOffset(currentOffset, pageStartsAtLineBegin, currentPageLines, &currentPageLineEndsParagraph,
+                   &currentPageLineStartsParagraph, nextOffset);
   currentEndOffset = nextOffset;
 
   // Seed the page-count estimate from the first page we render in this
@@ -728,13 +812,20 @@ void TxtReaderActivity::renderPage() {
     const size_t lineCount = currentPageLines.size();
     for (size_t i = 0; i < lineCount; i++) {
       const std::string& line = currentPageLines[i];
+      const bool endsParagraph = i < currentPageLineEndsParagraph.size() ? currentPageLineEndsParagraph[i] : true;
+      const bool startsParagraph =
+          i < currentPageLineStartsParagraph.size() ? currentPageLineStartsParagraph[i] : false;
+      // Push y down before drawing the leading wrap of a new paragraph
+      // (skip the page's first line since loadPageAtOffset already excluded it).
+      if (cachedExtraParagraphSpacing && startsParagraph && i > 0) {
+        y += paragraphSpacingPx;
+      }
       if (!line.empty()) {
         int x = cachedOrientedMarginLeft;
         // A line is "soft-wrapped" (safe to justify by widening gaps) when it
         // didn't consume a full source line AND it isn't the last line on the
         // page (the last line may actually continue on the next page even if
         // we didn't track it as wrapped).
-        const bool endsParagraph = i < currentPageLineEndsParagraph.size() ? currentPageLineEndsParagraph[i] : true;
         const bool isLastLineOnPage = (i + 1 == lineCount);
         const bool canJustify = !endsParagraph && !isLastLineOnPage;
 
@@ -824,10 +915,11 @@ void TxtReaderActivity::saveProgress() const {
   serialization::writePod(f, PROGRESS_VERSION);
   serialization::writePod(f, static_cast<uint32_t>(txt->getFileSize()));
   serialization::writePod(f, static_cast<int32_t>(viewportWidth));
-  serialization::writePod(f, static_cast<int32_t>(linesPerPage));
+  serialization::writePod(f, static_cast<int32_t>(maxLinesPerPage));
   serialization::writePod(f, static_cast<int32_t>(cachedFontId));
   serialization::writePod(f, static_cast<int32_t>(cachedScreenMargin));
   serialization::writePod(f, cachedParagraphAlignment);
+  serialization::writePod(f, cachedExtraParagraphSpacing);
   serialization::writePod(f, cachedLineCompression);
   serialization::writePod(f, static_cast<uint64_t>(currentOffset));
 }
@@ -853,34 +945,35 @@ void TxtReaderActivity::loadProgress() {
   serialization::readPod(f, savedFileSize);
   if (savedFileSize != fileSize) return;  // file changed — start over
 
-  int32_t savedWidth;
+  // Read remaining layout fields purely for forward-compat / debugging. We
+  // intentionally do NOT validate them against current settings: byte offset
+  // is layout-independent (any layout change just re-paginates around the
+  // saved position), and validating would lose the user's reading position
+  // every time they tweaked a font/margin/spacing setting.
+  int32_t savedWidth, savedMaxLines, savedFontId, savedMargin;
   serialization::readPod(f, savedWidth);
-  if (savedWidth != viewportWidth) return;
-
-  int32_t savedLines;
-  serialization::readPod(f, savedLines);
-  if (savedLines != linesPerPage) return;
-
-  int32_t savedFontId;
+  serialization::readPod(f, savedMaxLines);
   serialization::readPod(f, savedFontId);
-  if (savedFontId != cachedFontId) return;
-
-  int32_t savedMargin;
   serialization::readPod(f, savedMargin);
-  if (savedMargin != cachedScreenMargin) return;
-
-  uint8_t savedAlignment;
+  uint8_t savedAlignment, savedExtraSpacing;
   serialization::readPod(f, savedAlignment);
-  if (savedAlignment != cachedParagraphAlignment) return;
-
+  serialization::readPod(f, savedExtraSpacing);
   float savedCompression;
   serialization::readPod(f, savedCompression);
-  if (savedCompression != cachedLineCompression) return;
+  (void)savedWidth;
+  (void)savedMaxLines;
+  (void)savedFontId;
+  (void)savedMargin;
+  (void)savedAlignment;
+  (void)savedExtraSpacing;
+  (void)savedCompression;
 
   uint64_t savedOffset;
   serialization::readPod(f, savedOffset);
   if (savedOffset < fileSize) {
-    currentOffset = static_cast<size_t>(savedOffset);
+    // Snap to a line boundary so the new layout doesn't render a partial
+    // wrap segment at the top of the page.
+    currentOffset = snapToLineStart(static_cast<size_t>(savedOffset));
     LOG_DBG("TRS", "Loaded progress: offset %zu / %zu (%.0f%%)", currentOffset, fileSize,
             fileSize ? currentOffset * 100.0f / fileSize : 0.0f);
   }
