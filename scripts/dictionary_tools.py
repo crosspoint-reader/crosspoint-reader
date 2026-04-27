@@ -220,11 +220,13 @@ def prep(source_folder: Path) -> None:
     # Step 3: Generate .idx.oft
     idx     = out_dir / f"{stem}.idx"
     idx_oft = out_dir / f"{stem}.idx.oft"
+    idx_oft_regenerated = False
     if idx.exists() and not idx_oft.exists():
         print(f"  Generating {idx_oft.name} ...", end=" ", flush=True)
         idx_oft.write_bytes(_build_oft(idx.read_bytes(), skip_bytes_after_null=8))
         print(f"{idx_oft.stat().st_size} bytes")
         steps_run += 1
+        idx_oft_regenerated = True
 
     # Step 4: Generate .syn.oft (.syn may have just been created in step 2)
     syn_oft = out_dir / f"{stem}.syn.oft"
@@ -234,9 +236,13 @@ def prep(source_folder: Path) -> None:
         print(f"{syn_oft.stat().st_size} bytes")
         steps_run += 1
 
-    # Step 5: Generate .idx.oft.cspt (requires .idx and .idx.oft)
+    # Step 5: Generate .idx.oft.cspt (requires .idx and .idx.oft).
+    # Regenerate if .cspt is missing OR if .idx.oft was just rebuilt this run
+    # (stale .cspt). Mirrors DictPrepareActivity::detectSteps on-device.
     idx_cspt = out_dir / f"{stem}.idx.oft.cspt"
-    if idx.exists() and idx_oft.exists() and not idx_cspt.exists():
+    if idx.exists() and idx_oft.exists() and (not idx_cspt.exists() or idx_oft_regenerated):
+        if idx_cspt.exists():
+            idx_cspt.unlink()
         print(f"  Generating {idx_cspt.name} ...", end=" ", flush=True)
         idx_cspt.write_bytes(_build_cspt(idx.read_bytes(), idx_oft.read_bytes()))
         print(f"{idx_cspt.stat().st_size} bytes")

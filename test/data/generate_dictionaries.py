@@ -210,7 +210,8 @@ def build_syn(synonym_pairs: list, headword_ordinals: dict) -> tuple:
 def write_or_compress(path: str, data: bytes, compress: bool) -> None:
     if compress:
         with open(path + ".dz", "wb") as f:
-            f.write(gzip.compress(data, compresslevel=6))
+            # mtime=0 produces byte-stable gzip output across regenerations.
+            f.write(gzip.compress(data, compresslevel=6, mtime=0))
     else:
         with open(path, "wb") as f:
             f.write(data)

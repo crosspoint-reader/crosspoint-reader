@@ -113,7 +113,12 @@ All prefixed `prep-` for alphabetical grouping in the on-device picker.
    - `entry_format`: `m` (plain text) or `h` (HTML)
    - `compress` / `compress_dict` / `compress_syn`: produce `.dz` files
    - `generate_oft` / `generate_idx_oft` / `generate_syn_oft`: produce `.oft` files
-   - `generate_cspt`: produce `.idx.oft.cspt` (requires `generate_idx_oft`)
+   - `generate_cspt`: produce `.idx.oft.cspt` (requires `generate_idx_oft`).
+     Convention: when `generate_idx_oft` is true, also set `generate_cspt: true` so
+     fixtures match the deployed format and the device's `.cspt` fast path is
+     exercised. The exception is dictionaries explicitly testing on-device CSPT
+     generation (e.g. `prep-cspt-prefix-collision`), which intentionally ship
+     without `.idx.oft.cspt`.
    - `generate_ifo`: write `.ifo` (default true)
    - `generate_idx`: write `.idx` (default true)
    - `corrupt_dict`: write invalid bytes as `.dict.dz`
