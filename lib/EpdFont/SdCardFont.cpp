@@ -918,7 +918,8 @@ bool SdCardFont::hasAdvanceTable() const {
 }
 
 uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
-  if (style >= MAX_STYLES || !advanceTable_[style]) return 0;
+  style &= (MAX_STYLES - 1);
+  if (!advanceTable_[style]) return 0;
   const AdvanceEntry* table = advanceTable_[style];
   const uint32_t size = advanceTableSize_[style];
   // Binary search sorted by codepoint
@@ -1120,11 +1121,12 @@ void SdCardFont::resetStats() { stats_ = Stats{}; }
 // --- Public accessors ---
 
 EpdFont* SdCardFont::getEpdFont(uint8_t style) {
-  if (style >= MAX_STYLES || !styles_[style].present) return nullptr;
+  style &= (MAX_STYLES - 1);
+  if (!styles_[style].present) return nullptr;
   return &styles_[style].epdFont;
 }
 
-bool SdCardFont::hasStyle(uint8_t style) const { return style < MAX_STYLES && styles_[style].present; }
+bool SdCardFont::hasStyle(uint8_t style) const { return styles_[style & (MAX_STYLES - 1)].present; }
 
 // --- On-demand glyph loading (overflow buffer) ---
 
