@@ -18,6 +18,7 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -168,11 +169,68 @@ def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
+def extract_pnum_subs(font_path):
+    """Extract pnum (proportional figures) GSUB substitutions.
+
+    Parses the font's GSUB table for the 'pnum' feature, which replaces
+    tabular-width figure glyphs with proportional-width alternates.
+    Returns {original_glyph_name: substitute_glyph_name} or empty dict.
+    """
+    font = TTFont(font_path)
+    subs = {}
+    if 'GSUB' not in font:
+        font.close()
+        return subs
+    gsub = font['GSUB'].table
+    pnum_indices = set()
+    if gsub.FeatureList:
+        for fr in gsub.FeatureList.FeatureRecord:
+            if fr.FeatureTag == 'pnum':
+                pnum_indices.update(fr.Feature.LookupListIndex)
+    for li in pnum_indices:
+        lookup = gsub.LookupList.Lookup[li]
+        for st in lookup.SubTable:
+            actual = st
+            if lookup.LookupType == 7 and hasattr(st, 'ExtSubTable'):
+                actual = st.ExtSubTable
+            if hasattr(actual, 'mapping'):
+                subs.update(actual.mapping)
+    font.close()
+    return subs
+
+# Build proportional numeral glyph overrides when --pnum is active.
+# Maps (face_index, codepoint) -> freetype glyph index for the proportional alternate.
+pnum_glyph_overrides = {}
+pnum_kern_subs = {}  # face_index -> {original_glyph_name: substitute_glyph_name}
+if args.pnum:
+    for face_idx, font_path in enumerate(args.fontstack):
+        subs = extract_pnum_subs(font_path)
+        if not subs:
+            continue
+        pnum_kern_subs[face_idx] = subs
+        tt_font = TTFont(font_path)
+        cmap = tt_font.getBestCmap() or {}
+        glyph_order = tt_font.getGlyphOrder()
+        name_to_glyph_idx = {name: idx for idx, name in enumerate(glyph_order)}
+        count = 0
+        for cp, glyph_name in cmap.items():
+            if glyph_name in subs:
+                sub_name = subs[glyph_name]
+                sub_idx = name_to_glyph_idx.get(sub_name, 0)
+                if sub_idx > 0:
+                    pnum_glyph_overrides[(face_idx, cp)] = sub_idx
+                    count += 1
+        tt_font.close()
+        if count > 0:
+            print(f"pnum: {count} glyph substitutions from {font_path}", file=sys.stderr)
+
 def load_glyph(code_point):
     face_index = 0
     while face_index < len(font_stack):
         face = font_stack[face_index]
-        glyph_index = face.get_char_index(code_point)
+        glyph_index = pnum_glyph_overrides.get((face_index, code_point))
+        if glyph_index is None:
+            glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
             face.load_glyph(glyph_index, load_flags)
             return face
@@ -386,23 +444,30 @@ def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
                     key = (left_glyph, right_glyph)
                     raw_kern[key] = raw_kern.get(key, 0) + xa
 
-def extract_kerning_fonttools(font_path, codepoints, ppem):
+def extract_kerning_fonttools(font_path, codepoints, ppem, pnum_subs=None):
     """Extract kerning pairs from a font file using fonttools.
 
     Returns dict of {(leftCp, rightCp): pixel_adjust} for the given
     codepoints.  Values are scaled from font design units to integer
     pixels at ppem.
+
+    When pnum_subs is provided, substitute glyph names are also included
+    in the lookup so kern pairs referencing proportional alternates are found.
     """
     font = TTFont(font_path)
     units_per_em = font['head'].unitsPerEm
     cmap = font.getBestCmap() or {}
 
-    # Build glyph_name -> codepoint map (only for requested codepoints)
+    # Build glyph_name -> codepoint map (only for requested codepoints).
+    # When pnum is active, include both the original and substitute glyph
+    # names so kern pairs referencing either are captured.
     glyph_to_cp = {}
     for cp in codepoints:
         gname = cmap.get(cp)
         if gname:
             glyph_to_cp[gname] = cp
+            if pnum_subs and gname in pnum_subs:
+                glyph_to_cp[pnum_subs[gname]] = cp
 
     # Collect raw kerning values in font design units
     raw_kern = {}  # (left_glyph_name, right_glyph_name) -> design_units
@@ -454,7 +519,8 @@ ppem = size * 150.0 / 72.0
 kern_map = {}  # (leftCp, rightCp) -> adjust
 for face_idx, cps in face_idx_cps.items():
     font_path = args.fontstack[face_idx]
-    kern_map.update(extract_kerning_fonttools(font_path, cps, ppem))
+    subs = pnum_kern_subs.get(face_idx) if args.pnum else None
+    kern_map.update(extract_kerning_fonttools(font_path, cps, ppem, pnum_subs=subs))
 
 print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
@@ -564,7 +630,7 @@ def extract_ligatures_fonttools(font_path, codepoints):
         # Find lookup indices for ligature features.
         # Currently extracts 'liga' (standard) and 'rlig' (required) only.
         # To also extract discretionary or historical ligatures, add:
-        #   'dlig' - Discretionary Ligatures (e.g., ft, st in Bookerly)
+        #   'dlig' - Discretionary Ligatures (e.g., ft, st in Noto)
         #   'hlig' - Historical Ligatures (e.g., long-s+t in OpenDyslexic)
         # These are off by default in standard text renderers.
         LIGATURE_FEATURES = ('liga', 'rlig')
@@ -689,7 +755,38 @@ print(f"ligatures: {len(ligature_pairs)} pairs extracted", file=sys.stderr)
 
 compress = args.compress
 
+
+def to_byte_aligned(packed, width, height):
+    """Convert packed 2-bit bitmap to byte-aligned format (rows padded to byte boundary).
+
+    In packed format, pixels flow continuously across row boundaries (4 pixels/byte).
+    In byte-aligned format, each row starts at a byte boundary, padding the last byte
+    of each row with zero bits if width % 4 != 0. This improves DEFLATE compression
+    because identical pixel rows produce identical byte patterns regardless of position.
+    """
+    if width == 0 or height == 0:
+        return b''
+    row_stride = (width + 3) // 4  # bytes per byte-aligned row
+    aligned = bytearray(row_stride * height)
+    for y in range(height):
+        for x in range(width):
+            # Read pixel from packed format (continuous bit stream)
+            packed_pos = y * width + x
+            packed_byte_idx = packed_pos // 4
+            packed_shift = (3 - (packed_pos % 4)) * 2
+            pixel = (packed[packed_byte_idx] >> packed_shift) & 0x3
+
+            # Write pixel to byte-aligned format (row-aligned)
+            aligned_byte_idx = y * row_stride + x // 4
+            aligned_shift = (3 - (x % 4)) * 2
+            aligned[aligned_byte_idx] |= (pixel << aligned_shift)
+    return bytes(aligned)
+
+
 # Build groups for compression
+if compress and not is2Bit:
+    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
+    sys.exit(1)
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
     # are grouped together for efficient LRU caching on the embedded target.
@@ -747,11 +844,12 @@ if compress:
 
     for first_idx, count in groups:
         # Concatenate bitmap data for this group
-        group_data = b''
+        packed_len = 0
+        group_aligned = bytearray()
         for gi in range(first_idx, first_idx + count):
             props, packed = all_glyphs[gi]
-            # Update glyph's dataOffset to be within-group offset
-            within_group_offset = len(group_data)
+            # Update glyph's dataOffset to be within-group offset (packed offset)
+            within_group_offset = packed_len
             old_props = modified_glyph_props[gi]
             modified_glyph_props[gi] = GlyphProps(
                 width=old_props.width,
@@ -763,13 +861,14 @@ if compress:
                 data_offset=within_group_offset,
                 code_point=old_props.code_point,
             )
-            group_data += packed
+            packed_len += len(packed)
+            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
 
-        # Compress with raw DEFLATE (no zlib/gzip header)
+        # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
         compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(group_data) + compressor.flush()
+        compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
 
-        compressed_groups.append((compressed, len(group_data), count, first_idx))
+        compressed_groups.append((compressed, len(group_aligned), count, first_idx))
         compressed_bitmap_data.extend(compressed)
         compressed_offset += len(compressed)
 
@@ -862,8 +961,10 @@ if compress:
     print(f"    {font_name}Groups,")
     print(f"    {len(compressed_groups)},")
 else:
-    print(f"    nullptr,")
-    print(f"    0,")
+    print("    nullptr,")
+    print("    0,")
+# glyphToGroup (not used for script-grouped fonts)
+print("    nullptr,")
 if kern_map:
     print(f"    {font_name}KernLeftClasses,")
     print(f"    {font_name}KernRightClasses,")

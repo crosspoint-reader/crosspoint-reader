@@ -15,6 +15,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -24,7 +25,7 @@ int HomeActivity::getMenuItemCount() const {
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
-  if (hasOpdsUrl) {
+  if (hasOpdsServers) {
     count++;
   }
   return count;
@@ -110,8 +111,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  // Check if OPDS browser URL is configured
-  hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
+  hasOpdsServers = OPDS_STORE.hasServers();
 
   selectorIndex = 0;
 
@@ -138,7 +138,7 @@ bool HomeActivity::storeCoverBuffer() {
   // Free any existing buffer first
   freeCoverBuffer();
 
-  const size_t bufferSize = GfxRenderer::getBufferSize();
+  const size_t bufferSize = renderer.getBufferSize();
   coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
   if (!coverBuffer) {
     return false;
@@ -158,7 +158,7 @@ bool HomeActivity::restoreCoverBuffer() {
     return false;
   }
 
-  const size_t bufferSize = GfxRenderer::getBufferSize();
+  const size_t bufferSize = renderer.getBufferSize();
   memcpy(frameBuffer, coverBuffer, bufferSize);
   return true;
 }
@@ -190,7 +190,7 @@ void HomeActivity::loop() {
     int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
     const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
-    const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int opdsLibraryIdx = hasOpdsServers ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
@@ -230,8 +230,7 @@ void HomeActivity::render(RenderLock&&) {
                                         tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
-  if (hasOpdsUrl) {
-    // Insert OPDS Browser after File Browser
+  if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }

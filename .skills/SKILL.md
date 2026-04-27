@@ -405,7 +405,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::on
 **Source**: [src/main.cpp:40-115](../src/main.cpp)
 
 **All fonts are loaded as global static objects** at firmware startup:
-- Bookerly: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
+- Noto Serif: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
 - Noto Sans: 12, 14, 16, 18pt (4 styles each)
 - OpenDyslexic: 8, 10, 12, 14pt (4 styles each)
 - Ubuntu UI fonts: 10, 12pt (2 styles)
@@ -664,7 +664,7 @@ Tested in all 4 orientations with 5MB+ files.
    - `lib/I18n/I18nKeys.h`, `lib/I18n/I18nStrings.h`, `lib/I18n/I18nStrings.cpp`
    - **Source**: YAML translation files in `lib/I18n/translations/` (one per language)
    - **To modify**: Edit source YAML files, then run `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
-   - **Commit**: Source YAML files + `I18nKeys.h` and `I18nStrings.h` (needed for IDE symbol resolution), but NOT `I18nStrings.cpp`
+   - **Commit**: Source YAML files only. All three generated files (`I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`) are in `.gitignore` and regenerated at build time.
 
 3. **Build Artifacts** (in `.gitignore`):
    - `.pio/` - PlatformIO build output
@@ -686,7 +686,7 @@ Tested in all 4 orientations with 5MB+ files.
    - English (`english.yaml`) is the reference; missing keys in other languages fall back to English
 2. Run generator: `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
 3. Generated files update: `I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`
-4. **Commit** source YAML files + `I18nKeys.h` and `I18nStrings.h` (IDE needs these for symbol resolution), but NOT `I18nStrings.cpp`
+4. **Commit** source YAML files only. All three generated files are in `.gitignore` and regenerated at build time.
 
 **To use translated strings in code**:
 ```cpp

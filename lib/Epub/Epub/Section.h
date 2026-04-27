@@ -1,6 +1,8 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 
 #include "Epub.h"
 
@@ -37,4 +39,13 @@ class Section {
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                          uint8_t imageRendering, const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
+
+  // Look up the page number for an anchor id from the section cache file.
+  std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
+
+  // Look up the page number for a synthetic paragraph index from XPath p[N].
+  std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;
+
+  // Look up the synthetic paragraph index for the given rendered page.
+  std::optional<uint16_t> getParagraphIndexForPage(uint16_t page) const;
 };

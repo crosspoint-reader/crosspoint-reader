@@ -107,6 +107,17 @@ bool isPunctuation(const uint32_t cp) {
 
 bool isAsciiDigit(const uint32_t cp) { return cp >= '0' && cp <= '9'; }
 
+bool isApostrophe(const uint32_t cp) {
+  switch (cp) {
+    case '\'':
+    case 0x2018:  // left single quotation mark
+    case 0x2019:  // right single quotation mark
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool isExplicitHyphen(const uint32_t cp) {
   switch (cp) {
     case '-':
