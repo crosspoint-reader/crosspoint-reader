@@ -23,7 +23,6 @@
 #include "fontIds.h"
 
 namespace {
-constexpr unsigned long skipPageMs = 700;
 constexpr unsigned long goHomeMs = 1000;
 }  // namespace
 
@@ -65,38 +64,37 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
-      ReaderUtils::enforceExitFullRefresh(renderer);
-      startActivityForResult(
-          std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              currentPage = std::get<PageResult>(result.data).page;
-            }
-          });
+  ButtonEventManager::ButtonEvent ev;
+  while (buttonEvents.consumeEvent(ev)) {
+    if (ev.button == MappedInputManager::Button::Confirm && ev.type == ButtonEventManager::PressType::Short) {
+      if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        startActivityForResult(
+            std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                currentPage = std::get<PageResult>(result.data).page;
+              }
+            });
+        return;
+      }
+    }
+
+    if (ev.button == MappedInputManager::Button::Back) {
+      if (ev.type == ButtonEventManager::PressType::Long) {
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        onGoHome();
+        return;
+      }
+      if (ev.type == ButtonEventManager::PressType::Short) {
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        finish();
+        return;
+      }
     }
   }
 
-  // Long press BACK (1s+) goes to home screen
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= goHomeMs) {
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    onGoHome();
-    return;
-  }
-
-  // Short press BACK returns to the calling activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < goHomeMs) {
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    finish();
-    return;
-  }
-
-  const bool prevTriggered = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
-                             mappedInput.wasReleased(MappedInputManager::Button::Left);
-  const bool nextTriggered = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
-                             mappedInput.wasReleased(MappedInputManager::Button::Right);
+  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
 
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -113,18 +111,13 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = mappedInput.getHeldTime() > skipPageMs;
-  const int skipAmount = skipPages ? 10 : 1;
-
   if (prevTriggered) {
-    if (currentPage >= static_cast<uint32_t>(skipAmount)) {
-      currentPage -= skipAmount;
-    } else {
-      currentPage = 0;
+    if (currentPage > 0) {
+      currentPage--;
+      requestUpdate();
     }
-    requestUpdate();
   } else if (nextTriggered) {
-    currentPage += skipAmount;
+    currentPage++;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }

@@ -389,16 +389,18 @@ void BmpViewerActivity::loop() {
   Activity::loop();
 
   // Long press BACK (1s+) goes to home screen
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    onGoHome();
-    return;
-  }
-
-  // Short press BACK returns to the calling activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-    finish();
-    return;
+  ButtonEventManager::ButtonEvent ev;
+  while (buttonEvents.consumeEvent(ev)) {
+    if (ev.button == MappedInputManager::Button::Back) {
+      if (ev.type == ButtonEventManager::PressType::Long) {
+        onGoHome();
+        return;
+      }
+      if (ev.type == ButtonEventManager::PressType::Short) {
+        finish();
+        return;
+      }
+    }
   }
 
   // Confirm: toggle between 1-bit B&W and 4-level grayscale display.

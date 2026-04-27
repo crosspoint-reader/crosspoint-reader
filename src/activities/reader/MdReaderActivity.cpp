@@ -23,7 +23,6 @@
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 constexpr size_t MAX_LINE_LENGTH = 64 * 1024;
-constexpr unsigned long HEADING_SKIP_MS = 700;
 constexpr uint32_t CACHE_MAGIC = 0x4D4B4449;  // "MKDI"
 constexpr uint8_t CACHE_VERSION = 3;          // Bumped: nested list indent + task checkboxes
 
@@ -222,54 +221,55 @@ void MdReaderActivity::onExit() {
 }
 
 void MdReaderActivity::loop() {
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    activityManager.goToFileBrowser(txt ? txt->getPath() : "");
-    return;
-  }
+  ButtonEventManager::ButtonEvent ev;
+  while (buttonEvents.consumeEvent(ev)) {
+    if (ev.button == MappedInputManager::Button::Back) {
+      if (ev.type == ButtonEventManager::PressType::Long) {
+        activityManager.goToFileBrowser(txt ? txt->getPath() : "");
+        return;
+      }
+      if (ev.type == ButtonEventManager::PressType::Short) {
+        onGoHome();
+        return;
+      }
+    }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-    onGoHome();
-    return;
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !headings.empty()) {
-    currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    startActivityForResult(
-        std::make_unique<MdReaderTocSelectionActivity>(renderer, mappedInput, headings, currentHeadingIndex),
-        [this](const ActivityResult& result) {
-          if (!result.isCancelled) {
-            currentPage = std::get<PageResult>(result.data).page;
-            currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
-            requestUpdate();
-          }
-        });
-    return;
-  }
-
-  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-  if (!prevTriggered && !nextTriggered) {
-    return;
-  }
-
-  const bool headingSkip = mappedInput.getHeldTime() > HEADING_SKIP_MS;
-  if (headingSkip && !headings.empty()) {
-    jumpToHeading(nextTriggered);
-    return;
-  }
-
-  if (prevTriggered && currentPage > 0) {
-    currentPage--;
-    currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
-    requestUpdate();
-  } else if (nextTriggered) {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
+    if (!headings.empty() && ev.button == MappedInputManager::Button::Confirm &&
+        ev.type == ButtonEventManager::PressType::Short) {
       currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
-      requestUpdate();
-    } else {
-      onGoHome();
+      ReaderUtils::enforceExitFullRefresh(renderer);
+      startActivityForResult(
+          std::make_unique<MdReaderTocSelectionActivity>(renderer, mappedInput, headings, currentHeadingIndex),
+          [this](const ActivityResult& result) {
+            if (!result.isCancelled) {
+              currentPage = std::get<PageResult>(result.data).page;
+              currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
+              requestUpdate();
+            }
+          });
+      return;
+    }
+
+    if ((ev.button == MappedInputManager::Button::PageBack || ev.button == MappedInputManager::Button::Left) &&
+        ev.type == ButtonEventManager::PressType::Short) {
+      if (currentPage > 0) {
+        currentPage--;
+        currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
+        requestUpdate();
+      }
+      return;
+    }
+
+    if ((ev.button == MappedInputManager::Button::PageForward || ev.button == MappedInputManager::Button::Right) &&
+        ev.type == ButtonEventManager::PressType::Short) {
+      if (currentPage < totalPages - 1) {
+        currentPage++;
+        currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
+        requestUpdate();
+      } else {
+        onGoHome();
+      }
+      return;
     }
   }
 }

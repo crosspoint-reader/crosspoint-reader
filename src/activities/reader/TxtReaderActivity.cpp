@@ -140,51 +140,55 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  // Long press BACK (1s+) goes to home screen
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    onGoHome();
-    return;
-  }
+  ButtonEventManager::ButtonEvent ev;
+  while (buttonEvents.consumeEvent(ev)) {
+    if (ev.button == MappedInputManager::Button::Back) {
+      if (ev.type == ButtonEventManager::PressType::Long) {
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        onGoHome();
+        return;
+      }
+      if (ev.type == ButtonEventManager::PressType::Short) {
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        finish();
+        return;
+      }
+    }
 
-  // Short press BACK returns to the calling activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    finish();
-    return;
-  }
+    if (!bookmarkStore.isEmpty() && ev.button == MappedInputManager::Button::Confirm &&
+        ev.type == ButtonEventManager::PressType::Short) {
+      ReaderUtils::enforceExitFullRefresh(renderer);
+      startActivityForResult(std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 const auto& starred = std::get<StarredPageResult>(result.data);
+                                 currentPage = starred.pageNumber;
+                                 if (currentPage >= totalPages) currentPage = totalPages - 1;
+                                 if (currentPage < 0) currentPage = 0;
+                               }
+                               requestUpdate();
+                             });
+      return;
+    }
 
-  // Open starred pages list via Confirm button
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !bookmarkStore.isEmpty()) {
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    startActivityForResult(std::make_unique<StarredPagesActivity>(renderer, mappedInput, bookmarkStore),
-                           [this](const ActivityResult& result) {
-                             if (!result.isCancelled) {
-                               const auto& starred = std::get<StarredPageResult>(result.data);
-                               currentPage = starred.pageNumber;
-                               if (currentPage >= totalPages) currentPage = totalPages - 1;
-                               if (currentPage < 0) currentPage = 0;
-                             }
-                             requestUpdate();
-                           });
-    return;
-  }
+    if ((ev.button == MappedInputManager::Button::PageBack || ev.button == MappedInputManager::Button::Left) &&
+        ev.type == ButtonEventManager::PressType::Short) {
+      if (currentPage > 0) {
+        currentPage--;
+        requestUpdate();
+      }
+      return;
+    }
 
-  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-  if (!prevTriggered && !nextTriggered) {
-    return;
-  }
-
-  if (prevTriggered && currentPage > 0) {
-    currentPage--;
-    requestUpdate();
-  } else if (nextTriggered) {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      requestUpdate();
-    } else {
-      finish();
+    if ((ev.button == MappedInputManager::Button::PageForward || ev.button == MappedInputManager::Button::Right) &&
+        ev.type == ButtonEventManager::PressType::Short) {
+      if (currentPage < totalPages - 1) {
+        currentPage++;
+        requestUpdate();
+      } else {
+        finish();
+      }
+      return;
     }
   }
 }

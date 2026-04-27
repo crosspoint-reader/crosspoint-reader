@@ -248,66 +248,64 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Long press CONFIRM (1s+) goes directly to KOReader sync when credentials are configured.
-  // We intentionally keep long-press on the richer compare flow so advanced
-  // conflict-resolution behavior stays available even after simplifying menu UX.
-  // Without credentials, fall through to the regular menu on release.
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS && KOREADER_STORE.hasCredentials()) {
-    launchKOReaderSync(SyncLaunchMode::COMPARE);
-    return;
-  }
-
-  // Short press CONFIRM enters reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-    const int currentPage = section ? section->currentPage + 1 : 0;
-    const int totalPages = section ? section->pageCount : 0;
-    float bookProgress = 0.0f;
-    if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-      bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+  ButtonEventManager::ButtonEvent ev;
+  while (buttonEvents.consumeEvent(ev)) {
+    if (ev.button == MappedInputManager::Button::Confirm) {
+      if (ev.type == ButtonEventManager::PressType::Long && KOREADER_STORE.hasCredentials()) {
+        launchKOReaderSync(SyncLaunchMode::COMPARE);
+        return;
+      }
+      if (ev.type == ButtonEventManager::PressType::Short) {
+        const int currentPage = section ? section->currentPage + 1 : 0;
+        const int totalPages = section ? section->pageCount : 0;
+        float bookProgress = 0.0f;
+        if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
+          const float chapterProgress =
+              static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+          bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+        }
+        const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+        const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
+                                                                       static_cast<uint16_t>(section->currentPage));
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        startActivityForResult(
+            std::make_unique<EpubReaderMenuActivity>(
+                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+                SETTINGS.orientation, !currentPageFootnotes.empty(), bookEmbeddedStyleOverride,
+                bookImageRenderingOverride, bookFontFamilyOverride, bookFontSizeOverride, SETTINGS.textDarkness,
+                !bookmarkStore.isEmpty(), isCurrentPageStarred),
+            [this](const ActivityResult& result) {
+              // Always apply orientation/darkness change even if the menu was cancelled
+              const auto& menu = std::get<MenuResult>(result.data);
+              applyOrientation(menu.orientation);
+              applyTextDarkness(menu.textDarkness);
+              toggleAutoPageTurn(menu.pageTurnOption);
+              applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride, menu.fontFamilyOverride,
+                                       menu.fontSizeOverride);
+              if (!result.isCancelled) {
+                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+              }
+            });
+        return;
+      }
     }
-    const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
-                                                                   static_cast<uint16_t>(section->currentPage));
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty(), bookEmbeddedStyleOverride,
-                               bookImageRenderingOverride, bookFontFamilyOverride, bookFontSizeOverride,
-                               SETTINGS.textDarkness, !bookmarkStore.isEmpty(), isCurrentPageStarred),
-                           [this](const ActivityResult& result) {
-                             // Always apply orientation/darkness change even if the menu was cancelled
-                             const auto& menu = std::get<MenuResult>(result.data);
-                             applyOrientation(menu.orientation);
-                             applyTextDarkness(menu.textDarkness);
-                             toggleAutoPageTurn(menu.pageTurnOption);
-                             applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride,
-                                                      menu.fontFamilyOverride, menu.fontSizeOverride);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                             }
-                           });
-  }
 
-  // Long press BACK (1s+) goes to home screen
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    onGoHome();
-    return;
-  }
-
-  // Short press BACK returns to the calling activity (or restores position if viewing footnote)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-    if (footnoteDepth > 0) {
-      restoreSavedPosition();
-      return;
+    if (ev.button == MappedInputManager::Button::Back) {
+      if (ev.type == ButtonEventManager::PressType::Long) {
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        onGoHome();
+        return;
+      }
+      if (ev.type == ButtonEventManager::PressType::Short) {
+        if (footnoteDepth > 0) {
+          restoreSavedPosition();
+          return;
+        }
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        finish();
+        return;
+      }
     }
-    ReaderUtils::enforceExitFullRefresh(renderer);
-    finish();
-    return;
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
@@ -324,65 +322,6 @@ void EpubReaderActivity::loop() {
       nextPageNumber = UINT16_MAX;
       requestUpdate();
     }
-    return;
-  }
-
-  const bool skipChapter = mappedInput.getHeldTime() > skipChapterMs;
-
-  // Chapter skip navigates by TOC entries, not spine boundaries.
-  // Spine items without their own TOC entry inherit the previous spine's tocIndex
-  // (see BookMetadataCache), so they're treated as continuations of the last chapter.
-  // At the boundaries: skipping forward past the last TOC entry jumps to end-of-book
-  // (clamped in render()); skipping backward before the first TOC entry jumps to the
-  // spine before the current chapter's first spine (clamped to 0 in render()).
-  if (skipChapter) {
-    lastPageTurnTime = millis();
-    {
-      RenderLock lock(*this);
-
-      if (section && section->pageCount > 0) {
-        const int curTocIndex = section->getTocIndexForPage(section->currentPage);
-        const int nextTocIndex = nextTriggered ? curTocIndex + 1 : curTocIndex - 1;
-
-        if (curTocIndex < 0) {
-          // No TOC entry for this spine, fall back to spine-level skip
-          nextPageNumber = 0;
-          currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
-          section.reset();
-        } else if (nextTocIndex >= 0 && nextTocIndex < epub->getTocItemsCount()) {
-          const int newSpineIndex = epub->getSpineIndexForTocIndex(nextTocIndex);
-
-          if (newSpineIndex == currentSpineIndex) {
-            if (const auto resolvedPage = section->getPageForTocIndex(nextTocIndex)) {
-              section->currentPage = *resolvedPage;
-            } else {
-              LOG_DBG("ERS", "No page boundary for TOC %d in spine %d, staying on current page", nextTocIndex,
-                      currentSpineIndex);
-            }
-          } else {
-            pendingTocIndex = nextTocIndex;
-            nextPageNumber = 0;
-            currentSpineIndex = newSpineIndex;
-            section.reset();
-          }
-        } else if (nextTriggered) {
-          // Beyond last TOC entry, go to end of book
-          nextPageNumber = 0;
-          currentSpineIndex = epub->getSpineItemsCount();
-          section.reset();
-        } else {
-          // Before first TOC entry, skip to spine before the current chapter
-          nextPageNumber = 0;
-          currentSpineIndex = epub->getTocItem(curTocIndex).spineIndex - 1;
-          section.reset();
-        }
-      } else {
-        nextPageNumber = 0;
-        currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
-        section.reset();
-      }
-    }
-    requestUpdate();
     return;
   }
 
