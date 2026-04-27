@@ -58,8 +58,8 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
         snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
                  info.currentPage, pct, ts);
       } else {
-        snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle,
-                 info.currentPage, pct, ts);
+        snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
+                 pct, ts);
       }
     } else {
       snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
