@@ -28,7 +28,7 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // compatibility / debugging only — byte offset is layout-independent so we
 // preserve the user's reading position across font/margin/spacing changes).
 constexpr uint32_t PROGRESS_MAGIC = 0x54585450;  // "TXTP"
-constexpr uint8_t PROGRESS_VERSION = 2;  // v2 adds extraParagraphSpacing
+constexpr uint8_t PROGRESS_VERSION = 2;          // v2 adds extraParagraphSpacing
 
 // Auto page-turn options in pages-per-minute. Index 0 disables; the rest mirror
 // the EPUB reader's choices so users see consistent values across formats.
@@ -507,11 +507,15 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, bool firstLineIsParagrap
   bool isFirstSourceLineOnPage = true;
 
   // Helper: try to add a wrapped segment. Returns true if it fit, false if
-  // adding it would overflow the viewport (caller must stop).
+  // adding it would overflow the viewport (caller must stop). Also caps on
+  // maxLinesPerPage as a paranoia guard against degenerate font metrics.
   auto tryAddLine = [&](const std::string& seg, bool endsParagraph, bool startsParagraph,
                         bool needsExtraSpacing) -> bool {
     int linePixelHeight = lineHeight + (needsExtraSpacing ? paragraphSpacingPx : 0);
     if (accumulatedY + linePixelHeight > viewportHeight && !outLines.empty()) {
+      return false;
+    }
+    if (static_cast<int>(outLines.size()) >= maxLinesPerPage) {
       return false;
     }
     outLines.push_back(seg);
@@ -553,16 +557,16 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, bool firstLineIsParagrap
     // line is by definition a new paragraph (preceded by '\n').
     const bool sourceLineStartsParagraph = isFirstSourceLineOnPage ? firstLineIsParagraphStart : true;
     // Extra spacing precedes a new paragraph that is NOT the page's first.
-    const bool needsExtraSpacingBefore =
-        cachedExtraParagraphSpacing && sourceLineStartsParagraph && !outLines.empty();
+    const bool needsExtraSpacingBefore = cachedExtraParagraphSpacing && sourceLineStartsParagraph && !outLines.empty();
 
     // Track position within this source line (in bytes from pos)
     size_t lineBytePos = 0;
     bool isFirstSegmentOfSourceLine = true;
     bool extraSpacingApplied = false;
 
-    // Word wrap if needed - use binary search for performance with SD fonts
-    while (!line.empty() && static_cast<int>(outLines.size()) < maxLinesPerPage) {
+    // Word wrap if needed - use binary search for performance with SD fonts.
+    // Inner-loop bound is enforced by tryAddLine (height + maxLinesPerPage cap).
+    while (!line.empty()) {
       // Use binary search to find break position (much faster than linear search)
       size_t breakPos = findBreakPosition(renderer, cachedFontId, line, viewportWidth);
 
