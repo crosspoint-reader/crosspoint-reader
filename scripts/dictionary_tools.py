@@ -263,7 +263,8 @@ def _scan_idx(idx_data: bytes, idx_oft_path: Path, word: str) -> tuple[int, int]
     start_pos = 0
     end_pos = len(idx_data)
 
-    # Try .cspt first.
+    # Try .cspt first; on bad magic / truncation, fall through to .oft.
+    cspt_used = False
     cspt_path = Path(str(idx_oft_path) + ".cspt")
     if cspt_path.exists():
         cspt_data = cspt_path.read_bytes()
@@ -290,8 +291,9 @@ def _scan_idx(idx_data: bytes, idx_oft_path: Path, word: str) -> tuple[int, int]
                     end_pos = struct.unpack_from("<I", cspt_data, next_off + prefix_len)[0]
                 else:
                     end_pos = len(idx_data)
+            cspt_used = True
 
-    elif idx_oft_path.exists():
+    if not cspt_used and idx_oft_path.exists():
         oft_data = idx_oft_path.read_bytes()
         table_bytes = oft_data[len(_OFT_HEADER):]
         count = len(table_bytes) // 4
@@ -497,9 +499,11 @@ def merge(sources: list[Path], output: Path) -> None:
         ifo_fields["synwordcount"] = str(syn_count)
     _write_ifo(output / f"{out_stem}.ifo", ifo_fields)
 
-    # .oft files
-    (output / f"{out_stem}.idx.oft").write_bytes(
-        _build_oft(idx_bytes, skip_bytes_after_null=8)
+    # .oft files + .idx.oft.cspt
+    idx_oft_bytes = _build_oft(idx_bytes, skip_bytes_after_null=8)
+    (output / f"{out_stem}.idx.oft").write_bytes(idx_oft_bytes)
+    (output / f"{out_stem}.idx.oft.cspt").write_bytes(
+        _build_cspt(idx_bytes, idx_oft_bytes)
     )
     if syn_count:
         syn_data = (output / f"{out_stem}.syn").read_bytes()

@@ -338,8 +338,8 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
             with open(stem + ".idx.oft", "wb") as f:
                 f.write(build_idx_oft(idx_bytes))
         if generate_cspt and generate_idx_oft:
-            oft_bytes = (stem + ".idx.oft")
-            with open(oft_bytes, "rb") as f:
+            oft_path = stem + ".idx.oft"
+            with open(oft_path, "rb") as f:
                 oft_data = f.read()
             with open(stem + ".idx.oft.cspt", "wb") as f:
                 f.write(build_cspt(idx_bytes, oft_data))
@@ -388,6 +388,8 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         exts.append(".idx")
         if generate_idx_oft:
             exts.append(".idx.oft")
+            if generate_cspt:
+                exts.append(".idx.oft.cspt")
     if syn_bytes:
         exts.append(".syn" + (".dz" if compress_syn else ""))
         if generate_syn_oft:

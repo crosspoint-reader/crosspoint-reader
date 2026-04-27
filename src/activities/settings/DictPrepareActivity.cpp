@@ -648,6 +648,9 @@ bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath,
     return false;
   }
 
+  // Short last page produces 1 sub-entry instead of 2, so the upper-bound
+  // denominator overshoots actual entries written. Correct it for 100% display.
+  step.total = entriesWritten;
   step.progress = entriesWritten;
   return true;
 }

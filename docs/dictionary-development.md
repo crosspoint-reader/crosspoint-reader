@@ -18,6 +18,7 @@ The dictionary feature uses the StarDict format. Relevant file types:
 | `.syn.dz` | Optional | Gzip-compressed .syn |
 | `.idx.oft` | Generated | Two-level offset index for fast .idx binary search |
 | `.syn.oft` | Generated | Two-level offset index for fast .syn binary search |
+| `.idx.oft.cspt` | Generated | CrossPoint optimized prefix index over `.idx`; primary fast path for word lookup. Falls back to `.idx.oft` when absent. See [CrossPoint Optimized Index format](#crosspoint-optimized-index-idxoftcspt) below. |
 
 Minimum for lookup: `.dict` + `.idx`. Without `.ifo`, HTML definitions render as plain text (no `sametypesequence` detection).
 
@@ -112,6 +113,7 @@ All prefixed `prep-` for alphabetical grouping in the on-device picker.
    - `entry_format`: `m` (plain text) or `h` (HTML)
    - `compress` / `compress_dict` / `compress_syn`: produce `.dz` files
    - `generate_oft` / `generate_idx_oft` / `generate_syn_oft`: produce `.oft` files
+   - `generate_cspt`: produce `.idx.oft.cspt` (requires `generate_idx_oft`)
    - `generate_ifo`: write `.ifo` (default true)
    - `generate_idx`: write `.idx` (default true)
    - `corrupt_dict`: write invalid bytes as `.dict.dz`
@@ -195,7 +197,7 @@ python3 scripts/dictionary_tools.py merge \
 
 | Subcommand | Purpose |
 |------------|---------|
-| `prep` | Decompress `.dict.dz`/`.syn.dz` and generate `.idx.oft`/`.syn.oft` offset files. Replicates on-device `DictPrepareActivity` behavior. |
+| `prep` | Decompress `.dict.dz`/`.syn.dz`, generate `.idx.oft`/`.syn.oft` offset files, and generate `.idx.oft.cspt` optimized prefix index. Replicates on-device `DictPrepareActivity` behavior. |
 | `lookup` | Exact-match word lookup in a prepared dictionary. Prints the definition to stdout. |
 | `merge` | Combine two or more StarDict dictionaries into a single monolithic dictionary. |
 
@@ -208,8 +210,43 @@ Behavior:
 - **Definitions**: When the same headword appears in multiple sources, definitions are concatenated in source order.
 - **Synonyms**: Full union -- all synonyms from all sources are preserved, with target indices remapped to the merged headword index.
 - **sametypesequence**: Inherited from the first source. A warning is printed if sources disagree.
-- **Generated files**: `.idx.oft` and `.syn.oft` are produced automatically.
+- **Generated files**: `.idx.oft`, `.syn.oft`, and `.idx.oft.cspt` are produced automatically.
 - **Requirements**: Source dictionaries must have decompressed `.dict` files (run `prep` first if needed). No external dependencies -- stdlib only.
+
+## CrossPoint Optimized Index (`.idx.oft.cspt`)
+
+The `.idx.oft.cspt` ("CrossPoint") file is a CrossPoint-specific optimized prefix index over `.idx`. The on-device `Dictionary::locate` tries it before falling back to `.idx.oft` and then a linear scan. Three producers must stay in sync:
+
+- Device: `DictPrepareActivity::generateCspt` and constants in `src/util/Dictionary.cpp`
+- Host CLI: `_build_cspt` in `scripts/dictionary_tools.py`
+- Test fixtures: `build_cspt` in `test/data/generate_dictionaries.py`
+
+### Header (12 bytes)
+
+| Offset | Size | Field | Value |
+|--------|------|-------|-------|
+| 0 | 4 | magic | `"CSPT"` |
+| 4 | 1 | version | `1` |
+| 5 | 1 | prefixLen | `16` (bytes of headword stored per entry) |
+| 6 | 2 | stride | `16` (LE; informational — see note below) |
+| 8 | 4 | entryCount | LE |
+
+### Entries (20 bytes each)
+
+| Offset | Size | Field |
+|--------|------|-------|
+| 0 | 16 | prefix (UTF-8, zero-padded if shorter than `prefixLen`) |
+| 16 | 4 | byte offset into `.idx` (LE `uint32`) |
+
+Entries are produced from the `.idx.oft` page boundaries: for each `.idx.oft` page (stride 32), the first headword and the headword 16 entries into the page are sampled. Entries are sorted by case-insensitive prefix in ascending order.
+
+### Lookup
+
+Case-insensitive binary search over prefixes finds the largest entry `i` whose prefix is `<= target`. The `.idx` is then scanned from `entries[i].byteOffset` to `entries[i+1].byteOffset` (or end of `.idx` for the last entry).
+
+### `stride` field
+
+`stride` is currently informational. Both readers (`Dictionary::binarySearchCspt`, `_scan_idx` in `dictionary_tools.py`) treat the producer-side stride of 16 as a hard-coded constant. Producers must emit `stride=16`. A future format change that varies stride must increment `version` and update both readers to honor the field.
 
 ## Known Limitations
 

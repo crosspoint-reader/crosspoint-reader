@@ -168,6 +168,8 @@ python3 scripts/dictionary_tools.py prep /path/to/dictionary-folder
 
 This is useful for pre-processing large dictionaries before copying them to the SD card, avoiding the longer on-device preparation time.
 
+The command produces (when applicable) `.dict`, `.syn`, `.idx.oft`, `.syn.oft`, and `.idx.oft.cspt`. The `.idx.oft` and `.idx.oft.cspt` files are accelerator indexes used at lookup time; if you copy a dictionary folder by hand, include them so the device skips on-device generation. The device will regenerate any that are missing on first use.
+
 ### Looking Up a Word
 
 Look up a word from the command line:
