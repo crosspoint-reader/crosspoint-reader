@@ -972,8 +972,15 @@ void TxtReaderActivity::loadProgress() {
   (void)savedExtraSpacing;
   (void)savedCompression;
 
+  // savedOffset is the one field with no value-comparison after the read
+  // (earlier fields are guarded by their own validation, so a truncated read
+  // there harmlessly mismatches and returns). Read it via file.read() and
+  // verify bytesRead so a truncated progress.bin doesn't leave savedOffset as
+  // stack garbage and silently jump the user to a random byte position.
   uint64_t savedOffset;
-  serialization::readPod(f, savedOffset);
+  if (f.read(reinterpret_cast<uint8_t*>(&savedOffset), sizeof(savedOffset)) != sizeof(savedOffset)) {
+    return;
+  }
   if (savedOffset < fileSize) {
     // Snap to a line boundary so the new layout doesn't render a partial
     // wrap segment at the top of the page.
