@@ -17,7 +17,7 @@ constexpr unsigned long GO_HOME_MS = 1000;
 inline bool saveProgress(Epub& epub, int spineIndex, int currentPage, int pageCount) {
   FsFile f;
   if (!Storage.openFileForWrite("ERS", epub.getCachePath() + "/progress.bin", f)) {
-    LOG_ERR("ERS", "Could not save progress!");
+    LOG_ERR("ERS", "Could not open progress file for write!");
     return false;
   }
   uint8_t data[6];
@@ -27,7 +27,11 @@ inline bool saveProgress(Epub& epub, int spineIndex, int currentPage, int pageCo
   data[3] = (currentPage >> 8) & 0xFF;
   data[4] = pageCount & 0xFF;
   data[5] = (pageCount >> 8) & 0xFF;
-  f.write(data, 6);
+  const size_t written = f.write(data, sizeof(data));
+  if (written != sizeof(data)) {
+    LOG_ERR("ERS", "Short write saving progress: %u/%u bytes", (unsigned)written, (unsigned)sizeof(data));
+    return false;
+  }
   LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
   return true;
 }

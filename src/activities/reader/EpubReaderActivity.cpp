@@ -410,6 +410,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             paragraphIndex = *pIdx;
           }
         }
+        // Best-effort: persist current position so cancel/upload paths return to the right page.
+        // If this fails, KOSync still runs — applying remote progress will write a fresh
+        // progress.bin, and the helper already logs the error for diagnostics.
         saveProgress(currentSpineIndex, currentPage, totalPages);
         activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
             renderer, mappedInput, epub, epub->getPath(), currentSpineIndex, currentPage, totalPages, paragraphIndex));
@@ -703,8 +706,8 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   }
 }
 
-void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
-  ReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
+  return ReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
