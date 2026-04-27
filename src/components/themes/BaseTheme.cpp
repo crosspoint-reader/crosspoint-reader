@@ -16,24 +16,14 @@
 
 // Internal constants
 namespace {
-constexpr int batteryPercentSpacing = 4;
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
 
 // Helper: draw battery icon at given position
 void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight, uint16_t percentage) {
-  // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
-  // Bottom line
-  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
-  // Left line
-  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
-  // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
+  // Draw battery outline (shared code)
+  BaseTheme::drawBatteryOutline(renderer, x, y, battWidth, rectHeight);
 
   const bool charging = gpio.isUsbConnected();
 
@@ -58,19 +48,36 @@ void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, i
 
   // Draw lightning bolt when charging (white/inverted on black fill for visibility)
   if (charging) {
-    const int boltX = x + 4;
-    const int boltY = y + 2;
-    renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
-    renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
-    renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);
-    renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
-    renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
-    renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);
-    renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
-    renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
+    BaseTheme::drawBatteryLightningBolt(renderer, x + 4, y + 2);
   }
 }
 }  // namespace
+
+void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
+  // Top line
+  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
+  // Bottom line
+  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
+  // Left line
+  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
+  // Battery end
+  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
+  renderer.drawPixel(x + battWidth - 1, y + 3);
+  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
+  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
+}
+
+void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY) {
+  // Draw lightning bolt (white/inverted on black fill for visibility)
+  renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
+  renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
+  renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);
+  renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
+  renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
+  renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);
+  renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
+  renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
+}
 
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
@@ -79,8 +86,8 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + BaseMetrics::values.batteryWidth, rect.y,
-                      percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x + BaseTheme::batteryPercentSpacing + BaseMetrics::values.batteryWidth,
+                      rect.y, percentageText.c_str());
   }
 
   drawBatteryIcon(renderer, rect.x, y, BaseMetrics::values.batteryWidth, rect.height, percentage);
@@ -97,9 +104,10 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
     const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
     // Clear the area where we're going to draw the text to prevent ghosting
     const auto textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.fillRect(rect.x - textWidth - batteryPercentSpacing, rect.y, textWidth, textHeight, false);
+    renderer.fillRect(rect.x - textWidth - BaseTheme::batteryPercentSpacing, rect.y, textWidth, textHeight, false);
     // Draw text to the left of the icon
-    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - BaseTheme::batteryPercentSpacing, rect.y,
+                      percentageText.c_str());
   }
 
   // Icon is already at correct position from rect.x
@@ -422,7 +430,6 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           bookWidth = rect.width / 2;  // Fallback
         }
       }
-      file.close();
     }
   }
 
@@ -476,7 +483,6 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
             renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
           }
         }
-        file.close();
       }
     }
 
@@ -642,7 +648,8 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   constexpr int margin = 15;
-  constexpr int y = 60;
+  // Scale y position proportionally to screen height (7.5% from top)
+  const int y = static_cast<int>(renderer.getScreenHeight() * 0.075f);
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int w = textWidth + margin * 2;
@@ -774,18 +781,90 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
 }
 
-void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
-  renderer.drawText(UI_12_FONT_ID, rect.x + 10, rect.y, "[");
-  renderer.drawText(UI_12_FONT_ID, rect.x + rect.width - 15, rect.y + rect.height, "]");
+void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
+                              int contentStartX, int contentWidth) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int lineY = rect.y + rect.height + lineHeight + metrics.verticalSpacing;
+  const int thickness = cursorMode ? 3 : 1;
+  if (contentWidth > 0) {
+    renderer.drawLine(rect.x + contentStartX, lineY, rect.x + contentStartX + contentWidth, lineY, thickness, true);
+  } else {
+    const int hPadding = 6;
+    const int lineW = textWidth + hPadding * 2;
+    renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, thickness,
+                      true);
+  }
 }
 
-void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label,
-                                const bool isSelected) const {
-  const int itemWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
-  const int textX = rect.x + (rect.width - itemWidth) / 2;
+void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
+                                const char* secondaryLabel, const KeyboardKeyType keyType,
+                                const bool inactiveSelection) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int cr = metrics.keyboardKeyCornerRadius;
+
   if (isSelected) {
-    renderer.drawText(UI_10_FONT_ID, textX - 6, rect.y, "[");
-    renderer.drawText(UI_10_FONT_ID, textX + itemWidth, rect.y, "]");
+    if (inactiveSelection) {
+      if (cr > 0) {
+        renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cr, Color::LightGray);
+      } else {
+        renderer.drawRect(rect.x, rect.y, rect.width, rect.height, 2, true);
+      }
+    } else if (keyType == KeyboardKeyType::Disabled) {
+      if (cr > 0) {
+        renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cr, Color::LightGray);
+      } else {
+        renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
+      }
+    } else {
+      if (cr > 0) {
+        renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cr, Color::Black);
+      } else {
+        renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+      }
+    }
+  } else if (keyType == KeyboardKeyType::Shift || keyType == KeyboardKeyType::Mode || keyType == KeyboardKeyType::Del ||
+             keyType == KeyboardKeyType::Space || keyType == KeyboardKeyType::Ok ||
+             keyType == KeyboardKeyType::Disabled) {
+    if (cr > 0) {
+      renderer.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 1, cr, true);
+    } else {
+      renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+    }
   }
-  renderer.drawText(UI_10_FONT_ID, textX, rect.y, label);
+
+  const bool invert = isSelected && !inactiveSelection;
+
+  if (keyType == KeyboardKeyType::Space) {
+    const int lineHalfWidth = rect.width * 3 / 10;
+    const int centerX = rect.x + rect.width / 2;
+    const int lineY = rect.y + rect.height / 2 + 3;
+    renderer.drawLine(centerX - lineHalfWidth, lineY, centerX + lineHalfWidth, lineY, 3, !invert);
+    return;
+  }
+
+  if (keyType == KeyboardKeyType::Del) {
+    const int centerX = rect.x + rect.width / 2;
+    const int centerY = rect.y + rect.height / 2;
+    const int arrowLen = rect.width / 4;
+    const int arrowHead = arrowLen / 2;
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX + arrowLen / 2, centerY, 3, !invert);
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY - arrowHead, 3,
+                      !invert);
+    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY + arrowHead, 3,
+                      !invert);
+    return;
+  }
+
+  const bool hasSecondary = secondaryLabel != nullptr && secondaryLabel[0] != '\0';
+  const int itemWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
+  const int textX = rect.x + (rect.width - itemWidth) / 2;
+  const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+
+  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !invert);
+
+  if (hasSecondary) {
+    const int secWidth = renderer.getTextWidth(SMALL_FONT_ID, secondaryLabel);
+    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - secWidth - 1, rect.y, secondaryLabel, !invert);
+  }
 }

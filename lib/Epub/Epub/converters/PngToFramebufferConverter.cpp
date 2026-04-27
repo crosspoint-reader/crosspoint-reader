@@ -19,37 +19,23 @@ namespace {
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
 // The file I/O callbacks receive the FsFile* via pFile->fHandle (set by pngOpen()).
 struct PngContext {
-  GfxRenderer* renderer;
-  const RenderConfig* config;
-  int screenWidth;
-  int screenHeight;
+  GfxRenderer* renderer{nullptr};
+  const RenderConfig* config{nullptr};
+  int screenWidth{0};
+  int screenHeight{0};
 
   // Scaling state
-  float scale;
-  int srcWidth;
-  int srcHeight;
-  int dstWidth;
-  int dstHeight;
-  int lastDstY;  // Track last rendered destination Y to avoid duplicates
+  float scale{1.f};
+  int srcWidth{0};
+  int srcHeight{0};
+  int dstWidth{0};
+  int dstHeight{0};
+  int lastDstY{-1};  // Track last rendered destination Y to avoid duplicates
 
   PixelCache cache;
-  bool caching;
+  bool caching{false};
 
-  uint8_t* grayLineBuffer;
-
-  PngContext()
-      : renderer(nullptr),
-        config(nullptr),
-        screenWidth(0),
-        screenHeight(0),
-        scale(1.0f),
-        srcWidth(0),
-        srcHeight(0),
-        dstWidth(0),
-        dstHeight(0),
-        lastDstY(-1),
-        caching(false),
-        grayLineBuffer(nullptr) {}
+  uint8_t* grayLineBuffer{nullptr};
 };
 
 // File I/O callbacks use pFile->fHandle to access the FsFile*,

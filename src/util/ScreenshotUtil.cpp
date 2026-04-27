@@ -86,7 +86,7 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   char filename[256];
   buildFilename(info, filename, sizeof(filename));
 
-  bool saved = saveFramebufferAsBmp(filename, fb, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT);
+  bool saved = saveFramebufferAsBmp(filename, fb, renderer.getDisplayWidth(), renderer.getDisplayHeight());
   if (saved) {
     LOG_DBG("SCR", "Screenshot saved to %s", filename);
   } else {
@@ -96,7 +96,7 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 
   // Display a border around the screen to indicate a screenshot was taken
   if (renderer.storeBwBuffer()) {
-    renderer.drawRect(6, 6, HalDisplay::DISPLAY_HEIGHT - 12, HalDisplay::DISPLAY_WIDTH - 12, 2, true);
+    renderer.drawRect(6, 6, renderer.getDisplayHeight() - 12, renderer.getDisplayWidth() - 12, 2, true);
     renderer.displayBuffer();
     delay(1000);
     renderer.restoreBwBuffer();
@@ -132,7 +132,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
 
   BmpHeader header;
 
-  createBmpHeader(&header, phyWidth, phyHeight);
+  createBmpHeader(&header, phyWidth, phyHeight, BmpRowOrder::BottomUp);
 
   bool write_error = false;
   if (file.write(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
@@ -140,16 +140,18 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
   }
 
   if (write_error) {
+    // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove(filename);
     return false;
   }
 
   const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
-  // Max row size for 480px width = 60 bytes; use fixed buffer to avoid VLA
-  constexpr size_t kMaxRowSize = 64;
+  // Max row size for 528px height (X3) after rotation = 68 bytes; use fixed buffer to avoid VLA
+  constexpr size_t kMaxRowSize = 68;
   if (rowSizePadded > kMaxRowSize) {
     LOG_ERR("SCR", "Row size %u exceeds buffer capacity", rowSizePadded);
+    // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove(filename);
     return false;
@@ -176,6 +178,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     memset(rowBuffer, 0, rowSizePadded);  // Clear the buffer for the next row
   }
 
+  // Explicitly close() file before calling Storage.remove()
   file.close();
 
   if (write_error) {
