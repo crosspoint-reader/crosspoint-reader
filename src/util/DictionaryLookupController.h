@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -92,6 +93,10 @@ class DictionaryLookupController {
   const DictLocation& getFoundLocation() const { return foundLocation; }
   FoundStatus getFoundStatus() const { return foundStatus; }
 
+  // Record any pending history entry (deferred from lookup to avoid blocking).
+  // Call this after the definition is displayed to the user.
+  void recordPendingHistory();
+
  private:
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
@@ -107,6 +112,12 @@ class DictionaryLookupController {
   std::string foundWord;
   DictLocation foundLocation;
   std::string altFormWord;
+  std::string pendingHistoryWord;  // Deferred history recording
+
+  // CLEANUP: on Auto-only commit, delete only this line (threshold/cache/method below drive Auto mode — keep)
+  static constexpr uint32_t AUTO_POPUP_CSPT_ENTRY_THRESHOLD = 50000;
+  uint32_t csptEntryCountCached = UINT32_MAX;  // sentinel: not yet read
+  bool shouldShowPopup();
 
   volatile int lookupProgress = 0;
   volatile bool lookupDone = false;

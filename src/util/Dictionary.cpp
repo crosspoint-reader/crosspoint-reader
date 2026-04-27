@@ -22,6 +22,16 @@ constexpr char GLOBAL_DICT_DIR[] = "/.crosspoint";
 static constexpr uint32_t OFT_HEADER_SIZE = 38;
 static constexpr uint32_t OFT_STRIDE = 32;  // words per page
 
+// .idx.oft.cspt file constants (CrossPoint optimized index).
+// Header: 12 bytes = magic(4) + version(1) + prefixLen(1) + stride(2) + entryCount(4).
+// Each entry: prefixLen bytes (null-padded headword) + 4-byte LE idx offset = 20 bytes.
+static constexpr uint8_t CSPT_MAGIC[4] = {'C', 'S', 'P', 'T'};
+static constexpr uint8_t CSPT_VERSION = 1;
+static constexpr uint8_t CSPT_PREFIX_LEN = 16;
+static constexpr uint16_t CSPT_STRIDE = 16;
+static constexpr uint32_t CSPT_HEADER_SIZE = 12;
+static constexpr uint32_t CSPT_ENTRY_SIZE = CSPT_PREFIX_LEN + 4;  // 20 bytes
+
 // ---------------------------------------------------------------------------
 // Path management
 // ---------------------------------------------------------------------------
@@ -296,6 +306,83 @@ static int cistrcmp(const char* a, const char* b) {
   return std::tolower(static_cast<unsigned char>(*a)) - std::tolower(static_cast<unsigned char>(*b));
 }
 
+// CLEANUP: on Auto-only commit, delete only this line (readCsptEntryCount below stays)
+uint32_t Dictionary::readCsptEntryCount(const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return 0;
+  FsFile cspt;
+  if (!Storage.openFileForRead("DICT", DictPaths(folderPath).idxOftCspt().c_str(), cspt)) return 0;
+  uint8_t hdr[CSPT_HEADER_SIZE];
+  cspt.seekSet(0);
+  const bool read_ok = (cspt.read(hdr, CSPT_HEADER_SIZE) == static_cast<int>(CSPT_HEADER_SIZE));
+  cspt.close();
+  if (!read_ok) return 0;
+  if (memcmp(hdr, CSPT_MAGIC, 4) != 0 || hdr[4] != CSPT_VERSION) return 0;
+  uint32_t entryCount;
+  memcpy(&entryCount, hdr + 8, 4);  // LE, matches binarySearchCspt
+  return entryCount;
+}
+
+bool Dictionary::binarySearchCspt(FsFile& cspt, const char* target, uint32_t idxFileSize, uint32_t* startByte,
+                                  uint32_t* endByte) {
+  // Read and validate header (12 bytes).
+  uint8_t hdr[CSPT_HEADER_SIZE];
+  cspt.seekSet(0);
+  if (cspt.read(hdr, CSPT_HEADER_SIZE) != static_cast<int>(CSPT_HEADER_SIZE)) return false;
+  if (memcmp(hdr, CSPT_MAGIC, 4) != 0 || hdr[4] != CSPT_VERSION) return false;
+
+  const uint8_t prefixLen = hdr[5];
+  uint16_t stride;
+  memcpy(&stride, hdr + 6, 2);  // LE
+  uint32_t entryCount;
+  memcpy(&entryCount, hdr + 8, 4);  // LE
+
+  if (entryCount == 0 || prefixLen == 0 || prefixLen > 128) {
+    *startByte = 0;
+    *endByte = idxFileSize;
+    return true;
+  }
+
+  const uint32_t entrySize = prefixLen + 4;
+
+  // Binary search: find last entry whose prefix <= target (case-insensitive).
+  uint32_t lo = 0, hi = entryCount - 1;
+  uint8_t entry[128 + 4];  // prefixLen capped at 128 above
+
+  while (lo < hi) {
+    uint32_t mid = lo + (hi - lo + 1) / 2;
+    cspt.seekSet(CSPT_HEADER_SIZE + mid * entrySize);
+    if (cspt.read(entry, entrySize) != static_cast<int>(entrySize)) return false;
+
+    // Null-terminate prefix for cistrcmp (prefix is already null-padded if shorter).
+    entry[prefixLen] = '\0';
+    if (cistrcmp(reinterpret_cast<const char*>(entry), target) > 0) {
+      hi = mid - 1;
+    } else {
+      lo = mid;
+    }
+  }
+
+  // Read the matched entry to get idxOffset.
+  cspt.seekSet(CSPT_HEADER_SIZE + lo * entrySize);
+  if (cspt.read(entry, entrySize) != static_cast<int>(entrySize)) return false;
+
+  uint32_t idxOffset;
+  memcpy(&idxOffset, entry + prefixLen, 4);  // LE
+  *startByte = idxOffset;
+
+  // End bound: read next entry's idxOffset, or use idxFileSize for last entry.
+  if (lo + 1 < entryCount) {
+    cspt.seekSet(CSPT_HEADER_SIZE + (lo + 1) * entrySize);
+    if (cspt.read(entry, entrySize) != static_cast<int>(entrySize)) return false;
+    memcpy(endByte, entry + prefixLen, 4);  // LE
+  } else {
+    *endByte = idxFileSize;
+  }
+
+  return true;
+}
+
 void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
                                 uint32_t* endByte) {
   const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());
@@ -375,10 +462,19 @@ DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbac
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  FsFile oft;
-  if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
-    findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
-    oft.close();
+  // Try .cspt first (CrossPoint optimized index), fall back to .oft.
+  bool boundsResolved = false;
+  FsFile cspt;
+  if (Storage.openFileForRead("DICT", dp.idxOftCspt().c_str(), cspt)) {
+    boundsResolved = binarySearchCspt(cspt, word.c_str(), idxFileSize, &startByte, &endByte);
+    cspt.close();
+  }
+  if (!boundsResolved) {
+    FsFile oft;
+    if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
+      findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
+      oft.close();
+    }
   }
 
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 70);

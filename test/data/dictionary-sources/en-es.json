@@ -8,6 +8,7 @@
     "entry_format": "m",
     "compress": false,
     "generate_oft": true,
+    "generate_cspt": true,
     "ifo_version": "stardict-2.4.2"
   },
   "entries": [

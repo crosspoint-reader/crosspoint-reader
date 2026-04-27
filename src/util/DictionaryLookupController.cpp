@@ -8,6 +8,7 @@
 
 #include "../activities/Activity.h"
 #include "../activities/reader/DictionarySuggestionsActivity.h"
+#include "CrossPointSettings.h"
 #include "DictLookupTask.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -30,7 +31,16 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   lookupCancelRequested = false;
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
-  owner.requestUpdateAndWait();
+  // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
+  if (shouldShowPopup()) {
+    // Toast overlay: draw popup directly over whatever the user is currently viewing.
+    // RenderLock serializes against the render task — without it, a prior requestUpdate()
+    // (e.g. from navigation) may still be mid-refresh, and concurrent framebuffer / SPI
+    // access from two tasks crashes the e-ink driver.
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
   task = std::make_unique<DictLookupTask>(*this);
   task->start("DictLookup", 4096, 1);
 }
@@ -68,9 +78,8 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
         foundWord = lookupWord;
         foundStatus = nextIsSuggestion ? FoundStatus::Suggestion : FoundStatus::Direct;
         nextIsSuggestion = false;
-        if (recordHistory_ && !cachePath.empty()) {
-          LookupHistory::addWord(cachePath, lookupWord, toHistStatus(foundStatus));
-        }
+        // Defer history recording - will be done by recordPendingHistory() after definition is displayed
+        pendingHistoryWord = recordHistory_ ? lookupWord : "";
         return LookupEvent::FoundDefinition;
       }
 
@@ -156,12 +165,10 @@ bool DictionaryLookupController::render() {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   if (state == LookupState::LookingUp) {
-    Rect popupLayout = GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
-    if (lookupProgress > 0) {
-      GUI.fillPopupProgress(renderer, popupLayout, lookupProgress);
-    }
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return true;
+    // Popup is drawn inline as a toast in startLookup(); nothing to do from the render task.
+    // Returning false lets the activity's normal render run (e.g. on cancel, the page repaints
+    // which naturally wipes the toast overlay).
+    return false;
   }
 
   if (state == LookupState::AltFormPrompt) {
@@ -223,8 +230,12 @@ void DictionaryLookupController::lookupOrPopup(const std::string& rawWord) {
 }
 
 void DictionaryLookupController::showNoWordPopup() {
-  GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  {
+    // Serialize with render task — see comment in startLookup() for the race this prevents.
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_DICT_NO_WORD));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   owner.requestUpdate();
 }
@@ -254,7 +265,7 @@ void DictionaryLookupController::handleLookupFailed() {
 void DictionaryLookupController::progressCallback(void* ctx, int percent) {
   auto* self = static_cast<DictionaryLookupController*>(ctx);
   self->lookupProgress = percent;
-  self->owner.requestUpdate(true);
+  // Intentionally no requestUpdate() here — popup is a single static frame.
 }
 
 bool DictionaryLookupController::cancelCallback(void* ctx) {
@@ -269,5 +280,30 @@ void DictionaryLookupController::runLookup() {
   foundLocation = Dictionary::locate(lookupWord, cbs, cachePath.c_str());
   lookupCancelled = lookupCancelRequested;
   lookupDone = true;
-  owner.requestUpdate(true);
+  // Don't call requestUpdate(true) here - it triggers an unnecessary e-ink refresh
+  // of the word select activity before transitioning to the definition activity.
+  // The main loop polls lookupDone every ~10ms, so response time is still fast.
+}
+
+void DictionaryLookupController::recordPendingHistory() {
+  if (!pendingHistoryWord.empty() && !cachePath.empty()) {
+    LookupHistory::addWord(cachePath, pendingHistoryWord, toHistStatus(foundStatus));
+    pendingHistoryWord.clear();
+  }
+}
+
+// CLEANUP: on Auto-only commit, delete this line AND collapse the switch below to keep only the DBG_POPUP_AUTO branch
+bool DictionaryLookupController::shouldShowPopup() {
+  switch (SETTINGS.debugLookupPopupMode) {
+    case CrossPointSettings::DBG_POPUP_ON:
+      return true;
+    case CrossPointSettings::DBG_POPUP_OFF:
+      return false;
+    case CrossPointSettings::DBG_POPUP_AUTO:
+    default:
+      if (csptEntryCountCached == UINT32_MAX) {
+        csptEntryCountCached = Dictionary::readCsptEntryCount(cachePath.c_str());
+      }
+      return csptEntryCountCached == 0 || csptEntryCountCached > AUTO_POPUP_CSPT_ENTRY_THRESHOLD;
+  }
 }

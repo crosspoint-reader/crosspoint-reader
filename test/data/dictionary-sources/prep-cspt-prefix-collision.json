@@ -1,0 +1,51 @@
+{
+  "_comment": "Tests .cspt prefix collision: words sharing 16-char prefixes require overflow scan. Device must generate .idx.oft and .idx.oft.cspt, then find each word despite prefix truncation.",
+  "meta": {
+    "name": "prep-cspt-prefix-collision",
+    "bookname": "CSPT Prefix Collision Test",
+    "output_dir": "test/dictionaries/prep-cspt-prefix-collision",
+    "entry_format": "m",
+    "compress": false,
+    "generate_idx_oft": false,
+    "generate_cspt": false,
+    "ifo_version": "2.4.2"
+  },
+  "entries": [
+    {
+      "headword": "antidisestablish",
+      "definition": "Short prefix control word."
+    },
+    {
+      "headword": "internationalism",
+      "definition": "First word in collision pair: shares 16-char prefix with internationalize."
+    },
+    {
+      "headword": "internationalize",
+      "definition": "Second word in collision pair: shares 16-char prefix with internationalism."
+    },
+    {
+      "headword": "internationalized",
+      "definition": "Third word in collision group: also shares the 16-char prefix."
+    },
+    {
+      "headword": "microelectronics",
+      "definition": "Another collision: shares prefix with microelectronic."
+    },
+    {
+      "headword": "microelectromechanical",
+      "definition": "Collision: shares 16-char prefix 'microelectromech' with next entry."
+    },
+    {
+      "headword": "microelectromechanics",
+      "definition": "Collision: shares 16-char prefix 'microelectromech' with previous entry."
+    },
+    {
+      "headword": "simple",
+      "definition": "A short word with no collision risk."
+    },
+    {
+      "headword": "test",
+      "definition": "Another short control word."
+    }
+  ]
+}

@@ -45,6 +45,79 @@ def _build_oft(data: bytes, skip_bytes_after_null: int) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# .cspt constants — CrossPoint optimized index
+# ---------------------------------------------------------------------------
+
+_CSPT_MAGIC = b"CSPT"
+_CSPT_VERSION = 1
+_CSPT_PREFIX_LEN = 16
+_CSPT_STRIDE = 16
+_CSPT_HEADER_SIZE = 12
+_CSPT_ENTRY_SIZE = _CSPT_PREFIX_LEN + 4  # 20 bytes
+
+
+def _build_cspt(idx_data: bytes, oft_data: bytes) -> bytes:
+    """Build .idx.oft.cspt from .idx data and .idx.oft data."""
+    # Parse OFT: header (38 bytes) + LE uint32 page offsets + sentinel.
+    table_bytes = oft_data[len(_OFT_HEADER):]
+    # Last entry is sentinel (total file size); preceding entries are page boundaries.
+    num_oft_entries = len(table_bytes) // 4
+    if num_oft_entries > 0:
+        num_oft_entries -= 1  # exclude sentinel
+
+    # Collect page start offsets: page 0 is implicit at byte 0,
+    # remaining pages from OFT entries.
+    page_offsets = [0]
+    for i in range(num_oft_entries):
+        off = struct.unpack_from("<I", table_bytes, i * 4)[0]
+        page_offsets.append(off)
+
+    # Walk each 32-entry page and sample entries at positions 0 and 16.
+    entries = []
+    for page_off in page_offsets:
+        pos = page_off
+        # Sub-entry 0: first word of the page.
+        if pos >= len(idx_data):
+            break
+        try:
+            null = idx_data.index(b"\x00", pos)
+        except ValueError:
+            break
+        word = idx_data[pos:null]
+        prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
+        entries.append(prefix + struct.pack("<I", pos))
+
+        # Skip 16 entries to reach sub-entry 1.
+        scan_pos = pos
+        for _ in range(16):
+            try:
+                null = idx_data.index(b"\x00", scan_pos)
+            except ValueError:
+                scan_pos = len(idx_data)
+                break
+            scan_pos = null + 1 + 8  # skip null + 8-byte suffix
+        if scan_pos >= len(idx_data):
+            continue
+        try:
+            null = idx_data.index(b"\x00", scan_pos)
+        except ValueError:
+            continue
+        word = idx_data[scan_pos:null]
+        prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
+        entries.append(prefix + struct.pack("<I", scan_pos))
+
+    # Build header.
+    entry_count = len(entries)
+    hdr = _CSPT_MAGIC
+    hdr += struct.pack("<B", _CSPT_VERSION)
+    hdr += struct.pack("<B", _CSPT_PREFIX_LEN)
+    hdr += struct.pack("<H", _CSPT_STRIDE)
+    hdr += struct.pack("<I", entry_count)
+
+    return hdr + b"".join(entries)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -147,11 +220,13 @@ def prep(source_folder: Path) -> None:
     # Step 3: Generate .idx.oft
     idx     = out_dir / f"{stem}.idx"
     idx_oft = out_dir / f"{stem}.idx.oft"
+    idx_oft_regenerated = False
     if idx.exists() and not idx_oft.exists():
         print(f"  Generating {idx_oft.name} ...", end=" ", flush=True)
         idx_oft.write_bytes(_build_oft(idx.read_bytes(), skip_bytes_after_null=8))
         print(f"{idx_oft.stat().st_size} bytes")
         steps_run += 1
+        idx_oft_regenerated = True
 
     # Step 4: Generate .syn.oft (.syn may have just been created in step 2)
     syn_oft = out_dir / f"{stem}.syn.oft"
@@ -159,6 +234,18 @@ def prep(source_folder: Path) -> None:
         print(f"  Generating {syn_oft.name} ...", end=" ", flush=True)
         syn_oft.write_bytes(_build_oft(syn.read_bytes(), skip_bytes_after_null=4))
         print(f"{syn_oft.stat().st_size} bytes")
+        steps_run += 1
+
+    # Step 5: Generate .idx.oft.cspt (requires .idx and .idx.oft).
+    # Regenerate if .cspt is missing OR if .idx.oft was just rebuilt this run
+    # (stale .cspt). Mirrors DictPrepareActivity::detectSteps on-device.
+    idx_cspt = out_dir / f"{stem}.idx.oft.cspt"
+    if idx.exists() and idx_oft.exists() and (not idx_cspt.exists() or idx_oft_regenerated):
+        if idx_cspt.exists():
+            idx_cspt.unlink()
+        print(f"  Generating {idx_cspt.name} ...", end=" ", flush=True)
+        idx_cspt.write_bytes(_build_cspt(idx.read_bytes(), idx_oft.read_bytes()))
+        print(f"{idx_cspt.stat().st_size} bytes")
         steps_run += 1
 
     if steps_run == 0:
@@ -176,15 +263,44 @@ def _scan_idx(idx_data: bytes, idx_oft_path: Path, word: str) -> tuple[int, int]
     """
     Search idx_data for an exact match of word.
     Returns (dict_offset, size) on match, None if not found.
-    Uses idx_oft_path as a jump table (if present) to skip ahead before scanning.
+    Uses .idx.oft.cspt if present, then .idx.oft as fallback.
     """
     target = word.encode("utf-8")
     start_pos = 0
+    end_pos = len(idx_data)
 
-    if idx_oft_path.exists():
+    # Try .cspt first; on bad magic / truncation, fall through to .oft.
+    cspt_used = False
+    cspt_path = Path(str(idx_oft_path) + ".cspt")
+    if cspt_path.exists():
+        cspt_data = cspt_path.read_bytes()
+        if len(cspt_data) >= _CSPT_HEADER_SIZE and cspt_data[:4] == _CSPT_MAGIC:
+            prefix_len = cspt_data[4 + 1]  # byte 5
+            entry_count = struct.unpack_from("<I", cspt_data, 8)[0]
+            entry_size = prefix_len + 4
+
+            if entry_count > 0:
+                lo, hi = 0, entry_count - 1
+                while lo < hi:
+                    mid = lo + (hi - lo + 1) // 2
+                    off = _CSPT_HEADER_SIZE + mid * entry_size
+                    prefix = cspt_data[off:off + prefix_len].rstrip(b"\x00")
+                    if prefix.lower() > target.lower():
+                        hi = mid - 1
+                    else:
+                        lo = mid
+
+                off = _CSPT_HEADER_SIZE + lo * entry_size
+                start_pos = struct.unpack_from("<I", cspt_data, off + prefix_len)[0]
+                if lo + 1 < entry_count:
+                    next_off = _CSPT_HEADER_SIZE + (lo + 1) * entry_size
+                    end_pos = struct.unpack_from("<I", cspt_data, next_off + prefix_len)[0]
+                else:
+                    end_pos = len(idx_data)
+            cspt_used = True
+
+    if not cspt_used and idx_oft_path.exists():
         oft_data = idx_oft_path.read_bytes()
-        # Header is 38 bytes; remaining bytes are uint32 LE file positions,
-        # one per _STRIDE entries (position of the start of the next stride block).
         table_bytes = oft_data[len(_OFT_HEADER):]
         count = len(table_bytes) // 4
         best = 0
@@ -196,7 +312,6 @@ def _scan_idx(idx_data: bytes, idx_oft_path: Path, word: str) -> tuple[int, int]
                 null = idx_data.index(b"\x00", pos)
             except ValueError:
                 break
-            # Case-fold comparison to find a safe lower bound in the sorted index.
             if idx_data[pos:null].lower() <= target.lower():
                 best = pos
             else:
@@ -204,7 +319,7 @@ def _scan_idx(idx_data: bytes, idx_oft_path: Path, word: str) -> tuple[int, int]
         start_pos = best
 
     pos = start_pos
-    while pos < len(idx_data):
+    while pos < end_pos:
         try:
             null = idx_data.index(b"\x00", pos)
         except ValueError:
@@ -390,9 +505,11 @@ def merge(sources: list[Path], output: Path) -> None:
         ifo_fields["synwordcount"] = str(syn_count)
     _write_ifo(output / f"{out_stem}.ifo", ifo_fields)
 
-    # .oft files
-    (output / f"{out_stem}.idx.oft").write_bytes(
-        _build_oft(idx_bytes, skip_bytes_after_null=8)
+    # .oft files + .idx.oft.cspt
+    idx_oft_bytes = _build_oft(idx_bytes, skip_bytes_after_null=8)
+    (output / f"{out_stem}.idx.oft").write_bytes(idx_oft_bytes)
+    (output / f"{out_stem}.idx.oft.cspt").write_bytes(
+        _build_cspt(idx_bytes, idx_oft_bytes)
     )
     if syn_count:
         syn_data = (output / f"{out_stem}.syn").read_bytes()

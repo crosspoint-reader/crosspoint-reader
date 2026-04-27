@@ -6,7 +6,7 @@ No word lookups are needed in this chapter.</p>
 
 <h2>Offline Preparation: prep-all dictionary</h2>
 <p>Run the offline pre-processor on the host to verify that
-<code>dictionary_tools.py</code> correctly applies all four preparation steps.
+<code>dictionary_tools.py</code> correctly applies all five preparation steps.
 This is a host-only check — no device required.</p>
 <p><strong>Note:</strong> Test E in this chapter tests on-device processing using the
 <em>raw</em> (unprocessed) <em>prep-all</em> dictionary. Do not copy the output of this
@@ -16,26 +16,33 @@ offline step to the SD card before running Test E.</p>
 <li>Run: <code>python3 scripts/dictionary_tools.py prep test/dictionaries/prep-all</code></li>
 <li>Verify output folder <code>dictionaries/prep-all/</code> contains:
   <code>prep-all.dict</code>, <code>prep-all.idx</code>, <code>prep-all.idx.oft</code>,
+  <code>prep-all.idx.oft.cspt</code>,
   <code>prep-all.syn</code>, <code>prep-all.syn.oft</code>, <code>prep-all.ifo</code>
 </li>
 </ol>
 
-<h2>Test A: Generate dictionary offset file only</h2>
+<h2>Test A: Generate dictionary offset file then generate optimized index</h2>
 <p>This test first verifies that pressing <em>Back</em> at the confirmation screen
 cancels without starting any processing, then completes the preparation.
-Confirmation screen must list exactly one step. That step must complete with
-[OK] and <em>Preparation complete</em> must appear.</p>
+Confirmation screen must list exactly two steps in order.
+Each step must complete with [OK] before the next begins.
+<em>Preparation complete</em> must appear after both finish.</p>
 <h3>Dictionary</h3>
 <p><em>prep-gen-idx</em></p>
 <h3>Steps</h3>
 <ol>
 <li>Select <em>prep-gen-idx</em> in the picker.</li>
-<li>Confirmation screen lists: <em>Generate dictionary offset file</em></li>
+<li>Confirmation screen lists in order:
+  <ul>
+    <li><em>Generate dictionary offset file</em></li>
+    <li><em>Generate optimized index</em></li>
+  </ul>
+</li>
 <li>Press <em>Back</em>. Picker returns. No processing started.</li>
 <li>Select <em>prep-gen-idx</em> again.</li>
-<li>Confirmation screen lists: <em>Generate dictionary offset file</em></li>
+<li>Confirmation screen lists the same two steps in order.</li>
 <li>Press <em>Confirm</em>.</li>
-<li>Step completes: [OK] <em>Generate dictionary offset file</em></li>
+<li>Both steps run sequentially, each showing [ &gt; ] then [OK].</li>
 <li><em>Preparation complete</em>.</li>
 </ol>
 
@@ -87,10 +94,10 @@ on completion. <em>Preparation complete</em> must appear after both finish.</p>
 <li><em>Preparation complete</em>.</li>
 </ol>
 
-<h2>Test E: All four preparation steps</h2>
-<p>Confirmation screen must list exactly four steps in order.
+<h2>Test E: All five preparation steps</h2>
+<p>Confirmation screen must list exactly five steps in order.
 Each step must complete with [OK] before the next begins.
-<em>Preparation complete</em> must appear after all four finish.</p>
+<em>Preparation complete</em> must appear after all five finish.</p>
 <h3>Dictionary</h3>
 <p><em>prep-all</em></p>
 <h3>Note</h3>
@@ -106,10 +113,33 @@ device must not sleep during preparation or the test will be interrupted.</p>
     <li><em>Extract alt forms</em></li>
     <li><em>Generate dictionary offset file</em></li>
     <li><em>Generate alt-form offset file</em></li>
+    <li><em>Generate optimized index</em></li>
   </ul>
 </li>
 <li>Press <em>Confirm</em>.</li>
-<li>All four steps run sequentially.</li>
+<li>All five steps run sequentially.</li>
+<li><em>Preparation complete</em>.</li>
+</ol>
+
+<h2>Test F: Generate dictionary offset file then generate optimized index</h2>
+<p>Confirmation screen must list exactly two steps in order.
+Each step must show in-progress bold while running, then [OK] regular
+on completion. <em>Preparation complete</em> must appear after both finish.
+This test prepares the <em>prep-cspt-prefix-collision</em> dictionary so it
+is available for Ch 21.</p>
+<h3>Dictionary</h3>
+<p><em>prep-cspt-prefix-collision</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>prep-cspt-prefix-collision</em> in the picker.</li>
+<li>Confirmation screen lists in order:
+  <ul>
+    <li><em>Generate dictionary offset file</em></li>
+    <li><em>Generate optimized index</em></li>
+  </ul>
+</li>
+<li>Press <em>Confirm</em>.</li>
+<li>Both steps run sequentially, each showing [ &gt; ] then [OK].</li>
 <li><em>Preparation complete</em>.</li>
 </ol>
 

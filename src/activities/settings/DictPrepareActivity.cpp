@@ -43,6 +43,8 @@ static int dictPrepReadCallback(struct uzlib_uncomp* u) {
 // .idx.oft header constant (verified against real StarDict .oft files)
 // "StarDict's Cache, Version: 0.2" (30 bytes) + fixed 8-byte magic
 // ---------------------------------------------------------------------------
+static constexpr uint32_t OFT_HEADER_SIZE = 38;
+
 static constexpr uint8_t OFT_HEADER[38] = {'S', 't', 'a', 'r', 'D',  'i',  'c',  't',  '\'', 's',  ' ',  'C', 'a',
                                            'c', 'h', 'e', ',', ' ',  'V',  'e',  'r',  's',  'i',  'o',  'n', ':',
                                            ' ', '0', '.', '2', 0xc1, 0xd1, 0xa4, 0x51, 0x00, 0x00, 0x00, 0x00};
@@ -61,6 +63,8 @@ const char* DictPrepareActivity::stepLabel(StepType type) {
       return tr(STR_DICT_STEP_GEN_IDX);
     case StepType::GEN_SYN:
       return tr(STR_DICT_STEP_GEN_SYN);
+    case StepType::GEN_CSPT:
+      return tr(STR_DICT_STEP_GEN_CSPT);
   }
   return "";
 }
@@ -126,6 +130,15 @@ void DictPrepareActivity::detectSteps() {
   if (idxExists && !idxOftExists) steps[stepCount++] = {StepType::GEN_IDX};
   const bool synWillExist = synExists || synDzExists;
   if (synWillExist && !synOftExists) steps[stepCount++] = {StepType::GEN_SYN};
+
+  const bool csptExists = Storage.exists(dp.idxOftCspt().c_str());
+  const bool idxOftWillExist = idxOftExists || idxExists;
+  // Regenerate .cspt if missing, or if .oft is being regenerated (stale .cspt).
+  const bool oftBeingRegenerated = idxExists && !idxOftExists;
+  if (idxExists && idxOftWillExist && (!csptExists || oftBeingRegenerated)) {
+    if (csptExists && oftBeingRegenerated) Storage.remove(dp.idxOftCspt().c_str());
+    steps[stepCount++] = {StepType::GEN_CSPT};
+  }
 }
 
 void DictPrepareActivity::onExit() {
@@ -225,6 +238,11 @@ void DictPrepareActivity::runSteps() {
       case StepType::GEN_SYN:
         ok = generateOft(dp.syn().c_str(), dp.synOft().c_str(), 4, steps[i]);
         if (!ok) Storage.remove(dp.synOft().c_str());
+        break;
+
+      case StepType::GEN_CSPT:
+        ok = generateCspt(dp.idx().c_str(), dp.idxOft().c_str(), dp.idxOftCspt().c_str(), steps[i]);
+        if (!ok) Storage.remove(dp.idxOftCspt().c_str());
         break;
     }
 
@@ -449,6 +467,191 @@ done:
   }
 
   step.progress = step.total;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// .cspt optimized index generation
+// ---------------------------------------------------------------------------
+
+bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath, const char* csptPath, Step& step) {
+  // Open source files.
+  HalFile oft;
+  if (!Storage.openFileForRead("DICT_PREP", oftPath, oft)) {
+    LOG_ERR("DICT_PREP", "Failed to open .oft: %s", oftPath);
+    return false;
+  }
+  HalFile idx;
+  if (!Storage.openFileForRead("DICT_PREP", idxPath, idx)) {
+    oft.close();
+    LOG_ERR("DICT_PREP", "Failed to open .idx: %s", idxPath);
+    return false;
+  }
+
+  const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());
+  const uint32_t idxFileSize = static_cast<uint32_t>(idx.fileSize());
+
+  // Compute number of OFT page entries (excluding header and sentinel).
+  const uint32_t oftEntryCount = (oftFileSize > OFT_HEADER_SIZE + 4) ? (oftFileSize - OFT_HEADER_SIZE - 4) / 4 : 0;
+  // Total .cspt entries: 2 per .oft page (stride 16 within stride-32 pages), plus page 0.
+  // Page 0 (implicit in .oft, starts at byte 0) contributes 2 sub-entries.
+  // Each of the oftEntryCount explicit pages contributes 2 sub-entries.
+  const uint32_t totalPages = oftEntryCount + 1;  // including implicit page 0
+  const uint32_t csptEntryCount = totalPages * 2;
+
+  step.total = csptEntryCount;
+  step.progress = 0;
+
+  // Open output file and reserve header space.
+  HalFile out;
+  if (!Storage.openFileForWrite("DICT_PREP", csptPath, out)) {
+    oft.close();
+    idx.close();
+    LOG_ERR("DICT_PREP", "Failed to open for write: %s", csptPath);
+    return false;
+  }
+
+  // Write placeholder header (will seek back to fill entryCount at the end).
+  static constexpr uint8_t CSPT_MAGIC[4] = {'C', 'S', 'P', 'T'};
+  uint8_t hdr[12] = {};
+  memcpy(hdr, CSPT_MAGIC, 4);
+  hdr[4] = 1;   // version
+  hdr[5] = 16;  // prefixLen
+  uint16_t stride = 16;
+  memcpy(hdr + 6, &stride, 2);  // LE on ESP32-C3
+  // entryCount at hdr+8 will be filled later.
+  if (out.write(hdr, 12) != 12) {
+    LOG_ERR("DICT_PREP", "Header write failed: %s", csptPath);
+    oft.close();
+    idx.close();
+    out.close();
+    return false;
+  }
+
+  // Helper: write one .cspt entry from the current .idx position.
+  // Reads the headword, truncates/pads to 16 bytes, appends the 4-byte LE idx offset.
+  char prefixBuf[16];
+  uint8_t entryBuf[20];  // 16 prefix + 4 offset
+  uint32_t entriesWritten = 0;
+
+  auto writeEntry = [&](uint32_t idxOffset) -> bool {
+    memset(prefixBuf, 0, 16);
+    idx.seekSet(idxOffset);
+
+    // Read headword character by character until null terminator, up to 16 chars.
+    for (int i = 0; i < 16; i++) {
+      int ch = idx.read();
+      if (ch <= 0) break;  // null terminator or EOF
+      prefixBuf[i] = static_cast<char>(ch);
+    }
+
+    memcpy(entryBuf, prefixBuf, 16);
+    memcpy(entryBuf + 16, &idxOffset, 4);  // LE on ESP32-C3
+    if (out.write(entryBuf, 20) != 20) {
+      LOG_ERR("DICT_PREP", "Entry write failed: %s", csptPath);
+      return false;
+    }
+    entriesWritten++;
+    step.progress = entriesWritten;
+    return true;
+  };
+
+  // Helper: skip N entries in .idx from current position.
+  auto skipIdxEntries = [&](int count) -> bool {
+    for (int i = 0; i < count; i++) {
+      // Skip null-terminated word.
+      for (int b = 0; b < 4096; b++) {
+        int ch = idx.read();
+        if (ch < 0) return false;
+        if (ch == 0) break;
+      }
+      // Skip 8-byte suffix (offset + size).
+      uint8_t skip[8];
+      if (idx.read(skip, 8) != 8) return false;
+    }
+    return true;
+  };
+
+  bool error = false;
+
+  // Process each page: implicit page 0 starts at idx byte 0,
+  // explicit pages start at offsets read from .oft.
+  for (uint32_t page = 0; page < totalPages; page++) {
+    if (cancelRequested) {
+      error = true;
+      break;
+    }
+
+    // Determine the byte offset in .idx where this 32-entry page starts.
+    uint32_t pageOffset;
+    if (page == 0) {
+      pageOffset = 0;
+    } else {
+      oft.seekSet(OFT_HEADER_SIZE + (page - 1) * 4);
+      uint8_t raw[4];
+      if (oft.read(raw, 4) != 4) {
+        error = true;
+        break;
+      }
+      memcpy(&pageOffset, raw, 4);  // LE
+    }
+
+    if (pageOffset >= idxFileSize) break;
+
+    // Sub-entry 0: first word of this page (entry 0 of 32).
+    if (!writeEntry(pageOffset)) {
+      error = true;
+      break;
+    }
+
+    // Skip 16 entries to reach entry 16 of this page.
+    idx.seekSet(pageOffset);
+    if (!skipIdxEntries(16)) {
+      // Page has fewer than 17 entries (last page) — no second sub-entry.
+      // Progress update and continue to next page.
+      requestUpdate(true);
+      vTaskDelay(1);
+      continue;
+    }
+
+    // Sub-entry 1: word at entry 16 of this page.
+    const uint32_t midOffset = static_cast<uint32_t>(idx.position());
+    if (midOffset >= idxFileSize) {
+      requestUpdate(true);
+      vTaskDelay(1);
+      continue;
+    }
+    if (!writeEntry(midOffset)) {
+      error = true;
+      break;
+    }
+
+    requestUpdate(true);
+    vTaskDelay(1);
+  }
+
+  if (!error) {
+    // Seek back and write the final entryCount into the header.
+    out.seekSet(8);
+    if (out.write(&entriesWritten, 4) != 4) {
+      LOG_ERR("DICT_PREP", "entryCount write failed: %s", csptPath);
+      error = true;
+    }
+  }
+
+  oft.close();
+  idx.close();
+  out.close();
+
+  if (error) {
+    LOG_ERR("DICT_PREP", "CSPT generation failed: %s", csptPath);
+    return false;
+  }
+
+  // Short last page produces 1 sub-entry instead of 2, so the upper-bound
+  // denominator overshoots actual entries written. Correct it for 100% display.
+  step.total = entriesWritten;
+  step.progress = entriesWritten;
   return true;
 }
 

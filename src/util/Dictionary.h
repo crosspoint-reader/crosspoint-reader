@@ -16,6 +16,7 @@ struct DictPaths {
   std::string ifo() const { return folder + ".ifo"; }
   std::string idxOft() const { return folder + ".idx.oft"; }
   std::string synOft() const { return folder + ".syn.oft"; }
+  std::string idxOftCspt() const { return folder + ".idx.oft.cspt"; }
   std::string dictDz() const { return folder + ".dict.dz"; }
   std::string synDz() const { return folder + ".syn.dz"; }
 };
@@ -100,6 +101,12 @@ class Dictionary {
   // Requires .idx to be accessible; uses .idx.oft if present for neighbourhood search.
   static std::vector<std::string> findSimilar(const std::string& word, int maxResults, const char* cachePath = nullptr);
 
+  // CLEANUP: on Auto-only commit, delete only this line (readCsptEntryCount below stays — used by shouldShowPopup)
+  // Reads .idx.oft.cspt header and returns entryCount.
+  // Returns 0 if the file is missing, too small, or has invalid magic/version.
+  // Cheap: one SD seek, 12 bytes read.
+  static uint32_t readCsptEntryCount(const char* cachePath = nullptr);
+
  private:
   // Shared word read buffer. Lookup functions are single-threaded; this avoids
   // putting a 256-byte array on the stack in every caller (and 512B peak when nested).
@@ -120,6 +127,11 @@ class Dictionary {
   // srcFileSize is used as the upper bound when the page is the last one.
   static void findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
                              uint32_t* endByte);
+
+  // Binary search .idx.oft.cspt to find the scan range in .idx containing target.
+  // Returns true if .cspt was valid and bounds were set, false to fall back to .oft.
+  static bool binarySearchCspt(FsFile& cspt, const char* target, uint32_t idxFileSize, uint32_t* startByte,
+                               uint32_t* endByte);
 
   static int editDistance(const std::string& a, const std::string& b, int maxDist);
 };

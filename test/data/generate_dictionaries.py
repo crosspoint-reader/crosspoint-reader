@@ -112,6 +112,64 @@ def build_syn_oft(syn_bytes: bytes) -> bytes:
     return _build_oft(syn_bytes, skip_bytes_after_null=4)
 
 
+_CSPT_MAGIC = b"CSPT"
+_CSPT_PREFIX_LEN = 16
+_CSPT_STRIDE = 16
+_CSPT_HEADER_SIZE = 12
+
+
+def build_cspt(idx_bytes: bytes, oft_bytes: bytes) -> bytes:
+    """Build .idx.oft.cspt from .idx and .idx.oft data."""
+    table_bytes = oft_bytes[len(OFT_HEADER):]
+    num_oft_entries = len(table_bytes) // 4
+    if num_oft_entries > 0:
+        num_oft_entries -= 1  # exclude sentinel
+
+    page_offsets = [0]
+    for i in range(num_oft_entries):
+        off = struct.unpack_from("<I", table_bytes, i * 4)[0]
+        page_offsets.append(off)
+
+    entries = []
+    for page_off in page_offsets:
+        pos = page_off
+        if pos >= len(idx_bytes):
+            break
+        try:
+            null = idx_bytes.index(b"\x00", pos)
+        except ValueError:
+            break
+        word = idx_bytes[pos:null]
+        prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
+        entries.append(prefix + struct.pack("<I", pos))
+
+        scan_pos = pos
+        for _ in range(16):
+            try:
+                null = idx_bytes.index(b"\x00", scan_pos)
+            except ValueError:
+                scan_pos = len(idx_bytes)
+                break
+            scan_pos = null + 1 + 8
+        if scan_pos >= len(idx_bytes):
+            continue
+        try:
+            null = idx_bytes.index(b"\x00", scan_pos)
+        except ValueError:
+            continue
+        word = idx_bytes[scan_pos:null]
+        prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
+        entries.append(prefix + struct.pack("<I", scan_pos))
+
+    entry_count = len(entries)
+    hdr = _CSPT_MAGIC
+    hdr += struct.pack("<B", 1)  # version
+    hdr += struct.pack("<B", _CSPT_PREFIX_LEN)
+    hdr += struct.pack("<H", _CSPT_STRIDE)
+    hdr += struct.pack("<I", entry_count)
+    return hdr + b"".join(entries)
+
+
 def build_idx_dict(entries: list) -> tuple:
     """
     Build .idx and .dict binaries.
@@ -152,7 +210,8 @@ def build_syn(synonym_pairs: list, headword_ordinals: dict) -> tuple:
 def write_or_compress(path: str, data: bytes, compress: bool) -> None:
     if compress:
         with open(path + ".dz", "wb") as f:
-            f.write(gzip.compress(data, compresslevel=6))
+            # mtime=0 produces byte-stable gzip output across regenerations.
+            f.write(gzip.compress(data, compresslevel=6, mtime=0))
     else:
         with open(path, "wb") as f:
             f.write(data)
@@ -217,6 +276,7 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
     compress_syn = meta.get("compress_syn", meta.get("compress", False))
     generate_idx_oft = meta.get("generate_idx_oft", meta.get("generate_oft", False))
     generate_syn_oft = meta.get("generate_syn_oft", meta.get("generate_oft", False))
+    generate_cspt = meta.get("generate_cspt", False)
     generate_ifo = meta.get("generate_ifo", True)
     generate_idx = meta.get("generate_idx", True)
     corrupt_dict = meta.get("corrupt_dict", False)
@@ -278,6 +338,12 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         if generate_idx_oft:
             with open(stem + ".idx.oft", "wb") as f:
                 f.write(build_idx_oft(idx_bytes))
+        if generate_cspt and generate_idx_oft:
+            oft_path = stem + ".idx.oft"
+            with open(oft_path, "rb") as f:
+                oft_data = f.read()
+            with open(stem + ".idx.oft.cspt", "wb") as f:
+                f.write(build_cspt(idx_bytes, oft_data))
 
     # Write .syn and optionally .syn.oft
     if syn_bytes:
@@ -323,6 +389,8 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         exts.append(".idx")
         if generate_idx_oft:
             exts.append(".idx.oft")
+            if generate_cspt:
+                exts.append(".idx.oft.cspt")
     if syn_bytes:
         exts.append(".syn" + (".dz" if compress_syn else ""))
         if generate_syn_oft:
