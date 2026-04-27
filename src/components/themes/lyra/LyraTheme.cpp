@@ -404,9 +404,14 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
       const uint8_t* iconBitmap = iconForName(icon, iconSize);
+      int renderSize = iconSize;
+      if (iconBitmap == nullptr && rowSubtitle != nullptr) {
+        renderSize = listIconSize;
+        iconBitmap = iconForName(icon, renderSize);
+      }
       if (iconBitmap != nullptr) {
         renderer.drawIcon(iconBitmap, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection,
-                          itemY + iconY, iconSize, iconSize);
+                          itemY + iconY, renderSize, renderSize);
       }
     }
 
