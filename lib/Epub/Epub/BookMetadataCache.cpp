@@ -9,7 +9,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 6;
+constexpr uint8_t BOOK_CACHE_VERSION = 7;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -113,8 +113,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     return false;
   }
 
-  constexpr uint32_t headerASize =
-      sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
+  constexpr uint32_t headerASize = sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) +
+                                   sizeof(tocCount) + sizeof(uint8_t) /* tocReliable */;
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
                                 metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
                                 metadata.series.size() + metadata.seriesIndex.size() + metadata.description.size() +
@@ -122,11 +122,14 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
-  // Header A
+  // Header A. tocReliable is patched at the end once the TOC scan below has computed it.
+  const uint32_t tocReliableHeaderPos =
+      sizeof(BOOK_CACHE_VERSION) + sizeof(uint32_t) /* lutOffset */ + sizeof(spineCount) + sizeof(tocCount);
   serialization::writePod(bookFile, BOOK_CACHE_VERSION);
   serialization::writePod(bookFile, lutOffset);
   serialization::writePod(bookFile, spineCount);
   serialization::writePod(bookFile, tocCount);
+  serialization::writePod(bookFile, static_cast<uint8_t>(0));  // placeholder for tocReliable
   // Metadata
   serialization::writeString(bookFile, metadata.title);
   serialization::writeString(bookFile, metadata.author);
@@ -156,16 +159,29 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // LUTs complete
   // Loop through spines from spine file matching up TOC indexes, calculating cumulative size and writing to book.bin
 
-  // Build spineIndex->tocIndex mapping in one pass (O(n) instead of O(n*m))
+  // Build spineIndex->tocIndex mapping in one pass (O(n) instead of O(n*m)).
+  // Also count distinct spines referenced by the TOC so tocReliable can be persisted in the
+  // header below — without this, every first-page load on a large book pays an O(tocCount)
+  // seek-heavy scan in Epub::hasReliableToc().
   std::deque<int16_t> spineToTocIndex(spineCount, -1);
+  int distinctSpinesReferenced = 0;
   tocFile.seek(0);
   for (int j = 0; j < tocCount; j++) {
     auto tocEntry = readTocEntry(tocFile);
     if (tocEntry.spineIndex >= 0 && tocEntry.spineIndex < spineCount) {
       if (spineToTocIndex[tocEntry.spineIndex] == -1) {
         spineToTocIndex[tocEntry.spineIndex] = static_cast<int16_t>(j);
+        distinctSpinesReferenced++;
       }
     }
+  }
+
+  // Mirrors the heuristic in Epub::hasReliableToc(): require >=25% distinct spine coverage,
+  // with short-circuits for edge cases (no entries, or large book with a single TOC entry).
+  if (spineCount > 0 && tocCount > 0 && !(spineCount >= 8 && tocCount <= 1)) {
+    tocReliable = (distinctSpinesReferenced * 4 >= spineCount);
+  } else {
+    tocReliable = false;
   }
 
   ZipFile zip(epubPath);
@@ -268,6 +284,10 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     auto tocEntry = readTocEntry(tocFile);
     writeTocEntry(bookFile, tocEntry);
   }
+
+  // Patch tocReliable placeholder in header A
+  bookFile.seek(tocReliableHeaderPos);
+  serialization::writePod(bookFile, static_cast<uint8_t>(tocReliable ? 1 : 0));
 
   bookFile.close();
   spineFile.close();
@@ -384,6 +404,9 @@ bool BookMetadataCache::load() {
   serialization::readPod(bookFile, lutOffset);
   serialization::readPod(bookFile, spineCount);
   serialization::readPod(bookFile, tocCount);
+  uint8_t tocReliableByte;
+  serialization::readPod(bookFile, tocReliableByte);
+  tocReliable = (tocReliableByte != 0);
 
   serialization::readString(bookFile, coreMetadata.title);
   serialization::readString(bookFile, coreMetadata.author);

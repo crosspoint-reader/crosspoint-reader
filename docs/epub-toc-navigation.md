@@ -22,6 +22,14 @@ Spine items before the first TOC entry (cover pages) and after the last (appendi
 - `getTocItem(i)` returns the TOC entry (title, spineIndex, anchor) for TOC index `i` -- also a file seek per call, not cached in memory. Code that queries TOC metadata in a loop should cache the results locally first.
 - `getSpineIndexForTocIndex(i)` does the reverse lookup (TOC index to spine index).
 
+### Cached TOC reliability flag
+
+`hasReliableToc()` answers whether the TOC has enough spine coverage (>=25% of spines referenced) to drive chapter UX, with short-circuits for `tocCount <= 0` and the "large book with one TOC entry" pathology.
+
+The result is computed once during `buildBookBin` (folded into the existing `spineIndex->tocIndex` scan, so no extra disk pass) and persisted as a single byte in book.bin's header A. `Epub::hasReliableToc()` reads `BookMetadataCache::isTocReliable()` and caches the bool in `tocReliabilityState`.
+
+This matters because the check used to recompute the answer on demand by calling `getTocEntry(i)` for every TOC entry, which does two SD-card seeks per call. On a 2858-entry web-novel TOC that was ~5700 seeks (~7 seconds) added to first-page latency. `BOOK_CACHE_VERSION` was bumped to 7 for this layout change; older caches are rebuilt on next open.
+
 ## Section cache file format
 
 The section cache (`.bin`) stores pre-rendered page data for a spine item. The file layout:

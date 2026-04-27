@@ -50,6 +50,7 @@ class BookMetadataCache {
   size_t lutOffset;
   uint16_t spineCount;
   uint16_t tocCount;
+  bool tocReliable;
   bool loaded;
   bool buildMode;
 
@@ -88,7 +89,13 @@ class BookMetadataCache {
   BookMetadata coreMetadata;
 
   explicit BookMetadataCache(std::string cachePath)
-      : cachePath(std::move(cachePath)), lutOffset(0), spineCount(0), tocCount(0), loaded(false), buildMode(false) {}
+      : cachePath(std::move(cachePath)),
+        lutOffset(0),
+        spineCount(0),
+        tocCount(0),
+        tocReliable(false),
+        loaded(false),
+        buildMode(false) {}
   ~BookMetadataCache() = default;
 
   // Building phase (stream to disk immediately)
@@ -111,5 +118,6 @@ class BookMetadataCache {
   TocEntry getTocEntry(int index);
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
+  bool isTocReliable() const { return tocReliable; }
   bool isLoaded() const { return loaded; }
 };

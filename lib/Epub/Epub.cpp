@@ -868,35 +868,10 @@ bool Epub::hasReliableToc() const {
     return false;
   }
 
-  const int spineCount = bookMetadataCache->getSpineCount();
-  const int tocCount = bookMetadataCache->getTocCount();
-
-  if (spineCount <= 0 || tocCount <= 0) {
-    tocReliabilityState = 0;
-    return false;
-  }
-
-  // If a larger book only exposes one TOC entry, treat TOC as unusable for chapter UX.
-  if (spineCount >= 8 && tocCount <= 1) {
-    tocReliabilityState = 0;
-    return false;
-  }
-
-  std::vector<bool> spineReferenced(static_cast<size_t>(spineCount), false);
-  int distinctSpinesReferenced = 0;
-  for (int i = 0; i < tocCount; i++) {
-    const auto toc = bookMetadataCache->getTocEntry(i);
-    if (toc.spineIndex >= 0 && toc.spineIndex < spineCount) {
-      const size_t idx = static_cast<size_t>(toc.spineIndex);
-      if (!spineReferenced[idx]) {
-        spineReferenced[idx] = true;
-        distinctSpinesReferenced++;
-      }
-    }
-  }
-
-  // Require at least 25% spine coverage from TOC references.
-  const bool reliable = (distinctSpinesReferenced * 4 >= spineCount);
+  // Reliability is computed once at indexing time and persisted in book.bin's header.
+  // This avoids the O(tocCount) seek-heavy scan that previously fired on first page load
+  // for every book — a large web-novel TOC (~3000 entries) added several seconds of latency.
+  const bool reliable = bookMetadataCache->isTocReliable();
   tocReliabilityState = reliable ? 1 : 0;
   return reliable;
 }

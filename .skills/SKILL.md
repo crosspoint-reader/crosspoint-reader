@@ -847,8 +847,8 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
 
 **Current Versions** (as of docs/file-formats.md):
-- `book.bin`: **Version 5** (metadata structure)
-- `section.bin`: **Version 20** (layout structure, includes paragraph LUT)
+- `book.bin`: **Version 7** (header A includes cached `tocReliable` byte)
+- `section.bin`: **Version 23** (layout structure, includes paragraph LUT)
 
 **Version Increment Rules**:
 1. **ALWAYS increment version** BEFORE changing binary structure

@@ -2,7 +2,7 @@
 
 ## `book.bin`
 
-### Version 3
+### Version 7
 
 ImHex Pattern:
 
@@ -12,7 +12,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 3
+#define EXPECTED_VERSION 7
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -34,8 +34,12 @@ fn format_string(String s) {
 struct Metadata {
     String title [[comment("Book title")]];
     String author [[comment("Book author")]];
+    String language [[comment("BCP47 language tag")]];
     String coverItemHref [[comment("Path to cover image")]];
     String textReferenceHref [[comment("Path to guided first text reference")]];
+    String series [[comment("Series name")]];
+    String seriesIndex [[comment("Series index/position")]];
+    String description [[comment("Book description / blurb")]];
 } [[comment("Book metadata information")]];
 
 // === Spine Entry Structure ===
@@ -70,7 +74,8 @@ struct BookBin {
     u32 lutOffset [[comment("Offset to lookup tables"), color("6BCB77")]];
     u16 spineCount [[comment("Number of spine entries"), color("4D96FF")]];
     u16 tocCount [[comment("Number of TOC entries"), color("FF6B9D")]];
-    
+    u8 tocReliable [[comment("1 if TOC has >=25% spine coverage, 0 otherwise"), color("F4A261")]];
+
     // Metadata section
     Metadata metadata [[comment("Book metadata")]];
     
