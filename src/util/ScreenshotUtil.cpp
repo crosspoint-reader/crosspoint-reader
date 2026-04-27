@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <BitmapHelpers.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -12,21 +13,6 @@
 #include "Bitmap.h"  // Required for BmpHeader struct definition
 #include "activities/Activity.h"
 
-void ScreenshotUtil::sanitizeForFat32(const char* input, char* output, size_t maxLen) {
-  size_t i = 0;
-  for (; i < maxLen - 1 && input[i] != '\0'; i++) {
-    char c = input[i];
-    // Replace FAT32-invalid characters, spaces, and control characters with dashes
-    if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
-        c == ' ' || (c > 0x00 && c <= 0x1f)) {
-      output[i] = '-';
-    } else {
-      output[i] = c;
-    }
-  }
-  output[i] = '\0';
-}
-
 void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize) {
   const unsigned long ts = millis();
 
@@ -36,7 +22,11 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
   }
 
   char sanitizedTitle[64];
-  sanitizeForFat32(info.title, sanitizedTitle, sizeof(sanitizedTitle));
+  FsHelpers::sanitizePathComponentForFat32(info.title, sanitizedTitle, sizeof(sanitizedTitle));
+  if (sanitizedTitle[0] == '\0') {
+    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+    return;
+  }
 
   int pct = info.progressPercent;
   if (pct < 0) pct = 0;
@@ -46,28 +36,30 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
   const int chapterNum = info.spineIndex + 1;
 
   if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-    snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, chapterNum, info.currentPage, pct,
-             ts);
+    snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
+             info.currentPage, pct, ts);
   } else {
-    snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, ts);
+    snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
+             pct, ts);
   }
 
   // Truncate title if total path exceeds FAT32 limit
   if (strlen(buf) > 255) {
     size_t titleLen = strlen(sanitizedTitle);
-    size_t overhead = strlen(buf) - titleLen;
+    size_t overhead = strlen(buf) - 2 * titleLen;
     if (overhead < 255) {
-      size_t maxTitleLen = 255 - overhead;
+      size_t maxTitleLen = (255 - overhead) / 2;
       // Walk back to a valid UTF-8 boundary to avoid corrupting multibyte characters
       while (maxTitleLen > 0 && (sanitizedTitle[maxTitleLen] & 0xC0) == 0x80) {
         maxTitleLen--;
       }
       sanitizedTitle[maxTitleLen] = '\0';
       if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-        snprintf(buf, bufSize, "/screenshots/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, chapterNum, info.currentPage,
-                 pct, ts);
+        snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
+                 info.currentPage, pct, ts);
       } else {
-        snprintf(buf, bufSize, "/screenshots/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, info.currentPage, pct, ts);
+        snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle,
+                 info.currentPage, pct, ts);
       }
     } else {
       snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);

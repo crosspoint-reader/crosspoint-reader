@@ -12,5 +12,4 @@ class ScreenshotUtil {
 
  private:
   static void buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize);
-  static void sanitizeForFat32(const char* input, char* output, size_t maxLen);
 };
