@@ -558,6 +558,94 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   }
 }
 
+void LyraTheme::drawCoverList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                              const std::function<std::string(int index)>& rowTitle,
+                              const std::function<std::string(int index)>& rowAuthor,
+                              const std::function<std::string(int index)>& rowPath) const {
+  const int itemsPerPage = LyraMetrics::values.coverListItemsPerPage;
+  const int spacing = LyraMetrics::values.coverListSpacing;
+
+  const int pageIndex = (selectedIndex >= 0) ? (selectedIndex / itemsPerPage) : 0;
+  const int startIndex = pageIndex * itemsPerPage;
+
+  const int totalPages = (itemCount + itemsPerPage - 1) / itemsPerPage;
+  int listWidth = rect.width;
+
+  if (totalPages > 1) {
+    const int scrollAreaHeight = rect.height;
+    const int scrollBarHeight = (scrollAreaHeight * itemsPerPage) / itemCount;
+    const int scrollBarY = rect.y + ((scrollAreaHeight - scrollBarHeight) * pageIndex) / (totalPages - 1);
+    const int scrollBarX = rect.x + rect.width - LyraMetrics::values.scrollBarRightOffset;
+
+    renderer.drawLine(scrollBarX, rect.y, scrollBarX, rect.y + scrollAreaHeight, true);
+    renderer.fillRect(scrollBarX - LyraMetrics::values.scrollBarWidth, scrollBarY, LyraMetrics::values.scrollBarWidth,
+                      scrollBarHeight, true);
+    listWidth -= (LyraMetrics::values.scrollBarWidth + LyraMetrics::values.scrollBarRightOffset);
+  }
+
+  const int itemWidth = listWidth - 2 * LyraMetrics::values.contentSidePadding;
+  const int itemHeight = (rect.height - (itemsPerPage - 1) * spacing) / itemsPerPage;
+
+  for (int i = 0; i < itemsPerPage && (startIndex + i) < itemCount; i++) {
+    const int currentIndex = startIndex + i;
+    const int x = rect.x + LyraMetrics::values.contentSidePadding;
+    const int y = rect.y + i * (itemHeight + spacing);
+
+    const bool selected = (currentIndex == selectedIndex);
+
+    if (selected) {
+      renderer.fillRoundedRect(x, y, itemWidth, itemHeight, cornerRadius, Color::LightGray);
+    }
+
+    // Cover area
+    const int coverPadding = getCoverListPadding();
+    const int coverHeightMax = itemHeight - (coverPadding * 2);
+    const int coverWidthMax = static_cast<int>(coverHeightMax * 0.75);
+
+    const int coverX = x + hPaddingInSelection;
+    const int coverY = y + coverPadding;
+
+    std::string path = rowPath(currentIndex);
+    drawCoverThumbnail(renderer, coverX, coverY, coverWidthMax, coverHeightMax, path, selected);
+
+    // Text Area
+    const int textX = coverX + coverWidthMax + LyraMetrics::values.verticalSpacing;
+    const int textWidth = itemWidth - (textX - x) - hPaddingInSelection;
+
+    // Title and Author
+    std::string title = rowTitle(currentIndex);
+    std::string author = rowAuthor(currentIndex);
+
+    const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+    const int authorLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const int textSpacing = 4;
+
+    int totalTextHeight = 0;
+    if (!title.empty()) {
+      totalTextHeight += titleLineHeight;
+    }
+    if (!author.empty()) {
+      if (!title.empty()) {
+        totalTextHeight += textSpacing;
+      }
+      totalTextHeight += authorLineHeight;
+    }
+
+    int currentTextY = y + (itemHeight - totalTextHeight) / 2;
+
+    if (!title.empty()) {
+      auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title.c_str(), textWidth, EpdFontFamily::BOLD);
+      renderer.drawText(UI_12_FONT_ID, textX, currentTextY, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+      currentTextY += titleLineHeight + textSpacing;
+    }
+
+    if (!author.empty()) {
+      auto truncatedAuthor = renderer.truncatedText(UI_10_FONT_ID, author.c_str(), textWidth);
+      renderer.drawText(UI_10_FONT_ID, textX, currentTextY, truncatedAuthor.c_str(), true);
+    }
+  }
+}
+
 Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   // Scale y position proportionally to screen height (16.5% from top)
   const int y = static_cast<int>(renderer.getScreenHeight() * 0.165f);

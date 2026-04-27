@@ -5,8 +5,10 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Xtc.h>
 
 #include <algorithm>
+#include <cassert>
 
 #include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
@@ -16,6 +18,26 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
+
+std::string getFileName(std::string filename) {
+  if (filename.back() == '/') {
+    filename.pop_back();
+    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
+      return "[" + filename + "]";
+    }
+    return filename;
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(0, pos);
+}
+
+std::string getFileExtension(std::string filename) {
+  if (filename.back() == '/') {
+    return "";
+  }
+  const auto pos = filename.rfind('.');
+  return filename.substr(pos);
+}
 }  // namespace
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -72,6 +94,9 @@ void sortFileList(std::vector<std::string>& strs) {
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
+  metadataCache.clear();
+  lruList.clear();
+  lastMetadataIndex = -1;
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -99,6 +124,89 @@ void FileBrowserActivity::loadFiles() {
     }
   }
   sortFileList(files);
+}
+
+void FileBrowserActivity::getMetadata(int index, std::string& outTitle, std::string& outAuthor, bool updateLRU) {
+  if (index < 0 || index >= static_cast<int>(files.size())) {
+    outTitle = "";
+    outAuthor = "";
+    return;
+  }
+
+  // Memoization hit
+  if (index == lastMetadataIndex) {
+    outTitle = lastMetadata.title;
+    outAuthor = lastMetadata.author;
+    return;
+  }
+
+  auto it = metadataCache.find(index);
+  if (it != metadataCache.end()) {
+    // Cache Hit: Update LRU position if requested
+    if (updateLRU) {
+      lruList.remove(index);
+      lruList.push_front(index);
+    }
+    outTitle = it->second.title;
+    outAuthor = it->second.author;
+
+    // Update memoization
+    lastMetadataIndex = index;
+    lastMetadata = it->second;
+    return;
+  }
+
+  // Cache Miss: Provide fallback and lazy-load if needed (handled in render)
+  outTitle = getFileName(files[index]);
+  outAuthor = "";
+}
+
+void FileBrowserActivity::loadMetadata(int index, int maxWidth, int maxHeight) {
+  if (index < 0 || index >= static_cast<int>(files.size())) return;
+  const std::string& filename = files[index];
+
+  // Folders and non-book files don't need metadata extraction
+  if (filename.back() == '/' || (!FsHelpers::hasEpubExtension(filename) && !FsHelpers::hasXtcExtension(filename))) {
+    return;
+  }
+
+  // Evict if cache is full
+  if (metadataCache.size() >= MAX_CACHE_SIZE) {
+    int oldestIndex = lruList.back();
+    lruList.pop_back();
+    metadataCache.erase(oldestIndex);
+  }
+
+  std::string cleanBasePath = basepath;
+  if (cleanBasePath.back() != '/') cleanBasePath += "/";
+  const std::string fullPath = cleanBasePath + filename;
+
+  FileMetadata meta;
+  if (FsHelpers::hasEpubExtension(filename)) {
+    Epub epub(fullPath, "/.crosspoint");
+    if (epub.load(false, true)) {
+      meta.title = epub.getTitle();
+      meta.author = epub.getAuthor();
+      // Only generate if we're actually in cover mode to save I/O
+      if (SETTINGS.fileBrowserViewMode == CrossPointSettings::VIEW_COVERS) {
+        epub.generateThumbBmp(maxHeight);
+      }
+    }
+  } else if (FsHelpers::hasXtcExtension(filename)) {
+    Xtc xtc(fullPath, "/.crosspoint");
+    if (xtc.load()) {
+      meta.title = xtc.getTitle();
+      meta.author = xtc.getAuthor();
+      if (SETTINGS.fileBrowserViewMode == CrossPointSettings::VIEW_COVERS) {
+        xtc.generateThumbBmp(maxHeight);
+      }
+    }
+  }
+
+  if (meta.title.empty()) meta.title = getFileName(filename);
+
+  metadataCache[index] = std::move(meta);
+  lruList.push_front(index);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -130,12 +238,18 @@ void FileBrowserActivity::onEnter() {
 void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
+  metadataCache.clear();
+  lruList.clear();
+  lastMetadataIndex = -1;
 }
 
 void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
-  // Only clear cache for .epub files
+  // Only clear cache for .epub and .xtc files
   if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
+    LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
+  } else if (FsHelpers::hasXtcExtension(fullPath)) {
+    Xtc(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }
 }
@@ -158,8 +272,12 @@ void FileBrowserActivity::loop() {
     return;
   }
 
-  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  const int pageItems = (SETTINGS.fileBrowserViewMode == CrossPointSettings::VIEW_LIST)
+                            ? UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved)
+                            : metrics.coverListItemsPerPage;
+  assert(pageItems > 0);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (files.empty()) return;
@@ -259,26 +377,6 @@ void FileBrowserActivity::loop() {
   });
 }
 
-std::string getFileName(std::string filename) {
-  if (filename.back() == '/') {
-    filename.pop_back();
-    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
-      return "[" + filename + "]";
-    }
-    return filename;
-  }
-  const auto pos = filename.rfind('.');
-  return filename.substr(0, pos);
-}
-
-std::string getFileExtension(std::string filename) {
-  if (filename.back() == '/') {
-    return "";
-  }
-  const auto pos = filename.rfind('.');
-  return filename.substr(pos);
-}
-
 void FileBrowserActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -290,18 +388,14 @@ void FileBrowserActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int pathReserved = pathLineHeight + metrics.verticalSpacing;
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+
   if (files.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
+  } else if (SETTINGS.fileBrowserViewMode == CrossPointSettings::VIEW_LIST) {
+    renderList(metrics, pageWidth, pageHeight);
   } else {
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); }, false);
+    renderCoverList(metrics, pageWidth, pageHeight);
   }
 
   // Full path display
@@ -338,6 +432,102 @@ void FileBrowserActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+}
+
+void FileBrowserActivity::renderList(const ThemeMetrics& metrics, int pageWidth, int pageHeight) {
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+
+  if (files.empty()) {
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
+  } else {
+    GUI.drawList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(files.size()),
+        static_cast<int>(selectorIndex), [this](int index) { return getFileName(files[index]); }, nullptr,
+        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        [this](int index) { return getFileExtension(files[index]); }, false);
+  }
+}
+
+void FileBrowserActivity::renderCoverList(const ThemeMetrics& metrics, int pageWidth, int pageHeight) {
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+
+  if (files.empty()) {
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_FILES_FOUND));
+  } else {
+    // Lazy-load metadata for the current visible page
+    const int itemsPerPage = metrics.coverListItemsPerPage;
+    assert(itemsPerPage > 0);
+    const int startIndex = (static_cast<int>(selectorIndex) / itemsPerPage) * itemsPerPage;
+    const int endIndex = std::min(startIndex + itemsPerPage, static_cast<int>(files.size()));
+
+    // Calculate dimensions for probe (same as theme)
+    const int itemHeight = (contentHeight - (itemsPerPage - 1) * metrics.coverListSpacing) / itemsPerPage;
+    const int coverPadding = GUI.getCoverListPadding();
+    const int maxHeight = itemHeight - (coverPadding * 2);
+    const int maxWidth = static_cast<int>(maxHeight * 0.75);
+
+    bool showingLoading = false;
+    Rect popupRect;
+
+    for (int i = startIndex; i < endIndex; i++) {
+      if (files[i].back() != '/' && metadataCache.find(i) == metadataCache.end()) {
+        const std::string& filename = files[i];
+        if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename)) {
+          std::string cleanBasePath = basepath;
+          if (cleanBasePath.back() != '/') cleanBasePath += "/";
+          const std::string fullPath = cleanBasePath + filename;
+
+          const std::vector<std::string> thumbPaths = UITheme::getThumbnailCandidates(fullPath, maxWidth, maxHeight);
+
+          const bool thumbExists = std::any_of(begin(thumbPaths), end(thumbPaths), [](const std::string& thumbPath) {
+            return Storage.exists(thumbPath.c_str());
+          });
+
+          if (!thumbExists) {
+            if (!showingLoading) {
+              showingLoading = true;
+              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+            }
+            int progress = (i - startIndex) * 100 / (endIndex - startIndex);
+            GUI.fillPopupProgress(renderer, popupRect, progress);
+            renderer.displayBuffer();
+          }
+        }
+        loadMetadata(i, maxWidth, maxHeight);
+      }
+    }
+
+    if (showingLoading) {
+      renderer.clearScreen();
+      GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                     ((basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1)).c_str());
+    }
+
+    GUI.drawCoverList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(files.size()),
+        static_cast<int>(selectorIndex),
+        [this](int index) {
+          std::string t, a;
+          getMetadata(index, t, a, false);  // false = don't update LRU
+          return t;
+        },
+        [this](int index) {
+          std::string t, a;
+          getMetadata(index, t, a, false);  // false = don't update LRU
+          return a;
+        },
+        [this](int index) {
+          std::string cleanBasePath = basepath;
+          if (cleanBasePath.back() != '/') cleanBasePath += "/";
+          return cleanBasePath + files[index];
+        });
+  }
 }
 
 size_t FileBrowserActivity::findEntry(const std::string& name) const {

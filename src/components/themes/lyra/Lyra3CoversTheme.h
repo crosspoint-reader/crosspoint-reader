@@ -11,6 +11,8 @@ constexpr ThemeMetrics values = [] {
   ThemeMetrics v = LyraMetrics::values;
   v.homeCoverTileHeight = 300;
   v.homeRecentBooksCount = 3;
+  v.coverListItemsPerPage = 3;
+  v.coverListSpacing = 8;
   return v;
 }();
 }  // namespace Lyra3CoversMetrics

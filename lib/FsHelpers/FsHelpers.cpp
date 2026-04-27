@@ -78,6 +78,12 @@ bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(file
 
 bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
 
+std::string getCachePath(const std::string& bookPath) {
+  std::string cacheDir = "/.crosspoint";
+  std::string typePrefix = hasXtcExtension(bookPath) ? "/xtc_" : "/epub_";
+  return cacheDir + typePrefix + std::to_string(std::hash<std::string>{}(bookPath));
+}
+
 std::string extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
   if (lastSlash == std::string::npos || lastSlash == 0) {

@@ -74,6 +74,13 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
   return coverBmpPath;
 }
 
+std::vector<std::string> UITheme::getThumbnailCandidates(const std::string& bookPath, int maxWidth, int maxHeight) {
+  const std::string cachePath = FsHelpers::getCachePath(bookPath);
+  return {cachePath + "/thumb_" + std::to_string(maxWidth) + "x" + std::to_string(maxHeight) + ".bmp",
+          cachePath + "/thumb_" + std::to_string(maxHeight) + ".bmp", cachePath + "/thumb_226.bmp",
+          cachePath + "/thumb_400.bmp"};
+}
+
 UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (filename.back() == '/') {
     return Folder;

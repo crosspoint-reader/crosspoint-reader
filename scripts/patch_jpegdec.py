@@ -1,23 +1,25 @@
 """
-PlatformIO pre-build script: patch JPEGDEC for MCU_SKIP wild pointer crash.
+PlatformIO pre-build script: patch JPEGDEC library for progressive JPEG support.
 
-Problem:
-  JPEGDecodeMCU_P computes pMCU = &sMCUs[iMCU & 0xffffff].  When iMCU is
-  MCU_SKIP (-8), the bitmask produces index 0xFFFFF8 (16 777 208), creating a
-  pointer ~33 MB past the 392-entry sMCUs array.  If the progressive JPEG's
-  first scan includes AC coefficients (iScanEnd > 0), the AC decode loop writes
-  through this wild pointer and crashes with a store-access fault.
+Three patches are applied:
 
-  Upstream commit 8628297 guarded the DC coefficient write (pMCU[0]) but not the
-  AC coefficient writes at indices 1-63.
+1. JPEGDecodeMCU_P: Guard pMCU writes against MCU_SKIP (-8).
+   The non-progressive JPEGDecodeMCU checks `iMCU >= 0` before writing to pMCU,
+   but JPEGDecodeMCU_P does not.  When EIGHT_BIT_GRAYSCALE mode skips chroma
+   channels by passing MCU_SKIP, the unguarded write goes to a wild pointer
+   (sMCUs[0xFFFFF8]) and crashes.
 
-Fix:
-  Redirect pMCU to sMCUs[0] when MCU_SKIP is active.  Writes to sMCUs[1..63]
-  are harmless: for JPEG_SCALE_EIGHTH only sMCUs[0] is read for output, and
-  the DC write at sMCUs[0] is already guarded by the existing `if (iMCU >= 0)`
-  check.
+2. JPEGParseInfo: Force grayscale for non-interleaved progressive JPEGs.
+   If a progressive JPEG contains a luminance-only scan (Y) but the header 
+   defined color (YCrCb), JPEGDEC fails when trying to decode missing chroma
+   components. Forcing ucSubSample=0 (grayscale) avoids this.
 
-Applied idempotently — safe to run on every build.
+3. JPEGDecode: Remove forced 1/8 scaling for progressive mode.
+   Upstream v1.8.4+ forces JPEG_SCALE_EIGHTH for progressive JPEGs. We remove
+   this to allow high-resolution (though blocky) DC-only decodes, which our
+   converter then downsamples properly to the target size.
+
+All patches are applied idempotently so it is safe to run on every build.
 """
 
 Import("env")
@@ -25,44 +27,164 @@ import os
 
 
 def patch_jpegdec(env):
+    # Find the JPEGDEC library in libdeps
     libdeps_dir = os.path.join(env["PROJECT_DIR"], ".pio", "libdeps")
     if not os.path.isdir(libdeps_dir):
         return
     for env_dir in os.listdir(libdeps_dir):
         jpeg_inl = os.path.join(libdeps_dir, env_dir, "JPEGDEC", "src", "jpeg.inl")
         if os.path.isfile(jpeg_inl):
-            _apply_mcu_skip_pointer_fix(jpeg_inl)
+            _apply_mcu_skip_patch(jpeg_inl)
+            _apply_grayscale_patch(jpeg_inl)
+            _apply_remove_forced_scale_patch(jpeg_inl)
 
 
-def _apply_mcu_skip_pointer_fix(filepath):
-    MARKER = "// CrossPoint patch: safe pMCU for MCU_SKIP"
+def _apply_mcu_skip_patch(filepath):
+    MARKER = "// CrossPoint patch: guard pMCU write for MCU_SKIP"
     with open(filepath, "r") as f:
         content = f.read()
 
     if MARKER in content:
         return  # already patched
 
-    # The wild-pointer line in JPEGDecodeMCU_P:
-    OLD = "    signed short *pMCU = &pJPEG->sMCUs[iMCU & 0xffffff];"
+    # Patch 1: Guard the unconditional pMCU[0] write in JPEGDecodeMCU_P.
+    # This is the DC coefficient store that crashes when iMCU = MCU_SKIP (-8).
+    OLD_DC = """\
+        pMCU[0] = (short)*iDCPredictor; // store in MCU[0]
+    }
+    // Now get the other 63 AC coefficients"""
+
+    NEW_DC = (
+        "        " + MARKER + "\n"
+        "        if (iMCU >= 0)\n"
+        "            pMCU[0] = (short)*iDCPredictor; // store in MCU[0]\n"
+        "    }\n"
+        "    // Now get the other 63 AC coefficients"
+    )
+
+    if OLD_DC not in content:
+        print(
+            "WARNING: JPEGDEC MCU_SKIP patch target not found in %s — "
+            "library may have been updated" % filepath
+        )
+        return
+
+    content = content.replace(OLD_DC, NEW_DC, 1)
+
+    # Patch 2: Guard the successive approximation pMCU[0] write.
+    OLD_SA = """\
+                pMCU[0] |= iPositive;
+            }
+            goto mcu_done; // that's it"""
+
+    NEW_SA = (
+        "                if (iMCU >= 0)\n"
+        "                    pMCU[0] |= iPositive;\n"
+        "            }\n"
+        "            goto mcu_done; // that's it"
+    )
+
+    if OLD_SA in content:
+        content = content.replace(OLD_SA, NEW_SA, 1)
+
+    with open(filepath, "w") as f:
+        f.write(content)
+    print("Patched JPEGDEC: guard pMCU writes for MCU_SKIP in JPEGDecodeMCU_P: %s" % filepath)
+
+
+def _apply_grayscale_patch(filepath):
+    MARKER = "// CrossPoint patch: force grayscale for non-interleaved progressive"
+    with open(filepath, "r") as f:
+        content = f.read()
+
+    if MARKER in content:
+        return
+
+    OLD = """\
+            JPEGGetSOS(pPage, &iOffset); // get Start-Of-Scan info for decoding
+//        }"""
 
     NEW = (
-        "    " + MARKER + "\n"
-        "    signed short *pMCU = (iMCU < 0) ? pJPEG->sMCUs\n"
-        "                                     : &pJPEG->sMCUs[iMCU & 0xffffff];"
+        "            JPEGGetSOS(pPage, &iOffset); // get Start-Of-Scan info for decoding\n"
+        "//        }\n"
+        "        " + MARKER + "\n"
+        "        if (pPage->ucMode == 0xc2 && pPage->ucComponentsInScan == 1) {\n"
+        "            pPage->ucSubSample = 0; // Treat non-interleaved scan as grayscale\n"
+        "        }"
     )
 
     if OLD not in content:
-        print(
-            "WARNING: JPEGDEC MCU_SKIP pointer patch target not found in %s "
-            "— library may have been updated" % filepath
-        )
+        print("WARNING: JPEGDEC grayscale patch target not found in %s" % filepath)
         return
 
     content = content.replace(OLD, NEW, 1)
     with open(filepath, "w") as f:
         f.write(content)
-    print("Patched JPEGDEC: safe pMCU for MCU_SKIP in JPEGDecodeMCU_P: %s" % filepath)
+    print("Patched JPEGDEC: force grayscale for non-interleaved progressive: %s" % filepath)
 
 
-# Run immediately at script import time (before compilation).
+def _apply_remove_forced_scale_patch(filepath):
+    MARKER = "// CrossPoint patch: remove forced 1/8 scale for progressive mode"
+    with open(filepath, "r") as f:
+        content = f.read()
+
+    # FIRST: Clean up the rogue "force 1/8 scaling" patch that might be present
+    # This was likely an older version of the patch that didn't clean itself up.
+    ROGUE_PATCH = """\
+    // CrossPoint patch: force 1/8 scaling for progressive mode
+    if (pJPEG->ucMode == 0xc2) { // progressive mode - we only decode the first scan (DC values)
+        pJPEG->iOptions |= JPEG_SCALE_EIGHTH; // return 1/8 sized image
+    }"""
+    if ROGUE_PATCH in content:
+        content = content.replace(ROGUE_PATCH, "", 1)
+        # We don't return here because we still need to apply the NEW patch below
+        # if it hasn't been applied yet.
+
+    if MARKER in content:
+        # If the marker is present, we've already applied the removal patch.
+        # But if we just removed a rogue patch, we should write the cleaned content.
+        with open(filepath, "w") as f:
+            f.write(content)
+        return
+
+    # Upstream v1.8.4+ forces JPEG_SCALE_EIGHTH for progressive mode.
+    # We remove this to allow high-resolution (but blocky) DC-only decodes
+    # which we can then downsample properly in our converter.
+    OLD = """\
+    // Requested the Exif thumbnail
+    if (pJPEG->ucMode == 0xc2) { // progressive mode - we only decode the first scan (DC values)
+        pJPEG->iOptions |= JPEG_SCALE_EIGHTH; // return 1/8 sized image
+    }"""
+
+    NEW = (
+        "    // Requested the Exif thumbnail\n"
+        "    " + MARKER + "\n"
+        "    // if (pJPEG->ucMode == 0xc2) { // Patched out by CrossPoint\n"
+        "    //    pJPEG->iOptions |= JPEG_SCALE_EIGHTH;\n"
+        "    // }"
+    )
+
+    if OLD not in content:
+        # Check if the code is slightly different (without comments)
+        OLD_ALT = """\
+    if (pJPEG->ucMode == 0xc2) {
+        pJPEG->iOptions |= JPEG_SCALE_EIGHTH;
+    }"""
+        if OLD_ALT in content:
+            content = content.replace(OLD_ALT, NEW, 1)
+        else:
+            print("WARNING: JPEGDEC forced scale removal target not found in %s" % filepath)
+            # If we changed content by removing rogue patch, write it anyway
+            with open(filepath, "w") as f:
+                f.write(content)
+            return
+    else:
+        content = content.replace(OLD, NEW, 1)
+
+    with open(filepath, "w") as f:
+        f.write(content)
+    print("Patched JPEGDEC: removed forced 1/8 scale: %s" % filepath)
+
+
+# Apply patches immediately when this pre: script runs, before compilation starts.
 patch_jpegdec(env)

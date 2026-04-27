@@ -68,6 +68,9 @@ struct ThemeMetrics {
   int keyboardTextFieldWidthPercent;
   int keyboardWidthPercent;
   int keyboardKeyCornerRadius;
+
+  int coverListItemsPerPage;
+  int coverListSpacing;
 };
 
 enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot };
@@ -113,7 +116,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 0};
+                                 .keyboardKeyCornerRadius = 0,
+                                 .coverListItemsPerPage = 3,
+                                 .coverListSpacing = 4};
 }
 
 class BaseTheme {
@@ -147,6 +152,10 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  virtual void drawCoverList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                             const std::function<std::string(int index)>& rowTitle,
+                             const std::function<std::string(int index)>& rowAuthor,
+                             const std::function<std::string(int index)>& rowPath) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   virtual void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
@@ -159,9 +168,14 @@ class BaseTheme {
                                const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
                                bool inactiveSelection = false) const;
   virtual bool showsFileIcons() const { return false; }
+  virtual int getCoverListPadding() const { return 16; }
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);
   static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY);
+
+ protected:
+  virtual void drawCoverThumbnail(const GfxRenderer& renderer, int x, int y, int maxWidth, int maxHeight,
+                                  const std::string& path, bool selected) const;
 };
