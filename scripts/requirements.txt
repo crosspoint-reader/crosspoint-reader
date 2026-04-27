@@ -1,4 +1,4 @@
-pillow==12.1.1
+pillow==12.2.0
 cairosvg==2.9.0
 matplotlib==3.10.9
 pyserial==3.5
