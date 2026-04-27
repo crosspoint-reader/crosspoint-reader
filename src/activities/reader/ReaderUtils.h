@@ -1,7 +1,9 @@
 #pragma once
 
 #include <CrossPointSettings.h>
+#include <Epub.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <Logging.h>
 
 #include "MappedInputManager.h"
@@ -9,6 +11,26 @@
 namespace ReaderUtils {
 
 constexpr unsigned long GO_HOME_MS = 1000;
+
+// Persists reader progress for an EPUB to its cache directory. Returns true on success.
+// Logs an error on failure so the reason is visible in serial logs.
+inline bool saveProgress(Epub& epub, int spineIndex, int currentPage, int pageCount) {
+  FsFile f;
+  if (!Storage.openFileForWrite("ERS", epub.getCachePath() + "/progress.bin", f)) {
+    LOG_ERR("ERS", "Could not save progress!");
+    return false;
+  }
+  uint8_t data[6];
+  data[0] = spineIndex & 0xFF;
+  data[1] = (spineIndex >> 8) & 0xFF;
+  data[2] = currentPage & 0xFF;
+  data[3] = (currentPage >> 8) & 0xFF;
+  data[4] = pageCount & 0xFF;
+  data[5] = (pageCount >> 8) & 0xFF;
+  f.write(data, 6);
+  LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
+  return true;
+}
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {

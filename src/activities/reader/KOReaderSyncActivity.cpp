@@ -11,6 +11,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
+#include "ReaderUtils.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -246,17 +247,15 @@ void KOReaderSyncActivity::onExit() {
 
 void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
   epub->setupCacheDir();
-  FsFile f;
-  if (Storage.openFileForWrite("KOSync", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    data[0] = spineIndex & 0xFF;
-    data[1] = (spineIndex >> 8) & 0xFF;
-    data[2] = page & 0xFF;
-    data[3] = (page >> 8) & 0xFF;
-    data[4] = 0;
-    data[5] = 0;
-    f.write(data, 6);
-    LOG_DBG("KOSync", "Progress saved: Chapter %d, Page %d", spineIndex, page);
+  if (!ReaderUtils::saveProgress(*epub, spineIndex, page, 0)) {
+    // Surface the failure to the user instead of silently dropping the synced position.
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = tr(STR_SAVE_PROGRESS_FAILED);
+    }
+    requestUpdate(true);
+    return;
   }
   returnToReader();
 }
