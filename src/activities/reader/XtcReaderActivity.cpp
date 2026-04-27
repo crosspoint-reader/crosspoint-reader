@@ -22,10 +22,6 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "fontIds.h"
 
-namespace {
-constexpr unsigned long goHomeMs = 1000;
-}  // namespace
-
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -61,6 +57,7 @@ void XtcReaderActivity::onExit() {
 
 void XtcReaderActivity::loop() {
   if (inputDrainGuard.shouldDrain(mappedInput)) {
+    buttonEvents.drain();
     return;
   }
 
@@ -146,9 +143,6 @@ void XtcReaderActivity::loop() {
     }
   } else if (nextTriggered) {
     currentPage++;
-    if (currentPage >= xtc->getPageCount()) {
-      currentPage = xtc->getPageCount();  // Allow showing "End of book"
-    }
     requestUpdate();
   }
 }

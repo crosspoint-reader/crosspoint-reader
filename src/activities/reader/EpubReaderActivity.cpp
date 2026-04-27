@@ -219,12 +219,14 @@ void EpubReaderActivity::loop() {
   }
 
   if (inputDrainGuard.shouldDrain(mappedInput)) {
+    buttonEvents.drain();
     return;
   }
 
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      buttonEvents.drain();
       automaticPageTurnActive = false;
       // updates chapter title space to indicate page turn disabled
       requestUpdate();
@@ -260,36 +262,7 @@ void EpubReaderActivity::loop() {
         return;
       }
       if (ev.type == ButtonEventManager::PressType::Short) {
-        const int currentPage = section ? section->currentPage + 1 : 0;
-        const int totalPages = section ? section->pageCount : 0;
-        float bookProgress = 0.0f;
-        if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-          const float chapterProgress =
-              static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-          bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
-        }
-        const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-        const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
-                                                                       static_cast<uint16_t>(section->currentPage));
-        ReaderUtils::enforceExitFullRefresh(renderer);
-        startActivityForResult(
-            std::make_unique<EpubReaderMenuActivity>(
-                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                SETTINGS.orientation, !currentPageFootnotes.empty(), bookEmbeddedStyleOverride,
-                bookImageRenderingOverride, bookFontFamilyOverride, bookFontSizeOverride, SETTINGS.textDarkness,
-                !bookmarkStore.isEmpty(), isCurrentPageStarred),
-            [this](const ActivityResult& result) {
-              // Always apply orientation/darkness change even if the menu was cancelled
-              const auto& menu = std::get<MenuResult>(result.data);
-              applyOrientation(menu.orientation);
-              applyTextDarkness(menu.textDarkness);
-              toggleAutoPageTurn(menu.pageTurnOption);
-              applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride, menu.fontFamilyOverride,
-                                       menu.fontSizeOverride);
-              if (!result.isCancelled) {
-                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-              }
-            });
+        openReaderMenu();
         return;
       }
     }
@@ -1741,6 +1714,36 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   return true;
 }
 
+void EpubReaderActivity::openReaderMenu() {
+  const int currentPage = section ? section->currentPage + 1 : 0;
+  const int totalPages = section ? section->pageCount : 0;
+  float bookProgress = 0.0f;
+  if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
+    const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+  }
+  const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+  const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
+                                                                 static_cast<uint16_t>(section->currentPage));
+  ReaderUtils::enforceExitFullRefresh(renderer);
+  startActivityForResult(
+      std::make_unique<EpubReaderMenuActivity>(
+          renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+          !currentPageFootnotes.empty(), bookEmbeddedStyleOverride, bookImageRenderingOverride, bookFontFamilyOverride,
+          bookFontSizeOverride, SETTINGS.textDarkness, !bookmarkStore.isEmpty(), isCurrentPageStarred),
+      [this](const ActivityResult& result) {
+        const auto& menu = std::get<MenuResult>(result.data);
+        applyOrientation(menu.orientation);
+        applyTextDarkness(menu.textDarkness);
+        toggleAutoPageTurn(menu.pageTurnOption);
+        applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride, menu.fontFamilyOverride,
+                                 menu.fontSizeOverride);
+        if (!result.isCancelled) {
+          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+        }
+      });
+}
+
 void EpubReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION action) {
   using BA = CrossPointSettings::BUTTON_ACTION;
   switch (action) {
@@ -1859,35 +1862,7 @@ void EpubReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION 
       break;
     case BA::BTN_READER_MENU:
       if (epub) {
-        const int currentPage = section ? section->currentPage + 1 : 0;
-        const int totalPages = section ? section->pageCount : 0;
-        float bookProgress = 0.0f;
-        if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-          const float chapterProgress =
-              static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-          bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
-        }
-        const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-        const bool isCurrentPageStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
-                                                                       static_cast<uint16_t>(section->currentPage));
-        ReaderUtils::enforceExitFullRefresh(renderer);
-        startActivityForResult(
-            std::make_unique<EpubReaderMenuActivity>(
-                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                SETTINGS.orientation, !currentPageFootnotes.empty(), bookEmbeddedStyleOverride,
-                bookImageRenderingOverride, bookFontFamilyOverride, bookFontSizeOverride, SETTINGS.textDarkness,
-                !bookmarkStore.isEmpty(), isCurrentPageStarred),
-            [this](const ActivityResult& result) {
-              const auto& menu = std::get<MenuResult>(result.data);
-              applyOrientation(menu.orientation);
-              applyTextDarkness(menu.textDarkness);
-              toggleAutoPageTurn(menu.pageTurnOption);
-              applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride, menu.fontFamilyOverride,
-                                       menu.fontSizeOverride);
-              if (!result.isCancelled) {
-                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-              }
-            });
+        openReaderMenu();
       }
       break;
     case BA::BTN_KOREADER_SYNC:

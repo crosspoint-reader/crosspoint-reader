@@ -109,20 +109,6 @@ void StarredPagesActivity::loop() {
       deleteSelected();
       return;
     }
-
-    if (totalItems > 0 && ev.button == MappedInputManager::Button::PageBack &&
-        ev.type == ButtonEventManager::PressType::Short) {
-      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-      requestUpdate();
-      return;
-    }
-
-    if (totalItems > 0 && ev.button == MappedInputManager::Button::PageForward &&
-        ev.type == ButtonEventManager::PressType::Short) {
-      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-      requestUpdate();
-      return;
-    }
   }
 
   if (totalItems == 0) return;

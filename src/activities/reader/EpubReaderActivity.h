@@ -166,6 +166,7 @@ class EpubReaderActivity final : public Activity {
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void applyBookReaderOverrides(int8_t embeddedStyleOverride, int8_t imageRenderingOverride, int8_t fontFamilyOverride,
                                 int8_t fontSizeOverride);
+  void openReaderMenu();
   bool getEffectiveEmbeddedStyle() const;
   uint8_t getEffectiveImageRendering() const;
   int getEffectiveReaderFontId() const;

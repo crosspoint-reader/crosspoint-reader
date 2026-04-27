@@ -38,6 +38,8 @@ static std::string flattenHeadingText(const MdParser::ParsedLine& parsed) {
 void MdReaderActivity::onEnter() {
   Activity::onEnter();
 
+  inputDrainGuard.arm();
+
   if (!txt) {
     return;
   }
@@ -221,6 +223,11 @@ void MdReaderActivity::onExit() {
 }
 
 void MdReaderActivity::loop() {
+  if (inputDrainGuard.shouldDrain(mappedInput)) {
+    buttonEvents.drain();
+    return;
+  }
+
   ButtonEventManager::ButtonEvent ev;
   while (buttonEvents.consumeEvent(ev)) {
     if (ev.button == MappedInputManager::Button::Back) {

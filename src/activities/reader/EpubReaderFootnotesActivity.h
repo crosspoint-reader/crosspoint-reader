@@ -21,6 +21,7 @@ class EpubReaderFootnotesActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  void advanceSelection(int delta);
   const std::vector<FootnoteEntry>& footnotes;
   int selectedIndex = 0;
   int scrollOffset = 0;

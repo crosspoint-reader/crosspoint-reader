@@ -38,50 +38,33 @@ void EpubReaderFootnotesActivity::loop() {
 
     if ((ev.button == MappedInputManager::Button::PageBack || ev.button == MappedInputManager::Button::Left) &&
         ev.type == ButtonEventManager::PressType::Short) {
-      if (!footnotes.empty()) {
-        selectedIndex = (selectedIndex - 1 + footnotes.size()) % footnotes.size();
-        requestUpdate();
-      }
+      advanceSelection(-1);
       return;
     }
 
     if ((ev.button == MappedInputManager::Button::PageForward || ev.button == MappedInputManager::Button::Right) &&
         ev.type == ButtonEventManager::PressType::Short) {
-      if (!footnotes.empty()) {
-        selectedIndex = (selectedIndex + 1) % footnotes.size();
-        requestUpdate();
-      }
+      advanceSelection(1);
       return;
     }
   }
 
-  buttonNavigator.onNextRelease([this] {
-    if (!footnotes.empty()) {
-      selectedIndex = (selectedIndex + 1) % footnotes.size();
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onNextRelease([this] { advanceSelection(1); });
 
-  buttonNavigator.onPreviousRelease([this] {
-    if (!footnotes.empty()) {
-      selectedIndex = (selectedIndex - 1 + footnotes.size()) % footnotes.size();
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onPreviousRelease([this] { advanceSelection(-1); });
 
-  buttonNavigator.onNextContinuous([this] {
-    if (!footnotes.empty()) {
-      selectedIndex = (selectedIndex + 1) % footnotes.size();
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onNextContinuous([this] { advanceSelection(1); });
 
-  buttonNavigator.onPreviousContinuous([this] {
-    if (!footnotes.empty()) {
-      selectedIndex = (selectedIndex - 1 + footnotes.size()) % footnotes.size();
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onPreviousContinuous([this] { advanceSelection(-1); });
+}
+
+void EpubReaderFootnotesActivity::advanceSelection(int delta) {
+  if (footnotes.empty()) {
+    return;
+  }
+  const int n = static_cast<int>(footnotes.size());
+  selectedIndex = ((selectedIndex + delta) % n + n) % n;
+  requestUpdate();
 }
 
 void EpubReaderFootnotesActivity::render(RenderLock&&) {

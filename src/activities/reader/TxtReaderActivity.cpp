@@ -137,6 +137,7 @@ void TxtReaderActivity::onExit() {
 
 void TxtReaderActivity::loop() {
   if (inputDrainGuard.shouldDrain(mappedInput)) {
+    buttonEvents.drain();
     return;
   }
 

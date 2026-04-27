@@ -388,7 +388,7 @@ void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
 
-  // Long press BACK (1s+) goes to home screen
+  const bool toggleSupported = isBmpFile(filePath) ? bmpHasGreyscale : true;
   ButtonEventManager::ButtonEvent ev;
   while (buttonEvents.consumeEvent(ev)) {
     if (ev.button == MappedInputManager::Button::Back) {
@@ -401,27 +401,25 @@ void BmpViewerActivity::loop() {
         return;
       }
     }
-  }
 
-  // Confirm: toggle between 1-bit B&W and 4-level grayscale display.
-  // For decoded images this always applies; for BMPs it only makes sense when the bitmap
-  // actually carries greyscale data (1-bit BMPs have nothing to toggle).
-  const bool toggleSupported = isBmpFile(filePath) ? bmpHasGreyscale : true;
-  if (toggleSupported && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    toggleDisplayMode();
-    return;
-  }
+    if (ev.button == MappedInputManager::Button::Confirm && ev.type == ButtonEventManager::PressType::Short) {
+      if (toggleSupported) {
+        toggleDisplayMode();
+      }
+      return;
+    }
 
 #ifdef ENABLE_IMAGE_DITHERING_EXTENSION
-  if (!isBmpFile(filePath) && grayscaleDisplay && mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    cycleDitherMode();
-    return;
-  }
+    if (ev.button == MappedInputManager::Button::Left && ev.type == ButtonEventManager::PressType::Short &&
+        !isBmpFile(filePath) && grayscaleDisplay) {
+      cycleDitherMode();
+      return;
+    }
 #endif
 
-  // Next/Right button: set this image as the sleep screen
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    setAsSleepScreen();
-    return;
+    if (ev.button == MappedInputManager::Button::Right && ev.type == ButtonEventManager::PressType::Short) {
+      setAsSleepScreen();
+      return;
+    }
   }
 }

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 
 struct MdHeading {
@@ -72,6 +73,7 @@ class MdReaderActivity final : public Activity {
   void assignHeadingPageNumbers();
   int getHeadingIndexForOffset(size_t offset) const;
   void jumpToHeading(bool next);
+  ReaderUtils::InputDrainGuard inputDrainGuard;
 
   // Word-wrap a parsed markdown line into one or more RenderedLines.
   // Returns true if all content was emitted, false if truncated by maxLines.
