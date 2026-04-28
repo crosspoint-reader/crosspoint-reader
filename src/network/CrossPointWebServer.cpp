@@ -9,6 +9,7 @@
 #include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
@@ -1224,8 +1225,21 @@ void CrossPointWebServer::handleGetSettings() const {
   bool seenFirst = false;
   JsonDocument doc;
 
-  for (const auto& s : settings) {
-    if (!s.key) continue;  // Skip ACTION-only entries
+  for (const auto& sBase : settings) {
+    if (!sBase.key) continue;  // Skip ACTION-only entries
+
+    // Enrich the font-family entry with current SD card families.
+    SettingInfo sLocal;
+    const SettingInfo* sPtr = &sBase;
+    if (std::strcmp(sBase.key, "fontFamily") == 0) {
+      sLocal = sBase;
+      const uint8_t n = fontFamilyOptionCount();
+      sLocal.enumLabels.clear();
+      sLocal.enumLabels.reserve(n);
+      for (uint8_t i = 0; i < n; i++) sLocal.enumLabels.push_back(fontFamilyOptionLabel(i));
+      sPtr = &sLocal;
+    }
+    const SettingInfo& s = *sPtr;
 
     doc.clear();
     doc["key"] = s.key;
@@ -1337,7 +1351,11 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        const auto count = static_cast<int>(s.enumLabels.empty() ? s.enumValues.size() : s.enumLabels.size());
+        // For fontFamily the enumLabels in the static list are empty by design
+        // (built lazily by handleGetSettings); use the dynamic option count instead.
+        const int count = (std::strcmp(s.key, "fontFamily") == 0)
+                              ? static_cast<int>(fontFamilyOptionCount())
+                              : static_cast<int>(s.enumLabels.empty() ? s.enumValues.size() : s.enumLabels.size());
         if (val >= 0 && val < count) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);

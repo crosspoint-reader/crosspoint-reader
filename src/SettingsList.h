@@ -6,6 +6,7 @@
 
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
+#include "SdCardFontGlobals.h"
 #include "activities/settings/SettingInfo.h"
 
 // Shared settings list used by both the device settings UI and the web settings API.
@@ -86,10 +87,13 @@ inline const std::vector<SettingInfo> list = {
     SettingInfo::Enum(StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
                       {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW},
                       "orientation", StrId::STR_CAT_READER),
-    // Font
-    SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                      {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC}, "fontFamily",
-                      StrId::STR_CAT_READER)
+    // Font — DynamicEnum so SD card font families can be appended at the consumer
+    // side (SettingsActivity / CrossPointWebServer enrich enumLabels before
+    // iterating). The built-in StrIds are kept as a fallback for code paths that
+    // don't enrich enumLabels.
+    SettingInfo::DynamicEnum(StrId::STR_FONT_FAMILY,
+                             {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC},
+                             fontFamilyDynamicGetter, fontFamilyDynamicSetter, "fontFamily", StrId::STR_CAT_READER)
         .withSubcategory(StrId::STR_MENU_READER_FONT),
     SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                       {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE}, "fontSize",

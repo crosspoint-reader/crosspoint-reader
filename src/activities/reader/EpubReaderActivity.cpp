@@ -1073,48 +1073,25 @@ uint8_t EpubReaderActivity::getEffectiveImageRendering() const {
 }
 
 int EpubReaderActivity::getEffectiveReaderFontId() const {
-  const uint8_t fontFamily =
-      (bookFontFamilyOverride >= 0) ? static_cast<uint8_t>(bookFontFamilyOverride) : SETTINGS.fontFamily;
+  // Per-book font override: when set, force a specific BUILT-IN family even if
+  // an SD card font is the global default. This makes the override predictable
+  // ("override forces back to a known built-in") and avoids surprising users
+  // who set the override before they had any SD fonts.
   const uint8_t fontSize = (bookFontSizeOverride >= 0) ? static_cast<uint8_t>(bookFontSizeOverride) : SETTINGS.fontSize;
-  switch (fontFamily) {
-    case CrossPointSettings::NOTOSANS:
-      switch (fontSize) {
-        case CrossPointSettings::SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case CrossPointSettings::MEDIUM:
-        default:
-          return NOTOSANS_14_FONT_ID;
-        case CrossPointSettings::LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case CrossPointSettings::EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
-      }
-    case CrossPointSettings::OPENDYSLEXIC:
-      switch (fontSize) {
-        case CrossPointSettings::SMALL:
-          return OPENDYSLEXIC_8_FONT_ID;
-        case CrossPointSettings::MEDIUM:
-        default:
-          return OPENDYSLEXIC_10_FONT_ID;
-        case CrossPointSettings::LARGE:
-          return OPENDYSLEXIC_12_FONT_ID;
-        case CrossPointSettings::EXTRA_LARGE:
-          return OPENDYSLEXIC_14_FONT_ID;
-      }
-    case CrossPointSettings::BOOKERLY:
-    default:
-      switch (fontSize) {
-        case CrossPointSettings::SMALL:
-          return BOOKERLY_12_FONT_ID;
-        case CrossPointSettings::MEDIUM:
-        default:
-          return BOOKERLY_14_FONT_ID;
-        case CrossPointSettings::LARGE:
-          return BOOKERLY_16_FONT_ID;
-        case CrossPointSettings::EXTRA_LARGE:
-          return BOOKERLY_18_FONT_ID;
-      }
+  if (bookFontFamilyOverride >= 0) {
+    return CrossPointSettings::getBuiltinReaderFontId(static_cast<uint8_t>(bookFontFamilyOverride), fontSize);
   }
+  // No override: defer to global resolution (which honors SD card font selection).
+  // We synthesize a temporary lookup using the override fontSize if it's set; otherwise
+  // SETTINGS.getReaderFontId() is the canonical answer.
+  if (bookFontSizeOverride >= 0) {
+    if (SETTINGS.sdFontFamilyName[0] != '\0') {
+      // SD font selected globally — size override doesn't change which family resolves.
+      return SETTINGS.getReaderFontId();
+    }
+    return CrossPointSettings::getBuiltinReaderFontId(SETTINGS.fontFamily, fontSize);
+  }
+  return SETTINGS.getReaderFontId();
 }
 
 bool EpubReaderActivity::stepPageState(const bool isForwardTurn) {

@@ -6,6 +6,8 @@
 #include <HalGPIO.h>
 #include <Logging.h>
 
+#include <cstring>
+
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SettingActionDispatch.h"
@@ -66,14 +68,23 @@ void SettingsActivity::onEnter() {
          setting.nameId == StrId::STR_TIMEZONE)) {
       continue;
     }
-    if (setting.category == StrId::STR_CAT_DISPLAY) {
-      addTo(displaySettings, lastDisplaySub, setting);
-    } else if (setting.category == StrId::STR_CAT_READER) {
-      addTo(readerSettings, lastReaderSub, setting);
-    } else if (setting.category == StrId::STR_CAT_CONTROLS) {
-      addTo(controlsSettings, lastControlsSub, setting);
-    } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      addTo(systemSettings, lastSystemSub, setting);
+    // Enrich the font-family entry with SD card families discovered at boot.
+    // The list itself is a namespace-static; we only mutate our local copy here.
+    SettingInfo enriched = setting;
+    if (setting.key && std::strcmp(setting.key, "fontFamily") == 0) {
+      const uint8_t n = fontFamilyOptionCount();
+      enriched.enumLabels.clear();
+      enriched.enumLabels.reserve(n);
+      for (uint8_t i = 0; i < n; i++) enriched.enumLabels.push_back(fontFamilyOptionLabel(i));
+    }
+    if (enriched.category == StrId::STR_CAT_DISPLAY) {
+      addTo(displaySettings, lastDisplaySub, enriched);
+    } else if (enriched.category == StrId::STR_CAT_READER) {
+      addTo(readerSettings, lastReaderSub, enriched);
+    } else if (enriched.category == StrId::STR_CAT_CONTROLS) {
+      addTo(controlsSettings, lastControlsSub, enriched);
+    } else if (enriched.category == StrId::STR_CAT_SYSTEM) {
+      addTo(systemSettings, lastSystemSub, enriched);
     }
     // Web-only categories (KOReader Sync, OPDS Browser) are skipped for device UI
   }

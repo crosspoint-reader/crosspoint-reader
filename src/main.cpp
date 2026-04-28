@@ -26,6 +26,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
 #include "WeatherSettingsStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
@@ -40,7 +41,8 @@ ButtonEventManager& globalButtonEvents() { return buttonEventManager; }
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
-FontCacheManager fontCacheManager(renderer.getFontMap());
+SdCardFontSystem sdFontSystem;
+FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 
 // Fonts
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
@@ -182,8 +184,17 @@ void setupDisplayAndFonts() {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+
+  // Discover SD card fonts (under /.crosspoint/fonts/) and load the family
+  // currently selected in settings (if any). Safe to call without an SD card.
+  sdFontSystem.begin(renderer);
+
   LOG_DBG("MAIN", "Fonts setup");
 }
+
+// Defined here to satisfy SdCardFontGlobals.h's extern declaration. Keeps
+// activity-side callers out of SdCardFontSystem internals.
+void ensureSdFontLoaded() { sdFontSystem.ensureLoaded(renderer); }
 
 void setup() {
   {

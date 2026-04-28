@@ -88,8 +88,9 @@ class CrossPointSettings {
     FRONT_BUTTON_HARDWARE_COUNT
   };
 
-  // Font family options
+  // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
+  static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
@@ -211,6 +212,8 @@ class CrossPointSettings {
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
   uint8_t fontFamily = BOOKERLY;
+  // SD card font family name (empty = use built-in fontFamily)
+  char sdFontFamilyName[32] = "";
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
@@ -319,6 +322,11 @@ class CrossPointSettings {
 
   static constexpr uint16_t getPowerButtonDuration() { return 400; }
   int getReaderFontId() const;
+  // Pure built-in lookup (size enum + family enum -> font ID). Independent of
+  // SD-card font selection. Used by the per-book fontFamilyOverride path so
+  // an override forces back to a known built-in even when an SD font is the
+  // global default.
+  static int getBuiltinReaderFontId(uint8_t family, uint8_t size);
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(FsFile& file, bool count_only = false) const;

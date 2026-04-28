@@ -8,7 +8,27 @@
 #include <cstring>
 #include <string>
 
+#include "SdCardFontGlobals.h"
 #include "fontIds.h"
+
+// Font ID 0 is reserved as the SD card font "not found" sentinel
+// (SdCardFontManager::computeFontId() never returns 0). Guard against any
+// hash accidentally producing 0 — would cause silent fallback to built-in.
+static_assert(BOOKERLY_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(BOOKERLY_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(BOOKERLY_16_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(BOOKERLY_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_16_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_8_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(OPENDYSLEXIC_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
 
 // Initialize the static instance
 CrossPointSettings CrossPointSettings::instance;
@@ -244,6 +264,20 @@ bool CrossPointSettings::loadFromBinaryFile() {
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
+  // SD card fonts inherit the Bookerly-style line compression (the most neutral
+  // values) since we have no per-family metadata for SD fonts.
+  if (sdFontFamilyName[0] != '\0') {
+    switch (lineSpacing) {
+      case TIGHT:
+        return 0.95f;
+      case NORMAL:
+      default:
+        return 1.0f;
+      case WIDE:
+        return 1.1f;
+    }
+  }
+
   switch (fontFamily) {
     case BOOKERLY:
     default:
@@ -311,11 +345,11 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
-int CrossPointSettings::getReaderFontId() const {
-  switch (fontFamily) {
+int CrossPointSettings::getBuiltinReaderFontId(uint8_t family, uint8_t size) {
+  switch (family) {
     case BOOKERLY:
     default:
-      switch (fontSize) {
+      switch (size) {
         case SMALL:
           return BOOKERLY_12_FONT_ID;
         case MEDIUM:
@@ -327,7 +361,7 @@ int CrossPointSettings::getReaderFontId() const {
           return BOOKERLY_18_FONT_ID;
       }
     case NOTOSANS:
-      switch (fontSize) {
+      switch (size) {
         case SMALL:
           return NOTOSANS_12_FONT_ID;
         case MEDIUM:
@@ -339,7 +373,7 @@ int CrossPointSettings::getReaderFontId() const {
           return NOTOSANS_18_FONT_ID;
       }
     case OPENDYSLEXIC:
-      switch (fontSize) {
+      switch (size) {
         case SMALL:
           return OPENDYSLEXIC_8_FONT_ID;
         case MEDIUM:
@@ -351,4 +385,15 @@ int CrossPointSettings::getReaderFontId() const {
           return OPENDYSLEXIC_14_FONT_ID;
       }
   }
+}
+
+int CrossPointSettings::getReaderFontId() const {
+  // SD card font takes priority when one is selected globally.
+  // resolveSdCardFontId() returns 0 if the named family isn't loaded
+  // (e.g. SD card removed since selection) — fall through to built-in.
+  if (sdFontFamilyName[0] != '\0') {
+    int id = resolveSdCardFontId(sdFontFamilyName);
+    if (id != 0) return id;
+  }
+  return getBuiltinReaderFontId(fontFamily, fontSize);
 }
