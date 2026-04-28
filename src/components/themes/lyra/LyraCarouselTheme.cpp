@@ -102,8 +102,13 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   // When navigating the icon row, keep showing the last carousel position —
   // falling back to 0 on first use (lastCarouselSelectorIndex == -1).
   const bool inCarouselRow = (selectorIndex < bookCount);
-  const int centerIdx =
-      inCarouselRow ? selectorIndex : (lastCarouselSelectorIndex >= 0 ? lastCarouselSelectorIndex : 0);
+  int centerIdx = inCarouselRow ? selectorIndex : (lastCarouselSelectorIndex >= 0 ? lastCarouselSelectorIndex : 0);
+
+  if (centerIdx >= bookCount) {
+    centerIdx = bookCount - 1;
+    coverRendered = false;
+    coverBufferStored = false;
+  }
 
   // cppcheck-suppress knownConditionTrueFalse
   // Reachable as false when navigating the icon row with a previously-set
@@ -224,6 +229,7 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
                                        const std::function<std::string(int index)>& buttonLabel,
                                        const std::function<UIIcon(int index)>& rowIcon) const {
   if (buttonCount <= 0) return;
+  (void)buttonLabel;
 
   const int tileH = kMenuIconPad + kMenuIconSize + kMenuIconPad;
   const int tileW = renderer.getScreenWidth() / buttonCount;
@@ -295,7 +301,7 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
   // Solid black highlight bar
   if (selectedIndex >= 0) {
     renderer.fillRoundedRect(
-        LyraCarouselMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
+        rect.x + LyraCarouselMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
         contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2, rowHeight, kCornerRadius, Color::Black);
   }
 
