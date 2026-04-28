@@ -20,8 +20,9 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   if (adjusted < 0) adjusted = 0;
   if (adjusted > 255) adjusted = 255;
 
-  if (adjusted < 64) return 0;
+  // Midpoint thresholds for output palette {0, 85, 170, 255}.
+  if (adjusted < 43) return 0;
   if (adjusted < 128) return 1;
-  if (adjusted < 192) return 2;
+  if (adjusted < 213) return 2;
   return 3;
 }
