@@ -64,6 +64,8 @@ const uint8_t* iconBitmapFor(UIIcon icon) {
       return Settings2Icon;
     case UIIcon::Book:
       return BookIcon;
+    case UIIcon::Library:
+      return LibraryIcon;
     default:
       return nullptr;
   }
