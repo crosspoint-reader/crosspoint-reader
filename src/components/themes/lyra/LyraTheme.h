@@ -75,4 +75,7 @@ class LyraTheme : public BaseTheme {
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
   bool showsFileIcons() const override { return true; }
+
+ protected:
+  static const uint8_t* iconForName(UIIcon icon, int size);
 };

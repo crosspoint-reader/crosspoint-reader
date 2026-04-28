@@ -275,17 +275,21 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
+  const int sw = getScreenWidth();
+  const int sh = getScreenHeight();
   if (x1 == x2) {
-    if (y2 < y1) {
-      std::swap(y1, y2);
-    }
+    if (x1 < 0 || x1 >= sw) return;
+    if (y2 < y1) std::swap(y1, y2);
+    y1 = std::max(y1, 0);
+    y2 = std::min(y2, sh - 1);
     for (int y = y1; y <= y2; y++) {
       drawPixel(x1, y, state);
     }
   } else if (y1 == y2) {
-    if (x2 < x1) {
-      std::swap(x1, x2);
-    }
+    if (y1 < 0 || y1 >= sh) return;
+    if (x2 < x1) std::swap(x1, x2);
+    x1 = std::max(x1, 0);
+    x2 = std::min(x2, sw - 1);
     for (int x = x1; x <= x2; x++) {
       drawPixel(x, y1, state);
     }
@@ -478,16 +482,23 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
     fillRect(x, y, width, height, true);
   } else if (color == Color::White) {
     fillRect(x, y, width, height, false);
-  } else if (color == Color::LightGray) {
-    for (int fillY = y; fillY < y + height; fillY++) {
-      for (int fillX = x; fillX < x + width; fillX++) {
-        drawPixelDither<Color::LightGray>(fillX, fillY);
+  } else if (color == Color::LightGray || color == Color::DarkGray) {
+    const int x0 = std::max(x, 0);
+    const int y0 = std::max(y, 0);
+    const int x1 = std::min(x + width, getScreenWidth());
+    const int y1 = std::min(y + height, getScreenHeight());
+    if (x0 >= x1 || y0 >= y1) return;
+    if (color == Color::LightGray) {
+      for (int fillY = y0; fillY < y1; fillY++) {
+        for (int fillX = x0; fillX < x1; fillX++) {
+          drawPixelDither<Color::LightGray>(fillX, fillY);
+        }
       }
-    }
-  } else if (color == Color::DarkGray) {
-    for (int fillY = y; fillY < y + height; fillY++) {
-      for (int fillX = x; fillX < x + width; fillX++) {
-        drawPixelDither<Color::DarkGray>(fillX, fillY);
+    } else {
+      for (int fillY = y0; fillY < y1; fillY++) {
+        for (int fillX = x0; fillX < x1; fillX++) {
+          drawPixelDither<Color::DarkGray>(fillX, fillY);
+        }
       }
     }
   }
@@ -665,6 +676,67 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
+}
+
+void GfxRenderer::drawIconInverted(const uint8_t bitmap[], const int x, const int y, const int width,
+                                   const int height) const {
+  // Portrait-mode coordinate transform (x↔y swap), matching drawIcon.
+  // OR with ~srcByte sets framebuffer bits to 1 (white) wherever the icon
+  // bitmap is 0 (black) — produces a white icon on a black background.
+  const int physX = y;
+  const int physY = getScreenWidth() - width - x;
+  const int imgW = height;  // dimensions swapped by portrait transform
+  const int imgH = width;
+  const int srcStride = (imgW + 7) / 8;  // round up so non-byte-aligned widths copy fully
+
+  // Trivial off-screen rejection.
+  if (physX + imgW <= 0 || physX >= HalDisplay::DISPLAY_WIDTH) return;
+  if (physY + imgH <= 0 || physY >= HalDisplay::DISPLAY_HEIGHT) return;
+
+  // Floor-divide so a negative physX produces the correct (negative) base byte;
+  // C++ integer division truncates toward zero, which would round up for negatives.
+  const int baseByte = (physX >= 0) ? (physX >> 3) : -(((-physX) + 7) >> 3);
+  const int bitShift = ((physX % 8) + 8) % 8;  // 0..7
+
+  // Strip spurious low bits in the trailing source byte when imgW is not a
+  // multiple of 8 — without this, ~bitmap would set them to 1 and bleed extra
+  // white pixels past the icon's right edge.
+  const int trail = srcStride * 8 - imgW;
+  const uint8_t trailMask = static_cast<uint8_t>(0xFF << trail);
+  const int lastCol = srcStride - 1;
+
+  for (int row = 0; row < imgH; ++row) {
+    const int destY = physY + row;
+    if (destY < 0 || destY >= HalDisplay::DISPLAY_HEIGHT) continue;
+    const int rowBase = destY * HalDisplay::DISPLAY_WIDTH_BYTES;
+    const int srcOffset = row * srcStride;
+
+    if (bitShift == 0) {
+      for (int col = 0; col < srcStride; ++col) {
+        const int dst = baseByte + col;
+        if (dst < 0) continue;
+        if (dst >= HalDisplay::DISPLAY_WIDTH_BYTES) break;
+        uint8_t inv = ~bitmap[srcOffset + col];
+        if (col == lastCol && trail > 0) inv &= trailMask;
+        frameBuffer[rowBase + dst] |= inv;
+      }
+    } else {
+      const int rsh = bitShift;
+      const int lsh = 8 - bitShift;
+      for (int col = 0; col < srcStride; ++col) {
+        uint8_t inv = ~bitmap[srcOffset + col];
+        if (col == lastCol && trail > 0) inv &= trailMask;
+        const int dstHi = baseByte + col;
+        const int dstLo = dstHi + 1;
+        if (dstHi >= 0 && dstHi < HalDisplay::DISPLAY_WIDTH_BYTES) {
+          frameBuffer[rowBase + dstHi] |= static_cast<uint8_t>(inv >> rsh);
+        }
+        if (dstLo >= 0 && dstLo < HalDisplay::DISPLAY_WIDTH_BYTES) {
+          frameBuffer[rowBase + dstLo] |= static_cast<uint8_t>(inv << lsh);
+        }
+      }
+    }
+  }
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
