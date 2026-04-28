@@ -7,6 +7,8 @@
 
 namespace {
 
+int measureCallCount = 0;
+
 void fail(const char* testName, const std::string& message) {
   std::cerr << "FAILED: " << testName << "\n" << message << "\n";
   std::exit(1);
@@ -34,7 +36,8 @@ void expectTrue(bool condition, const char* testName, const char* message) {
   }
 }
 
-int fixedWidthMeasure(const std::string& text) {
+int fixedWidthMeasure(void*, const std::string& text) {
+  ++measureCallCount;
   int width = 0;
   for (const unsigned char ch : text) {
     if ((ch & 0xC0) != 0x80) {
@@ -45,10 +48,11 @@ int fixedWidthMeasure(const std::string& text) {
 }
 
 std::vector<WriterWrappedLayout::Line> wrapWithFixedWidth(const std::string& text, int maxWidth) {
-  return WriterWrappedLayout::wrap(text, maxWidth, fixedWidthMeasure);
+  return WriterWrappedLayout::wrap(text, maxWidth, WriterWrappedLayout::MeasureText{nullptr, fixedWidthMeasure});
 }
 
-int weightedMeasure(const std::string& text) {
+int weightedMeasure(void*, const std::string& text) {
+  ++measureCallCount;
   int width = 0;
   for (const char ch : text) {
     if (ch == 'W') {
@@ -63,10 +67,11 @@ int weightedMeasure(const std::string& text) {
 }
 
 std::vector<WriterWrappedLayout::Line> wrapWithWeightedWidth(const std::string& text, int maxWidth) {
-  return WriterWrappedLayout::wrap(text, maxWidth, weightedMeasure);
+  return WriterWrappedLayout::wrap(text, maxWidth, WriterWrappedLayout::MeasureText{nullptr, weightedMeasure});
 }
 
 void wrapsUsingMeasuredWidthNotCharacterCount() {
+  measureCallCount = 0;
   const auto lines = wrapWithWeightedWidth("iiii W", 6);
 
   expectEqual(lines.size(), 2, "wrapsUsingMeasuredWidthNotCharacterCount", "line count");
@@ -78,7 +83,23 @@ void wrapsUsingMeasuredWidthNotCharacterCount() {
   expectEqual(lines[1].endOffset, 6, "wrapsUsingMeasuredWidthNotCharacterCount", "line 1 endOffset");
 }
 
+void triesWholeWordsBeforeHardWrapping() {
+  measureCallCount = 0;
+  const auto lines = wrapWithFixedWidth("hello extraordinary", 13);
+
+  expectEqual(lines.size(), 2, "triesWholeWordsBeforeHardWrapping", "line count");
+  expectEqual(lines[0].text, "hello", "triesWholeWordsBeforeHardWrapping", "line 0 text");
+  expectEqual(lines[0].startOffset, 0, "triesWholeWordsBeforeHardWrapping", "line 0 startOffset");
+  expectEqual(lines[0].endOffset, 5, "triesWholeWordsBeforeHardWrapping", "line 0 endOffset");
+  expectEqual(lines[1].text, "extraordinary", "triesWholeWordsBeforeHardWrapping", "line 1 text");
+  expectEqual(lines[1].startOffset, 6, "triesWholeWordsBeforeHardWrapping", "line 1 startOffset");
+  expectEqual(lines[1].endOffset, 19, "triesWholeWordsBeforeHardWrapping", "line 1 endOffset");
+  expectTrue(measureCallCount <= 5, "triesWholeWordsBeforeHardWrapping",
+             "word-first wrapping should measure whole-word candidates instead of growing codepoint substrings");
+}
+
 void hardWrapsLongWordsWithoutEllipsis() {
+  measureCallCount = 0;
   const auto lines = wrapWithFixedWidth("abcdef", 2);
 
   expectEqual(lines.size(), 3, "hardWrapsLongWordsWithoutEllipsis", "line count");
@@ -88,6 +109,7 @@ void hardWrapsLongWordsWithoutEllipsis() {
 }
 
 void emitsOversizedCodepointAsSingleLine() {
+  measureCallCount = 0;
   const auto lines = wrapWithWeightedWidth("Wii", 2);
 
   expectEqual(lines.size(), 2, "emitsOversizedCodepointAsSingleLine", "line count");
@@ -98,6 +120,7 @@ void emitsOversizedCodepointAsSingleLine() {
 }
 
 void keepsUtf8CodepointsWholeWhenMeasured() {
+  measureCallCount = 0;
   const std::string text =
       "\xC3\xA9"
       "\xC3\xA9"
@@ -117,6 +140,7 @@ void keepsUtf8CodepointsWholeWhenMeasured() {
 }
 
 void preservesBlankLines() {
+  measureCallCount = 0;
   const auto lines = wrapWithFixedWidth("alpha\n\nbeta", 10);
 
   expectEqual(lines.size(), 3, "preservesBlankLines", "line count");
@@ -134,6 +158,7 @@ void preservesBlankLines() {
 }
 
 void keepsOffsetsIncreasingAcrossWrappedOutput() {
+  measureCallCount = 0;
   const std::string text = "wrap these words";
   const auto lines = wrapWithFixedWidth(text, 6);
 
@@ -153,6 +178,7 @@ void keepsOffsetsIncreasingAcrossWrappedOutput() {
 }
 
 void avoidsSplittingUtf8SequencesMidByte() {
+  measureCallCount = 0;
   const std::string text =
       "\xC3\xA9"
       "\xC3\xA9"
@@ -175,6 +201,7 @@ void avoidsSplittingUtf8SequencesMidByte() {
 
 int main() {
   wrapsUsingMeasuredWidthNotCharacterCount();
+  triesWholeWordsBeforeHardWrapping();
   hardWrapsLongWordsWithoutEllipsis();
   emitsOversizedCodepointAsSingleLine();
   keepsUtf8CodepointsWholeWhenMeasured();

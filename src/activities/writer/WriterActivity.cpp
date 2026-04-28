@@ -186,7 +186,10 @@ const std::vector<WriterWrappedLayout::Line>& WriterActivity::getWrappedLines(co
     wrappedLayoutCache.contentWidth = contentWidth;
     wrappedLayoutCache.lines = WriterWrappedLayout::wrap(
         wrappedLayoutCache.renderedText, contentWidth,
-        [this](const std::string& text) { return renderer.getTextWidth(UI_10_FONT_ID, text.c_str()); });
+        WriterWrappedLayout::MeasureText{this, [](void* context, const std::string& text) {
+                                           auto* activity = static_cast<WriterActivity*>(context);
+                                           return activity->renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
+                                         }});
     wrappedLayoutCache.valid = true;
   }
 

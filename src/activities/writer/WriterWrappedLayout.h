@@ -1,13 +1,17 @@
 #pragma once
 
 #include <cstddef>
-#include <functional>
 #include <string>
 #include <vector>
 
 class WriterWrappedLayout {
  public:
-  using MeasureText = std::function<int(const std::string& text)>;
+  struct MeasureText {
+    void* context = nullptr;
+    int (*fn)(void* context, const std::string& text) = nullptr;
+
+    int operator()(const std::string& text) const { return fn ? fn(context, text) : 0; }
+  };
 
   struct Line {
     std::string text;

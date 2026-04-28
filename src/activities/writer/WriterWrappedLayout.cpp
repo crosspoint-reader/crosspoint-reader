@@ -16,6 +16,48 @@ WriterWrappedLayout::Line makeLine(const std::string& text, size_t startOffset, 
   return WriterWrappedLayout::Line{text.substr(startOffset, endOffset - startOffset), startOffset, endOffset};
 }
 
+bool isWordSeparator(const char ch) { return ch == ' '; }
+
+size_t nextWordCandidateEnd(const std::string& text, size_t offset, const size_t paragraphEnd) {
+  while (offset < paragraphEnd && isWordSeparator(text[offset])) {
+    ++offset;
+  }
+
+  while (offset < paragraphEnd && !isWordSeparator(text[offset])) {
+    offset = nextCodepointOffset(text, offset);
+  }
+
+  return offset;
+}
+
+size_t hardWrapWord(const std::string& text, const size_t wordStart, const size_t wordEnd, const int maxWidth,
+                    const WriterWrappedLayout::MeasureText& measureText) {
+  size_t offset = wordStart;
+  size_t lastFit = wordStart;
+
+  while (offset < wordEnd) {
+    const size_t nextOffset = nextCodepointOffset(text, offset);
+    if (nextOffset <= offset) {
+      break;
+    }
+
+    const std::string candidate = text.substr(wordStart, nextOffset - wordStart);
+    if (measureText(candidate) > maxWidth) {
+      break;
+    }
+
+    lastFit = nextOffset;
+    offset = nextOffset;
+  }
+
+  if (lastFit > wordStart) {
+    return lastFit;
+  }
+
+  const size_t nextOffset = nextCodepointOffset(text, wordStart);
+  return nextOffset > wordStart ? nextOffset : wordEnd;
+}
+
 void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size_t paragraphEnd, int maxWidth,
                             const WriterWrappedLayout::MeasureText& measureText,
                             std::vector<WriterWrappedLayout::Line>& lines) {
@@ -26,52 +68,40 @@ void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size
 
   size_t lineStart = paragraphStart;
   while (lineStart < paragraphEnd) {
-    size_t offset = lineStart;
-    size_t lastSpace = std::string::npos;
-    size_t lastFit = lineStart;
+    size_t lineEnd = lineStart;
 
-    while (offset < paragraphEnd) {
-      const size_t nextOffset = nextCodepointOffset(text, offset);
-      if (nextOffset <= offset) {
+    while (lineEnd < paragraphEnd) {
+      const size_t candidateEnd = nextWordCandidateEnd(text, lineEnd, paragraphEnd);
+      if (candidateEnd <= lineEnd) {
         break;
       }
 
-      const std::string candidate = text.substr(lineStart, nextOffset - lineStart);
-      if (measureText(candidate) > maxWidth) {
-        break;
+      const std::string candidate = text.substr(lineStart, candidateEnd - lineStart);
+      if (measureText(candidate) <= maxWidth) {
+        lineEnd = candidateEnd;
+        continue;
       }
 
-      if (text[offset] == ' ') {
-        lastSpace = offset;
+      if (lineEnd == lineStart) {
+        lineEnd = hardWrapWord(text, lineStart, candidateEnd, maxWidth, measureText);
       }
-
-      lastFit = nextOffset;
-      offset = nextOffset;
+      break;
     }
 
-    if (offset >= paragraphEnd) {
+    if (lineEnd >= paragraphEnd) {
       lines.push_back(makeLine(text, lineStart, paragraphEnd));
       break;
     }
 
-    if (lastSpace != std::string::npos && lastSpace > lineStart) {
-      lines.push_back(makeLine(text, lineStart, lastSpace));
-      lineStart = lastSpace + 1;
-      continue;
-    }
-
-    if (lastFit > lineStart) {
-      lines.push_back(makeLine(text, lineStart, lastFit));
-      lineStart = lastFit;
-      continue;
-    }
-
-    const size_t nextOffset = nextCodepointOffset(text, lineStart);
-    if (nextOffset <= lineStart) {
+    if (lineEnd <= lineStart) {
       break;
     }
-    lines.push_back(makeLine(text, lineStart, nextOffset));
-    lineStart = nextOffset;
+
+    lines.push_back(makeLine(text, lineStart, lineEnd));
+    lineStart = lineEnd;
+    if (lineStart < paragraphEnd && isWordSeparator(text[lineStart])) {
+      ++lineStart;
+    }
   }
 }
 
