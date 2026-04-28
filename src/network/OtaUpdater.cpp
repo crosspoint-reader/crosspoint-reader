@@ -3,8 +3,12 @@
 #include <ArduinoJson.h>
 #include <Logging.h>
 
+#include <cstring>
+
+#include "HttpClientStream.h"
 #include "bootloader_common.h"
 #include "esp_flash_partitions.h"
+#include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_ota_ops.h"
@@ -13,10 +17,8 @@
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/jpirnay/crosspoint-reader/releases/latest";
-
-/* This is buffer and size holder to keep upcoming data from latestReleaseUrl */
-char* local_buf;
-int output_len;
+constexpr int httpRxBufferSize = 2048;
+constexpr int httpTxBufferSize = 512;
 
 /*
  * When esp_crt_bundle.h included, it is pointing wrong header file
@@ -31,95 +33,96 @@ esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
   return esp_http_client_set_header(http_client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 }
 
-esp_err_t event_handler(esp_http_client_event_t* event) {
-  /* We are only interested in HTTP_EVENT_ON_DATA event */
-  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-
-  if (event->data == nullptr || event->data_len == 0) {
-    return ESP_OK;
+struct HttpClientCleaner {
+  esp_http_client_handle_t client;
+  ~HttpClientCleaner() {
+    if (client) {
+      esp_http_client_cleanup(client);
+    }
   }
-
-  const int newSize = output_len + event->data_len + 1;
-  char* newBuf = static_cast<char*>(realloc(local_buf, static_cast<size_t>(newSize)));
-  if (newBuf == nullptr) {
-    LOG_ERR("OTA", "HTTP Client Out of Memory Failed, Allocation %d", newSize);
-    return ESP_ERR_NO_MEM;
-  }
-
-  local_buf = newBuf;
-  memcpy(local_buf + output_len, event->data, event->data_len);
-  output_len += event->data_len;
-  local_buf[output_len] = '\0';
-
-  return ESP_OK;
-} /* event_handler */
+};
 } /* namespace */
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
-  // Reset globals so retries start clean regardless of previous outcome
-  local_buf = nullptr;
-  output_len = 0;
-
   JsonDocument filter;
   esp_err_t esp_err;
   JsonDocument doc;
 
+  updateAvailable = false;
+  latestVersion.clear();
+  otaUrl.clear();
+  otaSize = 0;
+  processedSize = 0;
+  totalSize = 0;
+  render = false;
+
   esp_http_client_config_t client_config = {
       .url = latestReleaseUrl,
       .timeout_ms = 10000,
-      .event_handler = event_handler,
       /* Default HTTP client buffer size 512 byte only */
-      .buffer_size = 8192,
-      .buffer_size_tx = 8192,
+      .buffer_size = httpRxBufferSize,
+      .buffer_size_tx = httpTxBufferSize,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
-
-  /* To track life time of local_buf, dtor will be called on exit from that function */
-  struct localBufCleaner {
-    char** bufPtr;
-    ~localBufCleaner() {
-      if (*bufPtr) {
-        free(*bufPtr);
-        *bufPtr = NULL;
-      }
-    }
-  } localBufCleaner = {&local_buf};
 
   esp_http_client_handle_t client_handle = esp_http_client_init(&client_config);
   if (!client_handle) {
     LOG_ERR("OTA", "HTTP Client Handle Failed");
     return INTERNAL_UPDATE_ERROR;
   }
+  HttpClientCleaner clientCleaner = {client_handle};
 
   esp_err = esp_http_client_set_header(client_handle, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
   if (esp_err != ESP_OK) {
     LOG_ERR("OTA", "esp_http_client_set_header Failed : %s", esp_err_to_name(esp_err));
-    esp_http_client_cleanup(client_handle);
     return INTERNAL_UPDATE_ERROR;
   }
 
-  esp_err = esp_http_client_perform(client_handle);
+  esp_err = esp_http_client_set_header(client_handle, "Accept", "application/vnd.github+json");
   if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_http_client_perform Failed : %s", esp_err_to_name(esp_err));
-    esp_http_client_cleanup(client_handle);
+    LOG_ERR("OTA", "esp_http_client_set_header Failed : %s", esp_err_to_name(esp_err));
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  esp_err = esp_http_client_open(client_handle, 0);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_http_client_open Failed : %s", esp_err_to_name(esp_err));
     return HTTP_ERROR;
   }
 
-  /* esp_http_client_close will be called inside cleanup as well*/
-  esp_err = esp_http_client_cleanup(client_handle);
-  if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_http_client_cleanup Failed : %s", esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
+  const int64_t headerContentLength = esp_http_client_fetch_headers(client_handle);
+  if (headerContentLength < 0) {
+    LOG_ERR("OTA", "esp_http_client_fetch_headers Failed : %lld", headerContentLength);
+    return HTTP_ERROR;
   }
+
+  const int statusCode = esp_http_client_get_status_code(client_handle);
+  if (statusCode != 200) {
+    LOG_ERR("OTA", "Release metadata request failed: HTTP %d", statusCode);
+    return HTTP_ERROR;
+  }
+
+  const bool chunked = esp_http_client_is_chunked_response(client_handle);
+  const int64_t contentLength = chunked ? -1 : esp_http_client_get_content_length(client_handle);
+  LOG_DBG("OTA", "Release metadata headers: content_length=%lld chunked=%s heap=%u largest=%u", contentLength,
+          chunked ? "yes" : "no", heap_caps_get_free_size(MALLOC_CAP_8BIT),
+          heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
   filter["tag_name"] = true;
   filter["assets"][0]["name"] = true;
   filter["assets"][0]["browser_download_url"] = true;
   filter["assets"][0]["size"] = true;
-  const DeserializationError error = deserializeJson(doc, local_buf, DeserializationOption::Filter(filter));
+
+  HttpClientStream responseStream(client_handle, contentLength);
+  const DeserializationError error = deserializeJson(doc, responseStream, DeserializationOption::Filter(filter));
   if (error) {
-    LOG_ERR("OTA", "JSON parse failed: %s", error.c_str());
+    if (responseStream.hasError()) {
+      LOG_ERR("OTA", "HTTP stream read failed after %zu bytes: %d", responseStream.bytesReadCount(),
+              responseStream.lastError());
+      return HTTP_ERROR;
+    }
+    LOG_ERR("OTA", "JSON parse failed after %zu bytes: %s", responseStream.bytesReadCount(), error.c_str());
     return JSON_PARSE_ERROR;
   }
 
@@ -135,10 +138,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 
   latestVersion = doc["tag_name"].as<std::string>();
 
-  for (int i = 0; i < doc["assets"].size(); i++) {
-    if (doc["assets"][i]["name"] == "firmware.bin") {
-      otaUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
-      otaSize = doc["assets"][i]["size"].as<size_t>();
+  for (JsonObjectConst asset : doc["assets"].as<JsonArrayConst>()) {
+    const char* name = asset["name"] | "";
+    if (strcmp(name, "firmware.bin") == 0) {
+      otaUrl = asset["browser_download_url"].as<std::string>();
+      otaSize = asset["size"].as<size_t>();
       totalSize = otaSize;
       updateAvailable = true;
       break;
