@@ -273,6 +273,7 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
   const int rowHeight = (rowSubtitle != nullptr) ? LyraCarouselMetrics::values.listWithSubtitleRowHeight
                                                  : LyraCarouselMetrics::values.listRowHeight;
   const int pageItems = rect.height / rowHeight;
+  if (pageItems <= 0 || itemCount <= 0) return;
   const int totalPages = (itemCount + pageItems - 1) / pageItems;
 
   if (totalPages > 1) {
@@ -346,8 +347,9 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
 
     if (!valueText.empty()) {
       if (sel && highlightValue) {
-        renderer.fillRoundedRect(contentWidth - LyraCarouselMetrics::values.contentSidePadding - hPad - valueWidth,
-                                 itemY, valueWidth + hPad, rowHeight, cornerRadius, Color::Black);
+        renderer.fillRoundedRect(
+            rect.x + contentWidth - LyraCarouselMetrics::values.contentSidePadding - hPad - valueWidth, itemY,
+            valueWidth + hPad, rowHeight, cornerRadius, Color::Black);
       }
       renderer.drawText(UI_10_FONT_ID,
                         rect.x + contentWidth - LyraCarouselMetrics::values.contentSidePadding - valueWidth, itemY + 6,
