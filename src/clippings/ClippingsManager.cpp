@@ -12,24 +12,24 @@ bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::str
     return false;
   }
 
-  // Header line: "Title / Author"
+  // Header line: "Title (Author)" — Kindle-compatible format
   char header[128];
-  snprintf(header, sizeof(header), "%s / %s\n", bookTitle.c_str(), author.c_str());
+  snprintf(header, sizeof(header), "%s (%s)\n", bookTitle.c_str(), author.c_str());
 
-  // Location line: "Chapter: X | Page N"
+  // Location line: "- Highlight on Page N | Chapter X" — Kindle-compatible format
   char location[128];
   if (!chapterTitle.empty()) {
-    snprintf(location, sizeof(location), "Chapter: %s | Page %d\n", chapterTitle.c_str(), pageNumber);
+    snprintf(location, sizeof(location), "- Highlight on Page %d | %s\n", pageNumber, chapterTitle.c_str());
   } else {
-    snprintf(location, sizeof(location), "Page %d\n", pageNumber);
+    snprintf(location, sizeof(location), "- Highlight on Page %d\n", pageNumber);
   }
 
-  // Body: quoted text, trimmed to 2000 chars to avoid writing huge clippings
+  // Body: text trimmed to 2000 chars to avoid writing huge clippings
   static constexpr size_t MAX_TEXT = 2000;
   const size_t textLen = selectedText.size() < MAX_TEXT ? selectedText.size() : MAX_TEXT;
 
-  static constexpr char quote[] = "\n\"";
-  static constexpr char separator[] = "\"\n\n==========\n\n";
+  static constexpr char quote[] = "\n";
+  static constexpr char separator[] = "\n==========\n";
 
   const size_t headerLen = strlen(header);
   const size_t locationLen = strlen(location);
