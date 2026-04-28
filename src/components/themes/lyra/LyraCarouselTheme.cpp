@@ -82,7 +82,8 @@ void LyraCarouselTheme::drawCarouselBorder(GfxRenderer& renderer, Rect coverRect
   const int screenW = renderer.getScreenWidth();
   const int centerX = (screenW - kCenterCoverMaxW) / 2;
   const int centerTileY = coverRect.y + kCoverTopPad;
-  renderer.drawRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, kSelectionLineW, true);
+  renderer.drawRoundedRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, kSelectionLineW, kCornerRadius,
+                           true);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,14 +139,17 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
+          renderer.maskRoundedRectOutsideCorners(x, y, maxW, maxH, kCornerRadius, Color::White);
           hasCover = true;
         }
         file.close();
       }
     }
     if (!hasCover) {
-      renderer.drawRect(x, y, maxW, maxH, true);
-      renderer.fillRect(x, y + maxH / 3, maxW, 2 * maxH / 3, true);
+      renderer.drawRoundedRect(x, y, maxW, maxH, 1, kCornerRadius, true);
+      renderer.fillRoundedRect(x, y + maxH / 3, maxW, 2 * maxH / 3, kCornerRadius, /*roundTopLeft=*/false,
+                               /*roundTopRight=*/false, /*roundBottomLeft=*/true, /*roundBottomRight=*/true,
+                               Color::Black);
       renderer.drawIcon(CoverIcon, x + maxW / 2 - 16, y + 8, 32, 32);
     }
     return true;
@@ -165,11 +169,11 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
     const int nextIdx = (centerIdx + 1) % bookCount;
     if (bookCount >= 3) {
       if (drawCover(prevIdx, leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH))
-        renderer.drawRect(leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
+        renderer.drawRoundedRect(leftX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, 1, kCornerRadius, true);
     }
     if (bookCount >= 2) {
       if (drawCover(nextIdx, rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH))
-        renderer.drawRect(rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, true);
+        renderer.drawRoundedRect(rightX, sideTileY, kSideCoverMaxW, kSideCoverMaxH, 1, kCornerRadius, true);
     }
 
     // Clear a white outline ring around the centre cover, then draw the cover
@@ -210,7 +214,7 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   // Always outline the centre cover at its own edge (white ring sits outside the black line);
   // thicker when the carousel row is active
   const int outlineW = inCarouselRow ? kSelectionLineW : kThinOutlineW;
-  renderer.drawRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, outlineW, true);
+  renderer.drawRoundedRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, outlineW, kCornerRadius, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +240,8 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
     if (selected) {
       const int highlightSize = kMenuIconSize + 2 * kHighlightPad;
       const int highlightY = rowY + (tileH - highlightSize) / 2;
-      renderer.fillRect(iconX - kHighlightPad, highlightY, highlightSize, highlightSize, true);
+      renderer.fillRoundedRect(iconX - kHighlightPad, highlightY, highlightSize, highlightSize, kCornerRadius,
+                               Color::Black);
     }
 
     if (rowIcon != nullptr) {
@@ -288,8 +293,9 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
 
   // Solid black highlight bar
   if (selectedIndex >= 0) {
-    renderer.fillRect(LyraCarouselMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
-                      contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2, rowHeight, true);
+    renderer.fillRoundedRect(
+        LyraCarouselMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
+        contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2, rowHeight, kCornerRadius, Color::Black);
   }
 
   int textX = rect.x + LyraCarouselMetrics::values.contentSidePadding + hPad;
@@ -363,9 +369,10 @@ void LyraCarouselTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const
 
     if (tab.selected) {
       if (selected) {
-        renderer.fillRect(currentX, rect.y + 1, textWidth + 2 * hPad, rect.height - 4, true);
+        renderer.fillRoundedRect(currentX, rect.y + 1, textWidth + 2 * hPad, rect.height - 4, kCornerRadius,
+                                 Color::Black);
       } else {
-        renderer.drawRect(currentX, rect.y, textWidth + 2 * hPad, rect.height - 3, true);
+        renderer.drawRoundedRect(currentX, rect.y, textWidth + 2 * hPad, rect.height - 3, 1, kCornerRadius, true);
       }
     }
 
