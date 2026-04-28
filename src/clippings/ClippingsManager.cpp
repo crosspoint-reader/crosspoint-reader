@@ -12,35 +12,41 @@ bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::str
     return false;
   }
 
-  // Header line: "Title (Author)" — Kindle-compatible format
-  char header[128];
-  snprintf(header, sizeof(header), "%s (%s)\n", bookTitle.c_str(), author.c_str());
-
-  // Location line: "- Your Highlight on Page N | Chapter X" — Kindle-compatible format
-  char location[128];
+  // Build header and location as strings to avoid truncation of long titles/authors
+  const std::string header = bookTitle + " (" + author + ")\n";
+  std::string location = "- Your Highlight on Page " + std::to_string(pageNumber);
   if (!chapterTitle.empty()) {
-    snprintf(location, sizeof(location), "- Your Highlight on Page %d | %s\n", pageNumber, chapterTitle.c_str());
-  } else {
-    snprintf(location, sizeof(location), "- Your Highlight on Page %d\n", pageNumber);
+    location += " | " + chapterTitle;
   }
+  location += "\n";
 
-  // Body: text trimmed to 2000 chars to avoid writing huge clippings
   static constexpr size_t MAX_TEXT = 2000;
   const size_t textLen = selectedText.size() < MAX_TEXT ? selectedText.size() : MAX_TEXT;
 
-  static constexpr char quote[] = "\n";
+  // Concatenate into a single buffer and perform one write to avoid partial records on SD failure
   static constexpr char separator[] = "\n==========\n";
+  static constexpr size_t separatorLen = sizeof(separator) - 1;
+  const size_t totalLen = header.size() + location.size() + 1 + textLen + separatorLen;
 
-  const size_t headerLen = strlen(header);
-  const size_t locationLen = strlen(location);
-  const size_t quoteLen = strlen(quote);
-  const size_t separatorLen = strlen(separator);
+  auto* buf = static_cast<char*>(malloc(totalLen));
+  if (!buf) {
+    LOG_ERR("CLIP", "malloc failed: %zu bytes", totalLen);
+    file.close();
+    return false;
+  }
 
-  bool ok = file.write(header, headerLen) == headerLen;
-  ok = ok && file.write(location, locationLen) == locationLen;
-  ok = ok && file.write(quote, quoteLen) == quoteLen;
-  ok = ok && file.write(selectedText.c_str(), textLen) == textLen;
-  ok = ok && file.write(separator, separatorLen) == separatorLen;
+  size_t pos = 0;
+  memcpy(buf + pos, header.c_str(), header.size());
+  pos += header.size();
+  memcpy(buf + pos, location.c_str(), location.size());
+  pos += location.size();
+  buf[pos++] = '\n';
+  memcpy(buf + pos, selectedText.c_str(), textLen);
+  pos += textLen;
+  memcpy(buf + pos, separator, separatorLen);
+
+  const bool ok = file.write(buf, totalLen) == totalLen;
+  free(buf);
   file.flush();
   file.close();
 
