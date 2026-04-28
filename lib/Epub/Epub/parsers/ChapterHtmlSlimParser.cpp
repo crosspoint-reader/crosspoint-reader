@@ -4,6 +4,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Utf8.h>
+#include <XmlParserUtils.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -133,10 +135,20 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // This handles cases like <div style="margin-bottom:2em"><h1>text</h1></div> where the
       // div's margin should be preserved, even though it has no direct text content.
       currentTextBlock->setBlockStyle(currentTextBlock->getBlockStyle().getCombinedBlockStyle(blockStyle));
+
+      if (!pendingAnchorId.empty()) {
+        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+        pendingAnchorId.clear();
+      }
       return;
     }
 
     makePages();
+  }
+  // Record deferred anchor after previous block is flushed
+  if (!pendingAnchorId.empty()) {
+    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+    pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
   wordsExtractedInBlock = 0;
@@ -151,7 +163,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Extract class and style attributes for CSS processing
+  if (strcmp(name, "p") == 0) {
+    self->xpathParagraphIndex++;
+  }
+
+  // Extract class, style, and id attributes
   std::string classAttr;
   std::string styleAttr;
   if (atts != nullptr) {
@@ -160,6 +176,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         classAttr = atts[i + 1];
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        // Defer recording until startNewTextBlock, after previous block is flushed to pages
+        self->pendingAnchorId = atts[i + 1];
       }
     }
   }
@@ -167,6 +186,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   auto centeredBlockStyle = BlockStyle();
   centeredBlockStyle.textAlignDefined = true;
   centeredBlockStyle.alignment = CssTextAlign::Center;
+
+  // Compute CSS style for this element early so display:none can short-circuit
+  // before tag-specific branches emit any content or metadata.
+  CssStyle cssStyle;
+  if (self->cssParser) {
+    cssStyle = self->cssParser->resolveStyle(name, classAttr);
+    if (!styleAttr.empty()) {
+      CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
+      cssStyle.applyOver(inlineStyle);
+    }
+  }
+
+  // Skip elements with display:none before all fast paths (tables, links, etc.).
+  if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
+  }
 
   // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
   if (strcmp(name, "table") == 0) {
@@ -243,7 +280,27 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         }
       }
 
-      if (!src.empty()) {
+      // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
+      if (self->imageRendering == 2) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
+
+      // Skip image if CSS display:none
+      if (self->cssParser) {
+        CssStyle imgDisplayStyle = self->cssParser->resolveStyle("img", classAttr);
+        if (!styleAttr.empty()) {
+          imgDisplayStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
+        }
+        if (imgDisplayStyle.hasDisplay() && imgDisplayStyle.display == CssDisplay::None) {
+          self->skipUntilDepth = self->depth;
+          self->depth += 1;
+          return;
+        }
+      }
+
+      if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
 
         {
@@ -278,8 +335,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
                 int displayWidth = 0;
                 int displayHeight = 0;
-                const float emSize =
-                    static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+                const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
                 CssStyle imgStyle = self->cssParser ? self->cssParser->resolveStyle("img", classAttr) : CssStyle{};
                 // Merge inline style (e.g. style="height: 2em") so it overrides stylesheet rules
                 if (!styleAttr.empty()) {
@@ -364,10 +420,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
                 }
 
+                // Flush any pending text block so it appears before the image
+                if (self->partWordBufferIndex > 0) {
+                  self->flushPartWordBuffer();
+                }
+                if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+                  const BlockStyle parentBlockStyle = self->currentTextBlock->getBlockStyle();
+                  self->startNewTextBlock(parentBlockStyle);
+                }
+
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
-                  self->completePageFn(std::move(self->currentPage));
+                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+                  self->completedPageCount++;
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "Failed to create new page");
@@ -473,9 +539,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
-      strncpy(self->currentFootnoteLinkHref, href, sizeof(self->currentFootnoteLinkHref) - 1);
-      self->currentFootnoteLinkHref[sizeof(self->currentFootnoteLinkHref) - 1] = '\0';
-      self->currentFootnoteLinkText[0] = '\0';
+      strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
+      self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
+      self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
       // Apply underline style to visually indicate the link
@@ -493,19 +559,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  // Compute CSS style for this element
-  CssStyle cssStyle;
-  if (self->cssParser) {
-    // Get combined tag + class styles
-    cssStyle = self->cssParser->resolveStyle(name, classAttr);
-    // Merge inline style (highest priority)
-    if (!styleAttr.empty()) {
-      CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
-      cssStyle.applyOver(inlineStyle);
-    }
-  }
-
-  const float emSize = static_cast<float>(self->renderer.getLineHeight(self->fontId)) * self->lineCompression;
+  const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
   const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
@@ -648,14 +702,29 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Collect footnote link display text (for the number label)
   // Skip whitespace and brackets to normalize noterefs like "[1]" → "1"
   if (self->insideFootnoteLink) {
-    for (int i = 0; i < len; i++) {
-      unsigned char c = static_cast<unsigned char>(s[i]);
-      if (isWhitespace(c) || c == '[' || c == ']') continue;
-      if (self->currentFootnoteLinkTextLen < static_cast<int>(sizeof(self->currentFootnoteLinkText)) - 1) {
-        self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = c;
-        self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
-      }
+    int start = 0;
+    int end = len - 1;
+
+    // Example input and output texts:
+    // "     [  12  ]   " => "12"
+    // "   turn to 256  " => "turn to 256"
+
+    // Ignore leading whitespaces and left square brackets
+    while (start < len && (isWhitespace(s[start]) || (s[start] == '['))) {
+      ++start;
     }
+
+    // Ignore trailing whitespaces and right square brackets
+    while (end >= start && (isWhitespace(s[end]) || (s[end] == ']'))) {
+      --end;
+    }
+
+    // Extract footnote link text
+    for (int i = start; (self->currentFootnoteLinkTextLen < sizeof(self->currentFootnote.number) - 1) && (i <= end);
+         ++i) {
+      self->currentFootnote.number[self->currentFootnoteLinkTextLen++] = s[i];
+    }
+    self->currentFootnote.number[self->currentFootnoteLinkTextLen] = '\0';
   }
 
   for (int i = 0; i < len; i++) {
@@ -738,9 +807,30 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
     }
 
-    // If we're about to run out of space, then cut the word off and start a new one
+    // If we're about to run out of space, then cut the word off and start a new one.
+    // For CJK text (no spaces), this is the primary word-breaking mechanism.
+    // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
+    // otherwise the trailing bytes become orphaned continuation bytes that the
+    // decoder can't interpret.
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      self->flushPartWordBuffer();
+      int safeLen = utf8SafeTruncateBuffer(self->partWordBuffer, self->partWordBufferIndex);
+
+      if (safeLen < self->partWordBufferIndex && safeLen > 0) {
+        // Incomplete UTF-8 sequence at the end — save it before flushing
+        int overflow = self->partWordBufferIndex - safeLen;
+        char saved[4];
+        for (int j = 0; j < overflow; j++) {
+          saved[j] = self->partWordBuffer[safeLen + j];
+        }
+        self->partWordBufferIndex = safeLen;
+        self->flushPartWordBuffer();
+        for (int j = 0; j < overflow; j++) {
+          self->partWordBuffer[j] = saved[j];
+        }
+        self->partWordBufferIndex = overflow;
+      } else {
+        self->flushPartWordBuffer();
+      }
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
@@ -752,8 +842,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
+    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
+    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
+                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
+                                        : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, self->viewportWidth,
+        self->renderer, self->fontId, effectiveWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
   }
 }
@@ -821,11 +915,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // Closing a footnote link — create entry from collected text and href
   if (self->insideFootnoteLink && self->depth == self->footnoteLinkDepth) {
-    if (self->currentFootnoteLinkText[0] != '\0' && self->currentFootnoteLinkHref[0] != '\0') {
+    if (self->currentFootnote.number[0] != '\0' && self->currentFootnote.href[0] != '\0') {
       FootnoteEntry entry;
-      strncpy(entry.number, self->currentFootnoteLinkText, sizeof(entry.number) - 1);
+      strncpy(entry.number, self->currentFootnote.number, sizeof(entry.number) - 1);
       entry.number[sizeof(entry.number) - 1] = '\0';
-      strncpy(entry.href, self->currentFootnoteLinkHref, sizeof(entry.href) - 1);
+      strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
       int wordIndex =
           self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
@@ -907,7 +1001,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
-  const XML_Parser parser = XML_ParserCreate(nullptr);
+  XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
 
   if (!parser) {
@@ -921,7 +1015,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
   FsFile file;
   if (!Storage.openFileForRead("EHP", filepath, file)) {
-    XML_ParserFree(parser);
+    destroyXmlParser(parser);
     return false;
   }
 
@@ -940,10 +1034,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
+      destroyXmlParser(parser);
       file.close();
       return false;
     }
@@ -952,10 +1043,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
     if (len == 0 && file.available() > 0) {
       LOG_ERR("EHP", "File read error");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
+      destroyXmlParser(parser);
       file.close();
       return false;
     }
@@ -965,26 +1053,25 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
       LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
+      destroyXmlParser(parser);
       file.close();
       return false;
     }
   } while (!done);
   LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
 
-  XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-  XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-  XML_SetCharacterDataHandler(parser, nullptr);
-  XML_ParserFree(parser);
+  destroyXmlParser(parser);
   file.close();
 
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
-    completePageFn(std::move(currentPage));
+    if (!pendingAnchorId.empty()) {
+      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+      pendingAnchorId.clear();
+    }
+    completePageFn(std::move(currentPage), xpathParagraphIndex);
+    completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
   }
@@ -995,8 +1082,14 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
   if (currentPageNextY + lineHeight > viewportHeight) {
-    completePageFn(std::move(currentPage));
+    completePageFn(std::move(currentPage), xpathParagraphIndex);
+    completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }

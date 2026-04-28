@@ -33,4 +33,5 @@ class EpubReaderChapterSelectionActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool supportsOrientation() const override { return true; }
+  bool isReaderActivity() const override { return true; }
 };

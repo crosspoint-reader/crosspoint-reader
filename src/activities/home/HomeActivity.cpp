@@ -2,6 +2,7 @@
 
 #include <Bitmap.h>
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -14,17 +15,17 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // My Library, Recents, File transfer, Settings
+  int count = 4;  // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
-  if (hasOpdsUrl) {
+  if (hasOpdsServers) {
     count++;
   }
   return count;
@@ -61,7 +62,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
         // If epub, try to load the metadata for title/author and cover
-        if (StringUtils::checkFileExtension(book.path, ".epub")) {
+        if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
           // Skip loading css since we only need metadata here
           epub.load(false, true);
@@ -79,8 +80,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           }
           coverRendered = false;
           requestUpdate();
-        } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
-                   StringUtils::checkFileExtension(book.path, ".xtc")) {
+        } else if (FsHelpers::hasXtcExtension(book.path)) {
           // Handle XTC file
           Xtc xtc(book.path, "/.crosspoint");
           if (xtc.load()) {
@@ -111,8 +111,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  // Check if OPDS browser URL is configured
-  hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
+  hasOpdsServers = OPDS_STORE.hasServers();
 
   selectorIndex = 0;
 
@@ -139,7 +138,7 @@ bool HomeActivity::storeCoverBuffer() {
   // Free any existing buffer first
   freeCoverBuffer();
 
-  const size_t bufferSize = GfxRenderer::getBufferSize();
+  const size_t bufferSize = renderer.getBufferSize();
   coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
   if (!coverBuffer) {
     return false;
@@ -159,7 +158,7 @@ bool HomeActivity::restoreCoverBuffer() {
     return false;
   }
 
-  const size_t bufferSize = GfxRenderer::getBufferSize();
+  const size_t bufferSize = renderer.getBufferSize();
   memcpy(frameBuffer, coverBuffer, bufferSize);
   return true;
 }
@@ -189,16 +188,16 @@ void HomeActivity::loop() {
     // Calculate dynamic indices based on which options are available
     int idx = 0;
     int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    const int myLibraryIdx = idx++;
+    const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
-    const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int opdsLibraryIdx = hasOpdsServers ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
 
     if (selectorIndex < recentBooks.size()) {
       onSelectBook(recentBooks[selectorIndex].path);
-    } else if (menuSelectedIndex == myLibraryIdx) {
-      onMyLibraryOpen();
+    } else if (menuSelectedIndex == fileBrowserIdx) {
+      onFileBrowserOpen();
     } else if (menuSelectedIndex == recentsIdx) {
       onRecentsOpen();
     } else if (menuSelectedIndex == opdsLibraryIdx) {
@@ -219,7 +218,8 @@ void HomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
 
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
@@ -230,18 +230,24 @@ void HomeActivity::render(RenderLock&&) {
                                         tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
-  if (hasOpdsUrl) {
-    // Insert OPDS Browser after My Library
+  if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
 
+  if (metrics.homeContinueReadingInMenu) {
+    // Insert Continue Reading at the top if enabled in theme
+    menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
+    menuIcons.insert(menuIcons.begin(), Book);
+  }
+
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2 +
-                         metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
+      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
+                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
+      static_cast<int>(menuItems.size()),
+      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
@@ -261,7 +267,7 @@ void HomeActivity::render(RenderLock&&) {
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
-void HomeActivity::onMyLibraryOpen() { activityManager.goToMyLibrary(); }
+void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 

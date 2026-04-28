@@ -4,7 +4,7 @@
 #include <Logging.h>
 #include <Serialization.h>
 
-#include "../converters/DitherUtils.h"
+#include "../converters/DirectPixelWriter.h"
 #include "../converters/ImageDecoderFactory.h"
 
 // Cache file format:
@@ -37,7 +37,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
   uint16_t cachedWidth, cachedHeight;
   if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
-    cacheFile.close();
     return false;
   }
 
@@ -47,7 +46,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   if (widthDiff > 1 || heightDiff > 1) {
     LOG_ERR("IMG", "Cache dimension mismatch: %dx%d vs %dx%d", cachedWidth, cachedHeight, expectedWidth,
             expectedHeight);
-    cacheFile.close();
     return false;
   }
 
@@ -62,30 +60,31 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   uint8_t* rowBuffer = (uint8_t*)malloc(bytesPerRow);
   if (!rowBuffer) {
     LOG_ERR("IMG", "Failed to allocate row buffer");
-    cacheFile.close();
     return false;
   }
+
+  DirectPixelWriter pw;
+  pw.init(renderer);
 
   for (int row = 0; row < cachedHeight; row++) {
     if (cacheFile.read(rowBuffer, bytesPerRow) != bytesPerRow) {
       LOG_ERR("IMG", "Cache read error at row %d", row);
       free(rowBuffer);
-      cacheFile.close();
       return false;
     }
 
-    int destY = y + row;
+    const int destY = y + row;
+    pw.beginRow(destY);
     for (int col = 0; col < cachedWidth; col++) {
-      int byteIdx = col / 4;
-      int bitShift = 6 - (col % 4) * 2;  // MSB first within byte
+      const int byteIdx = col >> 2;            // col / 4
+      const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
       uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
 
-      drawPixelWithRenderMode(renderer, x + col, destY, pixelValue);
+      pw.writePixel(x + col, pixelValue);
     }
   }
 
   free(rowBuffer);
-  cacheFile.close();
   LOG_DBG("IMG", "Cache render complete");
   return true;
 }
