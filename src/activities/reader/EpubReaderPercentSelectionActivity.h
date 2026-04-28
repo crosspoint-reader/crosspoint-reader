@@ -15,6 +15,7 @@ class EpubReaderPercentSelectionActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool isReaderActivity() const override { return true; }
 
  private:
   // Current percent value (0-100) shown on the slider.
