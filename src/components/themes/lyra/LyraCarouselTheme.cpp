@@ -359,7 +359,7 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
       }
       renderer.drawText(UI_10_FONT_ID,
                         rect.x + contentWidth - LyraCarouselMetrics::values.contentSidePadding - valueWidth, itemY + 6,
-                        valueText.c_str(), !(sel && highlightValue));
+                        valueText.c_str(), !sel);
     }
   }
 }
