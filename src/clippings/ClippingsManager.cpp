@@ -16,12 +16,12 @@ bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::str
   char header[128];
   snprintf(header, sizeof(header), "%s (%s)\n", bookTitle.c_str(), author.c_str());
 
-  // Location line: "- Highlight on Page N | Chapter X" — Kindle-compatible format
+  // Location line: "- Your Highlight on Page N | Chapter X" — Kindle-compatible format
   char location[128];
   if (!chapterTitle.empty()) {
-    snprintf(location, sizeof(location), "- Highlight on Page %d | %s\n", pageNumber, chapterTitle.c_str());
+    snprintf(location, sizeof(location), "- Your Highlight on Page %d | %s\n", pageNumber, chapterTitle.c_str());
   } else {
-    snprintf(location, sizeof(location), "- Highlight on Page %d\n", pageNumber);
+    snprintf(location, sizeof(location), "- Your Highlight on Page %d\n", pageNumber);
   }
 
   // Body: text trimmed to 2000 chars to avoid writing huge clippings

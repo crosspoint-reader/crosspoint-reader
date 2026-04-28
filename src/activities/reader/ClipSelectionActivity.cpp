@@ -159,8 +159,8 @@ void ClipSelectionActivity::switchToPage(int pageIdx) {
   auto page = section.loadPageFromSectionFile();
   if (!page) {
     section.currentPage = oldPage;
-    LOG_ERR("CLIP", "Failed to load page %d (section.currentPage=%d, currentDisplayPage=%d) — reverted",
-            pageIdx, section.currentPage, currentDisplayPage);
+    LOG_ERR("CLIP", "Failed to load page %d (section.currentPage=%d, currentDisplayPage=%d) — reverted", pageIdx,
+            section.currentPage, currentDisplayPage);
     return;
   }
 
