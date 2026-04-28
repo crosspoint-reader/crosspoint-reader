@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <esp_system.h>
+#include <freertos/task.h>
 
 #include <iterator>
 #include <limits>
@@ -440,9 +441,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
               const int wx = mLeft + line.xPos + xpos[i];
               const int wy = mTop + line.yPos;
-              const int ww = (i + 1 < static_cast<int>(xpos.size()))
-                                 ? static_cast<int>(xpos[i + 1]) - static_cast<int>(xpos[i])
-                                 : renderer.getTextWidth(readerFontId, wlist[i].c_str());
+              const int ww = renderer.getTextWidth(readerFontId, wlist[i].c_str());
               if (ww > 0) {
                 words.push_back({wx, wy, ww, lineH, pi, wlist[i]});
               }
@@ -755,6 +754,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+#if LOG_LEVEL >= 2
+  LOG_DBG("ERS", "render stack hwm=%u", uxTaskGetStackHighWaterMark(nullptr));
+#endif
 
   if (pendingScreenshot) {
     pendingScreenshot = false;

@@ -291,17 +291,26 @@ void ActivityManager::requestUpdateAndWait() {
 // RenderLock
 
 RenderLock::RenderLock() {
+#if LOG_LEVEL >= 2
+  LOG_DBG("LOCK", "RL take from %s", pcTaskGetName(nullptr));
+#endif
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
 }
 
 RenderLock::RenderLock([[maybe_unused]] Activity&) {
+#if LOG_LEVEL >= 2
+  LOG_DBG("LOCK", "RL take from %s", pcTaskGetName(nullptr));
+#endif
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
 }
 
 RenderLock::~RenderLock() {
   if (isLocked) {
+#if LOG_LEVEL >= 2
+    LOG_DBG("LOCK", "RL give from %s", pcTaskGetName(nullptr));
+#endif
     xSemaphoreGive(activityManager.renderingMutex);
     isLocked = false;
   }
@@ -309,6 +318,9 @@ RenderLock::~RenderLock() {
 
 void RenderLock::unlock() {
   if (isLocked) {
+#if LOG_LEVEL >= 2
+    LOG_DBG("LOCK", "RL unlock from %s", pcTaskGetName(nullptr));
+#endif
     xSemaphoreGive(activityManager.renderingMutex);
     isLocked = false;
   }

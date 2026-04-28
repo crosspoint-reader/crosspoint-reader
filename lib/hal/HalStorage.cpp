@@ -4,6 +4,7 @@
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
 #include <SDCardManager.h>
+#include <freertos/task.h>
 
 #include <cassert>
 
@@ -26,8 +27,18 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 
 class HalStorage::StorageLock {
  public:
-  StorageLock() { xSemaphoreTake(HalStorage::getInstance().storageMutex, portMAX_DELAY); }
-  ~StorageLock() { xSemaphoreGive(HalStorage::getInstance().storageMutex); }
+  StorageLock() {
+#if LOG_LEVEL >= 2
+    LOG_DBG("LOCK", "SL take from %s", pcTaskGetName(nullptr));
+#endif
+    xSemaphoreTake(HalStorage::getInstance().storageMutex, portMAX_DELAY);
+  }
+  ~StorageLock() {
+#if LOG_LEVEL >= 2
+    LOG_DBG("LOCK", "SL give from %s", pcTaskGetName(nullptr));
+#endif
+    xSemaphoreGive(HalStorage::getInstance().storageMutex);
+  }
 };
 
 #define HAL_STORAGE_WRAPPED_CALL(method, ...) \

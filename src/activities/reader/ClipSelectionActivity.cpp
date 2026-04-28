@@ -69,29 +69,35 @@ void ClipSelectionActivity::loop() {
   const int total = static_cast<int>(words.size());
 
   buttonNavigator.onNextRelease([this, total] {
+    if (cursorIdx + 1 >= total) return;
     const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = ButtonNavigator::nextIndex(cursorIdx, total);
+    cursorIdx = cursorIdx + 1;
     if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
     requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this] {
     const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = lineEndForward(cursorIdx);
+    const int next = lineEndForward(cursorIdx);
+    if (next == cursorIdx) return;
+    cursorIdx = next;
     if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, total] {
+  buttonNavigator.onPreviousRelease([this] {
+    if (cursorIdx == 0) return;
     const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = ButtonNavigator::previousIndex(cursorIdx, total);
+    cursorIdx = cursorIdx - 1;
     if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this] {
     const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = lineEndBackward(cursorIdx);
+    const int prev = lineEndBackward(cursorIdx);
+    if (prev == cursorIdx) return;
+    cursorIdx = prev;
     if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
     requestUpdate();
   });
@@ -203,15 +209,9 @@ int ClipSelectionActivity::lineEndForward(int idx) const {
     last = i;
   }
 
-  // Already at line end — jump to end of next line
+  // Already at line end — jump to first word of next line
   if (last == idx && idx + 1 < total) {
-    const int nextY = words[idx + 1].y;
-    const int nextPage = words[idx + 1].pageIdx;
-    last = idx + 1;
-    for (int i = idx + 2; i < total; ++i) {
-      if (words[i].pageIdx != nextPage || words[i].y != nextY) break;
-      last = i;
-    }
+    return idx + 1;
   }
 
   return last;
@@ -228,15 +228,9 @@ int ClipSelectionActivity::lineEndBackward(int idx) const {
     first = i;
   }
 
-  // Already at line start — jump to start of previous line
+  // Already at line start — jump to last word of previous line
   if (first == idx && idx - 1 >= 0) {
-    const int prevY = words[idx - 1].y;
-    const int prevPage = words[idx - 1].pageIdx;
-    first = idx - 1;
-    for (int i = idx - 2; i >= 0; --i) {
-      if (words[i].pageIdx != prevPage || words[i].y != prevY) break;
-      first = i;
-    }
+    return idx - 1;
   }
 
   return first;
