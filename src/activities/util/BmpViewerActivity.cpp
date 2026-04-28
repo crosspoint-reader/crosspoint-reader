@@ -2,6 +2,7 @@
 
 #include <Bitmap.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -19,8 +20,6 @@ void BmpViewerActivity::onEnter() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
   // 1. Open the file
   if (Storage.openFileForRead("BMP", filePath, file)) {
     Bitmap bitmap(file, true);
@@ -48,20 +47,45 @@ void BmpViewerActivity::onEnter() {
         y = (pageHeight - bitmap.getHeight()) / 2;
       }
 
-      // 4. Prepare Rendering
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-      GUI.fillPopupProgress(renderer, popupRect, 50);
 
-      renderer.clearScreen();
-      // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,
-      // pageHeight, 0, 0)
-      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
-
-      // Draw UI hints on the base layer
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      // Single pass for non-grayscale images
-
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      if (bitmap.hasGreyscale()) {
+        struct BmpGrayCtx {
+          Bitmap* bitmap;
+          int x, y, maxWidth, maxHeight;
+          MappedInputManager::Labels labels;
+        };
+        BmpGrayCtx grayCtx{&bitmap, x, y, pageWidth, pageHeight, labels};
+        renderer.renderGrayscaleSinglePass(
+            GfxRenderer::GrayscaleMode::FactoryQuality,
+            [](const GfxRenderer& r, const void* raw) {
+              const auto* c = static_cast<const BmpGrayCtx*>(raw);
+              r.drawBitmap(*c->bitmap, c->x, c->y, c->maxWidth, c->maxHeight, 0, 0);
+              GUI.drawButtonHints(const_cast<GfxRenderer&>(r), c->labels.btn1, c->labels.btn2, c->labels.btn3,
+                                  c->labels.btn4);
+            },
+            &grayCtx,
+            [](const GfxRenderer& r, const void*) {
+              constexpr int margin = 15;
+              const char* msg = tr(STR_LOADING_POPUP);
+              const int y = static_cast<int>(r.getScreenHeight() * 0.075f);
+              const int textWidth = r.getTextWidth(UI_12_FONT_ID, msg, EpdFontFamily::BOLD);
+              const int w = textWidth + margin * 2;
+              const int h = r.getLineHeight(UI_12_FONT_ID) + margin * 2;
+              const int x = (r.getScreenWidth() - w) / 2;
+              r.fillRect(x - 2, y - 2, w + 4, h + 4, true);
+              r.fillRect(x, y, w, h, false);
+              r.drawText(UI_12_FONT_ID, x + margin, y + margin - 2, msg, true, EpdFontFamily::BOLD);
+            },
+            nullptr);
+        renderer.clearScreen();
+        renderer.cleanupGrayscaleWithFrameBuffer();
+      } else {
+        renderer.clearScreen();
+        renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+        GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+        renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      }
 
     } else {
       // Handle file parsing error
@@ -69,7 +93,7 @@ void BmpViewerActivity::onEnter() {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Invalid BMP File");
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
     }
 
     file.close();
@@ -79,8 +103,76 @@ void BmpViewerActivity::onEnter() {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Could not open file");
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
   }
+}
+
+void BmpViewerActivity::renderGrayscaleImage() {
+  FsFile file;
+  if (!Storage.openFileForRead("BMP", filePath, file)) return;
+
+  Bitmap bitmap(file, true);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok || !bitmap.hasGreyscale()) {
+    file.close();
+    return;
+  }
+
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  int x, y;
+  if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+    float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+    const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
+    if (ratio > screenRatio) {
+      x = 0;
+      y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+    } else {
+      x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
+      y = 0;
+    }
+  } else {
+    x = (pageWidth - bitmap.getWidth()) / 2;
+    y = (pageHeight - bitmap.getHeight()) / 2;
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  struct BmpGrayCtx {
+    Bitmap* bitmap;
+    int x, y, maxWidth, maxHeight;
+    MappedInputManager::Labels labels;
+  };
+  BmpGrayCtx grayCtx{&bitmap, x, y, pageWidth, pageHeight, labels};
+
+  renderer.renderGrayscaleSinglePass(
+      GfxRenderer::GrayscaleMode::FactoryQuality,
+      [](const GfxRenderer& r, const void* raw) {
+        const auto* c = static_cast<const BmpGrayCtx*>(raw);
+        r.drawBitmap(*c->bitmap, c->x, c->y, c->maxWidth, c->maxHeight, 0, 0);
+        GUI.drawButtonHints(const_cast<GfxRenderer&>(r), c->labels.btn1, c->labels.btn2, c->labels.btn3,
+                            c->labels.btn4);
+      },
+      &grayCtx,
+      [](const GfxRenderer& r, const void*) {
+        constexpr int margin = 15;
+        const char* msg = tr(STR_LOADING_POPUP);
+        const int y = static_cast<int>(r.getScreenHeight() * 0.075f);
+        const int textWidth = r.getTextWidth(UI_12_FONT_ID, msg, EpdFontFamily::BOLD);
+        const int w = textWidth + margin * 2;
+        const int h = r.getLineHeight(UI_12_FONT_ID) + margin * 2;
+        const int x = (r.getScreenWidth() - w) / 2;
+        r.fillRect(x - 2, y - 2, w + 4, h + 4, true);
+        r.fillRect(x, y, w, h, false);
+        r.drawText(UI_12_FONT_ID, x + margin, y + margin - 2, msg, true, EpdFontFamily::BOLD);
+      },
+      nullptr);
+
+  file.close();
+}
+
+void BmpViewerActivity::onScreenshotRequest() {
+  renderGrayscaleImage();
+  renderer.clearScreen();
+  renderer.cleanupGrayscaleWithFrameBuffer();
 }
 
 void BmpViewerActivity::onExit() {

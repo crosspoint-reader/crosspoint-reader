@@ -1,5 +1,7 @@
 #include "Bitmap.h"
 
+#include <Logging.h>
+
 #include <cstdlib>
 #include <cstring>
 
@@ -19,6 +21,33 @@ Bitmap::~Bitmap() {
 
   delete atkinsonDitherer;
   delete fsDitherer;
+
+  free(readChunkBuf);
+}
+
+int Bitmap::bufferedRead(uint8_t* dst, int n) const {
+  if (!readChunkBuf) {
+    readChunkBuf = static_cast<uint8_t*>(malloc(READ_CHUNK_SIZE));
+    if (!readChunkBuf) {
+      LOG_ERR("BMP", "bufferedRead: malloc failed (%d bytes)", READ_CHUNK_SIZE);
+      return 0;
+    }
+  }
+
+  int done = 0;
+  while (done < n) {
+    if (readChunkPos >= readChunkFill) {
+      readChunkFill = file.read(readChunkBuf, READ_CHUNK_SIZE);
+      readChunkPos = 0;
+      if (readChunkFill <= 0) break;
+    }
+    const int avail = readChunkFill - readChunkPos;
+    const int take = (avail < n - done) ? avail : n - done;
+    memcpy(dst + done, readChunkBuf + readChunkPos, take);
+    readChunkPos += take;
+    done += take;
+  }
+  return done;
 }
 
 uint16_t Bitmap::readLE16(FsFile& f) {
@@ -180,7 +209,7 @@ BmpReaderError Bitmap::parseHeaders() {
 // packed 2bpp output, 0 = black, 1 = dark gray, 2 = light gray, 3 = white
 BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
-  if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
+  if (bufferedRead(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
 
   prevRowY += 1;
 
@@ -193,16 +222,16 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   auto packPixel = [&](const uint8_t lum) {
     uint8_t color;
     if (atkinsonDitherer) {
-      color = atkinsonDitherer->processPixel(adjustPixel(lum), currentX);
+      color = atkinsonDitherer->processPixel(lum, currentX);
     } else if (fsDitherer) {
-      color = fsDitherer->processPixel(adjustPixel(lum), currentX);
+      color = fsDitherer->processPixel(lum, currentX);
     } else {
       if (nativePalette) {
-        // Palette matches native gray levels: direct mapping (still apply brightness/contrast/gamma)
-        color = static_cast<uint8_t>(adjustPixel(lum) >> 6);
+        // Palette matches native gray levels: direct 2-bit mapping
+        color = static_cast<uint8_t>(lum >> 6);
       } else {
         // Non-native palette with dithering disabled: simple quantization
-        color = quantize(adjustPixel(lum), currentX, prevRowY);
+        color = quantize(lum, currentX, prevRowY);
       }
     }
     currentOutByte |= (color << bitShift);
@@ -286,6 +315,10 @@ BmpReaderError Bitmap::rewindToData() const {
   if (!file.seek(bfOffBits)) {
     return BmpReaderError::SeekPixelDataFailed;
   }
+
+  // Invalidate chunk buffer — file position changed, buffered bytes are stale.
+  readChunkPos = 0;
+  readChunkFill = 0;
 
   // Reset dithering when rewinding
   if (fsDitherer) fsDitherer->reset();

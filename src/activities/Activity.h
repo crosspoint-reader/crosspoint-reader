@@ -44,6 +44,11 @@ class Activity {
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
 
+  // Called when the screenshot combo is pressed and the display is in FactoryLut state.
+  // Activities that use renderGrayscaleSinglePass should override this to trigger a re-render,
+  // allowing the installed screenshot hook to capture both planes before they are pushed.
+  virtual void onScreenshotRequest() {}
+
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes
   void startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler);

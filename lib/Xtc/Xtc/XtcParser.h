@@ -58,6 +58,29 @@ class XtcParser {
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
 
   /**
+   * Load only plane1 (MSB) of a 2-bit page into buffer.
+   * For 1-bit pages behaves identically to loadPage.
+   * Requires only half the buffer of loadPage for 2-bit pages, fitting within heap limits.
+   *
+   * @param pageIndex Page index (0-based)
+   * @param buffer Output buffer (caller allocated, must hold planeSize bytes)
+   * @param bufferSize Buffer size
+   * @return Number of bytes read on success, 0 on failure
+   */
+  size_t loadPageMsb(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
+
+  /**
+   * Load only plane2 (LSB) of a 2-bit page into buffer.
+   * For 1-bit pages behaves identically to loadPage.
+   *
+   * @param pageIndex Page index (0-based)
+   * @param buffer Output buffer (caller allocated, must hold planeSize bytes)
+   * @param bufferSize Buffer size
+   * @return Number of bytes read on success, 0 on failure
+   */
+  size_t loadPageLsb(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
+
+  /**
    * Streaming page load
    * Memory-efficient method that reads page data in chunks.
    *

@@ -459,6 +459,134 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
   return bytesRead;
 }
 
+size_t XtcParser::loadPageMsb(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) {
+  if (m_bitDepth != 2) {
+    return loadPage(pageIndex, buffer, bufferSize);
+  }
+
+  if (!m_isOpen) {
+    m_lastError = XtcError::FILE_NOT_FOUND;
+    return 0;
+  }
+
+  if (pageIndex >= m_header.pageCount) {
+    m_lastError = XtcError::PAGE_OUT_OF_RANGE;
+    return 0;
+  }
+
+  PageInfo page;
+  if (!readPageTableEntry(pageIndex, page)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  if (!ensureFileOpen()) {
+    m_lastError = XtcError::FILE_NOT_FOUND;
+    return 0;
+  }
+
+  if (!m_file.seek(page.offset)) {
+    LOG_DBG("XTC", "Failed to seek to page %u at offset %lu", pageIndex, page.offset);
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  XtgPageHeader pageHeader;
+  size_t headerRead = m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(XtgPageHeader));
+  if (headerRead != sizeof(XtgPageHeader)) {
+    LOG_DBG("XTC", "Failed to read page header for page %u", pageIndex);
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  if (pageHeader.magic != XTH_MAGIC) {
+    LOG_DBG("XTC", "Invalid page magic for page %u: 0x%08X", pageIndex, pageHeader.magic);
+    m_lastError = XtcError::INVALID_MAGIC;
+    return 0;
+  }
+
+  // Only plane1 (MSB): (width * height + 7) / 8 bytes
+  const size_t planeSize = (static_cast<size_t>(pageHeader.width) * pageHeader.height + 7) / 8;
+
+  if (bufferSize < planeSize) {
+    LOG_DBG("XTC", "Buffer too small for MSB plane: need %u, have %u", planeSize, bufferSize);
+    m_lastError = XtcError::MEMORY_ERROR;
+    return 0;
+  }
+
+  size_t bytesRead = m_file.read(buffer, planeSize);
+  if (bytesRead != planeSize) {
+    LOG_DBG("XTC", "MSB plane read error: expected %u, got %u", planeSize, bytesRead);
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  m_lastError = XtcError::OK;
+  return bytesRead;
+}
+
+size_t XtcParser::loadPageLsb(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) {
+  if (m_bitDepth != 2) return loadPage(pageIndex, buffer, bufferSize);
+
+  if (!m_isOpen) {
+    m_lastError = XtcError::FILE_NOT_FOUND;
+    return 0;
+  }
+  if (pageIndex >= m_header.pageCount) {
+    m_lastError = XtcError::PAGE_OUT_OF_RANGE;
+    return 0;
+  }
+
+  PageInfo page;
+  if (!readPageTableEntry(pageIndex, page)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  if (!ensureFileOpen()) {
+    m_lastError = XtcError::FILE_NOT_FOUND;
+    return 0;
+  }
+
+  if (!m_file.seek(page.offset)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  XtgPageHeader pageHeader;
+  if (m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(XtgPageHeader)) != sizeof(XtgPageHeader)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+  if (pageHeader.magic != XTH_MAGIC) {
+    LOG_DBG("XTC", "loadPageLsb: invalid magic for page %u: 0x%08X", pageIndex, pageHeader.magic);
+    m_lastError = XtcError::INVALID_MAGIC;
+    return 0;
+  }
+
+  const size_t planeSize = (static_cast<size_t>(pageHeader.width) * pageHeader.height + 7) / 8;
+  const uint32_t plane2Offset = page.offset + sizeof(XtgPageHeader) + static_cast<uint32_t>(planeSize);
+
+  if (!m_file.seek(plane2Offset)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  if (bufferSize < planeSize) {
+    LOG_DBG("XTC", "Buffer too small for LSB plane: need %u, have %u", planeSize, bufferSize);
+    m_lastError = XtcError::MEMORY_ERROR;
+    return 0;
+  }
+
+  size_t bytesRead = m_file.read(buffer, planeSize);
+  if (bytesRead != planeSize) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+  m_lastError = XtcError::OK;
+  return bytesRead;
+}
+
 XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
                                       std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                       size_t chunkSize) {

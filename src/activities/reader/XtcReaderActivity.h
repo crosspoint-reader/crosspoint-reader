@@ -15,7 +15,7 @@ class XtcReaderActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;
-  int pagesUntilFullRefresh = 0;
+  uint32_t pagesSinceClean = 0;
 
   void renderPage();
   void saveProgress() const;
@@ -28,5 +28,6 @@ class XtcReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onScreenshotRequest() override;
   bool isReaderActivity() const override { return true; }
 };

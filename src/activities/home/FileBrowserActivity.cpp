@@ -16,6 +16,11 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
+
+bool isSupportedFile(std::string_view name) {
+  return FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) || FsHelpers::hasTxtExtension(name) ||
+         FsHelpers::hasMarkdownExtension(name) || FsHelpers::hasBmpExtension(name) || FsHelpers::hasPxcExtension(name);
+}
 }  // namespace
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -91,9 +96,7 @@ void FileBrowserActivity::loadFiles() {
       files.emplace_back(std::string(name) + "/");
     } else {
       std::string_view filename{name};
-      if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-          FsHelpers::hasBmpExtension(filename)) {
+      if (isSupportedFile(filename)) {
         files.emplace_back(filename);
       }
     }
