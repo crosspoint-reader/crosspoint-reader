@@ -658,8 +658,10 @@ bool Xtc::generateThumbBmp(int width, int height) const {
       const size_t byteIndex = dstX / 8;
       const size_t bitOffset = 7 - (dstX % 8);
       if (byteIndex < rowSize) {
-        if (oneBit) rowBuffer[byteIndex] |= (1 << bitOffset);
-        else rowBuffer[byteIndex] &= ~(1 << bitOffset);
+        if (oneBit)
+          rowBuffer[byteIndex] |= (1 << bitOffset);
+        else
+          rowBuffer[byteIndex] &= ~(1 << bitOffset);
       }
     }
     thumbBmp.write(rowBuffer, rowSize);

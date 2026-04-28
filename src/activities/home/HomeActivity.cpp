@@ -329,8 +329,7 @@ void HomeActivity::preRenderCarouselFrames() {
   // Cache miss: free old cache and re-render
   invalidateCarouselCache();
 
-  uint8_t* frameBuffer = renderer.getFrameBuffer();
-  if (!frameBuffer) return;
+  if (!renderer.getFrameBuffer()) return;
 
   const size_t bufferSize = renderer.getBufferSize();
   freeCoverBuffer();  // reclaim 48KB before allocating frames

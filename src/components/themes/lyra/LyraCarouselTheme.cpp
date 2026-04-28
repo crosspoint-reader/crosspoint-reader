@@ -102,6 +102,9 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   const int centerIdx =
       inCarouselRow ? selectorIndex : (lastCarouselSelectorIndex >= 0 ? lastCarouselSelectorIndex : 0);
 
+  // cppcheck-suppress knownConditionTrueFalse
+  // Reachable as false when navigating the icon row with a previously-set
+  // lastCarouselSelectorIndex; cppcheck only models the inCarouselRow=true path.
   if (centerIdx != lastCarouselSelectorIndex) {
     coverRendered = false;
     coverBufferStored = false;
