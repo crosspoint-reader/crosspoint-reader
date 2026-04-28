@@ -332,7 +332,7 @@ void HomeActivity::preRenderCarouselFrames() {
   uint8_t* frameBuffer = renderer.getFrameBuffer();
   if (!frameBuffer) return;
 
-  const size_t bufferSize = GfxRenderer::getBufferSize();
+  const size_t bufferSize = renderer.getBufferSize();
   freeCoverBuffer();  // reclaim 48KB before allocating frames
 
   const int frameCount = std::min(bookCount, kCarouselFrameCount);
@@ -345,12 +345,13 @@ void HomeActivity::preRenderCarouselFrames() {
     }
   }
 
-  // Initial window centred on book 0: slots hold [book0, book1, book(bookCount-1)]
-  // so left and right navigation from the start position are both instant.
-  const int booksToRender[kCarouselFrameCount] = {0, 1 % bookCount, bookCount - 1};
-  for (int i = 0; i < frameCount; ++i) {
-    renderCarouselFrame(booksToRender[i], i);
-  }
+  // Render only the currently-selected cover. Adjacent frames are populated
+  // lazily by updateSlidingWindowCache() after the first paint completes,
+  // so the user sees their book immediately and scroll latency only appears
+  // once they actually navigate.
+  const int selectedBookIdx = (selectorIndex < bookCount) ? selectorIndex : lastCarouselBookIndex;
+  const int initialBookIdx = (selectedBookIdx >= 0 && selectedBookIdx < bookCount) ? selectedBookIdx : 0;
+  renderCarouselFrame(initialBookIdx, 0);
 
   gCachedFrameCount = frameCount;
   gCacheKey = newKey;
@@ -365,7 +366,7 @@ void HomeActivity::loop() {
 
   if (isCarousel) {
     const int bookCount = static_cast<int>(recentBooks.size());
-    const int menuItemCount = 4 + (hasOpdsUrl ? 1 : 0);
+    const int menuItemCount = 4 + (hasOpdsServers ? 1 : 0);
     const bool inCarouselRow = (selectorIndex < bookCount);
     const int menuIdx = inCarouselRow ? 0 : (selectorIndex - bookCount);
 
@@ -453,7 +454,7 @@ void HomeActivity::render(RenderLock&&) {
     const int slotIdx = findFrameSlot(centerIdx);
 
     if (frameBuffer && slotIdx >= 0 && carouselFrames[slotIdx]) {
-      memcpy(frameBuffer, carouselFrames[slotIdx], GfxRenderer::getBufferSize());
+      memcpy(frameBuffer, carouselFrames[slotIdx], renderer.getBufferSize());
 
       GUI.drawCarouselBorder(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                              inCarouselRow);
@@ -461,7 +462,7 @@ void HomeActivity::render(RenderLock&&) {
       std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
                                             tr(STR_SETTINGS_TITLE)};
       std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
-      if (hasOpdsUrl) {
+      if (hasOpdsServers) {
         menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
         menuIcons.insert(menuIcons.begin() + 2, Library);
       }
@@ -564,7 +565,7 @@ void HomeActivity::renderCarouselFrame(int bookIdx, int slotIdx) {
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, bookCount, dummy1, dummy2, dummy3, []() { return true; });
 
-  memcpy(gCachedFrames[slotIdx], frameBuffer, GfxRenderer::getBufferSize());
+  memcpy(gCachedFrames[slotIdx], frameBuffer, renderer.getBufferSize());
   gCachedFrameBookIdx[slotIdx] = bookIdx;
   carouselFrames[slotIdx] = gCachedFrames[slotIdx];
 }
