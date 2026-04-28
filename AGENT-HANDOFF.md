@@ -6,9 +6,9 @@ Build a distraction-free writerdeck firmware for the XTeInk-X4 eReader, starting
 
 Current status:
 
-- Repository: `/Users/mark/Coding/esp32/writerdeck-x4`
+- Repository: `/Users/mark/Coding/WriterDeck/writerdeck-x4`
 - Current branch: `stage-2-writer-wrap`
-- Branch is clean and pushed to `origin/stage-2-writer-wrap`.
+- Branch is pushed to `origin/stage-2-writer-wrap`; check `git status --short --branch` for local-only files before staging.
 - `master` tracks `origin/master`, not upstream.
 - `upstream` is `crosspoint-reader/crosspoint-reader`.
 - Stage 0 and Stage 1 have been merged into `origin/master`.
