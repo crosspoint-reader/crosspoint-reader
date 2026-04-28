@@ -559,36 +559,9 @@ bool Xtc::generateThumbBmp(int width, int height) const {
   }
 
   const uint32_t rowSize = (thumbWidth + 31) / 32 * 4;
-  const uint32_t imageSize = rowSize * thumbHeight;
-  const uint32_t fileSize = 14 + 40 + 8 + imageSize;
-  thumbBmp.write('B');
-  thumbBmp.write('M');
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&fileSize), 4);
-  uint32_t reserved = 0;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&reserved), 4);
-  uint32_t dataOffset = 14 + 40 + 8;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&dataOffset), 4);
-  uint32_t dibHeaderSize = 40;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&dibHeaderSize), 4);
-  int32_t widthVal = thumbWidth;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&widthVal), 4);
-  int32_t heightVal = -static_cast<int32_t>(thumbHeight);
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&heightVal), 4);
-  uint16_t planes = 1;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&planes), 2);
-  uint16_t bitsPerPixel = 1;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&bitsPerPixel), 2);
-  uint32_t compression = 0;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&compression), 4);
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&imageSize), 4);
-  int32_t ppmX = 2835, ppmY = 2835;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmX), 4);
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&ppmY), 4);
-  uint32_t colorsUsed = 2, colorsImportant = 2;
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsUsed), 4);
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&colorsImportant), 4);
-  uint8_t palette[8] = {0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  thumbBmp.write(palette, 8);
+  BmpHeader bmpHeader;
+  createBmpHeader(&bmpHeader, thumbWidth, thumbHeight, BmpRowOrder::TopDown);
+  thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(BmpHeader));
 
   uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
   if (!rowBuffer) {

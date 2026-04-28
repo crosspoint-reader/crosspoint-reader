@@ -82,7 +82,12 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
   bool showingLoading = false;
-  // Tracks which book indices had a thumbnail generated this pass (max 5 books).
+  // Tracks which book indices had a thumbnail generated this pass.
+  // Sized to LyraCarousel's max (5) since recentBooks is bounded by the active
+  // theme's homeRecentBooksCount and LyraCarousel is the maximum across themes.
+  static_assert(LyraCarouselMetrics::values.homeRecentBooksCount == 5,
+                "bookUpdated array sized to LyraCarousel max; if this metric "
+                "changes or another theme exceeds it, resize the array.");
   bool bookUpdated[LyraCarouselMetrics::values.homeRecentBooksCount] = {};
   Rect popupRect;
 
