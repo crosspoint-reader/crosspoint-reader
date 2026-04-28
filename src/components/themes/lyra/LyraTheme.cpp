@@ -35,7 +35,6 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int popupMarginX = 16;
 constexpr int popupMarginY = 12;
-constexpr int maxSubtitleWidth = 100;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
@@ -150,8 +149,27 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
-  int maxTitleWidth =
-      rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);
+  int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
+  int maxSubtitleWidth =
+      subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
+
+  // Available space is the distance between the side paddings, and a with side padding between title and subtitle.
+  const int availableSpace = rect.width - LyraMetrics::values.contentSidePadding * 3;
+
+  if (maxTitleWidth + maxSubtitleWidth > availableSpace) {
+    if ((maxTitleWidth > availableSpace / 2) && (maxSubtitleWidth > availableSpace / 2)) {
+      // Both are wider then half the space, truncate both.
+      maxTitleWidth = availableSpace / 2;
+      maxSubtitleWidth = availableSpace / 2;
+    } else {
+      // Truncate the the longest one
+      if (maxTitleWidth > maxSubtitleWidth) {
+        maxTitleWidth = availableSpace - maxSubtitleWidth;
+      } else {
+        maxSubtitleWidth = availableSpace - maxTitleWidth;
+      }
+    }
+  }
 
   if (title) {
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
@@ -576,22 +594,4 @@ void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.fillRect(barX, barY, fillWidth, barHeight, false);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-}
-
-void LyraTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth) const {
-  int lineY = rect.y + rect.height + renderer.getLineHeight(UI_12_FONT_ID) + LyraMetrics::values.verticalSpacing;
-  int lineW = textWidth + hPaddingInSelection * 2;
-  renderer.drawLine(rect.x + (rect.width - lineW) / 2, lineY, rect.x + (rect.width + lineW) / 2, lineY, 3);
-}
-
-void LyraTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label,
-                                const bool isSelected) const {
-  if (isSelected) {
-    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::Black);
-  }
-
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
-  const int textX = rect.x + (rect.width - textWidth) / 2;
-  const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, label, !isSelected);
 }

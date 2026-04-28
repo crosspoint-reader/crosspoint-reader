@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Utf8.h>
+#include <XmlParserUtils.h>
 #include <expat.h>
 
 #include "../../Epub.h"
@@ -160,6 +161,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (self->skipUntilDepth < self->depth) {
     self->depth += 1;
     return;
+  }
+
+  if (strcmp(name, "p") == 0) {
+    self->xpathParagraphIndex++;
   }
 
   // Extract class, style, and id attributes
@@ -427,7 +432,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + displayHeight > self->viewportHeight)) {
-                  self->completePageFn(std::move(self->currentPage));
+                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
                   self->completedPageCount++;
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
@@ -534,9 +539,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
-      strncpy(self->currentFootnoteLinkHref, href, sizeof(self->currentFootnoteLinkHref) - 1);
-      self->currentFootnoteLinkHref[sizeof(self->currentFootnoteLinkHref) - 1] = '\0';
-      self->currentFootnoteLinkText[0] = '\0';
+      strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
+      self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
+      self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
       // Apply underline style to visually indicate the link
@@ -715,11 +720,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     }
 
     // Extract footnote link text
-    for (int i = start; (self->currentFootnoteLinkTextLen < sizeof(self->currentFootnoteLinkText) - 1) && (i <= end);
+    for (int i = start; (self->currentFootnoteLinkTextLen < sizeof(self->currentFootnote.number) - 1) && (i <= end);
          ++i) {
-      self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen++] = s[i];
+      self->currentFootnote.number[self->currentFootnoteLinkTextLen++] = s[i];
     }
-    self->currentFootnoteLinkText[self->currentFootnoteLinkTextLen] = '\0';
+    self->currentFootnote.number[self->currentFootnoteLinkTextLen] = '\0';
   }
 
   for (int i = 0; i < len; i++) {
@@ -910,11 +915,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // Closing a footnote link — create entry from collected text and href
   if (self->insideFootnoteLink && self->depth == self->footnoteLinkDepth) {
-    if (self->currentFootnoteLinkText[0] != '\0' && self->currentFootnoteLinkHref[0] != '\0') {
+    if (self->currentFootnote.number[0] != '\0' && self->currentFootnote.href[0] != '\0') {
       FootnoteEntry entry;
-      strncpy(entry.number, self->currentFootnoteLinkText, sizeof(entry.number) - 1);
+      strncpy(entry.number, self->currentFootnote.number, sizeof(entry.number) - 1);
       entry.number[sizeof(entry.number) - 1] = '\0';
-      strncpy(entry.href, self->currentFootnoteLinkHref, sizeof(entry.href) - 1);
+      strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
       int wordIndex =
           self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
@@ -996,7 +1001,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
-  const XML_Parser parser = XML_ParserCreate(nullptr);
+  XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
 
   if (!parser) {
@@ -1010,7 +1015,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
   FsFile file;
   if (!Storage.openFileForRead("EHP", filepath, file)) {
-    XML_ParserFree(parser);
+    destroyXmlParser(parser);
     return false;
   }
 
@@ -1029,10 +1034,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
+      destroyXmlParser(parser);
+      file.close();
       return false;
     }
 
@@ -1040,10 +1043,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
     if (len == 0 && file.available() > 0) {
       LOG_ERR("EHP", "File read error");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
+      destroyXmlParser(parser);
+      file.close();
       return false;
     }
 
@@ -1052,19 +1053,15 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
       LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
+      destroyXmlParser(parser);
+      file.close();
       return false;
     }
   } while (!done);
   LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
 
-  XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-  XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-  XML_SetCharacterDataHandler(parser, nullptr);
-  XML_ParserFree(parser);
+  destroyXmlParser(parser);
+  file.close();
 
   // Process last page if there is still text
   if (currentTextBlock) {
@@ -1073,7 +1070,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
     }
-    completePageFn(std::move(currentPage));
+    completePageFn(std::move(currentPage), xpathParagraphIndex);
     completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
@@ -1091,7 +1088,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
-    completePageFn(std::move(currentPage));
+    completePageFn(std::move(currentPage), xpathParagraphIndex);
     completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
