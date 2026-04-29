@@ -76,14 +76,16 @@ void ClipSelectionActivity::loop() {
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this] {
-    const int prevPage = words[cursorIdx].pageIdx;
-    const int next = lineEndForward(cursorIdx);
-    if (next == cursorIdx) return;
-    cursorIdx = next;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  });
+  if (SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE) {
+    buttonNavigator.onNextContinuous([this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int next = lineEndForward(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+  }
 
   buttonNavigator.onPreviousRelease([this] {
     if (cursorIdx == 0) return;
@@ -93,14 +95,16 @@ void ClipSelectionActivity::loop() {
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousContinuous([this] {
-    const int prevPage = words[cursorIdx].pageIdx;
-    const int prev = lineEndBackward(cursorIdx);
-    if (prev == cursorIdx) return;
-    cursorIdx = prev;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  });
+  if (SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE) {
+    buttonNavigator.onPreviousContinuous([this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int prev = lineEndBackward(cursorIdx);
+      if (prev == cursorIdx) return;
+      cursorIdx = prev;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (startMarkIdx == -1) {
@@ -115,7 +119,7 @@ void ClipSelectionActivity::loop() {
         text += words[i].text;
       }
       ActivityResult result;
-      result.data = ClippingResult{std::move(text)};
+      result.data = ClippingResult{std::move(text), from, to};
       setResult(std::move(result));
       finish();
     }
@@ -147,7 +151,8 @@ void ClipSelectionActivity::render(RenderLock&&) {
   memcpy(renderer.getFrameBuffer(), savedBuffer, savedBufferSize);
   drawHighlights();
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
