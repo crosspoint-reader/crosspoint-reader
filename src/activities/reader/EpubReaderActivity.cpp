@@ -152,44 +152,6 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Annotation overlay: handle Back (close) and Confirm (delete) when overlay is visible
-  if (showAnnotationOverlay) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      showAnnotationOverlay = false;
-      requestUpdate();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (overlayAnnotationIdx < annotations.size() && epub) {
-        const std::string clippingPath = ClippingsManager::resolveClippingPath(epub->getTitle());
-        if (SETTINGS.clippingDeleteMode == CrossPointSettings::DELETE_PERMANENT) {
-          annotations.permanentDelete(overlayAnnotationIdx, clippingPath.c_str());
-        } else {
-          annotations.removeMeta(overlayAnnotationIdx);
-          annotations.save(epub->getCachePath().c_str());
-        }
-      }
-      showAnnotationOverlay = false;
-      annotationLongPressConsumed = true;
-      requestUpdate();
-    }
-    return;
-  }
-
-  // Long press Confirm: show annotation overlay if annotations exist on current page
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
-      mappedInput.getHeldTime() >= ANNOTATION_HOLD_MS && !annotationLongPressConsumed) {
-    const size_t annotIdx = annotations.firstIndexForSection(static_cast<uint16_t>(currentSpineIndex));
-    if (annotIdx != SIZE_MAX) {
-      overlayAnnotationIdx = annotIdx;
-      showAnnotationOverlay = true;
-      annotationLongPressConsumed = true;
-      requestUpdate();
-      return;
-    }
-  }
-  if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-    annotationLongPressConsumed = false;
-  }
-
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const int currentPage = section ? section->currentPage + 1 : 0;
@@ -892,42 +854,23 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
 
-  // Draw annotation underlines on top of rendered text (only for current section page)
+  // Draw annotation underlines on top of rendered text
   if (SETTINGS.annotationVisibility == CrossPointSettings::ANNOT_VISIBLE && section) {
-    const auto currentSectionPage = static_cast<uint16_t>(section->currentPage);
+    const int screenH = renderer.getScreenHeight();
+    const int screenW = renderer.getScreenWidth();
     const auto sectionAnnotations = annotations.forSection(static_cast<uint16_t>(currentSpineIndex));
     for (const auto& rec : sectionAnnotations) {
       for (const auto& r : rec.rects) {
-        if (r.sectionPage != currentSectionPage) continue;
-        const int underlineY = r.y + r.h - 1;
-        renderer.drawLine(r.x, underlineY, r.x + r.w, underlineY, 2, true);
+        if (r.sectionPage != static_cast<uint16_t>(section->currentPage)) continue;
+        const int underlineY = r.y + r.h;
+        if (underlineY < 0 || underlineY >= screenH) continue;
+        if (r.x < 0 || r.x >= screenW) continue;
+        renderer.drawLine(r.x, underlineY, r.x + r.w - 1, underlineY, 2, true);
       }
     }
   }
 
   renderStatusBar();
-
-  // Draw annotation management overlay on top of page + status bar
-  if (showAnnotationOverlay && epub) {
-    const int sw = renderer.getScreenWidth();
-    const int sh = renderer.getScreenHeight();
-    const int boxW = sw - 60;
-    const int boxH = 70;
-    const int boxX = 30;
-    const int boxY = (sh - boxH) / 2;
-
-    renderer.fillRect(boxX, boxY, boxW, boxH, false);
-    renderer.drawRect(boxX, boxY, boxW, boxH, 2, true);
-
-    const std::string clippingPath = ClippingsManager::resolveClippingPath(epub->getTitle());
-    char pathBuf[80];
-    snprintf(pathBuf, sizeof(pathBuf), "%s", clippingPath.c_str());
-    renderer.drawText(UI_10_FONT_ID, boxX + 10, boxY + 6, tr(STR_SAVE_CLIPPING), true);
-    renderer.drawText(UI_10_FONT_ID, boxX + 10, boxY + 28, pathBuf, true);
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
 
   fcm->logStats("bw_render");
   const auto tBwRender = millis();
