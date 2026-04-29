@@ -928,3 +928,24 @@ void EpubReaderActivity::restoreSavedPosition() {
   }
   requestUpdate();
 }
+
+ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
+  ScreenshotInfo info;
+  info.readerType = ScreenshotInfo::ReaderType::Epub;
+  if (epub) {
+    snprintf(info.title, sizeof(info.title), "%s", epub->getTitle().c_str());
+    info.spineIndex = currentSpineIndex;
+  }
+  if (section) {
+    info.currentPage = section->currentPage + 1;
+    info.totalPages = section->pageCount;
+    if (epub && epub->getBookSize() > 0 && section->pageCount > 0) {
+      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+      int pct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      info.progressPercent = pct;
+    }
+  }
+  return info;
+}
