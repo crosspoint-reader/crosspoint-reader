@@ -209,6 +209,15 @@ void avoidsSplittingUtf8SequencesMidByte() {
   expectEqual(lines[1].endOffset, 6, "avoidsSplittingUtf8SequencesMidByte", "line 1 endOffset");
 }
 
+void reservesLineCapacityBeforePushLoop() {
+  measureCallCount = 0;
+  const std::string text = "a a a a a a a a a a a a a a a a a";
+  const auto lines = wrapWithFixedWidth(text, 1);
+
+  expectEqual(lines.size(), 17, "reservesLineCapacityBeforePushLoop", "line count");
+  expectEqual(lines.capacity(), 17, "reservesLineCapacityBeforePushLoop", "line capacity");
+}
+
 }  // namespace
 
 int main() {
@@ -220,6 +229,7 @@ int main() {
   preservesBlankLines();
   keepsOffsetsIncreasingAcrossWrappedOutput();
   avoidsSplittingUtf8SequencesMidByte();
+  reservesLineCapacityBeforePushLoop();
   std::cout << "WriterWrappedLayoutTest passed\n";
   return 0;
 }
