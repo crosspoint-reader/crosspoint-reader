@@ -199,6 +199,12 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Maximum reading speed (WPM) that can be stored or adapted to.
+  // Mirrors EpubReaderActivity::WPM_ADAPT_MAX — a static_assert in EpubReaderActivity.cpp enforces they stay equal.
+  // Also used in JsonSettingsIO to clamp persisted values.
+  static constexpr uint16_t READING_SPEED_WPM_MAX = 1000;
+  // Calibrated reading speed in words per minute (0 = uncalibrated)
+  uint16_t readingSpeedWpm = 0;
 
   ~CrossPointSettings() = default;
 

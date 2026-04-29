@@ -140,6 +140,8 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["frontButtonConfirm"] = s.frontButtonConfirm;
   doc["frontButtonLeft"] = s.frontButtonLeft;
   doc["frontButtonRight"] = s.frontButtonRight;
+  // Reading speed calibration — uint16_t, stored outside the uint8_t SettingsList loop.
+  doc["readingSpeedWpm"] = s.readingSpeedWpm;
 
   String json;
   serializeJson(doc, json);
@@ -219,6 +221,14 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)S::FRONT_HW_RIGHT, S::FRONT_BUTTON_HARDWARE_COUNT, S::FRONT_HW_RIGHT);
   CrossPointSettings::validateFrontButtonMapping(s);
+  // Reading speed — uint16_t, stored outside the uint8_t SettingsList loop.
+  // Clamp to READING_SPEED_WPM_MAX to guard against stale/corrupt JSON values.
+  {
+    const uint16_t rawWpm = doc["readingSpeedWpm"] | (uint16_t)0;
+    s.readingSpeedWpm =
+        rawWpm > CrossPointSettings::READING_SPEED_WPM_MAX ? CrossPointSettings::READING_SPEED_WPM_MAX : rawWpm;
+    if (s.readingSpeedWpm != rawWpm && needsResave) *needsResave = true;
+  }
 
   LOG_DBG("CPS", "Settings loaded from file");
 

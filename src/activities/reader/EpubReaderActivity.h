@@ -30,6 +30,32 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  uint8_t activePageTurnOption = 0;  // Which option index is currently active (0 = off)
+
+  // Adaptive reading-speed constants (Smart auto-page-turn mode).
+  static constexpr unsigned long MIN_ADAPT_ELAPSED_MS = 2000UL;   // Ignore fwd turns faster than 2 s (accidental taps)
+  static constexpr unsigned long MIN_SMART_DURATION_MS = 2000UL;  // Floor for tiny pages (e.g. 1-word chapter titles)
+  static constexpr uint16_t WPM_ADAPT_MIN = 30;                   // Floor to prevent runaway slowdowns
+  static constexpr unsigned long BACK_SLOWDOWN_WINDOW_MS =
+      3000UL;  // Only slow down if back press within 3 s of auto-turn
+  // Tracks how many pages behind the furthest-read position the user currently is.
+  // Incremented on every manual backward turn; decremented on every manual forward turn.
+  // Auto-turn is paused (timer reset) while this is > 0.
+  uint8_t skipForwardAdaptCount = 0;
+  // True after the first backward turn following an auto-advance. Additional backward turns (user
+  // browsing back further) must not trigger extra slowdowns; only the first one counts.
+  // Reset to false each time an auto-turn fires so the cycle can repeat.
+  bool backwardSlowdownApplied = false;
+  // Set when a forward turn is classified as accidental (elapsed < MIN_ADAPT_ELAPSED_MS).
+  // The immediately following backward turn is treated as a correction: skipForwardAdaptCount
+  // is not incremented and no slowdown is applied. Cleared on any real forward event.
+  bool lastForwardWasAccidental = false;
+
+  // Word count of the page currently on screen (set in render(), consumed in adaptReadingSpeed()).
+  uint16_t currentPageWordCount = 0;
+  // True when readingSpeedWpm was updated in RAM but not yet flushed to flash.
+  // Flushed once in onExit() to avoid a flash write on every page turn.
+  bool dirtyReadingSpeedWpm = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -52,12 +78,19 @@ class EpubReaderActivity final : public Activity {
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
+  // Compute autoflip duration from current page's word count and calibrated WPM.
+  // Returns 0 if WPM is uncalibrated or word count is 0 (caller should keep previous duration).
+  unsigned long smartPageDurationMs(uint16_t wordCount, uint16_t wpm) const;
+  // Adapt readingSpeedWpm via EMA when the user manually turns a page in Smart auto-page-turn mode.
+  // elapsedMs is the time spent on the page being left (millis() - lastPageTurnTime).
+  void adaptReadingSpeed(bool isForwardTurn, unsigned long elapsedMs);
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 
  public:
+  static constexpr uint16_t WPM_ADAPT_MAX = 1000;  // Ceiling; must equal CrossPointSettings::READING_SPEED_WPM_MAX
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
       : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
   void onEnter() override;

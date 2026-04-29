@@ -28,6 +28,9 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
 - [x] Image support within EPUB
 - [x] Saved reading position
+- [x] Auto page turn
+  - [x] Fixed rates (1, 3, 6, 12 pages per minute)
+  - [x] Smart (WPM) mode — adaptive, word-count-aware pacing that learns your reading speed passively
 - [x] File explorer with file picker
   - [x] Basic EPUB picker from root directory
   - [x] Support nested folders

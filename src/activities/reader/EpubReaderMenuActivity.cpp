@@ -10,14 +10,15 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const bool hasFootnotes, const uint16_t readingSpeedWpm)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      readingSpeedWpm(readingSpeedWpm) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -28,6 +29,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   }
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+  items.push_back({MenuAction::RESET_READING_SPEED, StrId::STR_RESET_READING_SPEED});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
@@ -146,6 +148,19 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       const auto value = pageTurnLabels[selectedPageTurnOption];
       const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
       renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
+    }
+
+    if (menuItems[i].action == MenuAction::RESET_READING_SPEED) {
+      // Show current calibrated WPM (or "Uncalibrated") on the right edge.
+      const uint16_t wpm = readingSpeedWpm;
+      std::string wpmText;
+      if (wpm == 0) {
+        wpmText = tr(STR_CALIBRATE_UNCALIBRATED);
+      } else {
+        wpmText = std::to_string(wpm) + tr(STR_CALIBRATE_READING_SPEED_WPM);
+      }
+      const auto width = renderer.getTextWidth(UI_10_FONT_ID, wpmText.c_str());
+      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, wpmText.c_str(), !isSelected);
     }
   }
 

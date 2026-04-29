@@ -27,6 +27,8 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
     - [System Navigation](#system-navigation)
+    - [Reader Menu](#reader-menu)
+      - [Auto Page Turn](#auto-page-turn)
     - [Supported Languages](#supported-languages)
   - [5. Chapter Selection Screen](#5-chapter-selection-screen)
   - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
@@ -389,7 +391,44 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 ### System Navigation
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
-* **Chapter Menu:** Press **Confirm** to open the **[Table of Contents/Chapter Selection](#5-chapter-selection-screen)** screen.
+* **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#reader-menu)**.
+
+### Reader Menu
+
+Press **Confirm** while reading to open the Reader Menu. Use **Left**/**Right** to navigate options and **Confirm** to select. Press **Back** to return to your book without making a change.
+
+| Option | Description |
+| ------ | ----------- |
+| **Select Chapter** | Jump to any chapter in the book |
+| **Auto Turn (Pages Per Minute)** | Automatically advance pages (see below) |
+| **Reset Reading Speed** | Clear the learned reading speed back to default |
+| **Go To Percent** | Jump to a specific position in the book |
+| **Rotate Screen** | Change screen orientation |
+| **Take Screenshot** | Save a screenshot to the `screenshots/` folder |
+| **Display QR** | Show a QR code for the current page |
+| **Go Home** | Return to the Home screen |
+| **Sync Progress** | Sync reading position with KOReader |
+
+#### Auto Page Turn
+
+The **Auto Turn (Pages Per Minute)** option turns pages automatically at a set pace. Available modes:
+
+| Mode | Description |
+| ---- | ----------- |
+| **Off** | Auto page turn disabled |
+| **Smart (WPM)** | Adapts page duration to your reading speed (recommended) |
+| **1 / 3 / 6 / 12** | Fixed pages per minute |
+
+**Smart (WPM) mode** times each page based on its word count and your current reading speed in words-per-minute (WPM). Your reading speed is learned automatically while you read — no manual calibration needed:
+
+- If you press **Next Page** before the timer fires, the speed adjusts upward.
+- If you press **Previous Page**, the auto-turn timer pauses. Auto-turn resumes only after you manually press **Next Page** enough times to return to where you left off — one forward press is required for each backward press. The forward turns used to catch up are not counted as speed samples, since you only read the tail of the page you returned to.
+  - If you go back **within ~3 seconds** of a page appearing, it is treated as a signal that the page was moving too fast — the speed adjusts downward slightly.
+  - If you go back **after ~3 seconds**, it is treated as you browsing back through the book — the auto-turn still pauses, but your speed is left unchanged.
+
+Adjustments use an exponential moving average, so recent behaviour carries more weight than older interactions. The current WPM is shown in the status bar (e.g. `Auto Turn Enabled: 230 wpm`). Before any speed has been learned it shows `Auto Turn Enabled: Uncalibrated`.
+
+To clear the learned speed and start fresh, or to un-pause a suspended auto-turn, select **Reset Reading Speed** from the Reader Menu.
 
 ### Supported Languages
 
@@ -404,7 +443,7 @@ What is not supported: Chinese, Japanese, Korean, Vietnamese, Hebrew, Arabic, Gr
 
 ## 5. Chapter Selection Screen
 
-Accessible by pressing **Confirm** while inside a book.
+Accessible via **Select Chapter** in the **[Reader Menu](#reader-menu)**.
 
 1.  Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to highlight the desired chapter.
 2.  Press **Confirm** to jump to that chapter.
