@@ -995,13 +995,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       if (cssStyle.hasTextDecoration()) {
         const uint8_t dec = static_cast<uint8_t>(cssStyle.textDecoration);
-        if (dec & static_cast<uint8_t>(CssTextDecoration::Underline)) {
+        if (dec == static_cast<uint8_t>(CssTextDecoration::None)) {
           entry.hasUnderline = true;
-          entry.underline = true;
-        }
-        if (dec & static_cast<uint8_t>(CssTextDecoration::LineThrough)) {
+          entry.underline = false;
           entry.hasStrikethrough = true;
-          entry.strikethrough = true;
+          entry.strikethrough = false;
+        } else {
+          if (dec & static_cast<uint8_t>(CssTextDecoration::Underline)) {
+            entry.hasUnderline = true;
+            entry.underline = true;
+          }
+          if (dec & static_cast<uint8_t>(CssTextDecoration::LineThrough)) {
+            entry.hasStrikethrough = true;
+            entry.strikethrough = true;
+          }
         }
       }
       self->inlineStyleStack.push_back(entry);
