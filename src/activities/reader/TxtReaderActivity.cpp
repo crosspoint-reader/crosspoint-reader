@@ -54,6 +54,11 @@ void TxtReaderActivity::onExit() {
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+
+  auto filePath = txt->getPath();
+  auto fileName = filePath.substr(filePath.rfind('/') + 1);
+  const float progress = totalPages > 0 ? std::min((currentPage + 1) * 100.0f / totalPages, 100.0f) : 0;
+  RECENT_BOOKS.addBook(filePath, fileName, "", "", progress);
   txt.reset();
 }
 

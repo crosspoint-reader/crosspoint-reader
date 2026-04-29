@@ -101,7 +101,14 @@ void RecentBooksActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
         [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
-        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
+        [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); },
+        [this](int index) {
+          float progress = recentBooks[index].progress;
+          if (progress >= 0.0f) {
+            return std::to_string(static_cast<int>(progress)) + "%";
+          }
+          return std::string();
+        });
   }
 
   // Help text
