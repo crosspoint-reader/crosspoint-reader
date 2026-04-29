@@ -7,7 +7,6 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
-#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -123,7 +122,9 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, tr(STR_OPDS_BROWSER), true, EpdFontFamily::BOLD);
+  // Show server name in header if available, otherwise generic title
+  const char* headerTitle = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
+  renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
@@ -179,18 +180,19 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
-  if (strlen(SETTINGS.opdsServerUrl) == 0) {
+  if (server.url.empty()) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_SERVER_URL);
     requestUpdate();
     return;
   }
 
-  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(SETTINGS.opdsServerUrl, path);
+  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(server.url, path);
+  LOG_DBG("OPDS", "Fetching: %s", url.c_str());
   OpdsParser parser;
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream)) {
+    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
       state = BrowserState::ERROR;
       errorMessage = tr(STR_FETCH_FEED_FAILED);
       requestUpdate();
@@ -226,7 +228,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
   // Resolve to a full URL so sub-sub-navigation retains parent path context
-  const std::string feedUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, currentPath);
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   currentPath = UrlUtils::buildUrl(feedUrl, entry.href);
 
   state = BrowserState::LOADING;
@@ -259,18 +261,20 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   requestUpdate(true);
 
   // Build full download URL relative to the current feed, not the root server URL
-  const std::string feedUrl = UrlUtils::buildUrl(SETTINGS.opdsServerUrl, currentPath);
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
   std::string filename =
-      "/" + StringUtils::sanitizeFilename(book.title + (book.author.empty() ? "" : " - " + book.author)) + ".epub";
+      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
-  const auto result =
-      HttpDownloader::downloadToFile(downloadUrl, filename, [this](const size_t downloaded, const size_t total) {
+  const auto result = HttpDownloader::downloadToFile(
+      downloadUrl, filename,
+      [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);
-      });
+      },
+      server.username, server.password);
 
   if (result == HttpDownloader::OK) {
     Epub(filename, "/.crosspoint").clearCache();
@@ -346,7 +350,6 @@ void OpdsBookBrowserActivity::checkAndConnectWifi() {
 }
 
 void OpdsBookBrowserActivity::launchWifiSelection() {
-  consumeBack = consumeConfirm = true;
   state = BrowserState::WIFI_SELECTION;
   requestUpdate();
 

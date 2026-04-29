@@ -39,7 +39,8 @@
     }
     h1 {
       color: var(--title-color);
-      margin-bottom: 5px;
+      border-bottom: 2px solid var(--accent-color);
+      padding-bottom: 10px;
     }
     h2 {
       color: var(--title-color);
@@ -59,8 +60,6 @@
       flex-wrap: wrap;
       gap: 15px;
       margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid var(--accent-color);
     }
     .page-header-left {
       display: flex;
@@ -1463,6 +1462,8 @@
   </style>
 </head>
 <body>
+<h1>📚 CrossPoint Reader</h1>
+
 <div class="nav-links">
   <a href="/">Home</a>
   <a href="/files" class="active">File Manager</a>
@@ -1471,7 +1472,7 @@
 
 <div class="page-header">
   <div class="page-header-left">
-    <h1>📁 File Manager</h1>
+    <h2>📁 File Manager</h2>
     <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
   </div>
 
