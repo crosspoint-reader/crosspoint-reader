@@ -12,8 +12,8 @@ size_t nextCodepointOffset(const std::string& text, size_t offset) {
   return static_cast<size_t>(ptr - reinterpret_cast<const unsigned char*>(text.data()));
 }
 
-WriterWrappedLayout::Line makeLine(const std::string& text, size_t startOffset, size_t endOffset) {
-  return WriterWrappedLayout::Line{text.substr(startOffset, endOffset - startOffset), startOffset, endOffset};
+WriterWrappedLayout::Line makeLine(size_t startOffset, size_t endOffset) {
+  return WriterWrappedLayout::Line{startOffset, endOffset};
 }
 
 bool isWordSeparator(const char ch) { return ch == ' '; }
@@ -62,7 +62,7 @@ void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size
                             const WriterWrappedLayout::MeasureText& measureText,
                             std::vector<WriterWrappedLayout::Line>& lines) {
   if (paragraphStart == paragraphEnd) {
-    lines.push_back({"", paragraphStart, paragraphStart});
+    lines.push_back(makeLine(paragraphStart, paragraphStart));
     return;
   }
 
@@ -89,7 +89,7 @@ void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size
     }
 
     if (lineEnd >= paragraphEnd) {
-      lines.push_back(makeLine(text, lineStart, paragraphEnd));
+      lines.push_back(makeLine(lineStart, paragraphEnd));
       break;
     }
 
@@ -97,7 +97,7 @@ void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size
       break;
     }
 
-    lines.push_back(makeLine(text, lineStart, lineEnd));
+    lines.push_back(makeLine(lineStart, lineEnd));
     lineStart = lineEnd;
     if (lineStart < paragraphEnd && isWordSeparator(text[lineStart])) {
       ++lineStart;

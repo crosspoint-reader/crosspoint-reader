@@ -48,14 +48,17 @@ void WriterActivity::loop() {
       if (ch == '\b') {
         if (!inputBuffer.empty()) {
           utf8RemoveLastChar(inputBuffer);
+          utf8RemoveLastChar(draftText);
         }
       } else {
         inputBuffer.push_back(ch);
+        draftText.push_back(ch);
       }
     }
-    cursorIndex = getRenderedText().size();
+    cursorIndex = WriterCursor::clamp(draftText, draftText.size());
     clearPreferredCursorX();
     showSaveError = false;
+    markTextChanged();
     requestUpdate();
   }
 
@@ -106,9 +109,8 @@ void WriterActivity::render(RenderLock&&) {
   const int availableTextHeight = footer.top - textTop - metrics.verticalSpacing;
   const int maxVisibleLines = std::max(1, availableTextHeight / lineHeight);
 
-  const std::string renderedText = getRenderedText();
-  const auto& wrappedLines = getWrappedLines(renderedText, contentWidth);
-  const int cursorLine = findWrappedCursorLine(wrappedLines, renderedText);
+  const auto& wrappedLines = getWrappedLines(contentWidth);
+  const int cursorLine = findWrappedCursorLine(wrappedLines);
   const int maxTopLine = std::max(0, static_cast<int>(wrappedLines.size()) - maxVisibleLines);
   viewportTopLine = std::clamp(viewportTopLine, 0, maxTopLine);
   if (cursorLine < viewportTopLine) {
@@ -123,10 +125,11 @@ void WriterActivity::render(RenderLock&&) {
        lineIndex < static_cast<int>(wrappedLines.size()) && lineIndex < viewportTopLine + maxVisibleLines;
        ++lineIndex) {
     const auto& line = wrappedLines[lineIndex];
-    renderer.drawText(UI_10_FONT_ID, x, y, line.text.c_str());
+    const std::string lineText = getLineText(line);
+    renderer.drawText(UI_10_FONT_ID, x, y, lineText.c_str());
     if (lineIndex == cursorLine) {
       const size_t caretOffset = std::clamp(cursorIndex, line.startOffset, line.endOffset);
-      const int caretX = x + measureCursorX(line, renderedText, caretOffset);
+      const int caretX = x + measureCursorX(line, caretOffset);
       const int caretBottom = y + lineHeight - 1;
       renderer.fillRect(caretX, y, 2, lineHeight, true);
       renderer.drawLine(caretX - 2, y, caretX - 1, y, true);
@@ -168,24 +171,30 @@ bool WriterActivity::flushInputBuffer() {
   if (draftStore.readDraft(loadedDraft)) {
     draftText = std::move(loadedDraft);
   } else {
-    draftText += flushedText;
     LOG_ERR("Writer", "Draft append succeeded but reload failed; preserving in-memory text");
   }
   cursorIndex = WriterCursor::clamp(draftText, draftText.size());
+  markTextChanged();
   clearPreferredCursorX();
   return true;
 }
 
-std::string WriterActivity::getRenderedText() const { return draftText + inputBuffer; }
+void WriterActivity::markTextChanged() {
+  ++textRevision;
+  wrappedLayoutCache.valid = false;
+}
 
-const std::vector<WriterWrappedLayout::Line>& WriterActivity::getWrappedLines(const std::string& renderedText,
-                                                                              const int contentWidth) {
+std::string WriterActivity::getLineText(const WriterWrappedLayout::Line& line) const {
+  return draftText.substr(line.startOffset, line.endOffset - line.startOffset);
+}
+
+const std::vector<WriterWrappedLayout::Line>& WriterActivity::getWrappedLines(const int contentWidth) {
   if (!wrappedLayoutCache.valid || wrappedLayoutCache.contentWidth != contentWidth ||
-      wrappedLayoutCache.renderedText != renderedText) {
-    wrappedLayoutCache.renderedText = renderedText;
+      wrappedLayoutCache.textRevision != textRevision) {
     wrappedLayoutCache.contentWidth = contentWidth;
+    wrappedLayoutCache.textRevision = textRevision;
     wrappedLayoutCache.lines = WriterWrappedLayout::wrap(
-        wrappedLayoutCache.renderedText, contentWidth,
+        draftText, contentWidth,
         WriterWrappedLayout::MeasureText{this, [](void* context, const std::string& text) {
                                            auto* activity = static_cast<WriterActivity*>(context);
                                            return activity->renderer.getTextWidth(UI_10_FONT_ID, text.c_str());
@@ -215,49 +224,47 @@ int WriterActivity::countWords(const std::string& text) const {
 void WriterActivity::clearPreferredCursorX() { hasPreferredCursorX = false; }
 
 void WriterActivity::moveCursorLeft() {
-  cursorIndex = WriterCursor::moveLeft(getRenderedText(), cursorIndex);
+  cursorIndex = WriterCursor::moveLeft(draftText, cursorIndex);
   clearPreferredCursorX();
 }
 
 void WriterActivity::moveCursorRight() {
-  cursorIndex = WriterCursor::moveRight(getRenderedText(), cursorIndex);
+  cursorIndex = WriterCursor::moveRight(draftText, cursorIndex);
   clearPreferredCursorX();
 }
 
 void WriterActivity::moveCursorVertical(const int lineDelta) {
-  const std::string renderedText = getRenderedText();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentWidth = renderer.getScreenWidth() - 2 * metrics.contentSidePadding;
 
-  const auto& wrappedLines = getWrappedLines(renderedText, contentWidth);
+  const auto& wrappedLines = getWrappedLines(contentWidth);
   if (wrappedLines.empty()) {
     cursorIndex = 0;
     clearPreferredCursorX();
     return;
   }
 
-  const int currentLine = findWrappedCursorLine(wrappedLines, renderedText);
+  const int currentLine = findWrappedCursorLine(wrappedLines);
   const int targetLine = std::clamp(currentLine + lineDelta, 0, static_cast<int>(wrappedLines.size()) - 1);
   if (targetLine == currentLine) {
     return;
   }
 
-  const size_t clampedCursor = WriterCursor::clamp(renderedText, cursorIndex);
+  const size_t clampedCursor = WriterCursor::clamp(draftText, cursorIndex);
   if (!hasPreferredCursorX) {
-    preferredCursorX = measureCursorX(wrappedLines[currentLine], renderedText, clampedCursor);
+    preferredCursorX = measureCursorX(wrappedLines[currentLine], clampedCursor);
     hasPreferredCursorX = true;
   }
 
-  cursorIndex = findClosestCursorOffsetOnLine(wrappedLines[targetLine], renderedText, preferredCursorX);
+  cursorIndex = findClosestCursorOffsetOnLine(wrappedLines[targetLine], preferredCursorX);
 }
 
-int WriterActivity::findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines,
-                                          const std::string& renderedText) const {
+int WriterActivity::findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines) const {
   if (lines.empty()) {
     return 0;
   }
 
-  const size_t clampedCursor = WriterCursor::clamp(renderedText, cursorIndex);
+  const size_t clampedCursor = WriterCursor::clamp(draftText, cursorIndex);
   for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
     const auto& line = lines[i];
     const bool isLastLine = i == static_cast<int>(lines.size()) - 1;
@@ -282,28 +289,27 @@ int WriterActivity::findWrappedCursorLine(const std::vector<WriterWrappedLayout:
   return static_cast<int>(lines.size()) - 1;
 }
 
-int WriterActivity::measureCursorX(const WriterWrappedLayout::Line& line, const std::string& renderedText,
-                                   const size_t cursorOffset) const {
+int WriterActivity::measureCursorX(const WriterWrappedLayout::Line& line, const size_t cursorOffset) const {
   const size_t clampedOffset = std::clamp(cursorOffset, line.startOffset, line.endOffset);
-  const std::string prefix = renderedText.substr(line.startOffset, clampedOffset - line.startOffset);
+  const std::string prefix = draftText.substr(line.startOffset, clampedOffset - line.startOffset);
   return renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
 }
 
 size_t WriterActivity::findClosestCursorOffsetOnLine(const WriterWrappedLayout::Line& line,
-                                                     const std::string& renderedText, const int preferredX) const {
+                                                     const int preferredX) const {
   size_t bestOffset = line.startOffset;
-  int bestX = measureCursorX(line, renderedText, bestOffset);
+  int bestX = measureCursorX(line, bestOffset);
   int bestDistance = std::abs(preferredX - bestX);
 
   size_t candidate = line.startOffset;
 
   while (candidate < line.endOffset) {
-    const size_t nextCandidate = std::min(WriterCursor::moveRight(renderedText, candidate), line.endOffset);
+    const size_t nextCandidate = std::min(WriterCursor::moveRight(draftText, candidate), line.endOffset);
     if (nextCandidate == candidate) {
       break;
     }
 
-    const int nextX = measureCursorX(line, renderedText, nextCandidate);
+    const int nextX = measureCursorX(line, nextCandidate);
     const int distance = std::abs(preferredX - nextX);
 
     if (distance < bestDistance) {
@@ -352,7 +358,7 @@ void WriterActivity::renderFooter() const {
   renderer.drawText(SMALL_FONT_ID, (renderer.getScreenWidth() - titleWidth) / 2, footer.top, title.c_str());
 
   // Current wordcount
-  const int words = countWords(getRenderedText());
+  const int words = countWords(draftText);
   std::string wordCount = std::to_string(words) + (words == 1 ? " word" : " words");
   int wordCountWidth = renderer.getTextWidth(SMALL_FONT_ID, wordCount.c_str());
 
