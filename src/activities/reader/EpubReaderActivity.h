@@ -35,13 +35,6 @@ class EpubReaderActivity final : public Activity {
   AnnotationsManager annotations;
   bool annotationsDirty = false;
 
-  // Annotation management overlay state
-  bool showAnnotationOverlay = false;
-  size_t overlayAnnotationIdx = 0;
-  bool annotationLongPressConsumed = false;
-
-  static constexpr unsigned long ANNOTATION_HOLD_MS = 700;
-
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
