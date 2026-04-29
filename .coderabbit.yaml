@@ -10,6 +10,9 @@ reviews:
   review_status: true
   review_details: true
   poem: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
   collapse_walkthrough: true
   auto_review:
     enabled: true
