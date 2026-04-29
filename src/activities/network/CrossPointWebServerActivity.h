@@ -44,7 +44,16 @@ class CrossPointWebServerActivity final : public Activity {
   // Performance monitoring
   unsigned long lastHandleClientTime = 0;
 
+  // Sustained WiFi-loss tracking; abandon only after WIFI_ABANDON_MS.
+  int consecutiveDisconnects = 0;
+  unsigned long firstDisconnectAt = 0;
+  static constexpr unsigned long WIFI_ABANDON_MS = 5UL * 60UL * 1000UL;
+
+  // Cached signal-strength bracket (0..4) for the WiFi indicator.
+  int lastWifiBars = 0;
+
   void renderServerRunning() const;
+  void renderWifiIndicator(int subHeaderTop) const;
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);
