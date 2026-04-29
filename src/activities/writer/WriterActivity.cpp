@@ -185,7 +185,9 @@ void WriterActivity::markTextChanged() {
 }
 
 std::string WriterActivity::getLineText(const WriterWrappedLayout::Line& line) const {
-  return draftText.substr(line.startOffset, line.endOffset - line.startOffset);
+  const size_t safeStart = std::min(line.startOffset, draftText.size());
+  const size_t safeEnd = std::min(std::max(line.endOffset, safeStart), draftText.size());
+  return draftText.substr(safeStart, safeEnd - safeStart);
 }
 
 const std::vector<WriterWrappedLayout::Line>& WriterActivity::getWrappedLines(const int contentWidth) {
