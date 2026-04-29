@@ -282,17 +282,32 @@ void CrossPointWebServerActivity::loop() {
       if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
         lastWifiCheck = millis();
         const wl_status_t wifiStatus = WiFi.status();
+        // Driver auto-reconnect handles retries; abandon (via onGoHome) only
+        // after WIFI_ABANDON_MS, otherwise the activity freezes on a blip.
         if (wifiStatus != WL_CONNECTED) {
-          LOG_DBG("WEBACT", "WiFi disconnected! Status: %d", wifiStatus);
-          // Show error and exit gracefully
-          state = WebServerActivityState::SHUTTING_DOWN;
-          requestUpdate();
-          return;
-        }
-        // Log weak signal warnings
-        const int rssi = WiFi.RSSI();
-        if (rssi < -75) {
-          LOG_DBG("WEBACT", "Warning: Weak WiFi signal: %d dBm", rssi);
+          if (consecutiveDisconnects == 0) {
+            firstDisconnectAt = millis();
+          }
+          consecutiveDisconnects++;
+          LOG_DBG("WEBACT", "WiFi not connected (status=%d, consecutive=%d, total=%lu ms)", wifiStatus,
+                  consecutiveDisconnects, millis() - firstDisconnectAt);
+          if (millis() - firstDisconnectAt > WIFI_ABANDON_MS) {
+            LOG_DBG("WEBACT", "WiFi unavailable for >%lu s; returning to network selection", WIFI_ABANDON_MS / 1000UL);
+            state = WebServerActivityState::SHUTTING_DOWN;
+            onGoHome();
+            return;
+          }
+        } else {
+          if (consecutiveDisconnects > 0) {
+            LOG_DBG("WEBACT", "WiFi recovered after %d failed checks (%lu ms)", consecutiveDisconnects,
+                    millis() - firstDisconnectAt);
+          }
+          consecutiveDisconnects = 0;
+          firstDisconnectAt = 0;
+          const int rssi = WiFi.RSSI();
+          if (rssi < -75) {
+            LOG_DBG("WEBACT", "Warning: Weak WiFi signal: %d dBm", rssi);
+          }
         }
       }
     }
