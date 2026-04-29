@@ -13,6 +13,7 @@
 #include "WriterCursor.h"
 #include "WriterDraftStore.h"
 #include "WriterInput.h"
+#include "WriterTextSlice.h"
 #include "WriterWrappedLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -185,9 +186,7 @@ void WriterActivity::markTextChanged() {
 }
 
 std::string WriterActivity::getLineText(const WriterWrappedLayout::Line& line) const {
-  const size_t safeStart = std::min(line.startOffset, draftText.size());
-  const size_t safeEnd = std::min(std::max(line.endOffset, safeStart), draftText.size());
-  return draftText.substr(safeStart, safeEnd - safeStart);
+  return WriterTextSlice::slice(draftText, line.startOffset, line.endOffset);
 }
 
 const std::vector<WriterWrappedLayout::Line>& WriterActivity::getWrappedLines(const int contentWidth) {
@@ -292,8 +291,9 @@ int WriterActivity::findWrappedCursorLine(const std::vector<WriterWrappedLayout:
 }
 
 int WriterActivity::measureCursorX(const WriterWrappedLayout::Line& line, const size_t cursorOffset) const {
-  const size_t clampedOffset = std::clamp(cursorOffset, line.startOffset, line.endOffset);
-  const std::string prefix = draftText.substr(line.startOffset, clampedOffset - line.startOffset);
+  const size_t safeLineEnd = std::max(line.endOffset, line.startOffset);
+  const size_t clampedOffset = std::clamp(cursorOffset, line.startOffset, safeLineEnd);
+  const std::string prefix = WriterTextSlice::slice(draftText, line.startOffset, clampedOffset);
   return renderer.getTextWidth(UI_10_FONT_ID, prefix.c_str());
 }
 
