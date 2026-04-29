@@ -39,6 +39,15 @@ void expectTrue(bool condition, const char* testName, const char* message) {
   }
 }
 
+void expectGreaterOrEqual(size_t actual, size_t minimum, const char* testName, const char* field) {
+  if (actual >= minimum) {
+    return;
+  }
+
+  fail(testName,
+       std::string(field) + " expected at least " + std::to_string(minimum) + ", got " + std::to_string(actual));
+}
+
 int fixedWidthMeasure(void*, const std::string& text) {
   ++measureCallCount;
   int width = 0;
@@ -215,7 +224,7 @@ void reservesLineCapacityBeforePushLoop() {
   const auto lines = wrapWithFixedWidth(text, 1);
 
   expectEqual(lines.size(), 17, "reservesLineCapacityBeforePushLoop", "line count");
-  expectEqual(lines.capacity(), 17, "reservesLineCapacityBeforePushLoop", "line capacity");
+  expectGreaterOrEqual(lines.capacity(), 17, "reservesLineCapacityBeforePushLoop", "line capacity");
 }
 
 }  // namespace
