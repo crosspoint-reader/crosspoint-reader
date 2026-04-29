@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -16,26 +17,27 @@ class WriterActivity final : public Activity {
   int preferredCursorX = 0;
   bool hasPreferredCursorX = false;
   bool showSaveError = false;
+  uint32_t textRevision = 0;
   struct WrappedLayoutCache {
     bool valid = false;
     int contentWidth = 0;
-    std::string renderedText;
+    uint32_t textRevision = 0;
     std::vector<WriterWrappedLayout::Line> lines;
   };
   WrappedLayoutCache wrappedLayoutCache;
 
   bool flushInputBuffer();
-  std::string getRenderedText() const;
-  const std::vector<WriterWrappedLayout::Line>& getWrappedLines(const std::string& renderedText, int contentWidth);
+  void markTextChanged();
+  std::string getLineText(const WriterWrappedLayout::Line& line) const;
+  const std::vector<WriterWrappedLayout::Line>& getWrappedLines(int contentWidth);
   int countWords(const std::string& text) const;
   void clearPreferredCursorX();
   void moveCursorLeft();
   void moveCursorRight();
   void moveCursorVertical(int lineDelta);
-  int findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines, const std::string& renderedText) const;
-  int measureCursorX(const WriterWrappedLayout::Line& line, const std::string& renderedText, size_t cursorOffset) const;
-  size_t findClosestCursorOffsetOnLine(const WriterWrappedLayout::Line& line, const std::string& renderedText,
-                                       int preferredX) const;
+  int findWrappedCursorLine(const std::vector<WriterWrappedLayout::Line>& lines) const;
+  int measureCursorX(const WriterWrappedLayout::Line& line, size_t cursorOffset) const;
+  size_t findClosestCursorOffsetOnLine(const WriterWrappedLayout::Line& line, int preferredX) const;
   void renderFooter() const;
   struct FooterLayout {
     int top;

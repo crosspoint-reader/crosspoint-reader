@@ -7,6 +7,9 @@
 
 namespace {
 
+static_assert(sizeof(WriterWrappedLayout::Line) == sizeof(size_t) * 2,
+              "wrapped lines should only store source offsets, not copied text");
+
 int measureCallCount = 0;
 
 void fail(const char* testName, const std::string& message) {
@@ -51,6 +54,10 @@ std::vector<WriterWrappedLayout::Line> wrapWithFixedWidth(const std::string& tex
   return WriterWrappedLayout::wrap(text, maxWidth, WriterWrappedLayout::MeasureText{nullptr, fixedWidthMeasure});
 }
 
+std::string lineText(const std::string& text, const WriterWrappedLayout::Line& line) {
+  return text.substr(line.startOffset, line.endOffset - line.startOffset);
+}
+
 int weightedMeasure(void*, const std::string& text) {
   ++measureCallCount;
   int width = 0;
@@ -72,26 +79,28 @@ std::vector<WriterWrappedLayout::Line> wrapWithWeightedWidth(const std::string& 
 
 void wrapsUsingMeasuredWidthNotCharacterCount() {
   measureCallCount = 0;
-  const auto lines = wrapWithWeightedWidth("iiii W", 6);
+  const std::string text = "iiii W";
+  const auto lines = wrapWithWeightedWidth(text, 6);
 
   expectEqual(lines.size(), 2, "wrapsUsingMeasuredWidthNotCharacterCount", "line count");
-  expectEqual(lines[0].text, "iiii", "wrapsUsingMeasuredWidthNotCharacterCount", "line 0 text");
+  expectEqual(lineText(text, lines[0]), "iiii", "wrapsUsingMeasuredWidthNotCharacterCount", "line 0 text");
   expectEqual(lines[0].startOffset, 0, "wrapsUsingMeasuredWidthNotCharacterCount", "line 0 startOffset");
   expectEqual(lines[0].endOffset, 4, "wrapsUsingMeasuredWidthNotCharacterCount", "line 0 endOffset");
-  expectEqual(lines[1].text, "W", "wrapsUsingMeasuredWidthNotCharacterCount", "line 1 text");
+  expectEqual(lineText(text, lines[1]), "W", "wrapsUsingMeasuredWidthNotCharacterCount", "line 1 text");
   expectEqual(lines[1].startOffset, 5, "wrapsUsingMeasuredWidthNotCharacterCount", "line 1 startOffset");
   expectEqual(lines[1].endOffset, 6, "wrapsUsingMeasuredWidthNotCharacterCount", "line 1 endOffset");
 }
 
 void triesWholeWordsBeforeHardWrapping() {
   measureCallCount = 0;
-  const auto lines = wrapWithFixedWidth("hello extraordinary", 13);
+  const std::string text = "hello extraordinary";
+  const auto lines = wrapWithFixedWidth(text, 13);
 
   expectEqual(lines.size(), 2, "triesWholeWordsBeforeHardWrapping", "line count");
-  expectEqual(lines[0].text, "hello", "triesWholeWordsBeforeHardWrapping", "line 0 text");
+  expectEqual(lineText(text, lines[0]), "hello", "triesWholeWordsBeforeHardWrapping", "line 0 text");
   expectEqual(lines[0].startOffset, 0, "triesWholeWordsBeforeHardWrapping", "line 0 startOffset");
   expectEqual(lines[0].endOffset, 5, "triesWholeWordsBeforeHardWrapping", "line 0 endOffset");
-  expectEqual(lines[1].text, "extraordinary", "triesWholeWordsBeforeHardWrapping", "line 1 text");
+  expectEqual(lineText(text, lines[1]), "extraordinary", "triesWholeWordsBeforeHardWrapping", "line 1 text");
   expectEqual(lines[1].startOffset, 6, "triesWholeWordsBeforeHardWrapping", "line 1 startOffset");
   expectEqual(lines[1].endOffset, 19, "triesWholeWordsBeforeHardWrapping", "line 1 endOffset");
   expectTrue(measureCallCount <= 5, "triesWholeWordsBeforeHardWrapping",
@@ -100,23 +109,25 @@ void triesWholeWordsBeforeHardWrapping() {
 
 void hardWrapsLongWordsWithoutEllipsis() {
   measureCallCount = 0;
-  const auto lines = wrapWithFixedWidth("abcdef", 2);
+  const std::string text = "abcdef";
+  const auto lines = wrapWithFixedWidth(text, 2);
 
   expectEqual(lines.size(), 3, "hardWrapsLongWordsWithoutEllipsis", "line count");
-  expectEqual(lines[0].text, "ab", "hardWrapsLongWordsWithoutEllipsis", "line 0 text");
-  expectEqual(lines[1].text, "cd", "hardWrapsLongWordsWithoutEllipsis", "line 1 text");
-  expectEqual(lines[2].text, "ef", "hardWrapsLongWordsWithoutEllipsis", "line 2 text");
+  expectEqual(lineText(text, lines[0]), "ab", "hardWrapsLongWordsWithoutEllipsis", "line 0 text");
+  expectEqual(lineText(text, lines[1]), "cd", "hardWrapsLongWordsWithoutEllipsis", "line 1 text");
+  expectEqual(lineText(text, lines[2]), "ef", "hardWrapsLongWordsWithoutEllipsis", "line 2 text");
 }
 
 void emitsOversizedCodepointAsSingleLine() {
   measureCallCount = 0;
-  const auto lines = wrapWithWeightedWidth("Wii", 2);
+  const std::string text = "Wii";
+  const auto lines = wrapWithWeightedWidth(text, 2);
 
   expectEqual(lines.size(), 2, "emitsOversizedCodepointAsSingleLine", "line count");
-  expectEqual(lines[0].text, "W", "emitsOversizedCodepointAsSingleLine", "line 0 text");
+  expectEqual(lineText(text, lines[0]), "W", "emitsOversizedCodepointAsSingleLine", "line 0 text");
   expectEqual(lines[0].startOffset, 0, "emitsOversizedCodepointAsSingleLine", "line 0 startOffset");
   expectEqual(lines[0].endOffset, 1, "emitsOversizedCodepointAsSingleLine", "line 0 endOffset");
-  expectEqual(lines[1].text, "ii", "emitsOversizedCodepointAsSingleLine", "line 1 text");
+  expectEqual(lineText(text, lines[1]), "ii", "emitsOversizedCodepointAsSingleLine", "line 1 text");
 }
 
 void keepsUtf8CodepointsWholeWhenMeasured() {
@@ -128,31 +139,32 @@ void keepsUtf8CodepointsWholeWhenMeasured() {
   const auto lines = wrapWithFixedWidth(text, 2);
 
   expectEqual(lines.size(), 2, "keepsUtf8CodepointsWholeWhenMeasured", "line count");
-  expectEqual(lines[0].text,
+  expectEqual(lineText(text, lines[0]),
               "\xC3\xA9"
               "\xC3\xA9",
               "keepsUtf8CodepointsWholeWhenMeasured", "line 0 text");
   expectEqual(lines[0].startOffset, 0, "keepsUtf8CodepointsWholeWhenMeasured", "line 0 startOffset");
   expectEqual(lines[0].endOffset, 4, "keepsUtf8CodepointsWholeWhenMeasured", "line 0 endOffset");
-  expectEqual(lines[1].text, "\xC3\xA9", "keepsUtf8CodepointsWholeWhenMeasured", "line 1 text");
+  expectEqual(lineText(text, lines[1]), "\xC3\xA9", "keepsUtf8CodepointsWholeWhenMeasured", "line 1 text");
   expectEqual(lines[1].startOffset, 4, "keepsUtf8CodepointsWholeWhenMeasured", "line 1 startOffset");
   expectEqual(lines[1].endOffset, 6, "keepsUtf8CodepointsWholeWhenMeasured", "line 1 endOffset");
 }
 
 void preservesBlankLines() {
   measureCallCount = 0;
-  const auto lines = wrapWithFixedWidth("alpha\n\nbeta", 10);
+  const std::string text = "alpha\n\nbeta";
+  const auto lines = wrapWithFixedWidth(text, 10);
 
   expectEqual(lines.size(), 3, "preservesBlankLines", "line count");
-  expectEqual(lines[0].text, "alpha", "preservesBlankLines", "line 0 text");
+  expectEqual(lineText(text, lines[0]), "alpha", "preservesBlankLines", "line 0 text");
   expectEqual(lines[0].startOffset, 0, "preservesBlankLines", "line 0 startOffset");
   expectEqual(lines[0].endOffset, 5, "preservesBlankLines", "line 0 endOffset");
 
-  expectEqual(lines[1].text, "", "preservesBlankLines", "line 1 text");
+  expectEqual(lineText(text, lines[1]), "", "preservesBlankLines", "line 1 text");
   expectEqual(lines[1].startOffset, 6, "preservesBlankLines", "line 1 startOffset");
   expectEqual(lines[1].endOffset, 6, "preservesBlankLines", "line 1 endOffset");
 
-  expectEqual(lines[2].text, "beta", "preservesBlankLines", "line 2 text");
+  expectEqual(lineText(text, lines[2]), "beta", "preservesBlankLines", "line 2 text");
   expectEqual(lines[2].startOffset, 7, "preservesBlankLines", "line 2 startOffset");
   expectEqual(lines[2].endOffset, 11, "preservesBlankLines", "line 2 endOffset");
 }
@@ -163,9 +175,9 @@ void keepsOffsetsIncreasingAcrossWrappedOutput() {
   const auto lines = wrapWithFixedWidth(text, 6);
 
   expectEqual(lines.size(), 3, "keepsOffsetsIncreasingAcrossWrappedOutput", "line count");
-  expectEqual(lines[0].text, "wrap", "keepsOffsetsIncreasingAcrossWrappedOutput", "line 0 text");
-  expectEqual(lines[1].text, "these", "keepsOffsetsIncreasingAcrossWrappedOutput", "line 1 text");
-  expectEqual(lines[2].text, "words", "keepsOffsetsIncreasingAcrossWrappedOutput", "line 2 text");
+  expectEqual(lineText(text, lines[0]), "wrap", "keepsOffsetsIncreasingAcrossWrappedOutput", "line 0 text");
+  expectEqual(lineText(text, lines[1]), "these", "keepsOffsetsIncreasingAcrossWrappedOutput", "line 1 text");
+  expectEqual(lineText(text, lines[2]), "words", "keepsOffsetsIncreasingAcrossWrappedOutput", "line 2 text");
 
   expectTrue(lines[0].startOffset < lines[0].endOffset, "keepsOffsetsIncreasingAcrossWrappedOutput",
              "first line should consume source bytes");
@@ -186,13 +198,13 @@ void avoidsSplittingUtf8SequencesMidByte() {
   const auto lines = wrapWithFixedWidth(text, 2);
 
   expectEqual(lines.size(), 2, "avoidsSplittingUtf8SequencesMidByte", "line count");
-  expectEqual(lines[0].text,
+  expectEqual(lineText(text, lines[0]),
               "\xC3\xA9"
               "\xC3\xA9",
               "avoidsSplittingUtf8SequencesMidByte", "line 0 text");
   expectEqual(lines[0].startOffset, 0, "avoidsSplittingUtf8SequencesMidByte", "line 0 startOffset");
   expectEqual(lines[0].endOffset, 4, "avoidsSplittingUtf8SequencesMidByte", "line 0 endOffset");
-  expectEqual(lines[1].text, "\xC3\xA9", "avoidsSplittingUtf8SequencesMidByte", "line 1 text");
+  expectEqual(lineText(text, lines[1]), "\xC3\xA9", "avoidsSplittingUtf8SequencesMidByte", "line 1 text");
   expectEqual(lines[1].startOffset, 4, "avoidsSplittingUtf8SequencesMidByte", "line 1 startOffset");
   expectEqual(lines[1].endOffset, 6, "avoidsSplittingUtf8SequencesMidByte", "line 1 endOffset");
 }

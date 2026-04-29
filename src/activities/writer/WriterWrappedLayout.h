@@ -14,7 +14,6 @@ class WriterWrappedLayout {
   };
 
   struct Line {
-    std::string text;
     size_t startOffset;
     size_t endOffset;
   };
