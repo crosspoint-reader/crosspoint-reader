@@ -10,6 +10,7 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "CrossPointSettings.h"
@@ -32,6 +33,12 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+
+const RecentBook* findRecentBook(const std::string& path) {
+  const auto& books = RECENT_BOOKS.getBooks();
+  const auto it = std::find_if(books.begin(), books.end(), [&path](const RecentBook& rb) { return rb.path == path; });
+  return (it != books.end()) ? &*it : nullptr;
+}
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -105,6 +112,7 @@ void EpubReaderActivity::onExit() {
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.pendingCoverGeneration = true;
   APP_STATE.saveToFile();
   section.reset();
   epub.reset();
@@ -153,9 +161,16 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+    const RecentBook* recentBook = findRecentBook(epub->getPath());
+    bool hasCoverForTheme = false;
+    if (recentBook && !recentBook->coverBmpPath.empty()) {
+      const std::string coverPath =
+          UITheme::getCoverThumbPath(recentBook->coverBmpPath, UITheme::getInstance().getMetrics().homeCoverHeight);
+      hasCoverForTheme = Storage.exists(coverPath.c_str());
+    }
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), hasCoverForTheme),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -394,6 +409,36 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       {
         RenderLock lock(*this);
         pendingScreenshot = true;
+      }
+      requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::COVER_ACTION: {
+      if (SETTINGS.coverMode == CrossPointSettings::COVER_TIMEOUT) {
+        LOG_DBG("ERS", "COVER_ACTION: TIMEOUT mode → force-render (no coverDisabled change)");
+        APP_STATE.forceRenderCoverPath = epub->getPath();
+      } else {
+        const std::string bmpPath =
+            UITheme::getCoverThumbPath(epub->getThumbBmpPath(), UITheme::getInstance().getMetrics().homeCoverHeight);
+        const bool hasCover = !bmpPath.empty() && Storage.exists(bmpPath.c_str());
+        LOG_DBG("ERS", "COVER_ACTION: ENABLED/DISABLED toggle, hasCover=%d", hasCover);
+        if (hasCover) {
+          for (const int h : UITheme::getAllCoverHeights()) {
+            const std::string pathToRemove = UITheme::getCoverThumbPath(epub->getThumbBmpPath(), h);
+            if (Storage.exists(pathToRemove.c_str())) {
+              Storage.remove(pathToRemove.c_str());
+              LOG_DBG("ERS", "COVER_ACTION: deleted BMP '%s'", pathToRemove.c_str());
+            }
+          }
+          RECENT_BOOKS.setCoverDisabled(epub->getPath(), true);
+          if (APP_STATE.forceRenderCoverPath == epub->getPath()) {
+            APP_STATE.forceRenderCoverPath = "";
+          }
+          LOG_DBG("ERS", "COVER_ACTION: cover disabled, cleared forcePath");
+        } else {
+          APP_STATE.forceRenderCoverPath = epub->getPath();
+          LOG_DBG("ERS", "COVER_ACTION: cover enabled, set forcePath='%s'", epub->getPath().c_str());
+        }
       }
       requestUpdate();
       break;

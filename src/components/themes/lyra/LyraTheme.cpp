@@ -440,7 +440,8 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       std::string coverPath = book.coverBmpPath;
       bool hasCover = true;
       int tileX = LyraMetrics::values.contentSidePadding;
-      if (coverPath.empty()) {
+      const bool skipCover = book.coverDisabled;
+      if (coverPath.empty() || skipCover) {
         hasCover = false;
       } else {
         const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, LyraMetrics::values.homeCoverHeight);
@@ -451,12 +452,16 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             coverWidth = bitmap.getWidth();
-            renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth,
-                                LyraMetrics::values.homeCoverHeight);
+            if (!renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth,
+                                     LyraMetrics::values.homeCoverHeight)) {
+              hasCover = false;
+            }
           } else {
             hasCover = false;
           }
           file.close();
+        } else {
+          hasCover = false;
         }
       }
 
@@ -472,8 +477,8 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24, 32, 32);
       }
 
+      coverRendered = true;
       coverBufferStored = storeCoverBuffer();
-      coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
 
     bool bookSelected = (selectorIndex == 0);

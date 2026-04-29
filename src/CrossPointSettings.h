@@ -137,6 +137,9 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // Home screen cover rendering mode
+  enum COVER_MODE { COVER_ENABLED = 0, COVER_TIMEOUT = 1, COVER_DISABLED_MODE = 2, COVER_MODE_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -199,6 +202,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Home screen cover rendering mode
+  uint8_t coverMode = COVER_ENABLED;
 
   ~CrossPointSettings() = default;
 
