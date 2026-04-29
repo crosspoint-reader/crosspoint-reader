@@ -18,6 +18,40 @@ WriterWrappedLayout::Line makeLine(size_t startOffset, size_t endOffset) {
 
 bool isWordSeparator(const char ch) { return ch == ' '; }
 
+size_t estimateLineCapacity(const std::string& text) {
+  size_t lineCapacity = 0;
+  bool inWord = false;
+  bool paragraphHasContent = false;
+
+  for (const char ch : text) {
+    if (ch == '\n') {
+      if (!paragraphHasContent) {
+        ++lineCapacity;
+      }
+      inWord = false;
+      paragraphHasContent = false;
+      continue;
+    }
+
+    if (isWordSeparator(ch)) {
+      inWord = false;
+      continue;
+    }
+
+    paragraphHasContent = true;
+    if (!inWord) {
+      ++lineCapacity;
+      inWord = true;
+    }
+  }
+
+  if (!paragraphHasContent && (text.empty() || text.back() == '\n')) {
+    ++lineCapacity;
+  }
+
+  return std::max<size_t>(1, lineCapacity);
+}
+
 size_t nextWordCandidateEnd(const std::string& text, size_t offset, const size_t paragraphEnd) {
   while (offset < paragraphEnd && isWordSeparator(text[offset])) {
     ++offset;
@@ -30,8 +64,14 @@ size_t nextWordCandidateEnd(const std::string& text, size_t offset, const size_t
   return offset;
 }
 
+int measureSlice(const std::string& text, const size_t startOffset, const size_t endOffset,
+                 const WriterWrappedLayout::MeasureText& measureText, std::string& measureScratch) {
+  measureScratch.assign(text, startOffset, endOffset - startOffset);
+  return measureText(measureScratch);
+}
+
 size_t hardWrapWord(const std::string& text, const size_t wordStart, const size_t wordEnd, const int maxWidth,
-                    const WriterWrappedLayout::MeasureText& measureText) {
+                    const WriterWrappedLayout::MeasureText& measureText, std::string& measureScratch) {
   size_t offset = wordStart;
   size_t lastFit = wordStart;
 
@@ -41,8 +81,7 @@ size_t hardWrapWord(const std::string& text, const size_t wordStart, const size_
       break;
     }
 
-    const std::string candidate = text.substr(wordStart, nextOffset - wordStart);
-    if (measureText(candidate) > maxWidth) {
+    if (measureSlice(text, wordStart, nextOffset, measureText, measureScratch) > maxWidth) {
       break;
     }
 
@@ -60,7 +99,7 @@ size_t hardWrapWord(const std::string& text, const size_t wordStart, const size_
 
 void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size_t paragraphEnd, int maxWidth,
                             const WriterWrappedLayout::MeasureText& measureText,
-                            std::vector<WriterWrappedLayout::Line>& lines) {
+                            std::vector<WriterWrappedLayout::Line>& lines, std::string& measureScratch) {
   if (paragraphStart == paragraphEnd) {
     lines.push_back(makeLine(paragraphStart, paragraphStart));
     return;
@@ -76,14 +115,13 @@ void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size
         break;
       }
 
-      const std::string candidate = text.substr(lineStart, candidateEnd - lineStart);
-      if (measureText(candidate) <= maxWidth) {
+      if (measureSlice(text, lineStart, candidateEnd, measureText, measureScratch) <= maxWidth) {
         lineEnd = candidateEnd;
         continue;
       }
 
       if (lineEnd == lineStart) {
-        lineEnd = hardWrapWord(text, lineStart, candidateEnd, maxWidth, measureText);
+        lineEnd = hardWrapWord(text, lineStart, candidateEnd, maxWidth, measureText, measureScratch);
       }
       break;
     }
@@ -110,14 +148,17 @@ void appendWrappedParagraph(const std::string& text, size_t paragraphStart, size
 std::vector<WriterWrappedLayout::Line> WriterWrappedLayout::wrap(const std::string& renderedText, const int maxWidth,
                                                                  const MeasureText& measureText) {
   std::vector<Line> lines;
+  lines.reserve(estimateLineCapacity(renderedText));
   const int wrappedWidth = std::max(1, maxWidth);
+  std::string measureScratch;
 
   size_t paragraphStart = 0;
   while (paragraphStart <= renderedText.size()) {
     const size_t newline = renderedText.find('\n', paragraphStart);
     const size_t paragraphEnd = newline == std::string::npos ? renderedText.size() : newline;
 
-    appendWrappedParagraph(renderedText, paragraphStart, paragraphEnd, wrappedWidth, measureText, lines);
+    appendWrappedParagraph(renderedText, paragraphStart, paragraphEnd, wrappedWidth, measureText, lines,
+                           measureScratch);
 
     if (newline == std::string::npos) {
       break;

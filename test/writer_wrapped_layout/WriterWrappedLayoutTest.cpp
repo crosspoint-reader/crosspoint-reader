@@ -39,6 +39,15 @@ void expectTrue(bool condition, const char* testName, const char* message) {
   }
 }
 
+void expectGreaterOrEqual(size_t actual, size_t minimum, const char* testName, const char* field) {
+  if (actual >= minimum) {
+    return;
+  }
+
+  fail(testName,
+       std::string(field) + " expected at least " + std::to_string(minimum) + ", got " + std::to_string(actual));
+}
+
 int fixedWidthMeasure(void*, const std::string& text) {
   ++measureCallCount;
   int width = 0;
@@ -209,6 +218,15 @@ void avoidsSplittingUtf8SequencesMidByte() {
   expectEqual(lines[1].endOffset, 6, "avoidsSplittingUtf8SequencesMidByte", "line 1 endOffset");
 }
 
+void reservesLineCapacityBeforePushLoop() {
+  measureCallCount = 0;
+  const std::string text = "a a a a a a a a a a a a a a a a a";
+  const auto lines = wrapWithFixedWidth(text, 1);
+
+  expectEqual(lines.size(), 17, "reservesLineCapacityBeforePushLoop", "line count");
+  expectGreaterOrEqual(lines.capacity(), 17, "reservesLineCapacityBeforePushLoop", "line capacity");
+}
+
 }  // namespace
 
 int main() {
@@ -220,6 +238,7 @@ int main() {
   preservesBlankLines();
   keepsOffsetsIncreasingAcrossWrappedOutput();
   avoidsSplittingUtf8SequencesMidByte();
+  reservesLineCapacityBeforePushLoop();
   std::cout << "WriterWrappedLayoutTest passed\n";
   return 0;
 }
