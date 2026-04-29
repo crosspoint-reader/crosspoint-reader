@@ -267,20 +267,30 @@ OtaUpdater::OtaUpdaterError OtaUpdater::beginInstallUpdate() {
 int OtaUpdater::forceSetOtaBootPartition() {
   const esp_partition_t* newPartition = esp_ota_get_next_update_partition(nullptr);
   if (newPartition == nullptr) {
+    LOG_ERR("OTA", "force boot partition: next update partition not found");
     return ESP_ERR_NOT_FOUND;
   }
+  LOG_INF("OTA", "force boot next partition=%s subtype=0x%x offset=0x%lx size=0x%lx", newPartition->label,
+          newPartition->subtype, static_cast<unsigned long>(newPartition->address),
+          static_cast<unsigned long>(newPartition->size));
 
   const esp_partition_t* otaDataPartition =
       esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
   if (otaDataPartition == nullptr) {
+    LOG_ERR("OTA", "force boot partition: otadata partition not found");
     return ESP_ERR_NOT_FOUND;
   }
-
   esp_ota_select_entry_t otadata[2];
   esp_err_t err = esp_partition_read(otaDataPartition, 0, &otadata[0], sizeof(esp_ota_select_entry_t));
-  if (err != ESP_OK) return err;
+  if (err != ESP_OK) {
+    LOG_ERR("OTA", "force boot: read otadata[0] failed: %s", esp_err_to_name(err));
+    return err;
+  }
   err = esp_partition_read(otaDataPartition, otaDataPartition->erase_size, &otadata[1], sizeof(esp_ota_select_entry_t));
-  if (err != ESP_OK) return err;
+  if (err != ESP_OK) {
+    LOG_ERR("OTA", "force boot: read otadata[1] failed: %s", esp_err_to_name(err));
+    return err;
+  }
 
   int activeSlot = bootloader_common_get_active_otadata(otadata);
   int nextSlot = (activeSlot == -1) ? 0 : (~activeSlot & 1);
@@ -291,7 +301,10 @@ int OtaUpdater::forceSetOtaBootPartition() {
                                   nullptr) != nullptr) {
     otaAppCount++;
   }
-  if (otaAppCount == 0) return ESP_ERR_NOT_FOUND;
+  if (otaAppCount == 0) {
+    LOG_ERR("OTA", "force boot select: no OTA app partitions found");
+    return ESP_ERR_NOT_FOUND;
+  }
 
   const uint8_t subTypeId = newPartition->subtype & 0x0F;
   uint32_t newSeq;
@@ -300,7 +313,10 @@ int OtaUpdater::forceSetOtaBootPartition() {
   } else {
     uint32_t currentSeq = otadata[activeSlot].ota_seq;
     newSeq = currentSeq;
-    while (newSeq % otaAppCount != static_cast<uint32_t>(subTypeId)) {
+    // ESP-IDF's bootloader maps ota_seq to an OTA app slot with
+    // (ota_seq - 1) % ota_app_count. Match that mapping here so the forced
+    // otadata entry selects the partition that esp_https_ota just wrote.
+    while ((newSeq - 1) % otaAppCount != static_cast<uint32_t>(subTypeId)) {
       newSeq++;
     }
     if (newSeq == currentSeq) newSeq += otaAppCount;
@@ -312,10 +328,17 @@ int OtaUpdater::forceSetOtaBootPartition() {
 
   err = esp_partition_erase_range(otaDataPartition, otaDataPartition->erase_size * static_cast<uint32_t>(nextSlot),
                                   otaDataPartition->erase_size);
-  if (err != ESP_OK) return err;
+  if (err != ESP_OK) {
+    LOG_ERR("OTA", "force boot: erase otadata[%d] failed: %s", nextSlot, esp_err_to_name(err));
+    return err;
+  }
 
-  return esp_partition_write(otaDataPartition, otaDataPartition->erase_size * static_cast<uint32_t>(nextSlot),
-                             &otadata[nextSlot], sizeof(esp_ota_select_entry_t));
+  err = esp_partition_write(otaDataPartition, otaDataPartition->erase_size * static_cast<uint32_t>(nextSlot),
+                            &otadata[nextSlot], sizeof(esp_ota_select_entry_t));
+  if (err != ESP_OK) {
+    LOG_ERR("OTA", "force boot: write otadata[%d] failed: %s", nextSlot, esp_err_to_name(err));
+  }
+  return err;
 }
 
 OtaUpdater::OtaUpdaterError OtaUpdater::performInstallUpdateStep() {

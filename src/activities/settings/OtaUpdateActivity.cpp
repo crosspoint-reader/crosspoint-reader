@@ -164,6 +164,10 @@ void OtaUpdateActivity::render(RenderLock&&) {
   }
 
   renderer.displayBuffer();
+
+  if (state == FINISHED) {
+    state = SHUTTING_DOWN;
+  }
 }
 
 void OtaUpdateActivity::loop() {
