@@ -130,6 +130,34 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
+echo "#define MANJARI_12_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./manjari_12_regular.h",
+  "./manjari_12_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define MANJARI_14_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./manjari_14_regular.h",
+  "./manjari_14_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define MANJARI_16_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./manjari_16_regular.h",
+  "./manjari_16_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define MANJARI_18_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./manjari_18_regular.h",
+  "./manjari_18_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
 echo "#define SMALL_FONT_ID ($(
 ruby -rdigest -e 'puts [
   "./notosans_8_regular.h",

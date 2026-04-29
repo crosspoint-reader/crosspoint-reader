@@ -19,6 +19,7 @@ parser.add_argument("--additional-intervals", dest="additional_intervals", actio
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
+parser.add_argument("--pua-mapping", dest="pua_mapping", help="JSON file mapping PUA codepoints (hex strings) to glyph names. Enables rendering of private glyphs (e.g. Malayalam conjuncts) via PUA codepoints.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -74,6 +75,9 @@ intervals = [
     ### Cyrillic ###
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
+    ### Malayalam ###
+    # Base consonants, vowels, vowel signs, virama, chillu forms, digits
+    (0x0D00, 0x0D7F),
     ### Math Symbols (common subset) ###
     # Superscripts and Subscripts
     (0x2070, 0x209F),
@@ -224,7 +228,43 @@ if args.pnum:
         if count > 0:
             print(f"pnum: {count} glyph substitutions from {font_path}", file=sys.stderr)
 
+# Build PUA glyph index overrides from --pua-mapping JSON.
+# Maps PUA codepoint -> (face_index, freetype_glyph_index)
+pua_glyph_indices = {}
+if args.pua_mapping:
+    import json
+    with open(args.pua_mapping) as f:
+        pua_map = json.load(f)  # {"0xE000": "glyph_name", ...}
+    for face_idx, font_path in enumerate(args.fontstack):
+        tt_font = TTFont(font_path)
+        glyph_order = tt_font.getGlyphOrder()
+        name_to_idx = {name: idx for idx, name in enumerate(glyph_order)}
+        count = 0
+        for cp_hex, glyph_name in pua_map.items():
+            cp = int(cp_hex, 16)
+            if cp in pua_glyph_indices:
+                continue  # Already resolved by higher-priority font in stack
+            glyph_idx = name_to_idx.get(glyph_name, 0)
+            if glyph_idx > 0:
+                pua_glyph_indices[cp] = (face_idx, glyph_idx)
+                count += 1
+        tt_font.close()
+        if count > 0:
+            print(f"pua-mapping: {count} PUA glyphs from {font_path}", file=sys.stderr)
+    # Add PUA interval to the intervals list
+    pua_cps = sorted(pua_glyph_indices.keys())
+    if pua_cps:
+        add_ints.append((pua_cps[0], pua_cps[-1]))
+        print(f"pua-mapping: added interval U+{pua_cps[0]:04X}-U+{pua_cps[-1]:04X} ({len(pua_cps)} glyphs)", file=sys.stderr)
+
 def load_glyph(code_point):
+    # PUA override: load glyph by name instead of codepoint
+    if code_point in pua_glyph_indices:
+        face_idx, glyph_index = pua_glyph_indices[code_point]
+        face = font_stack[face_idx]
+        face.load_glyph(glyph_index, load_flags)
+        return face
+
     face_index = 0
     while face_index < len(font_stack):
         face = font_stack[face_index]
@@ -799,12 +839,14 @@ if compress:
         (0x0180, 0x024F),   # Latin Extended-B
         (0x0300, 0x036F),   # Combining Diacritical Marks
         (0x0400, 0x04FF),   # Cyrillic
+        (0x0D00, 0x0D7F),   # Malayalam
         (0x1EA0, 0x1EF9),   # Vietnamese Extended
         (0x2000, 0x206F),   # General Punctuation
         (0x2070, 0x209F),   # Superscripts & Subscripts
         (0x20A0, 0x20CF),   # Currency Symbols
         (0x2190, 0x21FF),   # Arrows
         (0x2200, 0x22FF),   # Math Operators
+        (0xE000, 0xF8FF),   # Private Use Area (Malayalam conjunct glyphs)
         (0xFB00, 0xFB06),   # Alphabetic Presentation Forms (ligatures)
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
