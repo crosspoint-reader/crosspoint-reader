@@ -36,18 +36,32 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   const auto& books = RECENT_BOOKS.getBooks();
   recentBooks.reserve(std::min(static_cast<int>(books.size()), maxBooks));
 
+  // Pass 1: Add pinned books
   for (const RecentBook& book : books) {
-    // Limit to maximum number of recent books
     if (recentBooks.size() >= maxBooks) {
       break;
     }
 
-    // Skip if file no longer exists
-    if (!Storage.exists(book.path.c_str())) {
-      continue;
+    if (book.pinned) {
+      if (!Storage.exists(book.path.c_str())) {
+        continue;
+      }
+      recentBooks.push_back(book);
+    }
+  }
+
+  // Pass 2: Add unpinned books
+  for (const RecentBook& book : books) {
+    if (recentBooks.size() >= maxBooks) {
+      break;
     }
 
-    recentBooks.push_back(book);
+    if (!book.pinned) {
+      if (!Storage.exists(book.path.c_str())) {
+        continue;
+      }
+      recentBooks.push_back(book);
+    }
   }
 }
 
@@ -208,6 +222,31 @@ void HomeActivity::loop() {
       onSettingsOpen();
     }
   }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (selectorIndex < static_cast<int>(recentBooks.size())) {
+      const RecentBook& selectedBook = recentBooks[selectorIndex];
+      const int maxPinned = UITheme::getInstance().getMetrics().homeRecentBooksCount;
+      if (selectedBook.pinned || RECENT_BOOKS.getPinnedCount() < maxPinned) {
+        std::string toggledPath = selectedBook.path;
+        RECENT_BOOKS.togglePinned(toggledPath);
+        loadRecentBooks(maxPinned);
+
+        // Track the book's new position so the selection cursor follows it
+        for (int i = 0; i < static_cast<int>(recentBooks.size()); ++i) {
+          if (recentBooks[i].path == toggledPath) {
+            selectorIndex = i;
+            break;
+          }
+        }
+
+        // Invalidate the cover buffer so it re-renders in the correct order
+        freeCoverBuffer();
+        coverRendered = false;
+
+        requestUpdate();
+      }
+    }
+  }
 }
 
 void HomeActivity::render(RenderLock&&) {
@@ -251,7 +290,15 @@ void HomeActivity::render(RenderLock&&) {
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const char* backLabel = "";
+  if (selectorIndex < static_cast<int>(recentBooks.size())) {
+    if (recentBooks[selectorIndex].pinned) {
+      backLabel = tr(STR_UNPIN);
+    } else if (RECENT_BOOKS.getPinnedCount() < metrics.homeRecentBooksCount) {
+      backLabel = tr(STR_PIN);
+    }
+  }
+  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

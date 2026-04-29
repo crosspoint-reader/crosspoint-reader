@@ -25,16 +25,24 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  bool wasPinned = false;
   if (it != recentBooks.end()) {
+    wasPinned = it->pinned;
     recentBooks.erase(it);
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath, wasPinned});
 
-  // Trim to max size
+  // Trim to max size, preferring to evict unpinned books
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
-    recentBooks.resize(MAX_RECENT_BOOKS);
+    auto evictIt = 
+    std::find_if(recentBooks.rbegin(), recentBooks.rend(),[](const RecentBook& book) { return !book.pinned; });
+    if (evictIt != recentBooks.rend()) {
+      recentBooks.erase(std::next(evictIt).base());
+    } else {
+      recentBooks.pop_back();
+    }
   }
 
   saveToFile();
@@ -176,4 +184,46 @@ bool RecentBooksStore::loadFromBinaryFile() {
 
   LOG_DBG("RBS", "Recent books loaded from binary file (%d entries)", static_cast<int>(recentBooks.size()));
   return true;
+}
+
+bool RecentBooksStore::isPinned(const std::string& path) const {
+  for (const RecentBook& book : recentBooks) {
+    if (book.path == path) {
+      return book.pinned;
+    }
+  }
+  return false;
+}
+
+void RecentBooksStore::setPinned(const std::string& path, bool pinned) {
+  for (RecentBook& book : recentBooks) {
+    if (book.path == path) {
+      if (book.pinned != pinned) {
+        book.pinned = pinned;
+        saveToFile();
+      }
+      break;
+    }
+  }
+}
+
+bool RecentBooksStore::togglePinned(const std::string& path) {
+  for (RecentBook& book : recentBooks) {
+    if (book.path == path) {
+      book.pinned = !book.pinned;
+      saveToFile();
+      return book.pinned;
+    }
+  }
+  return false;
+}
+
+int RecentBooksStore::getPinnedCount() const {
+  int count = 0;
+  for (const RecentBook& book : recentBooks) {
+    if (book.pinned && Storage.exists(book.path.c_str())) {
+      count++;
+    }
+  }
+  return count;
 }
