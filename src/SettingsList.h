@@ -82,6 +82,14 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                           StrId::STR_CAT_SYSTEM),
 
+      // --- Clippings ---
+      SettingInfo::Enum(StrId::STR_CLIPPING_STORAGE, &CrossPointSettings::clippingStorage,
+                        {StrId::STR_CLIPPING_SINGLE_FILE, StrId::STR_CLIPPING_PER_BOOK}, "clippingStorage",
+                        StrId::STR_CAT_CLIPPINGS),
+      SettingInfo::Enum(StrId::STR_CLIP_NAV_MODE, &CrossPointSettings::clipNavMode,
+                        {StrId::STR_CLIP_NAV_LINE, StrId::STR_CLIP_NAV_WORD}, "clipNavMode", StrId::STR_CAT_CLIPPINGS),
+      SettingInfo::Toggle(StrId::STR_ANNOT_SHOW, &CrossPointSettings::annotationVisibility, "annotationVisibility",
+                          StrId::STR_CAT_CLIPPINGS),
       // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
       SettingInfo::DynamicString(
           StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },

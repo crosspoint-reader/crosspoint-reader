@@ -7,6 +7,7 @@
 
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
+#include "annotations/AnnotationsManager.h"
 
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
@@ -30,6 +31,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+
+  AnnotationsManager annotations;
+  bool annotationsDirty = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

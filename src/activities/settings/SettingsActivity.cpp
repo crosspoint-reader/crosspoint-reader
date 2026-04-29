@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 
+#include "../reader/ClippingsMenuActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
@@ -40,7 +41,6 @@ void SettingsActivity::onEnter() {
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
     }
-    // Web-only categories (KOReader Sync, OPDS Browser) are skipped for device UI
   }
 
   // Append device-only ACTION items
@@ -53,14 +53,30 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_CAT_CLIPPINGS, SettingAction::ClippingSettings));
 
-  // Reset selection to first category
-  selectedCategoryIndex = 0;
+  // Clamp initialCategoryIndex in case it was set out of range
+  if (selectedCategoryIndex < 0 || selectedCategoryIndex >= categoryCount) {
+    selectedCategoryIndex = 0;
+  }
   selectedSettingIndex = 0;
 
-  // Initialize with first category (Display)
-  currentSettings = &displaySettings;
-  settingsCount = static_cast<int>(displaySettings.size());
+  // Initialize with the requested category
+  switch (selectedCategoryIndex) {
+    case 1:
+      currentSettings = &readerSettings;
+      break;
+    case 2:
+      currentSettings = &controlsSettings;
+      break;
+    case 3:
+      currentSettings = &systemSettings;
+      break;
+    default:
+      currentSettings = &displaySettings;
+      break;
+  }
+  settingsCount = static_cast<int>(currentSettings->size());
 
   // Trigger first update
   requestUpdate();
@@ -191,6 +207,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ClippingSettings:
+        startActivityForResult(std::make_unique<ClippingsMenuActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing
