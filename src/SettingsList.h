@@ -128,6 +128,10 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         StrId::STR_CUSTOMISE_STATUS_BAR),
       SettingInfo::Toggle(StrId::STR_BATTERY, &CrossPointSettings::statusBarBattery, "statusBarBattery",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
+      SettingInfo::Toggle(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock, "statusBarClock",
+                          StrId::STR_CUSTOMISE_STATUS_BAR),
+      SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffset, {0, 52, 1}, "clockUtcOffset",
+                         StrId::STR_CUSTOMISE_STATUS_BAR),
   };
   return list;
 }
