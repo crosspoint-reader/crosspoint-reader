@@ -81,4 +81,6 @@ class KOReaderSyncActivity final : public Activity {
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
+  void saveProgressAndReturn(int spineIndex, int page);
+  void returnToReader();
 };
