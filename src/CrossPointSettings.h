@@ -199,6 +199,8 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Dark mode: invert display colors while reading (0 = off, 1 = on)
+  uint8_t readerDarkMode = 0;
 
   ~CrossPointSettings() = default;
 
