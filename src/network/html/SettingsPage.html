@@ -299,6 +299,7 @@
     <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
   </div>
 
+  <div id="wifi-container"></div>
   <div id="opds-container"></div>
 
   <div class="card">
@@ -480,6 +481,119 @@
 
   loadSettings();
 
+  // --- Wi-Fi Network Management ---
+  // Renders an editable list of saved Wi-Fi networks using /api/wifi endpoints.
+  // Password fields are never pre-filled; when left blank during edit, existing
+  // passwords remain unchanged server-side.
+  let wifiNetworks = [];
+
+  function renderWifiNetwork(net, idx) {
+    const isNew = idx === -1;
+    const id = isNew ? 'new' : idx;
+    const lastConnected = net.isLastConnected
+      ? '<div style="margin-top:8px;color:var(--label-color);font-size:0.9em;">Last connected network</div>'
+      : '';
+
+    return '<div class="opds-server" id="wifi-' + id + '">' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">SSID</span>' +
+        '<span class="setting-control"><input type="text" id="wifi-ssid-' + id + '" value="' + escapeHtml(net.ssid || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Password</span>' +
+        '<span class="setting-control"><input type="password" id="wifi-pass-' + id + '" placeholder="' + (net.hasPassword ? '(unchanged)' : '') + '"></span>' +
+      '</div>' +
+      lastConnected +
+      '<div class="opds-actions">' +
+        '<button class="btn-small btn-save-server" onclick="saveWifiNetwork(' + idx + ')">Save</button>' +
+        (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteWifiNetwork(' + idx + ')">Delete</button>') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderWifiSection() {
+    const container = document.getElementById('wifi-container');
+    let html = '<div class="card"><h2>Wi-Fi Networks</h2>';
+
+    if (wifiNetworks.length === 0) {
+      html += '<p style="color:var(--label-color);text-align:center;">No Wi-Fi networks saved</p>';
+    } else {
+      wifiNetworks.forEach(function(net, idx) {
+        html += renderWifiNetwork(net, idx);
+      });
+    }
+
+    html += '<div style="margin-top:12px;text-align:center;">' +
+      '<button class="btn-small btn-add" onclick="addWifiNetwork()">+ Add Network</button>' +
+    '</div></div>';
+    container.innerHTML = html;
+  }
+
+  async function loadWifiNetworks() {
+    try {
+      const resp = await fetch('/api/wifi');
+      if (!resp.ok) throw new Error('Failed to load');
+      wifiNetworks = await resp.json();
+      renderWifiSection();
+    } catch (e) {
+      console.error('Wi-Fi load error:', e);
+    }
+  }
+
+  function addWifiNetwork() {
+    const container = document.getElementById('wifi-container');
+    const card = container.querySelector('.card');
+    const addBtn = card.querySelector('.btn-add').parentElement;
+    // Prevent multiple unsaved new-network forms at once (idx -1 -> id "new")
+    if (document.getElementById('wifi-new')) return;
+    addBtn.insertAdjacentHTML('beforebegin', renderWifiNetwork({ssid:'',hasPassword:false,isLastConnected:false}, -1));
+  }
+
+  async function saveWifiNetwork(idx) {
+    const id = idx === -1 ? 'new' : idx;
+    const ssid = document.getElementById('wifi-ssid-' + id).value.trim();
+    if (!ssid) {
+      showMessage('SSID is required.', true);
+      return;
+    }
+
+    const data = { ssid: ssid };
+    // Only include password when the user actually typed something; omitting it
+    // tells the server to preserve an existing password.
+    const pass = document.getElementById('wifi-pass-' + id).value;
+    if (pass) data.password = pass;
+    if (idx >= 0) data.index = idx;
+
+    try {
+      const resp = await fetch('/api/wifi', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('Wi-Fi network saved!', false);
+      await loadWifiNetworks();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  async function deleteWifiNetwork(idx) {
+    if (!confirm('Delete this Wi-Fi network?')) return;
+    try {
+      const resp = await fetch('/api/wifi/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({index: idx})
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('Wi-Fi network deleted', false);
+      await loadWifiNetworks();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
   // --- OPDS Server Management ---
   // Dynamically renders an editable list of OPDS servers, communicating with the
   // /api/opds REST endpoints. Password fields are never pre-filled for security;
@@ -594,6 +708,7 @@
     }
   }
 
+  loadWifiNetworks();
   loadOpdsServers();
 </script>
 </body>
