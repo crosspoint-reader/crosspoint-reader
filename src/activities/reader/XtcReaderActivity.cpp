@@ -50,6 +50,7 @@ void XtcReaderActivity::onExit() {
   Activity::onExit();
 
   APP_STATE.readerActivityLoadCount = 0;
+  APP_STATE.pendingCoverGeneration = true;
   APP_STATE.saveToFile();
   xtc.reset();
 }
