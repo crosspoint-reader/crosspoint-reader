@@ -3,6 +3,7 @@
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 #include <Utf8.h>
 
 #include "FontCacheManager.h"
@@ -20,7 +21,32 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     // must consume it (draw the glyph) before requesting another bitmap.
     return fd->getBitmap(fontData, glyph, glyphIndex);
   }
+  // For SD card fonts, check if the glyph was loaded on demand into the overflow
+  // buffer.  getOverflowBitmap() returns:
+  //   - bitmap pointer for overflow glyphs with bitmap data
+  //   - nullptr for overflow glyphs without bitmap data (e.g. space: width=0, height=0)
+  //   - nullptr for non-overflow glyphs (normal prewarmed path)
+  // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
+  if (fontData->glyphMissCtx) {
+    auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
+    if (sdFont->isOverflowGlyph(glyph)) {
+      return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs
+    }
+  }
   return &fontData->bitmap[glyph->dataOffset];
+}
+
+void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    // Metadata-only: loads glyph metrics (advanceX) without bitmap data.
+    // Saves ~50-100KB heap vs full prewarm — layout only needs advance widths.
+    // Prewarm all present styles (0x0F) for layout measurement.
+    int missed = it->second->prewarm(utf8Text, 0x0F, /*metadataOnly=*/true);
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
 }
 
 void GfxRenderer::begin() {
@@ -36,7 +62,12 @@ void GfxRenderer::begin() {
   bwBufferChunks.assign((frameBufferSize + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE, nullptr);
 }
 
-void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
+  auto result = fontMap.insert({fontId, font});
+  if (!result.second) {
+    LOG_ERR("GFX", "Font ID %d already registered, ignoring duplicate", fontId);
+  }
+}
 
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
 // This should always be inlined for better performance

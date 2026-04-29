@@ -3,6 +3,7 @@
 #include <HalPowerManager.h>
 
 #include "OpdsServerStore.h"
+#include "SdCardFontGlobals.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -191,6 +192,7 @@ void ActivityManager::goToBrowser() {
 }
 
 void ActivityManager::goToReader(std::string path) {
+  ensureSdFontLoaded();
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 

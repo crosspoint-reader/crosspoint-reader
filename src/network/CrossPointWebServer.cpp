@@ -12,6 +12,8 @@
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
+#include "SdCardFontGlobals.h"
+#include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "html/FilesPageHtml.generated.h"
@@ -1093,7 +1095,10 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  const auto& settings = getSettingsList();
+  // Pass the SD font registry so the fontFamily setting's enumStringValues
+  // includes SD-resident families — otherwise the web API only exposes the
+  // three built-in fonts.
+  const auto& settings = getSettingsList(&sdFontSystem.registry());
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1128,8 +1133,14 @@ void CrossPointWebServer::handleGetSettings() const {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
         JsonArray options = doc["options"].to<JsonArray>();
-        for (const auto& opt : s.enumValues) {
-          options.add(I18N.get(opt));
+        if (!s.enumStringValues.empty()) {
+          for (const auto& opt : s.enumStringValues) {
+            options.add(opt);
+          }
+        } else {
+          for (const auto& opt : s.enumValues) {
+            options.add(I18N.get(opt));
+          }
         }
         break;
       }
@@ -1189,7 +1200,7 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList();
+  const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
 
   for (const auto& s : settings) {
@@ -1207,7 +1218,9 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        if (val >= 0 && val < static_cast<int>(s.enumValues.size())) {
+        const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
+                                                      : static_cast<int>(s.enumStringValues.size());
+        if (val >= 0 && val < maxVal) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
           } else if (s.valueSetter) {
