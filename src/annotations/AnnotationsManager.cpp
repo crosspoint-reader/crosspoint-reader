@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <common/FsApiConstants.h>
 
+#include <algorithm>
+
 static constexpr const char* ANNOT_FILENAME = "/annotations.bin";
 
 std::string AnnotationsManager::annotationsPath(const char* bookCachePath) {
@@ -84,17 +86,12 @@ void AnnotationsManager::add(AnnotationRecord record) { records.push_back(std::m
 
 std::vector<AnnotationsManager::AnnotationRecord> AnnotationsManager::forSection(uint16_t sectionIdx) const {
   std::vector<AnnotationRecord> result;
-  for (const auto& rec : records) {
-    if (rec.sectionIdx == sectionIdx) {
-      result.push_back(rec);
-    }
-  }
+  std::copy_if(records.begin(), records.end(), std::back_inserter(result),
+               [sectionIdx](const AnnotationRecord& rec) { return rec.sectionIdx == sectionIdx; });
   return result;
 }
 
 bool AnnotationsManager::hasAnnotationsForSection(uint16_t sectionIdx) const {
-  for (const auto& rec : records) {
-    if (rec.sectionIdx == sectionIdx) return true;
-  }
-  return false;
+  return std::any_of(records.begin(), records.end(),
+                     [sectionIdx](const AnnotationRecord& rec) { return rec.sectionIdx == sectionIdx; });
 }

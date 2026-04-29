@@ -11,6 +11,7 @@
 #include <esp_system.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "ClipSelectionActivity.h"
@@ -461,7 +462,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                   if (!clip.text.empty()) {
                     ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle, startPage + 1,
                                                    clip.text);
-                    if (clip.fromWordIdx >= 0 && clip.toWordIdx >= 0 && epub) {
+                    if (clip.fromWordIdx >= 0 && clip.toWordIdx >= 0) {
                       AnnotationsManager::AnnotationRecord rec;
                       rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
                       const int to = std::min(clip.toWordIdx, static_cast<int>(wordsCopy.size()) - 1);
@@ -864,16 +865,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int underlineY = r.y + r.h;
         if (underlineY < 0 || underlineY >= screenH) continue;
         if (r.x < 0 || r.x >= screenW) continue;
-        bool merged = false;
-        for (auto& span : spans) {
-          if (span.underlineY == underlineY) {
-            if (r.x < span.xMin) span.xMin = r.x;
-            if (r.x + r.w - 1 > span.xMax) span.xMax = r.x + r.w - 1;
-            merged = true;
-            break;
-          }
+        auto it = std::find_if(spans.begin(), spans.end(),
+                               [underlineY](const RowSpan& s) { return s.underlineY == underlineY; });
+        if (it != spans.end()) {
+          if (r.x < it->xMin) it->xMin = r.x;
+          if (r.x + r.w - 1 > it->xMax) it->xMax = r.x + r.w - 1;
+        } else {
+          spans.push_back({underlineY, r.x, r.x + r.w - 1});
         }
-        if (!merged) spans.push_back({underlineY, r.x, r.x + r.w - 1});
       }
       for (const auto& span : spans) {
         renderer.drawLine(span.xMin, span.underlineY, span.xMax, span.underlineY, 2, true);
