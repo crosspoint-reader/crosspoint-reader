@@ -87,6 +87,8 @@ class HalFile : public Print {
   size_t write(uint8_t b) override;
   bool rename(const char* newPath);
   bool isDirectory() const;
+  bool getCreateDateTime(uint16_t* pdate, uint16_t* ptime);
+  bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime);
   void rewindDirectory();
   bool close();
   HalFile openNextFile();

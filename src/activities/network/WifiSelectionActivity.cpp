@@ -4,6 +4,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <esp_sntp.h>
 
 #include <map>
 
@@ -215,10 +216,9 @@ void WifiSelectionActivity::attemptConnection() {
   connectionError.clear();
   requestUpdate();
 
-  WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
+  WiFi.persistent(false);       // don't write credentials to NVS
+  WiFi.disconnect(true, true);  // clear stale SSID, disable SDK auto-connect
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
-  delay(100);
 
   // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
   String mac = WiFi.macAddress();
@@ -241,7 +241,26 @@ void WifiSelectionActivity::checkConnectionStatus() {
   const wl_status_t status = WiFi.status();
 
   if (status == WL_CONNECTED) {
-    // Successfully connected
+    // Kick off NTP sync so FAT timestamps are accurate for the session.
+    // Use esp_sntp directly (same pattern as KOReaderSyncActivity) so we
+    // can poll for completion before handing off to the web server.
+    if (esp_sntp_enabled()) esp_sntp_stop();
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
+
+    int retry = 0;
+    constexpr int maxRetries = 50;  // 5 seconds max (50 × 100 ms)
+    while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && retry < maxRetries) {
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      retry++;
+    }
+    if (retry < maxRetries) {
+      LOG_DBG("WIFI", "NTP time synced");
+    } else {
+      LOG_DBG("WIFI", "NTP sync timeout, continuing without sync");
+    }
+
     IPAddress ip = WiFi.localIP();
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);

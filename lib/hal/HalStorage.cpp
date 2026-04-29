@@ -6,6 +6,21 @@
 #include <SDCardManager.h>
 
 #include <cassert>
+#include <ctime>
+
+static void sdFatDateTimeCallback(uint16_t* pdate, uint16_t* ptime) {
+  struct tm timeinfo;
+  const time_t t = time(nullptr);
+  // FAT epoch starts 1980-01-01; time_t 0 (1970) or a failed localtime_r
+  // would pack an invalid date. Fall back to 1980-01-01 00:00:00 instead.
+  if (t < 315532800LL || localtime_r(&t, &timeinfo) == nullptr) {
+    *pdate = FS_DATE(1980, 1, 1);
+    *ptime = FS_TIME(0, 0, 0);
+    return;
+  }
+  *pdate = FS_DATE(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+  *ptime = FS_TIME(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+}
 
 #define SDCard SDCardManager::getInstance()
 
@@ -18,7 +33,10 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+bool HalStorage::begin() {
+  FsDateTime::setCallback(sdFatDateTimeCallback);
+  return SDCard.begin();
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
@@ -148,6 +166,12 @@ size_t HalFile::write(const void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(wri
 size_t HalFile::write(uint8_t b) { HAL_FILE_WRAPPED_CALL(write, b); }
 bool HalFile::rename(const char* newPath) { HAL_FILE_WRAPPED_CALL(rename, newPath); }
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap
+bool HalFile::getCreateDateTime(uint16_t* pdate, uint16_t* ptime) {
+  HAL_FILE_WRAPPED_CALL(getCreateDateTime, pdate, ptime);
+}
+bool HalFile::getModifyDateTime(uint16_t* pdate, uint16_t* ptime) {
+  HAL_FILE_WRAPPED_CALL(getModifyDateTime, pdate, ptime);
+}
 void HalFile::rewindDirectory() { HAL_FILE_WRAPPED_CALL(rewindDirectory, ); }
 bool HalFile::close() { HAL_FILE_WRAPPED_CALL(close, ); }
 HalFile HalFile::openNextFile() {
