@@ -69,6 +69,24 @@ void testAsteriskEmphasisStillWorks() {
   PASS();
 }
 
+void testStrikethroughWorks() {
+  printf("testStrikethroughWorks...\n");
+  auto spans = MdParser::parseInline("foo ~~bar~~ baz");
+  ASSERT_EQ(flattenText(spans), "foo bar baz");
+  ASSERT_EQ(spans.size(), 3);
+  ASSERT_EQ(spans[1].style, EpdFontFamily::STRIKETHROUGH);
+  PASS();
+}
+
+void testEscapedTildeDoesNotToggleStrikethrough() {
+  printf("testEscapedTildeDoesNotToggleStrikethrough...\n");
+  auto spans = MdParser::parseInline("foo \\~~bar~~ baz");
+  ASSERT_EQ(flattenText(spans), "foo ~~bar~~ baz");
+  ASSERT_EQ(spans.size(), 1);
+  ASSERT_EQ(spans[0].style, EpdFontFamily::REGULAR);
+  PASS();
+}
+
 void testUnderscoreBoldWorks() {
   printf("testUnderscoreBoldWorks...\n");
   auto spans = MdParser::parseInline("foo __bar__ baz");
@@ -105,7 +123,9 @@ int main() {
   testUnderscoreWithinExpressionRemainsLiteral();
   testUnderscoreEmphasisStillWorks();
   testAsteriskEmphasisStillWorks();
+  testStrikethroughWorks();
   testUnderscoreBoldWorks();
+  testEscapedTildeDoesNotToggleStrikethrough();
   testNestedUnorderedListIndentLevel();
   testNestedOrderedListIndentLevel();
 

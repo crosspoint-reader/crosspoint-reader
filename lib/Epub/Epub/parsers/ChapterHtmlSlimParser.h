@@ -34,6 +34,7 @@ class ChapterHtmlSlimParser final : public Print {
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
+  int strikethroughUntilDepth = INT_MAX;
   int preUntilDepth = INT_MAX;  // set when inside a <pre> element; enables \n → line-break handling
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
@@ -63,12 +64,14 @@ class ChapterHtmlSlimParser final : public Print {
     bool hasBold = false, bold = false;
     bool hasItalic = false, italic = false;
     bool hasUnderline = false, underline = false;
+    bool hasStrikethrough = false, strikethrough = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
+  bool effectiveStrikethrough = false;
   int tableDepth = 0;
   int tableRowIndex = 0;
   int tableColIndex = 0;

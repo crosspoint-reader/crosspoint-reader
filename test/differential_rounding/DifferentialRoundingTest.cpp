@@ -94,6 +94,8 @@ static const EpdFontData kTestFontData = {
   .kernRightClassCount = 2,
   .ligaturePairs     = nullptr,
   .ligaturePairCount = 0,
+  .glyphMissHandler  = nullptr,
+  .glyphMissCtx      = nullptr,
 };
 // clang-format on
 

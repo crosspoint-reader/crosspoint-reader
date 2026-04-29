@@ -9,3 +9,8 @@ in the development cycle.
 
 More information about PlatformIO Unit Testing:
 - https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+
+Example test runners in this repository:
+- test/run_url_utils_test.sh
+- test/run_opds_parser_test.sh
+- test/run_epub_css_test.sh
