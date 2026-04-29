@@ -1916,7 +1916,11 @@
           fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a><span class="folder-badge">FOLDER</span></td>`;
           fileTableContent += '<td>Folder</td>';
           fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
+          fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
+          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Move folder">📂</button>`;
+          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Rename folder">✏️</button>`;
+          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button>`;
+          fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         } else {
           let filePath = currentPath;
@@ -5038,8 +5042,9 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+  function openRenameModal(name, path, isFolder = false) {
+    const icon = isFolder ? '📁' : '📄';
+    document.getElementById('renameItemName').textContent = icon + ' ' + name;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
     document.getElementById('renameModal').classList.add('open');
@@ -5153,8 +5158,9 @@ function retryAllFailedUploads() {
     });
   }
 
-  function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
+  function openMoveModal(name, path, isFolder = false) {
+    const icon = isFolder ? '📁' : '📄';
+    document.getElementById('moveItemName').textContent = icon + ' ' + name;
     document.getElementById('moveItemPath').value = path;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
     document.getElementById('moveModal').classList.add('open');
