@@ -344,6 +344,15 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
     const std::string_view displayValue = stripTrailingImportant(propValueBuf);
     style.display = (displayValue == "none") ? CssDisplay::None : CssDisplay::Block;
     style.defined.display = 1;
+  } else if (propNameBuf == "direction") {
+    const std::string_view directionValue = stripTrailingImportant(propValueBuf);
+    if (directionValue == "rtl") {
+      style.direction = CssTextDirection::Rtl;
+      style.defined.direction = 1;
+    } else if (directionValue == "ltr") {
+      style.direction = CssTextDirection::Ltr;
+      style.defined.direction = 1;
+    }
   }
 }
 
@@ -701,6 +710,7 @@ bool CssParser::saveToCache() const {
     file.write(static_cast<uint8_t>(style.fontStyle));
     file.write(static_cast<uint8_t>(style.fontWeight));
     file.write(static_cast<uint8_t>(style.textDecoration));
+    file.write(static_cast<uint8_t>(style.direction));
 
     // Write CssLength fields (value + unit)
     auto writeLength = [&file](const CssLength& len) {
@@ -721,8 +731,8 @@ bool CssParser::saveToCache() const {
     writeLength(style.imageWidth);
     file.write(static_cast<uint8_t>(style.display));
 
-    // Write defined flags as uint16_t
-    uint16_t definedBits = 0;
+    // Write defined flags as uint32_t
+    uint32_t definedBits = 0;
     if (style.defined.textAlign) definedBits |= 1 << 0;
     if (style.defined.fontStyle) definedBits |= 1 << 1;
     if (style.defined.fontWeight) definedBits |= 1 << 2;
@@ -739,6 +749,7 @@ bool CssParser::saveToCache() const {
     if (style.defined.imageHeight) definedBits |= 1 << 13;
     if (style.defined.imageWidth) definedBits |= 1 << 14;
     if (style.defined.display) definedBits |= 1 << 15;
+    if (style.defined.direction) definedBits |= 1 << 16;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -789,7 +800,7 @@ bool CssParser::loadFromCache() {
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
   constexpr size_t CSS_FIXED_STYLE_BYTES =
-      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint16_t);
+      5 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint32_t);
 
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
@@ -851,6 +862,12 @@ bool CssParser::loadFromCache() {
     }
     style.textDecoration = static_cast<CssTextDecoration>(enumVal);
 
+    if (file.read(&enumVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.direction = static_cast<CssTextDirection>(enumVal);
+
     // Read CssLength fields
     auto readLength = [&file](CssLength& len) -> bool {
       if (file.read(&len.value, sizeof(len.value)) != sizeof(len.value)) {
@@ -881,7 +898,7 @@ bool CssParser::loadFromCache() {
     style.display = static_cast<CssDisplay>(displayVal);
 
     // Read defined flags
-    uint16_t definedBits = 0;
+    uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
       rulesBySelector_.clear();
       return false;
@@ -902,6 +919,7 @@ bool CssParser::loadFromCache() {
     style.defined.imageHeight = (definedBits & 1 << 13) != 0;
     style.defined.imageWidth = (definedBits & 1 << 14) != 0;
     style.defined.display = (definedBits & 1 << 15) != 0;
+    style.defined.direction = (definedBits & 1 << 16) != 0;
 
     rulesBySelector_[selector] = style;
   }
