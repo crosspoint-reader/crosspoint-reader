@@ -391,6 +391,28 @@ void loop() {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 
+  // Handle LOCK_BUTTONS - lock/unlock buttons with short power press
+  // MUST be checked BEFORE the lock block below so unlock always works!
+  if (mappedInputManager.wasReleased(MappedInputManager::Button::Power) &&
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::LOCK_BUTTONS) {
+    APP_STATE.buttonsLocked = !APP_STATE.buttonsLocked;
+    APP_STATE.buttonsLockedDisplayed = false;  // Reset flag so popup shows next frame
+    APP_STATE.saveToFile();
+    LOG_DBG("MAIN", "Buttons %s", APP_STATE.buttonsLocked ? "LOCKED" : "UNLOCKED");
+    activityManager.requestUpdate();  // Update display when lock state changes
+  }
+
+  // Show lock indicator popup when buttons are locked (only once per lock activation)
+  if (APP_STATE.buttonsLocked) {
+    if (!APP_STATE.buttonsLockedDisplayed) {
+      GUI.drawPopup(renderer, tr(STR_BUTTONS_LOCKED));
+      APP_STATE.buttonsLockedDisplayed = true;
+    }
+    return;
+  } else {
+    APP_STATE.buttonsLockedDisplayed = false;
+  }
+
   // Refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
   if (gpio.wasUsbStateChanged()) {
