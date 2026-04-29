@@ -60,8 +60,9 @@ struct ClippingResult {
   int toWordIdx = -1;
 };
 
-using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, ClippingResult>;
+using ResultVariant =
+    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, PageResult,
+                 SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, ClippingResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
