@@ -60,6 +60,7 @@ void EpubReaderActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   epub->setupCacheDir();
+  annotations.load(epub->getCachePath().c_str());
 
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
@@ -104,6 +105,11 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  if (epub && annotationsDirty) {
+    annotations.save(epub->getCachePath().c_str());
+    annotationsDirty = false;
+  }
+
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -144,6 +150,44 @@ void EpubReaderActivity::loop() {
       pageTurn(true);
       return;
     }
+  }
+
+  // Annotation overlay: handle Back (close) and Confirm (delete) when overlay is visible
+  if (showAnnotationOverlay) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      showAnnotationOverlay = false;
+      requestUpdate();
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      if (overlayAnnotationIdx < annotations.size() && epub) {
+        const std::string clippingPath = ClippingsManager::resolveClippingPath(epub->getTitle());
+        if (SETTINGS.clippingDeleteMode == CrossPointSettings::DELETE_PERMANENT) {
+          annotations.permanentDelete(overlayAnnotationIdx, clippingPath.c_str());
+        } else {
+          annotations.removeMeta(overlayAnnotationIdx);
+          annotations.save(epub->getCachePath().c_str());
+        }
+      }
+      showAnnotationOverlay = false;
+      annotationLongPressConsumed = true;
+      requestUpdate();
+    }
+    return;
+  }
+
+  // Long press Confirm: show annotation overlay if annotations exist on current page
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= ANNOTATION_HOLD_MS && !annotationLongPressConsumed) {
+    const size_t annotIdx = annotations.firstIndexForSection(static_cast<uint16_t>(currentSpineIndex));
+    if (annotIdx != SIZE_MAX) {
+      overlayAnnotationIdx = annotIdx;
+      showAnnotationOverlay = true;
+      annotationLongPressConsumed = true;
+      requestUpdate();
+      return;
+    }
+  }
+  if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    annotationLongPressConsumed = false;
   }
 
   // Enter reader menu activity.
@@ -447,15 +491,35 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
           if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
 
+          // Capture words by value before moving into ClipSelectionActivity
+          auto wordsCopy = words;
           startActivityForResult(std::make_unique<ClipSelectionActivity>(
                                      renderer, mappedInput, std::move(words), epub->getTitle(), epub->getAuthor(),
                                      chapterTitle, startPage + 1, readerFontId, *section, startPage, mTop, mLeft),
-                                 [this, chapterTitle, startPage](const ActivityResult& result) {
+                                 [this, chapterTitle, startPage,
+                                  wordsCopy = std::move(wordsCopy)](const ActivityResult& result) mutable {
                                    if (!result.isCancelled) {
                                      const auto& clip = std::get<ClippingResult>(result.data);
                                      if (!clip.text.empty()) {
                                        ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle,
                                                                       startPage + 1, clip.text);
+                                       // Build annotation record from selected word pixel positions
+                                       if (clip.fromWordIdx >= 0 && clip.toWordIdx >= 0 && epub) {
+                                         AnnotationsManager::AnnotationRecord rec;
+                                         rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
+                                         const int to = std::min(clip.toWordIdx, static_cast<int>(wordsCopy.size()) - 1);
+                                         for (int i = clip.fromWordIdx; i <= to; ++i) {
+                                           const auto absPage = static_cast<uint16_t>(startPage + wordsCopy[i].pageIdx);
+                                           rec.rects.push_back(
+                                               {static_cast<int16_t>(wordsCopy[i].x), static_cast<int16_t>(wordsCopy[i].y),
+                                                static_cast<int16_t>(wordsCopy[i].w), static_cast<int16_t>(wordsCopy[i].h),
+                                                absPage});
+                                         }
+                                         const size_t previewLen = clip.text.size() < 100 ? clip.text.size() : 100;
+                                         rec.textPreview = clip.text.substr(0, previewLen);
+                                         annotations.add(std::move(rec));
+                                         annotations.save(epub->getCachePath().c_str());
+                                       }
                                      }
                                    }
                                    requestUpdate();
@@ -827,7 +891,44 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+
+  // Draw annotation underlines on top of rendered text (only for current section page)
+  if (SETTINGS.annotationVisibility == CrossPointSettings::ANNOT_VISIBLE && section) {
+    const auto currentSectionPage = static_cast<uint16_t>(section->currentPage);
+    const auto sectionAnnotations = annotations.forSection(static_cast<uint16_t>(currentSpineIndex));
+    for (const auto& rec : sectionAnnotations) {
+      for (const auto& r : rec.rects) {
+        if (r.sectionPage != currentSectionPage) continue;
+        const int underlineY = r.y + r.h - 1;
+        renderer.drawLine(r.x, underlineY, r.x + r.w, underlineY, 2, true);
+      }
+    }
+  }
+
   renderStatusBar();
+
+  // Draw annotation management overlay on top of page + status bar
+  if (showAnnotationOverlay && epub) {
+    const int sw = renderer.getScreenWidth();
+    const int sh = renderer.getScreenHeight();
+    const int boxW = sw - 60;
+    const int boxH = 70;
+    const int boxX = 30;
+    const int boxY = (sh - boxH) / 2;
+
+    renderer.fillRect(boxX, boxY, boxW, boxH, false);
+    renderer.drawRect(boxX, boxY, boxW, boxH, 2, true);
+
+    const std::string clippingPath = ClippingsManager::resolveClippingPath(epub->getTitle());
+    char pathBuf[80];
+    snprintf(pathBuf, sizeof(pathBuf), "%s", clippingPath.c_str());
+    renderer.drawText(UI_10_FONT_ID, boxX + 10, boxY + 6, tr(STR_SAVE_CLIPPING), true);
+    renderer.drawText(UI_10_FONT_ID, boxX + 10, boxY + 28, pathBuf, true);
+
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_DELETE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
+
   fcm->logStats("bw_render");
   const auto tBwRender = millis();
 

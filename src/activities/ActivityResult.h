@@ -52,6 +52,8 @@ struct FootnoteResult {
 
 struct ClippingResult {
   std::string text;
+  int fromWordIdx = -1;
+  int toWordIdx = -1;
 };
 
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
