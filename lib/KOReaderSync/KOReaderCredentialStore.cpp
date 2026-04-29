@@ -133,7 +133,7 @@ std::string KOReaderCredentialStore::getMd5Password() const {
   md5.add(password.c_str());
   md5.calculate();
 
-  return md5.toString().c_str();
+  return std::string(md5.toString().c_str());
 }
 
 bool KOReaderCredentialStore::hasCredentials() const { return !username.empty() && !password.empty(); }

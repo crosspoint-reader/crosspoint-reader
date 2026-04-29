@@ -22,6 +22,8 @@
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
+#include "ReadestCredentialStore.h"
+#include "ReadestSyncActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -399,7 +401,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
-      if (KOREADER_STORE.hasCredentials()) {
+      if (KOREADER_STORE.hasCredentials() ||
+          (READEST_STORE.hasCredentials() && !READEST_STORE.getServerUrl().empty())) {
         const int currentPage = section ? section->currentPage : nextPageNumber;
         const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
         std::optional<uint16_t> paragraphIndex;
@@ -410,23 +413,31 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             paragraphIndex = *pIdx;
           }
         }
-        startActivityForResult(
-            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages, paragraphIndex),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& sync = std::get<SyncResult>(result.data);
-                if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
-                  RenderLock lock(*this);
-                  currentSpineIndex = sync.spineIndex;
-                  nextPageNumber = sync.page;
-                  cachedChapterTotalPageCount = 0;  // Prevent rescaling sync page
-                  pendingPageJump.reset();
-                  saveProgress(currentSpineIndex, nextPageNumber, 0);
-                  section.reset();
-                }
-              }
-            });
+        auto applySyncResult = [this](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            const auto& sync = std::get<SyncResult>(result.data);
+            if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
+              RenderLock lock(*this);
+              currentSpineIndex = sync.spineIndex;
+              nextPageNumber = sync.page;
+              cachedChapterTotalPageCount = 0;  // Prevent rescaling sync page
+              pendingPageJump.reset();
+              saveProgress(currentSpineIndex, nextPageNumber, 0);
+              section.reset();
+            }
+          }
+        };
+
+        if (READEST_STORE.hasCredentials() && !READEST_STORE.getServerUrl().empty()) {
+          startActivityForResult(std::make_unique<ReadestSyncActivity>(renderer, mappedInput, epub, epub->getPath(),
+                                                                       currentSpineIndex, currentPage, totalPages),
+                                 applySyncResult);
+        } else {
+          startActivityForResult(
+              std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
+                                                     currentPage, totalPages, paragraphIndex),
+              applySyncResult);
+        }
       }
       break;
     }

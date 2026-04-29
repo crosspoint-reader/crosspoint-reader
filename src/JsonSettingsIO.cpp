@@ -12,6 +12,7 @@
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "OpdsServerStore.h"
+#include "ReadestCredentialStore.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
@@ -403,5 +404,43 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   }
 
   LOG_DBG("OPS", "Loaded %zu OPDS servers from file", store.servers.size());
+  return true;
+}
+
+// ---- ReadestCredentialStore ----
+
+bool JsonSettingsIO::saveReadest(const ReadestCredentialStore& store, const char* path) {
+  JsonDocument doc;
+  doc["username"] = store.getUsername();
+  doc["password_obf"] = obfuscation::obfuscateToBase64(store.getPassword());
+  doc["serverUrl"] = store.getServerUrl();
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadReadest(ReadestCredentialStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("RDS", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  store.username = doc["username"] | std::string("");
+  bool ok = false;
+  store.password = obfuscation::deobfuscateFromBase64(doc["password_obf"] | "", &ok);
+  if (!ok || store.password.empty()) {
+    const std::string plaintext = doc["password"] | std::string("");
+    if (!plaintext.empty()) {
+      store.password = plaintext;
+      if (needsResave) *needsResave = true;
+    }
+  }
+  store.serverUrl = doc["serverUrl"] | std::string("");
+
+  LOG_DBG("RDS", "Loaded Readest credentials for user: %s", store.username.c_str());
   return true;
 }
