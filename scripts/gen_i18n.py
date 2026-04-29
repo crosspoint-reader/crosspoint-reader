@@ -25,8 +25,9 @@ Example:
 import sys
 import os
 import re
+import argparse
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +106,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 
 def load_translations(
     translations_dir: str,
+    language_code_filter: Optional[str]
 ) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]]]:
     """
     Read every YAML file in *translations_dir* and return:
@@ -183,7 +185,9 @@ def load_translations(
             if not value.strip() and fname != english_file:
                 value = english_data[key]
                 lang_code = parsed[fname].get("_language_code", fname)
-                print(f"  INFO: '{key}' missing in {lang_code}, using English fallback")
+                # Filter out all logs not related to the picked filter
+                if language_code_filter is None or language_code_filter == lang_code:
+                    print(f"  INFO: '{key}' missing in {lang_code}, using English fallback")
             row.append(value)
         translations[key] = row
 
@@ -195,7 +199,14 @@ def load_translations(
         extra = [k for k in data if not k.startswith("_") and k not in english_data]
         if extra:
             lang_code = data.get("_language_code", fname)
-            print(f"  WARNING: {lang_code} has keys not in English: {', '.join(extra)}")
+            # Filter out all logs not related to the picked filter
+            if language_code_filter is None or language_code_filter == lang_code:
+                print(f"  WARNING: {lang_code} has keys not in English: {', '.join(extra)}")
+
+    if language_code_filter is not None and language_code_filter not in {
+        code.upper() for code in language_codes
+    }:
+      print(f"  WARNING: A translation file not found for language code: {language_code_filter}")
 
     print(f"Loaded {len(language_codes)} languages, {len(string_keys)} string keys")
     return language_codes, language_names, string_keys, translations
@@ -587,20 +598,30 @@ def _write_file(path: str, lines: List[str]) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main(translations_dir=None, output_dir=None) -> None:
-    # Default paths (relative to project root)
-    default_translations_dir = "lib/I18n/translations"
-    default_output_dir = "lib/I18n/"
+def main(
+    translations_dir: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    argv: Optional[List[str]] = None,
+) -> None:
+    # Setup argparse
+    parser = argparse.ArgumentParser(description="18n flags")
+    parser.add_argument("-l", "--language", type=str, help="Filter terminal logs by language code. Ex. -l=UK shows only logs related to the Ukrainian translation")
+    parser.add_argument("-t", "--translations", type=str, default="lib/I18n/translations", help="Default translation dir path relative to project root")
+    parser.add_argument("-o", "--output", type=str, default="lib/I18n/", help="Default output dir path relative to project root")
+    
+    argv = [] if argv is None else argv
+    flags, unknown = parser.parse_known_args(argv)
+    if unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
 
-    if translations_dir is None or output_dir is None:
-        if len(sys.argv) == 3:
-            translations_dir = sys.argv[1]
-            output_dir = sys.argv[2]
-        else:
-            # Default for no arguments or weird arguments (e.g. SCons)
-            translations_dir = default_translations_dir
-            output_dir = default_output_dir
+    translations_dir = translations_dir or flags.translations
+    output_dir = output_dir or flags.output
+    language_code_filter = flags.language.upper() if flags.language is not None else None
 
+    if language_code_filter:
+      print("===================================================")
+      print(f"You filtered out all logs by this language code: {language_code_filter}")
+      print("===================================================")
 
     if not os.path.isdir(translations_dir):
         print(f"Error: Translations directory not found: {translations_dir}")
@@ -616,7 +637,8 @@ def main(translations_dir=None, output_dir=None) -> None:
 
     try:
         languages, language_names, string_keys, translations = load_translations(
-            translations_dir
+            translations_dir,
+            language_code_filter
         )
 
         out = Path(output_dir)
@@ -637,11 +659,11 @@ def main(translations_dir=None, output_dir=None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(argv=sys.argv[1:])
 else:
     try:
         Import("env")
         print("Running i18n generation script from PlatformIO...")
-        main()
+        main(argv=[])
     except NameError:
         pass
