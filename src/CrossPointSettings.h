@@ -143,9 +143,6 @@ class CrossPointSettings {
   enum CLIP_NAV_MODE : uint8_t { LINE_AWARE = 0, WORD_BY_WORD = 1, CLIP_NAV_MODE_COUNT };
   // Annotation underline visibility
   enum ANNOTATION_VISIBILITY : uint8_t { ANNOT_VISIBLE = 0, ANNOT_HIDDEN = 1, ANNOTATION_VISIBILITY_COUNT };
-  // Clipping delete behaviour
-  enum CLIPPING_DELETE_MODE : uint8_t { DELETE_PERMANENT = 0, DELETE_META_ONLY = 1, CLIPPING_DELETE_MODE_COUNT };
-
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -212,8 +209,6 @@ class CrossPointSettings {
   uint8_t clippingStorage = SINGLE_FILE;
   uint8_t clipNavMode = LINE_AWARE;
   uint8_t annotationVisibility = ANNOT_VISIBLE;
-  uint8_t clippingDeleteMode = DELETE_PERMANENT;
-
   ~CrossPointSettings() = default;
 
   // Get singleton instance

@@ -87,14 +87,9 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         {StrId::STR_CLIPPING_SINGLE_FILE, StrId::STR_CLIPPING_PER_BOOK}, "clippingStorage",
                         StrId::STR_CAT_CLIPPINGS),
       SettingInfo::Enum(StrId::STR_CLIP_NAV_MODE, &CrossPointSettings::clipNavMode,
-                        {StrId::STR_CLIP_NAV_LINE, StrId::STR_CLIP_NAV_WORD}, "clipNavMode",
-                        StrId::STR_CAT_CLIPPINGS),
+                        {StrId::STR_CLIP_NAV_LINE, StrId::STR_CLIP_NAV_WORD}, "clipNavMode", StrId::STR_CAT_CLIPPINGS),
       SettingInfo::Toggle(StrId::STR_ANNOT_SHOW, &CrossPointSettings::annotationVisibility, "annotationVisibility",
                           StrId::STR_CAT_CLIPPINGS),
-      SettingInfo::Enum(StrId::STR_CLIPPING_DELETE_MODE, &CrossPointSettings::clippingDeleteMode,
-                        {StrId::STR_DELETE_PERMANENT, StrId::STR_DELETE_META_ONLY}, "clippingDeleteMode",
-                        StrId::STR_CAT_CLIPPINGS),
-
       // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
       SettingInfo::DynamicString(
           StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
