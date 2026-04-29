@@ -4,9 +4,6 @@
 #include <Logging.h>
 #include <common/FsApiConstants.h>
 
-#include <algorithm>
-#include <cstring>
-
 static constexpr const char* ANNOT_FILENAME = "/annotations.bin";
 
 std::string AnnotationsManager::annotationsPath(const char* bookCachePath) {
@@ -45,13 +42,6 @@ bool AnnotationsManager::load(const char* bookCachePath) {
       if (file.read(&rec.rects[r], sizeof(Rect)) != sizeof(Rect)) goto done;
     }
 
-    uint8_t previewLen = 0;
-    if (file.read(&previewLen, 1) != 1) break;
-    if (previewLen > 0) {
-      rec.textPreview.resize(previewLen);
-      if (file.read(rec.textPreview.data(), previewLen) != previewLen) break;
-    }
-
     records.push_back(std::move(rec));
   }
 
@@ -82,12 +72,6 @@ bool AnnotationsManager::save(const char* bookCachePath) const {
     for (const auto& r : rec.rects) {
       file.write(&r, sizeof(Rect));
     }
-    const uint8_t previewLen = static_cast<uint8_t>(
-        rec.textPreview.size() < MAX_PREVIEW_LEN ? rec.textPreview.size() : MAX_PREVIEW_LEN);
-    file.write(&previewLen, 1);
-    if (previewLen > 0) {
-      file.write(rec.textPreview.c_str(), previewLen);
-    }
   }
 
   file.flush();
@@ -96,90 +80,7 @@ bool AnnotationsManager::save(const char* bookCachePath) const {
   return true;
 }
 
-void AnnotationsManager::add(AnnotationRecord record) {
-  records.push_back(std::move(record));
-}
-
-void AnnotationsManager::removeMeta(size_t idx) {
-  if (idx < records.size()) {
-    records.erase(records.begin() + static_cast<ptrdiff_t>(idx));
-  }
-}
-
-bool AnnotationsManager::permanentDelete(size_t idx, const char* clippingFilePath) {
-  if (idx >= records.size()) return false;
-  const std::string preview = records[idx].textPreview;
-
-  // Streaming copy of clipping file, skipping the matching entry
-  // Each entry in the Kindle format ends with "\n==========\n"
-  static constexpr char SEPARATOR[] = "\n==========\n";
-  static constexpr size_t SEP_LEN = sizeof(SEPARATOR) - 1;
-
-  // Build temp path alongside the source file
-  const std::string tempPath = std::string(clippingFilePath) + ".tmp";
-
-  HalFile src = Storage.open(clippingFilePath, O_RDONLY);
-  if (!src) {
-    LOG_ERR("ANNOT", "Failed to open %s for reading", clippingFilePath);
-    removeMeta(idx);
-    return false;
-  }
-
-  HalFile dst = Storage.open(tempPath.c_str(), O_RDWR | O_CREAT | O_TRUNC);
-  if (!dst) {
-    src.close();
-    LOG_ERR("ANNOT", "Failed to open temp file %s", tempPath.c_str());
-    return false;
-  }
-
-  // Read file entry-by-entry using separator as delimiter
-  std::string entry;
-  entry.reserve(STREAM_BLOCK);
-  char buf[STREAM_BLOCK];
-  bool skipped = false;
-
-  // We accumulate until we find a separator, then decide to copy or skip
-  while (true) {
-    int32_t n = src.read(buf, sizeof(buf));
-    if (n <= 0) break;
-    entry.append(buf, static_cast<size_t>(n));
-
-    // Process all complete entries in the accumulated buffer
-    size_t pos = 0;
-    while (true) {
-      size_t sepPos = entry.find(SEPARATOR, pos);
-      if (sepPos == std::string::npos) break;
-
-      const std::string chunk = entry.substr(pos, sepPos + SEP_LEN - pos);
-
-      // Check if this entry contains the preview text we want to delete
-      if (!skipped && !preview.empty() && chunk.find(preview) != std::string::npos) {
-        skipped = true;  // Skip this entry
-      } else {
-        dst.write(chunk.c_str(), chunk.size());
-      }
-      pos = sepPos + SEP_LEN;
-    }
-    entry = entry.substr(pos);  // Keep leftover (incomplete entry)
-  }
-
-  // Write any trailing content that doesn't end with a separator
-  if (!entry.empty()) {
-    dst.write(entry.c_str(), entry.size());
-  }
-
-  src.close();
-  dst.flush();
-  dst.close();
-
-  // Replace original with temp
-  Storage.remove(clippingFilePath);
-  Storage.rename(tempPath.c_str(), clippingFilePath);
-
-  removeMeta(idx);
-  LOG_DBG("ANNOT", "Permanently deleted annotation %zu from %s (skipped=%d)", idx, clippingFilePath, skipped);
-  return true;
-}
+void AnnotationsManager::add(AnnotationRecord record) { records.push_back(std::move(record)); }
 
 std::vector<AnnotationsManager::AnnotationRecord> AnnotationsManager::forSection(uint16_t sectionIdx) const {
   std::vector<AnnotationRecord> result;
@@ -196,11 +97,4 @@ bool AnnotationsManager::hasAnnotationsForSection(uint16_t sectionIdx) const {
     if (rec.sectionIdx == sectionIdx) return true;
   }
   return false;
-}
-
-size_t AnnotationsManager::firstIndexForSection(uint16_t sectionIdx) const {
-  for (size_t i = 0; i < records.size(); ++i) {
-    if (records[i].sectionIdx == sectionIdx) return i;
-  }
-  return SIZE_MAX;
 }

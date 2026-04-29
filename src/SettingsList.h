@@ -94,9 +94,6 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                           StrId::STR_CAT_CLIPPINGS),
         SettingInfo::Toggle(StrId::STR_ANNOT_SHOW, &CrossPointSettings::annotationVisibility, "annotationVisibility",
                             StrId::STR_CAT_CLIPPINGS),
-        SettingInfo::Enum(StrId::STR_CLIPPING_DELETE_MODE, &CrossPointSettings::clippingDeleteMode,
-                          {StrId::STR_DELETE_PERMANENT, StrId::STR_DELETE_META_ONLY}, "clippingDeleteMode",
-                          StrId::STR_CAT_CLIPPINGS),
 
         // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
                           StrId::STR_CUSTOMISE_STATUS_BAR),
