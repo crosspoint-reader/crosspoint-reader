@@ -660,11 +660,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
+      // The section cache is corrupt or unreadable. Retrying would re-read
+      // the same bad file, so clear it immediately and show an error.
+      // The user can navigate away and back to trigger a fresh render.
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+      currentPageFootnotes.clear();
       section->clearCache();
       section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+      renderer.displayBuffer();
       automaticPageTurnActive = false;
       return;
     }
@@ -772,8 +776,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
-      // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
       page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      renderStatusBar();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
