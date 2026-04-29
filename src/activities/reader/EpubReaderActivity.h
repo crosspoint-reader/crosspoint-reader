@@ -29,6 +29,7 @@ class EpubReaderActivity final : public Activity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
+  bool longPressHandled = false;
   bool automaticPageTurnActive = false;
 
   // Footnote support

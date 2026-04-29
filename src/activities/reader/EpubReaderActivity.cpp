@@ -184,6 +184,18 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Long-press rotation: fires while held, suppresses input until released
+  if (longPressHandled) {
+    longPressHandled = ReaderUtils::isPageButtonHeld(mappedInput);
+    return;
+  }
+  const int8_t rotation = ReaderUtils::detectRotation(mappedInput);
+  if (rotation >= 0) {
+    applyOrientation(rotation);
+    longPressHandled = true;
+    return;
+  }
+
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -202,12 +214,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
-
-  // Don't skip chapter after screenshot
-  if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
-    return;
-  }
+  const bool skipChapter = SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_CHAPTER_SKIP &&
+                           mappedInput.getHeldTime() > skipChapterMs;
 
   if (skipChapter) {
     lastPageTurnTime = millis();
@@ -458,6 +466,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     // Reset section to force re-layout in the new orientation.
     section.reset();
   }
+  requestUpdate();
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {

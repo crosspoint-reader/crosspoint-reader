@@ -9,6 +9,7 @@
 namespace ReaderUtils {
 
 constexpr unsigned long GO_HOME_MS = 1000;
+constexpr unsigned long LONGPRESS_ACTION_MS = 700;
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {
@@ -29,13 +30,40 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   }
 }
 
+inline bool isPageButtonHeld(const MappedInputManager& input) {
+  return input.isPressed(MappedInputManager::Button::PageForward) ||
+         input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(MappedInputManager::Button::Left) ||
+         input.isPressed(MappedInputManager::Button::Right);
+}
+
+// Returns the new orientation index if a long-press rotation was detected, or -1.
+//
+// Orientation is named from the device perspective (LANDSCAPE_CW = device is
+// rotated CW from portrait). A user is typically thinking in terms of on-screen
+// content though. Pressing the physically-bottom side button should rotate
+// on-screen content clockwise, which requires physically rotating the device
+// CCW to stay upright -- so the enum steps backwards.
+inline int8_t detectRotation(const MappedInputManager& input) {
+  if (SETTINGS.sideButtonLongPress != CrossPointSettings::LONGPRESS_ROTATE) return -1;
+  if (input.getHeldTime() < LONGPRESS_ACTION_MS) return -1;
+  const bool isNextHeld =
+      input.isPressed(MappedInputManager::Button::PageForward) || input.isPressed(MappedInputManager::Button::Right);
+  const bool isPrevHeld =
+      input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(MappedInputManager::Button::Left);
+  if (!isNextHeld && !isPrevHeld) return -1;
+  const bool isBottom = (SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT) ? isNextHeld : isPrevHeld;
+  constexpr uint8_t N = CrossPointSettings::ORIENTATION_COUNT;
+  const uint8_t step = isBottom ? N - 1 : 1;  // N-1 ≡ -1 (mod N): rotate content CW
+  return (SETTINGS.orientation + step) % N;
+}
+
 struct PageTurnResult {
   bool prev;
   bool next;
 };
 
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
-  const bool usePress = !SETTINGS.longPressChapterSkip;
+  const bool usePress = (SETTINGS.sideButtonLongPress == CrossPointSettings::LONGPRESS_OFF);
   const bool prev = usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) ||
                                 input.wasPressed(MappedInputManager::Button::Left))
                              : (input.wasReleased(MappedInputManager::Button::PageBack) ||

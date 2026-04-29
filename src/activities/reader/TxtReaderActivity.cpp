@@ -71,6 +71,18 @@ void TxtReaderActivity::loop() {
     return;
   }
 
+  // Long-press rotation: fires while held, suppresses input until released
+  if (longPressHandled) {
+    longPressHandled = ReaderUtils::isPageButtonHeld(mappedInput);
+    return;
+  }
+  const int8_t rotation = ReaderUtils::detectRotation(mappedInput);
+  if (rotation >= 0) {
+    applyOrientation(rotation);
+    longPressHandled = true;
+    return;
+  }
+
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -423,6 +435,37 @@ void TxtReaderActivity::loadProgress() {
       LOG_DBG("TRS", "Loaded progress: page %d/%d", currentPage, totalPages);
     }
   }
+}
+
+void TxtReaderActivity::applyOrientation(const uint8_t newOrientation) {
+  if (SETTINGS.orientation == newOrientation) {
+    return;
+  }
+
+  // Preserve reading position as character offset before reflow
+  const size_t savedOffset =
+      (currentPage >= 0 && currentPage < static_cast<int>(pageOffsets.size())) ? pageOffsets[currentPage] : 0;
+
+  SETTINGS.orientation = newOrientation;
+  SETTINGS.saveToFile();
+  ReaderUtils::applyOrientation(renderer, newOrientation);
+
+  // Force full reinitialize with new viewport dimensions
+  initialized = false;
+  pageOffsets.clear();
+  initializeReader();
+
+  // Restore position: find the page whose offset is closest to savedOffset
+  currentPage = 0;
+  for (int i = static_cast<int>(pageOffsets.size()) - 1; i >= 0; i--) {
+    if (pageOffsets[i] <= savedOffset) {
+      currentPage = i;
+      break;
+    }
+  }
+
+  saveProgress();
+  requestUpdate();
 }
 
 bool TxtReaderActivity::loadPageIndexCache() {
