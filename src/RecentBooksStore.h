@@ -7,6 +7,7 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  bool coverDisabled = false;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -36,6 +37,8 @@ class RecentBooksStore {
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
+
+  void setCoverDisabled(const std::string& path, bool disabled);
 
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
