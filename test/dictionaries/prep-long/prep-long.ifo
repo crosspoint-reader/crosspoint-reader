@@ -1,0 +1,9 @@
+StarDict's dict ifo file
+version=stardict-2.4.2
+wordcount=25000
+synwordcount=100000
+idxfilesize=725000
+bookname=Prep Long Test
+sametypesequence=m
+author=CrossPoint Test Suite
+description=Medium synthetic dictionary for per-book cancel-prepare tests. All 4 steps required.

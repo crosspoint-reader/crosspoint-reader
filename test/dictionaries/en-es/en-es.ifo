@@ -1,0 +1,9 @@
+StarDict's dict ifo file
+version=stardict-2.4.2
+wordcount=190
+synwordcount=130
+idxfilesize=2606
+bookname=English to Spanish
+sametypesequence=m
+author=CrossPoint Test Suite
+description=Common English words with Spanish translations. Includes British/American spelling synonyms and alternate word forms.

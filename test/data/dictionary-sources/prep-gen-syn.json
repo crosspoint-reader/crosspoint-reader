@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "name": "prep-gen-syn",
+    "bookname": "Prep Gen Syn Test",
+    "output_dir": "test/dictionaries/prep-gen-syn",
+    "entry_format": "m",
+    "compress": false,
+    "generate_idx_oft": true,
+    "generate_syn_oft": false,
+    "generate_cspt": true,
+    "ifo_version": "2.4.2",
+    "base_entries": "english-no-syn"
+  },
+  "synonyms": [
+    [
+      "apples",
+      "apple"
+    ],
+    [
+      "blaze",
+      "flame"
+    ],
+    [
+      "bridges",
+      "bridge"
+    ],
+    [
+      "canopy",
+      "grove"
+    ],
+    [
+      "clouds",
+      "cloud"
+    ],
+    [
+      "coastline",
+      "ocean"
+    ],
+    [
+      "dawning",
+      "dawn"
+    ],
+    [
+      "echoes",
+      "echo"
+    ],
+    [
+      "glades",
+      "meadow"
+    ],
+    [
+      "groves",
+      "grove"
+    ],
+    [
+      "harvests",
+      "harvest"
+    ],
+    [
+      "jungles",
+      "jungle"
+    ],
+    [
+      "kettles",
+      "kettle"
+    ],
+    [
+      "lanterns",
+      "lantern"
+    ],
+    [
+      "meadows",
+      "meadow"
+    ],
+    [
+      "oceans",
+      "ocean"
+    ],
+    [
+      "riddles",
+      "riddle"
+    ],
+    [
+      "shadows",
+      "shadow"
+    ],
+    [
+      "valleys",
+      "valley"
+    ],
+    [
+      "willows",
+      "willow"
+    ],
+    [
+      "yearning",
+      "yearn"
+    ],
+    [
+      "zeniths",
+      "zenith"
+    ]
+  ]
+}

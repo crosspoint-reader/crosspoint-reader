@@ -1,0 +1,117 @@
+<h1>5. Per-Book Dictionary Override</h1>
+
+<p>The reader menu includes a <em>Book Dictionary</em> option that lets you set a
+dictionary for the current book independently of the global setting in
+Settings -> Dictionary. The per-book choice is saved and restored each time
+the book is opened. Selecting <em>Use Global</em> clears the override and reverts
+to the global setting.</p>
+
+<h2>Test A: Set per-book dictionary from reader menu</h2>
+<p>This test verifies that selecting a dictionary via the book menu overrides
+the global setting and enables word lookup for this book.</p>
+<h3>Dictionary</h3>
+<p><em>prep-gen-idx</em> (already prepared in Ch 3)</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu (press <em>Confirm</em>).</li>
+<li>Select <em>Book Dictionary</em>.</li>
+<li>The dictionary picker opens. <em>Use Global</em> is highlighted (no per-book override set yet).</li>
+<li>Select <em>prep-gen-idx</em>. The picker closes.</li>
+<li>Open the reader menu again. Verify <em>Look Up Word</em> is now visible.</li>
+</ol>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>bridge</li>
+<li>cloud</li>
+</ul>
+
+<h2>Test B: Per-book override persists after closing and reopening</h2>
+<p>Closing the book and reopening it must restore the per-book dictionary
+setting automatically.</p>
+<h3>Steps</h3>
+<ol>
+<li>Press <em>Back</em> (long press) to return to the home screen.</li>
+<li>Reopen this book.</li>
+<li>Open the reader menu. Verify <em>Look Up Word</em> is still visible.</li>
+<li>Select <em>Book Dictionary</em>. Verify <em>prep-gen-idx</em> is marked as selected.</li>
+</ol>
+
+<h2>Test C: Clear per-book override with Use Global</h2>
+<p>Selecting <em>Use Global</em> must clear the per-book override and revert lookup
+availability to whatever the global setting provides.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu -> <em>Book Dictionary</em>.</li>
+<li>Select <em>Use Global</em>. The picker closes.</li>
+<li>Open the reader menu. <em>Look Up Word</em> visibility now reflects the global dictionary setting.</li>
+</ol>
+<h3>Note</h3>
+<p>If no global dictionary is set in Settings -> Dictionary, <em>Look Up Word</em>
+will disappear from the menu after selecting <em>Use Global</em>.</p>
+
+<h2>Test D: Per-book prepare -- prep-mini (all four steps, quick)</h2>
+<p>Selecting an unprepared dictionary from the book menu must trigger the
+same prepare workflow as selecting from Settings. All four steps must
+complete and the book dictionary must be set to <em>prep-mini</em>.</p>
+<h3>Dictionary</h3>
+<p><em>prep-mini</em> (must not be pre-processed -- verify no .idx.oft or .syn.oft files exist)</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu -> <em>Book Dictionary</em>.</li>
+<li>Select <em>prep-mini</em>.</li>
+<li>Confirmation screen lists in order:
+  <ul>
+    <li><em>Extract dictionary</em></li>
+    <li><em>Extract alt forms</em></li>
+    <li><em>Generate dictionary offset file</em></li>
+    <li><em>Generate alt-form offset file</em></li>
+  </ul>
+</li>
+<li>Press <em>Confirm</em>.</li>
+<li>All four steps complete with [OK]. <em>Preparation complete</em>.</li>
+<li>Picker closes. Open the reader menu. <em>Look Up Word</em> is visible.</li>
+<li>Verify the <em>Book Dictionary</em> row shows <em>prep-mini</em> on the right side.</li>
+</ol>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>cloud</li>
+<li>zenith</li>
+</ul>
+
+<h2>Test E: Per-book cancel prepare -- prep-long</h2>
+<p>Pressing <em>Back</em> during preparation must cancel without changing the
+current per-book dictionary. The picker must return with the previous
+selection still shown as active.</p>
+<h3>Dictionary</h3>
+<p><em>prep-long</em> (must not be pre-processed -- verify no .idx.oft or .syn.oft files exist)</p>
+<h3>Note</h3>
+<p>The current per-book dictionary at the start of this test is <em>prep-mini</em>
+(set in Test D). Do not change it before starting.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu -> <em>Book Dictionary</em>.</li>
+<li>Select <em>prep-long</em>.</li>
+<li>Confirmation screen appears listing four steps. Press <em>Confirm</em> to start.</li>
+<li>Processing begins. Press <em>Back</em> to cancel during any step.</li>
+<li>Screen shows: <em>User cancelled</em></li>
+<li>The dictionary picker returns. <em>prep-mini</em> is still shown as selected.</li>
+<li>Press <em>Back</em> to close the picker without changing the book dictionary.</li>
+</ol>
+
+<h2>Test F: Global dictionary restored when book is closed</h2>
+<p>The per-book dictionary override must not affect the global dictionary setting.
+Closing the book must restore the global dictionary to whatever it was before
+the book was opened.</p>
+<h3>Note</h3>
+<p>The per-book dictionary for this book is currently <em>prep-mini</em> (set in Test D).
+The global dictionary in Settings is whatever was set before starting this chapter.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open Settings -> Dictionary. Note which dictionary is currently selected as the global setting.</li>
+<li>Return to this book. The per-book dictionary (<em>prep-mini</em>) is active.</li>
+<li>Press <em>Back</em> (long press) to close the book and return to the home screen.</li>
+<li>Open Settings -> Dictionary.</li>
+<li>Verify the global dictionary is unchanged from step 1.</li>
+</ol>

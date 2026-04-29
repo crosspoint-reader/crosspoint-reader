@@ -1,0 +1,195 @@
+<h1>3. Dictionary Picker -- Scanner Validation</h1>
+
+<p>Place all test dictionaries in one of the following directories on the SD card:
+<code>/.dictionaries/</code> or <code>/dictionaries/</code>
+(checked in this order; only the first found is used).
+No word lookups are performed in this chapter.
+Open Settings -> Dictionary for every test below.</p>
+
+<h2>Test A: Folder without .ifo appears in picker</h2>
+<p>The <em>no-ifo</em> folder has a valid .idx and .dict but no .ifo file.
+It must appear in the picker list. Long-pressing it must show a
+"No metadata available" message.</p>
+<h3>Dictionary</h3>
+<p><em>no-ifo</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>no-ifo</em> is present in the list.</li>
+<li>Long-press <em>no-ifo</em>.</li>
+<li>Info view shows: No metadata available.</li>
+<li>Press Back. Picker reappears.</li>
+</ol>
+
+<h2>Test B: Folder with only .dict is hidden</h2>
+<p>The <em>only-dict</em> folder must not appear in the picker list.</p>
+<h3>Dictionary</h3>
+<p><em>only-dict</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>only-dict</em> is absent from the list.</li>
+</ol>
+
+<h2>Test C: Folder with multiple .idx files is hidden</h2>
+<p>The <em>multi-idx</em> folder has two .idx files. The scanner must skip it
+because the dictionary stem is ambiguous.</p>
+<h3>Dictionary</h3>
+<p><em>multi-idx</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>multi-idx</em> is absent from the list.</li>
+</ol>
+
+<h2>Test D: Folder with multiple .ifo files is hidden</h2>
+<p>The <em>multi-ifo</em> folder has two .ifo files. The scanner must skip it
+because the dictionary metadata is ambiguous.</p>
+<h3>Dictionary</h3>
+<p><em>multi-ifo</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>multi-ifo</em> is absent from the list.</li>
+</ol>
+
+<h2>Test E: Folder with macOS metadata files appears in picker</h2>
+<p>The <em>macos-metadata</em> folder contains <code>.DS_Store</code> and
+<code>._macos-metadata.*</code> (AppleDouble resource fork) files. The scanner
+must ignore these junk files and display the dictionary normally.</p>
+<h3>Dictionary</h3>
+<p><em>macos-metadata</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Confirm <em>macos-metadata</em> is present in the list.</li>
+<li>Long-press <em>macos-metadata</em>.</li>
+<li>Parsed info view appears showing Name, Words, and Type.</li>
+<li>Press Back. Picker reappears.</li>
+</ol>
+
+<h2>Test F: All test dictionaries appear in picker</h2>
+<p>All of the following must be visible in the picker. Do not select any yet.</p>
+<h3>Words</h3>
+<ul>
+<li><em>en-es</em></li>
+<li><em>english-full</em></li>
+<li><em>english-no-syn</em></li>
+<li><em>html-definitions</em></li>
+<li><em>ipa-phonetic</em></li>
+<li><em>macos-metadata</em></li>
+<li><em>no-ifo</em></li>
+<li><em>overflow-fields</em></li>
+<li><em>phrase</em></li>
+<li><em>prep-all</em></li>
+<li><em>prep-cspt-prefix-collision</em></li>
+<li><em>prep-extract-dict</em></li>
+<li><em>prep-fail-decompress</em></li>
+<li><em>prep-gen-idx</em></li>
+<li><em>prep-gen-syn</em></li>
+<li><em>prep-long</em></li>
+<li><em>prep-mini</em></li>
+<li><em>prep-syn-two-step</em></li>
+</ul>
+<h3>Note</h3>
+<p><em>prep-long</em> and <em>prep-mini</em> are for Ch 5 per-book prepare tests only.
+Do not select them from Settings.</p>
+
+<h2>Test G: Failed decompression -- error shown, prior selection unchanged</h2>
+<p>The preparation must fail with an error. The picker must remain open
+and the previously selected dictionary must be unchanged. No crash.</p>
+<h3>Dictionary</h3>
+<p><em>prep-fail-decompress</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Note the currently selected dictionary before starting.</li>
+<li>Select <em>prep-fail-decompress</em> in the picker.</li>
+<li>The preparation screen appears listing one step: <em>Extract dictionary</em></li>
+<li>Press <em>Confirm</em>.</li>
+<li>Screen shows: <em>Preparation failed</em></li>
+<li>Picker remains open. Previously selected dictionary is unchanged.</li>
+</ol>
+
+<h2>Test H: Metadata info view -- basic</h2>
+<p>Long-pressing a dictionary with a valid .ifo must open the parsed
+metadata info view showing at minimum: Name, Words, Alt Forms, and Type.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Long-press <em>english-full</em>.</li>
+<li>Parsed info view appears. Verify Name, Words, Alt Forms, and Type are shown.</li>
+<li>Press Back. Picker reappears.</li>
+</ol>
+
+<h2>Test I: Metadata info view -- overflow fields</h2>
+<p>All displayed fields must wrap correctly when their values are very long.
+No truncation. No crash.</p>
+<h3>Dictionary</h3>
+<p><em>overflow-fields</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Long-press <em>overflow-fields</em>.</li>
+<li>Parsed info view appears.</li>
+<li>Verify Name, Description, Website, Date, Words, and Type are all shown and wrap correctly.</li>
+<li>Press Back. Picker reappears.</li>
+</ol>
+
+<h2>Test J: Picker pagination</h2>
+<p>With enough test dictionaries present, the list spans more than one screen.
+Hold-Up and Hold-Down must page-jump without crash.</p>
+<h3>Note</h3>
+<p>If the list fits on one screen, copy and rename any existing dictionary folder
+on the SD card to create additional entries until the list spans two screens.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Hold Up. List jumps a page upward. No crash.</li>
+<li>Hold Down. List jumps a page downward. No crash.</li>
+</ol>
+
+<h2>Test K: Metadata info view -- View Raw</h2>
+<p>From the parsed metadata info view, pressing <em>Confirm</em> must switch
+to the raw .ifo text view showing the unprocessed file contents.
+Pressing <em>Back</em> from the raw view must return to the parsed view.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Long-press <em>english-full</em>. Parsed info view appears.</li>
+<li>Press <em>Confirm</em>. Raw .ifo text view appears showing file contents.</li>
+<li>Press <em>Back</em>. Parsed info view reappears.</li>
+<li>Press <em>Back</em>. Picker reappears.</li>
+</ol>
+
+<h2>Test L: Compressed dictionary shows "Compressed" status line</h2>
+<p>The info view for a compressed dictionary must include a "Compressed"
+status line in addition to the standard metadata fields.</p>
+<h3>Dictionary</h3>
+<p><em>prep-mini</em> (do not select it -- long-press only)</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the dictionary picker.</li>
+<li>Long-press <em>prep-mini</em>. Parsed info view appears.</li>
+<li>Verify a <em>Compressed</em> status line is shown.</li>
+<li>Press <em>Back</em>. Picker reappears.</li>
+</ol>
+
+<h2>Test M: "None found" when no dictionaries are present</h2>
+<p>When no valid dictionary folders exist on the SD card, the picker
+must show a "None found" message rather than an empty list.</p>
+<h3>Note</h3>
+<p>This test requires temporarily removing all dictionary folders from
+the SD card. Move them to a temporary folder on the card or on your
+computer, then run the test, then move them back before continuing.</p>
+<h3>Steps</h3>
+<ol>
+<li>Move all dictionary folders off the SD card (or into a non-dictionary location).</li>
+<li>Open Settings -> Dictionary.</li>
+<li>Verify the picker shows: <em>None found</em></li>
+<li>Press <em>Back</em>.</li>
+<li>Restore all dictionary folders to their original location before continuing.</li>
+</ol>

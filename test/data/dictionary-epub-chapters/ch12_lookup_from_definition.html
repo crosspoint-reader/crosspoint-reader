@@ -1,0 +1,88 @@
+<h1>12. Lookup from Definition</h1>
+
+<p>These tests verify that the definition screen supports word-select mode.
+Pressing <em>Look Up Word</em> from a definition screen enters word-select mode
+directly on the definition text, allowing the user to look up any word in
+the definition without returning to the reader.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Look Up Word button label</h2>
+<p>After a successful lookup, the <em>Confirm</em> button on the definition screen
+must be labelled <em>Look Up Word</em>.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select any word from the reader. Definition screen appears.</li>
+<li>Verify the <em>Confirm</em> button is labelled <em>Look Up Word</em>.</li>
+</ol>
+
+<h2>Test B: Enter word-select mode on definition</h2>
+<p>Pressing <em>Look Up Word</em> from the definition screen must enter word-select
+mode on the definition text. A word highlight must appear and navigation must work.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>apple</em>. Definition screen appears.</li>
+<li>Press <em>Look Up Word</em> (Confirm). A word in the definition text becomes highlighted.</li>
+<li>Verify the initially highlighted word is approximately centred in the definition text — it must not be the very first word on the first line.</li>
+<li>Press Up / Down / Left / Right. Highlight moves to adjacent rows and words.</li>
+<li>Verify page navigation buttons do not change the page while in word-select mode.</li>
+</ol>
+
+<h2>Test C: Look up a word from a definition</h2>
+<p>Selecting a word in word-select mode must perform a lookup and open a new
+definition screen for that word.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>chronicle</em>. Definition screen appears.</li>
+<li>Press <em>Look Up Word</em>. Word-select mode activates on the definition text.</li>
+<li>Navigate to any content word in the definition.</li>
+<li>Press <em>Confirm</em>. <em>Looking up&#8230;</em> popup appears briefly.</li>
+<li>A new definition screen appears for the selected word. No crash.</li>
+</ol>
+
+<h2>Test D: Chained lookup</h2>
+<p>From a definition reached via <em>Look Up Word</em>, pressing <em>Look Up Word</em>
+again must open a third definition screen. No crash at any depth.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>chronicle</em>. Definition screen 1 appears.</li>
+<li>Press <em>Look Up Word</em>. Enter word-select mode.</li>
+<li>Select a word. Definition screen 2 appears.</li>
+<li>Press <em>Look Up Word</em> again. Enter word-select mode on definition 2.</li>
+<li>Select a word. Definition screen 3 appears. No crash.</li>
+</ol>
+
+<h2>Test E: Short Back exits word-select mode</h2>
+<p>While in word-select mode, a short press of <em>Back</em> must exit word-select
+and return to the definition view. It must not exit to the reader or to the
+EPUB word-select screen.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up any word. Definition screen appears.</li>
+<li>Press <em>Look Up Word</em>. Word-select mode activates.</li>
+<li>Short-press <em>Back</em>.</li>
+<li>Word-select mode exits. Definition view is shown again. No lookup performed.</li>
+</ol>
+
+<h2>Test F: Long-press Back exits to reader</h2>
+<p>A long press of <em>Back</em> (hold until released) from any level of the definition
+screen must exit all the way back to the reader page.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up any word. Definition screen appears (view mode).</li>
+<li>Long-press <em>Back</em>. Reader page returns immediately. No crash.</li>
+<li>Look up any word. Press <em>Look Up Word</em>. Word-select mode activates.</li>
+<li>Long-press <em>Back</em>. Reader page returns immediately. No crash.</li>
+</ol>
+
+<h2>Test G: Page lock during word-select</h2>
+<p>While in word-select mode, pressing page navigation buttons must not change
+the page. Page navigation must resume normally after exiting word-select mode.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>chronicle</em> (multi-page definition). Advance to page 2.</li>
+<li>Press <em>Look Up Word</em>. Word-select mode activates on page 2.</li>
+<li>Press <em>PageForward</em> and <em>PageBack</em>. Page must not change.</li>
+<li>Short-press <em>Back</em>. Word-select mode exits.</li>
+<li>Press <em>PageBack</em>. Page 1 appears normally.</li>
+</ol>

@@ -1,0 +1,70 @@
+<h1>11. Fuzzy Suggestions</h1>
+
+<p>These are misspelled words. Because <em>english-full</em> has a .syn file, the alternate
+forms prompt appears first -- press <em>Confirm</em> each time. The words are not in
+.syn either, so the suggestions screen must appear next with nearby
+real headwords.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Suggestions list appears</h2>
+<p>Select a misspelled word. The alternate forms prompt appears -- press <em>Confirm</em>.
+No alternate form is found. The suggestions screen must appear with nearby headwords.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select applel.</li>
+<li>Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>Suggestions screen appears with nearby words.</li>
+</ol>
+<h3>Additional</h3>
+<ul>
+<li>oceam</li>
+<li>vally</li>
+<li>shdow</li>
+<li>bridqe</li>
+</ul>
+
+<h2>Test B: Select a suggestion</h2>
+<p>From the suggestions screen reached in Test A, selecting a suggested
+word must open its definition screen.</p>
+<h3>Steps</h3>
+<ol>
+<li>From suggestions screen, select any suggested word.</li>
+<li>Definition screen appears for that word.</li>
+</ol>
+
+<h2>Test C: Look Up Word button after selecting a suggestion</h2>
+<p>When arriving at a definition via the suggestions screen, the <em>Confirm</em>
+button must be labelled <em>Look Up Word</em>. Long-pressing <em>Back</em> must exit
+the definition screen and return to the reader.</p>
+<h3>Steps</h3>
+<ol>
+<li>On the definition screen from Test B, verify <em>Confirm</em> is labelled <em>Look Up Word</em>.</li>
+<li>Long-press <em>Back</em>.</li>
+<li>Reader page returns. No crash.</li>
+</ol>
+
+<h2>Test D: Navigation across a long suggestions list</h2>
+<p>The word <em>grafe</em> is close in spelling to multiple headwords in <em>english-full</em>
+and must produce a suggestions list long enough to require scrolling.
+Both side buttons and front buttons must move the highlight one row at a time.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>grafe</em>.</li>
+<li>Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>No alternate form found. Suggestions screen appears with 5 or more nearby headwords.</li>
+<li>Verify: side Up and Down buttons move the highlight one row at a time.</li>
+<li>Verify: front Left and Right buttons move the highlight one row at a time.</li>
+<li>Select any suggestion. Definition screen appears. No crash.</li>
+</ol>
+
+<h2>Test E: Back dismisses the suggestions list</h2>
+<p>From the suggestions screen, pressing <em>Back</em> must dismiss the list and
+return to the word-select screen without performing a lookup.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>applel</em>. Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>Suggestions screen appears.</li>
+<li>Press <em>Back</em>.</li>
+<li>Word-select screen returns. No lookup performed. No crash.</li>
+</ol>

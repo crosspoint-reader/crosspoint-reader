@@ -291,6 +291,93 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+int CrossPointSettings::getDefinitionFontId() const {
+  // Resolve effective family and size (GLOBAL = fall back to reader setting)
+  const FONT_FAMILY effFamily = (dictionaryFontFamily == DICT_FONT_GLOBAL)
+                                    ? static_cast<FONT_FAMILY>(fontFamily)
+                                    : static_cast<FONT_FAMILY>(dictionaryFontFamily - 1);
+  const FONT_SIZE effSize = (dictionaryFontSize == DICT_SIZE_GLOBAL) ? static_cast<FONT_SIZE>(fontSize)
+                                                                     : static_cast<FONT_SIZE>(dictionaryFontSize - 1);
+  switch (effFamily) {
+    case BOOKERLY:
+    default:
+      switch (effSize) {
+        case SMALL:
+          return BOOKERLY_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return BOOKERLY_14_FONT_ID;
+        case LARGE:
+          return BOOKERLY_16_FONT_ID;
+        case EXTRA_LARGE:
+          return BOOKERLY_18_FONT_ID;
+      }
+    case NOTOSANS:
+      switch (effSize) {
+        case SMALL:
+          return NOTOSANS_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return NOTOSANS_14_FONT_ID;
+        case LARGE:
+          return NOTOSANS_16_FONT_ID;
+        case EXTRA_LARGE:
+          return NOTOSANS_18_FONT_ID;
+      }
+    case OPENDYSLEXIC:
+      switch (effSize) {
+        case SMALL:
+          return OPENDYSLEXIC_8_FONT_ID;
+        case MEDIUM:
+        default:
+          return OPENDYSLEXIC_10_FONT_ID;
+        case LARGE:
+          return OPENDYSLEXIC_12_FONT_ID;
+        case EXTRA_LARGE:
+          return OPENDYSLEXIC_14_FONT_ID;
+      }
+  }
+}
+
+float CrossPointSettings::getDefinitionLineCompression() const {
+  const FONT_FAMILY effFamily = (dictionaryFontFamily == DICT_FONT_GLOBAL)
+                                    ? static_cast<FONT_FAMILY>(fontFamily)
+                                    : static_cast<FONT_FAMILY>(dictionaryFontFamily - 1);
+  switch (effFamily) {
+    case BOOKERLY:
+    default:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.95f;
+        case NORMAL:
+        default:
+          return 1.0f;
+        case WIDE:
+          return 1.1f;
+      }
+    case NOTOSANS:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.90f;
+        case NORMAL:
+        default:
+          return 0.95f;
+        case WIDE:
+          return 1.0f;
+      }
+    case OPENDYSLEXIC:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.90f;
+        case NORMAL:
+        default:
+          return 0.95f;
+        case WIDE:
+          return 1.0f;
+      }
+  }
+}
+
 int CrossPointSettings::getReaderFontId() const {
   switch (fontFamily) {
     case NOTOSERIF:

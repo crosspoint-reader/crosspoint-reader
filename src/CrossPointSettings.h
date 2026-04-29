@@ -95,6 +95,22 @@ class CrossPointSettings {
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
   // Font size options
   enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
+  // Definition viewer font overrides (0 = follow reader setting)
+  enum DICT_FONT_FAMILY {
+    DICT_FONT_GLOBAL = 0,
+    DICT_BOOKERLY = 1,
+    DICT_NOTOSANS = 2,
+    DICT_OPENDYSLEXIC = 3,
+    DICT_FONT_FAMILY_COUNT
+  };
+  enum DICT_FONT_SIZE {
+    DICT_SIZE_GLOBAL = 0,
+    DICT_SMALL = 1,
+    DICT_MEDIUM = 2,
+    DICT_LARGE = 3,
+    DICT_EXTRA_LARGE = 4,
+    DICT_FONT_SIZE_COUNT
+  };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
@@ -173,6 +189,9 @@ class CrossPointSettings {
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
+  // Definition viewer font overrides (0 = follow reader setting)
+  uint8_t dictionaryFontFamily = DICT_FONT_GLOBAL;
+  uint8_t dictionaryFontSize = DICT_SIZE_GLOBAL;
   // Auto-sleep timeout setting (default 10 minutes)
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)
@@ -199,6 +218,16 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Lookup history entry cap (direct value)
+  static constexpr uint8_t HIST_CAP_MIN = 25;
+  static constexpr uint8_t HIST_CAP_MAX = 225;
+  static constexpr uint8_t HIST_CAP_STEP = 25;
+  static constexpr uint8_t HIST_CAP_DEFAULT = 100;
+  uint8_t lookupHistoryCap = HIST_CAP_DEFAULT;
+  uint8_t holdToLookup = 0;
+  // CLEANUP: on Auto-only commit, delete these 3 lines (enum + field for debug toggle)
+  enum DEBUG_LOOKUP_POPUP_MODE : uint8_t { DBG_POPUP_AUTO = 0, DBG_POPUP_ON = 1, DBG_POPUP_OFF = 2 };
+  uint8_t debugLookupPopupMode = DBG_POPUP_AUTO;
 
   ~CrossPointSettings() = default;
 
@@ -209,6 +238,9 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  int getDefinitionFontId() const;
+  float getDefinitionLineCompression() const;
+  int getLookupHistoryCapValue() const { return lookupHistoryCap; }
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(FsFile& file, bool count_only = false) const;

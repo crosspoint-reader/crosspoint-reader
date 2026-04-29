@@ -1,0 +1,102 @@
+<h1>13. Phrase / Multi-word Lookup</h1>
+
+<p>These tests verify multi-word phrase selection in both the EPUB reader and the
+definition viewer. In word-select mode, a <em>long press</em> of the <em>Confirm</em>
+button enters multi-word select mode. The word that was highlighted when you
+long-pressed becomes the <strong>anchor</strong> — it stays fixed. Use the navigation
+buttons to move the cursor to extend or shrink the selection. A short press of
+<em>Confirm</em> then looks up the selected phrase. <em>Back</em> exits multi-word select
+and returns to single-word select mode.</p>
+
+<h3>Dictionary</h3>
+<p><em>phrase</em> (switch to the Phrase Sampler dictionary before starting)</p>
+
+<h3>Test phrases</h3>
+<p>Use the words below as lookup targets throughout this chapter.</p>
+<p>Two words: for you — pork scratching</p>
+<p>Five words: have a whale of a time — have a good time</p>
+<p>Eight words: march to the beat of a different drum</p>
+
+<h2>Test A: Enter multi-word select from the reader</h2>
+<p>A long press of <em>Confirm</em> while in single-word select mode must activate
+multi-word select. The anchor and cursor start on the same word, so initially
+only one word is highlighted.</p>
+<h3>Steps</h3>
+<ol>
+<li>Enter word-select mode (select any word from the reader).</li>
+<li>Long-press <em>Confirm</em>.</li>
+<li>Verify that word-select mode is still active and exactly one word is highlighted
+(the anchor). No crash, no accidental lookup.</li>
+</ol>
+
+<h2>Test B: 2-word phrase lookup from reader</h2>
+<p>Selecting a 2-word phrase must look it up successfully.</p>
+<h3>Steps</h3>
+<ol>
+<li>In word-select mode, navigate to <em>for</em> in the phrase "for you".</li>
+<li>Long-press <em>Confirm</em> to enter multi-word select. <em>for</em> is the anchor.</li>
+<li>Press Right (or Down then Left as needed) to move the cursor to <em>you</em>.
+Both words are now highlighted.</li>
+<li>Short-press <em>Confirm</em>. The definition for <em>for you</em> appears.</li>
+</ol>
+
+<h2>Test C: 5-word phrase lookup from reader</h2>
+<p>Selecting a longer phrase across multiple navigation moves must work correctly.</p>
+<h3>Steps</h3>
+<ol>
+<li>In word-select mode, navigate to <em>have</em> in the phrase "have a whale of a time".</li>
+<li>Long-press <em>Confirm</em>. <em>have</em> is the anchor.</li>
+<li>Press Right four times to extend the cursor to <em>time</em>. All five words are highlighted.</li>
+<li>Short-press <em>Confirm</em>. The definition for <em>have a whale of a time</em> appears.</li>
+</ol>
+
+<h2>Test D: Back exits multi-word select</h2>
+<p>Pressing <em>Back</em> while in multi-word select mode must return to single-word
+select mode, not exit word-select entirely.</p>
+<h3>Steps</h3>
+<ol>
+<li>Enter word-select mode. Long-press <em>Confirm</em> to enter multi-word select.</li>
+<li>Move the cursor to extend the selection over two or more words.</li>
+<li>Press <em>Back</em>.</li>
+<li>Verify: back in single-word select mode — only the anchor word remains highlighted.
+Navigation still works. No exit to reader.</li>
+<li>Press <em>Back</em> again (short press). Word-select exits, returning to the reader.</li>
+</ol>
+
+<h2>Test E: Multi-word select from the definition viewer</h2>
+<p>Multi-word select must also work when in word-select mode on a definition screen.
+This test chains two lookups: a single-word select brings up a definition, then
+multi-word select picks a phrase from within that definition.</p>
+<h3>Steps</h3>
+<ol>
+<li>In word-select mode, navigate to <em>have</em> in the phrase "have a good time" above.</li>
+<li>Long-press <em>Confirm</em> and extend the cursor to <em>time</em> (5 words: <em>have a good time</em>).</li>
+<li>Short-press <em>Confirm</em>. The definition for <em>have a good time</em> appears.
+Verify the definition text reads: "…Compare: have a whale of a time."</li>
+<li>Press <em>Confirm</em> (<em>Look Up Word</em>) to enter word-select mode on the definition.</li>
+<li>Navigate to <em>have</em> in the phrase "have a whale of a time" in the definition text.</li>
+<li>Long-press <em>Confirm</em>. Enter multi-word select. Extend cursor to <em>time</em> (5 words).</li>
+<li>Short-press <em>Confirm</em>. The definition for <em>have a whale of a time</em> appears. No crash.</li>
+</ol>
+
+<h2>Known Limitation: Page boundaries</h2>
+<p>Multi-word selection cannot span a page boundary. Words on the next page are
+not loaded into memory, so extending the selection past the last word on the
+current page is not possible.</p>
+<p><strong>Workaround:</strong> Reduce the reader font size in Settings -> Reader
+-> Font Size so that more words fit on a single page. Perform the phrase
+lookup, then restore the original font size.</p>
+<p>A complete fix would require significant changes to the rendering engine and
+is out of scope for the dictionary feature.</p>
+
+<h2>Test F: Phrase not in dictionary</h2>
+<p>Selecting a word sequence that does not appear in the dictionary must trigger
+the normal not-found flow (popup or suggestions), not a crash.</p>
+<h3>Steps</h3>
+<ol>
+<li>Enter multi-word select and select any 3-word sequence not listed above
+(e.g. three consecutive common words).</li>
+<li>Short-press <em>Confirm</em>.</li>
+<li>Verify: not-found popup appears, or suggestions screen appears if close matches exist.
+No crash. Navigation returns normally after dismissal.</li>
+</ol>

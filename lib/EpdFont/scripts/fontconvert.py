@@ -237,7 +237,7 @@ def load_glyph(code_point):
         face_index += 1
     return None
 
-unmerged_intervals = sorted(intervals + add_ints)
+unmerged_intervals = sorted(([] if args.no_default_intervals else intervals) + add_ints)
 intervals = []
 unvalidated_intervals = []
 for i_start, i_end in unmerged_intervals:
@@ -368,7 +368,10 @@ for i_start, i_end in intervals:
         all_glyphs.append((glyph, packed))
 
 # pipe seems to be a good heuristic for the "real" descender
+# Fall back to the first available interval codepoint when | is not in the font (e.g. IPA-only subset)
 face = load_glyph(ord('|'))
+if face is None and intervals:
+    face = load_glyph(intervals[0][0])
 
 glyph_data = []
 glyph_props = []

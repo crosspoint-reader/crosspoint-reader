@@ -1,0 +1,36 @@
+<h1>16. No-Syn Dictionary</h1>
+
+<p><em>english-no-syn</em> has no .syn file. These tests verify the alternate forms prompt does
+not appear when no .syn file is present.</p>
+<h3>Dictionary</h3>
+<p><em>english-no-syn</em></p>
+
+<h2>Test A: No alternate forms prompt on lookup miss</h2>
+<p>These words are not headwords in <em>english-no-syn</em> and are not reachable by the
+stemmer. Because <em>english-no-syn</em> has no .syn file, the alternate forms prompt must not
+appear. The flow must go directly to fuzzy suggestions or not-found.</p>
+<h3>Words</h3>
+<ul>
+<li>blaze</li>
+<li>canopy</li>
+<li>coastline</li>
+<li>glades</li>
+<li>tundra</li>
+</ul>
+
+<h2>Test B: Look Up Word button on successful lookup</h2>
+<p>These words are headwords in <em>english-no-syn</em>. The definition screen must appear
+and the <em>Confirm</em> button must be labelled <em>Look Up Word</em>.</p>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>bridge</li>
+<li>cloud</li>
+<li>echo</li>
+<li>flame</li>
+<li>grove</li>
+<li>harvest</li>
+<li>ocean</li>
+<li>shadow</li>
+<li>zenith</li>
+</ul>

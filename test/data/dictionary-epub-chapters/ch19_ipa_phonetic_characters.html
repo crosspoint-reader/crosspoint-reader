@@ -1,0 +1,71 @@
+<h1>19. IPA Phonetic Characters</h1>
+
+<p>This chapter tests rendering of IPA phonetic characters in dictionary definitions.
+Set the active dictionary to <em>ipa-phonetic</em> before starting.</p>
+
+<p>IPA characters must render as legible Doulos SIL glyphs. A filled diamond
+indicates a rendering failure.</p>
+
+<h2>Test A: IPA Extensions block (U+0250 to U+02AF)</h2>
+<p>Look up <strong>ipa-extensions</strong>.</p>
+<p>Expected: definition shows a heading followed by a dense block of 96 IPA glyphs.
+All must be legible Doulos SIL characters, not filled diamonds.</p>
+
+<h2>Test B: Modifier Letters block (U+02B0 to U+02FF)</h2>
+<p>Look up <strong>ipa-modifier-letters</strong>.</p>
+<p>Expected: definition shows a heading followed by a dense block of 80 glyphs.
+All must be legible.</p>
+
+<h2>Test C: Phonetic Extensions block (U+1D00 to U+1D7F)</h2>
+<p>Look up <strong>phonetic-extensions</strong>.</p>
+<p>Expected: definition shows a heading followed by 128 glyphs. All must be legible.</p>
+
+<h2>Test D: Phonetic Extensions Supplement (U+1D80 to U+1DBF)</h2>
+<p>Look up <strong>phonetic-extensions-supplement</strong>.</p>
+<p>Expected: definition shows a heading followed by 64 glyphs. All must be legible.</p>
+
+<h2>Test E: Mixed IPA and regular text (inline font switching)</h2>
+<p>Look up <strong>pronunciation</strong>.</p>
+<p>Expected: the definition shows a pronunciation transcription in IPA symbols
+inline within regular English text. The IPA characters must be legible and match
+the surrounding text size visually. No filled diamonds.</p>
+
+<h2>Test F: Mixed IPA mid-sentence</h2>
+<p>Look up <strong>schwa</strong>.</p>
+<p>Expected: definition mixes regular English text with inline IPA symbols.
+IPA glyphs must appear correctly inline. The example transcriptions in brackets
+must be fully legible.</p>
+
+<h2>Test G: Word-wrap with long IPA string</h2>
+<p>Look up <strong>ipa-wrap-test</strong>.</p>
+<p>Expected: the long IPA string in the definition wraps correctly at the screen
+margin. No truncation or corruption of characters at the wrap point. All glyphs
+must remain legible after wrapping.</p>
+
+<h2>Test H: Pronunciation line with no trailing glyph (F-060/F-061)</h2>
+<p>These entries use the real-dict format: plain-text pronunciation on the first
+line followed by a newline, then HTML body. The newline must be treated as a line
+break, not rendered as a filled diamond.</p>
+<p>Look up <strong>meetings</strong> (stems to <strong>meeting</strong>).</p>
+<p>Expected: pronunciation line <em>/ˈmitɪŋ/, /ˈmiːtɪŋ/</em> appears cleanly with
+no trailing filled diamond. Body text (Noun definition and etymology) follows on
+the next line.</p>
+<p>Look up <strong>austere</strong>.</p>
+<p>Expected: pronunciation line <em>/ɑˈstiɹ/, /ɒˈstɪə(ɹ)/, /ɔˈstiɹ/, /ɔːˈstɪə(ɹ)/</em>
+appears cleanly with no trailing filled diamond. Unsupported Greek characters in the
+etymology body render as filled diamonds — this is expected and correct behaviour for
+unsupported scripts.</p>
+
+<h2>Test I: Word-select on an IPA definition</h2>
+<p>Word-select mode must work correctly on a definition that contains IPA characters.
+Highlight boxes must align accurately over the words they represent, including over
+runs of IPA glyphs.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <strong>pronunciation</strong>. Definition screen appears with mixed IPA and regular text.</li>
+<li>Press <em>Look Up Word</em> to enter word-select mode.</li>
+<li>Verify the initial highlight is approximately centred in the definition text.</li>
+<li>Navigate through the definition. Verify each highlight box sits directly over its word — no offset for either regular text or IPA character runs.</li>
+<li>Navigate to any regular English word in the definition and press <em>Confirm</em>. A lookup is performed. No crash.</li>
+<li>Long-press <em>Back</em> to return to the reader.</li>
+</ol>

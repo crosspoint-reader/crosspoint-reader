@@ -1,0 +1,51 @@
+<h1>17. English to Spanish Dictionary</h1>
+
+<p>This is a bilingual English to Spanish dictionary. Definitions are
+Spanish translations, not English explanations.</p>
+<h3>Dictionary</h3>
+<p><em>en-es</em></p>
+
+<h2>Test A: Dictionary info screen</h2>
+<p>The info screen must show the full dictionary name and non-zero counts
+for both words and alt forms.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open Settings -> Dictionary.</li>
+<li>Long-press <em>en-es</em> to open the info screen.</li>
+<li>Verify Name shows: <em>English to Spanish</em></li>
+<li>Verify Words count is non-zero.</li>
+<li>Verify Alt Forms count is non-zero.</li>
+<li>Press <em>Back</em>. Select <em>en-es</em>.</li>
+</ol>
+
+<h2>Test B: Translation definitions display correctly</h2>
+<p>Each word below is a headword in <em>en-es</em>. Selecting it must open a
+definition screen showing a Spanish translation in plain text with no
+rendering errors.</p>
+<h3>Words</h3>
+<ul>
+<li>love -- expect: <em>amor (m) / amar</em></li>
+<li>water -- expect: <em>agua (f)</em></li>
+<li>friend -- expect: <em>amigo (m) / amiga (f)</em></li>
+<li>fire -- expect: <em>fuego (m) / incendio (m)</em></li>
+<li>ocean -- expect: <em>océano (m)</em></li>
+<li>mountain -- expect: <em>montaña (f)</em></li>
+<li>tree -- expect: <em>árbol (m)</em></li>
+<li>sky -- expect: <em>cielo (m)</em></li>
+</ul>
+
+<h2>Test C: Alternate form resolves to Spanish translation</h2>
+<p>The words below are in the <em>en-es</em> .syn file but are not headwords.
+After direct lookup fails, the alternate forms prompt must appear. Confirming
+must open the Spanish translation of the canonical headword.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select auto. Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>Definition for car appears: <em>coche (m) / carro (m)</em></li>
+<li>The result is a Spanish translation, confirming bilingual alternate form resolution.</li>
+</ol>
+<h3>Additional</h3>
+<ul>
+<li>dad -> father</li>
+<li>grin -> smile</li>
+</ul>

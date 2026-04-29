@@ -869,4 +869,30 @@ struct PageLine {
 
 ---
 
+---
+
+## Dictionary Subsystem Quality Rules (Non-Negotiable)
+
+**Planning requirement:**
+- Use Plan mode before any implementation work
+- Develop the plan iteratively — no jumping ahead to code
+- Zero assumptions about input data, file structure, or existing state — verify first
+- Plan must be approved before implementation begins
+
+**When implementing or fixing anything in the dictionary subsystem:**
+
+1. **Before writing new code**: Search for existing implementations of the same pattern. Report findings before proceeding.
+
+2. **After completing the immediate task**: Audit related code and **report** (not fix):
+   - Duplicated logic that should be extracted
+   - RAM/heap allocations that can be eliminated or pooled
+   - Missing memory barriers on cross-task volatile state
+   - Dead code
+
+3. **Proactive cleanup is PROPOSED, not executed**: Surface problems found during work. Wait for explicit approval before fixing.
+
+4. **Definition of "done"**: The approved task works. Related problems are documented for user decision.
+
+---
+
 Philosophy: We are building a dedicated e-reader, not a Swiss Army knife. If a feature adds RAM pressure without significantly improving the reading experience, it is Out of Scope.

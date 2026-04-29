@@ -1,0 +1,41 @@
+<h1>14. No Matches</h1>
+
+<p>These strings have no dictionary entry and no close neighbours in the
+index. The full failure sequence must complete without a crash and end
+with the not-found popup.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Full failure sequence -- both popup dismissal paths</h2>
+<p>Every lookup stage must fail cleanly and end at the not-found popup.
+Both dismissal paths must work: <em>Back</em> returns to word-select;
+<em>Confirm</em> (Done) exits the lookup entirely. No crash at any step.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select xzqwvb.</li>
+<li>Direct lookup fails, stems fail.</li>
+<li>Alternate forms prompt appears. Press <em>Confirm</em>.</li>
+<li>No alternate form found.</li>
+<li>Fuzzy search finds no neighbours.</li>
+<li>Not-found popup appears: <em>Word not found</em></li>
+<li>Press <em>Back</em>. Word-select screen returns.</li>
+<li>Select xzqwvb again. Not-found popup appears again.</li>
+<li>Press <em>Confirm</em> (Done). Reader returns.</li>
+</ol>
+<h3>Additional</h3>
+<ul>
+<li>qfbrtm</li>
+<li>zzzyxwv</li>
+<li>blorptfq</li>
+</ul>
+
+<h2>Test B: Back at alternate forms prompt also reaches not-found</h2>
+<p>The alternate forms prompt appears. Pressing <em>Back</em> must still result in the
+not-found popup -- the <em>Back</em> path must not skip the fuzzy search.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select qfbrtm.</li>
+<li>Alternate forms prompt appears. Press <em>Back</em>.</li>
+<li>Fuzzy search finds no neighbours.</li>
+<li>Not-found popup appears.</li>
+</ol>

@@ -1,0 +1,41 @@
+<h1>10. Alternate Form Search</h1>
+
+<p>The words below are in the <em>english-full</em> .syn file but are not headwords
+and cannot be reached by the stemmer. They are unrelated words, not
+inflected forms. After direct lookup and all stem variants fail, the
+alternate forms prompt must appear.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Confirm path -- alternate form resolves to definition</h2>
+<p>Select each word. The alternate forms prompt must appear.
+Press <em>Confirm</em>. The definition for the word after the arrow must open.</p>
+<h3>Words</h3>
+<ul>
+<li>blaze -> flame</li>
+<li>canopy -> grove</li>
+<li>coastline -> ocean</li>
+<li>glades -> meadow</li>
+</ul>
+
+<h2>Test B: Back path -- falls through to fuzzy or not-found</h2>
+<p>The alternate forms prompt must appear. Pressing <em>Back</em> must skip the
+alternate form lookup. No definition must appear. The flow must continue to
+fuzzy suggestions or not-found.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select canopy. Alternate forms prompt appears.</li>
+<li>Press <em>Back</em>.</li>
+<li>No definition shown. Flow continues to fuzzy or not-found.</li>
+</ol>
+
+<h2>Test C: Alternate forms prompt then miss -- word absent from .syn</h2>
+<p>The alternate forms prompt must appear because <em>english-full</em> has a .syn file.
+Pressing <em>Confirm</em> must find no canonical entry. The flow must fall
+through to fuzzy suggestions or not-found.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select tundra. Alternate forms prompt appears.</li>
+<li>Press <em>Confirm</em>.</li>
+<li>No canonical found. Falls through to fuzzy or not-found.</li>
+</ol>

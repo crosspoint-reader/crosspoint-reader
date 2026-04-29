@@ -1,0 +1,77 @@
+<h1>15. Edge Cases</h1>
+
+<p>These tests cover back navigation, non-word selection, SD card state
+changes, and disabling the dictionary.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Back from definition returns to correct position</h2>
+<p>After viewing a definition and pressing <em>Back</em>, the reader must return
+to exactly the same page position with no layout shift.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select any word from the list below.</li>
+<li>Definition screen appears.</li>
+<li>Press <em>Back</em>.</li>
+<li>Verify you are returned to this page at the same position.</li>
+<li>Verify no layout shift has occurred.</li>
+</ol>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>ocean</li>
+<li>shadow</li>
+<li>flame</li>
+<li>valley</li>
+</ul>
+
+<h2>Test B: Non-word tokens are filtered or produce no-match</h2>
+<p>Tokens consisting entirely of punctuation (no letters or digits) are filtered
+from the word list and cannot be navigated to. Tokens that contain digits or
+letters but have no dictionary match must produce a not-found result — no crash.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open word-select mode on this page.</li>
+<li>Attempt to navigate to a standalone punctuation token (period, hyphen).
+    Verify: such tokens are absent from the word list — you cannot land on them
+    with the navigation buttons.</li>
+<li>Navigate to the "3." list marker below (it contains a digit and remains selectable).</li>
+<li>Press <em>Confirm</em>.</li>
+<li>A not-found popup or brief "no word" popup appears. No crash. Word-select screen returns.</li>
+</ol>
+<h3>Items</h3>
+<ol>
+<li>first</li>
+<li>second</li>
+<li>third</li>
+</ol>
+
+<h2>Test C: Dictionary removed mid-session</h2>
+<p>When the SD card is removed and reinserted without changing the
+dictionary setting, attempting a lookup must not crash the device.
+Acceptable outcomes are an error popup, the dictionary UI becoming
+hidden, or an automatic reset to None.</p>
+<h3>Steps</h3>
+<ol>
+<li>With <em>english-full</em> selected and this book open, remove and reinsert the SD card,
+    or power-cycle without changing the dictionary setting.</li>
+<li>Attempt to look up any word from the list below.</li>
+<li>Verify no crash occurs.</li>
+</ol>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>cloud</li>
+<li>meadow</li>
+</ul>
+
+<h2>Test D: None selection disables dictionary UI</h2>
+<p>After selecting None, the dictionary word-select UI must no longer
+be accessible from the reader. Selecting <em>english-no-syn</em> prepares for Chapter 16.</p>
+<h3>Steps</h3>
+<ol>
+<li>Navigate to Settings -> Dictionary. Select None.</li>
+<li>Return to the reader.</li>
+<li>Verify the dictionary word-select UI is no longer accessible.</li>
+<li>Return to Settings -> Dictionary. Select <em>english-no-syn</em>.</li>
+</ol>

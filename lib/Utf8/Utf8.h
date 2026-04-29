@@ -22,3 +22,28 @@ inline bool utf8IsCombiningMark(const uint32_t cp) {
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
 }
+
+// Encode a Unicode codepoint to UTF-8. Writes 1-4 bytes to buf (must be >= 4 bytes).
+// Returns the number of bytes written.
+int utf8EncodeCodepoint(uint32_t cp, char* buf);
+
+// Append a Unicode codepoint as UTF-8 to a string.
+void utf8AppendCodepoint(std::string& str, uint32_t cp);
+
+// Returns true if the string ends with '-' or soft-hyphen (U+00AD = 0xC2 0xAD in UTF-8).
+inline bool utf8EndsWithHyphen(const char* str, size_t len) {
+  if (len == 0) return false;
+  if (str[len - 1] == '-') return true;
+  return len >= 2 && static_cast<uint8_t>(str[len - 2]) == 0xC2 && static_cast<uint8_t>(str[len - 1]) == 0xAD;
+}
+
+// Remove trailing '-' or soft-hyphen (U+00AD) from string.
+inline void utf8RemoveTrailingHyphen(std::string& str) {
+  if (str.empty()) return;
+  if (str.back() == '-') {
+    str.pop_back();
+  } else if (str.size() >= 2 && static_cast<uint8_t>(str[str.size() - 2]) == 0xC2 &&
+             static_cast<uint8_t>(str[str.size() - 1]) == 0xAD) {
+    str.erase(str.size() - 2);
+  }
+}

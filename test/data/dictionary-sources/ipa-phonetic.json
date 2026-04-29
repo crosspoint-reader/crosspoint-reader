@@ -1,0 +1,61 @@
+{
+  "_comment": "IPA phonetic character rendering test dictionary. Exercises all four IPA Unicode blocks in HTML definitions. Used by ch19 of test_dictionary.epub.",
+  "meta": {
+    "name": "ipa-phonetic",
+    "bookname": "IPA Phonetic",
+    "output_dir": "test/dictionaries/ipa-phonetic",
+    "entry_format": "h",
+    "compress": false,
+    "generate_oft": true,
+    "generate_cspt": true,
+    "ifo_version": "2.4.2"
+  },
+  "entries": [
+    {
+      "_comment": "IPA Extensions block U+0250-U+02AF — core IPA consonants and vowels",
+      "headword": "ipa-extensions",
+      "definition": "<p>IPA Extensions (U+0250\u2013U+02AF):</p><p>\u0250\u0251\u0252\u0253\u0254\u0255\u0256\u0257\u0258\u0259\u025a\u025b\u025c\u025d\u025e\u025f\u0260\u0261\u0262\u0263\u0264\u0265\u0266\u0267\u0268\u0269\u026a\u026b\u026c\u026d\u026e\u026f\u0270\u0271\u0272\u0273\u0274\u0275\u0276\u0277\u0278\u0279\u027a\u027b\u027c\u027d\u027e\u027f\u0280\u0281\u0282\u0283\u0284\u0285\u0286\u0287\u0288\u0289\u028a\u028b\u028c\u028d\u028e\u028f\u0290\u0291\u0292\u0293\u0294\u0295\u0296\u0297\u0298\u0299\u029a\u029b\u029c\u029d\u029e\u029f\u02a0\u02a1\u02a2\u02a3\u02a4\u02a5\u02a6\u02a7\u02a8\u02a9\u02aa\u02ab\u02ac\u02ad\u02ae\u02af</p>"
+    },
+    {
+      "_comment": "Modifier Letters IPA subset U+02B0-U+02FF — superscript and tone letters",
+      "headword": "ipa-modifier-letters",
+      "definition": "<p>Modifier Letters (U+02B0\u2013U+02FF):</p><p>\u02b0\u02b1\u02b2\u02b3\u02b4\u02b5\u02b6\u02b7\u02b8\u02b9\u02ba\u02bb\u02bc\u02bd\u02be\u02bf\u02c0\u02c1\u02c2\u02c3\u02c4\u02c5\u02c6\u02c7\u02c8\u02c9\u02ca\u02cb\u02cc\u02cd\u02ce\u02cf\u02d0\u02d1\u02d2\u02d3\u02d4\u02d5\u02d6\u02d7\u02d8\u02d9\u02da\u02db\u02dc\u02dd\u02de\u02df\u02e0\u02e1\u02e2\u02e3\u02e4\u02e5\u02e6\u02e7\u02e8\u02e9\u02ea\u02eb\u02ec\u02ed\u02ee\u02ef\u02f0\u02f1\u02f2\u02f3\u02f4\u02f5\u02f6\u02f7\u02f8\u02f9\u02fa\u02fb\u02fc\u02fd\u02fe\u02ff</p>"
+    },
+    {
+      "_comment": "Phonetic Extensions block U+1D00-U+1D7F — small capital letters, historical phonetics",
+      "headword": "phonetic-extensions",
+      "definition": "<p>Phonetic Extensions (U+1D00\u2013U+1D7F):</p><p>\u1d00\u1d01\u1d02\u1d03\u1d04\u1d05\u1d06\u1d07\u1d08\u1d09\u1d0a\u1d0b\u1d0c\u1d0d\u1d0e\u1d0f\u1d10\u1d11\u1d12\u1d13\u1d14\u1d15\u1d16\u1d17\u1d18\u1d19\u1d1a\u1d1b\u1d1c\u1d1d\u1d1e\u1d1f\u1d20\u1d21\u1d22\u1d23\u1d24\u1d25\u1d26\u1d27\u1d28\u1d29\u1d2a\u1d2b\u1d2c\u1d2d\u1d2e\u1d2f\u1d30\u1d31\u1d32\u1d33\u1d34\u1d35\u1d36\u1d37\u1d38\u1d39\u1d3a\u1d3b\u1d3c\u1d3d\u1d3e\u1d3f\u1d40\u1d41\u1d42\u1d43\u1d44\u1d45\u1d46\u1d47\u1d48\u1d49\u1d4a\u1d4b\u1d4c\u1d4d\u1d4e\u1d4f\u1d50\u1d51\u1d52\u1d53\u1d54\u1d55\u1d56\u1d57\u1d58\u1d59\u1d5a\u1d5b\u1d5c\u1d5d\u1d5e\u1d5f\u1d60\u1d61\u1d62\u1d63\u1d64\u1d65\u1d66\u1d67\u1d68\u1d69\u1d6a\u1d6b\u1d6c\u1d6d\u1d6e\u1d6f\u1d70\u1d71\u1d72\u1d73\u1d74\u1d75\u1d76\u1d77\u1d78\u1d79\u1d7a\u1d7b\u1d7c\u1d7d\u1d7e\u1d7f</p>"
+    },
+    {
+      "_comment": "Phonetic Extensions Supplement U+1D80-U+1DBF — palatal hooks and superscripts",
+      "headword": "phonetic-extensions-supplement",
+      "definition": "<p>Phonetic Extensions Supplement (U+1D80\u2013U+1DBF):</p><p>\u1d80\u1d81\u1d82\u1d83\u1d84\u1d85\u1d86\u1d87\u1d88\u1d89\u1d8a\u1d8b\u1d8c\u1d8d\u1d8e\u1d8f\u1d90\u1d91\u1d92\u1d93\u1d94\u1d95\u1d96\u1d97\u1d98\u1d99\u1d9a\u1d9b\u1d9c\u1d9d\u1d9e\u1d9f\u1da0\u1da1\u1da2\u1da3\u1da4\u1da5\u1da6\u1da7\u1da8\u1da9\u1daa\u1dab\u1dac\u1dad\u1dae\u1daf\u1db0\u1db1\u1db2\u1db3\u1db4\u1db5\u1db6\u1db7\u1db8\u1db9\u1dba\u1dbb\u1dbc\u1dbd\u1dbe\u1dbf</p>"
+    },
+    {
+      "_comment": "Mixed IPA + regular text — realistic dictionary pronunciation entry",
+      "headword": "pronunciation",
+      "definition": "<p>pronunciation /pr\u0259\u02ccn\u028ansi\u02c8e\u026a\u0283\u0259n/ noun</p><p>The way in which a word or language is spoken. The transcription uses IPA symbols including \u0259 (schwa), \u028a (near-close back rounded vowel), and \u0283 (voiceless postalveolar fricative).</p>"
+    },
+    {
+      "_comment": "Mixed IPA inline with regular text — tests font switching mid-line",
+      "headword": "schwa",
+      "definition": "<p>schwa /\u0283w\u0251\u02d0/ noun</p><p>The mid-central vowel \u0259, the most common vowel sound in English. Appears in unstressed syllables, e.g. the first vowel in <em>about</em> [\u0259\u02c8ba\u028at] and the vowel in <em>the</em> before consonants [\u00f0\u0259].</p>"
+    },
+    {
+      "_comment": "Long IPA string for word-wrap testing at 16pt",
+      "headword": "ipa-wrap-test",
+      "definition": "<p>Word-wrap test. The following IPA transcription is long enough to require wrapping at 16pt:</p><p>\u0250\u0251\u0252\u0253\u0254\u0255\u0256\u0257\u0258\u0259\u025a\u025b\u025c\u025d\u025e\u025f\u0260\u0261\u0262\u0263\u0264\u0265\u0266\u0267\u0268\u0269\u026a\u026b\u026c\u026d\u026e\u026f\u0270\u0271\u0272\u0273\u0274\u0275\u0276\u0277\u0278\u0279\u027a\u027b\u027c\u027d\u027e\u027f\u0280\u0281\u0282\u0283</p>"
+    },
+    {
+      "_comment": "F-063 verification: real-dict entry with pronunciation\\n<HTML> format. Tests that \\n between pronunciation and body does not render as ◆. Verbatim from dict-en-en-2026-03-01.",
+      "headword": "meeting",
+      "definition": "/\u02c8mit\u026a\u014b/, /\u02c8mi\u02d0t\u026a\u014b/\n<p><b>Noun</b></p><ol><li>(gerund,&#32;uncountable) The act of persons or things that meet.</li><li>A gathering of persons for a purpose; an assembly.</li><li>(<i>collective</i>) The people at such a gathering.</li><li>An encounter between people, even accidental.</li><li>A place or instance of junction or intersection; a confluence.</li><li>(rustic&#32;US,&#32;dated) A religious service held by a charismatic preacher in small towns in the United States.</li><li>(<i>Quakerism</i>) An administrative unit in the Religious Society of Friends (Quakers).</li></ol><p>From Middle English <i>meeting</i>, <i>meting</i>, from Old English <i>m\u0113ting</i>, <i>\u0121em\u0113ting</i> (\"meeting, assembly, association, society\"), equivalent to <i>meet</i> +&lrm; <i>-ing</i>. Cognate with West Frisian <i>moeting</i> (\"meeting, encounter\"), Dutch <i>ontmoeting</i> (\"meeting, encounter\"), Middle Low German <i>m\u00f6\u0302tinge</i> (\"meeting\"). Compare also German Low German <i>M\u00f6te</i> (\"meeting, encounter\"), Danish <i>m\u00f8de</i> (\"meeting, encounter\"), Swedish <i>m\u00f6te</i> (\"meeting, encounter\"), Icelandic <i>m\u00f3t</i> (\"meeting\"). Related to <i>moot</i>.</p><p>From Middle English <i>metynge</i>, <i>metinde</i>, <i>metand</i>, from Old English <i>m\u0113tende</i>, <i>&#42;\u0121em\u0113tende</i>, from Proto-Germanic <i>&#42;m\u014dtijandz</i>, present participle of Proto-Germanic <i>&#42;m\u014dtijan\u0105</i> (\"to meet\"), equivalent to <i>meet</i> +&lrm; <i>-ing</i>.</p></html>"
+    },
+    {
+      "_comment": "F-063 verification: real-dict entry with pronunciation\\n<HTML> format. Tests that \\n between pronunciation and body does not render as ◆. Verbatim from dict-en-en-2026-03-01.",
+      "headword": "austere",
+      "definition": "/\u0251\u02c8sti\u0279/, /\u0252\u02c8st\u026a\u0259(\u0279)/, /\u0254\u02c8sti\u0279/, /\u0254\u02d0\u02c8st\u026a\u0259(\u0279)/\n<p><b>Adjective</b></p><ol><li>Grim or severe in manner or appearance.</li><li>Lacking decoration; trivial; not extravagant or gaudy.</li><li>Adhering to the economic policy of austerity.</li><li>Harsh; astringent.</li></ol><p>From Ancient Greek <i>\u03b1\u1f50\u03c3\u03c4\u03b7\u03c1\u03cc\u03c2</i> (aust\u0113r\u00f3s, \"bitter, harsh, astringent\"), having the specific meaning \"making the tongue dry\" (originally used of fruits, wines), related to <i>\u03b1\u1f54\u03c9</i> (a\u00fa\u014d, \"to singe\"), <i>\u03b1\u1f56\u03bf\u03c2</i> (a\u00fbos, \"dry\").</p></html>"
+    }
+  ],
+  "synonyms": []
+}

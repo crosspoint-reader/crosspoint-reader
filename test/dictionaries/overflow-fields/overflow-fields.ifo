@@ -1,0 +1,10 @@
+StarDict's dict ifo file
+version=3.0.0
+wordcount=2
+idxfilesize=28
+bookname=Overflow Fields Verification Dictionary — A Very Long Bookname To Verify That The Metadata Display View Wraps Correctly
+sametypesequence=h
+description=This dictionary exists solely to verify that the metadata info view wraps and displays all fields correctly when their values are very long. It is not intended for word lookup. Do not select it as your active dictionary for reading sessions.
+website=https://example.com/very/long/url/path/to/verify/wrapping?param1=value1&param2=value2&param3=long-value-three
+date=2026-01-01
+lang=en-en

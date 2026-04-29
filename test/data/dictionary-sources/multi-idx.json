@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "name": "multi-idx",
+    "bookname": "Multi IDX Test",
+    "output_dir": "test/dictionaries/multi-idx",
+    "entry_format": "m",
+    "ifo_version": "2.4.2",
+    "base_entries": "english-no-syn",
+    "extra_idx_files": ["multi-idx-b"]
+  }
+}
