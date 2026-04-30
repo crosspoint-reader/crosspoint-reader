@@ -24,7 +24,8 @@ class SleepActivity final : public Activity {
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
-  void renderBitmapSleepScreen(const Bitmap& bitmap, const BookOverlayInfo& overlayInfo) const;
+  void renderBitmapSleepScreen(const Bitmap& bitmap, const BookOverlayInfo& overlayInfo,
+                                bool topAlignForCoverFit = false) const;
   void renderBlankSleepScreen() const;
   void renderOverlaySleepScreen() const;
   BookOverlayInfo getBookOverlayInfo(const std::string& bookPath) const;

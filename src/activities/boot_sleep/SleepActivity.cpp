@@ -570,14 +570,12 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
   return info;
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOverlayInfo& overlayInfo) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const BookOverlayInfo& overlayInfo,
+                                            bool topAlignForCoverFit) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   float cropX = 0, cropY = 0;
-  const bool topAlignForCoverFit = (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER ||
-                                    SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM) &&
-                                   SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::FIT;
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
   if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
@@ -791,7 +789,8 @@ void SleepActivity::renderCoverSleepScreen() const {
       const uint8_t overlayMode = SETTINGS.sleepCoverOverlay;
       const BookOverlayInfo coverOverlayInfo =
           overlayMode != 0 ? getBookOverlayInfo(APP_STATE.openEpubPath) : BookOverlayInfo{};
-      renderBitmapSleepScreen(bitmap, coverOverlayInfo);
+      renderBitmapSleepScreen(bitmap, coverOverlayInfo,
+                              SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::FIT);
       file.close();
       return;
     }
@@ -875,7 +874,7 @@ void SleepActivity::renderOverlaySleepScreen() const {
       LOG_ERR("SLP", "Not enough heap for PNG overlay decoder");
       return false;
     }
-    std::unique_ptr<PNG> png(new (std::nothrow) PNG());
+    auto png = std::make_unique<PNG>();
     if (!png) return false;
 
     int rc = png->open(filename.c_str(), pngSleepOpen, pngSleepClose, pngSleepRead, pngSleepSeek, pngOverlayDraw);
