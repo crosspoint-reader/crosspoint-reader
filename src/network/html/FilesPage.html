@@ -1926,7 +1926,7 @@
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
           fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
           fileTableContent += '</td>';
-          fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${file.name.split('.').pop().toUpperCase()}</td>`;
+          fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
           fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
