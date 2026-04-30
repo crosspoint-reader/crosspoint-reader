@@ -133,6 +133,7 @@ void DictPrepareActivity::detectSteps() {
 
   const bool csptExists = Storage.exists(dp.idxOftCspt().c_str());
   // Regenerate .cspt if missing, or if .oft is being regenerated (stale .cspt).
+  // idxExists implies idxOft will exist after GEN_IDX runs above, so no separate guard needed.
   const bool oftBeingRegenerated = idxExists && !idxOftExists;
   if (idxExists && (!csptExists || oftBeingRegenerated)) {
     if (csptExists && oftBeingRegenerated) Storage.remove(dp.idxOftCspt().c_str());

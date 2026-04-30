@@ -101,7 +101,6 @@ class Dictionary {
   // Requires .idx to be accessible; uses .idx.oft if present for neighbourhood search.
   static std::vector<std::string> findSimilar(const std::string& word, int maxResults, const char* cachePath = nullptr);
 
-  // CLEANUP: on Auto-only commit, delete only this line (readCsptEntryCount below stays — used by shouldShowPopup)
   // Reads .idx.oft.cspt header and returns entryCount.
   // Returns 0 if the file is missing, too small, or has invalid magic/version.
   // Cheap: one SD seek, 12 bytes read.
