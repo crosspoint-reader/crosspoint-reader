@@ -1,7 +1,7 @@
 #include "I18n.h"
 
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 #include <string>
@@ -59,22 +59,22 @@ void I18n::saveSettings() {
 
   FsFile file;
   if (!Storage.openFileForWrite("I18N", SETTINGS_FILE, file)) {
-    Serial.printf("[I18N] Failed to save settings\n");
+    LOG_ERR("I18N", "Failed to save settings");
     return;
   }
 
   serialization::writePod(file, SETTINGS_VERSION);
-  serialization::writeString(file, getLanguageCode(_language));
 
-  file.close();
-  Serial.printf("[I18N] Settings saved: language=%d code=%s\n", static_cast<int>(_language),
-                getLanguageCode(_language));
+  const char* code = getLanguageCode(_language);
+  serialization::writeString(file, code);
+
+  LOG_DBG("I18N", "Settings saved: code=%s", code);
 }
 
 void I18n::loadSettings() {
   FsFile file;
   if (!Storage.openFileForRead("I18N", SETTINGS_FILE, file)) {
-    Serial.printf("[I18N] No settings file, using default (English)\n");
+    LOG_DBG("I18N", "No settings file, using default");
     return;
   }
 
@@ -84,45 +84,28 @@ void I18n::loadSettings() {
   if (version == SETTINGS_VERSION) {
     std::string code;
     serialization::readString(file, code);
-    bool found = false;
 
     for (uint8_t i = 0; i < getLanguageCount(); i++) {
       if (code == LANGUAGE_CODES[i]) {
         _language = static_cast<Language>(i);
-        found = true;
-        break;
+        LOG_DBG("I18N", "Loaded language: %s", code.c_str());
+        return;
       }
     }
 
-    if (found) {
-      Serial.printf("[I18N] Loaded language code: %s (%d)\n", code.c_str(), static_cast<int>(_language));
-    } else {
-      Serial.printf("[I18N] Unknown language code in settings: %s\n", code.c_str());
-    }
-    file.close();
+    LOG_ERR("I18N", "Unknown language code: %s", code.c_str());
     return;
   }
 
-  // Legacy migration path: version 1 stored language enum index directly.
   if (version == 1) {
     uint8_t lang;
     serialization::readPod(file, lang);
     if (lang < static_cast<size_t>(Language::_COUNT)) {
       _language = static_cast<Language>(lang);
-      Serial.printf("[I18N] Migrating v1 language index: %d -> %s\n", static_cast<int>(_language),
-                    getLanguageCode(_language));
-      file.close();
       saveSettings();
-      return;
+      LOG_INF("I18N", "Migrated v1 language setting");
     }
-    file.close();
-    Serial.printf("[I18N] Invalid v1 language index: %d\n", static_cast<int>(lang));
-    return;
   }
-
-  Serial.printf("[I18N] Settings version mismatch: %d\n", static_cast<int>(version));
-
-  file.close();
 }
 
 // Generate character set for a specific language
