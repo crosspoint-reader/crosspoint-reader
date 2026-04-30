@@ -1,3 +1,5 @@
+cool
+
 # CrossPoint Reader
 
 Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
