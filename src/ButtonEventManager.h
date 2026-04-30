@@ -16,7 +16,7 @@ ButtonEventManager& globalButtonEvents();
 //     on release (zero extra wait).
 //   - If a double-click action IS configured, Short is delayed by DOUBLE_WINDOW_MS
 //     to allow disambiguation.
-//   - Long fires on release once hold time >= LONG_PRESS_MS (no extra wait).
+//   - Long fires as soon as hold time >= LONG_PRESS_MS; release is not required.
 //   - Double fires on the second release within DOUBLE_WINDOW_MS.
 //
 // Activities query consumeEvent() each loop tick to receive pending events.

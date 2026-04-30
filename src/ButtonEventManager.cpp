@@ -86,6 +86,10 @@ void ButtonEventManager::processButton(const int idx, const Button btn) {
           pushEvent(btn, PressType::Short);
           s.state = State::Idle;
         }
+      } else if (held && now - s.pressDownTime >= LONG_PRESS_MS) {
+        // Fire long press immediately once the threshold is reached.
+        pushEvent(btn, PressType::Long);
+        s.state = State::Idle;
       } else if (!held) {
         // Button disappeared without wasReleased edge (e.g. after drain) — reset
         s.state = State::Idle;
