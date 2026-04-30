@@ -1060,7 +1060,7 @@ void EpubReaderActivity::computeStablePageNumbers(int& stableCurrent, int& stabl
   }
   const uint32_t a0 = idx.pageStartChar[ixFirst];
   const uint32_t a1Exclusive = (s + 1 < n) ? idx.pageStartChar[static_cast<size_t>(sp[static_cast<size_t>(s + 1)] - 1u)]
-                                            : idx.totalTextCodepoints;
+                                           : idx.totalTextCodepoints;
   const double fProg = std::clamp(static_cast<double>(sectionChapterProg), 0.0, 1.0);
   uint32_t spinePos = a0;
   if (a1Exclusive > a0) {
