@@ -122,7 +122,7 @@ void testNamedEntities() {
   ASSERT_EQ(cvt("&quot;"), std::string("\""));
   ASSERT_EQ(cvt("&apos;"), std::string("'"));
   ASSERT_EQ(cvt("AT&amp;T"), std::string("AT&T"));
-  ASSERT_EQ(cvt("&nbsp;"), std::string(" "));
+  ASSERT_EQ(cvt("a&nbsp;b"), std::string("a b"));
   // mdash / ndash produce UTF-8 bytes
   std::string mdash = cvt("&mdash;");
   ASSERT_TRUE(!mdash.empty());

@@ -149,6 +149,7 @@ std::string HtmlToText::convert(const std::string& html, size_t maxBytes) {
         while (i < inputLen && src[i] != '>') i++;
         if (i < inputLen) i++;
         state = TEXT;
+        appendSpace();
       } else {
         i++;
       }
@@ -161,6 +162,7 @@ std::string HtmlToText::convert(const std::string& html, size_t maxBytes) {
         while (i < inputLen && src[i] != '>') i++;
         if (i < inputLen) i++;
         state = TEXT;
+        appendSpace();
       } else {
         i++;
       }
