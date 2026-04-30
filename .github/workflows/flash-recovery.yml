@@ -1,0 +1,56 @@
+name: Flash Recovery Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-recovery-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Install esptool
+        run: pip install esptool
+
+      - name: Build CrossPoint
+        run: pio run
+
+      - name: Create merged flash image
+        run: |
+          esptool.py merge-bin \
+            --output merged-flash.bin \
+            --flash_mode dio \
+            --flash_freq 80m \
+            --flash_size 16MB \
+            0x0     .pio/build/default/bootloader.bin \
+            0x8000  .pio/build/default/partitions.bin \
+            0x10000 .pio/build/default/firmware.bin
+
+      - name: Upload recovery image
+        uses: actions/upload-artifact@v6
+        with:
+          name: crosspoint-full-flash
+          path: |
+            merged-flash.bin
+            .pio/build/default/bootloader.bin
+            .pio/build/default/partitions.bin
+            .pio/build/default/firmware.bin
+          if-no-files-found: error
