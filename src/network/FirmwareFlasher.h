@@ -20,6 +20,10 @@ enum class Result {
   TOO_SMALL,
   TOO_LARGE,
   BAD_MAGIC,
+  BAD_SEGMENTS,  // segment table malformed or runs past EOF
+  BAD_CHECKSUM,  // ESP image XOR checksum mismatch
+  BAD_SHA,       // SHA256 trailer mismatch (hash_appended images)
+  BAD_SIZE,      // body+pad+sha length doesn't match file size
   NO_PARTITION,
   OOM,
   READ_FAIL,
@@ -36,6 +40,17 @@ using ProgressCb = void (*)(size_t written, size_t total, void* ctx);
 // success switches otadata via ota_boot::switchTo. Caller is responsible for
 // ESP.restart() afterwards.
 Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx);
+
+// Full-image integrity check that mirrors the bootloader's verification:
+// header magic, segment table walk, XOR checksum, and SHA256 trailer (when
+// hash_appended == 1). Run this before flashing a candidate firmware so a
+// truncated/corrupted .bin never reaches otadata.
+//
+// `partitionSize` is the size of the destination OTA partition; pass 0 to
+// skip the size-fits-partition check (e.g. when validating ahead of partition
+// lookup). Streams the file in CHUNK-sized reads; the file is rewound on
+// success so the caller can immediately reread it for flashing.
+Result validateImageFile(const char* sdPath, size_t partitionSize);
 
 const char* resultName(Result r);
 

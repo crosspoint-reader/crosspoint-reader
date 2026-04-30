@@ -26,10 +26,16 @@ Image layout we rely on:
 Idempotent — patched images are detected by the already-cleared min_efuse field.
 """
 
-Import("env")
 import hashlib
 import os
 import struct
+
+try:
+    Import("env")  # noqa: F821 — provided by SCons in PlatformIO post-build context
+    _PIO_CONTEXT = True
+except NameError:
+    env = None
+    _PIO_CONTEXT = False
 
 ESP_IMAGE_MAGIC = 0xE9
 APP_DESC_MAGIC = 0xABCD5432
@@ -165,4 +171,5 @@ def _verify_image(data, hash_appended):
     print(f"[X3-PATCH] self-check OK: checksum=0x{actual:02X} hash_appended={int(hash_appended)}")
 
 
-env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", patch_firmware_bin)
+if _PIO_CONTEXT:
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", patch_firmware_bin)

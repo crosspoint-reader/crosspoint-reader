@@ -14,13 +14,6 @@
 #include "fontIds.h"
 #include "network/FirmwareFlasher.h"
 
-namespace {
-// First byte of every ESP32 firmware image (esp_image_header_t::magic).
-constexpr uint8_t ESP_IMAGE_MAGIC = 0xE9;
-// Reasonable lower bound; real firmware is well over 1 MB.
-constexpr size_t MIN_FIRMWARE_SIZE = 64 * 1024;
-}  // namespace
-
 void SdFirmwareUpdateActivity::onEnter() {
   Activity::onEnter();
   // Build-identity marker — confirms which firmware build owns the SD update flow.
@@ -78,32 +71,32 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
     errorMessage = tr(STR_FIRMWARE_FILE_OPEN_FAILED);
     return false;
   }
-
   firmwareSize = file.fileSize();
-  if (firmwareSize < MIN_FIRMWARE_SIZE) {
-    errorMessage = tr(STR_INVALID_FIRMWARE);
-    file.close();
-    return false;
-  }
-
-  uint8_t magic = 0;
-  const int got = file.read(&magic, 1);
   file.close();
-  if (got != 1 || magic != ESP_IMAGE_MAGIC) {
-    LOG_ERR("FW", "Bad magic: 0x%02X (expected 0x%02X)", magic, ESP_IMAGE_MAGIC);
-    errorMessage = tr(STR_INVALID_FIRMWARE);
-    return false;
-  }
 
-  // Check it fits the OTA partition (begin() probes the partition table).
+  // Probe the OTA partition first so the integrity check can also enforce a fits-partition bound.
   if (!Update.begin(firmwareSize)) {
     LOG_ERR("FW", "Update.begin(%u) failed: %s", static_cast<unsigned>(firmwareSize), Update.errorString());
     errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
     Update.abort();
     return false;
   }
+  const size_t partitionLimit = Update.size();
   // Roll back the begin() — we'll call it again in performUpdate().
   Update.abort();
+
+  // Run the same end-to-end integrity check (header / segment table / XOR checksum / SHA256
+  // trailer) that the shared firmware-flasher applies right before raw-writing otadata. This
+  // catches truncated or corrupted .bin files at confirmation time, before the user ever sees
+  // the "Updating…" progress bar.
+  const auto vr = firmware_flash::validateImageFile(firmwarePath.c_str(), partitionLimit);
+  if (vr != firmware_flash::Result::OK) {
+    LOG_ERR("FW", "image validation failed: %s", firmware_flash::resultName(vr));
+    errorMessage = (vr == firmware_flash::Result::TOO_SMALL || vr == firmware_flash::Result::TOO_LARGE)
+                       ? tr(STR_FIRMWARE_TOO_LARGE)
+                       : tr(STR_INVALID_FIRMWARE);
+    return false;
+  }
   return true;
 }
 

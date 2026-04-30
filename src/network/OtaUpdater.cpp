@@ -122,6 +122,14 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   local_buf = NULL;
   output_len = 0;
   buf_cap = 0;
+  /* Also clear the persistent updater fields so a later check that fails to find a firmware.bin
+   * asset cannot inadvertently reuse a URL/version cached from an earlier successful run. */
+  updateAvailable = false;
+  latestVersion.clear();
+  otaUrl.clear();
+  otaSize = 0;
+  totalSize = 0;
+  processedSize = 0;
 
   esp_err = ESP_FAIL;
   for (int attempt = 0; attempt < 2; ++attempt) {
@@ -345,7 +353,10 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
       .user_data = &dctx,
-      .skip_cert_common_name_check = true,
+      /* Enforce CN/SAN hostname verification — crt_bundle_attach validates the CA chain but
+       * hostname matching is a separate step. Leaving this true would let any cert signed by a
+       * trusted CA serve a tampered firmware over HTTPS. */
+      .skip_cert_common_name_check = false,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
@@ -387,6 +398,19 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   if (dctx.written == 0) {
     LOG_ERR("OTA", "no body bytes received");
     lastError = "empty_body";
+    return HTTP_ERROR;
+  }
+  // Reject truncated downloads before flashing. The firmware-flasher only does a magic-byte /
+  // min-size check on the SD file, so a short body (network drop after Content-Length is known)
+  // would otherwise still go through and brick on reboot.
+  const size_t expectedSize = totalSize > 0 ? totalSize : otaSize;
+  if (expectedSize > 0 && dctx.written != expectedSize) {
+    LOG_ERR("OTA", "short body: got=%u want=%u", static_cast<unsigned>(dctx.written),
+            static_cast<unsigned>(expectedSize));
+    char buf[48];
+    snprintf(buf, sizeof(buf), "short_body:%u/%u", static_cast<unsigned>(dctx.written),
+             static_cast<unsigned>(expectedSize));
+    lastError = buf;
     return HTTP_ERROR;
   }
   LOG_INF("OTA", "download complete: %u bytes -> %s", static_cast<unsigned>(dctx.written), kOtaSdPath);

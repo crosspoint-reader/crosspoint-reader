@@ -43,7 +43,7 @@ import sys
 try:
     Import("env")  # noqa: F821 — provided by SCons in PlatformIO post-build context
     _PIO_CONTEXT = True
-except Exception:
+except NameError:
     env = None
     _PIO_CONTEXT = False
 
@@ -98,7 +98,10 @@ def verify_firmware_bin(target, source, env):
         failures.append(f"size {len(data)} < MIN_FIRMWARE_SIZE {MIN_FIRMWARE_SIZE}")
 
     # 2) image magic
-    if not data or data[0] != ESP_IMAGE_MAGIC:
+    if not data:
+        failures.append("file is empty")
+        raise RuntimeError(f"[X3-VERIFY] {name}: " + "; ".join(failures))
+    if data[0] != ESP_IMAGE_MAGIC:
         failures.append(f"magic 0x{data[0]:02X} != 0x{ESP_IMAGE_MAGIC:02X}")
         # If magic is wrong nothing else is reliable.
         raise RuntimeError(f"[X3-VERIFY] {name}: " + "; ".join(failures))
@@ -147,6 +150,12 @@ def verify_firmware_bin(target, source, env):
     # 9) padded body must be 16-aligned
     if pad_end % 16 != 0:
         failures.append(f"padded body not 16-aligned ({pad_end})")
+
+    # Default identity strings used if the file is too small to contain an app
+    # descriptor; keeps the summary path free from UnboundLocalError when a
+    # short/corrupt firmware fails the size check above.
+    project = "<unknown>"
+    version = "<unknown>"
 
     # 6) app_desc magic + 7) efuse fields + 10) printable identity strings
     if len(data) >= APP_DESC_OFFSET + 256:

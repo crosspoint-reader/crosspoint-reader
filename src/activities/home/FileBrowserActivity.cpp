@@ -366,8 +366,12 @@ void FileBrowserActivity::render(RenderLock&&) {
 
   // Help text
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
-  const auto labels = mappedInput.mapLabels(backLabel, files.empty() ? "" : tr(STR_OPEN),
-                                            files.empty() ? "" : tr(STR_DIR_UP), files.empty() ? "" : tr(STR_DIR_DOWN));
+  // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
+  // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
+  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
+  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
+                                            files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
