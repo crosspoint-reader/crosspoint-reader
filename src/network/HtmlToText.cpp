@@ -1,6 +1,7 @@
 #include "HtmlToText.h"
 
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <strings.h>
