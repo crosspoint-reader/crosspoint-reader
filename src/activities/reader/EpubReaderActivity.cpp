@@ -10,6 +10,9 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 
 #include "CrossPointSettings.h"
@@ -23,6 +26,7 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -32,6 +36,11 @@ namespace {
 constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
 const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+
+constexpr uint32_t kStableCharsPerPageMin = 100;
+constexpr uint32_t kStableCharsPerPageMax = 200000;
+constexpr uint32_t kStablePrefsMagic = 0x53544142;
+constexpr uint32_t kStablePrefsVersion = 1;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -57,6 +66,12 @@ void EpubReaderActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   epub->setupCacheDir();
+
+  loadStablePagesSettings();
+  if (stableCharsPerPage > 0 && !ensureStableSyntheticIndex()) {
+    stableSyntheticIndex = {};
+    LOG_DBG("ERS", "Stable index load/build failed on open; keeping chars/page for retry");
+  }
 
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
@@ -153,18 +168,22 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
-                           [this](const ActivityResult& result) {
-                             // Always apply orientation change even if the menu was cancelled
-                             const auto& menu = std::get<MenuResult>(result.data);
-                             applyOrientation(menu.orientation);
-                             toggleAutoPageTurn(menu.pageTurnOption);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                             }
-                           });
+    int stableCur = -1, stableTot = -1, chCur = -1, chTot = -1;
+    computeStablePageNumbers(stableCur, stableTot, &chCur, &chTot);
+    const bool chSynth = (chCur >= 1 && chTot > 0);
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), chSynth ? chCur : currentPage,
+                                                 chSynth ? chTot : totalPages, bookProgressPercent, stableCur,
+                                                 stableTot, SETTINGS.orientation, !currentPageFootnotes.empty()),
+        [this](const ActivityResult& result) {
+          // Always apply orientation change even if the menu was cancelled
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+          toggleAutoPageTurn(menu.pageTurnOption);
+          if (!result.isCancelled) {
+            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+          }
+        });
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -339,6 +358,34 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             if (!result.isCancelled) {
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
+          });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STABLE_PAGES: {
+      const std::string initial = stableCharsPerPage ? std::to_string(stableCharsPerPage) : "";
+      startActivityForResult(
+          std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_STABLE_PAGES_CHARS_TITLE)),
+                                                  initial, 6, InputType::Text),
+          [this](const ActivityResult& result) {
+            if (!result.isCancelled && epub) {
+              const auto& text = std::get<KeyboardResult>(result.data).text;
+              const unsigned long raw = std::strtoul(text.c_str(), nullptr, 10);
+              if (raw == 0) {
+                stableCharsPerPage = 0;
+                stableSyntheticIndex = {};
+              } else {
+                const unsigned long lo = kStableCharsPerPageMin;
+                const unsigned long hi = kStableCharsPerPageMax;
+                const unsigned long clamped = std::min(std::max(raw, lo), hi);
+                stableCharsPerPage = static_cast<uint32_t>(clamped);
+                if (!ensureStableSyntheticIndex()) {
+                  stableSyntheticIndex = {};
+                  LOG_DBG("ERS", "Stable index build failed after menu; chars/page kept for retry");
+                }
+              }
+              saveStablePagesSettings();
+            }
+            requestUpdate();
           });
       break;
     }
@@ -840,6 +887,9 @@ void EpubReaderActivity::renderStatusBar() const {
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
+  int stableCur = -1, stableTot = -1, chapSynthCur = -1, chapSynthTot = -1;
+  computeStablePageNumbers(stableCur, stableTot, &chapSynthCur, &chapSynthTot);
+
   std::string title;
 
   int textYOffset = 0;
@@ -867,7 +917,164 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, stableCur, stableTot,
+                    chapSynthCur, chapSynthTot);
+}
+
+void EpubReaderActivity::loadStablePagesSettings() {
+  stableCharsPerPage = 0;
+  if (!epub) {
+    return;
+  }
+  FsFile f;
+  const std::string path = epub->getCachePath() + "/stable_pages.bin";
+  if (!Storage.openFileForRead("ERS", path.c_str(), f)) {
+    return;
+  }
+  uint32_t mag = 0;
+  uint32_t ver = 0;
+  uint32_t cpp = 0;
+  if (f.read(reinterpret_cast<uint8_t*>(&mag), sizeof(mag)) != sizeof(mag) || mag != kStablePrefsMagic) {
+    return;
+  }
+  if (f.read(reinterpret_cast<uint8_t*>(&ver), sizeof(ver)) != sizeof(ver) || ver != kStablePrefsVersion) {
+    return;
+  }
+  if (f.read(reinterpret_cast<uint8_t*>(&cpp), sizeof(cpp)) != sizeof(cpp)) {
+    return;
+  }
+  if (cpp >= kStableCharsPerPageMin && cpp <= kStableCharsPerPageMax) {
+    stableCharsPerPage = cpp;
+  }
+}
+
+void EpubReaderActivity::saveStablePagesSettings() {
+  if (!epub) {
+    return;
+  }
+  FsFile f;
+  const std::string path = epub->getCachePath() + "/stable_pages.bin";
+  if (!Storage.openFileForWrite("ERS", path.c_str(), f)) {
+    return;
+  }
+  uint32_t mag = kStablePrefsMagic;
+  uint32_t ver = kStablePrefsVersion;
+  uint32_t cpp = stableCharsPerPage;
+  f.write(reinterpret_cast<const uint8_t*>(&mag), sizeof(mag));
+  f.write(reinterpret_cast<const uint8_t*>(&ver), sizeof(ver));
+  f.write(reinterpret_cast<const uint8_t*>(&cpp), sizeof(cpp));
+}
+
+bool EpubReaderActivity::ensureStableSyntheticIndex() {
+  stableSyntheticIndex = {};
+  if (!epub || stableCharsPerPage == 0) {
+    return true;
+  }
+  const int n = epub->getSpineItemsCount();
+  if (n <= 0) {
+    return false;
+  }
+  if (BookSyntheticIndex::loadFromCache(epub->getCachePath(), n, stableCharsPerPage, stableSyntheticIndex)) {
+    return true;
+  }
+
+  const Rect popupRect = GUI.drawPopup(renderer, tr(STR_STABLE_PAGES_COUNTING));
+  int lastPct = -1;
+  const auto onProgress = [this, &popupRect, &lastPct](const int done, const int total) {
+    if (total <= 0) {
+      return;
+    }
+    const int pct = (done >= total) ? 100 : (done * 100 / total);
+    if (pct == lastPct) {
+      return;
+    }
+    lastPct = pct;
+    GUI.fillPopupProgress(renderer, popupRect, pct);
+  };
+
+  return BookSyntheticIndex::buildAndSave(*epub, stableCharsPerPage, stableSyntheticIndex, onProgress);
+}
+
+void EpubReaderActivity::computeStablePageNumbers(int& stableCurrent, int& stableTotal, int* chapterCurrent,
+                                                  int* chapterTotal) const {
+  stableCurrent = stableTotal = -1;
+  if (chapterCurrent && chapterTotal) {
+    *chapterCurrent = *chapterTotal = -1;
+  }
+  if (!epub || stableCharsPerPage == 0 || !section || section->pageCount == 0) {
+    return;
+  }
+  const auto& idx = stableSyntheticIndex;
+  if (idx.totalPages == 0 || idx.pageStartChar.empty()) {
+    return;
+  }
+  const int curPage1 = section->currentPage + 1;
+  const float pc = static_cast<float>(section->pageCount);
+  const float sectionChapterProg = (pc > 0.0f) ? (static_cast<float>(curPage1) / pc) : 0.0f;
+  const float bookProg = epub->calculateProgress(currentSpineIndex, sectionChapterProg);
+  const uint32_t pos =
+      idx.totalTextCodepoints > 0
+          ? std::min(static_cast<uint32_t>(
+                         static_cast<double>(bookProg) * static_cast<double>(idx.totalTextCodepoints) + 0.5),
+                     idx.totalTextCodepoints)
+          : 0;
+  stableTotal = static_cast<int>(idx.totalPages);
+
+  // Largest pageStarts[k] <= chrPos determines which synthetic page we are reading (avoid upper_bound off-by-one).
+  auto synthPage1FromCodepoint = [&idx](const uint32_t chrPos) -> int {
+    auto ub = std::upper_bound(idx.pageStartChar.begin(), idx.pageStartChar.end(), chrPos);
+    if (ub == idx.pageStartChar.begin()) {
+      return 1;
+    }
+    if (ub == idx.pageStartChar.end()) {
+      return static_cast<int>(idx.totalPages);
+    }
+    --ub;
+    return std::clamp(static_cast<int>((ub - idx.pageStartChar.begin()) + 1), 1, static_cast<int>(idx.totalPages));
+  };
+
+  stableCurrent = synthPage1FromCodepoint(pos);
+
+  if (!chapterCurrent || !chapterTotal) {
+    return;
+  }
+  const auto& sp = idx.spineFirstSyntheticPage;
+  const int n = epub->getSpineItemsCount();
+  const int s = currentSpineIndex;
+  if (sp.empty() || static_cast<int>(sp.size()) != n || n <= 0 || s < 0 || s >= n) {
+    return;
+  }
+
+  const uint32_t g0 = sp[static_cast<size_t>(s)];
+  const uint32_t spanPages = (s + 1 < n) ? (sp[static_cast<size_t>(s + 1)] - g0) : (idx.totalPages - g0 + 1u);
+  if (spanPages == 0 || spanPages > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+    return;
+  }
+  *chapterTotal = static_cast<int>(spanPages);
+
+  // Book-wide blended progress does not align synthetic page counts across spines — map layout progress inside
+  // this spine to a character offset inside the synthetic spine slice, then to a synthetic page.
+  const size_t ixFirst = static_cast<size_t>(g0 - 1u);
+  if (ixFirst >= idx.pageStartChar.size()) {
+    return;
+  }
+  const uint32_t a0 = idx.pageStartChar[ixFirst];
+  const uint32_t a1Exclusive = (s + 1 < n) ? idx.pageStartChar[static_cast<size_t>(sp[static_cast<size_t>(s + 1)] - 1u)]
+                                            : idx.totalTextCodepoints;
+  const double fProg = std::clamp(static_cast<double>(sectionChapterProg), 0.0, 1.0);
+  uint32_t spinePos = a0;
+  if (a1Exclusive > a0) {
+    const double lo = static_cast<double>(a0);
+    const double hiIncl = static_cast<double>((a1Exclusive - 1u) >= a0 ? (a1Exclusive - 1u) : a0);
+    const double interpolated = hiIncl <= lo ? lo : lo + fProg * (hiIncl - lo);
+    spinePos = static_cast<uint32_t>(
+        std::clamp(std::llround(interpolated), static_cast<long long>(a0), static_cast<long long>(hiIncl)));
+  }
+
+  const int chapSynthGlob = synthPage1FromCodepoint(spinePos);
+  const int chapFirstGlob = static_cast<int>(g0);
+  const int chapLastGlob = chapFirstGlob + static_cast<int>(spanPages) - 1;
+  *chapterCurrent = std::clamp(chapSynthGlob, chapFirstGlob, chapLastGlob) - chapFirstGlob + 1;
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

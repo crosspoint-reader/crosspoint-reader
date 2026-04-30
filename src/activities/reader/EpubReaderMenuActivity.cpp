@@ -3,13 +3,15 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
-                                               const int bookProgressPercent, const uint8_t currentOrientation,
+                                               const int bookProgressPercent, const int stableBookPage,
+                                               const int stableBookTotal, const uint8_t currentOrientation,
                                                const bool hasFootnotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
@@ -17,7 +19,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      stableBookPage(stableBookPage),
+      stableBookTotal(stableBookTotal) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -29,6 +33,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+  items.push_back({MenuAction::STABLE_PAGES, StrId::STR_STABLE_PAGES});
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
@@ -110,14 +115,49 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
 
-  // Progress summary
+  // Progress summary (same composition rules as the reader status bar)
   std::string progressLine;
-  if (totalPages > 0) {
-    progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" +
-                   std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
+  const bool showChapter = SETTINGS.statusBarChapterPageCount;
+  bool showStable = false;
+  bool showPct = false;
+  computeStatusBarBookDisplayFlags(SETTINGS.statusBarStablePages, SETTINGS.statusBarBookProgressPercentage != 0,
+                                   stableBookTotal, showStable, showPct);
+
+  if (showChapter && totalPages > 0) {
+    progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages);
+    if (showStable || showPct) {
+      progressLine += std::string(tr(STR_PAGES_SEPARATOR));
+    } else {
+      std::string mid(tr(STR_PAGES_SEPARATOR));
+      const size_t pipePos = mid.find('|');
+      if (pipePos != std::string::npos) {
+        mid.resize(pipePos);
+        while (!mid.empty() && mid.back() == ' ') {
+          mid.pop_back();
+        }
+        progressLine += mid;
+      }
+    }
   }
-  progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
+
+  std::string bookPart;
+  if (showStable && showPct) {
+    bookPart = std::string(tr(STR_BOOK_PREFIX)) + std::to_string(stableBookPage) + "/" +
+               std::to_string(stableBookTotal) + " · " + std::to_string(bookProgressPercent) + "%";
+  } else if (showStable) {
+    bookPart =
+        std::string(tr(STR_BOOK_PREFIX)) + std::to_string(stableBookPage) + "/" + std::to_string(stableBookTotal);
+  } else if (showPct) {
+    bookPart = std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
+  }
+
+  if (!bookPart.empty()) {
+    progressLine += bookPart;
+  }
+
+  if (!progressLine.empty()) {
+    renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
+  }
 
   // Menu Items
   const int startY = 75 + contentY;

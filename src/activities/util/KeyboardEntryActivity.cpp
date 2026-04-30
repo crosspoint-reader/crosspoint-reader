@@ -349,7 +349,9 @@ void KeyboardEntryActivity::loop() {
     confirmLongHandled = false;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  // Use release (not press): otherwise the paired release is still pending and the
+  // activity underneath may treat it as Back (e.g. reader exits to home).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onCancel();
   }
 

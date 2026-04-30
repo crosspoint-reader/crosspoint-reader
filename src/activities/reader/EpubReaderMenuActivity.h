@@ -15,6 +15,7 @@ class EpubReaderMenuActivity final : public Activity {
     SELECT_CHAPTER,
     FOOTNOTES,
     GO_TO_PERCENT,
+    STABLE_PAGES,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     SCREENSHOT,
@@ -26,7 +27,8 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes);
+                                  const int stableBookPage, const int stableBookTotal, const uint8_t currentOrientation,
+                                  const bool hasFootnotes);
 
   void onEnter() override;
   void onExit() override;
@@ -57,4 +59,6 @@ class EpubReaderMenuActivity final : public Activity {
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;
+  int stableBookPage = -1;
+  int stableBookTotal = -1;
 };
