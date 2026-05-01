@@ -206,21 +206,36 @@ def load_translations(
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
             raise ValueError(f"Invalid C++ identifier in English file: '{key}'")
 
-    # Build translations dict, filling missing keys from English
+    # Build translations dict, filling missing keys from English.
+    # Non-English values that are absent or blank fall back to English at runtime.
+    # A literal empty string in a non-English YAML file is treated as an intentional
+    # empty translation and stored as a single space to distinguish it from fallback.
     inherited_sets: List[Set[str]] = [set() for _ in ordered_files]
     translations: Dict[str, List[str]] = {}
     for key in string_keys:
         row: List[str] = []
         for lang_idx, fname in enumerate(ordered_files):
             data = parsed[fname]
-            value = data.get(key, "")
-            if not value.strip() and fname != english_file:
-                value = english_data[key]
-                inherited_sets[lang_idx].add(key)
-                if verbose:
-                    print(
-                        f"  INFO: '{key}' missing in {language_codes[lang_idx]}, using English fallback"
-                    )
+            if key not in data:
+                value = ""
+                if fname != english_file:
+                    inherited_sets[lang_idx].add(key)
+                    if verbose:
+                        print(
+                            f"  INFO: '{key}' missing in {language_codes[lang_idx]}, using English fallback"
+                        )
+            else:
+                value = data[key]
+                if fname != english_file:
+                    if value == "":
+                        value = " "
+                    elif not value.strip():
+                        value = ""
+                        inherited_sets[lang_idx].add(key)
+                        if verbose:
+                            print(
+                                f"  INFO: '{key}' missing in {language_codes[lang_idx]}, using English fallback"
+                            )
             row.append(value)
         translations[key] = row
 
@@ -474,8 +489,12 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
 def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
     """Return a sorted string of every unique character used in a language."""
     chars = set()
+    english_index = 0
     for values in translations.values():
-        for ch in values[lang_index]:
+        text = values[lang_index]
+        if lang_index != english_index and text == "":
+            text = values[english_index]
+        for ch in text:
             chars.add(ord(ch))
     return "".join(chr(cp) for cp in sorted(chars))
 
@@ -741,20 +760,43 @@ def _print_language_table(
     string_keys: List[str],
     unused_keys: Set[str],
     data_sizes: List[int],
+    translations: Dict[str, List[str]],
 ) -> None:
     """Print a per-language summary table."""
     total = len(string_keys)
-    headers = ("Language", "Code", "Own", "Fallback", "Unused", "Data (B)")
+    headers = (
+        "Language",
+        "Code",
+        "Own",
+        "Fallback",
+        "Unused",
+        "Data (B)",
+        "Unique (B)",
+    )
 
     rows = []
-    for code, name, inherited, size in zip(
-        language_codes, language_names, inherited_sets, data_sizes
+    for lang_idx, (code, name, inherited, size) in enumerate(
+        zip(language_codes, language_names, inherited_sets, data_sizes)
     ):
         own = total - len(inherited)
         fallback = len(inherited)
         # strings this language translated but the code never calls
         unused = len(unused_keys - inherited)
-        rows.append((name, code, str(own), str(fallback), str(unused), str(size)))
+        unique_size = sum(
+            len(s.encode("utf-8")) + 1
+            for s in {translations[k][lang_idx] for k in string_keys}
+        )
+        rows.append(
+            (
+                name,
+                code,
+                str(own),
+                str(fallback),
+                str(unused),
+                str(size),
+                str(unique_size),
+            )
+        )
 
     # EN first, then alphabetically by ISO code
     rows.sort(key=lambda r: (0 if r[1] == "EN" else 1, r[1]))
@@ -785,10 +827,16 @@ def _print_language_table(
     # Current layout: uint16_t offset table (2 B per string per language)
     offset_table_size = n_lang * n_keys * 2
     current_total = total_size + offset_table_size
-    # Previous layout: const char* pointer array (4 B per string per language)
+
+    # Estimate the original pointer-based layout using deduplicated string storage.
+    unique_strings: Set[str] = set()
+    for values in translations.values():
+        unique_strings.update(values)
+    unique_string_size = sum(len(s.encode("utf-8")) + 1 for s in unique_strings)
     old_pointer_table_size = n_lang * n_keys * 4
-    old_total = total_size + old_pointer_table_size
+    old_total = unique_string_size + old_pointer_table_size
     saved = old_total - current_total
+
     print(
         f"\n  Total: {total}  |  Used in code: {used}  |  Never used: {len(unused_keys)}"
     )
@@ -797,10 +845,10 @@ def _print_language_table(
         f"  =  {current_total:>7,} B"
     )
     print(
-        f"  Flash (before): {total_size:>7,} B strings  +  {old_pointer_table_size:>6,} B pointer tables (ptr32)"
+        f"  Flash (pointer model, deduped): {unique_string_size:>7,} B unique strings  +  {old_pointer_table_size:>6,} B pointer tables (ptr32)"
         f"  =  {old_total:>7,} B"
     )
-    print(f"  Saved by offset tables: {saved:,} B")
+    print(f"  Estimated savings vs pointer model: {saved:,} B")
 
 
 def _append_string_data_entry(lines: List[str], text: str) -> None:
@@ -917,6 +965,7 @@ def main(
             string_keys,
             unused_set,
             data_sizes,
+            translations,
         )
         print()
 

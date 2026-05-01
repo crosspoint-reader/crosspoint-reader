@@ -1,7 +1,7 @@
 #include "I18n.h"
 
 #include <HalStorage.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 #include <string>
@@ -27,7 +27,12 @@ const char* I18n::get(StrId id) const {
 
   // Use generated helper function - no hardcoded switch needed!
   const LangStrings lang = getLanguageStrings(_language);
-  return lang.data + lang.offsets[index];
+  const char* result = lang.data + lang.offsets[index];
+  if (_language != Language::EN && result[0] == '\0') {
+    const LangStrings english = getLanguageStrings(Language::EN);
+    return english.data + english.offsets[index];
+  }
+  return result;
 }
 
 void I18n::setLanguage(Language lang) {
@@ -59,7 +64,7 @@ void I18n::saveSettings() {
 
   FsFile file;
   if (!Storage.openFileForWrite("I18N", SETTINGS_FILE, file)) {
-    Serial.printf("[I18N] Failed to save settings\n");
+    LOG_ERR("I18N", "Failed to save settings");
     return;
   }
 
@@ -67,14 +72,13 @@ void I18n::saveSettings() {
   serialization::writeString(file, getLanguageCode(_language));
 
   file.close();
-  Serial.printf("[I18N] Settings saved: language=%d code=%s\n", static_cast<int>(_language),
-                getLanguageCode(_language));
+  LOG_INF("I18N", "Settings saved: language=%d code=%s", static_cast<int>(_language), getLanguageCode(_language));
 }
 
 void I18n::loadSettings() {
   FsFile file;
   if (!Storage.openFileForRead("I18N", SETTINGS_FILE, file)) {
-    Serial.printf("[I18N] No settings file, using default (English)\n");
+    LOG_INF("I18N", "No settings file, using default (English)");
     return;
   }
 
@@ -95,9 +99,9 @@ void I18n::loadSettings() {
     }
 
     if (found) {
-      Serial.printf("[I18N] Loaded language code: %s (%d)\n", code.c_str(), static_cast<int>(_language));
+      LOG_INF("I18N", "Loaded language code: %s (%d)", code.c_str(), static_cast<int>(_language));
     } else {
-      Serial.printf("[I18N] Unknown language code in settings: %s\n", code.c_str());
+      LOG_ERR("I18N", "Unknown language code in settings: %s", code.c_str());
     }
     file.close();
     return;
@@ -109,18 +113,17 @@ void I18n::loadSettings() {
     serialization::readPod(file, lang);
     if (lang < static_cast<size_t>(Language::_COUNT)) {
       _language = static_cast<Language>(lang);
-      Serial.printf("[I18N] Migrating v1 language index: %d -> %s\n", static_cast<int>(_language),
-                    getLanguageCode(_language));
+      LOG_INF("I18N", "Migrating v1 language index: %d -> %s", static_cast<int>(_language), getLanguageCode(_language));
       file.close();
       saveSettings();
       return;
     }
     file.close();
-    Serial.printf("[I18N] Invalid v1 language index: %d\n", static_cast<int>(lang));
+    LOG_ERR("I18N", "Invalid v1 language index: %d", static_cast<int>(lang));
     return;
   }
 
-  Serial.printf("[I18N] Settings version mismatch: %d\n", static_cast<int>(version));
+  LOG_ERR("I18N", "Settings version mismatch: %d\n", static_cast<int>(version));
 
   file.close();
 }
