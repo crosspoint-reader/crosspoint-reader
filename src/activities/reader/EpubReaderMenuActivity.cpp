@@ -9,15 +9,16 @@
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
-                                               const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const int bookProgressPercent, const uint32_t bookMillis,
+                                               const uint8_t currentOrientation, const bool hasFootnotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      bookMillis(bookMillis) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -117,6 +118,9 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
+  progressLine += tr(STR_TIME_PREFIX);
+  if (bookMillis >= 3600000) progressLine += std::to_string(bookMillis / 3600000) + tr(STR_HOUR);
+  progressLine += std::to_string((bookMillis % 3600000) / 60000) + tr(STR_MINUTE);
   renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
 
   // Menu Items

@@ -60,9 +60,9 @@ void EpubReaderActivity::onEnter() {
 
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    int dataSize = f.read(data, 6);
-    if (dataSize == 4 || dataSize == 6) {
+    uint8_t data[10];
+    int dataSize = f.read(data, 10);
+    if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
       if (nextPageNumber == UINT16_MAX) {
@@ -75,8 +75,12 @@ void EpubReaderActivity::onEnter() {
       cachedSpineIndex = currentSpineIndex;
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
     }
-    if (dataSize == 6) {
+    if (dataSize == 6 || dataSize == 10) {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
+    }
+    if (dataSize == 10) {
+      bookMillis = data[6] + (data[7] << 8) + (data[8] << 16) + (data[9] << 24);
+      LOG_DBG("ERS", "Loaded cached bookMillis: %d", bookMillis);
     }
   }
   // We may want a better condition to detect if we are opening for the first time.
@@ -88,6 +92,8 @@ void EpubReaderActivity::onEnter() {
       LOG_DBG("ERS", "Opened for first time, navigating to text reference at index %d", textSpineIndex);
     }
   }
+
+  sessionStartMillis = millis();
 
   // Save current epub as last opened epub and add to recent books
   APP_STATE.openEpubPath = epub->getPath();
@@ -104,6 +110,7 @@ void EpubReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   section.reset();
@@ -153,18 +160,19 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
-                           [this](const ActivityResult& result) {
-                             // Always apply orientation change even if the menu was cancelled
-                             const auto& menu = std::get<MenuResult>(result.data);
-                             applyOrientation(menu.orientation);
-                             toggleAutoPageTurn(menu.pageTurnOption);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                             }
-                           });
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
+                                                 bookProgressPercent, bookMillis + (millis() - sessionStartMillis),
+                                                 SETTINGS.orientation, !currentPageFootnotes.empty()),
+        [this](const ActivityResult& result) {
+          // Always apply orientation change even if the menu was cancelled
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+          toggleAutoPageTurn(menu.pageTurnOption);
+          if (!result.isCancelled) {
+            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+          }
+        });
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -720,15 +728,20 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   FsFile f;
   if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
+    uint8_t data[10];
     data[0] = currentSpineIndex & 0xFF;
     data[1] = (currentSpineIndex >> 8) & 0xFF;
     data[2] = currentPage & 0xFF;
     data[3] = (currentPage >> 8) & 0xFF;
     data[4] = pageCount & 0xFF;
     data[5] = (pageCount >> 8) & 0xFF;
-    f.write(data, 6);
-    LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
+    uint32_t newTime = bookMillis + (millis() - sessionStartMillis);
+    data[6] = newTime & 0xFF;
+    data[7] = (newTime >> 8) & 0xFF;
+    data[8] = (newTime >> 16) & 0xFF;
+    data[9] = (newTime >> 24) & 0xFF;
+    f.write(data, 10);
+    LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d, Time %d", spineIndex, currentPage, newTime);
   } else {
     LOG_ERR("ERS", "Could not save progress!");
   }
