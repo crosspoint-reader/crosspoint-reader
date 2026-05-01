@@ -38,7 +38,6 @@ const char* I18n::getLanguageName(Language lang) const {
   return LANGUAGE_NAMES[index];
 }
 
-// Generate character set for a specific language
 Language I18n::languageFromCode(const char* code) {
   for (uint8_t i = 0; i < getLanguageCount(); i++) {
     if (strcmp(code, LANGUAGE_CODES[i]) == 0) return static_cast<Language>(i);
