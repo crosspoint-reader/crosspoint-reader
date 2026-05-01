@@ -139,7 +139,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       if (!pendingAnchorId.empty()) {
         if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
           if (currentPage && !currentPage->elements.empty()) {
-            completePageFn(std::move(currentPage));
+            completePageFn(std::move(currentPage), xpathParagraphIndex);
             completedPageCount++;
             currentPage.reset(new Page());
             currentPageNextY = 0;
@@ -159,7 +159,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   if (!pendingAnchorId.empty() &&
       std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
     if (currentPage && !currentPage->elements.empty()) {
-      completePageFn(std::move(currentPage));
+      completePageFn(std::move(currentPage), xpathParagraphIndex);
       completedPageCount++;
       currentPage.reset(new Page());
       currentPageNextY = 0;
