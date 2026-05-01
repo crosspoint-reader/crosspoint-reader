@@ -367,7 +367,7 @@ void loop() {
     }
   }
 
-  if(!screenshotButtonsReleased) {
+  if (!screenshotButtonsReleased) {
     if (!gpio.isPressed(HalGPIO::BTN_POWER) && !gpio.isPressed(HalGPIO::BTN_DOWN)) {
       screenshotButtonsReleased = true;
     }
