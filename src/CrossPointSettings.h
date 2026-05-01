@@ -191,6 +191,8 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
+  // Long-press Confirm in EPUB reader launches KOReader sync (1 = enabled, 0 = disabled)
+  uint8_t longPressMenuKoSync = 1;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
