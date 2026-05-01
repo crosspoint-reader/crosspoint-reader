@@ -763,28 +763,18 @@ def _print_language_table(
     for row in rows:
         _safe_print(fmt.format(*row))
     used = total - len(unused_keys)
-    total_size = sum(data_sizes)
+    dedup_size = sum(data_sizes)
     n_lang = len(rows)
     n_keys = len(string_keys)
-    # Current layout: uint16_t offset table (2 B per string per language)
     offset_table_size = n_lang * n_keys * 2
-    current_total = total_size + offset_table_size
-    # Previous layout: const char* pointer array (4 B per string per language)
-    old_pointer_table_size = n_lang * n_keys * 4
-    old_total = total_size + old_pointer_table_size
-    saved = old_total - current_total
+    current_total = dedup_size + offset_table_size
     print(
         f"\n  Total: {total}  |  Used in code: {used}  |  Never used: {len(unused_keys)}"
     )
     print(
-        f"  Flash (now):    {total_size:>7,} B strings  +  {offset_table_size:>6,} B offset tables (uint16_t)"
+        f"  Flash: {dedup_size:>7,} B strings (deduped)  +  {offset_table_size:>6,} B offset tables"
         f"  =  {current_total:>7,} B"
     )
-    print(
-        f"  Flash (before): {total_size:>7,} B strings  +  {old_pointer_table_size:>6,} B pointer tables (ptr32)"
-        f"  =  {old_total:>7,} B"
-    )
-    print(f"  Saved by offset tables: {saved:,} B")
 
 
 def _append_string_data_entry(lines: List[str], text: str) -> None:
@@ -887,12 +877,22 @@ def main(
             print()
             sys.exit(1)
 
-        # Compute per-language data blob sizes:
-        # sum of UTF-8 byte length + 1 (null terminator) per string
-        data_sizes = [
-            sum(len(translations[k][i].encode("utf-8")) + 1 for k in string_keys)
-            for i in range(len(languages))
-        ]
+        # Compute per-language data blob sizes (after dedup).
+        # Non-English languages omit strings identical to English.
+        data_sizes = []
+        for i in range(len(languages)):
+            if i == 0:
+                data_sizes.append(
+                    sum(len(translations[k][0].encode("utf-8")) + 1 for k in string_keys)
+                )
+            else:
+                data_sizes.append(
+                    sum(
+                        len(translations[k][i].encode("utf-8")) + 1
+                        for k in string_keys
+                        if translations[k][i] != translations[k][0]
+                    )
+                )
 
         _print_language_table(
             languages,
