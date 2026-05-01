@@ -365,9 +365,15 @@ void loop() {
         ScreenshotUtil::takeScreenshot(renderer);
       }
     }
+  }
+
+  if(!screenshotButtonsReleased) {
+    if (!gpio.isPressed(HalGPIO::BTN_POWER) && !gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      screenshotButtonsReleased = true;
+    }
+    // If the screenshot combination is being pressed,
+    // skip the rest of the loop to avoid any chance of triggering sleep or skipping chapter
     return;
-  } else {
-    screenshotButtonsReleased = true;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
@@ -379,10 +385,6 @@ void loop() {
   }
 
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    // If the screenshot combination is potentially being pressed, don't sleep
-    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
-      return;
-    }
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

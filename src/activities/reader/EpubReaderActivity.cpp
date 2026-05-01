@@ -203,12 +203,6 @@ void EpubReaderActivity::loop() {
   }
 
   const bool skipChapter = !fromTilt && SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
-
-  // Don't skip chapter after screenshot
-  if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
-    return;
-  }
-
   if (skipChapter) {
     lastPageTurnTime = millis();
     // We don't want to delete the section mid-render, so grab the semaphore
