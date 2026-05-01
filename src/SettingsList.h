@@ -46,7 +46,7 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         StrId::STR_CAT_READER),
       SettingInfo::Enum(
           StrId::STR_DICT_FONT_FAMILY, &CrossPointSettings::dictionaryFontFamily,
-          {StrId::STR_DICT_USE_GLOBAL, StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC},
+          {StrId::STR_DICT_USE_GLOBAL, StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC},
           "dictionaryFontFamily", StrId::STR_CAT_READER),
       SettingInfo::Enum(
           StrId::STR_DICT_FONT_SIZE, &CrossPointSettings::dictionaryFontSize,

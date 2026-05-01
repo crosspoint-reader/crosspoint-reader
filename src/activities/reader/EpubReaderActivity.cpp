@@ -11,10 +11,9 @@
 #include <esp_system.h>
 
 #include <algorithm>
-
-#include "../settings/DictionarySelectActivity.h"
 #include <limits>
 
+#include "../settings/DictionarySelectActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"

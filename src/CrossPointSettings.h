@@ -98,7 +98,7 @@ class CrossPointSettings {
   // Definition viewer font overrides (0 = follow reader setting)
   enum DICT_FONT_FAMILY {
     DICT_FONT_GLOBAL = 0,
-    DICT_BOOKERLY = 1,
+    DICT_NOTOSERIF = 1,
     DICT_NOTOSANS = 2,
     DICT_OPENDYSLEXIC = 3,
     DICT_FONT_FAMILY_COUNT

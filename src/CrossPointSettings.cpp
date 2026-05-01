@@ -299,18 +299,18 @@ int CrossPointSettings::getDefinitionFontId() const {
   const FONT_SIZE effSize = (dictionaryFontSize == DICT_SIZE_GLOBAL) ? static_cast<FONT_SIZE>(fontSize)
                                                                      : static_cast<FONT_SIZE>(dictionaryFontSize - 1);
   switch (effFamily) {
-    case BOOKERLY:
+    case NOTOSERIF:
     default:
       switch (effSize) {
         case SMALL:
-          return BOOKERLY_12_FONT_ID;
+          return NOTOSERIF_12_FONT_ID;
         case MEDIUM:
         default:
-          return BOOKERLY_14_FONT_ID;
+          return NOTOSERIF_14_FONT_ID;
         case LARGE:
-          return BOOKERLY_16_FONT_ID;
+          return NOTOSERIF_16_FONT_ID;
         case EXTRA_LARGE:
-          return BOOKERLY_18_FONT_ID;
+          return NOTOSERIF_18_FONT_ID;
       }
     case NOTOSANS:
       switch (effSize) {
@@ -344,7 +344,7 @@ float CrossPointSettings::getDefinitionLineCompression() const {
                                     ? static_cast<FONT_FAMILY>(fontFamily)
                                     : static_cast<FONT_FAMILY>(dictionaryFontFamily - 1);
   switch (effFamily) {
-    case BOOKERLY:
+    case NOTOSERIF:
     default:
       switch (lineSpacing) {
         case TIGHT:

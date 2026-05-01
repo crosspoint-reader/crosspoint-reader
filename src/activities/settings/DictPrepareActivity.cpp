@@ -132,10 +132,9 @@ void DictPrepareActivity::detectSteps() {
   if (synWillExist && !synOftExists) steps[stepCount++] = {StepType::GEN_SYN};
 
   const bool csptExists = Storage.exists(dp.idxOftCspt().c_str());
-  const bool idxOftWillExist = idxOftExists || idxExists;
   // Regenerate .cspt if missing, or if .oft is being regenerated (stale .cspt).
   const bool oftBeingRegenerated = idxExists && !idxOftExists;
-  if (idxExists && idxOftWillExist && (!csptExists || oftBeingRegenerated)) {
+  if (idxExists && (!csptExists || oftBeingRegenerated)) {
     if (csptExists && oftBeingRegenerated) Storage.remove(dp.idxOftCspt().c_str());
     steps[stepCount++] = {StepType::GEN_CSPT};
   }
