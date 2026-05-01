@@ -20,7 +20,9 @@ const char* I18n::get(StrId id) const {
 
   // Use generated helper function - no hardcoded switch needed!
   const LangStrings lang = getLanguageStrings(_language);
-  return lang.data + lang.offsets[index];
+  const uint16_t off = lang.offsets[index];
+  if (off & 0x8000) return STRINGS_EN_DATA + (off & 0x7FFF);
+  return lang.data + off;
 }
 
 void I18n::setLanguage(Language lang) {

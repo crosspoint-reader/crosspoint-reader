@@ -638,29 +638,53 @@ def generate_strings_cpp(
     lines.append("};")
     lines.append("")
 
-    # Per-language flat string blobs and offset tables
+    # Per-language flat string blobs and offset tables.
+    # Non-English languages skip strings identical to English; their offset
+    # tables use bit 15 (0x8000) to flag "use English blob at offset & 0x7FFF".
     lines.append("namespace i18n_strings {")
     lines.append("")
 
+    en_strings = [translations[key][0] for key in string_keys]
+    en_offsets: List[int] = []
+
     for lang_idx, code in enumerate(languages):
         lang_strings = [translations[key][lang_idx] for key in string_keys]
+        is_english = lang_idx == 0
 
-        # Precompute byte offsets (UTF-8 encoded, +1 per string for null terminator)
-        offsets: List[int] = []
-        current_offset = 0
-        for s in lang_strings:
-            offsets.append(current_offset)
-            current_offset += len(s.encode("utf-8")) + 1
-        if current_offset > 65535:
+        if is_english:
+            # Precompute byte offsets (UTF-8 encoded, +1 per string for null terminator)
+            offsets: List[int] = []
+            current_offset = 0
+            for s in lang_strings:
+                offsets.append(current_offset)
+                current_offset += len(s.encode("utf-8")) + 1
+            en_offsets = list(offsets)
+            blob_strings = lang_strings
+        else:
+            offsets = []
+            current_offset = 0
+            blob_strings = []
+            for i, (s, en_s) in enumerate(zip(lang_strings, en_strings)):
+                if s == en_s:
+                    offsets.append(en_offsets[i] | 0x8000)
+                else:
+                    offsets.append(current_offset)
+                    current_offset += len(s.encode("utf-8")) + 1
+                    blob_strings.append(s)
+
+        max_offset = max(o & 0x7FFF for o in offsets) if offsets else 0
+        if max_offset > 0x7FFF:
             raise ValueError(
-                f"Language {code}: total string data ({current_offset} bytes) "
-                "exceeds uint16_t offset range (65535)"
+                f"Language {code}: max offset ({max_offset}) exceeds "
+                "15-bit limit (32767). Too many strings for flag-bit scheme."
             )
 
         # Flat string data blob — all strings concatenated with \0 separators.
         lines.append(f"const char STRINGS_{code}_DATA[] =")
-        for text in lang_strings:
+        for text in blob_strings:
             _append_string_data_entry(lines, text)
+        if not blob_strings:
+            _append_string_data_entry(lines, "")
         lines.append(";")
         lines.append("")
 
