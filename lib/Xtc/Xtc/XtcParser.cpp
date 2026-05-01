@@ -11,6 +11,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstddef>
 #include <cstring>
 
 namespace xtc {
@@ -193,10 +194,15 @@ XtcError XtcParser::readFirstPageInfo() {
     return XtcError::CORRUPTED_HEADER;
   }
 
-  // Verify the file is large enough to contain the full page table
+  // Verify the file is large enough to contain the full page table.
+  // Some encoders (e.g. xtcjs.app) place the page table at offset 0x30, overlapping
+  // the chapterOffset/padding tail of the documented 56-byte header. Accept any
+  // offset at or beyond the chapterOffset field (0x30) so long as it doesn't
+  // overlap fields we actually parse.
+  constexpr uint64_t kMinPageTableOffset = offsetof(XtcHeader, chapterOffset);
   const uint64_t fileSize = m_file.size64();
   const uint64_t pageTableSize = static_cast<uint64_t>(m_header.pageCount) * sizeof(PageTableEntry);
-  if (m_header.pageTableOffset < sizeof(XtcHeader) || m_header.pageTableOffset > fileSize ||
+  if (m_header.pageTableOffset < kMinPageTableOffset || m_header.pageTableOffset > fileSize ||
       pageTableSize > fileSize - m_header.pageTableOffset) {
     LOG_DBG("XTC", "Page table exceeds file bounds");
     return XtcError::CORRUPTED_HEADER;
