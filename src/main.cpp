@@ -271,7 +271,6 @@ void setup() {
       SETTINGS.lookupHistoryCap % CrossPointSettings::HIST_CAP_STEP != 0) {
     SETTINGS.lookupHistoryCap = CrossPointSettings::HIST_CAP_DEFAULT;
   }
-  I18N.loadSettings();
   // Validate the stored dictionary path still exists on the SD card.
   Dictionary::isValidDictionary();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
