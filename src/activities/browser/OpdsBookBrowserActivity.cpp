@@ -411,9 +411,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
   downloadTotal = 0;
   requestUpdate(true);
 
-  std::string downloadUrl = (acquisition.href.rfind("http", 0) == 0)
-                                ? acquisition.href
-                                : UrlUtils::buildUrl(server.url, acquisition.href);
+  std::string downloadUrl =
+      (acquisition.href.rfind("http", 0) == 0) ? acquisition.href : UrlUtils::buildUrl(server.url, acquisition.href);
   std::string filename = "/" +
                          StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) +
                          acquisition.fileExtension;
