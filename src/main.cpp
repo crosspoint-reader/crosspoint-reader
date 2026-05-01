@@ -371,6 +371,8 @@ void loop() {
     if (!gpio.isPressed(HalGPIO::BTN_POWER) && !gpio.isPressed(HalGPIO::BTN_DOWN)) {
       screenshotButtonsReleased = true;
     }
+    // prevent a tight spin
+    yield();
     // If the screenshot combination is being pressed,
     // skip the rest of the loop to avoid any chance of triggering sleep or skipping chapter
     return;
