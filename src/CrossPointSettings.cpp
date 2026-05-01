@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 
+#include "I18nKeys.h"
 #include "fontIds.h"
 
 // Initialize the static instance
@@ -26,6 +27,8 @@ constexpr uint8_t SETTINGS_FILE_VERSION = 1;
 constexpr char SETTINGS_FILE_BIN[] = "/.crosspoint/settings.bin";
 constexpr char SETTINGS_FILE_JSON[] = "/.crosspoint/settings.json";
 constexpr char SETTINGS_FILE_BAK[] = "/.crosspoint/settings.bin.bak";
+constexpr char LANG_FILE_BIN[] = "/.crosspoint/language.bin";
+constexpr char LANG_FILE_BAK[] = "/.crosspoint/language.bin.bak";
 
 // Convert legacy front button layout into explicit logical->hardware mapping.
 void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
@@ -95,6 +98,7 @@ bool CrossPointSettings::loadFromFile() {
           LOG_ERR("CPS", "Failed to resave settings after format update");
         }
       }
+      migrateLanguageBinaryFile();
       return result;
     }
   }
@@ -102,6 +106,7 @@ bool CrossPointSettings::loadFromFile() {
   // Fall back to binary migration
   if (Storage.exists(SETTINGS_FILE_BIN)) {
     if (loadFromBinaryFile()) {
+      migrateLanguageBinaryFile();
       if (saveToFile()) {
         Storage.rename(SETTINGS_FILE_BIN, SETTINGS_FILE_BAK);
         LOG_DBG("CPS", "Migrated settings.bin to settings.json");
@@ -113,7 +118,31 @@ bool CrossPointSettings::loadFromFile() {
     }
   }
 
-  return false;
+  // No settings files at all -- check for standalone language.bin
+  return migrateLanguageBinaryFile();
+}
+
+bool CrossPointSettings::migrateLanguageBinaryFile() {
+  // V1_LANGUAGES / V1_LANGUAGE_COUNT are emitted by gen_i18n.py with the
+  // frozen enum order from 2f969a9.
+  if (!Storage.exists(LANG_FILE_BIN)) return false;
+
+  FsFile f;
+  if (Storage.openFileForRead("CPS", LANG_FILE_BIN, f)) {
+    uint8_t version;
+    serialization::readPod(f, version);
+    if (version == 1) {
+      uint8_t oldIndex;
+      serialization::readPod(f, oldIndex);
+      if (oldIndex < V1_LANGUAGE_COUNT) {
+        language = static_cast<uint8_t>(V1_LANGUAGES[oldIndex]);
+      }
+    }
+  }
+  Storage.rename(LANG_FILE_BIN, LANG_FILE_BAK);
+  saveToFile();
+  LOG_DBG("CPS", "Migrated language.bin into settings.json");
+  return true;
 }
 
 bool CrossPointSettings::loadFromBinaryFile() {
