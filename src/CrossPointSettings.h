@@ -57,6 +57,11 @@ class CrossPointSettings {
     STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
   };
   enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
+  enum STATUS_BAR_ITEMS_POSITION {
+    STATUS_BAR_ITEMS_TOP = 0,
+    STATUS_BAR_ITEMS_BOTTOM = 1,
+    STATUS_BAR_ITEMS_POSITION_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -149,8 +154,14 @@ class CrossPointSettings {
   uint8_t statusBar = FULL;
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
+  // Legacy single progress bar fields retained for JSON migration only.
   uint8_t statusBarProgressBar = HIDE_PROGRESS;
   uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
+  uint8_t statusBarUpperProgressBar = HIDE_PROGRESS;
+  uint8_t statusBarUpperProgressBarThickness = PROGRESS_BAR_NORMAL;
+  uint8_t statusBarLowerProgressBar = HIDE_PROGRESS;
+  uint8_t statusBarLowerProgressBarThickness = PROGRESS_BAR_NORMAL;
+  uint8_t statusBarItemsPosition = STATUS_BAR_ITEMS_BOTTOM;
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
   // Text rendering settings

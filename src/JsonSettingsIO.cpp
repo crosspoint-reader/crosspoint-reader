@@ -23,6 +23,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarLowerProgressBar = CrossPointSettings::HIDE_PROGRESS;
       settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
       settings.statusBarBattery = 0;
       break;
@@ -30,6 +31,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarLowerProgressBar = CrossPointSettings::HIDE_PROGRESS;
       settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
@@ -37,6 +39,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarLowerProgressBar = CrossPointSettings::BOOK_PROGRESS;
       settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
@@ -44,6 +47,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 0;
       settings.statusBarProgressBar = CrossPointSettings::BOOK_PROGRESS;
+      settings.statusBarLowerProgressBar = CrossPointSettings::BOOK_PROGRESS;
       settings.statusBarTitle = CrossPointSettings::HIDE_TITLE;
       settings.statusBarBattery = 0;
       break;
@@ -51,6 +55,7 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarChapterPageCount = 0;
       settings.statusBarBookProgressPercentage = 1;
       settings.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
+      settings.statusBarLowerProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
       settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
@@ -59,10 +64,16 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
       settings.statusBarChapterPageCount = 1;
       settings.statusBarBookProgressPercentage = 1;
       settings.statusBarProgressBar = CrossPointSettings::HIDE_PROGRESS;
+      settings.statusBarLowerProgressBar = CrossPointSettings::HIDE_PROGRESS;
       settings.statusBarTitle = CrossPointSettings::CHAPTER_TITLE;
       settings.statusBarBattery = 1;
       break;
   }
+
+  settings.statusBarUpperProgressBar = CrossPointSettings::HIDE_PROGRESS;
+  settings.statusBarUpperProgressBarThickness = CrossPointSettings::PROGRESS_BAR_NORMAL;
+  settings.statusBarLowerProgressBarThickness = settings.statusBarProgressBarThickness;
+  settings.statusBarItemsPosition = CrossPointSettings::STATUS_BAR_ITEMS_BOTTOM;
 }
 
 // ---- CrossPointState ----
@@ -164,8 +175,35 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   // Legacy migration: if statusBarChapterPageCount is absent this is a pre-refactor settings file.
   // Populate s with migrated values now so the generic loop below picks them up as defaults and clamps them.
   if (doc["statusBarChapterPageCount"].isNull()) {
+    s.statusBar = clamp(doc["statusBar"] | s.statusBar, CrossPointSettings::STATUS_BAR_MODE_COUNT, s.statusBar);
     applyLegacyStatusBarSettings(s);
+    if (needsResave) *needsResave = true;
   }
+
+  auto migrateMissingStatusSetting = [&doc, &needsResave, &clamp](const char* newKey, uint8_t& value,
+                                                                  const char* legacyKey, uint8_t defaultValue,
+                                                                  uint8_t count) {
+    if (!doc[newKey].isNull()) {
+      return;
+    }
+
+    value = clamp(doc[legacyKey] | defaultValue, count, defaultValue);
+    if (needsResave) *needsResave = true;
+  };
+
+  migrateMissingStatusSetting("statusBarUpperProgressBar", s.statusBarUpperProgressBar, "statusBarUpperProgressBar",
+                              CrossPointSettings::HIDE_PROGRESS, CrossPointSettings::STATUS_BAR_PROGRESS_BAR_COUNT);
+  migrateMissingStatusSetting("statusBarUpperProgressBarThickness", s.statusBarUpperProgressBarThickness,
+                              "statusBarUpperProgressBarThickness", CrossPointSettings::PROGRESS_BAR_NORMAL,
+                              CrossPointSettings::STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT);
+  migrateMissingStatusSetting("statusBarLowerProgressBar", s.statusBarLowerProgressBar, "statusBarProgressBar",
+                              s.statusBarProgressBar, CrossPointSettings::STATUS_BAR_PROGRESS_BAR_COUNT);
+  migrateMissingStatusSetting("statusBarLowerProgressBarThickness", s.statusBarLowerProgressBarThickness,
+                              "statusBarProgressBarThickness", s.statusBarProgressBarThickness,
+                              CrossPointSettings::STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT);
+  migrateMissingStatusSetting("statusBarItemsPosition", s.statusBarItemsPosition, "statusBarItemsPosition",
+                              CrossPointSettings::STATUS_BAR_ITEMS_BOTTOM,
+                              CrossPointSettings::STATUS_BAR_ITEMS_POSITION_COUNT);
 
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
