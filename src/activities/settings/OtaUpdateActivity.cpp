@@ -107,8 +107,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == UPDATE_IN_PROGRESS) {
-    const auto* label = updater.getPhase() == OtaUpdater::Phase::Downloading ? tr(STR_DOWNLOADING) : tr(STR_UPDATING);
-    renderer.drawCenteredText(UI_10_FONT_ID, top, label);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING));
 
     int y = top + height + metrics.verticalSpacing;
     GUI.drawProgressBar(
@@ -129,26 +128,17 @@ void OtaUpdateActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
-    const auto& err = updater.getLastError();
-    if (!err.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, err.c_str());
-    }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FINISHED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_RESTARTING_HINT));
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_POWER_ON_HINT));
   }
 
   renderer.displayBuffer();
 }
 
 void OtaUpdateActivity::loop() {
-  // TODO @ngxson : refactor this logic later
-  if (updater.getRender()) {
-    requestUpdate();
-  }
-
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       LOG_DBG("OTA", "New update available, starting download...");
@@ -157,11 +147,14 @@ void OtaUpdateActivity::loop() {
         state = UPDATE_IN_PROGRESS;
       }
       requestUpdateAndWait();
-      const auto res =
-          // immediate=true: we're synchronously inside loop(), so the
-          // requestedUpdate flag won't be drained until installUpdate returns.
-          // Wake the render task directly so the e-ink progress bar advances.
-          updater.installUpdate([](void* ctx) { static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true); }, this);
+      const auto res = updater.installUpdate(
+          [](void* ctx) {
+            // immediate=true notifies the render task directly. The default deferred path only
+            // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
+            // installUpdate() blocks this task.
+            static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
+          },
+          this);
 
       if (res != OtaUpdater::OK) {
         LOG_DBG("OTA", "Update failed: %d", res);
@@ -178,8 +171,12 @@ void OtaUpdateActivity::loop() {
         state = FINISHED;
       }
       requestUpdateAndWait();
-      delay(1500);
-      ESP.restart();
+      // Hold the completion screen briefly so the user sees it, then restart.
+      delay(3000);
+      {
+        RenderLock lock(*this);
+        state = SHUTTING_DOWN;
+      }
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {

@@ -1,16 +1,11 @@
 #include "I18n.h"
 
-#include <HalStorage.h>
-#include <HardwareSerial.h>
-#include <Serialization.h>
+#include <cstddef>
+#include <cstring>
 
 #include "I18nStrings.h"
 
 using namespace i18n_strings;
-
-// Settings file path
-static constexpr const char* SETTINGS_FILE = "/.crosspoint/language.bin";
-static constexpr uint8_t SETTINGS_VERSION = 1;
 
 I18n& I18n::getInstance() {
   static I18n instance;
@@ -24,8 +19,8 @@ const char* I18n::get(StrId id) const {
   }
 
   // Use generated helper function - no hardcoded switch needed!
-  const char* const* strings = getStringArray(_language);
-  return strings[index];
+  const LangStrings lang = getLanguageStrings(_language);
+  return lang.data + lang.offsets[index];
 }
 
 void I18n::setLanguage(Language lang) {
@@ -33,7 +28,6 @@ void I18n::setLanguage(Language lang) {
     return;
   }
   _language = lang;
-  saveSettings();
 }
 
 const char* I18n::getLanguageName(Language lang) const {
@@ -44,42 +38,11 @@ const char* I18n::getLanguageName(Language lang) const {
   return LANGUAGE_NAMES[index];
 }
 
-void I18n::saveSettings() {
-  Storage.mkdir("/.crosspoint");
-
-  FsFile file;
-  if (!Storage.openFileForWrite("I18N", SETTINGS_FILE, file)) {
-    Serial.printf("[I18N] Failed to save settings\n");
-    return;
+Language I18n::languageFromCode(const char* code) {
+  for (uint8_t i = 0; i < getLanguageCount(); i++) {
+    if (strcmp(code, LANGUAGE_CODES[i]) == 0) return static_cast<Language>(i);
   }
-
-  serialization::writePod(file, SETTINGS_VERSION);
-  serialization::writePod(file, static_cast<uint8_t>(_language));
-
-  file.close();
-  Serial.printf("[I18N] Settings saved: language=%d\n", static_cast<int>(_language));
-}
-
-void I18n::loadSettings() {
-  FsFile file;
-  if (!Storage.openFileForRead("I18N", SETTINGS_FILE, file)) {
-    Serial.printf("[I18N] No settings file, using default (English)\n");
-    return;
-  }
-
-  uint8_t version;
-  serialization::readPod(file, version);
-  if (version != SETTINGS_VERSION) {
-    Serial.printf("[I18N] Settings version mismatch\n");
-    return;
-  }
-
-  uint8_t lang;
-  serialization::readPod(file, lang);
-  if (lang < static_cast<size_t>(Language::_COUNT)) {
-    _language = static_cast<Language>(lang);
-    Serial.printf("[I18N] Loaded language: %d\n", static_cast<int>(_language));
-  }
+  return Language::EN;
 }
 
 // Generate character set for a specific language
