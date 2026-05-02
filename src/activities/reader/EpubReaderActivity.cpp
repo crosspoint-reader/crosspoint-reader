@@ -106,11 +106,6 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
-  if (epub && annotationsDirty) {
-    annotations.save(epub->getCachePath().c_str());
-    annotationsDirty = false;
-  }
-
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -451,12 +446,23 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
           if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
 
-          auto wordsCopy = words;
+          // Strip-copy: only geometry fields needed for annotation rects — avoids a full WordRef copy.
+          struct WordGeom {
+            int16_t x, y, w, h;
+            uint8_t pageIdx;
+          };
+          std::vector<WordGeom> wordGeoms;
+          wordGeoms.reserve(words.size());
+          for (const auto& wr : words) {
+            wordGeoms.push_back({static_cast<int16_t>(wr.x), static_cast<int16_t>(wr.y), static_cast<int16_t>(wr.w),
+                                 static_cast<int16_t>(wr.h), static_cast<uint8_t>(wr.pageIdx)});
+          }
+
           startActivityForResult(
               std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
                                                       epub->getAuthor(), chapterTitle, startPage + 1, readerFontId,
                                                       *section, startPage, mTop, mLeft),
-              [this, chapterTitle, startPage, wordsCopy = std::move(wordsCopy)](const ActivityResult& result) mutable {
+              [this, chapterTitle, startPage, wordGeoms = std::move(wordGeoms)](const ActivityResult& result) mutable {
                 if (!result.isCancelled) {
                   const auto& clip = std::get<ClippingResult>(result.data);
                   if (!clip.text.empty()) {
@@ -465,12 +471,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                     if (clip.fromWordIdx >= 0 && clip.toWordIdx >= 0) {
                       AnnotationsManager::AnnotationRecord rec;
                       rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
-                      const int to = std::min(clip.toWordIdx, static_cast<int>(wordsCopy.size()) - 1);
+                      const int to = std::min(clip.toWordIdx, static_cast<int>(wordGeoms.size()) - 1);
                       for (int i = clip.fromWordIdx; i <= to; ++i) {
-                        const auto absPage = static_cast<uint16_t>(startPage + wordsCopy[i].pageIdx);
-                        rec.rects.push_back({static_cast<int16_t>(wordsCopy[i].x), static_cast<int16_t>(wordsCopy[i].y),
-                                             static_cast<int16_t>(wordsCopy[i].w), static_cast<int16_t>(wordsCopy[i].h),
-                                             absPage});
+                        const auto absPage = static_cast<uint16_t>(startPage + wordGeoms[i].pageIdx);
+                        rec.rects.push_back({wordGeoms[i].x, wordGeoms[i].y, wordGeoms[i].w, wordGeoms[i].h, absPage});
                       }
                       annotations.add(std::move(rec));
                       annotations.save(epub->getCachePath().c_str());

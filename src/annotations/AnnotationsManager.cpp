@@ -33,7 +33,8 @@ bool AnnotationsManager::load(const char* bookCachePath) {
   }
 
   records.reserve(count);
-  for (uint16_t i = 0; i < count; ++i) {
+  bool truncated = false;
+  for (uint16_t i = 0; i < count && !truncated; ++i) {
     AnnotationRecord rec;
     if (file.read(&rec.sectionIdx, sizeof(rec.sectionIdx)) != sizeof(rec.sectionIdx)) break;
 
@@ -41,13 +42,15 @@ bool AnnotationsManager::load(const char* bookCachePath) {
     if (file.read(&rectCount, sizeof(rectCount)) != sizeof(rectCount)) break;
     rec.rects.resize(rectCount);
     for (uint16_t r = 0; r < rectCount; ++r) {
-      if (file.read(&rec.rects[r], sizeof(Rect)) != sizeof(Rect)) goto done;
+      if (file.read(&rec.rects[r], sizeof(Rect)) != sizeof(Rect)) {
+        truncated = true;
+        break;
+      }
     }
 
-    records.push_back(std::move(rec));
+    if (!truncated) records.push_back(std::move(rec));
   }
 
-done:
   file.close();
   LOG_DBG("ANNOT", "Loaded %zu annotations from %s", records.size(), path.c_str());
   return true;
@@ -64,20 +67,25 @@ bool AnnotationsManager::save(const char* bookCachePath) const {
 
   const uint8_t version = FILE_VERSION;
   const uint16_t count = static_cast<uint16_t>(records.size());
-  file.write(&version, 1);
-  file.write(&count, sizeof(count));
+  bool ok = file.write(&version, 1) == 1;
+  ok = ok && file.write(&count, sizeof(count)) == sizeof(count);
 
   for (const auto& rec : records) {
-    file.write(&rec.sectionIdx, sizeof(rec.sectionIdx));
+    ok = ok && file.write(&rec.sectionIdx, sizeof(rec.sectionIdx)) == sizeof(rec.sectionIdx);
     const uint16_t rectCount = static_cast<uint16_t>(rec.rects.size());
-    file.write(&rectCount, sizeof(rectCount));
+    ok = ok && file.write(&rectCount, sizeof(rectCount)) == sizeof(rectCount);
     for (const auto& r : rec.rects) {
-      file.write(&r, sizeof(Rect));
+      ok = ok && file.write(&r, sizeof(Rect)) == sizeof(Rect);
     }
   }
 
   file.flush();
   file.close();
+
+  if (!ok) {
+    LOG_ERR("ANNOT", "Write error while saving to %s (SD full or removed?)", path.c_str());
+    return false;
+  }
   LOG_DBG("ANNOT", "Saved %zu annotations to %s", records.size(), path.c_str());
   return true;
 }

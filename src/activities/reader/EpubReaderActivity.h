@@ -33,7 +33,6 @@ class EpubReaderActivity final : public Activity {
   bool automaticPageTurnActive = false;
 
   AnnotationsManager annotations;
-  bool annotationsDirty = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

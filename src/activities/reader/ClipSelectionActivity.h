@@ -52,7 +52,6 @@ class ClipSelectionActivity final : public Activity {
   int cursorIdx = 0;
   int startMarkIdx = -1;
   bool needsPageSwitch = false;
-  bool initialRender = true;
 
   ButtonNavigator buttonNavigator;
 

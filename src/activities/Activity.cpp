@@ -5,9 +5,8 @@
 void Activity::onEnter() {
   entryPressedMask = 0;
   static constexpr MappedInputManager::Button kGuarded[] = {
-      MappedInputManager::Button::Back,  MappedInputManager::Button::Confirm,
-      MappedInputManager::Button::Left,  MappedInputManager::Button::Right,
-      MappedInputManager::Button::Up,    MappedInputManager::Button::Down,
+      MappedInputManager::Button::Back,  MappedInputManager::Button::Confirm, MappedInputManager::Button::Left,
+      MappedInputManager::Button::Right, MappedInputManager::Button::Up,      MappedInputManager::Button::Down,
   };
   for (const auto b : kGuarded) {
     if (mappedInput.isPressed(b)) {
