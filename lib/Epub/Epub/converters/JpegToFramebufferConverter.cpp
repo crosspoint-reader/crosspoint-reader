@@ -173,7 +173,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   }
 
   // === 1:1 fast path: no scaling math ===
-  if (fineScaleFPX == FP_ONE) {
+  if (fineScaleFPX == FP_ONE && fineScaleFPY == FP_ONE) {
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
       pw.beginRow(outY);
@@ -199,7 +199,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   // === Bilinear interpolation (upscale: fineScale > 1.0) ===
   // Smooths block boundaries that would otherwise create visible banding
   // on progressive JPEG DC-only decode (1/8 resolution upscaled to target).
-  if (fineScaleFPX > FP_ONE) {
+  if (fineScaleFPX > FP_ONE && fineScaleFPY > FP_ONE) {
     // Pre-compute safe X range where lx0 and lx0+1 are both in [0, validW-1].
     // Only the left/right edge pixels (typically 0-2 and 1-8 respectively) need clamping.
     int safeXStart = (int)(((int64_t)blockX * fineScaleFPX + FP_MASK) >> FP_SHIFT);
