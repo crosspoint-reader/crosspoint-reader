@@ -194,6 +194,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::CLIPPING &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    startClipSelection();
+    return;
+  }
+
   const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
@@ -417,80 +423,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SAVE_CLIPPING: {
-      if (section && epub) {
-        int mTop, mRight, mBottom, mLeft;
-        renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
-        mTop += SETTINGS.screenMargin;
-        mLeft += SETTINGS.screenMargin;
-
-        const int readerFontId = SETTINGS.getReaderFontId();
-        const int lineH = renderer.getLineHeight(readerFontId);
-        const int startPage = section->currentPage;
-        const int pagesToLoad = std::min(3, section->pageCount - startPage);
-
-        std::vector<ClipSelectionActivity::WordRef> words;
-        words.reserve(pagesToLoad * 60);
-
-        for (int pi = 0; pi < pagesToLoad; ++pi) {
-          section->currentPage = startPage + pi;
-          auto page = section->loadPageFromSectionFile();
-          if (!page) break;
-
-          for (const auto& el : page->elements) {
-            if (el->getTag() != TAG_PageLine) continue;
-            const auto& line = static_cast<const PageLine&>(*el);
-            if (!line.getBlock()) continue;
-            const auto& block = *line.getBlock();
-            const auto& xpos = block.getWordXpos();
-            const auto& wlist = block.getWords();
-
-            for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
-              const int wx = mLeft + line.xPos + xpos[i];
-              const int wy = mTop + line.yPos;
-              const int ww = renderer.getTextWidth(readerFontId, wlist[i].c_str());
-              if (ww > 0) words.push_back({wx, wy, ww, lineH, pi, wlist[i]});
-            }
-          }
-        }
-        section->currentPage = startPage;
-
-        if (!words.empty()) {
-          std::string chapterTitle;
-          const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
-          if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
-
-          auto wordsCopy = words;
-          startActivityForResult(
-              std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
-                                                      epub->getAuthor(), chapterTitle, startPage + 1, readerFontId,
-                                                      *section, startPage, mTop, mLeft),
-              [this, chapterTitle, startPage, wordsCopy = std::move(wordsCopy)](const ActivityResult& result) mutable {
-                if (!result.isCancelled) {
-                  const auto& clip = std::get<ClippingResult>(result.data);
-                  if (!clip.text.empty()) {
-                    ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle, startPage + 1,
-                                                   clip.text);
-                    if (clip.fromWordIdx >= 0 && clip.toWordIdx >= 0) {
-                      AnnotationsManager::AnnotationRecord rec;
-                      rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
-                      const int to = std::min(clip.toWordIdx, static_cast<int>(wordsCopy.size()) - 1);
-                      for (int i = clip.fromWordIdx; i <= to; ++i) {
-                        const auto absPage = static_cast<uint16_t>(startPage + wordsCopy[i].pageIdx);
-                        rec.rects.push_back({static_cast<int16_t>(wordsCopy[i].x), static_cast<int16_t>(wordsCopy[i].y),
-                                             static_cast<int16_t>(wordsCopy[i].w), static_cast<int16_t>(wordsCopy[i].h),
-                                             absPage});
-                      }
-                      annotations.add(std::move(rec));
-                      annotations.save(epub->getCachePath().c_str());
-                    }
-                  }
-                }
-                requestUpdate();
-              });
-        } else {
-          requestUpdate();
-        }
-      }
+      startClipSelection();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
@@ -525,6 +458,83 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       break;
     }
+  }
+}
+
+void EpubReaderActivity::startClipSelection() {
+  if (!section || !epub) {
+    requestUpdate();
+    return;
+  }
+
+  int mTop, mRight, mBottom, mLeft;
+  renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
+  mTop += SETTINGS.screenMargin;
+  mLeft += SETTINGS.screenMargin;
+
+  const int readerFontId = SETTINGS.getReaderFontId();
+  const int lineH = renderer.getLineHeight(readerFontId);
+  const int startPage = section->currentPage;
+  const int pagesToLoad = std::min(3, section->pageCount - startPage);
+
+  std::vector<ClipSelectionActivity::WordRef> words;
+  words.reserve(pagesToLoad * 60);
+
+  for (int pi = 0; pi < pagesToLoad; ++pi) {
+    section->currentPage = startPage + pi;
+    auto page = section->loadPageFromSectionFile();
+    if (!page) break;
+
+    for (const auto& el : page->elements) {
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*el);
+      if (!line.getBlock()) continue;
+      const auto& block = *line.getBlock();
+      const auto& xpos = block.getWordXpos();
+      const auto& wlist = block.getWords();
+      const auto& styles = block.getWordStyles();
+
+      for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
+        const int wx = mLeft + line.xPos + xpos[i];
+        const int wy = mTop + line.yPos;
+        const auto s = i < static_cast<int>(styles.size()) ? styles[i] : EpdFontFamily::REGULAR;
+        const int ww = renderer.getTextWidth(readerFontId, wlist[i].c_str(), s);
+        if (ww > 0) words.push_back({wx, wy, ww, lineH, pi, wlist[i], s});
+      }
+    }
+  }
+  section->currentPage = startPage;
+
+  if (!words.empty()) {
+    std::string chapterTitle;
+    const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
+
+    startActivityForResult(std::make_unique<ClipSelectionActivity>(
+                               renderer, mappedInput, std::move(words), epub->getTitle(), epub->getAuthor(),
+                               chapterTitle, startPage + 1, readerFontId, *section, startPage, mTop, mLeft),
+                           [this, chapterTitle, startPage](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& clip = std::get<ClippingResult>(result.data);
+                               if (!clip.text.empty()) {
+                                 ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle,
+                                                                startPage + 1, clip.text);
+                                 if (!clip.rects.empty()) {
+                                   AnnotationsManager::AnnotationRecord rec;
+                                   rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
+                                   for (const auto& r : clip.rects) {
+                                     rec.rects.push_back({r.x, r.y, r.w, r.h, r.sectionPage});
+                                   }
+                                   annotations.add(std::move(rec));
+                                   annotationsDirty = true;
+                                   annotations.save(epub->getCachePath().c_str());
+                                 }
+                               }
+                             }
+                             requestUpdate();
+                           });
+  } else {
+    requestUpdate();
   }
 }
 
@@ -861,8 +871,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int screenW = renderer.getScreenWidth();
     const auto sectionAnnotations = annotations.forSection(static_cast<uint16_t>(currentSpineIndex));
     for (const auto& rec : sectionAnnotations) {
-      // Group rects by row (underlineY) and draw one continuous line per row
-      // to avoid gaps between words caused by per-word drawing
       struct RowSpan {
         int underlineY, xMin, xMax;
       };

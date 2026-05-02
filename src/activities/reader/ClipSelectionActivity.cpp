@@ -85,6 +85,14 @@ void ClipSelectionActivity::loop() {
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
+  } else {
+    buttonNavigator.onNextContinuous([this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
   }
 
   buttonNavigator.onPreviousRelease([this] {
@@ -104,6 +112,14 @@ void ClipSelectionActivity::loop() {
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
+  } else {
+    buttonNavigator.onPreviousContinuous([this] {
+      if (cursorIdx == 0) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -114,12 +130,64 @@ void ClipSelectionActivity::loop() {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
       std::string text;
+      std::vector<ClippingResult::AnnotationRect> rects;
+      rects.reserve(to - from + 1);
+      auto pushWordRect = [this](int i, std::vector<ClippingResult::AnnotationRect>& out) {
+        int rx = words[i].x;
+        int rw = words[i].w;
+        const auto& t = words[i].text;
+        if (t.size() >= 3 && static_cast<unsigned char>(t[0]) == 0xE2 && static_cast<unsigned char>(t[1]) == 0x80 &&
+            static_cast<unsigned char>(t[2]) == 0x83) {
+          const auto s = static_cast<EpdFontFamily::Style>(words[i].style & ~EpdFontFamily::UNDERLINE);
+          const int skip = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s);
+          rx += skip;
+          rw -= skip;
+        }
+        out.push_back({static_cast<int16_t>(rx), static_cast<int16_t>(words[i].y), static_cast<int16_t>(rw),
+                       static_cast<int16_t>(words[i].h), static_cast<uint16_t>(startPageInSection + words[i].pageIdx)});
+      };
+      auto stripEmSpace = [](const std::string& w) -> const std::string& {
+        static thread_local std::string buf;
+        if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+            static_cast<unsigned char>(w[2]) == 0x83) {
+          buf = w.substr(3);
+          return buf;
+        }
+        return w;
+      };
+      auto hasEmSpace = [](const std::string& w) -> bool {
+        return w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+               static_cast<unsigned char>(w[2]) == 0x83;
+      };
       for (int i = from; i <= to; ++i) {
-        if (!text.empty()) text += ' ';
-        text += words[i].text;
+        const auto& wtext = stripEmSpace(words[i].text);
+        const bool emSpaceStart = hasEmSpace(words[i].text) && i > from;
+        const bool yGapBreak =
+            i > from && words[i].pageIdx == words[i - 1].pageIdx && words[i].y > words[i - 1].y + words[i - 1].h;
+        const bool paragraphStart = emSpaceStart || yGapBreak;
+        if (i > from && !text.empty() && !paragraphStart) {
+          const auto& prev = words[i - 1].text;
+          const auto& prevStripped = stripEmSpace(prev);
+          if (prevStripped.size() >= 1 && prevStripped.back() == '-' && !wtext.empty() &&
+              static_cast<unsigned char>(wtext[0]) >= 'a' && static_cast<unsigned char>(wtext[0]) <= 'z' &&
+              prevStripped.find('-') == prevStripped.size() - 1) {
+            text.pop_back();
+            text += wtext;
+            pushWordRect(i, rects);
+            continue;
+          }
+        }
+        if (paragraphStart) {
+          text += '\n';
+        } else if (!text.empty()) {
+          text += ' ';
+        }
+        text += wtext;
+        pushWordRect(i, rects);
       }
+
       ActivityResult result;
-      result.data = ClippingResult{std::move(text), from, to};
+      result.data = ClippingResult{std::move(text), from, to, std::move(rects)};
       setResult(std::move(result));
       finish();
     }
@@ -177,28 +245,74 @@ void ClipSelectionActivity::switchToPage(int pageIdx) {
 }
 
 void ClipSelectionActivity::drawHighlights() {
-  // Draw selection range (words on the currently displayed page only)
+  auto hasEmSpace = [](const std::string& t) {
+    return t.size() >= 3 && static_cast<unsigned char>(t[0]) == 0xE2 && static_cast<unsigned char>(t[1]) == 0x80 &&
+           static_cast<unsigned char>(t[2]) == 0x83;
+  };
+
+  auto emSpaceSkip = [this, &hasEmSpace](const std::string& t, EpdFontFamily::Style s) -> int {
+    if (hasEmSpace(t)) return renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s);
+    return 0;
+  };
+
+  auto drawContinuousHighlight = [this, &emSpaceSkip, &hasEmSpace](int first, int last) {
+    const auto& fw = words[first];
+    const auto& lw = words[last];
+    const auto fs = static_cast<EpdFontFamily::Style>(fw.style & ~EpdFontFamily::UNDERLINE);
+    const int skip = emSpaceSkip(fw.text, fs);
+    const int startX = fw.x + skip;
+    const int spanW = (lw.x + lw.w) - startX;
+    renderer.fillRectDither(startX, fw.y, spanW, fw.h, Color::LightGray);
+    for (int i = first; i <= last; ++i) {
+      if (words[i].text.find_first_not_of(" \t") != std::string::npos) {
+        const auto s = static_cast<EpdFontFamily::Style>(words[i].style & ~EpdFontFamily::UNDERLINE);
+        if (i == first && hasEmSpace(words[i].text)) {
+          renderer.drawText(fontId, startX, words[i].y, words[i].text.c_str() + 3, true, s);
+        } else {
+          renderer.drawText(fontId, words[i].x, words[i].y, words[i].text.c_str(), true, s);
+        }
+      }
+    }
+  };
+
   if (startMarkIdx != -1) {
     const int from = std::min(startMarkIdx, cursorIdx);
     const int to = std::max(startMarkIdx, cursorIdx);
+    int runStart = -1;
     for (int i = from; i <= to; ++i) {
-      if (i == cursorIdx) continue;
-      if (words[i].pageIdx != currentDisplayPage) continue;
-      const auto r = alignedRect(words[i].x, words[i].y, words[i].w, words[i].h);
-      renderer.fillRectDither(r.x, r.y, r.w, r.h, Color::LightGray);
-      if (words[i].text.find_first_not_of(" \t") != std::string::npos) {
-        renderer.drawText(fontId, words[i].x, words[i].y, words[i].text.c_str(), true);
+      bool skipWord = (words[i].pageIdx != currentDisplayPage);
+      if (skipWord) {
+        if (runStart >= 0) {
+          drawContinuousHighlight(runStart, i - 1);
+          runStart = -1;
+        }
+      } else if (runStart < 0 || words[i].y != words[runStart].y) {
+        if (runStart >= 0) {
+          drawContinuousHighlight(runStart, i - 1);
+        }
+        runStart = i;
       }
+    }
+    if (runStart >= 0) {
+      drawContinuousHighlight(runStart, to);
     }
   }
 
-  // Draw cursor highlight (always on top)
   const auto& cw = words[cursorIdx];
   if (cw.pageIdx == currentDisplayPage) {
-    const auto r = alignedRect(cw.x, cw.y, cw.w, cw.h);
-    renderer.fillRectDither(r.x, r.y, r.w, r.h, Color::LightGray);
-    if (cw.text.find_first_not_of(" \t") != std::string::npos) {
-      renderer.drawText(fontId, cw.x, cw.y, cw.text.c_str(), true);
+    const auto cs = static_cast<EpdFontFamily::Style>(cw.style & ~EpdFontFamily::UNDERLINE);
+    const int skip = emSpaceSkip(cw.text, cs);
+    const int cx = cw.x + skip;
+    const int cWidth = cw.w - skip;
+    if (cWidth > 0) {
+      renderer.fillRectDither(cx, cw.y, cWidth, cw.h, Color::LightGray);
+      if (cw.text.find_first_not_of(" \t") != std::string::npos) {
+        if (hasEmSpace(cw.text)) {
+          renderer.drawText(fontId, cx, cw.y, cw.text.c_str() + 3, true, cs);
+        } else {
+          renderer.drawText(fontId, cw.x, cw.y, cw.text.c_str(), true, cs);
+        }
+      }
     }
   }
 }
@@ -213,37 +327,26 @@ int ClipSelectionActivity::lineEndForward(int idx) const {
   const int total = static_cast<int>(words.size());
   const int lineY = words[idx].y;
   const int page = words[idx].pageIdx;
-
-  // Find last word on the same line
-  int last = idx;
   for (int i = idx + 1; i < total; ++i) {
-    if (words[i].pageIdx != page || words[i].y != lineY) break;
-    last = i;
+    if (words[i].pageIdx != page || words[i].y != lineY) return i;
   }
-
-  // Already at line end — jump to first word of next line
-  if (last == idx && idx + 1 < total) {
-    return idx + 1;
-  }
-
-  return last;
+  return idx;
 }
 
 int ClipSelectionActivity::lineEndBackward(int idx) const {
   const int lineY = words[idx].y;
   const int page = words[idx].pageIdx;
-
-  // Find first word on the same line
-  int first = idx;
-  for (int i = idx - 1; i >= 0; --i) {
+  int i;
+  for (i = idx - 1; i >= 0; --i) {
     if (words[i].pageIdx != page || words[i].y != lineY) break;
+  }
+  if (i < 0) return idx;
+  const int prevY = words[i].y;
+  const int prevPage = words[i].pageIdx;
+  int first = i;
+  for (; i >= 0; --i) {
+    if (words[i].pageIdx != prevPage || words[i].y != prevY) break;
     first = i;
   }
-
-  // Already at line start — jump to last word of previous line
-  if (first == idx && idx - 1 >= 0) {
-    return idx - 1;
-  }
-
   return first;
 }

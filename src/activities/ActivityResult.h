@@ -58,6 +58,11 @@ struct ClippingResult {
   std::string text;
   int fromWordIdx = -1;
   int toWordIdx = -1;
+  struct AnnotationRect {
+    int16_t x, y, w, h;
+    uint16_t sectionPage;
+  };
+  std::vector<AnnotationRect> rects;
 };
 
 using ResultVariant =

@@ -10,7 +10,6 @@ class ClippingsMenuActivity final : public Activity {
   static constexpr int ITEM_COUNT = 3;
 
   void toggleSetting(int idx);
-  const char* settingValue(int idx) const;
 
  public:
   explicit ClippingsMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

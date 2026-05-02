@@ -1,5 +1,6 @@
 #pragma once
 
+#include <EpdFontFamily.h>
 #include <Epub/Page.h>
 #include <Epub/Section.h>
 
@@ -13,8 +14,9 @@ class ClipSelectionActivity final : public Activity {
  public:
   struct WordRef {
     int x, y, w, h;
-    int pageIdx;  // 0 = current, 1 = next, 2 = page after next
+    int pageIdx;
     std::string text;
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
   };
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::vector<WordRef> words,

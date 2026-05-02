@@ -25,7 +25,7 @@ bool AnnotationsManager::load(const char* bookCachePath) {
   uint16_t count = 0;
   if (file.read(&version, 1) != 1 || version != FILE_VERSION) {
     file.close();
-    return true;  // Unknown version — treat as empty
+    return true;
   }
   if (file.read(&count, sizeof(count)) != sizeof(count)) {
     file.close();

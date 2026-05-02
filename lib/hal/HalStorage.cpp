@@ -28,16 +28,12 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 class HalStorage::StorageLock {
  public:
   StorageLock() {
-#if LOG_LEVEL >= 2
     LOG_DBG("LOCK", "SL take from %s", pcTaskGetName(nullptr));
-#endif
     xSemaphoreTake(HalStorage::getInstance().storageMutex, portMAX_DELAY);
   }
   ~StorageLock() {
-#if LOG_LEVEL >= 2
-    LOG_DBG("LOCK", "SL give from %s", pcTaskGetName(nullptr));
-#endif
     xSemaphoreGive(HalStorage::getInstance().storageMutex);
+    LOG_DBG("LOCK", "SL give from %s", pcTaskGetName(nullptr));
   }
 };
 

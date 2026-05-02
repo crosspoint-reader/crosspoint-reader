@@ -36,10 +36,7 @@ bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::str
   const std::string path = resolveClippingPath(bookTitle);
 
   if (SETTINGS.clippingStorage == CrossPointSettings::PER_BOOK) {
-    if (!Storage.mkdir(CLIPPINGS_DIR)) {
-      LOG_ERR("CLIP", "Failed to create %s directory", CLIPPINGS_DIR);
-      return false;
-    }
+    Storage.mkdir(CLIPPINGS_DIR);
   }
 
   HalFile file = Storage.open(path.c_str(), O_RDWR | O_CREAT | O_AT_END);
