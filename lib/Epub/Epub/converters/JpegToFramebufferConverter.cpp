@@ -37,8 +37,8 @@ struct JpegContext {
   // may differ from the source (srcWidth/srcHeight) due to integer rounding of displayHeight.
   // Using a single (X-based) scale for both axes causes the wrong srcRow to be skipped
   // during nearest-neighbor downscaling, potentially losing critical image content.
-  int32_t fineScaleFPX{1 << 16};   // X: src -> dst column mapping
-  int32_t invScaleFPX{1 << 16};    // X: dst -> src column mapping
+  int32_t fineScaleFPX{1 << 16};  // X: src -> dst column mapping
+  int32_t invScaleFPX{1 << 16};   // X: dst -> src column mapping
   int32_t fineScaleFPY{1 << 16};  // Y: src -> dst row mapping
   int32_t invScaleFPY{1 << 16};   // Y: dst -> src row mapping
 
