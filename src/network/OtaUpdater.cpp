@@ -15,8 +15,12 @@ esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
   return esp_http_client_set_header(http_client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 }
 
+size_t totalBytesReceived = 0;
+
 esp_err_t event_handler(esp_http_client_event_t* event) {
   if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
+  totalBytesReceived += event->data_len;
+  LOG_DBG("OTA", "HTTP chunk: %d bytes (total: %zu)", event->data_len, totalBytesReceived);
   auto* parser = static_cast<ReleaseJsonParser*>(event->user_data);
   parser->feed(static_cast<const char*>(event->data), event->data_len);
   return ESP_OK;
@@ -37,6 +41,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
   };
+
+  totalBytesReceived = 0;
+  LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
   esp_http_client_handle_t client_handle = esp_http_client_init(&client_config);
   if (!client_handle) {
@@ -64,6 +71,10 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return INTERNAL_UPDATE_ERROR;
   }
 
+  LOG_DBG("OTA", "Response received: %zu bytes total", totalBytesReceived);
+  LOG_DBG("OTA", "Parser results: tag=%s firmware=%s", releaseParser.foundTag() ? "yes" : "no",
+          releaseParser.foundFirmware() ? "yes" : "no");
+
   if (!releaseParser.foundTag()) {
     LOG_ERR("OTA", "No tag_name in release JSON");
     return JSON_PARSE_ERROR;
@@ -80,7 +91,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   totalSize = otaSize;
   updateAvailable = true;
 
-  LOG_DBG("OTA", "Found update: %s", latestVersion.c_str());
+  LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
+  LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
   return OK;
 }
 
