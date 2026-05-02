@@ -25,7 +25,7 @@ esp_err_t event_handler(esp_http_client_event_t* event) {
   parser->feed(static_cast<const char*>(event->data), event->data_len);
   return ESP_OK;
 }
-} // namespace
+}  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   esp_err_t esp_err;

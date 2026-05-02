@@ -8,36 +8,36 @@
 static int testsPassed = 0;
 static int testsFailed = 0;
 
-#define ASSERT_EQ(a, b)                                                                                \
-    do {                                                                                               \
-        auto _a = (a);                                                                                 \
-        auto _b = (b);                                                                                 \
-        if (_a != _b) {                                                                                \
-            fprintf(stderr, "  FAIL: %s:%d: %s != expected\n", __FILE__, __LINE__, #a);                \
-            testsFailed++;                                                                             \
-            return;                                                                                    \
-        }                                                                                              \
-    } while (0)
+#define ASSERT_EQ(a, b)                                                           \
+  do {                                                                            \
+    auto _a = (a);                                                                \
+    auto _b = (b);                                                                \
+    if (_a != _b) {                                                               \
+      fprintf(stderr, "  FAIL: %s:%d: %s != expected\n", __FILE__, __LINE__, #a); \
+      testsFailed++;                                                              \
+      return;                                                                     \
+    }                                                                             \
+  } while (0)
 
-#define ASSERT_STREQ(a, b)                                                                             \
-    do {                                                                                               \
-        const char* _a = (a);                                                                          \
-        const char* _b = (b);                                                                          \
-        if (strcmp(_a, _b) != 0) {                                                                     \
-            fprintf(stderr, "  FAIL: %s:%d: \"%s\" != \"%s\"\n", __FILE__, __LINE__, _a, _b);          \
-            testsFailed++;                                                                             \
-            return;                                                                                    \
-        }                                                                                              \
-    } while (0)
+#define ASSERT_STREQ(a, b)                                                              \
+  do {                                                                                  \
+    const char* _a = (a);                                                               \
+    const char* _b = (b);                                                               \
+    if (strcmp(_a, _b) != 0) {                                                          \
+      fprintf(stderr, "  FAIL: %s:%d: \"%s\" != \"%s\"\n", __FILE__, __LINE__, _a, _b); \
+      testsFailed++;                                                                    \
+      return;                                                                           \
+    }                                                                                   \
+  } while (0)
 
-#define ASSERT_TRUE(cond)                                                                              \
-    do {                                                                                               \
-        if (!(cond)) {                                                                                 \
-            fprintf(stderr, "  FAIL: %s:%d: %s\n", __FILE__, __LINE__, #cond);                         \
-            testsFailed++;                                                                             \
-            return;                                                                                    \
-        }                                                                                              \
-    } while (0)
+#define ASSERT_TRUE(cond)                                                \
+  do {                                                                   \
+    if (!(cond)) {                                                       \
+      fprintf(stderr, "  FAIL: %s:%d: %s\n", __FILE__, __LINE__, #cond); \
+      testsFailed++;                                                     \
+      return;                                                            \
+    }                                                                    \
+  } while (0)
 
 #define PASS() testsPassed++
 
@@ -152,11 +152,11 @@ static const char* kRealisticMinified =
 
 // Helper: feed JSON in fixed-size chunks
 static void feedChunked(ReleaseJsonParser& p, const char* json, size_t chunkSize) {
-    size_t len = strlen(json);
-    for (size_t off = 0; off < len; off += chunkSize) {
-        size_t n = len - off < chunkSize ? len - off : chunkSize;
-        p.feed(json + off, n);
-    }
+  size_t len = strlen(json);
+  for (size_t off = 0; off < len; off += chunkSize) {
+    size_t n = len - off < chunkSize ? len - off : chunkSize;
+    p.feed(json + off, n);
+  }
 }
 
 // ============================================================================
@@ -164,61 +164,61 @@ static void feedChunked(ReleaseJsonParser& p, const char* json, size_t chunkSize
 // ============================================================================
 
 void testRealisticPrettyPrinted() {
-    printf("testRealisticPrettyPrinted...\n");
+  printf("testRealisticPrettyPrinted...\n");
 
-    ReleaseJsonParser p;
-    p.feed(kRealisticPretty, strlen(kRealisticPretty));
+  ReleaseJsonParser p;
+  p.feed(kRealisticPretty, strlen(kRealisticPretty));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v2.4.1");
-    ASSERT_STREQ(p.getFirmwareUrl(),
-                 "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 1572864u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v2.4.1");
+  ASSERT_STREQ(p.getFirmwareUrl(),
+               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 1572864u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testRealisticMinified() {
-    printf("testRealisticMinified...\n");
+  printf("testRealisticMinified...\n");
 
-    ReleaseJsonParser p;
-    p.feed(kRealisticMinified, strlen(kRealisticMinified));
+  ReleaseJsonParser p;
+  p.feed(kRealisticMinified, strlen(kRealisticMinified));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v2.4.1");
-    ASSERT_STREQ(p.getFirmwareUrl(),
-                 "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 1572864u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v2.4.1");
+  ASSERT_STREQ(p.getFirmwareUrl(),
+               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 1572864u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testPrettyAndMinifiedAgree() {
-    printf("testPrettyAndMinifiedAgree...\n");
+  printf("testPrettyAndMinifiedAgree...\n");
 
-    ReleaseJsonParser pretty;
-    pretty.feed(kRealisticPretty, strlen(kRealisticPretty));
+  ReleaseJsonParser pretty;
+  pretty.feed(kRealisticPretty, strlen(kRealisticPretty));
 
-    ReleaseJsonParser minified;
-    minified.feed(kRealisticMinified, strlen(kRealisticMinified));
+  ReleaseJsonParser minified;
+  minified.feed(kRealisticMinified, strlen(kRealisticMinified));
 
-    ASSERT_STREQ(pretty.getTagName(), minified.getTagName());
-    ASSERT_STREQ(pretty.getFirmwareUrl(), minified.getFirmwareUrl());
-    ASSERT_EQ(pretty.getFirmwareSize(), minified.getFirmwareSize());
+  ASSERT_STREQ(pretty.getTagName(), minified.getTagName());
+  ASSERT_STREQ(pretty.getFirmwareUrl(), minified.getFirmwareUrl());
+  ASSERT_EQ(pretty.getFirmwareSize(), minified.getFirmwareSize());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testFirmwareNotFirstAsset() {
-    printf("testFirmwareNotFirstAsset...\n");
+  printf("testFirmwareNotFirstAsset...\n");
 
-    // firmware.bin is the third of four assets
-    const char* json = R"({
+  // firmware.bin is the third of four assets
+  const char* json = R"({
       "tag_name": "v1.0.0",
       "assets": [
         {"name": "source.tar.gz", "browser_download_url": "https://example.com/src.tar.gz", "size": 500000},
@@ -228,23 +228,23 @@ void testFirmwareNotFirstAsset() {
       ]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v1.0.0");
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/firmware.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 987654u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v1.0.0");
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/firmware.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 987654u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testFieldOrderUrlBeforeName() {
-    printf("testFieldOrderUrlBeforeName...\n");
+  printf("testFieldOrderUrlBeforeName...\n");
 
-    const char* json = R"({
+  const char* json = R"({
       "tag_name": "v3.0",
       "assets": [{
         "browser_download_url": "https://example.com/fw.bin",
@@ -253,21 +253,21 @@ void testFieldOrderUrlBeforeName() {
       }]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 2222u);
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 2222u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testFieldOrderSizeBeforeUrl() {
-    printf("testFieldOrderSizeBeforeUrl...\n");
+  printf("testFieldOrderSizeBeforeUrl...\n");
 
-    const char* json = R"({
+  const char* json = R"({
       "tag_name": "v3.1",
       "assets": [{
         "size": 3333,
@@ -276,21 +276,21 @@ void testFieldOrderSizeBeforeUrl() {
       }]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw2.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 3333u);
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw2.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 3333u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testFieldOrderNameFirst() {
-    printf("testFieldOrderNameFirst...\n");
+  printf("testFieldOrderNameFirst...\n");
 
-    const char* json = R"({
+  const char* json = R"({
       "tag_name": "v3.2",
       "assets": [{
         "name": "firmware.bin",
@@ -299,22 +299,22 @@ void testFieldOrderNameFirst() {
       }]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw3.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 4444u);
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw3.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 4444u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testAssetsBeforeTagName() {
-    printf("testAssetsBeforeTagName...\n");
+  printf("testAssetsBeforeTagName...\n");
 
-    // tag_name appears after assets in the JSON
-    const char* json = R"({
+  // tag_name appears after assets in the JSON
+  const char* json = R"({
       "name": "Release",
       "assets": [{
         "name": "firmware.bin",
@@ -324,73 +324,73 @@ void testAssetsBeforeTagName() {
       "tag_name": "v4.0"
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v4.0");
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 5555u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v4.0");
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 5555u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testChunkedFeedingRealisticSmallChunks() {
-    printf("testChunkedFeedingRealisticSmallChunks...\n");
+  printf("testChunkedFeedingRealisticSmallChunks...\n");
 
-    // Simulate HTTP chunked transfer with small chunks (64 bytes)
-    ReleaseJsonParser p;
-    feedChunked(p, kRealisticPretty, 64);
+  // Simulate HTTP chunked transfer with small chunks (64 bytes)
+  ReleaseJsonParser p;
+  feedChunked(p, kRealisticPretty, 64);
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v2.4.1");
-    ASSERT_STREQ(p.getFirmwareUrl(),
-                 "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 1572864u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v2.4.1");
+  ASSERT_STREQ(p.getFirmwareUrl(),
+               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 1572864u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testChunkedFeedingByteByByte() {
-    printf("testChunkedFeedingByteByByte...\n");
+  printf("testChunkedFeedingByteByByte...\n");
 
+  ReleaseJsonParser p;
+  feedChunked(p, kRealisticMinified, 1);
+
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v2.4.1");
+  ASSERT_EQ(p.getFirmwareSize(), 1572864u);
+
+  printf("  passed\n");
+  PASS();
+}
+
+void testChunkedFeedingVariousChunkSizes() {
+  printf("testChunkedFeedingVariousChunkSizes...\n");
+
+  for (size_t chunkSize : {3, 7, 13, 31, 97, 128, 256, 512, 1024}) {
     ReleaseJsonParser p;
-    feedChunked(p, kRealisticMinified, 1);
+    feedChunked(p, kRealisticPretty, chunkSize);
 
     ASSERT_TRUE(p.foundTag());
     ASSERT_TRUE(p.foundFirmware());
     ASSERT_STREQ(p.getTagName(), "v2.4.1");
     ASSERT_EQ(p.getFirmwareSize(), 1572864u);
+  }
 
-    printf("  passed\n");
-    PASS();
-}
-
-void testChunkedFeedingVariousChunkSizes() {
-    printf("testChunkedFeedingVariousChunkSizes...\n");
-
-    for (size_t chunkSize : {3, 7, 13, 31, 97, 128, 256, 512, 1024}) {
-        ReleaseJsonParser p;
-        feedChunked(p, kRealisticPretty, chunkSize);
-
-        ASSERT_TRUE(p.foundTag());
-        ASSERT_TRUE(p.foundFirmware());
-        ASSERT_STREQ(p.getTagName(), "v2.4.1");
-        ASSERT_EQ(p.getFirmwareSize(), 1572864u);
-    }
-
-    printf("  passed (9 chunk sizes)\n");
-    PASS();
+  printf("  passed (9 chunk sizes)\n");
+  PASS();
 }
 
 void testMissingTagName() {
-    printf("testMissingTagName...\n");
+  printf("testMissingTagName...\n");
 
-    const char* json = R"({
+  const char* json = R"({
       "name": "Some Release",
       "draft": false,
       "assets": [{
@@ -400,21 +400,21 @@ void testMissingTagName() {
       }]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(!p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "");
+  ASSERT_TRUE(!p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "");
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testMissingFirmwareBinAsset() {
-    printf("testMissingFirmwareBinAsset...\n");
+  printf("testMissingFirmwareBinAsset...\n");
 
-    const char* json = R"({
+  const char* json = R"({
       "tag_name": "v1.0.0",
       "assets": [
         {"name": "source.zip", "browser_download_url": "https://example.com/src.zip", "size": 1000},
@@ -422,134 +422,134 @@ void testMissingFirmwareBinAsset() {
       ]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v1.0.0");
-    ASSERT_STREQ(p.getFirmwareUrl(), "");
-    ASSERT_EQ(p.getFirmwareSize(), 0u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v1.0.0");
+  ASSERT_STREQ(p.getFirmwareUrl(), "");
+  ASSERT_EQ(p.getFirmwareSize(), 0u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testEmptyAssetsArray() {
-    printf("testEmptyAssetsArray...\n");
+  printf("testEmptyAssetsArray...\n");
 
-    const char* json = R"({"tag_name": "v1.0.0", "assets": []})";
+  const char* json = R"({"tag_name": "v1.0.0", "assets": []})";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testNoAssetsKey() {
-    printf("testNoAssetsKey...\n");
+  printf("testNoAssetsKey...\n");
 
-    const char* json = R"({"tag_name": "v1.0.0", "name": "Release"})";
+  const char* json = R"({"tag_name": "v1.0.0", "name": "Release"})";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testTruncatedBeforeTagValue() {
-    printf("testTruncatedBeforeTagValue...\n");
+  printf("testTruncatedBeforeTagValue...\n");
 
-    const char* json = R"({"tag_name": )";
+  const char* json = R"({"tag_name": )";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(!p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_TRUE(!p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testTruncatedInsideTagValue() {
-    printf("testTruncatedInsideTagValue...\n");
+  printf("testTruncatedInsideTagValue...\n");
 
-    const char* json = R"({"tag_name": "v2.4)";
+  const char* json = R"({"tag_name": "v2.4)";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(!p.foundTag());
+  ASSERT_TRUE(!p.foundTag());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testTruncatedInsideAssetsArray() {
-    printf("testTruncatedInsideAssetsArray...\n");
+  printf("testTruncatedInsideAssetsArray...\n");
 
-    const char* json = R"({"tag_name": "v2.4.1", "assets": [{"name": "firm)";
+  const char* json = R"({"tag_name": "v2.4.1", "assets": [{"name": "firm)";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_STREQ(p.getTagName(), "v2.4.1");
-    ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_STREQ(p.getTagName(), "v2.4.1");
+  ASSERT_TRUE(!p.foundFirmware());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testTruncatedAfterFirmwareName() {
-    printf("testTruncatedAfterFirmwareName...\n");
+  printf("testTruncatedAfterFirmwareName...\n");
 
-    // Found the name but connection dropped before URL/size
-    const char* json = R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_dow)";
+  // Found the name but connection dropped before URL/size
+  const char* json = R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_dow)";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testTruncatedRealisticJson() {
-    printf("testTruncatedRealisticJson...\n");
+  printf("testTruncatedRealisticJson...\n");
 
-    // Truncate the realistic JSON at various points; none should crash
-    std::string full(kRealisticPretty);
-    for (size_t cutPoint : {10u, 50u, 100u, 200u, 500u, 1000u, 1500u, 2000u}) {
-        if (cutPoint >= full.size()) continue;
+  // Truncate the realistic JSON at various points; none should crash
+  std::string full(kRealisticPretty);
+  for (size_t cutPoint : {10u, 50u, 100u, 200u, 500u, 1000u, 1500u, 2000u}) {
+    if (cutPoint >= full.size()) continue;
 
-        ReleaseJsonParser p;
-        p.feed(full.c_str(), cutPoint);
-        // Just verify no crash; results depend on where we cut
-        (void)p.foundTag();
-        (void)p.foundFirmware();
-    }
+    ReleaseJsonParser p;
+    p.feed(full.c_str(), cutPoint);
+    // Just verify no crash; results depend on where we cut
+    (void)p.foundTag();
+    (void)p.foundFirmware();
+  }
 
-    printf("  passed (no crashes on truncated realistic JSON)\n");
-    PASS();
+  printf("  passed (no crashes on truncated realistic JSON)\n");
+  PASS();
 }
 
 void testNestedObjectsInAsset() {
-    printf("testNestedObjectsInAsset...\n");
+  printf("testNestedObjectsInAsset...\n");
 
-    // Asset with deeply nested "uploader" object -- should not confuse depth tracking
-    const char* json = R"({
+  // Asset with deeply nested "uploader" object -- should not confuse depth tracking
+  const char* json = R"({
       "tag_name": "v5.0",
       "assets": [{
         "name": "firmware.bin",
@@ -563,22 +563,22 @@ void testNestedObjectsInAsset() {
       }]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw5.bin");
-    ASSERT_EQ(p.getFirmwareSize(), 8888u);
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw5.bin");
+  ASSERT_EQ(p.getFirmwareSize(), 8888u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testNestedObjectsAtTopLevel() {
-    printf("testNestedObjectsAtTopLevel...\n");
+  printf("testNestedObjectsAtTopLevel...\n");
 
-    // Multiple nested objects at the top level before/after tag_name and assets
-    const char* json = R"({
+  // Multiple nested objects at the top level before/after tag_name and assets
+  const char* json = R"({
       "author": {"login": "dev", "id": 1, "nested": {"deep": true}},
       "tag_name": "v6.0",
       "reactions": {"url": "https://reactions", "total_count": 0, "+1": 0},
@@ -586,93 +586,96 @@ void testNestedObjectsAtTopLevel() {
       "mentions_count": 3
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v6.0");
-    ASSERT_EQ(p.getFirmwareSize(), 1111u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v6.0");
+  ASSERT_EQ(p.getFirmwareSize(), 1111u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testArraysAtTopLevel() {
-    printf("testArraysAtTopLevel...\n");
+  printf("testArraysAtTopLevel...\n");
 
-    // A non-assets array at the top level should not interfere
-    const char* json = R"({
+  // A non-assets array at the top level should not interfere
+  const char* json = R"({
       "tag_name": "v7.0",
       "labels": ["release", "stable"],
       "assets": [{"name": "firmware.bin", "browser_download_url": "https://fw7", "size": 7070}]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v7.0");
-    ASSERT_EQ(p.getFirmwareSize(), 7070u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v7.0");
+  ASSERT_EQ(p.getFirmwareSize(), 7070u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testResetAndReuse() {
-    printf("testResetAndReuse...\n");
+  printf("testResetAndReuse...\n");
 
-    ReleaseJsonParser p;
+  ReleaseJsonParser p;
 
-    const char* json1 = R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://a","size":1}]})";
-    p.feed(json1, strlen(json1));
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_STREQ(p.getTagName(), "v1.0");
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://a");
-    ASSERT_EQ(p.getFirmwareSize(), 1u);
+  const char* json1 =
+      R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://a","size":1}]})";
+  p.feed(json1, strlen(json1));
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_STREQ(p.getTagName(), "v1.0");
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://a");
+  ASSERT_EQ(p.getFirmwareSize(), 1u);
 
-    p.reset();
+  p.reset();
 
-    // Second document with different values
-    const char* json2 = R"({"tag_name":"v2.0","assets":[{"name":"firmware.bin","browser_download_url":"https://b","size":2}]})";
-    p.feed(json2, strlen(json2));
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_STREQ(p.getTagName(), "v2.0");
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://b");
-    ASSERT_EQ(p.getFirmwareSize(), 2u);
+  // Second document with different values
+  const char* json2 =
+      R"({"tag_name":"v2.0","assets":[{"name":"firmware.bin","browser_download_url":"https://b","size":2}]})";
+  p.feed(json2, strlen(json2));
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_STREQ(p.getTagName(), "v2.0");
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://b");
+  ASSERT_EQ(p.getFirmwareSize(), 2u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testResetClearsState() {
-    printf("testResetClearsState...\n");
+  printf("testResetClearsState...\n");
 
-    ReleaseJsonParser p;
+  ReleaseJsonParser p;
 
-    const char* json = R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://a","size":100}]})";
-    p.feed(json, strlen(json));
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
+  const char* json =
+      R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://a","size":100}]})";
+  p.feed(json, strlen(json));
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
 
-    p.reset();
+  p.reset();
 
-    ASSERT_TRUE(!p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "");
-    ASSERT_STREQ(p.getFirmwareUrl(), "");
-    ASSERT_EQ(p.getFirmwareSize(), 0u);
+  ASSERT_TRUE(!p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "");
+  ASSERT_STREQ(p.getFirmwareUrl(), "");
+  ASSERT_EQ(p.getFirmwareSize(), 0u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testPartialAssetNameMatch() {
-    printf("testPartialAssetNameMatch...\n");
+  printf("testPartialAssetNameMatch...\n");
 
-    // "firmware.bin.bak" should NOT match "firmware.bin"
-    const char* json = R"({
+  // "firmware.bin.bak" should NOT match "firmware.bin"
+  const char* json = R"({
       "tag_name": "v1.0",
       "assets": [
         {"name": "firmware.bin.bak", "browser_download_url": "https://bak", "size": 100},
@@ -680,21 +683,21 @@ void testPartialAssetNameMatch() {
       ]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(!p.foundFirmware());
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(!p.foundFirmware());
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testFirmwareBinExactMatch() {
-    printf("testFirmwareBinExactMatch...\n");
+  printf("testFirmwareBinExactMatch...\n");
 
-    // Only exact "firmware.bin" matches, not similar names
-    const char* json = R"({
+  // Only exact "firmware.bin" matches, not similar names
+  const char* json = R"({
       "tag_name": "v1.0",
       "assets": [
         {"name": "FIRMWARE.BIN", "browser_download_url": "https://upper", "size": 100},
@@ -703,126 +706,128 @@ void testFirmwareBinExactMatch() {
       ]
     })";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getFirmwareUrl(), "https://exact");
-    ASSERT_EQ(p.getFirmwareSize(), 200u);
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getFirmwareUrl(), "https://exact");
+  ASSERT_EQ(p.getFirmwareSize(), 200u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testLargeSize() {
-    printf("testLargeSize...\n");
+  printf("testLargeSize...\n");
 
-    // 16MB firmware (maximum flash size)
-    const char* json = R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://fw","size":16777216}]})";
+  // 16MB firmware (maximum flash size)
+  const char* json =
+      R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://fw","size":16777216}]})";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_EQ(p.getFirmwareSize(), 16777216u);
+  ASSERT_EQ(p.getFirmwareSize(), 16777216u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testSizeZero() {
-    printf("testSizeZero...\n");
+  printf("testSizeZero...\n");
 
-    const char* json = R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://fw","size":0}]})";
+  const char* json =
+      R"({"tag_name":"v1.0","assets":[{"name":"firmware.bin","browser_download_url":"https://fw","size":0}]})";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_EQ(p.getFirmwareSize(), 0u);
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_EQ(p.getFirmwareSize(), 0u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testMinimalValidJson() {
-    printf("testMinimalValidJson...\n");
+  printf("testMinimalValidJson...\n");
 
-    const char* json = R"({"tag_name":"v0","assets":[{"name":"firmware.bin","browser_download_url":"u","size":1}]})";
+  const char* json = R"({"tag_name":"v0","assets":[{"name":"firmware.bin","browser_download_url":"u","size":1}]})";
 
-    ReleaseJsonParser p;
-    p.feed(json, strlen(json));
+  ReleaseJsonParser p;
+  p.feed(json, strlen(json));
 
-    ASSERT_TRUE(p.foundTag());
-    ASSERT_TRUE(p.foundFirmware());
-    ASSERT_STREQ(p.getTagName(), "v0");
-    ASSERT_STREQ(p.getFirmwareUrl(), "u");
-    ASSERT_EQ(p.getFirmwareSize(), 1u);
+  ASSERT_TRUE(p.foundTag());
+  ASSERT_TRUE(p.foundFirmware());
+  ASSERT_STREQ(p.getTagName(), "v0");
+  ASSERT_STREQ(p.getFirmwareUrl(), "u");
+  ASSERT_EQ(p.getFirmwareSize(), 1u);
 
-    printf("  passed\n");
-    PASS();
+  printf("  passed\n");
+  PASS();
 }
 
 void testChunkedRealisticEveryBoundary() {
-    printf("testChunkedRealisticEveryBoundary...\n");
+  printf("testChunkedRealisticEveryBoundary...\n");
 
-    // Two-chunk split at every byte boundary on a compact JSON
-    const char* json =
-        R"({"tag_name":"v2.0","assets":[{"name":"firmware.bin","browser_download_url":"https://example.com/fw","size":9999}]})";
-    size_t len = strlen(json);
+  // Two-chunk split at every byte boundary on a compact JSON
+  const char* json =
+      R"({"tag_name":"v2.0","assets":[{"name":"firmware.bin","browser_download_url":"https://example.com/fw","size":9999}]})";
+  size_t len = strlen(json);
 
-    for (size_t split = 0; split <= len; ++split) {
-        ReleaseJsonParser p;
-        if (split > 0) p.feed(json, split);
-        if (split < len) p.feed(json + split, len - split);
+  for (size_t split = 0; split <= len; ++split) {
+    ReleaseJsonParser p;
+    if (split > 0) p.feed(json, split);
+    if (split < len) p.feed(json + split, len - split);
 
-        ASSERT_TRUE(p.foundTag());
-        ASSERT_TRUE(p.foundFirmware());
-        ASSERT_STREQ(p.getTagName(), "v2.0");
-        ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw");
-        ASSERT_EQ(p.getFirmwareSize(), 9999u);
-    }
+    ASSERT_TRUE(p.foundTag());
+    ASSERT_TRUE(p.foundFirmware());
+    ASSERT_STREQ(p.getTagName(), "v2.0");
+    ASSERT_STREQ(p.getFirmwareUrl(), "https://example.com/fw");
+    ASSERT_EQ(p.getFirmwareSize(), 9999u);
+  }
 
-    printf("  passed (all %zu split points)\n", len + 1);
-    PASS();
+  printf("  passed (all %zu split points)\n", len + 1);
+  PASS();
 }
 
 // ============================================================================
 
 int main() {
-    printf("=== ReleaseJsonParser Tests ===\n\n");
+  printf("=== ReleaseJsonParser Tests ===\n\n");
 
-    testRealisticPrettyPrinted();
-    testRealisticMinified();
-    testPrettyAndMinifiedAgree();
-    testFirmwareNotFirstAsset();
-    testFieldOrderUrlBeforeName();
-    testFieldOrderSizeBeforeUrl();
-    testFieldOrderNameFirst();
-    testAssetsBeforeTagName();
-    testChunkedFeedingRealisticSmallChunks();
-    testChunkedFeedingByteByByte();
-    testChunkedFeedingVariousChunkSizes();
-    testMissingTagName();
-    testMissingFirmwareBinAsset();
-    testEmptyAssetsArray();
-    testNoAssetsKey();
-    testTruncatedBeforeTagValue();
-    testTruncatedInsideTagValue();
-    testTruncatedInsideAssetsArray();
-    testTruncatedAfterFirmwareName();
-    testTruncatedRealisticJson();
-    testNestedObjectsInAsset();
-    testNestedObjectsAtTopLevel();
-    testArraysAtTopLevel();
-    testResetAndReuse();
-    testResetClearsState();
-    testPartialAssetNameMatch();
-    testFirmwareBinExactMatch();
-    testLargeSize();
-    testSizeZero();
-    testMinimalValidJson();
-    testChunkedRealisticEveryBoundary();
+  testRealisticPrettyPrinted();
+  testRealisticMinified();
+  testPrettyAndMinifiedAgree();
+  testFirmwareNotFirstAsset();
+  testFieldOrderUrlBeforeName();
+  testFieldOrderSizeBeforeUrl();
+  testFieldOrderNameFirst();
+  testAssetsBeforeTagName();
+  testChunkedFeedingRealisticSmallChunks();
+  testChunkedFeedingByteByByte();
+  testChunkedFeedingVariousChunkSizes();
+  testMissingTagName();
+  testMissingFirmwareBinAsset();
+  testEmptyAssetsArray();
+  testNoAssetsKey();
+  testTruncatedBeforeTagValue();
+  testTruncatedInsideTagValue();
+  testTruncatedInsideAssetsArray();
+  testTruncatedAfterFirmwareName();
+  testTruncatedRealisticJson();
+  testNestedObjectsInAsset();
+  testNestedObjectsAtTopLevel();
+  testArraysAtTopLevel();
+  testResetAndReuse();
+  testResetClearsState();
+  testPartialAssetNameMatch();
+  testFirmwareBinExactMatch();
+  testLargeSize();
+  testSizeZero();
+  testMinimalValidJson();
+  testChunkedRealisticEveryBoundary();
 
-    printf("\n=== Results: %d passed, %d failed ===\n", testsPassed, testsFailed);
-    return testsFailed > 0 ? 1 : 0;
+  printf("\n=== Results: %d passed, %d failed ===\n", testsPassed, testsFailed);
+  return testsFailed > 0 ? 1 : 0;
 }
