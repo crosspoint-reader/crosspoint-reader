@@ -3,10 +3,10 @@
 #include <Logging.h>
 #include <ReleaseJsonParser.h>
 
-#include "esp_crt_bundle.h"
-#include "esp_http_client.h"
-#include "esp_https_ota.h"
-#include "esp_wifi.h"
+#include <esp_crt_bundle.h>
+#include <esp_http_client.h>
+#include <esp_https_ota.h>
+#include <esp_wifi.h>
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
