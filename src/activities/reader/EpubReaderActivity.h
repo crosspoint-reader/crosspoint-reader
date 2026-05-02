@@ -68,4 +68,5 @@ class EpubReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&& lock) override;
   bool isReaderActivity() const override { return true; }
+  ScreenshotInfo getScreenshotInfo() const override;
 };

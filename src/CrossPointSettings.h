@@ -137,6 +137,7 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
   // Clipping storage mode
   enum CLIPPING_STORAGE : uint8_t { SINGLE_FILE = 0, PER_BOOK = 1, CLIPPING_STORAGE_COUNT };
   // Clip selector navigation scheme
@@ -205,6 +206,10 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Tilt-based page turning (X3 only — requires QMI8658 IMU)
+  uint8_t tiltPageTurn = TILT_OFF;
+  // Language setting (Language enum index, default 0 = EN)
+  uint8_t language = 0;
   // Clippings settings
   uint8_t clippingStorage = SINGLE_FILE;
   uint8_t clipNavMode = NAV_MIRROR;
@@ -229,6 +234,7 @@ class CrossPointSettings {
 
  private:
   bool loadFromBinaryFile();
+  bool migrateLanguageBinaryFile();
 
  public:
   float getReaderLineCompression() const;

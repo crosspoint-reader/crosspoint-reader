@@ -15,23 +15,31 @@ Each YAML file must contain:
 The English file is the reference. Missing keys in other languages are
 automatically filled from English, with a warning.
 
-Usage:
-    python gen_i18n.py <translations_dir> <output_dir>
+By default the script scans the src/ and lib/ trees for STR_* references and
+reports any translation keys that are never used.  Pass --strip-unused to
+omit those keys from the generated output entirely.
 
-Example:
+Usage:
+    python gen_i18n.py [translations_dir [output_dir]] [options]
+
+Examples:
+    python gen_i18n.py
     python gen_i18n.py lib/I18n/translations lib/I18n/
+    python gen_i18n.py --strip-unused
+    python gen_i18n.py --strip-unused --src-dirs src lib/EpdFont
 """
 
 import sys
 import os
 import re
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 
 # ---------------------------------------------------------------------------
 # YAML file reading (simple key: "value" format, no PyYAML dependency)
 # ---------------------------------------------------------------------------
+
 
 def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str:
     """
@@ -51,9 +59,7 @@ def _unescape_yaml_value(raw: str, filepath: str = "", line_num: int = 0) -> str
             elif nxt == "n":
                 result.append("\n")
             else:
-                raise ValueError(
-                    f"{filepath}:{line_num}: unknown escape '\\{nxt}'"
-                )
+                raise ValueError(f"{filepath}:{line_num}: unknown escape '\\{nxt}'")
             i += 2
         else:
             result.append(raw[i])
@@ -103,9 +109,11 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 # Load all languages from a directory of YAML files
 # ---------------------------------------------------------------------------
 
+
 def load_translations(
     translations_dir: str,
-) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]]]:
+    verbose: bool = False,
+) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]], List[Set[str]]]:
     """
     Read every YAML file in *translations_dir* and return:
         language_codes   e.g. ["EN", "ES", ...]
@@ -137,6 +145,31 @@ def load_translations(
 
     if english_file is None:
         raise ValueError("No YAML file with _language_code: EN found")
+
+    duplicate_orders: Dict[str, List[str]] = {}
+    order_to_files: Dict[str, List[str]] = {}
+    for fname, data in parsed.items():
+        order = data.get("_order")
+        if not order:
+            continue
+        order_to_files.setdefault(order, []).append(fname)
+
+    for order, files in order_to_files.items():
+        if len(files) > 1:
+            duplicate_orders[order] = sorted(files)
+
+    if duplicate_orders:
+        duplicate_messages = [
+            f"_order {order}: {', '.join(files)}"
+            for order, files in sorted(
+                duplicate_orders.items(), key=lambda item: int(item[0])
+            )
+        ]
+        raise ValueError(
+            "Duplicate _order values found:\n  "
+            + "\n  ".join(duplicate_messages)
+            + "\nEach _order value must be unique to ensure a deterministic language order."
+        )
 
     # Order: English first, then by _order metadata (falls back to filename)
     def sort_key(fname: str) -> Tuple[int, int, str]:
@@ -174,16 +207,20 @@ def load_translations(
             raise ValueError(f"Invalid C++ identifier in English file: '{key}'")
 
     # Build translations dict, filling missing keys from English
+    inherited_sets: List[Set[str]] = [set() for _ in ordered_files]
     translations: Dict[str, List[str]] = {}
     for key in string_keys:
         row: List[str] = []
-        for fname in ordered_files:
+        for lang_idx, fname in enumerate(ordered_files):
             data = parsed[fname]
             value = data.get(key, "")
             if not value.strip() and fname != english_file:
                 value = english_data[key]
-                lang_code = parsed[fname].get("_language_code", fname)
-                print(f"  INFO: '{key}' missing in {lang_code}, using English fallback")
+                inherited_sets[lang_idx].add(key)
+                if verbose:
+                    print(
+                        f"  INFO: '{key}' missing in {language_codes[lang_idx]}, using English fallback"
+                    )
             row.append(value)
         translations[key] = row
 
@@ -195,44 +232,71 @@ def load_translations(
         extra = [k for k in data if not k.startswith("_") and k not in english_data]
         if extra:
             lang_code = data.get("_language_code", fname)
-            print(f"  WARNING: {lang_code} has keys not in English: {', '.join(extra)}")
+            if verbose:
+                print(
+                    f"  WARNING: {lang_code} has keys not in English: {', '.join(extra)}"
+                )
 
-    print(f"Loaded {len(language_codes)} languages, {len(string_keys)} string keys")
-    return language_codes, language_names, string_keys, translations
+    if verbose:
+        print(f"Loaded {len(language_codes)} languages, {len(string_keys)} string keys")
+    return language_codes, language_names, string_keys, translations, inherited_sets
+
+
+# ---------------------------------------------------------------------------
+# Unused-string detection
+# ---------------------------------------------------------------------------
+
+_GENERATED_FILENAMES: Set[str] = {"I18nKeys.h", "I18nStrings.h", "I18nStrings.cpp"}
+
+
+def find_used_string_keys(
+    src_dirs: List[str],
+    skip_filenames: Optional[Set[str]] = None,
+) -> Set[str]:
+    """
+    Scan C/C++ source files under *src_dirs* for STR_* identifiers.
+
+    Files whose basename appears in *skip_filenames* are skipped so that
+    the generated I18n files don't count as "usage" of themselves.
+
+    Returns the set of all STR_KEY names that appear at least once.
+    """
+    if skip_filenames is None:
+        skip_filenames = _GENERATED_FILENAMES
+
+    pattern = re.compile(r"\bSTR_[A-Za-z0-9_]+\b")
+    used: Set[str] = set()
+
+    for src_dir in src_dirs:
+        p = Path(src_dir)
+        if not p.is_dir():
+            continue
+        for f in p.rglob("*"):
+            if f.suffix not in {".cpp", ".h", ".c"}:
+                continue
+            if f.name in skip_filenames:
+                continue
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for m in pattern.finditer(text):
+                used.add(m.group(0))
+
+    return used
+
+
+def report_unused_keys(
+    string_keys: List[str],
+    used_keys: Set[str],
+) -> List[str]:
+    """Return a sorted list of keys from *string_keys* absent in *used_keys*."""
+    return [k for k in sorted(string_keys) if k not in used_keys]
 
 
 # ---------------------------------------------------------------------------
 # C++ string escaping
 # ---------------------------------------------------------------------------
-
-LANG_ABBREVIATIONS = {
-    "english": "EN",
-    "español": "ES", "espanol": "ES",
-    "italiano": "IT",
-    "svenska": "SV",
-    "français": "FR", "francais": "FR",
-    "deutsch": "DE", "german": "DE",
-    "polski": "PL",
-    "português": "PT", "portugues": "PT", "português (brasil)": "PO",
-    "中文": "ZH", "chinese": "ZH",
-    "日本語": "JA", "japanese": "JA",
-    "한국어": "KO", "korean": "KO",
-    "русский": "RU", "russian": "RU",
-    "العربية": "AR", "arabic": "AR",
-    "עברית": "HE", "hebrew": "HE",
-    "فارسی": "FA", "persian": "FA",
-    "čeština": "CS",
-    "türkçe": "TR", "turkish": "TR",
-    "Қазақша": "KK", "kazakh": "KK",
-}
-
-
-def get_lang_abbreviation(lang_code: str, lang_name: str) -> str:
-    """Return a 2-letter abbreviation for a language."""
-    lower = lang_name.lower()
-    if lower in LANG_ABBREVIATIONS:
-        return LANG_ABBREVIATIONS[lower]
-    return lang_code[:2].upper()
 
 
 def escape_cpp_string(s: str) -> List[str]:
@@ -267,12 +331,12 @@ def escape_cpp_string(s: str) -> List[str]:
 
         if ch == "\\" and i + 1 < len(s):
             nxt = s[i + 1]
-            if nxt in "ntr\"\\":
+            if nxt in 'ntr"\\':
                 current.append(ch + nxt)
                 i += 2
             elif nxt == "x" and i + 3 < len(s):
                 current.append(s[i : i + 4])
-                _flush()                       # segment break after hex
+                _flush()  # segment break after hex
                 i += 4
             else:
                 current.append("\\\\")
@@ -286,7 +350,7 @@ def escape_cpp_string(s: str) -> List[str]:
         else:
             for byte in ch.encode("utf-8"):
                 current.append(f"\\x{byte:02X}")
-                _flush()                       # segment break after hex
+                _flush()  # segment break after hex
             i += 1
 
     # Flush remaining content
@@ -321,11 +385,11 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
             last_space = -1
             idx = 0
             while idx <= MAX_CONTENT_LEN and idx < len(current):
-                if current[idx] == ' ':
+                if current[idx] == " ":
                     last_space = idx
 
                 # Handle escapes to step correctly
-                if current[idx] == '\\':
+                if current[idx] == "\\":
                     idx += 2
                 else:
                     idx += 1
@@ -340,7 +404,7 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
                 # No space, forced break at MAX_CONTENT_LEN (or slightly less)
                 cut_at = MAX_CONTENT_LEN
                 # Don't cut in the middle of an escape sequence
-                if current[cut_at - 1] == '\\':
+                if current[cut_at - 1] == "\\":
                     cut_at -= 1
 
                 lines.append(f'{indent}"{current[:cut_at]}"')
@@ -356,6 +420,7 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
 # Character-set computation
 # ---------------------------------------------------------------------------
 
+
 def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
     """Return a sorted string of every unique character used in a language."""
     chars = set()
@@ -369,11 +434,13 @@ def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -
 # Code generators
 # ---------------------------------------------------------------------------
 
+
 def generate_keys_header(
     languages: List[str],
     language_names: List[str],
     string_keys: List[str],
     output_path: str,
+    verbose: bool = False,
 ) -> None:
     """Generate I18nKeys.h."""
     lines: List[str] = [
@@ -381,14 +448,15 @@ def generate_keys_header(
         "#include <cstdint>",
         "",
         "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
+        "// clang-format off",
         "",
-        "// Forward declaration for string arrays",
+        "// Forward declarations for flat string data blobs and offset tables",
         "namespace i18n_strings {",
     ]
 
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"extern const char* const STRINGS_{abbrev}[];")
+    for code in languages:
+        lines.append(f"extern const char STRINGS_{code}_DATA[];")
+        lines.append(f"extern const uint16_t OFFSETS_{code}[];")
 
     lines.append("}  // namespace i18n_strings")
     lines.append("")
@@ -403,6 +471,10 @@ def generate_keys_header(
     lines.append("")
 
     # Extern declarations
+    lines.append("// Language codes (defined in I18nStrings.cpp)")
+    lines.append("extern const char* const LANGUAGE_CODES[];")
+    lines.append("")
+
     lines.append("// Language display names (defined in I18nStrings.cpp)")
     lines.append("extern const char* const LANGUAGE_NAMES[];")
     lines.append("")
@@ -420,17 +492,28 @@ def generate_keys_header(
     lines.append("};")
     lines.append("")
 
-    # getStringArray helper
-    lines.append("// Helper function to get string array for a language")
-    lines.append("inline const char* const* getStringArray(Language lang) {")
+    # LangStrings struct
+    lines.append("// Holds a flat string blob and its offset table for one language")
+    lines.append("struct LangStrings {")
+    lines.append("  const char* data;")
+    lines.append("  const uint16_t* offsets;")
+    lines.append("};")
+    lines.append("")
+
+    # getLanguageStrings helper
+    lines.append("// Helper function to get string data for a language")
+    lines.append("inline LangStrings getLanguageStrings(Language lang) {")
     lines.append("  switch (lang) {")
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
+    for code in languages:
         lines.append(f"    case Language::{code}:")
-        lines.append(f"      return i18n_strings::STRINGS_{abbrev};")
-    first_abbrev = get_lang_abbreviation(languages[0], language_names[0])
+        lines.append(
+            f"      return {{i18n_strings::STRINGS_{code}_DATA, i18n_strings::OFFSETS_{code}}};"
+        )
+    first_code = languages[0]
     lines.append("    default:")
-    lines.append(f"      return i18n_strings::STRINGS_{first_abbrev};")
+    lines.append(
+        f"      return {{i18n_strings::STRINGS_{first_code}_DATA, i18n_strings::OFFSETS_{first_code}}};"
+    )
     lines.append("  }")
     lines.append("}")
     lines.append("")
@@ -451,9 +534,9 @@ def generate_keys_header(
         key=lambda i: languages[i],
     )
     sorted_indices = [english_idx] + rest
-    comment_names = ", ".join(language_names[i] for i in sorted_indices)
     lines.append("// Sorted language indices by code (auto-generated by gen_i18n.py)")
-    lines.append(f"// Order: {comment_names}")
+    for rank, idx in enumerate(sorted_indices):
+        lines.append(f"//   {rank:>2}: {languages[idx]:<4} {language_names[idx]}")
     lines.append(
         "constexpr uint8_t SORTED_LANGUAGE_INDICES[] = {"
         f"{', '.join(str(i) for i in sorted_indices)}"
@@ -463,38 +546,53 @@ def generate_keys_header(
     lines.append(
         "static_assert(sizeof(SORTED_LANGUAGE_INDICES) / sizeof(SORTED_LANGUAGE_INDICES[0]) == getLanguageCount(),"
     )
+    lines.append('              "SORTED_LANGUAGE_INDICES size mismatch");')
+    lines.append("")
+
+    # V1 language.bin migration table -- frozen enum order from commit 2f969a9.
+    # Maps the old uint8_t index stored on disk to the current Language enum.
+    # If a Language enum value listed here is ever removed, this will fail to
+    # compile, signalling that the migration table needs updating.
+    v1_codes = [
+        "EN", "ES", "FR", "DE", "CS", "PT", "RU", "SV", "RO", "CA", "UK",
+        "BE", "IT", "PL", "FI", "DA", "NL", "TR", "KK", "HU", "LT", "SI",
+    ]
+    lines.append("// V1 language.bin migration table (frozen enum order from 2f969a9)")
+    lines.append("constexpr Language V1_LANGUAGES[] = {")
+    lines.append("    " + ", ".join(f"Language::{c}" for c in v1_codes) + ",")
+    lines.append("};")
     lines.append(
-        '              "SORTED_LANGUAGE_INDICES size mismatch");'
+        f"constexpr uint8_t V1_LANGUAGE_COUNT = {len(v1_codes)};"
     )
 
-    _write_file(output_path, lines)
+    _write_file(output_path, lines, verbose)
 
 
 def generate_strings_header(
     languages: List[str],
     language_names: List[str],
     output_path: str,
+    verbose: bool = False,
 ) -> None:
     """Generate I18nStrings.h."""
     lines: List[str] = [
         "#pragma once",
-        '#include <string>',
-        "",
         '#include "I18nKeys.h"',
         "",
         "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
+        "// clang-format off",
         "",
         "namespace i18n_strings {",
         "",
     ]
 
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"extern const char* const STRINGS_{abbrev}[];")
+    for code in languages:
+        lines.append(f"extern const char STRINGS_{code}_DATA[];")
+        lines.append(f"extern const uint16_t OFFSETS_{code}[];")
 
     lines.append("")
     lines.append("}  // namespace i18n_strings")
-    _write_file(output_path, lines)
+    _write_file(output_path, lines, verbose)
 
 
 def generate_strings_cpp(
@@ -503,14 +601,25 @@ def generate_strings_cpp(
     string_keys: List[str],
     translations: Dict[str, List[str]],
     output_path: str,
+    verbose: bool = False,
 ) -> None:
     """Generate I18nStrings.cpp."""
     lines: List[str] = [
+        "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
+        "// clang-format off",
         '#include "I18nStrings.h"',
         "",
-        "// THIS FILE IS AUTO-GENERATED BY gen_i18n.py. DO NOT EDIT.",
+        "#include <cstddef>",
         "",
     ]
+
+    # LANGUAGE_CODES array
+    lines.append("// Language codes")
+    lines.append("const char* const LANGUAGE_CODES[] = {")
+    for code in languages:
+        _append_string_entry(lines, code)
+    lines.append("};")
+    lines.append("")
 
     # LANGUAGE_NAMES array
     lines.append("// Language display names")
@@ -529,18 +638,38 @@ def generate_strings_cpp(
     lines.append("};")
     lines.append("")
 
-    # Per-language string arrays
+    # Per-language flat string blobs and offset tables
     lines.append("namespace i18n_strings {")
     lines.append("")
 
-    for lang_idx, (code, name) in enumerate(zip(languages, language_names)):
-        abbrev = get_lang_abbreviation(code, name)
-        lines.append(f"const char* const STRINGS_{abbrev}[] = {{")
+    for lang_idx, code in enumerate(languages):
+        lang_strings = [translations[key][lang_idx] for key in string_keys]
 
-        for key in string_keys:
-            text = translations[key][lang_idx]
-            _append_string_entry(lines, text)
+        # Precompute byte offsets (UTF-8 encoded, +1 per string for null terminator)
+        offsets: List[int] = []
+        current_offset = 0
+        for s in lang_strings:
+            offsets.append(current_offset)
+            current_offset += len(s.encode("utf-8")) + 1
+        if current_offset > 65535:
+            raise ValueError(
+                f"Language {code}: total string data ({current_offset} bytes) "
+                "exceeds uint16_t offset range (65535)"
+            )
 
+        # Flat string data blob — all strings concatenated with \0 separators.
+        lines.append(f"const char STRINGS_{code}_DATA[] =")
+        for text in lang_strings:
+            _append_string_data_entry(lines, text)
+        lines.append(";")
+        lines.append("")
+
+        # Offset table — one uint16_t per StrId
+        lines.append(f"const uint16_t OFFSETS_{code}[] = {{")
+        chunk_size = 12
+        for i in range(0, len(offsets), chunk_size):
+            chunk = offsets[i : i + chunk_size]
+            lines.append("    " + ", ".join(str(o) for o in chunk) + ",")
         lines.append("};")
         lines.append("")
 
@@ -549,25 +678,108 @@ def generate_strings_cpp(
 
     # Compile-time size checks
     lines.append("// Compile-time validation of array sizes")
-    for code, name in zip(languages, language_names):
-        abbrev = get_lang_abbreviation(code, name)
+    for code in languages:
         lines.append(
-            f"static_assert(sizeof(i18n_strings::STRINGS_{abbrev}) "
-            f"/ sizeof(i18n_strings::STRINGS_{abbrev}[0]) =="
+            f"static_assert(sizeof(i18n_strings::OFFSETS_{code}) "
+            f"/ sizeof(i18n_strings::OFFSETS_{code}[0]) =="
         )
         lines.append("                  static_cast<size_t>(StrId::_COUNT),")
-        lines.append(f'              "STRINGS_{abbrev} size mismatch");')
+        lines.append(f'              "OFFSETS_{code} size mismatch");')
 
-    _write_file(output_path, lines)
+    _write_file(output_path, lines, verbose)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _append_string_entry(
-    lines: List[str], text: str, comment: str = ""
+
+def _print_language_table(
+    language_codes: List[str],
+    language_names: List[str],
+    inherited_sets: List[Set[str]],
+    string_keys: List[str],
+    unused_keys: Set[str],
+    data_sizes: List[int],
 ) -> None:
+    """Print a per-language summary table."""
+    total = len(string_keys)
+    headers = ("Language", "Code", "Own", "Fallback", "Unused", "Data (B)")
+
+    rows = []
+    for code, name, inherited, size in zip(
+        language_codes, language_names, inherited_sets, data_sizes
+    ):
+        own = total - len(inherited)
+        fallback = len(inherited)
+        # strings this language translated but the code never calls
+        unused = len(unused_keys - inherited)
+        rows.append((name, code, str(own), str(fallback), str(unused), str(size)))
+
+    # EN first, then alphabetically by ISO code
+    rows.sort(key=lambda r: (0 if r[1] == "EN" else 1, r[1]))
+
+    col_widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            col_widths[i] = max(col_widths[i], len(cell))
+
+    fmt = "  ".join(f"{{:<{w}}}" for w in col_widths)
+    sep = "  ".join("-" * w for w in col_widths)
+
+    def _safe_print(line: str) -> None:
+        print(
+            line.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(
+                sys.stdout.encoding or "utf-8", errors="replace"
+            )
+        )
+
+    _safe_print(fmt.format(*headers))
+    _safe_print(sep)
+    for row in rows:
+        _safe_print(fmt.format(*row))
+    used = total - len(unused_keys)
+    total_size = sum(data_sizes)
+    n_lang = len(rows)
+    n_keys = len(string_keys)
+    # Current layout: uint16_t offset table (2 B per string per language)
+    offset_table_size = n_lang * n_keys * 2
+    current_total = total_size + offset_table_size
+    # Previous layout: const char* pointer array (4 B per string per language)
+    old_pointer_table_size = n_lang * n_keys * 4
+    old_total = total_size + old_pointer_table_size
+    saved = old_total - current_total
+    print(
+        f"\n  Total: {total}  |  Used in code: {used}  |  Never used: {len(unused_keys)}"
+    )
+    print(
+        f"  Flash (now):    {total_size:>7,} B strings  +  {offset_table_size:>6,} B offset tables (uint16_t)"
+        f"  =  {current_total:>7,} B"
+    )
+    print(
+        f"  Flash (before): {total_size:>7,} B strings  +  {old_pointer_table_size:>6,} B pointer tables (ptr32)"
+        f"  =  {old_total:>7,} B"
+    )
+    print(f"  Saved by offset tables: {saved:,} B")
+
+
+def _append_string_data_entry(lines: List[str], text: str) -> None:
+    """
+    Escape *text*, append a \\0 null separator, and format as indented C++
+    string literal lines for inclusion in a flat char data array blob.
+    """
+    segments = escape_cpp_string(text)
+    # Append the null entry separator to the last segment
+    if segments and segments[-1] != "":
+        segments[-1] += "\\0"
+    elif segments:
+        segments[-1] = "\\0"
+    else:
+        segments = ["\\0"]
+    lines.extend(format_cpp_string_literal(segments))
+
+
+def _append_string_entry(lines: List[str], text: str, comment: str = "") -> None:
     """Escape *text*, format as indented C++ lines, append comma (and optional comment)."""
     segments = escape_cpp_string(text)
     formatted = format_cpp_string_literal(segments)
@@ -576,21 +788,30 @@ def _append_string_entry(
     lines.extend(formatted)
 
 
-def _write_file(path: str, lines: List[str]) -> None:
+def _write_file(path: str, lines: List[str], verbose: bool = False) -> None:
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines))
         f.write("\n")
-    print(f"Generated: {path}")
+    if verbose:
+        print(f"Generated: {path}")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def main(translations_dir=None, output_dir=None) -> None:
+
+def main(
+    translations_dir: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    src_dirs: Optional[List[str]] = None,
+    strip_unused: bool = False,
+    verbose: bool = False,
+) -> None:
     # Default paths (relative to project root)
     default_translations_dir = "lib/I18n/translations"
     default_output_dir = "lib/I18n/"
+    default_src_dirs = ["src", "lib"]
 
     if translations_dir is None or output_dir is None:
         if len(sys.argv) == 3:
@@ -601,6 +822,8 @@ def main(translations_dir=None, output_dir=None) -> None:
             translations_dir = default_translations_dir
             output_dir = default_output_dir
 
+    if src_dirs is None:
+        src_dirs = default_src_dirs
 
     if not os.path.isdir(translations_dir):
         print(f"Error: Translations directory not found: {translations_dir}")
@@ -610,26 +833,91 @@ def main(translations_dir=None, output_dir=None) -> None:
         print(f"Error: Output directory not found: {output_dir}")
         sys.exit(1)
 
-    print(f"Reading translations from: {translations_dir}")
-    print(f"Output directory: {output_dir}")
-    print()
+    if verbose:
+        print(f"Reading translations from: {translations_dir}")
+        print(f"Output directory: {output_dir}")
+        print()
 
     try:
-        languages, language_names, string_keys, translations = load_translations(
-            translations_dir
+        languages, language_names, string_keys, translations, inherited_sets = (
+            load_translations(translations_dir, verbose)
         )
 
+        # --- Unused-string detection ---
+        scan_dirs = [d for d in src_dirs if os.path.isdir(d)]
+        if scan_dirs:
+            used_keys = find_used_string_keys(scan_dirs)
+            unused_set = set(report_unused_keys(string_keys, used_keys))
+        else:
+            used_keys = set(string_keys)
+            unused_set = set()
+
+        # --- Missing-string detection (used in code but absent from English) ---
+        missing_keys = sorted(used_keys - set(string_keys))
+        if missing_keys:
+            print(
+                f"\n  CRITICAL: {len(missing_keys)} string(s) used in source but missing from english.yaml:"
+            )
+            for key in missing_keys:
+                print(f"    - {key}")
+            print()
+            sys.exit(1)
+
+        # Compute per-language data blob sizes:
+        # sum of UTF-8 byte length + 1 (null terminator) per string
+        data_sizes = [
+            sum(len(translations[k][i].encode("utf-8")) + 1 for k in string_keys)
+            for i in range(len(languages))
+        ]
+
+        _print_language_table(
+            languages,
+            language_names,
+            inherited_sets,
+            string_keys,
+            unused_set,
+            data_sizes,
+        )
+        print()
+
+        if verbose and unused_set:
+            print(f"  Unused keys ({len(unused_set)}):")
+            for key in sorted(unused_set):
+                print(f"    - {key}")
+            print()
+
+        if unused_set and strip_unused:
+            string_keys = [k for k in string_keys if k not in unused_set]
+            translations = {
+                k: v for k, v in translations.items() if k not in unused_set
+            }
+            inherited_sets = [s - unused_set for s in inherited_sets]
+            print(f"  Stripping {len(unused_set)} unused string(s) from output.")
+
         out = Path(output_dir)
-        generate_keys_header(languages, language_names, string_keys, str(out / "I18nKeys.h"))
-        generate_strings_header(languages, language_names, str(out / "I18nStrings.h"))
+        generate_keys_header(
+            languages, language_names, string_keys, str(out / "I18nKeys.h"), verbose
+        )
+        generate_strings_header(
+            languages, language_names, str(out / "I18nStrings.h"), verbose
+        )
         generate_strings_cpp(
-            languages, language_names, string_keys, translations, str(out / "I18nStrings.cpp")
+            languages,
+            language_names,
+            string_keys,
+            translations,
+            str(out / "I18nStrings.cpp"),
+            verbose,
         )
 
         print()
-        print("✓ Code generation complete!")
+        print("Code generation complete!")
         print(f"  Languages: {len(languages)}")
         print(f"  String keys: {len(string_keys)}")
+        if unused_set and not strip_unused:
+            print(
+                f"  Unused keys: {len(unused_set)} (pass --strip-unused to remove them)"
+            )
 
     except Exception as e:
         print(f"\nError: {e}")
@@ -637,11 +925,52 @@ def main(translations_dir=None, output_dir=None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Generate I18n C++ files from per-language YAML translations."
+    )
+    parser.add_argument(
+        "translations_dir",
+        nargs="?",
+        default=None,
+        help="Path to the translations directory (default: lib/I18n/translations)",
+    )
+    parser.add_argument(
+        "output_dir",
+        nargs="?",
+        default=None,
+        help="Path to the output directory (default: lib/I18n/)",
+    )
+    parser.add_argument(
+        "--src-dirs",
+        nargs="+",
+        metavar="DIR",
+        default=None,
+        help="Source directories to scan for STR_* usage (default: src lib)",
+    )
+    parser.add_argument(
+        "--strip-unused",
+        action="store_true",
+        help="Remove unused STR_* keys from the generated output",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Print per-key INFO/WARNING messages and file generation details",
+    )
+    args = parser.parse_args()
+    main(
+        args.translations_dir,
+        args.output_dir,
+        args.src_dirs,
+        args.strip_unused,
+        args.verbose,
+    )
 else:
     try:
         Import("env")
-        print("Running i18n generation script from PlatformIO...")
-        main()
+        main(strip_unused=True)
     except NameError:
         pass
