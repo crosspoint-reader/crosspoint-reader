@@ -658,6 +658,11 @@ def generate_strings_cpp(
             for s in lang_strings:
                 offsets.append(current_offset)
                 current_offset += len(s.encode("utf-8")) + 1
+            if current_offset > 0x7FFF:
+                raise ValueError(
+                    f"Language {code}: blob size ({current_offset} bytes) exceeds "
+                    "15-bit offset limit (32767)"
+                )
             en_offsets = list(offsets)
             blob_strings = lang_strings
         else:
@@ -671,13 +676,11 @@ def generate_strings_cpp(
                     offsets.append(current_offset)
                     current_offset += len(s.encode("utf-8")) + 1
                     blob_strings.append(s)
-
-        max_offset = max(o & 0x7FFF for o in offsets) if offsets else 0
-        if max_offset > 0x7FFF:
-            raise ValueError(
-                f"Language {code}: max offset ({max_offset}) exceeds "
-                "15-bit limit (32767). Too many strings for flag-bit scheme."
-            )
+            if current_offset > 0x7FFF:
+                raise ValueError(
+                    f"Language {code}: blob size ({current_offset} bytes) exceeds "
+                    "15-bit offset limit (32767)"
+                )
 
         # Flat string data blob — all strings concatenated with \0 separators.
         lines.append(f"const char STRINGS_{code}_DATA[] =")
