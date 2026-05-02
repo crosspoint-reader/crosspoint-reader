@@ -30,4 +30,5 @@ class XtcReaderActivity final : public Activity {
   void render(RenderLock&&) override;
   void onScreenshotRequest() override;
   bool isReaderActivity() const override { return true; }
+  ScreenshotInfo getScreenshotInfo() const override;
 };
