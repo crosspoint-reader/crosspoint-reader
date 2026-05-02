@@ -450,6 +450,14 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     jpegScaleDenom = chooseJpegScale(targetScale, jpegScaleOption);
   }
 
+  if (destWidth <= 0 || destHeight <= 0) {
+    LOG_ERR("JPG", "Degenerate output dimensions %dx%d for %s, skipping render", destWidth, destHeight,
+            imagePath.c_str());
+    jpeg->close();
+    delete jpeg;
+    return false;
+  }
+
   ctx.scaledSrcWidth = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
   ctx.scaledSrcHeight = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
   ctx.dstWidth = destWidth;
