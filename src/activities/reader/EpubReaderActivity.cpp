@@ -142,7 +142,7 @@ void EpubReaderActivity::loop() {
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      automaticPageTurnActive = false;
+      stopAutomaticPageTurn();
       // updates chapter title space to indicate page turn disabled
       requestUpdate();
       return;
@@ -484,7 +484,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
   if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
-    automaticPageTurnActive = false;
+    stopAutomaticPageTurn();
     return;
   }
 
@@ -504,6 +504,27 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
     }
     section.reset();
   }
+}
+
+void EpubReaderActivity::stopAutomaticPageTurn() {
+  if (!automaticPageTurnActive) {
+    return;
+  }
+
+  automaticPageTurnActive = false;
+
+  if (UITheme::getStatusBarHeight(true) == UITheme::getStatusBarHeight()) {
+    return;
+  }
+
+  // Preserve current reading position so we can restore after reflow.
+  RenderLock lock(*this);
+  if (section) {
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = section->pageCount;
+    nextPageNumber = section->currentPage;
+  }
+  section.reset();
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {

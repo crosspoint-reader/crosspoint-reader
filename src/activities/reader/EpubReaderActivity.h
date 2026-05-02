@@ -51,6 +51,7 @@ class EpubReaderActivity final : public Activity {
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
+  void stopAutomaticPageTurn();
   void pageTurn(bool isForwardTurn);
 
   // Footnote navigation

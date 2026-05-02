@@ -52,7 +52,10 @@ void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, i
   }
 }
 
-int progressBarPixelHeight(const uint8_t thickness) { return (thickness + 1) * 2; }
+int progressBarPixelHeight(const uint8_t progressBar, const uint8_t thickness, const ThemeMetrics& metrics) {
+  const int reservedHeight = UITheme::getProgressBarHeight(progressBar, thickness);
+  return std::max(0, reservedHeight - metrics.progressBarMarginTop);
+}
 
 int statusBarProgressPercent(const uint8_t progressBar, const float bookProgress, const int currentPage,
                              const int pageCount) {
@@ -705,13 +708,13 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const int progressBarMaxWidth = screenWidth - orientedMarginLeft - orientedMarginRight;
 
   auto drawEdgeProgressBar = [&](const uint8_t progressBar, const uint8_t thickness, const bool topEdge) {
-    if (progressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS) {
+    const int barHeight = progressBarPixelHeight(progressBar, thickness, metrics);
+    if (barHeight <= 0) {
       return;
     }
 
     const int progress = statusBarProgressPercent(progressBar, bookProgress, currentPage, pageCount);
     const int barWidth = progressBarMaxWidth * progress / 100;
-    const int barHeight = progressBarPixelHeight(thickness);
     const int y =
         topEdge ? orientedMarginTop + paddingBottom : screenHeight - orientedMarginBottom - paddingBottom - barHeight;
     renderer.fillRect(orientedMarginLeft, y, barWidth, barHeight, true);

@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -73,9 +74,13 @@ void drawPreviewStatusItems(const GfxRenderer& renderer, const Rect& rect, const
                         ? rect.y + previewInnerMargin + adjacentProgressHeight + 4
                         : rect.y + rect.height - previewInnerMargin - adjacentProgressHeight - statusItemsHeight + 4;
 
+  const bool showBatteryPercentage =
+      SETTINGS.statusBarBattery &&
+      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
   if (SETTINGS.statusBarBattery) {
-    GUI.drawBatteryLeft(
-        renderer, Rect{rect.x + previewInnerMargin + 2, textY, metrics.batteryWidth, metrics.batteryHeight}, false);
+    GUI.drawBatteryLeft(renderer,
+                        Rect{rect.x + previewInnerMargin + 2, textY, metrics.batteryWidth, metrics.batteryHeight},
+                        showBatteryPercentage);
   }
 
   int progressTextWidth = 0;
@@ -101,7 +106,15 @@ void drawPreviewStatusItems(const GfxRenderer& renderer, const Rect& rect, const
   const char* title = SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE
                           ? tr(STR_EXAMPLE_BOOK)
                           : tr(STR_EXAMPLE_CHAPTER);
-  const int leftReserve = SETTINGS.statusBarBattery ? metrics.batteryWidth + 28 : 6;
+  int leftReserve = 6;
+  if (SETTINGS.statusBarBattery) {
+    leftReserve = metrics.batteryWidth + 28;
+    if (showBatteryPercentage) {
+      const int percentReserve = 2 + metrics.batteryWidth + BaseTheme::batteryPercentSpacing +
+                                 renderer.getTextWidth(SMALL_FONT_ID, "100%") + 8;
+      leftReserve = std::max(leftReserve, percentReserve);
+    }
+  }
   const int rightReserve = progressTextWidth > 0 ? progressTextWidth + 18 : 6;
   const int titleAreaWidth = rect.width - previewInnerMargin * 2 - leftReserve - rightReserve;
   if (titleAreaWidth <= 0) {
