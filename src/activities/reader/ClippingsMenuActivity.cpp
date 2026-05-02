@@ -61,7 +61,7 @@ void ClippingsMenuActivity::loop() {
     requestUpdate();
   });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleSetting(selectedIndex);
     requestUpdate();
     return;
