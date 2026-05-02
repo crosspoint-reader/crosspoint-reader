@@ -68,15 +68,27 @@ void ClipSelectionActivity::onExit() {
 void ClipSelectionActivity::loop() {
   const int total = static_cast<int>(words.size());
 
-  buttonNavigator.onNextRelease([this, total] {
+  auto moveNext = [this, total] {
     if (cursorIdx + 1 >= total) return;
     const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = cursorIdx + 1;
+    cursorIdx++;
     if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
     requestUpdate();
-  });
+  };
 
-  if (SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE) {
+  auto movePrev = [this] {
+    if (cursorIdx == 0) return;
+    const int prevPage = words[cursorIdx].pageIdx;
+    cursorIdx--;
+    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+    requestUpdate();
+  };
+
+  if (SETTINGS.clipNavMode == CrossPointSettings::NAV_MIRROR) {
+    // All 4 directions move word-by-word; hold jumps to line end/start.
+    buttonNavigator.onNextRelease(moveNext);
+    buttonNavigator.onPreviousRelease(movePrev);
+
     buttonNavigator.onNextContinuous([this] {
       const int prevPage = words[cursorIdx].pageIdx;
       const int next = lineEndForward(cursorIdx);
@@ -85,17 +97,7 @@ void ClipSelectionActivity::loop() {
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
-  }
 
-  buttonNavigator.onPreviousRelease([this] {
-    if (cursorIdx == 0) return;
-    const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = cursorIdx - 1;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  });
-
-  if (SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE) {
     buttonNavigator.onPreviousContinuous([this] {
       const int prevPage = words[cursorIdx].pageIdx;
       const int prev = lineEndBackward(cursorIdx);
@@ -104,6 +106,34 @@ void ClipSelectionActivity::loop() {
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
+  } else {
+    // NAV_VERTICAL: Left/Right = word-by-word (hold = continuous), Up/Down = line above/below (hold = continuous).
+    buttonNavigator.onRelease({MappedInputManager::Button::Right}, moveNext);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Right}, moveNext);
+    buttonNavigator.onRelease({MappedInputManager::Button::Left}, movePrev);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Left}, movePrev);
+
+    auto moveUp = [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int next = findWordAbove(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    };
+    auto moveDown = [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int next = findWordBelow(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    };
+
+    buttonNavigator.onRelease({MappedInputManager::Button::Up}, moveUp);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Up}, moveUp);
+    buttonNavigator.onRelease({MappedInputManager::Button::Down}, moveDown);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Down}, moveDown);
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -246,4 +276,62 @@ int ClipSelectionActivity::lineEndBackward(int idx) const {
   }
 
   return first;
+}
+
+int ClipSelectionActivity::findWordAbove(int idx) const {
+  const int curY = words[idx].y;
+  const int curX = words[idx].x;
+  const int curPage = words[idx].pageIdx;
+
+  // Find the highest Y value that is still below curY on the same page.
+  int prevY = -1;
+  for (const auto& w : words) {
+    if (w.pageIdx == curPage && w.y < curY) {
+      prevY = std::max(prevY, w.y);
+    }
+  }
+  if (prevY == -1) return idx;
+
+  // Among words on prevY, pick the one with closest X to the current cursor.
+  int best = idx;
+  int bestDist = INT_MAX;
+  for (int i = 0; i < static_cast<int>(words.size()); ++i) {
+    if (words[i].pageIdx == curPage && words[i].y == prevY) {
+      const int dist = std::abs(words[i].x - curX);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+  }
+  return best;
+}
+
+int ClipSelectionActivity::findWordBelow(int idx) const {
+  const int curY = words[idx].y;
+  const int curX = words[idx].x;
+  const int curPage = words[idx].pageIdx;
+
+  // Find the lowest Y value that is still above curY on the same page.
+  int nextY = INT_MAX;
+  for (const auto& w : words) {
+    if (w.pageIdx == curPage && w.y > curY) {
+      nextY = std::min(nextY, w.y);
+    }
+  }
+  if (nextY == INT_MAX) return idx;
+
+  // Among words on nextY, pick the one with closest X to the current cursor.
+  int best = idx;
+  int bestDist = INT_MAX;
+  for (int i = 0; i < static_cast<int>(words.size()); ++i) {
+    if (words[i].pageIdx == curPage && words[i].y == nextY) {
+      const int dist = std::abs(words[i].x - curX);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+  }
+  return best;
 }

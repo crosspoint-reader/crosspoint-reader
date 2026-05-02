@@ -61,4 +61,6 @@ class ClipSelectionActivity final : public Activity {
   void drawHighlights();
   int lineEndForward(int idx) const;
   int lineEndBackward(int idx) const;
+  int findWordAbove(int idx) const;
+  int findWordBelow(int idx) const;
 };

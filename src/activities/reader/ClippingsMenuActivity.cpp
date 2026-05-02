@@ -39,9 +39,9 @@ void ClippingsMenuActivity::toggleSetting(int idx) {
 const char* ClippingsMenuActivity::settingValue(int idx) const {
   switch (idx) {
     case 0:
-      return SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE ? tr(STR_CLIP_NAV_LINE) : tr(STR_CLIP_NAV_WORD);
+      return SETTINGS.clipNavMode == CrossPointSettings::NAV_MIRROR ? tr(STR_CLIP_NAV_MIRROR) : tr(STR_CLIP_NAV_VERTICAL);
     case 1:
-      return SETTINGS.annotationVisibility ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.annotationVisibility == CrossPointSettings::ANNOT_VISIBLE ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case 2:
       return SETTINGS.clippingStorage == CrossPointSettings::SINGLE_FILE ? tr(STR_CLIPPING_SINGLE_FILE)
                                                                          : tr(STR_CLIPPING_PER_BOOK);
