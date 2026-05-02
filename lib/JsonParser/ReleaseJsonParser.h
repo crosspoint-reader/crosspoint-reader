@@ -53,8 +53,8 @@ class ReleaseJsonParser {
 
     Position position;
     LastKey lastKey;
-    int depth;
-    int assetDepth;
+    uint8_t depth;
+    uint8_t assetDepth;
 
     char tagName[32];
     char firmwareUrl[512];
