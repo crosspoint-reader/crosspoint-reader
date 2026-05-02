@@ -355,12 +355,19 @@ void ParsedText::layoutAndExtractLines(
     }
   }
 
-  // Remove consumed words so size() reflects only remaining words
+  // Remove consumed words so size() reflects only remaining words, then
+  // release excess capacity.  Without shrink_to_fit the vector retains a
+  // large allocation from before the flush; the next paragraph fills it
+  // back up and eventually needs an even larger contiguous realloc.
   if (lineCount > 0) {
     const size_t consumed = lineBreakIndices[lineCount - 1];
     words.erase(words.begin(), words.begin() + consumed);
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
+    words.shrink_to_fit();
+    wordStyles.shrink_to_fit();
+    wordContinues.shrink_to_fit();
+    isContinuation_ = !includeLastLine;
   }
 }
 
