@@ -37,11 +37,16 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path) {
     // Absolute path - use just the host
     return extractHost(urlWithProtocol) + path;
   }
-  // Relative path - append to server URL
-  if (urlWithProtocol.back() == '/') {
-    return urlWithProtocol + path;
+  // Relative path - strip query string from base before appending
+  std::string base = urlWithProtocol;
+  const size_t queryPos = base.find('?');
+  if (queryPos != std::string::npos) {
+    base.resize(queryPos);
   }
-  return urlWithProtocol + "/" + path;
+  if (base.back() == '/') {
+    return base + path;
+  }
+  return base + "/" + path;
 }
 
 }  // namespace UrlUtils

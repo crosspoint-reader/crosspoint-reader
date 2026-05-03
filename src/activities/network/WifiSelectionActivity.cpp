@@ -190,20 +190,18 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     // Show password entry
     state = WifiSelectionState::PASSWORD_ENTRY;
     // Don't allow screen updates while changing activity
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
-                                                "",    // No initial text
-                                                64,    // Max password length
-                                                false  // Show password by default (hard keyboard to use)
-                                                ),
-        [this](const ActivityResult& result) {
-          if (result.isCancelled) {
-            state = WifiSelectionState::NETWORK_LIST;
-          } else {
-            enteredPassword = std::get<KeyboardResult>(result.data).text;
-            // state will be updated in next loop iteration
-          }
-        });
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
+                                                                   "",  // No initial text
+                                                                   64,  // Max password length
+                                                                   InputType::Password),
+                           [this](const ActivityResult& result) {
+                             if (result.isCancelled) {
+                               state = WifiSelectionState::NETWORK_LIST;
+                             } else {
+                               enteredPassword = std::get<KeyboardResult>(result.data).text;
+                               // state will be updated in next loop iteration
+                             }
+                           });
   } else {
     // Connect directly for open networks
     attemptConnection();
@@ -217,7 +215,10 @@ void WifiSelectionActivity::attemptConnection() {
   connectionError.clear();
   requestUpdate();
 
+  WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
+  delay(100);
 
   // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
   String mac = WiFi.macAddress();

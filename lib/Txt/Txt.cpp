@@ -120,7 +120,6 @@ bool Txt::generateCoverBmp() const {
       return false;
     }
     if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
-      src.close();
       return false;
     }
     uint8_t buffer[1024];
@@ -128,8 +127,6 @@ bool Txt::generateCoverBmp() const {
       size_t bytesRead = src.read(buffer, sizeof(buffer));
       dst.write(buffer, bytesRead);
     }
-    src.close();
-    dst.close();
     LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
   } else if (FsHelpers::hasJpgExtension(coverImagePath)) {
@@ -140,12 +137,9 @@ bool Txt::generateCoverBmp() const {
       return false;
     }
     if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
-      coverJpg.close();
       return false;
     }
     const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
-    coverJpg.close();
-    coverBmp.close();
 
     if (!success) {
       LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
@@ -172,12 +166,9 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
   }
 
   if (!file.seek(offset)) {
-    file.close();
     return false;
   }
 
   size_t bytesRead = file.read(buffer, length);
-  file.close();
-
   return bytesRead > 0;
 }

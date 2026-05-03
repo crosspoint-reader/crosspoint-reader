@@ -2,31 +2,93 @@
 
 #include <Arduino.h>
 #include <BitmapHelpers.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstring>
 #include <string>
 
 #include "Bitmap.h"  // Required for BmpHeader struct definition
+#include "activities/Activity.h"
+
+void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize) {
+  const unsigned long ts = millis();
+
+  if (info.readerType == ScreenshotInfo::ReaderType::None || info.title[0] == '\0') {
+    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+    return;
+  }
+
+  char sanitizedTitle[64];
+  FsHelpers::sanitizePathComponentForFat32(info.title, sanitizedTitle, sizeof(sanitizedTitle));
+  if (sanitizedTitle[0] == '\0') {
+    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+    return;
+  }
+
+  int pct = info.progressPercent;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+
+  // Display spine index as 1-based for user-facing filenames
+  const int chapterNum = info.spineIndex + 1;
+
+  if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
+    snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
+             info.currentPage, pct, ts);
+  } else {
+    snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
+             pct, ts);
+  }
+
+  // Truncate title if total path exceeds FAT32 limit
+  if (strlen(buf) > 255) {
+    size_t titleLen = strlen(sanitizedTitle);
+    size_t overhead = strlen(buf) - 2 * titleLen;
+    if (overhead < 255) {
+      size_t maxTitleLen = (255 - overhead) / 2;
+      // Walk back to a valid UTF-8 boundary to avoid corrupting multibyte characters
+      while (maxTitleLen > 0 && (sanitizedTitle[maxTitleLen] & 0xC0) == 0x80) {
+        maxTitleLen--;
+      }
+      sanitizedTitle[maxTitleLen] = '\0';
+      if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
+        snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
+                 info.currentPage, pct, ts);
+      } else {
+        snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
+                 pct, ts);
+      }
+    } else {
+      snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+    }
+  }
+}
 
 void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   const uint8_t* fb = renderer.getFrameBuffer();
-  if (fb) {
-    String filename_str = "/screenshots/screenshot-" + String(millis()) + ".bmp";
-    if (ScreenshotUtil::saveFramebufferAsBmp(filename_str.c_str(), fb, HalDisplay::DISPLAY_WIDTH,
-                                             HalDisplay::DISPLAY_HEIGHT)) {
-      LOG_DBG("SCR", "Screenshot saved to %s", filename_str.c_str());
-    } else {
-      LOG_ERR("SCR", "Failed to save screenshot");
-    }
-  } else {
+  if (!fb) {
     LOG_ERR("SCR", "Framebuffer not available");
+    return;
+  }
+
+  ScreenshotInfo info = activityManager.getScreenshotInfo();
+  char filename[256];
+  buildFilename(info, filename, sizeof(filename));
+
+  bool saved = saveFramebufferAsBmp(filename, fb, renderer.getDisplayWidth(), renderer.getDisplayHeight());
+  if (saved) {
+    LOG_DBG("SCR", "Screenshot saved to %s", filename);
+  } else {
+    LOG_ERR("SCR", "Failed to save screenshot");
+    return;
   }
 
   // Display a border around the screen to indicate a screenshot was taken
   if (renderer.storeBwBuffer()) {
-    renderer.drawRect(6, 6, HalDisplay::DISPLAY_HEIGHT - 12, HalDisplay::DISPLAY_WIDTH - 12, 2, true);
+    renderer.drawRect(6, 6, renderer.getDisplayHeight() - 12, renderer.getDisplayWidth() - 12, 2, true);
     renderer.displayBuffer();
     delay(1000);
     renderer.restoreBwBuffer();
@@ -62,7 +124,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
 
   BmpHeader header;
 
-  createBmpHeader(&header, phyWidth, phyHeight);
+  createBmpHeader(&header, phyWidth, phyHeight, BmpRowOrder::BottomUp);
 
   bool write_error = false;
   if (file.write(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
@@ -70,16 +132,18 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
   }
 
   if (write_error) {
+    // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove(filename);
     return false;
   }
 
   const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
-  // Max row size for 480px width = 60 bytes; use fixed buffer to avoid VLA
-  constexpr size_t kMaxRowSize = 64;
+  // Max row size for 528px height (X3) after rotation = 68 bytes; use fixed buffer to avoid VLA
+  constexpr size_t kMaxRowSize = 68;
   if (rowSizePadded > kMaxRowSize) {
     LOG_ERR("SCR", "Row size %u exceeds buffer capacity", rowSizePadded);
+    // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove(filename);
     return false;
@@ -106,6 +170,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     memset(rowBuffer, 0, rowSizePadded);  // Clear the buffer for the next row
   }
 
+  // Explicitly close() file before calling Storage.remove()
   file.close();
 
   if (write_error) {

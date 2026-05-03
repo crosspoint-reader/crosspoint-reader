@@ -17,6 +17,8 @@ class FileBrowserActivity final : public Activity {
 
   size_t selectorIndex = 0;
 
+  bool lockLongPressBack = false;
+
   // Files state
   std::string basepath = "/";
   std::vector<std::string> files;

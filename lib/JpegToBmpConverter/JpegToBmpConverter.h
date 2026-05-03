@@ -6,8 +6,6 @@ class Print;
 class ZipFile;
 
 class JpegToBmpConverter {
-  static unsigned char jpegReadCallback(unsigned char* pBuf, unsigned char buf_size,
-                                        unsigned char* pBytes_actually_read, void* pCallback_data);
   static bool jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
                                           bool oneBit, bool crop = true);
 
