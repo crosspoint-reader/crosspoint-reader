@@ -1,5 +1,7 @@
 #include "Activity.h"
 
+#include <numeric>
+
 #include "ActivityManager.h"
 
 void Activity::onEnter() {
@@ -8,11 +10,12 @@ void Activity::onEnter() {
       MappedInputManager::Button::Back,  MappedInputManager::Button::Confirm, MappedInputManager::Button::Left,
       MappedInputManager::Button::Right, MappedInputManager::Button::Up,      MappedInputManager::Button::Down,
   };
-  for (const auto b : kGuarded) {
-    if (mappedInput.isPressed(b)) {
-      entryPressedMask |= static_cast<uint8_t>(1u << static_cast<uint8_t>(b));
-    }
-  }
+  entryPressedMask = std::accumulate(std::begin(kGuarded), std::end(kGuarded), uint8_t{0},
+                                     [&](uint8_t mask, MappedInputManager::Button b) -> uint8_t {
+                                       return mappedInput.isPressed(b)
+                                                  ? mask | static_cast<uint8_t>(1u << static_cast<uint8_t>(b))
+                                                  : mask;
+                                     });
   LOG_DBG("ACT", "Entering activity: %s", name.c_str());
 }
 

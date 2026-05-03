@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <numeric>
 
 #include "../ActivityResult.h"
 #include "MappedInputManager.h"
@@ -284,12 +285,9 @@ int ClipSelectionActivity::findWordAbove(int idx) const {
   const int curPage = words[idx].pageIdx;
 
   // Find the highest Y value that is still below curY on the same page.
-  int prevY = -1;
-  for (const auto& w : words) {
-    if (w.pageIdx == curPage && w.y < curY) {
-      prevY = std::max(prevY, w.y);
-    }
-  }
+  const int prevY = std::accumulate(words.begin(), words.end(), -1, [&](int acc, const auto& w) {
+    return (w.pageIdx == curPage && w.y < curY) ? std::max(acc, w.y) : acc;
+  });
   if (prevY == -1) return idx;
 
   // Among words on prevY, pick the one with closest X to the current cursor.
@@ -313,12 +311,9 @@ int ClipSelectionActivity::findWordBelow(int idx) const {
   const int curPage = words[idx].pageIdx;
 
   // Find the lowest Y value that is still above curY on the same page.
-  int nextY = INT_MAX;
-  for (const auto& w : words) {
-    if (w.pageIdx == curPage && w.y > curY) {
-      nextY = std::min(nextY, w.y);
-    }
-  }
+  const int nextY = std::accumulate(words.begin(), words.end(), INT_MAX, [&](int acc, const auto& w) {
+    return (w.pageIdx == curPage && w.y > curY) ? std::min(acc, w.y) : acc;
+  });
   if (nextY == INT_MAX) return idx;
 
   // Among words on nextY, pick the one with closest X to the current cursor.

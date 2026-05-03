@@ -12,6 +12,7 @@
 #include <freertos/task.h>
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 
 #include "ClipSelectionActivity.h"
@@ -453,10 +454,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           };
           std::vector<WordGeom> wordGeoms;
           wordGeoms.reserve(words.size());
-          for (const auto& wr : words) {
-            wordGeoms.push_back({static_cast<int16_t>(wr.x), static_cast<int16_t>(wr.y), static_cast<int16_t>(wr.w),
-                                 static_cast<int16_t>(wr.h), static_cast<uint8_t>(wr.pageIdx)});
-          }
+          std::transform(words.begin(), words.end(), std::back_inserter(wordGeoms), [](const auto& wr) {
+            return WordGeom{static_cast<int16_t>(wr.x), static_cast<int16_t>(wr.y), static_cast<int16_t>(wr.w),
+                            static_cast<int16_t>(wr.h), static_cast<uint8_t>(wr.pageIdx)};
+          });
 
           startActivityForResult(
               std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
