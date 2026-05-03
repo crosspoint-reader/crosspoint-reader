@@ -405,7 +405,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::on
 **Source**: [src/main.cpp:40-115](../src/main.cpp)
 
 **All fonts are loaded as global static objects** at firmware startup:
-- Bookerly: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
+- Noto Serif: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
 - Noto Sans: 12, 14, 16, 18pt (4 styles each)
 - OpenDyslexic: 8, 10, 12, 14pt (4 styles each)
 - Ubuntu UI fonts: 10, 12pt (2 styles)

@@ -421,7 +421,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   while (true) {
     std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
-    textWidth = renderer.getTextWidth(UI_12_FONT_ID, lineText.c_str());
+    textWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
     if (textWidth <= maxLineWidth) {
       const bool isLastLine = (lineEndIdx == static_cast<int>(displayText.length()));
       bool isCursorLine = false;
@@ -433,12 +433,14 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         } else {
           beforeCursor = displayText.substr(lineStartIdx, cursorPos - lineStartIdx);
         }
-        int beforeWidth = renderer.getTextWidth(UI_12_FONT_ID, beforeCursor.c_str());
+        int beforeWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, beforeCursor.c_str(), EpdFontFamily::REGULAR);
         int kernOffset = 0;
         if (cursorPos < displayText.length()) {
           std::string beforeAndCursor = beforeCursor + displayText.substr(cursorPos, 1);
-          int beforeAndCursorWidth = renderer.getTextWidth(UI_12_FONT_ID, beforeAndCursor.c_str());
-          int charAdvance = renderer.getTextWidth(UI_12_FONT_ID, displayText.substr(cursorPos, 1).c_str());
+          int beforeAndCursorWidth =
+              renderer.getTextAdvanceX(UI_12_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
+          int charAdvance =
+              renderer.getTextAdvanceX(UI_12_FONT_ID, displayText.substr(cursorPos, 1).c_str(), EpdFontFamily::REGULAR);
           kernOffset = beforeAndCursorWidth - beforeWidth - charAdvance;
         }
         if (centerText) {

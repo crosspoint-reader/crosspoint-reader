@@ -35,7 +35,6 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int popupMarginX = 16;
 constexpr int popupMarginY = 12;
-constexpr int maxSubtitleWidth = 100;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
@@ -150,8 +149,27 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
-  int maxTitleWidth =
-      rect.width - LyraMetrics::values.contentSidePadding * 2 - (subtitle != nullptr ? maxSubtitleWidth : 0);
+  int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
+  int maxSubtitleWidth =
+      subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
+
+  // Available space is the distance between the side paddings, and a with side padding between title and subtitle.
+  const int availableSpace = rect.width - LyraMetrics::values.contentSidePadding * 3;
+
+  if (maxTitleWidth + maxSubtitleWidth > availableSpace) {
+    if ((maxTitleWidth > availableSpace / 2) && (maxSubtitleWidth > availableSpace / 2)) {
+      // Both are wider then half the space, truncate both.
+      maxTitleWidth = availableSpace / 2;
+      maxSubtitleWidth = availableSpace / 2;
+    } else {
+      // Truncate the the longest one
+      if (maxTitleWidth > maxSubtitleWidth) {
+        maxTitleWidth = availableSpace - maxSubtitleWidth;
+      } else {
+        maxSubtitleWidth = availableSpace - maxTitleWidth;
+      }
+    }
+  }
 
   if (title) {
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);

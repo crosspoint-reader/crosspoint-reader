@@ -53,6 +53,13 @@ If you already cloned without submodules:
 git submodule update --init --recursive
 ```
 
+Enable the repository-managed Git hooks (required once per clone):
+
+```sh
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit
+```
+
 ## Build
 
 ```sh

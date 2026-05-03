@@ -2,6 +2,7 @@
 
 #include <HalPowerManager.h>
 
+#include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -11,6 +12,7 @@
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
+#include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
@@ -179,7 +181,13 @@ void ActivityManager::goToRecentBooks() {
 }
 
 void ActivityManager::goToBrowser() {
-  replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput));
+  const auto& servers = OPDS_STORE.getServers();
+  // Skip the server picker when there's only one server configured
+  if (servers.size() == 1) {
+    replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
+  } else {
+    replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
+  }
 }
 
 void ActivityManager::goToReader(std::string path) {
@@ -225,6 +233,13 @@ bool ActivityManager::preventAutoSleep() const { return currentActivity && curre
 bool ActivityManager::isReaderActivity() const { return currentActivity && currentActivity->isReaderActivity(); }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
+
+ScreenshotInfo ActivityManager::getScreenshotInfo() const {
+  if (currentActivity) {
+    return currentActivity->getScreenshotInfo();
+  }
+  return {};
+}
 
 void ActivityManager::requestUpdate(bool immediate) {
   if (immediate) {
