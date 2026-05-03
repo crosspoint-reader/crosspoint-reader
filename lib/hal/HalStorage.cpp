@@ -25,15 +25,21 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 
 // For the rest of the methods, we acquire the mutex to ensure thread safety
 
+static uint32_t lockLogCount = 0;
+
 class HalStorage::StorageLock {
  public:
   StorageLock() {
-    LOG_DBG("LOCK", "SL take from %s", pcTaskGetName(nullptr));
+    if (lockLogCount++ % 10000 == 0) {
+      LOG_DBG("LOCK", "SL take from %s (#%u)", pcTaskGetName(nullptr), lockLogCount);
+    }
     xSemaphoreTake(HalStorage::getInstance().storageMutex, portMAX_DELAY);
   }
   ~StorageLock() {
+    if (lockLogCount++ % 10000 == 0) {
+      LOG_DBG("LOCK", "SL give from %s (#%u)", pcTaskGetName(nullptr), lockLogCount);
+    }
     xSemaphoreGive(HalStorage::getInstance().storageMutex);
-    LOG_DBG("LOCK", "SL give from %s", pcTaskGetName(nullptr));
   }
 };
 

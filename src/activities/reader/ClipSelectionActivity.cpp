@@ -161,10 +161,9 @@ void ClipSelectionActivity::loop() {
       };
       for (int i = from; i <= to; ++i) {
         const auto& wtext = stripEmSpace(words[i].text);
-        const bool emSpaceStart = hasEmSpace(words[i].text) && i > from;
-        const bool yGapBreak =
+        const bool yGap =
             i > from && words[i].pageIdx == words[i - 1].pageIdx && words[i].y > words[i - 1].y + words[i - 1].h;
-        const bool paragraphStart = emSpaceStart || yGapBreak;
+        const bool paragraphStart = (i > from) && (hasEmSpace(words[i].text) || words[i].paragraphStart || yGap);
         if (i > from && !text.empty() && !paragraphStart) {
           const auto& prev = words[i - 1].text;
           const auto& prevStripped = stripEmSpace(prev);
@@ -180,7 +179,10 @@ void ClipSelectionActivity::loop() {
         if (paragraphStart) {
           text += '\n';
         } else if (!text.empty()) {
-          text += ' ';
+          const bool attached = (words[i].y == words[i - 1].y) && (words[i].x <= words[i - 1].x + words[i - 1].w + 2);
+          if (!attached) {
+            text += ' ';
+          }
         }
         text += wtext;
         pushWordRect(i, rects);

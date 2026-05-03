@@ -17,6 +17,7 @@ class ClipSelectionActivity final : public Activity {
     int pageIdx;
     std::string text;
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    bool paragraphStart = false;
   };
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::vector<WordRef> words,
