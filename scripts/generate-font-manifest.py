@@ -160,7 +160,7 @@ def build_manifest(
         for filepath in sorted(files, key=lambda p: p.name):
             file_entries.append(
                 {
-                    "name": filepath.name,
+                    "name": filepath.relative_to(input_dir).as_posix(),
                     "size": filepath.stat().st_size,
                 }
             )
