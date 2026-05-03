@@ -164,12 +164,17 @@ void ClipSelectionActivity::loop() {
         const bool yGap =
             i > from && words[i].pageIdx == words[i - 1].pageIdx && words[i].y > words[i - 1].y + words[i - 1].h;
         const bool paragraphStart = (i > from) && (hasEmSpace(words[i].text) || words[i].paragraphStart || yGap);
+        if (paragraphStart) {
+          LOG_DBG("CLIP", "NL w[%d] em=%d ps=%d yGap=%d text=%.30s", i, hasEmSpace(words[i].text),
+                  words[i].paragraphStart, yGap, wtext.c_str());
+        }
         if (i > from && !text.empty() && !paragraphStart) {
           const auto& prev = words[i - 1].text;
           const auto& prevStripped = stripEmSpace(prev);
           if (prevStripped.size() >= 1 && prevStripped.back() == '-' && !wtext.empty() &&
               static_cast<unsigned char>(wtext[0]) >= 'a' && static_cast<unsigned char>(wtext[0]) <= 'z' &&
               prevStripped.find('-') == prevStripped.size() - 1) {
+            LOG_DBG("CLIP", "MERGE w[%d] \"%.15s\"+\"%.15s\"", i - 1, prevStripped.c_str(), wtext.c_str());
             text.pop_back();
             text += wtext;
             pushWordRect(i, rects);
