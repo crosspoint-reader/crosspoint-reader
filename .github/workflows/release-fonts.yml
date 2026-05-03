@@ -6,9 +6,6 @@ name: Build & Publish SD Card Fonts
 # firmware can fetch them from a stable URL.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - ci-font-packaging   # TEMPORARY: remove before merging
 
 jobs:
   build-fonts:

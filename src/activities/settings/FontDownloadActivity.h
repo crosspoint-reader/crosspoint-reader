@@ -8,7 +8,10 @@
 #include "util/ButtonNavigator.h"
 
 #ifndef FONT_MANIFEST_URL
-#define FONT_MANIFEST_URL "https://crosspointreader.com/fonts.json"
+// Manifest + .cpfont assets are published by .github/workflows/release-fonts.yml
+// to the "sd-fonts" GitHub release. URL resolves once the workflow has run
+// against master.
+#define FONT_MANIFEST_URL "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/sd-fonts/fonts.json"
 #endif
 
 class FontDownloadActivity : public Activity {
