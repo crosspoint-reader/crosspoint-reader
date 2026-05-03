@@ -114,7 +114,8 @@ void XtcReaderActivity::loop() {
   }
 
   const bool fromTilt = tiltPrev || tiltNext;
-  const bool skipPages = !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages =
+      !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && mappedInput.getHeldTime() > skipPageMs;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
