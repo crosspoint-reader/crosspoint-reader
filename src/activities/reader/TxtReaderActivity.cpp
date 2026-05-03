@@ -250,7 +250,12 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  // Upstream's tilt-driven page turn (X3 IMU) returns a third tuple element;
+  // TXT reader has no chapter-skip semantics to gate on, so the source of the
+  // turn doesn't matter here. Discard `fromTilt` to silence unused-binding
+  // warnings.
+  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  (void)fromTilt;
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -994,4 +999,22 @@ void TxtReaderActivity::loadProgress() {
     LOG_DBG("TRS", "Loaded progress: offset %zu / %zu (%.0f%%)", currentOffset, fileSize,
             fileSize ? currentOffset * 100.0f / fileSize : 0.0f);
   }
+}
+
+ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
+  ScreenshotInfo info;
+  info.readerType = ScreenshotInfo::ReaderType::Txt;
+  if (txt) {
+    const std::string t = txt->getTitle();
+    snprintf(info.title, sizeof(info.title), "%s", t.c_str());
+  }
+  // The byte-offset rewrite removed the page-index members upstream's
+  // getScreenshotInfo originally used (`currentPage` / `totalPages`).
+  // Use the existing estimators (already 1-based) and derive progress from
+  // the exact byte offset for accuracy.
+  info.currentPage = estimatedCurrentPage();
+  info.totalPages = estimatedTotalPages();
+  info.progressPercent = fileSize > 0 ? static_cast<int>(currentOffset * 100.0f / fileSize + 0.5f) : 0;
+  if (info.progressPercent > 100) info.progressPercent = 100;
+  return info;
 }

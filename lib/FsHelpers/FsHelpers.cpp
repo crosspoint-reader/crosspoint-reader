@@ -86,4 +86,22 @@ std::string extractFolderPath(const std::string& filePath) {
   return filePath.substr(0, lastSlash);
 }
 
+void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen) {
+  if (maxLen == 0) {
+    return;
+  }
+
+  size_t i = 0;
+  for (; i < maxLen - 1 && input[i] != '\0'; i++) {
+    const char c = input[i];
+    if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
+        c == ' ' || (c > 0x00 && c <= 0x1f)) {
+      output[i] = '-';
+    } else {
+      output[i] = c;
+    }
+  }
+  output[i] = '\0';
+}
+
 }  // namespace FsHelpers
