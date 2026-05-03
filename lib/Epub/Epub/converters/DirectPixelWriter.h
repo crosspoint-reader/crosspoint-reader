@@ -15,6 +15,7 @@
 struct DirectPixelWriter {
   uint8_t* fb;
   GfxRenderer::RenderMode mode;
+  uint16_t displayWidthBytes;  // Runtime framebuffer stride (X4: 100, X3: 99)
 
   // Orientation is collapsed into a linear transform:
   //   phyX = phyXBase + x * phyXStepX + y * phyXStepY
@@ -29,29 +30,33 @@ struct DirectPixelWriter {
   void init(GfxRenderer& renderer) {
     fb = renderer.getFrameBuffer();
     mode = renderer.getRenderMode();
+    displayWidthBytes = renderer.getDisplayWidthBytes();
+
+    const int phyW = renderer.getDisplayWidth();
+    const int phyH = renderer.getDisplayHeight();
 
     switch (renderer.getOrientation()) {
       case GfxRenderer::Portrait:
-        // phyX = y, phyY = (DISPLAY_HEIGHT-1) - x
+        // phyX = y, phyY = (phyH-1) - x
         phyXBase = 0;
-        phyYBase = HalDisplay::DISPLAY_HEIGHT - 1;
+        phyYBase = phyH - 1;
         phyXStepX = 0;
         phyYStepX = -1;
         phyXStepY = 1;
         phyYStepY = 0;
         break;
       case GfxRenderer::LandscapeClockwise:
-        // phyX = (DISPLAY_WIDTH-1) - x, phyY = (DISPLAY_HEIGHT-1) - y
-        phyXBase = HalDisplay::DISPLAY_WIDTH - 1;
-        phyYBase = HalDisplay::DISPLAY_HEIGHT - 1;
+        // phyX = (phyW-1) - x, phyY = (phyH-1) - y
+        phyXBase = phyW - 1;
+        phyYBase = phyH - 1;
         phyXStepX = -1;
         phyYStepX = 0;
         phyXStepY = 0;
         phyYStepY = -1;
         break;
       case GfxRenderer::PortraitInverted:
-        // phyX = (DISPLAY_WIDTH-1) - y, phyY = x
-        phyXBase = HalDisplay::DISPLAY_WIDTH - 1;
+        // phyX = (phyW-1) - y, phyY = x
+        phyXBase = phyW - 1;
         phyYBase = 0;
         phyXStepX = 0;
         phyYStepX = 1;
@@ -115,7 +120,7 @@ struct DirectPixelWriter {
     const int phyX = rowPhyXBase + logicalX * phyXStepX;
     const int phyY = rowPhyYBase + logicalX * phyYStepX;
 
-    const uint16_t byteIndex = phyY * HalDisplay::DISPLAY_WIDTH_BYTES + (phyX >> 3);
+    const uint16_t byteIndex = phyY * displayWidthBytes + (phyX >> 3);
     const uint8_t bitMask = 1 << (7 - (phyX & 7));
 
     if (state) {

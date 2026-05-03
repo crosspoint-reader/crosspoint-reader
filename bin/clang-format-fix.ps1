@@ -97,6 +97,7 @@ $exclude = @(
     'lib\Epub\Epub\hyphenation\generated'
     'lib\uzlib'
     '.pio'
+    '.venv'
 )
 
 function Test-Excluded($fullPath) {

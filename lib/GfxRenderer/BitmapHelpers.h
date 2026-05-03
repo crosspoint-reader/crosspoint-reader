@@ -11,8 +11,10 @@ uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
 int adjustPixel(int gray);
 
+enum class BmpRowOrder { BottomUp, TopDown };
+
 // Populates a 1-bit BMP header in the provided memory.
-void createBmpHeader(BmpHeader* bmpHeader, int width, int height);
+void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder rowOrder);
 
 // 1-bit Atkinson dithering - better quality than noise dithering for thumbnails
 // Error distribution pattern (same as 2-bit but quantizes to 2 levels):
