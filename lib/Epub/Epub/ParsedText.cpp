@@ -76,15 +76,11 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
 
 }  // namespace
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
-                         const bool attachToPrevious) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool attachToPrevious) {
   if (word.empty()) return;
 
   words.push_back(std::move(word));
   EpdFontFamily::Style combinedStyle = fontStyle;
-  if (underline) {
-    combinedStyle = static_cast<EpdFontFamily::Style>(combinedStyle | EpdFontFamily::UNDERLINE);
-  }
   wordStyles.push_back(combinedStyle);
   wordContinues.push_back(attachToPrevious);
 }

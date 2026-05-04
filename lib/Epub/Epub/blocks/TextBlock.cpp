@@ -12,19 +12,48 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     return;
   }
 
+  // y is the top of the text line; add ascender to reach baseline, then offset 2px below
+  const int ascenderSize = renderer.getFontAscenderSize(fontId);
+  const int yUnderline = y + ascenderSize + 2;
+  const int yOverline = y + ascenderSize / 5;
+  const int yLinethrough = y + ascenderSize * 4 / 5;
+
+  struct DecorationLineTracker {
+    int startX = -1;
+    int endX = -1;
+    EpdFontFamily::Style style;
+    int yPos;
+
+    void reset() {
+      startX = -1;
+      endX = -1;
+    }
+  };
+
+  DecorationLineTracker decos[] = {
+      {.style = EpdFontFamily::Style::UNDERLINE, .yPos = yUnderline},
+      {.style = EpdFontFamily::Style::OVERLINE, .yPos = yOverline},
+      {.style = EpdFontFamily::Style::LINETHROUGH, .yPos = yLinethrough},
+  };
+
+  auto flushDeco = [&](DecorationLineTracker& deco) {
+    if (deco.startX != -1) {
+      renderer.drawLine(deco.startX, deco.yPos, deco.endX, deco.yPos, 2, true);
+      deco.reset();
+    }
+  };
+
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
     renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
 
-    if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
+    if (EpdFontFamily::hasDecoration(currentStyle)) {
       const std::string& w = words[i];
       const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
-      // y is the top of the text line; add ascender to reach baseline, then offset 2px below
-      const int underlineY = y + renderer.getFontAscenderSize(fontId) + 2;
 
       int startX = wordX;
-      int underlineWidth = fullWordWidth;
+      int lineWidth = fullWordWidth;
 
       // if word starts with em-space ("\xe2\x80\x83"), account for the additional indent before drawing the line
       if (w.size() >= 3 && static_cast<uint8_t>(w[0]) == 0xE2 && static_cast<uint8_t>(w[1]) == 0x80 &&
@@ -33,12 +62,22 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         const int prefixWidth = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
         const int visibleWidth = renderer.getTextWidth(fontId, visiblePtr, currentStyle);
         startX = wordX + prefixWidth;
-        underlineWidth = visibleWidth;
+        lineWidth = visibleWidth;
       }
 
-      renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
+      for (auto& deco : decos) {
+        if (currentStyle & deco.style) {
+          if (deco.startX == -1) deco.startX = startX;
+          deco.endX = startX + lineWidth;
+        } else {
+          flushDeco(deco);
+        }
+      }
+    } else {
+      for (auto& deco : decos) flushDeco(deco);
     }
   }
+  for (auto& deco : decos) flushDeco(deco);
 }
 
 bool TextBlock::serialize(FsFile& file) const {
