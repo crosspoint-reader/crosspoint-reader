@@ -184,6 +184,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
   - "Page Scroll" - Long-pressing scrolls a page up/down
+- **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) for ~1 second while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle:
+  - "Disabled" (default) - Long-press is ignored; only short-press opens the reader menu.
+  - "KOSync" - Long-press launches KOReader sync directly. A short press still opens the reader menu as normal.
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
   - "Ignore" (default) - Require a long press to turn off the device
   - "Sleep" - A short press puts the device into sleep mode

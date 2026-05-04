@@ -143,16 +143,18 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Long-press CONFIRM (1s+) launches KOReader sync directly when enabled.
-  if (SETTINGS.longPressMenuKoSync && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+  // Long-press CONFIRM (1s+) launches KOReader sync when that's the bound function.
+  if (SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_KOSYNC &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     launchKOReaderSync();
     return;
   }
 
-  // Enter reader menu activity (short-press, or any release when long-press binding is off).
+  // Enter reader menu activity (short-press, or any release when no long-press function is bound).
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) &&
-      (!SETTINGS.longPressMenuKoSync || mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS)) {
+      (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_KOSYNC ||
+       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS)) {
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;

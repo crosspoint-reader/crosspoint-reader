@@ -128,6 +128,10 @@ class CrossPointSettings {
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, SHORT_PWRBTN_COUNT };
 
+  // Long-press Confirm action while reading an EPUB. The setting cycles through these values;
+  // additional functions (e.g. dictionary, bookmark) can be appended without breaking storage.
+  enum LONG_PRESS_MENU_FUNCTION { LP_MENU_KOSYNC = 0, LP_MENU_DISABLED = 1, LONG_PRESS_MENU_FUNCTION_COUNT };
+
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
@@ -191,8 +195,8 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press chapter skip on side buttons
   uint8_t longPressChapterSkip = 1;
-  // Long-press Confirm in EPUB reader launches KOReader sync (1 = enabled, 0 = disabled)
-  uint8_t longPressMenuKoSync = 1;
+  // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values)
+  uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
