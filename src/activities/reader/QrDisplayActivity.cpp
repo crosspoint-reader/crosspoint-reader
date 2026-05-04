@@ -18,12 +18,12 @@ void QrDisplayActivity::onExit() { Activity::onExit(); }
 void QrDisplayActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
       mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onGoBack();
+    finish();
     return;
   }
 }
 
-void QrDisplayActivity::render(Activity::RenderLock&&) {
+void QrDisplayActivity::render(RenderLock&&) {
   renderer.clearScreen();
   auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();

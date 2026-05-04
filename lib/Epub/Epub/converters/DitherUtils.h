@@ -1,6 +1,5 @@
 #pragma once
 
-#include <GfxRenderer.h>
 #include <stdint.h>
 
 // 4x4 Bayer matrix for ordered dithering
@@ -25,16 +24,4 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   if (adjusted < 128) return 1;
   if (adjusted < 192) return 2;
   return 3;
-}
-
-// Draw a pixel respecting the current render mode for grayscale support
-inline void drawPixelWithRenderMode(GfxRenderer& renderer, int x, int y, uint8_t pixelValue) {
-  GfxRenderer::RenderMode renderMode = renderer.getRenderMode();
-  if (renderMode == GfxRenderer::BW && pixelValue < 3) {
-    renderer.drawPixel(x, y, true);
-  } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (pixelValue == 1 || pixelValue == 2)) {
-    renderer.drawPixel(x, y, false);
-  } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && pixelValue == 1) {
-    renderer.drawPixel(x, y, false);
-  }
 }

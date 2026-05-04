@@ -8,9 +8,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
-                                     std::function<void()> onGoBack)
-    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)), onGoBack(std::move(onGoBack)) {}
+BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
+    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
 
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
@@ -62,7 +61,7 @@ void BmpViewerActivity::onEnter() {
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       // Single pass for non-grayscale images
 
-      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
     } else {
       // Handle file parsing error
@@ -70,7 +69,7 @@ void BmpViewerActivity::onEnter() {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Invalid BMP File");
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
 
     file.close();
@@ -80,14 +79,14 @@ void BmpViewerActivity::onEnter() {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Could not open file");
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 }
 
 void BmpViewerActivity::onExit() {
   Activity::onExit();
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void BmpViewerActivity::loop() {
@@ -95,7 +94,7 @@ void BmpViewerActivity::loop() {
   Activity::loop();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (onGoBack) onGoBack();
+    activityManager.goToFileBrowser(filePath);
     return;
   }
 }

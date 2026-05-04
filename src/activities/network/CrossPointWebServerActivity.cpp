@@ -33,7 +33,7 @@ constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
 void CrossPointWebServerActivity::onEnter() {
-  ActivityWithSubactivity::onEnter();
+  Activity::onEnter();
 
   LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
 
@@ -48,14 +48,18 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
-  enterNewActivity(new NetworkModeSelectionActivity(
-      renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
-      [this]() { onGoBack(); }  // Cancel goes back to home
-      ));
+  startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             onGoHome();
+                           } else {
+                             onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
+                           }
+                         });
 }
 
 void CrossPointWebServerActivity::onExit() {
-  ActivityWithSubactivity::onExit();
+  Activity::onExit();
 
   LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
@@ -107,18 +111,20 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
 
-  // Exit mode selection subactivity
-  exitActivity();
-
   if (mode == NetworkMode::CONNECT_CALIBRE) {
-    exitActivity();
-    enterNewActivity(new CalibreConnectActivity(renderer, mappedInput, [this] {
-      exitActivity();
-      state = WebServerActivityState::MODE_SELECTION;
-      enterNewActivity(new NetworkModeSelectionActivity(
-          renderer, mappedInput, [this](const NetworkMode nextMode) { onNetworkModeSelected(nextMode); },
-          [this]() { onGoBack(); }));
-    }));
+    startActivityForResult(
+        std::make_unique<CalibreConnectActivity>(renderer, mappedInput), [this](const ActivityResult& result) {
+          state = WebServerActivityState::MODE_SELECTION;
+
+          startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+                                 [this](const ActivityResult& result) {
+                                   if (result.isCancelled) {
+                                     onGoHome();
+                                   } else {
+                                     onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
+                                   }
+                                 });
+        });
     return;
   }
 
@@ -129,8 +135,15 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 
     state = WebServerActivityState::WIFI_SELECTION;
     LOG_DBG("WEBACT", "Launching WifiSelectionActivity...");
-    enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
-                                               [this](const bool connected) { onWifiSelectionComplete(connected); }));
+    startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& wifi = std::get<WifiResult>(result.data);
+                               connectedIP = wifi.ip;
+                               connectedSSID = wifi.ssid;
+                             }
+                             onWifiSelectionComplete(!result.isCancelled);
+                           });
   } else {
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
@@ -144,11 +157,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 
   if (connected) {
     // Get connection info before exiting subactivity
-    connectedIP = static_cast<WifiSelectionActivity*>(subActivity.get())->getConnectedIP();
-    connectedSSID = WiFi.SSID().c_str();
     isApMode = false;
-
-    exitActivity();
 
     // Start mDNS for hostname resolution
     if (MDNS.begin(AP_HOSTNAME)) {
@@ -159,11 +168,16 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     startWebServer();
   } else {
     // User cancelled - go back to mode selection
-    exitActivity();
     state = WebServerActivityState::MODE_SELECTION;
-    enterNewActivity(new NetworkModeSelectionActivity(
-        renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
-        [this]() { onGoBack(); }));
+
+    startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+                           [this](const ActivityResult& result) {
+                             if (result.isCancelled) {
+                               onGoHome();
+                             } else {
+                               onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
+                             }
+                           });
   }
 }
 
@@ -186,7 +200,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   if (!apStarted) {
     LOG_ERR("WEBACT", "ERROR: Failed to start Access Point!");
-    onGoBack();
+    onGoHome();
     return;
   }
 
@@ -236,16 +250,12 @@ void CrossPointWebServerActivity::startWebServer() {
 
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.
-    {
-      RenderLock lock(*this);
-      render(std::move(lock));
-    }
-    LOG_DBG("WEBACT", "Rendered File Transfer screen");
+    requestUpdate();
   } else {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
     webServer.reset();
     // Go back on error
-    onGoBack();
+    onGoHome();
   }
 }
 
@@ -259,12 +269,6 @@ void CrossPointWebServerActivity::stopWebServer() {
 }
 
 void CrossPointWebServerActivity::loop() {
-  if (subActivity) {
-    // Forward loop to subactivity
-    subActivity->loop();
-    return;
-  }
-
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
@@ -322,7 +326,7 @@ void CrossPointWebServerActivity::loop() {
           mappedInput.update();
           // Check for exit button inside loop for responsiveness
           if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-            onGoBack();
+            onGoHome();
             return;
           }
         }
@@ -332,13 +336,13 @@ void CrossPointWebServerActivity::loop() {
 
     // Handle exit on Back button (also check outside loop)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onGoBack();
+      onGoHome();
       return;
     }
   }
 }
 
-void CrossPointWebServerActivity::render(Activity::RenderLock&&) {
+void CrossPointWebServerActivity::render(RenderLock&&) {
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
   if (state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) {

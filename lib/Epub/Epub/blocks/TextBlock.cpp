@@ -74,7 +74,7 @@ bool TextBlock::serialize(FsFile& file) const {
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
   std::vector<std::string> words;
-  std::vector<uint16_t> wordXpos;
+  std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 

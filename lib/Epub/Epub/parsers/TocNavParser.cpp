@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <Logging.h>
+#include <XmlParserUtils.h>
 
 #include "../BookMetadataCache.h"
 
@@ -18,15 +19,7 @@ bool TocNavParser::setup() {
   return true;
 }
 
-TocNavParser::~TocNavParser() {
-  if (parser) {
-    XML_StopParser(parser, XML_FALSE);
-    XML_SetElementHandler(parser, nullptr, nullptr);
-    XML_SetCharacterDataHandler(parser, nullptr);
-    XML_ParserFree(parser);
-    parser = nullptr;
-  }
-}
+TocNavParser::~TocNavParser() { destroyXmlParser(parser); }
 
 size_t TocNavParser::write(const uint8_t data) { return write(&data, 1); }
 
@@ -40,11 +33,7 @@ size_t TocNavParser::write(const uint8_t* buffer, const size_t size) {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
       LOG_DBG("NAV", "Couldn't allocate memory for buffer");
-      XML_StopParser(parser, XML_FALSE);
-      XML_SetElementHandler(parser, nullptr, nullptr);
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      destroyXmlParser(parser);
       return 0;
     }
 
@@ -54,11 +43,7 @@ size_t TocNavParser::write(const uint8_t* buffer, const size_t size) {
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
       LOG_DBG("NAV", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);
-      XML_SetElementHandler(parser, nullptr, nullptr);
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      destroyXmlParser(parser);
       return 0;
     }
 

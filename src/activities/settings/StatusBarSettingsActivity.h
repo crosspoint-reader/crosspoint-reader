@@ -9,22 +9,18 @@
 // Reader status bar configuration activity
 class StatusBarSettingsActivity final : public Activity {
  public:
-  explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                     const std::function<void()>& onBack)
-      : Activity("StatusBarSettings", renderer, mappedInput), onBack(onBack) {}
+  explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("StatusBarSettings", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   ButtonNavigator buttonNavigator;
 
   int selectedIndex = 0;
 
-  const std::function<void()> onBack;
-
-  static void taskTrampoline(void* param);
   void handleSelection();
 };

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdint.h>
 
 #include <string>
@@ -17,8 +18,4 @@ class JpegToFramebufferConverter final : public ImageToFramebufferDecoder {
 
   static bool supportsFormat(const std::string& extension);
   const char* getFormatName() const override { return "JPEG"; }
-
- private:
-  static unsigned char jpegReadCallback(unsigned char* pBuf, unsigned char buf_size,
-                                        unsigned char* pBytes_actually_read, void* pCallback_data);
 };

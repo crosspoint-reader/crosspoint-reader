@@ -41,7 +41,7 @@ std::string Txt::getTitle() const {
   std::string filename = (lastSlash != std::string::npos) ? filepath.substr(lastSlash + 1) : filepath;
 
   // Remove .txt extension
-  if (filename.length() >= 4 && filename.substr(filename.length() - 4) == ".txt") {
+  if (FsHelpers::hasTxtExtension(filename)) {
     filename = filename.substr(0, filename.length() - 4);
   }
 
@@ -112,14 +112,7 @@ bool Txt::generateCoverBmp() const {
   // Setup cache directory
   setupCacheDir();
 
-  // Get file extension
-  const size_t len = coverImagePath.length();
-  const bool isJpg =
-      (len >= 4 && (coverImagePath.substr(len - 4) == ".jpg" || coverImagePath.substr(len - 4) == ".JPG")) ||
-      (len >= 5 && (coverImagePath.substr(len - 5) == ".jpeg" || coverImagePath.substr(len - 5) == ".JPEG"));
-  const bool isBmp = len >= 4 && (coverImagePath.substr(len - 4) == ".bmp" || coverImagePath.substr(len - 4) == ".BMP");
-
-  if (isBmp) {
+  if (FsHelpers::hasBmpExtension(coverImagePath)) {
     // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
     FsFile src, dst;
@@ -127,7 +120,6 @@ bool Txt::generateCoverBmp() const {
       return false;
     }
     if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
-      src.close();
       return false;
     }
     uint8_t buffer[1024];
@@ -135,13 +127,9 @@ bool Txt::generateCoverBmp() const {
       size_t bytesRead = src.read(buffer, sizeof(buffer));
       dst.write(buffer, bytesRead);
     }
-    src.close();
-    dst.close();
     LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
-  }
-
-  if (isJpg) {
+  } else if (FsHelpers::hasJpgExtension(coverImagePath)) {
     // Convert JPG/JPEG to BMP (same approach as Epub)
     LOG_DBG("TXT", "Generating BMP from JPG cover image");
     FsFile coverJpg, coverBmp;
@@ -149,12 +137,9 @@ bool Txt::generateCoverBmp() const {
       return false;
     }
     if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
-      coverJpg.close();
       return false;
     }
     const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
-    coverJpg.close();
-    coverBmp.close();
 
     if (!success) {
       LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
@@ -181,12 +166,9 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
   }
 
   if (!file.seek(offset)) {
-    file.close();
     return false;
   }
 
   size_t bytesRead = file.read(buffer, length);
-  file.close();
-
   return bytesRead > 0;
 }

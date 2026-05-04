@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "activities/ActivityWithSubactivity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 // Structure to hold WiFi network information
@@ -15,6 +15,7 @@ struct WifiNetworkInfo {
   int32_t rssi;
   bool isEncrypted;
   bool hasSavedPassword;  // Whether we have saved credentials for this network
+  std::string ipAddress;  // Populated after connection for display
 };
 
 // WiFi selection states
@@ -41,13 +42,12 @@ enum class WifiSelectionState {
  *
  * The onComplete callback receives true if connected successfully, false if cancelled.
  */
-class WifiSelectionActivity final : public ActivityWithSubactivity {
+class WifiSelectionActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   WifiSelectionState state = WifiSelectionState::SCANNING;
   size_t selectedNetworkIndex = 0;
   std::vector<WifiNetworkInfo> networks;
-  const std::function<void(bool connected)> onComplete;
 
   // Selected network for connection
   std::string selectedSSID;
@@ -95,17 +95,13 @@ class WifiSelectionActivity final : public ActivityWithSubactivity {
   void checkConnectionStatus();
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
+  void onComplete(bool connected);
+
  public:
-  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 const std::function<void(bool connected)>& onComplete, bool autoConnect = true)
-      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput),
-        onComplete(onComplete),
-        allowAutoConnect(autoConnect) {}
+  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true)
+      : Activity("WifiSelection", renderer, mappedInput), allowAutoConnect(autoConnect) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
-
-  // Get the IP address after successful connection
-  const std::string& getConnectedIP() const { return connectedIP; }
+  void render(RenderLock&&) override;
 };

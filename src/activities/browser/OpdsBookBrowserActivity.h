@@ -1,51 +1,46 @@
 #pragma once
 #include <OpdsParser.h>
 
-#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "../ActivityWithSubactivity.h"
+#include "../Activity.h"
+#include "OpdsServerStore.h"
 #include "util/ButtonNavigator.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
  * Supports navigation through catalog hierarchy and downloading EPUBs.
- * When WiFi connection fails, launches WiFi selection to let user connect.
  */
-class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
+class OpdsBookBrowserActivity final : public Activity {
  public:
-  enum class BrowserState {
-    CHECK_WIFI,      // Checking WiFi connection
-    WIFI_SELECTION,  // WiFi selection subactivity is active
-    LOADING,         // Fetching OPDS feed
-    BROWSING,        // Displaying entries (navigation or books)
-    DOWNLOADING,     // Downloading selected EPUB
-    ERROR            // Error state with message
-  };
+  enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
 
-  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const std::function<void()>& onGoHome)
-      : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput), onGoHome(onGoHome) {}
+  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
+      : Activity("OpdsBookBrowser", renderer, mappedInput), buttonNavigator(), server(std::move(server)) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
 
  private:
   ButtonNavigator buttonNavigator;
   BrowserState state = BrowserState::LOADING;
   std::vector<OpdsEntry> entries;
-  std::vector<std::string> navigationHistory;  // Stack of previous feed paths for back navigation
-  std::string currentPath;                     // Current feed path being displayed
+  std::vector<std::string> navigationHistory;
+  std::string currentPath;
+  std::string searchTemplate;
+  bool consumeConfirm = false;
+  bool consumeBack = false;  // Added missing member
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
 
-  const std::function<void()> onGoHome;
+  OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
   void checkAndConnectWifi();
   void launchWifiSelection();
@@ -54,5 +49,7 @@ class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
+  void launchSearch();
+  void performSearch(const std::string& query);
   bool preventAutoSleep() override { return true; }
 };

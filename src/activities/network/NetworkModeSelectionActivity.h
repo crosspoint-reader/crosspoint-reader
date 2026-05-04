@@ -5,7 +5,6 @@
 #include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
-// Enum for network mode selection
 enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
 
 /**
@@ -22,16 +21,14 @@ class NetworkModeSelectionActivity final : public Activity {
 
   int selectedIndex = 0;
 
-  const std::function<void(NetworkMode)> onModeSelected;
-  const std::function<void()> onCancel;
-
  public:
-  explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::function<void(NetworkMode)>& onModeSelected,
-                                        const std::function<void()>& onCancel)
-      : Activity("NetworkModeSelection", renderer, mappedInput), onModeSelected(onModeSelected), onCancel(onCancel) {}
+  explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("NetworkModeSelection", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  void render(Activity::RenderLock&&) override;
+  void render(RenderLock&&) override;
+
+  void onModeSelected(NetworkMode mode);
+  void onCancel();
 };

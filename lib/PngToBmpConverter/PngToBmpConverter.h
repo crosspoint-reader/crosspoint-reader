@@ -1,6 +1,7 @@
 #pragma once
 
-class FsFile;
+#include <HalStorage.h>
+
 class Print;
 
 class PngToBmpConverter {

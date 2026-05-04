@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <XmlParserUtils.h>
 
 #include "../BookMetadataCache.h"
 
@@ -26,22 +27,14 @@ bool ContentOpfParser::setup() {
 }
 
 ContentOpfParser::~ContentOpfParser() {
-  if (parser) {
-    XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-    XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-    XML_SetCharacterDataHandler(parser, nullptr);
-    XML_ParserFree(parser);
-    parser = nullptr;
-  }
+  destroyXmlParser(parser);
   if (tempItemStore) {
     tempItemStore.close();
   }
-  if (Storage.exists((cachePath + itemCacheFile).c_str())) {
-    Storage.remove((cachePath + itemCacheFile).c_str());
+  const auto itemCachePath = cachePath + itemCacheFile;
+  if (Storage.exists(itemCachePath.c_str())) {
+    Storage.remove(itemCachePath.c_str());
   }
-  itemIndex.clear();
-  itemIndex.shrink_to_fit();
-  useItemIndex = false;
 }
 
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }
@@ -57,11 +50,7 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
 
     if (!buf) {
       LOG_ERR("COF", "Couldn't allocate memory for buffer");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      destroyXmlParser(parser);
       return 0;
     }
 
@@ -71,11 +60,7 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
       LOG_DBG("COF", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      destroyXmlParser(parser);
       return 0;
     }
 

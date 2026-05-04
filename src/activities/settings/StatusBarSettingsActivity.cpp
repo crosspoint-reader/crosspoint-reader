@@ -58,7 +58,7 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 
 void StatusBarSettingsActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
+    finish();
     return;
   }
 
@@ -114,7 +114,7 @@ void StatusBarSettingsActivity::handleSelection() {
   SETTINGS.saveToFile();
 }
 
-void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
+void StatusBarSettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();
@@ -156,7 +156,7 @@ void StatusBarSettingsActivity::render(Activity::RenderLock&&) {
   std::string title;
   if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = tr(STR_EXAMPLE_BOOK);
-  } else {
+  } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_EXAMPLE_CHAPTER);
   }
 

@@ -1,5 +1,6 @@
 #include "QrUtils.h"
 
+#include <Utf8.h>
 #include <qrcode.h>
 
 #include <algorithm>
@@ -12,7 +13,18 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
   // Version 4 holds ~114 bytes, Version 10 ~395, Version 20 ~1066, up to 40
   // qrcode.h max version is 40.
   // Formula: approx version = size / 26 + 1 (very rough estimate, better to find best fit)
-  const size_t len = textPayload.length();
+  size_t len = textPayload.length();
+
+  // Truncate to max QR capacity at a UTF-8 safe boundary to avoid splitting multi-byte sequences
+  static constexpr size_t MAX_QR_CAPACITY = 2953;  // Version 40, ECC_LOW, byte mode
+  std::string truncated;
+  const char* payload = textPayload.c_str();
+  if (len > MAX_QR_CAPACITY) {
+    len = utf8SafeTruncateBuffer(textPayload.c_str(), static_cast<int>(MAX_QR_CAPACITY));
+    truncated = textPayload.substr(0, len);
+    payload = truncated.c_str();
+  }
+
   int version = 4;
   if (len > 114) version = 10;
   if (len > 395) version = 20;
@@ -25,7 +37,7 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
 
   QRCode qrcode;
   // Initialize the QR code. We use ECC_LOW for max capacity.
-  int8_t res = qrcode_initText(&qrcode, qrcodeBytes.get(), version, ECC_LOW, textPayload.c_str());
+  int8_t res = qrcode_initText(&qrcode, qrcodeBytes.get(), version, ECC_LOW, payload);
 
   if (res == 0) {
     // Determine the optimal pixel size.

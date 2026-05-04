@@ -19,6 +19,7 @@ bool isCyrillicLetter(uint32_t cp);
 bool isAlphabetic(uint32_t cp);
 bool isPunctuation(uint32_t cp);
 bool isAsciiDigit(uint32_t cp);
+bool isApostrophe(uint32_t cp);
 bool isExplicitHyphen(uint32_t cp);
 bool isSoftHyphen(uint32_t cp);
 void trimSurroundingPunctuationAndFootnote(std::vector<CodepointInfo>& cps);

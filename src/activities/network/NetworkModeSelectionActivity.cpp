@@ -54,7 +54,7 @@ void NetworkModeSelectionActivity::loop() {
   });
 }
 
-void NetworkModeSelectionActivity::render(Activity::RenderLock&&) {
+void NetworkModeSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -82,4 +82,16 @@ void NetworkModeSelectionActivity::render(Activity::RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+}
+
+void NetworkModeSelectionActivity::onModeSelected(NetworkMode mode) {
+  setResult(NetworkModeResult{mode});
+  finish();
+}
+
+void NetworkModeSelectionActivity::onCancel() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
 }

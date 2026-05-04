@@ -144,14 +144,4 @@ inline const char* errorToString(XtcError err) {
   }
 }
 
-/**
- * Check if filename has XTC/XTCH extension
- */
-inline bool isXtcExtension(const char* filename) {
-  if (!filename) return false;
-  const char* ext = strrchr(filename, '.');
-  if (!ext) return false;
-  return (strcasecmp(ext, ".xtc") == 0 || strcasecmp(ext, ".xtch") == 0);
-}
-
 }  // namespace xtc
