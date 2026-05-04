@@ -99,9 +99,13 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
   const auto vr = firmware_flash::validateImageFile(firmwarePath.c_str(), partitionLimit);
   if (vr != firmware_flash::Result::OK) {
     LOG_ERR("FW", "image validation failed: %s", firmware_flash::resultName(vr));
-    errorMessage = (vr == firmware_flash::Result::TOO_SMALL || vr == firmware_flash::Result::TOO_LARGE)
-                       ? tr(STR_FIRMWARE_TOO_LARGE)
-                       : tr(STR_INVALID_FIRMWARE);
+    if (vr == firmware_flash::Result::TOO_LARGE) {
+      errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
+    } else if (vr == firmware_flash::Result::TOO_SMALL) {
+      errorMessage = tr(STR_FIRMWARE_TOO_SMALL);
+    } else {
+      errorMessage = tr(STR_INVALID_FIRMWARE);
+    }
     return false;
   }
   return true;
@@ -156,10 +160,11 @@ void SdFirmwareUpdateActivity::performUpdate() {
     self->requestUpdate(true);
   };
 
-  // We already ran validateImageFile() in validateFirmware() before the
-  // user confirmed; skip the redundant pass inside the flasher.
-  const auto result =
-      firmware_flash::flashFromSdPath(firmwarePath.c_str(), progressCb, this, /*alreadyValidated=*/true);
+  // Re-validate at flash time (TOCTOU): SD is removable, so don't trust the
+  // pre-confirmation pass. The alreadyValidated parameter on the API stays
+  // for callers (e.g. an OTA staging path) where the same byte stream was
+  // just hashed and there's no removable-media gap.
+  const auto result = firmware_flash::flashFromSdPath(firmwarePath.c_str(), progressCb, this);
   if (result != firmware_flash::Result::OK) {
     LOG_ERR("FW", "flash failed: %s", firmware_flash::resultName(result));
     errorMessage = tr(STR_FIRMWARE_WRITE_FAILED);
