@@ -5,6 +5,10 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
+#include "FontCacheManager.h"
+
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
   if (fontData->groups != nullptr) {
     auto* fd = fontCacheManager_ ? fontCacheManager_->getDecompressor() : nullptr;
