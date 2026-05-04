@@ -56,8 +56,12 @@ _CSPT_HEADER_SIZE = 12
 _CSPT_ENTRY_SIZE = _CSPT_PREFIX_LEN + 4  # 20 bytes
 
 
-def _build_cspt(idx_data: bytes, oft_data: bytes) -> bytes:
-    """Build .idx.oft.cspt from .idx data and .idx.oft data."""
+def _build_cspt(src_data: bytes, oft_data: bytes, skip_per_entry: int = 8) -> bytes:
+    """Build .cspt from .idx/.syn data and matching .oft data.
+
+    skip_per_entry: bytes after the null-terminated word in src_data
+    (8 for .idx = offset+size; 4 for .syn = original_word_index).
+    """
     # Parse OFT: header (38 bytes) + LE uint32 page offsets + sentinel.
     table_bytes = oft_data[len(_OFT_HEADER):]
     # Last entry is sentinel (total file size); preceding entries are page boundaries.
@@ -77,13 +81,13 @@ def _build_cspt(idx_data: bytes, oft_data: bytes) -> bytes:
     for page_off in page_offsets:
         pos = page_off
         # Sub-entry 0: first word of the page.
-        if pos >= len(idx_data):
+        if pos >= len(src_data):
             break
         try:
-            null = idx_data.index(b"\x00", pos)
+            null = src_data.index(b"\x00", pos)
         except ValueError:
             break
-        word = idx_data[pos:null]
+        word = src_data[pos:null]
         prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
         entries.append(prefix + struct.pack("<I", pos))
 
@@ -91,18 +95,18 @@ def _build_cspt(idx_data: bytes, oft_data: bytes) -> bytes:
         scan_pos = pos
         for _ in range(16):
             try:
-                null = idx_data.index(b"\x00", scan_pos)
+                null = src_data.index(b"\x00", scan_pos)
             except ValueError:
-                scan_pos = len(idx_data)
+                scan_pos = len(src_data)
                 break
-            scan_pos = null + 1 + 8  # skip null + 8-byte suffix
-        if scan_pos >= len(idx_data):
+            scan_pos = null + 1 + skip_per_entry
+        if scan_pos >= len(src_data):
             continue
         try:
-            null = idx_data.index(b"\x00", scan_pos)
+            null = src_data.index(b"\x00", scan_pos)
         except ValueError:
             continue
-        word = idx_data[scan_pos:null]
+        word = src_data[scan_pos:null]
         prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
         entries.append(prefix + struct.pack("<I", scan_pos))
 
@@ -230,11 +234,13 @@ def prep(source_folder: Path) -> None:
 
     # Step 4: Generate .syn.oft (.syn may have just been created in step 2)
     syn_oft = out_dir / f"{stem}.syn.oft"
+    syn_oft_regenerated = False
     if syn.exists() and not syn_oft.exists():
         print(f"  Generating {syn_oft.name} ...", end=" ", flush=True)
         syn_oft.write_bytes(_build_oft(syn.read_bytes(), skip_bytes_after_null=4))
         print(f"{syn_oft.stat().st_size} bytes")
         steps_run += 1
+        syn_oft_regenerated = True
 
     # Step 5: Generate .idx.oft.cspt (requires .idx and .idx.oft).
     # Regenerate if .cspt is missing OR if .idx.oft was just rebuilt this run
@@ -244,8 +250,19 @@ def prep(source_folder: Path) -> None:
         if idx_cspt.exists():
             idx_cspt.unlink()
         print(f"  Generating {idx_cspt.name} ...", end=" ", flush=True)
-        idx_cspt.write_bytes(_build_cspt(idx.read_bytes(), idx_oft.read_bytes()))
+        idx_cspt.write_bytes(_build_cspt(idx.read_bytes(), idx_oft.read_bytes(), skip_per_entry=8))
         print(f"{idx_cspt.stat().st_size} bytes")
+        steps_run += 1
+
+    # Step 6: Generate .syn.oft.cspt (requires .syn and .syn.oft).
+    # Regenerate if .cspt is missing OR if .syn.oft was just rebuilt this run.
+    syn_cspt = out_dir / f"{stem}.syn.oft.cspt"
+    if syn.exists() and syn_oft.exists() and (not syn_cspt.exists() or syn_oft_regenerated):
+        if syn_cspt.exists():
+            syn_cspt.unlink()
+        print(f"  Generating {syn_cspt.name} ...", end=" ", flush=True)
+        syn_cspt.write_bytes(_build_cspt(syn.read_bytes(), syn_oft.read_bytes(), skip_per_entry=4))
+        print(f"{syn_cspt.stat().st_size} bytes")
         steps_run += 1
 
     if steps_run == 0:
@@ -505,16 +522,18 @@ def merge(sources: list[Path], output: Path) -> None:
         ifo_fields["synwordcount"] = str(syn_count)
     _write_ifo(output / f"{out_stem}.ifo", ifo_fields)
 
-    # .oft files + .idx.oft.cspt
+    # .oft files + .cspt files
     idx_oft_bytes = _build_oft(idx_bytes, skip_bytes_after_null=8)
     (output / f"{out_stem}.idx.oft").write_bytes(idx_oft_bytes)
     (output / f"{out_stem}.idx.oft.cspt").write_bytes(
-        _build_cspt(idx_bytes, idx_oft_bytes)
+        _build_cspt(idx_bytes, idx_oft_bytes, skip_per_entry=8)
     )
     if syn_count:
         syn_data = (output / f"{out_stem}.syn").read_bytes()
-        (output / f"{out_stem}.syn.oft").write_bytes(
-            _build_oft(syn_data, skip_bytes_after_null=4)
+        syn_oft_bytes = _build_oft(syn_data, skip_bytes_after_null=4)
+        (output / f"{out_stem}.syn.oft").write_bytes(syn_oft_bytes)
+        (output / f"{out_stem}.syn.oft.cspt").write_bytes(
+            _build_cspt(syn_data, syn_oft_bytes, skip_per_entry=4)
         )
 
     print(f"Merged {len(sources)} dictionaries -> {output}")

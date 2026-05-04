@@ -17,6 +17,7 @@ struct DictPaths {
   std::string idxOft() const { return folder + ".idx.oft"; }
   std::string synOft() const { return folder + ".syn.oft"; }
   std::string idxOftCspt() const { return folder + ".idx.oft.cspt"; }
+  std::string synOftCspt() const { return folder + ".syn.oft.cspt"; }
   std::string dictDz() const { return folder + ".dict.dz"; }
   std::string synDz() const { return folder + ".syn.dz"; }
 };
@@ -131,6 +132,13 @@ class Dictionary {
   // Returns true if .cspt was valid and bounds were set, false to fall back to .oft.
   static bool binarySearchCspt(FsFile& cspt, const char* target, uint32_t idxFileSize, uint32_t* startByte,
                                uint32_t* endByte);
+
+  // Resolve the byte range in src to scan for target. Tries .cspt first; on miss or
+  // absence, falls back to .oft. Callers must initialize *startByte=0, *endByte=srcFileSize
+  // before calling — when both .cspt and .oft are absent, the bounds are left untouched
+  // (full-file scan). Used by both .idx (locate) and .syn (resolveAltForm) lookups.
+  static void resolveScanBounds(const char* csptPath, const char* oftPath, FsFile& src, uint32_t srcFileSize,
+                                const char* target, uint32_t* startByte, uint32_t* endByte);
 
   static int editDistance(const std::string& a, const std::string& b, int maxDist);
 };

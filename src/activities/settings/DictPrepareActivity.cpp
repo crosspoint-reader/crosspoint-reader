@@ -65,6 +65,8 @@ const char* DictPrepareActivity::stepLabel(StepType type) {
       return tr(STR_DICT_STEP_GEN_SYN);
     case StepType::GEN_CSPT:
       return tr(STR_DICT_STEP_GEN_CSPT);
+    case StepType::GEN_SYN_CSPT:
+      return tr(STR_DICT_STEP_GEN_SYN_CSPT);
   }
   return "";
 }
@@ -138,6 +140,13 @@ void DictPrepareActivity::detectSteps() {
   if (idxExists && (!csptExists || oftBeingRegenerated)) {
     if (csptExists && oftBeingRegenerated) Storage.remove(dp.idxOftCspt().c_str());
     steps[stepCount++] = {StepType::GEN_CSPT};
+  }
+
+  const bool synCsptExists = Storage.exists(dp.synOftCspt().c_str());
+  const bool synOftBeingRegenerated = synWillExist && !synOftExists;
+  if (synWillExist && (!synCsptExists || synOftBeingRegenerated)) {
+    if (synCsptExists && synOftBeingRegenerated) Storage.remove(dp.synOftCspt().c_str());
+    steps[stepCount++] = {StepType::GEN_SYN_CSPT};
   }
 }
 
@@ -241,8 +250,13 @@ void DictPrepareActivity::runSteps() {
         break;
 
       case StepType::GEN_CSPT:
-        ok = generateCspt(dp.idx().c_str(), dp.idxOft().c_str(), dp.idxOftCspt().c_str(), steps[i]);
+        ok = generateCspt(dp.idx().c_str(), dp.idxOft().c_str(), dp.idxOftCspt().c_str(), 8, steps[i]);
         if (!ok) Storage.remove(dp.idxOftCspt().c_str());
+        break;
+
+      case StepType::GEN_SYN_CSPT:
+        ok = generateCspt(dp.syn().c_str(), dp.synOft().c_str(), dp.synOftCspt().c_str(), 4, steps[i]);
+        if (!ok) Storage.remove(dp.synOftCspt().c_str());
         break;
     }
 
@@ -474,7 +488,8 @@ done:
 // .cspt optimized index generation
 // ---------------------------------------------------------------------------
 
-bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath, const char* csptPath, Step& step) {
+bool DictPrepareActivity::generateCspt(const char* srcPath, const char* oftPath, const char* csptPath,
+                                       uint8_t skipPerEntry, Step& step) {
   // Open source files.
   HalFile oft;
   if (!Storage.openFileForRead("DICT_PREP", oftPath, oft)) {
@@ -482,9 +497,9 @@ bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath,
     return false;
   }
   HalFile idx;
-  if (!Storage.openFileForRead("DICT_PREP", idxPath, idx)) {
+  if (!Storage.openFileForRead("DICT_PREP", srcPath, idx)) {
     oft.close();
-    LOG_ERR("DICT_PREP", "Failed to open .idx: %s", idxPath);
+    LOG_ERR("DICT_PREP", "Failed to open src: %s", srcPath);
     return false;
   }
 
@@ -556,7 +571,7 @@ bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath,
     return true;
   };
 
-  // Helper: skip N entries in .idx from current position.
+  // Helper: skip N entries in src from current position.
   auto skipIdxEntries = [&](int count) -> bool {
     for (int i = 0; i < count; i++) {
       // Skip null-terminated word.
@@ -565,9 +580,9 @@ bool DictPrepareActivity::generateCspt(const char* idxPath, const char* oftPath,
         if (ch < 0) return false;
         if (ch == 0) break;
       }
-      // Skip 8-byte suffix (offset + size).
-      uint8_t skip[8];
-      if (idx.read(skip, 8) != 8) return false;
+      // Skip fixed-size suffix (8 for .idx = offset+size, 4 for .syn = original_word_index).
+      uint8_t skip[8];  // sized for the larger case; only skipPerEntry bytes are read.
+      if (idx.read(skip, skipPerEntry) != static_cast<int>(skipPerEntry)) return false;
     }
     return true;
   };

@@ -383,6 +383,24 @@ bool Dictionary::binarySearchCspt(FsFile& cspt, const char* target, uint32_t idx
   return true;
 }
 
+void Dictionary::resolveScanBounds(const char* csptPath, const char* oftPath, FsFile& src, uint32_t srcFileSize,
+                                   const char* target, uint32_t* startByte, uint32_t* endByte) {
+  // Try .cspt first (CrossPoint optimized index), fall back to .oft.
+  bool boundsResolved = false;
+  FsFile cspt;
+  if (Storage.openFileForRead("DICT", csptPath, cspt)) {
+    boundsResolved = binarySearchCspt(cspt, target, srcFileSize, startByte, endByte);
+    cspt.close();
+  }
+  if (!boundsResolved) {
+    FsFile oft;
+    if (Storage.openFileForRead("DICT", oftPath, oft)) {
+      findPageBounds(oft, src, srcFileSize, target, startByte, endByte);
+      oft.close();
+    }
+  }
+}
+
 void Dictionary::findPageBounds(FsFile& oft, FsFile& src, uint32_t srcFileSize, const char* target, uint32_t* startByte,
                                 uint32_t* endByte) {
   const uint32_t oftFileSize = static_cast<uint32_t>(oft.fileSize());
@@ -462,20 +480,7 @@ DictLocation Dictionary::locate(const std::string& word, const DictLookupCallbac
   uint32_t startByte = 0;
   uint32_t endByte = idxFileSize;
 
-  // Try .cspt first (CrossPoint optimized index), fall back to .oft.
-  bool boundsResolved = false;
-  FsFile cspt;
-  if (Storage.openFileForRead("DICT", dp.idxOftCspt().c_str(), cspt)) {
-    boundsResolved = binarySearchCspt(cspt, word.c_str(), idxFileSize, &startByte, &endByte);
-    cspt.close();
-  }
-  if (!boundsResolved) {
-    FsFile oft;
-    if (Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft)) {
-      findPageBounds(oft, idx, idxFileSize, word.c_str(), &startByte, &endByte);
-      oft.close();
-    }
-  }
+  resolveScanBounds(dp.idxOftCspt().c_str(), dp.idxOft().c_str(), idx, idxFileSize, word.c_str(), &startByte, &endByte);
 
   if (cbs.onProgress) cbs.onProgress(cbs.ctx, 70);
 
@@ -582,11 +587,7 @@ std::string Dictionary::resolveAltForm(const std::string& word, const char* cach
   uint32_t startByte = 0;
   uint32_t endByte = synFileSize;
 
-  FsFile oft;
-  if (Storage.openFileForRead("DICT", dp.synOft().c_str(), oft)) {
-    findPageBounds(oft, syn, synFileSize, word.c_str(), &startByte, &endByte);
-    oft.close();
-  }
+  resolveScanBounds(dp.synOftCspt().c_str(), dp.synOft().c_str(), syn, synFileSize, word.c_str(), &startByte, &endByte);
 
   syn.seekSet(startByte);
 
