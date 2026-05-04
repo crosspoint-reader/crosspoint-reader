@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <EpdFontFamily.h>
 
 #include <functional>
@@ -47,7 +48,10 @@ class ParsedText {
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
   const std::vector<uint8_t>& getWordBackgrounds() const { return wordBackgrounds; }
-  void setWordBackgrounds(std::vector<uint8_t> backgrounds) { wordBackgrounds = std::move(backgrounds); }
+  void setWordBackgrounds(std::vector<uint8_t> backgrounds) {
+    assert(backgrounds.size() == words.size());
+    wordBackgrounds = std::move(backgrounds);
+  }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);

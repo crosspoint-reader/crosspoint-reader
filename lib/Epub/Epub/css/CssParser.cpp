@@ -7,6 +7,7 @@
 #include <array>
 #include <cctype>
 #include <cerrno>
+#include <optional>
 #include <string_view>
 
 namespace {
@@ -79,9 +80,10 @@ std::string_view stripTrailingImportant(std::string_view value) {
 // Convert CSS color value to GfxRenderer::Color enum value (8-bit grayscale)
 // Supports hex colors (#000, #000000), named colors (black, white, gray),
 // and rgb/rgba values.
-static uint8_t interpretColor(const std::string& val) {
+// Returns std::nullopt if the color could not be parsed.
+static std::optional<uint8_t> tryInterpretColor(const std::string& val) {
   std::string_view sv = stripTrailingImportant(val);
-  if (sv.empty()) return 0;
+  if (sv.empty()) return std::nullopt;
   while (!sv.empty() && isCssWhitespace(sv.front())) sv.remove_prefix(1);
   while (!sv.empty() && isCssWhitespace(sv.back())) sv.remove_suffix(1);
   std::string normalized(sv);
@@ -141,13 +143,13 @@ static uint8_t interpretColor(const std::string& val) {
       b = parseHexComponent(normalized, 5, 2);
     } else {
       LOG_DBG("CSS", "interpretColor: failed hex parse for '%s'", normalized.c_str());
-      return 0;
+      return std::nullopt;
     }
 
     // Validate parsing results
     if (r < 0 || g < 0 || b < 0 || r > 255 || g > 255 || b > 255) {
       LOG_DBG("CSS", "interpretColor: malformed hex color '%s'", normalized.c_str());
-      return 0;
+      return std::nullopt;
     }
 
     const int luminance = (19595 * r + 38470 * g + 7471 * b) >> 16;
@@ -199,6 +201,8 @@ static uint8_t interpretColor(const std::string& val) {
         }
       }
     }
+  } else {
+    return std::nullopt;
   }
   return result;
 }
@@ -386,6 +390,10 @@ bool CssParser::tryInterpretLength(const std::string& val, CssLength& out) {
   return true;
 }
 
+std::optional<uint8_t> CssParser::tryInterpretColor(const std::string& val) {
+  return ::tryInterpretColor(val);
+}
+
 // Declaration parsing
 
 void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
@@ -473,8 +481,10 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
     style.display = (displayValue == "none") ? CssDisplay::None : CssDisplay::Block;
     style.defined.display = 1;
   } else if (propNameBuf == "background-color") {
-    style.backgroundColor = interpretColor(propValueBuf);
-    style.defined.backgroundColor = 1;
+    if (auto color = tryInterpretColor(propValueBuf)) {
+      style.backgroundColor = *color;
+      style.defined.backgroundColor = 1;
+    }
   }
 }
 

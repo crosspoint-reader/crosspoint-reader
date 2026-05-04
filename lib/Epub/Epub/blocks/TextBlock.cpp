@@ -144,8 +144,22 @@ std::unique_ptr<TextBlock> TextBlock::deserializeLegacy(FsFile& file) {
       LOG_ERR("TXB", "Deserialization failed: word length %u exceeds maximum", strLen);
       return nullptr;
     }
-    w.resize(strLen);
-    if (strLen > 0) file.read(&w[0], strLen);
+    if (strLen > 0) {
+      // Read into temporary buffer first to avoid partial fills on short reads
+      auto tempBuf = static_cast<char*>(malloc(strLen));
+      if (!tempBuf) {
+        LOG_ERR("TXB", "Deserialization failed: malloc failed for %u bytes", strLen);
+        return nullptr;
+      }
+      const size_t bytesRead = file.read(tempBuf, strLen);
+      if (bytesRead != strLen) {
+        free(tempBuf);
+        LOG_ERR("TXB", "Deserialization failed: short read (got %u, expected %u)", (uint32_t)bytesRead, strLen);
+        return nullptr;
+      }
+      w.assign(tempBuf, strLen);
+      free(tempBuf);
+    }
   }
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
@@ -198,8 +212,22 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file, uint8_t sectionV
       LOG_ERR("TXB", "Deserialization failed: word length %u exceeds maximum", strLen);
       return nullptr;
     }
-    w.resize(strLen);
-    if (strLen > 0) file.read(&w[0], strLen);
+    if (strLen > 0) {
+      // Read into temporary buffer first to avoid partial fills on short reads
+      auto tempBuf = static_cast<char*>(malloc(strLen));
+      if (!tempBuf) {
+        LOG_ERR("TXB", "Deserialization failed: malloc failed for %u bytes", strLen);
+        return nullptr;
+      }
+      const size_t bytesRead = file.read(tempBuf, strLen);
+      if (bytesRead != strLen) {
+        free(tempBuf);
+        LOG_ERR("TXB", "Deserialization failed: short read (got %u, expected %u)", (uint32_t)bytesRead, strLen);
+        return nullptr;
+      }
+      w.assign(tempBuf, strLen);
+      free(tempBuf);
+    }
   }
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
