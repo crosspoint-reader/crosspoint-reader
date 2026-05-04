@@ -6,6 +6,8 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
 #include "BitmapHelpers.h"
 #include "FontCacheManager.h"
 
@@ -1046,16 +1048,8 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       j = i;
     }
 
-    // Sort nodes by X (simple bubble sort, numPoints is small)
-    for (int i = 0; i < nodes - 1; i++) {
-      for (int k = i + 1; k < nodes; k++) {
-        if (nodeX[i] > nodeX[k]) {
-          int temp = nodeX[i];
-          nodeX[i] = nodeX[k];
-          nodeX[k] = temp;
-        }
-      }
-    }
+    // Sort nodes by X
+    std::sort(nodeX, nodeX + nodes);
 
     // Fill between pairs of nodes
     for (int i = 0; i < nodes - 1; i += 2) {
