@@ -5,7 +5,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <Update.h>
+#include <esp_ota_ops.h>
 
 #include "MappedInputManager.h"
 #include "activities/home/FileBrowserActivity.h"
@@ -74,16 +74,23 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
   firmwareSize = file.fileSize();
   file.close();
 
-  // Probe the OTA partition first so the integrity check can also enforce a fits-partition bound.
-  if (!Update.begin(firmwareSize)) {
-    LOG_ERR("FW", "Update.begin(%u) failed: %s", static_cast<unsigned>(firmwareSize), Update.errorString());
-    errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
-    Update.abort();
+  // Resolve the next-update partition directly via the OTA API. Previously this
+  // probed via Update.begin(firmwareSize)/Update.abort() to learn the partition
+  // size, which had the side effect of erasing partition state and was wasted
+  // work since we only need the size bound for validation here.
+  const esp_partition_t* dest = esp_ota_get_next_update_partition(nullptr);
+  if (!dest) {
+    LOG_ERR("FW", "no next-update partition available");
+    errorMessage = tr(STR_INVALID_FIRMWARE);
     return false;
   }
-  const size_t partitionLimit = Update.size();
-  // Roll back the begin() — we'll call it again in performUpdate().
-  Update.abort();
+  const size_t partitionLimit = dest->size;
+  if (firmwareSize > partitionLimit) {
+    LOG_ERR("FW", "firmware (%u bytes) exceeds partition (%u bytes)", static_cast<unsigned>(firmwareSize),
+            static_cast<unsigned>(partitionLimit));
+    errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
+    return false;
+  }
 
   // Run the same end-to-end integrity check (header / segment table / XOR checksum / SHA256
   // trailer) that the shared firmware-flasher applies right before raw-writing otadata. This
@@ -149,7 +156,10 @@ void SdFirmwareUpdateActivity::performUpdate() {
     self->requestUpdate(true);
   };
 
-  const auto result = firmware_flash::flashFromSdPath(firmwarePath.c_str(), progressCb, this);
+  // We already ran validateImageFile() in validateFirmware() before the
+  // user confirmed; skip the redundant pass inside the flasher.
+  const auto result =
+      firmware_flash::flashFromSdPath(firmwarePath.c_str(), progressCb, this, /*alreadyValidated=*/true);
   if (result != firmware_flash::Result::OK) {
     LOG_ERR("FW", "flash failed: %s", firmware_flash::resultName(result));
     errorMessage = tr(STR_FIRMWARE_WRITE_FAILED);
