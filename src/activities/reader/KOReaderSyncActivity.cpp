@@ -195,6 +195,17 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = koPos.xpath;
   progress.percentage = koPos.percentage;
 
+  // Optionally include document metadata (KOReader PR #15306)
+  if (KOREADER_STORE.getSendMetadata()) {
+    KOReaderMetadata meta;
+    // Extract filename from path
+    const auto lastSlash = epubPath.rfind('/');
+    meta.filename = (lastSlash != std::string::npos) ? epubPath.substr(lastSlash + 1) : epubPath;
+    meta.title = epub->getTitle();
+    meta.authors = epub->getAuthor();
+    progress.metadata = std::move(meta);
+  }
+
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   if (result != KOReaderSyncClient::OK) {
