@@ -40,7 +40,8 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
   const int thumbH = std::max(10, (barH * pageItems) / itemCount);
   const int maxStart = std::max(1, itemCount - pageItems);
   const int maxTravel = std::max(1, barH - thumbH);
-  const int thumbY = barY + (pageStartIndex * maxTravel) / maxStart;
+  const int clampedStart = std::clamp(pageStartIndex, 0, maxStart);
+  const int thumbY = barY + (clampedStart * maxTravel) / maxStart;
 
   renderer.fillRect(barX, thumbY, barW, thumbH);
 }
