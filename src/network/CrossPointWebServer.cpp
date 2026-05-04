@@ -9,6 +9,7 @@
 #include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <iterator>
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
@@ -22,8 +23,7 @@
 namespace {
 // Folders/files to hide from the web interface file browser
 // Note: Items starting with "." are automatically hidden
-const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -75,7 +75,7 @@ bool isProtectedItemName(const String& name) {
   if (name.startsWith(".")) {
     return true;
   }
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+  for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
     if (name.equals(HIDDEN_ITEMS[i])) {
       return true;
     }
@@ -389,7 +389,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
-      for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+      for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
         if (fileName.equals(HIDDEN_ITEMS[i])) {
           shouldHide = true;
           break;
@@ -497,7 +497,7 @@ void CrossPointWebServer::handleDownload() const {
     server->send(403, "text/plain", "Cannot access system files");
     return;
   }
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+  for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
     if (itemName.equals(HIDDEN_ITEMS[i])) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
@@ -1033,7 +1033,7 @@ void CrossPointWebServer::handleDelete() const {
 
     // Check against explicitly protected items
     bool isProtected = false;
-    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
+    for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
       if (itemName.equals(HIDDEN_ITEMS[i])) {
         isProtected = true;
         break;
