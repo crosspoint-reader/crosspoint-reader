@@ -638,29 +638,56 @@ def generate_strings_cpp(
     lines.append("};")
     lines.append("")
 
-    # Per-language flat string blobs and offset tables
+    # Per-language flat string blobs and offset tables.
+    # Non-English languages skip strings identical to English; their offset
+    # tables use bit 15 (0x8000) to flag "use English blob at offset & 0x7FFF".
     lines.append("namespace i18n_strings {")
     lines.append("")
 
+    en_strings = [translations[key][0] for key in string_keys]
+    en_offsets: List[int] = []
+
     for lang_idx, code in enumerate(languages):
         lang_strings = [translations[key][lang_idx] for key in string_keys]
+        is_english = lang_idx == 0
 
-        # Precompute byte offsets (UTF-8 encoded, +1 per string for null terminator)
-        offsets: List[int] = []
-        current_offset = 0
-        for s in lang_strings:
-            offsets.append(current_offset)
-            current_offset += len(s.encode("utf-8")) + 1
-        if current_offset > 65535:
-            raise ValueError(
-                f"Language {code}: total string data ({current_offset} bytes) "
-                "exceeds uint16_t offset range (65535)"
-            )
+        if is_english:
+            # Precompute byte offsets (UTF-8 encoded, +1 per string for null terminator)
+            offsets: List[int] = []
+            current_offset = 0
+            for s in lang_strings:
+                offsets.append(current_offset)
+                current_offset += len(s.encode("utf-8")) + 1
+            if current_offset > 0x7FFF:
+                raise ValueError(
+                    f"Language {code}: blob size ({current_offset} bytes) exceeds "
+                    "15-bit offset limit (32767)"
+                )
+            en_offsets = list(offsets)
+            blob_strings = lang_strings
+        else:
+            offsets = []
+            current_offset = 0
+            blob_strings = []
+            for i, (s, en_s) in enumerate(zip(lang_strings, en_strings)):
+                if s == en_s:
+                    offsets.append(en_offsets[i] | 0x8000)
+                else:
+                    offsets.append(current_offset)
+                    current_offset += len(s.encode("utf-8")) + 1
+                    blob_strings.append(s)
+            if current_offset > 0x7FFF:
+                raise ValueError(
+                    f"Language {code}: blob size ({current_offset} bytes) exceeds "
+                    "15-bit offset limit (32767)"
+                )
 
         # Flat string data blob — all strings concatenated with \0 separators.
         lines.append(f"const char STRINGS_{code}_DATA[] =")
-        for text in lang_strings:
+        for text in blob_strings:
             _append_string_data_entry(lines, text)
+        if not blob_strings:
+            _append_string_data_entry(lines, "")
         lines.append(";")
         lines.append("")
 
@@ -739,28 +766,18 @@ def _print_language_table(
     for row in rows:
         _safe_print(fmt.format(*row))
     used = total - len(unused_keys)
-    total_size = sum(data_sizes)
+    dedup_size = sum(data_sizes)
     n_lang = len(rows)
     n_keys = len(string_keys)
-    # Current layout: uint16_t offset table (2 B per string per language)
     offset_table_size = n_lang * n_keys * 2
-    current_total = total_size + offset_table_size
-    # Previous layout: const char* pointer array (4 B per string per language)
-    old_pointer_table_size = n_lang * n_keys * 4
-    old_total = total_size + old_pointer_table_size
-    saved = old_total - current_total
+    current_total = dedup_size + offset_table_size
     print(
         f"\n  Total: {total}  |  Used in code: {used}  |  Never used: {len(unused_keys)}"
     )
     print(
-        f"  Flash (now):    {total_size:>7,} B strings  +  {offset_table_size:>6,} B offset tables (uint16_t)"
+        f"  Flash: {dedup_size:>7,} B strings (deduped)  +  {offset_table_size:>6,} B offset tables"
         f"  =  {current_total:>7,} B"
     )
-    print(
-        f"  Flash (before): {total_size:>7,} B strings  +  {old_pointer_table_size:>6,} B pointer tables (ptr32)"
-        f"  =  {old_total:>7,} B"
-    )
-    print(f"  Saved by offset tables: {saved:,} B")
 
 
 def _append_string_data_entry(lines: List[str], text: str) -> None:
@@ -863,12 +880,22 @@ def main(
             print()
             sys.exit(1)
 
-        # Compute per-language data blob sizes:
-        # sum of UTF-8 byte length + 1 (null terminator) per string
-        data_sizes = [
-            sum(len(translations[k][i].encode("utf-8")) + 1 for k in string_keys)
-            for i in range(len(languages))
-        ]
+        # Compute per-language data blob sizes (after dedup).
+        # Non-English languages omit strings identical to English.
+        data_sizes = []
+        for i in range(len(languages)):
+            if i == 0:
+                data_sizes.append(
+                    sum(len(translations[k][0].encode("utf-8")) + 1 for k in string_keys)
+                )
+            else:
+                data_sizes.append(
+                    sum(
+                        len(translations[k][i].encode("utf-8")) + 1
+                        for k in string_keys
+                        if translations[k][i] != translations[k][0]
+                    )
+                )
 
         _print_language_table(
             languages,
