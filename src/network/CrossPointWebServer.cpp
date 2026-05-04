@@ -1640,8 +1640,12 @@ void CrossPointWebServer::handleFontUploadData() {
       }
 
       String filename = upload.filename;
-      if (!filename.endsWith(".cpfont")) {
-        LOG_ERR("WEB", "Not a .cpfont file: %s", filename.c_str());
+      // Validate filename: rejects path traversal (../, /, \) and enforces
+      // a .cpfont basename of alphanumeric + hyphen + underscore. Without
+      // this an attacker could supply "../../.crosspoint/settings.json" as
+      // a "filename" and have it written outside the fonts directory.
+      if (!FontInstaller::isValidCpfontFilename(filename.c_str())) {
+        LOG_ERR("WEB", "Invalid font filename: %s", filename.c_str());
         break;
       }
 

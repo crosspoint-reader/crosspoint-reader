@@ -1,5 +1,5 @@
 # Ignore all font directories except those committed to the repo.
-# Fonts like NotoSansCJK are downloaded on demand by generate-sd-fonts.sh.
+# Fonts like NotoSansCJK are downloaded on demand by build-sd-fonts.py.
 *
 !.gitignore
 !NotoSerif/

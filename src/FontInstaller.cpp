@@ -27,6 +27,34 @@ bool FontInstaller::isValidFamilyName(const char* name) {
   return true;
 }
 
+bool FontInstaller::isValidCpfontFilename(const char* name) {
+  if (name == nullptr || name[0] == '\0') return false;
+
+  // Reject path separators / traversal up front. Anything that could escape
+  // the family directory or refer to a different one is a hard reject.
+  if (strstr(name, "..") != nullptr) return false;
+  if (strchr(name, '/') != nullptr) return false;
+  if (strchr(name, '\\') != nullptr) return false;
+
+  // Must end with ".cpfont" exactly.
+  static constexpr char kExt[] = ".cpfont";
+  static constexpr size_t kExtLen = sizeof(kExt) - 1;
+  size_t nameLen = strlen(name);
+  if (nameLen <= kExtLen) return false;
+  if (strcmp(name + nameLen - kExtLen, kExt) != 0) return false;
+
+  // Basename (before .cpfont) must be alphanumeric + hyphen + underscore only.
+  // No additional dots — keeps stray "Foo.cpfont.tmp"-style names out.
+  size_t baseLen = nameLen - kExtLen;
+  for (size_t i = 0; i < baseLen; ++i) {
+    char c = name[i];
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool FontInstaller::ensureFamilyDir(const char* familyName) {
   // Reuse the family's existing root if installed; otherwise pick the
   // default-write root (hidden if no roots exist yet).

@@ -12,6 +12,12 @@ class SdCardFont {
 
   SdCardFont() = default;
   ~SdCardFont();
+  // Owns raw buffers freed in dtor — no shallow-copy semantics. Make any
+  // accidental pass-by-value or move a compile-time error.
+  SdCardFont(const SdCardFont&) = delete;
+  SdCardFont& operator=(const SdCardFont&) = delete;
+  SdCardFont(SdCardFont&&) = delete;
+  SdCardFont& operator=(SdCardFont&&) = delete;
 
   // Load .cpfont file: reads header + intervals into RAM, records file layout offsets.
   // Supports v4 (multi-style) format.

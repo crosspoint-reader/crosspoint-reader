@@ -527,6 +527,38 @@ bool SdCardFont::load(const char* path) {
       return false;
     }
 
+    // Validate interval contents before any later code (findGlobalGlyphIndex,
+    // glyph reads) trusts them. A malformed file could otherwise drive
+    // out-of-range glyph indices into bogus on-disk reads.
+    {
+      uint32_t expectedOffset = 0;
+      uint32_t prevLast = 0;
+      for (uint32_t j = 0; j < s.header.intervalCount; ++j) {
+        const auto& iv = s.fullIntervals[j];
+        if (iv.first > iv.last) {
+          LOG_ERR("SDCF", "Style %u: invalid interval %u (first 0x%lX > last 0x%lX)", i, j,
+                  static_cast<unsigned long>(iv.first), static_cast<unsigned long>(iv.last));
+          file.close();
+          freeAll();
+          return false;
+        }
+        const uint32_t span = iv.last - iv.first + 1;
+        const bool overlapsPrev = (j > 0 && iv.first <= prevLast);
+        const bool spanTooBig = (span > s.header.glyphCount);
+        const bool offsetMismatch = (iv.offset != expectedOffset);
+        const bool offsetOverruns = (iv.offset > s.header.glyphCount - span);
+        if (overlapsPrev || spanTooBig || offsetMismatch || offsetOverruns) {
+          LOG_ERR("SDCF", "Style %u: invalid interval layout at %u (overlap=%d span=%u offMis=%d offOver=%d)", i, j,
+                  overlapsPrev, span, offsetMismatch, offsetOverruns);
+          file.close();
+          freeAll();
+          return false;
+        }
+        expectedOffset += span;
+        prevLast = iv.last;
+      }
+    }
+
     // Initialize stub data
     memset(&s.stubData, 0, sizeof(s.stubData));
     s.stubData.advanceY = s.header.advanceY;
@@ -777,7 +809,14 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
 
     uint32_t fileOff = s.glyphsFileOffset + static_cast<uint32_t>(gIdx) * sizeof(EpdGlyph);
     if (gIdx != lastReadIndex + 1) {
-      file.seekSet(fileOff);
+      if (!file.seekSet(fileOff)) {
+        LOG_ERR("SDCF", "Prewarm: failed to seek to glyph %d (style %u)", gIdx, styleIdx);
+        file.close();
+        delete[] readOrder;
+        delete[] mappings;
+        freeStyleMiniData(s);
+        return static_cast<int>(cpCount);
+      }
       seekCount++;
     }
     if (file.read(reinterpret_cast<uint8_t*>(&s.miniGlyphs[mapIdx]), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
@@ -826,7 +865,14 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
 
       uint32_t fileOff = s.bitmapFileOffset + glyph.dataOffset;
       if (fileOff != lastBitmapEnd) {
-        file.seekSet(fileOff);
+        if (!file.seekSet(fileOff)) {
+          LOG_ERR("SDCF", "Prewarm: failed to seek to bitmap (style %u)", styleIdx);
+          file.close();
+          delete[] readOrder;
+          delete[] mappings;
+          freeStyleMiniData(s);
+          return static_cast<int>(cpCount);
+        }
         seekCount++;
       }
       if (file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) != static_cast<int>(glyph.dataLength)) {
@@ -1116,7 +1162,10 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
       int32_t gIdx = mappings[i].glyphIndex;
       uint32_t fileOff = s.glyphsFileOffset + static_cast<uint32_t>(gIdx) * sizeof(EpdGlyph);
       if (gIdx != lastReadIndex + 1) {
-        file.seekSet(fileOff);
+        if (!file.seekSet(fileOff)) {
+          LOG_ERR("SDCF", "buildAdvanceTable: failed to seek to glyph %d (style %u)", gIdx, si);
+          break;
+        }
       }
       if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
         LOG_ERR("SDCF", "buildAdvanceTable: short glyph read (style %u, glyph %d)", si, gIdx);
@@ -1199,7 +1248,11 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
 
   EpdGlyph tempGlyph = {};
   uint32_t glyphFileOff = s.glyphsFileOffset + static_cast<uint32_t>(globalIdx) * sizeof(EpdGlyph);
-  file.seekSet(glyphFileOff);
+  if (!file.seekSet(glyphFileOff)) {
+    LOG_ERR("SDCF", "Overflow: failed to seek to glyph for U+%04X style %u", codepoint, styleIdx);
+    file.close();
+    return nullptr;
+  }
   if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
     LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X style %u", codepoint, styleIdx);
     file.close();
@@ -1215,7 +1268,12 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
       file.close();
       return nullptr;
     }
-    file.seekSet(s.bitmapFileOffset + tempGlyph.dataOffset);
+    if (!file.seekSet(s.bitmapFileOffset + tempGlyph.dataOffset)) {
+      LOG_ERR("SDCF", "Overflow: failed to seek to bitmap for U+%04X", codepoint);
+      delete[] tempBitmap;
+      file.close();
+      return nullptr;
+    }
     if (file.read(tempBitmap, tempGlyph.dataLength) != static_cast<int>(tempGlyph.dataLength)) {
       LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
       delete[] tempBitmap;

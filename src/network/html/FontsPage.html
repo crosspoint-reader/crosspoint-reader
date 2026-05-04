@@ -155,29 +155,54 @@
     }
 
     async function loadFonts() {
+      const el = document.getElementById('families');
       try {
         const res = await fetch('/api/fonts');
         const data = await res.json();
-        const el = document.getElementById('families');
+        // Build rows with DOM APIs and textContent so on-device family names
+        // (which can contain arbitrary characters) cannot break markup or
+        // execute script via innerHTML / inline onclick interpolation.
+        el.replaceChildren();
         if (!data.families || data.families.length === 0) {
-          el.innerHTML = '<p class="empty">No fonts installed</p>';
+          const p = document.createElement('p');
+          p.className = 'empty';
+          p.textContent = 'No fonts installed';
+          el.appendChild(p);
           return;
         }
-        el.innerHTML = data.families.map(f => `
-          <div class="family">
-            <div class="family-info">
-              <h3>${f.name}</h3>
-              <span class="family-meta">
-                ${f.sizes.join(', ')}pt &middot;
-                ${f.files.map(fi => formatSize(fi.size)).join(' + ')}
-              </span>
-            </div>
-            <button class="btn btn-danger" onclick="deleteFamily('${f.name}')">Delete</button>
-          </div>
-        `).join('');
+        for (const f of data.families) {
+          const row = document.createElement('div');
+          row.className = 'family';
+
+          const info = document.createElement('div');
+          info.className = 'family-info';
+          const h3 = document.createElement('h3');
+          h3.textContent = f.name;
+          info.appendChild(h3);
+          const meta = document.createElement('span');
+          meta.className = 'family-meta';
+          const sizes = (f.sizes || []).join(', ');
+          const filesSizes = (f.files || []).map(fi => formatSize(fi.size)).join(' + ');
+          meta.textContent = sizes + 'pt · ' + filesSizes;
+          info.appendChild(meta);
+
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-danger';
+          btn.textContent = 'Delete';
+          // Capture name in the closure rather than interpolating into onclick.
+          const familyName = f.name;
+          btn.addEventListener('click', () => deleteFamily(familyName));
+
+          row.appendChild(info);
+          row.appendChild(btn);
+          el.appendChild(row);
+        }
       } catch (e) {
-        document.getElementById('families').innerHTML =
-          '<p class="empty">Failed to load font list</p>';
+        el.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = 'Failed to load font list';
+        el.appendChild(p);
       }
     }
 
@@ -242,11 +267,22 @@
       const files = cpfontFilesOnly(document.getElementById('fontFiles').files);
       if (files.length === 0) {
         status.className = 'status-err';
+        status.style.display = 'block';
         status.textContent = 'No .cpfont files selected.';
         return;
       }
 
-      const family = sanitizeFamily(familyFromFilename(files[0].name));
+      // A directory picker may include files from multiple family subfolders.
+      // Reject that up front — otherwise files[0]'s family is silently reused
+      // for every upload, corrupting the install layout.
+      const families = [...new Set(files.map(f => sanitizeFamily(familyFromFilename(f.name))))];
+      if (families.length !== 1) {
+        status.className = 'status-err';
+        status.style.display = 'block';
+        status.textContent = 'Please select files from a single font family.';
+        return;
+      }
+      const family = families[0];
 
       status.className = '';
       status.style.display = 'block';

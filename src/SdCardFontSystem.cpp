@@ -42,7 +42,11 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   // If the web server (or another task) installed/deleted fonts, re-discover.
-  if (registryDirty_.exchange(false, std::memory_order_acquire)) {
+  // Track whether we just re-discovered so we can force a reload below even
+  // when the wanted family/size still maps to the same point size — the file
+  // contents on disk may have changed (e.g. user re-uploaded a new build).
+  const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
+  if (registryWasDirty) {
     LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
     registry_.discover();
   }
@@ -59,7 +63,8 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   }
 
   // Reload if family changed OR if the user-selected size maps to a
-  // different file than what's currently loaded.
+  // different file than what's currently loaded OR if the registry was
+  // just rediscovered (file may have been replaced on disk).
   bool familyMatches = (currentFamily == wantedFamily);
   if (familyMatches) {
     const auto* family = registry_.findFamily(wantedFamily);
@@ -73,9 +78,9 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     uint8_t idx = sizeEnum;
     if (idx >= sizes.size()) idx = sizes.size() - 1;
     uint8_t wantedPt = sizes.empty() ? 0 : sizes[idx];
-    if (wantedPt == manager_.currentPointSize()) return;
-    LOG_DBG("SDFS", "Reloading %s: size %u -> %u (enum %u)", wantedFamily, manager_.currentPointSize(), wantedPt,
-            sizeEnum);
+    if (!registryWasDirty && wantedPt == manager_.currentPointSize()) return;
+    LOG_DBG("SDFS", "Reloading %s: size %u -> %u (enum %u)%s", wantedFamily, manager_.currentPointSize(), wantedPt,
+            sizeEnum, registryWasDirty ? " [registry dirty]" : "");
   }
 
   if (!currentFamily.empty()) {

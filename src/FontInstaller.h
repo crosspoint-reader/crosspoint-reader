@@ -22,6 +22,12 @@ class FontInstaller {
   /// Validate a family name: alphanumeric + hyphen + underscore only, no path traversal.
   static bool isValidFamilyName(const char* name);
 
+  /// Validate a .cpfont filename: ends with ".cpfont", no path separators or
+  /// traversal sequences, basename uses only alphanumeric + hyphen + underscore
+  /// + dot (only as the extension separator). Rejects "../foo.cpfont" and
+  /// "evil/foo.cpfont".
+  static bool isValidCpfontFilename(const char* name);
+
   /// Ensure /<root>/<family>/ exists, where <root> is /.fonts (preferred) or /fonts.
   /// Re-uses the existing root if the family is already installed; otherwise
   /// creates it under SdCardFontRegistry::defaultWriteRoot().

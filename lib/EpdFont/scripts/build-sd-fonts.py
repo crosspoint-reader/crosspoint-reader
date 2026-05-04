@@ -20,9 +20,11 @@ Usage:
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -77,10 +79,22 @@ def extract_static_instance(source_path: Path, axes: dict, family_name: str, sty
         old.unlink()
 
     print(f"  Extracting static instance: {family_name}/{style_name} ({axis_key})")
+    # Atomic write: save to a temp file first, then rename. A crash or save()
+    # exception would otherwise leave a corrupt `cached` file that future runs
+    # would happily reuse via the `cached.exists()` check above.
+    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".ttf", dir=cached.parent)
+    os.close(tmp_fd)
+    tmp_path = Path(tmp_name)
     font = TTFont(str(source_path))
-    instantiateVariableFont(font, axes)
-    font.save(str(cached))
-    font.close()
+    try:
+        instantiateVariableFont(font, axes)
+        font.save(str(tmp_path))
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    finally:
+        font.close()
+    tmp_path.replace(cached)
 
     return cached
 
@@ -174,7 +188,7 @@ def build_family(family: dict, output_base: Path) -> tuple[str, bool, str]:
 
 
 def generate_manifest(
-    families_config: list[dict], output_base: Path, base_url: str, manifest_path: Path
+    config_path: Path, output_base: Path, base_url: str, manifest_path: Path
 ):
     """Generate fonts.json manifest from config + built output.
 
@@ -182,7 +196,6 @@ def generate_manifest(
     descriptions come from the YAML config via --descriptions-from.
     """
     manifest_script = SCRIPT_DIR.parent.parent.parent / "scripts" / "generate-font-manifest.py"
-    config_path = SCRIPT_DIR / "sd-fonts.yaml"
 
     if not base_url.endswith("/"):
         base_url += "/"
@@ -297,7 +310,7 @@ def main():
                 failed.append(name)
 
     # Summary
-    print(f"\n=== Summary ===\n")
+    print("\n=== Summary ===\n")
     total_files = len(list(output_base.rglob("*.cpfont")))
     total_size = sum(f.stat().st_size for f in output_base.rglob("*.cpfont"))
     print(f"Total: {total_files} .cpfont files ({total_size / 1024 / 1024:.1f} MB)")
@@ -308,7 +321,7 @@ def main():
     # Manifest
     if args.manifest:
         manifest_path = Path(args.manifest_output) if args.manifest_output else output_base / "fonts.json"
-        generate_manifest(families, output_base, args.base_url, manifest_path)
+        generate_manifest(config_path, output_base, args.base_url, manifest_path)
 
     if failed:
         sys.exit(1)
