@@ -9,7 +9,6 @@
 #include <esp_task_wdt.h>
 
 #include <algorithm>
-#include <iterator>
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
@@ -75,8 +74,8 @@ bool isProtectedItemName(const String& name) {
   if (name.startsWith(".")) {
     return true;
   }
-  for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
-    if (name.equals(HIDDEN_ITEMS[i])) {
+  for (const auto* item : HIDDEN_ITEMS) {
+    if (name.equals(item)) {
       return true;
     }
   }
@@ -389,8 +388,8 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
-      for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
-        if (fileName.equals(HIDDEN_ITEMS[i])) {
+      for (const auto* item : HIDDEN_ITEMS) {
+        if (fileName.equals(item)) {
           shouldHide = true;
           break;
         }
@@ -497,8 +496,8 @@ void CrossPointWebServer::handleDownload() const {
     server->send(403, "text/plain", "Cannot access system files");
     return;
   }
-  for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
-    if (itemName.equals(HIDDEN_ITEMS[i])) {
+  for (const auto* item : HIDDEN_ITEMS) {
+    if (itemName.equals(item)) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
     }
@@ -1033,8 +1032,8 @@ void CrossPointWebServer::handleDelete() const {
 
     // Check against explicitly protected items
     bool isProtected = false;
-    for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
-      if (itemName.equals(HIDDEN_ITEMS[i])) {
+    for (const auto* item : HIDDEN_ITEMS) {
+      if (itemName.equals(item)) {
         isProtected = true;
         break;
       }

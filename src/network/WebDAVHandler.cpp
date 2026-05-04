@@ -6,8 +6,6 @@
 #include <Logging.h>
 #include <esp_task_wdt.h>
 
-#include <iterator>
-
 namespace {
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
@@ -231,8 +229,8 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       // Skip hidden/protected items
       bool shouldHide = fileName.startsWith(".");
       if (!shouldHide) {
-        for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
-          if (fileName.equals(HIDDEN_ITEMS[i])) {
+        for (const auto* item : HIDDEN_ITEMS) {
+          if (fileName.equals(item)) {
             shouldHide = true;
             break;
           }
@@ -775,8 +773,8 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
 
     if (segment.startsWith(".")) return true;
 
-    for (size_t i = 0; i < std::size(HIDDEN_ITEMS); i++) {
-      if (segment.equals(HIDDEN_ITEMS[i])) return true;
+    for (const auto* item : HIDDEN_ITEMS) {
+      if (segment.equals(item)) return true;
     }
 
     start = end + 1;
