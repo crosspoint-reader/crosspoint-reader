@@ -13,6 +13,8 @@ class DictPrepareTask;
 //   2. Extract .syn.dz  → .syn   (if .syn.dz  present and .syn  absent)
 //   3. Generate .idx.oft from .idx  (if .idx present and .idx.oft absent)
 //   4. Generate .syn.oft from .syn  (if .syn present and .syn.oft absent)
+//   5. Generate .idx.oft.cspt from .idx + .idx.oft  (CrossPoint optimized index)
+//   6. Generate .syn.oft.cspt from .syn + .syn.oft  (CrossPoint optimized synonym index)
 //
 // Shows a confirmation screen listing required steps with time/charger warnings,
 // then runs all steps sequentially on a FreeRTOS task with per-step progress bars.
@@ -34,7 +36,7 @@ class DictPrepareActivity final : public Activity {
  private:
   enum class State { CONFIRM, PROCESSING, SUCCESS, FAILED, CANCELLED };
 
-  enum class StepType { EXTRACT_DICT, EXTRACT_SYN, GEN_IDX, GEN_SYN, GEN_CSPT };
+  enum class StepType { EXTRACT_DICT, EXTRACT_SYN, GEN_IDX, GEN_SYN, GEN_CSPT, GEN_SYN_CSPT };
 
   enum class StepStatus { PENDING, IN_PROGRESS, COMPLETE, FAILED };
 
@@ -54,7 +56,7 @@ class DictPrepareActivity final : public Activity {
   // Checked by the FreeRTOS task at each vTaskDelay(1) yield point.
   volatile bool cancelRequested = false;
 
-  Step steps[5];
+  Step steps[6];
   int stepCount = 0;
   volatile int currentStep = 0;
 
@@ -76,9 +78,11 @@ class DictPrepareActivity final : public Activity {
   // skipPerEntry: bytes after the null-terminated word to skip (8 for .idx, 4 for .syn).
   bool generateOft(const char* srcPath, const char* oftPath, uint8_t skipPerEntry, Step& step);
 
-  // Read .idx.oft page boundaries, sample headword prefixes from .idx at stride 16,
-  // and write a .idx.oft.cspt file for optimized lookup.
-  bool generateCspt(const char* idxPath, const char* oftPath, const char* csptPath, Step& step);
+  // Read .oft page boundaries, sample headword prefixes from src at stride 16,
+  // and write a .cspt file for optimized lookup.
+  // skipPerEntry: bytes after the null-terminated word in src to skip
+  // (8 for .idx = offset+size; 4 for .syn = original_word_index).
+  bool generateCspt(const char* srcPath, const char* oftPath, const char* csptPath, uint8_t skipPerEntry, Step& step);
 
   static const char* stepLabel(StepType type);
 };
