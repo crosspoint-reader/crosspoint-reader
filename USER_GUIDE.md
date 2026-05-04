@@ -195,7 +195,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **WiFi Networks**: Connect to WiFi networks for file transfers and firmware updates.
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress.
-- **OPDS Servers**: Manage one or more OPDS libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
+- **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 - **Clear Reading Cache**: Clear the internal SD card cache.
 - **Check for updates**: Check for Crosspoint firmware updates over WiFi.
 - **Language**: Set the system language (see **[Supported Languages](#supported-languages)** for more information).
