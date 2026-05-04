@@ -131,7 +131,7 @@ struct CssStyle {
   CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
   CssLength imageWidth;     // Width for img when both or only width set
   CssDisplay display = CssDisplay::Block;  // display property (Block or None)
-  uint8_t backgroundColor = 0;               // 0=none; otherwise maps to GfxRenderer::Color enum
+  uint8_t backgroundColor = 0;             // 0=none; otherwise maps to GfxRenderer::Color enum
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 

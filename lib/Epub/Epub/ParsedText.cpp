@@ -538,8 +538,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                      std::make_move_iterator(words.begin() + lineBreak));
   std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
   std::vector<uint8_t> lineWordBackgrounds(
-      wordBackgrounds.empty() ? std::vector<uint8_t>() :
-      std::vector<uint8_t>(wordBackgrounds.begin() + lastBreakAt, wordBackgrounds.begin() + lineBreak));
+      wordBackgrounds.empty()
+          ? std::vector<uint8_t>()
+          : std::vector<uint8_t>(wordBackgrounds.begin() + lastBreakAt, wordBackgrounds.begin() + lineBreak));
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
@@ -547,8 +548,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  auto textBlock = std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
-                                               blockStyle);
+  auto textBlock =
+      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle);
   if (!lineWordBackgrounds.empty()) {
     for (size_t i = 0; i < lineWordBackgrounds.size(); i++) {
       textBlock->setWordBackground(i, lineWordBackgrounds[i]);

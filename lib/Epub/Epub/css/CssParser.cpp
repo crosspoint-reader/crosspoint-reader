@@ -88,15 +88,24 @@ static uint8_t interpretColor(const std::string& val) {
     normalized[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(normalized[i])));
   }
   uint8_t result = 0;
-  if (normalized == "black" || normalized == "#000" || normalized == "#000000") result = 16;
-  else if (normalized == "white" || normalized == "#fff" || normalized == "#ffffff") result = 0;
-  else if (normalized == "gray" || normalized == "grey" || normalized == "#808080") result = 10;
-  else if (normalized == "lightgray" || normalized == "#d3d3d3") result = 5;
-  else if (normalized == "darkgray" || normalized == "#a9a9a9") result = 8;
-  else if (normalized == "red" || normalized == "#f00" || normalized == "#ff0000") result = 10;
-  else if (normalized == "blue" || normalized == "#00f" || normalized == "#0000ff") result = 10;
-  else if (normalized == "green" || normalized == "#0f0" || normalized == "#00ff00") result = 10;
-  else if (normalized == "transparent" || normalized == "none") result = 0;
+  if (normalized == "black" || normalized == "#000" || normalized == "#000000")
+    result = 16;
+  else if (normalized == "white" || normalized == "#fff" || normalized == "#ffffff")
+    result = 0;
+  else if (normalized == "gray" || normalized == "grey" || normalized == "#808080")
+    result = 10;
+  else if (normalized == "lightgray" || normalized == "#d3d3d3")
+    result = 5;
+  else if (normalized == "darkgray" || normalized == "#a9a9a9")
+    result = 8;
+  else if (normalized == "red" || normalized == "#f00" || normalized == "#ff0000")
+    result = 10;
+  else if (normalized == "blue" || normalized == "#00f" || normalized == "#0000ff")
+    result = 10;
+  else if (normalized == "green" || normalized == "#0f0" || normalized == "#00ff00")
+    result = 10;
+  else if (normalized == "transparent" || normalized == "none")
+    result = 0;
   else if (normalized.size() >= 4 && normalized[0] == '#') {
     int r = 0, g = 0, b = 0;
     if (normalized.size() == 4) {
@@ -128,20 +137,32 @@ static uint8_t interpretColor(const std::string& val) {
             const char* str = s.c_str();
             while (*str && isCssWhitespace(*str)) ++str;
             bool neg = false;
-            if (*str == '-') { neg = true; ++str; }
+            if (*str == '-') {
+              neg = true;
+              ++str;
+            }
             int val = 0;
-            while (*str >= '0' && *str <= '9') { val = val * 10 + (*str - '0'); ++str; }
+            while (*str >= '0' && *str <= '9') {
+              val = val * 10 + (*str - '0');
+              ++str;
+            }
             return neg ? -val : val;
           };
           r = parseInt(rgbPart.substr(0, comma1));
           g = parseInt(rgbPart.substr(comma1 + 1, comma2 - comma1 - 1));
           b = parseInt(rgbPart.substr(comma2 + 1));
-          if (r < 0) r = 0;
-          else if (r > 255) r = 255;
-          if (g < 0) g = 0;
-          else if (g > 255) g = 255;
-          if (b < 0) b = 0;
-          else if (b > 255) b = 255;
+          if (r < 0)
+            r = 0;
+          else if (r > 255)
+            r = 255;
+          if (g < 0)
+            g = 0;
+          else if (g > 255)
+            g = 255;
+          if (b < 0)
+            b = 0;
+          else if (b > 255)
+            b = 255;
           const int luminance = (19595 * r + 38470 * g + 7471 * b) >> 16;
           result = static_cast<uint8_t>(((255 - luminance) * 16 + 127) / 255);
           if (result > 16) result = 16;
@@ -874,9 +895,9 @@ bool CssParser::loadFromCache() {
 
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
-  constexpr size_t CSS_FIXED_STYLE_BYTES =
-      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) /* display */ +
-      sizeof(uint8_t) /* backgroundColor */ + sizeof(uint16_t) /* definedBits */ + sizeof(uint8_t) /* extraBits */;
+  constexpr size_t CSS_FIXED_STYLE_BYTES = 4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) +
+                                           sizeof(uint8_t) /* display */ + sizeof(uint8_t) /* backgroundColor */ +
+                                           sizeof(uint16_t) /* definedBits */ + sizeof(uint8_t) /* extraBits */;
 
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {

@@ -37,7 +37,8 @@ class ChapterHtmlSlimParser {
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
-  bool atInlineStyleBoundary = false;  // true when entering styled inline element, cleared after first content processed
+  bool atInlineStyleBoundary =
+      false;  // true when entering styled inline element, cleared after first content processed
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;

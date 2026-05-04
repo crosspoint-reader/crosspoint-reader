@@ -792,7 +792,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->nextWordContinues = !self->atInlineStyleBoundary;
       self->flushPartWordBuffer();
 
-      self->nextWordContinues = true;  // Next real word attaches to this space (no break).
+      self->nextWordContinues = true;       // Next real word attaches to this space (no break).
       self->atInlineStyleBoundary = false;  // Clear boundary flag after first content
 
       i++;  // Skip the second byte (0xA0)

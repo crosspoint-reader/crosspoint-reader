@@ -9,8 +9,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
       (!wordBackgrounds.empty() && words.size() != wordBackgrounds.size())) {
     LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u, bg=%u)\n", (uint32_t)words.size(),
-            (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size(),
-            (uint32_t)wordBackgrounds.size());
+            (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size(), (uint32_t)wordBackgrounds.size());
     return;
   }
 
