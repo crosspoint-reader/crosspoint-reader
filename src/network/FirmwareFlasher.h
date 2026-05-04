@@ -39,7 +39,13 @@ using ProgressCb = void (*)(size_t written, size_t total, void* ctx);
 // next OTA app partition with interleaved 64 KiB erase + sector writes. On
 // success switches otadata via ota_boot::switchTo. Caller is responsible for
 // ESP.restart() afterwards.
-Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx);
+//
+// `alreadyValidated` lets callers that have just run `validateImageFile()`
+// themselves (e.g. SdFirmwareUpdateActivity, which validates before showing
+// the user the confirmation prompt) skip the redundant second pass. Defaults
+// to false so callers without prior validation (any future entry point) keep
+// the defense-in-depth check.
+Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated = false);
 
 // Full-image integrity check that mirrors the bootloader's verification:
 // header magic, segment table walk, XOR checksum, and SHA256 trailer (when

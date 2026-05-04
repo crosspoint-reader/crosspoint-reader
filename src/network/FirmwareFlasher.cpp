@@ -226,7 +226,7 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
   return Result::OK;
 }
 
-Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx) {
+Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated) {
   // Resolve destination first so we can size-check during validation. The full image-integrity
   // pass below verifies header, segment table, XOR checksum and SHA256 trailer end-to-end before
   // we touch otadata, so a truncated/corrupted .bin can never become the next boot target.
@@ -236,10 +236,16 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx) {
     return Result::NO_PARTITION;
   }
 
-  const Result validateRes = validateImageFile(sdPath, dest->size);
-  if (validateRes != Result::OK) {
-    LOG_ERR("FLASH", "image validation failed: %s", resultName(validateRes));
-    return validateRes;
+  // When the caller already ran validateImageFile() against this same partition
+  // size (e.g. SdFirmwareUpdateActivity validates before the confirmation
+  // prompt), skip the redundant integrity scan. We still keep the partition
+  // lookup so the rest of the flashing path stays unchanged.
+  if (!alreadyValidated) {
+    const Result validateRes = validateImageFile(sdPath, dest->size);
+    if (validateRes != Result::OK) {
+      LOG_ERR("FLASH", "image validation failed: %s", resultName(validateRes));
+      return validateRes;
+    }
   }
 
   HalFile file;
