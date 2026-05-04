@@ -410,7 +410,7 @@ void Section::buildTocBoundariesFromFile(FsFile& f) {
 
   // Single pass through on-disk anchors, matching against cached TOC anchors.
   // Stop early once all TOC anchors are resolved.
-  f.seek(HEADER_SIZE - sizeof(uint32_t));
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
 
