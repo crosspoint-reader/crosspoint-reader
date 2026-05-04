@@ -100,27 +100,43 @@ static std::optional<uint8_t> tryInterpretColor(const std::string& val) {
     normalized[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(normalized[i])));
   }
 
-  if (normalized == "transparent" || normalized == "none")
-    return 0;
+  if (normalized == "transparent" || normalized == "none") return 0;
 
   // Named colors — resolve to RGB then go through the shared grayscale helper
   int r = -1, g = -1, b = -1;
-  if (normalized == "black")
-    { r = 0;   g = 0;   b = 0;   }
-  else if (normalized == "white")
-    { r = 255; g = 255; b = 255; }
-  else if (normalized == "gray" || normalized == "grey")
-    { r = 128; g = 128; b = 128; }
-  else if (normalized == "lightgray")
-    { r = 211; g = 211; b = 211; }
-  else if (normalized == "darkgray")
-    { r = 169; g = 169; b = 169; }
-  else if (normalized == "red")
-    { r = 255; g = 0;   b = 0;   }
-  else if (normalized == "green")
-    { r = 0;   g = 255; b = 0;   }
-  else if (normalized == "blue")
-    { r = 0;   g = 0;   b = 255; }
+  if (normalized == "black") {
+    r = 0;
+    g = 0;
+    b = 0;
+  } else if (normalized == "white") {
+    r = 255;
+    g = 255;
+    b = 255;
+  } else if (normalized == "gray" || normalized == "grey") {
+    r = 128;
+    g = 128;
+    b = 128;
+  } else if (normalized == "lightgray") {
+    r = 211;
+    g = 211;
+    b = 211;
+  } else if (normalized == "darkgray") {
+    r = 169;
+    g = 169;
+    b = 169;
+  } else if (normalized == "red") {
+    r = 255;
+    g = 0;
+    b = 0;
+  } else if (normalized == "green") {
+    r = 0;
+    g = 255;
+    b = 0;
+  } else if (normalized == "blue") {
+    r = 0;
+    g = 0;
+    b = 255;
+  }
 
   if (r >= 0 && g >= 0 && b >= 0) {
     return rgbToGrayscale(r, g, b);
@@ -402,9 +418,7 @@ bool CssParser::tryInterpretLength(const std::string& val, CssLength& out) {
   return true;
 }
 
-std::optional<uint8_t> CssParser::tryInterpretColor(const std::string& val) {
-  return ::tryInterpretColor(val);
-}
+std::optional<uint8_t> CssParser::tryInterpretColor(const std::string& val) { return ::tryInterpretColor(val); }
 
 // Declaration parsing
 
