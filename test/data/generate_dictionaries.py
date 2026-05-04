@@ -25,6 +25,8 @@ YAML schemas:
       generate_oft:    bool — default for idx.oft and syn.oft generation (default false)
       generate_idx_oft: bool — override idx.oft generation (default: generate_oft)
       generate_syn_oft: bool — override syn.oft generation (default: generate_oft)
+      generate_cspt:    bool — write .idx.oft.cspt (default false; requires generate_idx_oft)
+      generate_syn_cspt: bool — write .syn.oft.cspt (default false; requires generate_syn_oft)
       generate_ifo:    bool — write .ifo file (default true)
       generate_idx:    bool — write .idx (and .idx.oft) (default true)
       corrupt_dict:    bool — write invalid bytes as .dict.dz instead of real content
@@ -118,8 +120,12 @@ _CSPT_STRIDE = 16
 _CSPT_HEADER_SIZE = 12
 
 
-def build_cspt(idx_bytes: bytes, oft_bytes: bytes) -> bytes:
-    """Build .idx.oft.cspt from .idx and .idx.oft data."""
+def build_cspt(src_bytes: bytes, oft_bytes: bytes, skip_per_entry: int = 8) -> bytes:
+    """Build .cspt from .idx/.syn and matching .oft data.
+
+    skip_per_entry: bytes after the null-terminated word in src_bytes
+    (8 for .idx = offset+size; 4 for .syn = original_word_index).
+    """
     table_bytes = oft_bytes[len(OFT_HEADER):]
     num_oft_entries = len(table_bytes) // 4
     if num_oft_entries > 0:
@@ -133,31 +139,31 @@ def build_cspt(idx_bytes: bytes, oft_bytes: bytes) -> bytes:
     entries = []
     for page_off in page_offsets:
         pos = page_off
-        if pos >= len(idx_bytes):
+        if pos >= len(src_bytes):
             break
         try:
-            null = idx_bytes.index(b"\x00", pos)
+            null = src_bytes.index(b"\x00", pos)
         except ValueError:
             break
-        word = idx_bytes[pos:null]
+        word = src_bytes[pos:null]
         prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
         entries.append(prefix + struct.pack("<I", pos))
 
         scan_pos = pos
         for _ in range(16):
             try:
-                null = idx_bytes.index(b"\x00", scan_pos)
+                null = src_bytes.index(b"\x00", scan_pos)
             except ValueError:
-                scan_pos = len(idx_bytes)
+                scan_pos = len(src_bytes)
                 break
-            scan_pos = null + 1 + 8
-        if scan_pos >= len(idx_bytes):
+            scan_pos = null + 1 + skip_per_entry
+        if scan_pos >= len(src_bytes):
             continue
         try:
-            null = idx_bytes.index(b"\x00", scan_pos)
+            null = src_bytes.index(b"\x00", scan_pos)
         except ValueError:
             continue
-        word = idx_bytes[scan_pos:null]
+        word = src_bytes[scan_pos:null]
         prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
         entries.append(prefix + struct.pack("<I", scan_pos))
 
@@ -277,6 +283,7 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
     generate_idx_oft = meta.get("generate_idx_oft", meta.get("generate_oft", False))
     generate_syn_oft = meta.get("generate_syn_oft", meta.get("generate_oft", False))
     generate_cspt = meta.get("generate_cspt", False)
+    generate_syn_cspt = meta.get("generate_syn_cspt", False)
     generate_ifo = meta.get("generate_ifo", True)
     generate_idx = meta.get("generate_idx", True)
     corrupt_dict = meta.get("corrupt_dict", False)
@@ -343,14 +350,18 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
             with open(oft_path, "rb") as f:
                 oft_data = f.read()
             with open(stem + ".idx.oft.cspt", "wb") as f:
-                f.write(build_cspt(idx_bytes, oft_data))
+                f.write(build_cspt(idx_bytes, oft_data, skip_per_entry=8))
 
-    # Write .syn and optionally .syn.oft
+    # Write .syn and optionally .syn.oft (+ .syn.oft.cspt)
     if syn_bytes:
         write_or_compress(stem + ".syn", syn_bytes, compress_syn)
         if generate_syn_oft:
+            syn_oft_bytes = build_syn_oft(syn_bytes)
             with open(stem + ".syn.oft", "wb") as f:
-                f.write(build_syn_oft(syn_bytes))
+                f.write(syn_oft_bytes)
+            if generate_syn_cspt:
+                with open(stem + ".syn.oft.cspt", "wb") as f:
+                    f.write(build_cspt(syn_bytes, syn_oft_bytes, skip_per_entry=4))
 
     # Write primary .ifo
     if generate_ifo:
@@ -395,6 +406,8 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         exts.append(".syn" + (".dz" if compress_syn else ""))
         if generate_syn_oft:
             exts.append(".syn.oft")
+            if generate_syn_cspt:
+                exts.append(".syn.oft.cspt")
     if generate_ifo:
         exts.append(".ifo")
     _print_summary(out_dir, stem_name, exts)

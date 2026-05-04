@@ -18,7 +18,8 @@ The dictionary feature uses the StarDict format. Relevant file types:
 | `.syn.dz` | Optional | Gzip-compressed .syn |
 | `.idx.oft` | Generated | Two-level offset index for fast .idx binary search |
 | `.syn.oft` | Generated | Two-level offset index for fast .syn binary search |
-| `.idx.oft.cspt` | Generated | CrossPoint optimized prefix index over `.idx`; primary fast path for word lookup. Falls back to `.idx.oft` when absent. See [CrossPoint Optimized Index format](#crosspoint-optimized-index-idxoftcspt) below. |
+| `.idx.oft.cspt` | Generated | CrossPoint optimized prefix index over `.idx`; primary fast path for word lookup. Falls back to `.idx.oft` when absent. See [CrossPoint Optimized Index format](#crosspoint-optimized-index-cspt) below. |
+| `.syn.oft.cspt` | Generated | CrossPoint optimized prefix index over `.syn`; primary fast path for alternate-form lookup. Falls back to `.syn.oft` when absent. Same format as `.idx.oft.cspt`. |
 
 Minimum for lookup: `.dict` + `.idx`. Without `.ifo`, HTML definitions render as plain text (no `sametypesequence` detection).
 
@@ -114,11 +115,12 @@ All prefixed `prep-` for alphabetical grouping in the on-device picker.
    - `compress` / `compress_dict` / `compress_syn`: produce `.dz` files
    - `generate_oft` / `generate_idx_oft` / `generate_syn_oft`: produce `.oft` files
    - `generate_cspt`: produce `.idx.oft.cspt` (requires `generate_idx_oft`).
-     Convention: when `generate_idx_oft` is true, also set `generate_cspt: true` so
-     fixtures match the deployed format and the device's `.cspt` fast path is
-     exercised. The exception is dictionaries explicitly testing on-device CSPT
-     generation (e.g. `prep-cspt-prefix-collision`), which intentionally ship
-     without `.idx.oft.cspt`.
+   - `generate_syn_cspt`: produce `.syn.oft.cspt` (requires `generate_syn_oft`).
+     Convention: when `generate_idx_oft`/`generate_syn_oft` are true, also set
+     `generate_cspt`/`generate_syn_cspt: true` so fixtures match the deployed
+     format and the device's `.cspt` fast path is exercised. The exception is
+     dictionaries explicitly testing on-device CSPT generation (e.g.
+     `prep-cspt-prefix-collision`), which intentionally ship without `.cspt`.
    - `generate_ifo`: write `.ifo` (default true)
    - `generate_idx`: write `.idx` (default true)
    - `corrupt_dict`: write invalid bytes as `.dict.dz`
@@ -202,7 +204,7 @@ python3 scripts/dictionary_tools.py merge \
 
 | Subcommand | Purpose |
 |------------|---------|
-| `prep` | Decompress `.dict.dz`/`.syn.dz`, generate `.idx.oft`/`.syn.oft` offset files, and generate `.idx.oft.cspt` optimized prefix index. Replicates on-device `DictPrepareActivity` behavior. |
+| `prep` | Decompress `.dict.dz`/`.syn.dz`, generate `.idx.oft`/`.syn.oft` offset files, and generate `.idx.oft.cspt`/`.syn.oft.cspt` optimized prefix indexes. Replicates on-device `DictPrepareActivity` behavior. |
 | `lookup` | Exact-match word lookup in a prepared dictionary. Prints the definition to stdout. |
 | `merge` | Combine two or more StarDict dictionaries into a single monolithic dictionary. |
 
@@ -215,14 +217,19 @@ Behavior:
 - **Definitions**: When the same headword appears in multiple sources, definitions are concatenated in source order.
 - **Synonyms**: Full union -- all synonyms from all sources are preserved, with target indices remapped to the merged headword index.
 - **sametypesequence**: Inherited from the first source. A warning is printed if sources disagree.
-- **Generated files**: `.idx.oft`, `.syn.oft`, and `.idx.oft.cspt` are produced automatically.
+- **Generated files**: `.idx.oft`, `.syn.oft`, `.idx.oft.cspt`, and `.syn.oft.cspt` are produced automatically.
 - **Requirements**: Source dictionaries must have decompressed `.dict` files (run `prep` first if needed). No external dependencies -- stdlib only.
 
-## CrossPoint Optimized Index (`.idx.oft.cspt`)
+## CrossPoint Optimized Index (`.cspt`)
 
-The `.idx.oft.cspt` ("CrossPoint") file is a CrossPoint-specific optimized prefix index over `.idx`. The on-device `Dictionary::locate` tries it before falling back to `.idx.oft` and then a linear scan. Three producers must stay in sync:
+The `.cspt` ("CrossPoint") file is a CrossPoint-specific optimized prefix index. Two flavors exist with identical format:
 
-- Device: `DictPrepareActivity::generateCspt` and constants in `src/util/Dictionary.cpp`
+- `.idx.oft.cspt` — over `.idx`. The on-device `Dictionary::locate` tries it before falling back to `.idx.oft` and then a linear scan.
+- `.syn.oft.cspt` — over `.syn`. The on-device `Dictionary::resolveAltForm` tries it before falling back to `.syn.oft` and then a linear scan.
+
+Three producers must stay in sync (each emits both flavors):
+
+- Device: `DictPrepareActivity::generateCspt` (parameterized by `skipPerEntry`) and constants in `src/util/Dictionary.cpp`
 - Host CLI: `_build_cspt` in `scripts/dictionary_tools.py`
 - Test fixtures: `build_cspt` in `test/data/generate_dictionaries.py`
 
@@ -241,13 +248,13 @@ The `.idx.oft.cspt` ("CrossPoint") file is a CrossPoint-specific optimized prefi
 | Offset | Size | Field |
 |--------|------|-------|
 | 0 | 16 | prefix (UTF-8, zero-padded if shorter than `prefixLen`) |
-| 16 | 4 | byte offset into `.idx` (LE `uint32`) |
+| 16 | 4 | byte offset into `.idx` or `.syn` (LE `uint32`) |
 
-Entries are produced from the `.idx.oft` page boundaries: for each `.idx.oft` page (stride 32), the first headword and the headword 16 entries into the page are sampled. Entries are sorted by case-insensitive prefix in ascending order.
+Entries are produced from the `.oft` page boundaries: for each `.oft` page (stride 32), the first headword and the headword 16 entries into the page are sampled. Entries are sorted by case-insensitive prefix in ascending order. The producer's per-entry suffix size differs by source (`.idx` = 8 bytes for offset+size; `.syn` = 4 bytes for the original-word-index), but the resulting `.cspt` format is identical.
 
 ### Lookup
 
-Case-insensitive binary search over prefixes finds the largest entry `i` whose prefix is `<= target`. The `.idx` is then scanned from `entries[i].byteOffset` to `entries[i+1].byteOffset` (or end of `.idx` for the last entry).
+Case-insensitive binary search over prefixes finds the largest entry `i` whose prefix is `<= target`. The source file (`.idx` or `.syn`) is then scanned from `entries[i].byteOffset` to `entries[i+1].byteOffset` (or end of source for the last entry).
 
 ### `stride` field
 
