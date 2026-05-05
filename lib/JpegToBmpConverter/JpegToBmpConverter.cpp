@@ -399,7 +399,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
-  const ScopedCleanup cleanup {[&jpeg](){ jpeg->close(); }};
+  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
 
   const int srcWidth = jpeg->getWidth();
   const int srcHeight = jpeg->getHeight();
