@@ -151,14 +151,12 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
       LOG_ERR("SDCF", "Failed to allocate kern classes (%u+%u bytes)", s.header.kernLeftEntryCount * 3u,
               s.header.kernRightEntryCount * 3u);
       freeStyleKernLigatureData(s);
-      file.close();
       return false;
     }
 
     if (!file.seekSet(s.kernLeftFileOffset)) {
       LOG_ERR("SDCF", "Failed to seek to kern data");
       freeStyleKernLigatureData(s);
-      file.close();
       return false;
     }
     size_t leftSz = s.header.kernLeftEntryCount * sizeof(EpdKernClassEntry);
@@ -167,7 +165,6 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
         file.read(reinterpret_cast<uint8_t*>(s.kernRightClasses), rightSz) != static_cast<int>(rightSz)) {
       LOG_ERR("SDCF", "Failed to read kern classes");
       freeStyleKernLigatureData(s);
-      file.close();
       return false;
     }
   }
@@ -177,25 +174,21 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     if (!s.ligaturePairs) {
       LOG_ERR("SDCF", "Failed to allocate ligature pairs");
       freeStyleKernLigatureData(s);
-      file.close();
       return false;
     }
     if (!file.seekSet(s.ligatureFileOffset)) {
       LOG_ERR("SDCF", "Failed to seek to ligature data");
       freeStyleKernLigatureData(s);
-      file.close();
       return false;
     }
     size_t sz = s.header.ligaturePairCount * sizeof(EpdLigaturePair);
     if (file.read(reinterpret_cast<uint8_t*>(s.ligaturePairs), sz) != static_cast<int>(sz)) {
       LOG_ERR("SDCF", "Failed to read ligature pairs");
       freeStyleKernLigatureData(s);
-      file.close();
       return false;
     }
   }
 
-  file.close();
   s.kernLigLoaded = true;
 
   // Make ligatures visible to the stub (used when no mini data built yet).
@@ -328,7 +321,6 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   std::unique_ptr<int8_t[]> rowBuf(new (std::nothrow) int8_t[s.header.kernRightClassCount]);
   if (!rowBuf) {
     LOG_ERR("SDCF", "Failed to allocate row buffer (%u bytes)", s.header.kernRightClassCount);
-    file.close();
     freeStyleMiniKern(s);
     return false;
   }
@@ -338,14 +330,12 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
     const uint32_t rowFileOff = s.kernMatrixFileOffset + (oldL - 1u) * s.header.kernRightClassCount;
     if (!file.seekSet(rowFileOff)) {
       LOG_ERR("SDCF", "Failed to seek to kern row %u", oldL);
-      file.close();
       freeStyleMiniKern(s);
       return false;
     }
     if (file.read(reinterpret_cast<uint8_t*>(rowBuf.get()), s.header.kernRightClassCount) !=
         static_cast<int>(s.header.kernRightClassCount)) {
       LOG_ERR("SDCF", "Failed to read kern row %u", oldL);
-      file.close();
       freeStyleMiniKern(s);
       return false;
     }
@@ -354,8 +344,6 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
       miniRow[newR - 1] = rowBuf[newToOldRight[newR] - 1u];
     }
   }
-
-  file.close();
 
   s.miniKernLeftEntryCount = lIdx;
   s.miniKernRightEntryCount = rIdx;
@@ -413,20 +401,17 @@ bool SdCardFont::load(const char* path) {
   uint8_t headerBuf[HEADER_SIZE];
   if (file.read(headerBuf, HEADER_SIZE) != HEADER_SIZE) {
     LOG_ERR("SDCF", "Failed to read header");
-    file.close();
     return false;
   }
 
   if (memcmp(headerBuf, CPFONT_MAGIC, 8) != 0) {
     LOG_ERR("SDCF", "Invalid magic bytes");
-    file.close();
     return false;
   }
 
   uint16_t fileVersion = readU16(headerBuf + 8);
   if (fileVersion != CPFONT_VERSION) {
     LOG_ERR("SDCF", "Unsupported version: %u (expected %u)", fileVersion, CPFONT_VERSION);
-    file.close();
     return false;
   }
 
@@ -438,7 +423,6 @@ bool SdCardFont::load(const char* path) {
   uint8_t styleCount = headerBuf[12];
   if (styleCount == 0 || styleCount > MAX_STYLES) {
     LOG_ERR("SDCF", "Invalid style count: %u", styleCount);
-    file.close();
     return false;
   }
 
@@ -447,7 +431,6 @@ bool SdCardFont::load(const char* path) {
     uint8_t tocBuf[STYLE_TOC_ENTRY_SIZE];
     if (file.read(tocBuf, STYLE_TOC_ENTRY_SIZE) != STYLE_TOC_ENTRY_SIZE) {
       LOG_ERR("SDCF", "Failed to read style TOC entry %u", i);
-      file.close();
       freeAll();
       return false;
     }
@@ -500,21 +483,18 @@ bool SdCardFont::load(const char* path) {
     s.fullIntervals = new (std::nothrow) EpdUnicodeInterval[s.header.intervalCount];
     if (!s.fullIntervals) {
       LOG_ERR("SDCF", "Failed to allocate %u intervals for style %u", s.header.intervalCount, i);
-      file.close();
       freeAll();
       return false;
     }
 
     if (!file.seekSet(s.intervalsFileOffset)) {
       LOG_ERR("SDCF", "Failed to seek to intervals for style %u", i);
-      file.close();
       freeAll();
       return false;
     }
     size_t intervalsBytes = s.header.intervalCount * sizeof(EpdUnicodeInterval);
     if (file.read(reinterpret_cast<uint8_t*>(s.fullIntervals), intervalsBytes) != static_cast<int>(intervalsBytes)) {
       LOG_ERR("SDCF", "Failed to read intervals for style %u", i);
-      file.close();
       freeAll();
       return false;
     }
@@ -530,7 +510,6 @@ bool SdCardFont::load(const char* path) {
     applyGlyphMissCallback(i);
   }
 
-  file.close();
   loaded_ = true;
 
   LOG_DBG("SDCF", "Loaded: %s (v%u, %u styles)", path, CPFONT_VERSION, styleCount_);
@@ -774,7 +753,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     }
     if (file.read(reinterpret_cast<uint8_t*>(&s.miniGlyphs[mapIdx]), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
       LOG_ERR("SDCF", "Prewarm: short glyph read (style %u, glyph %d)", styleIdx, gIdx);
-      file.close();
       delete[] readOrder;
       delete[] mappings;
       freeStyleMiniData(s);
@@ -794,7 +772,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     s.miniBitmap = new (std::nothrow) uint8_t[totalBitmapSize > 0 ? totalBitmapSize : 1];
     if (!s.miniBitmap) {
       LOG_ERR("SDCF", "Failed to allocate mini bitmap (%u bytes) for style %u", totalBitmapSize, styleIdx);
-      file.close();
       delete[] readOrder;
       delete[] mappings;
       freeStyleMiniData(s);
@@ -823,7 +800,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       }
       if (file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) != static_cast<int>(glyph.dataLength)) {
         LOG_ERR("SDCF", "Prewarm: short bitmap read (style %u)", styleIdx);
-        file.close();
         delete[] readOrder;
         delete[] mappings;
         freeStyleMiniData(s);
@@ -837,7 +813,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   }
 
   uint32_t sdTime = millis() - sdStart;
-  file.close();
   delete[] readOrder;
   delete[] mappings;
 
@@ -949,7 +924,6 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   file.seekSet(glyphFileOff);
   if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
     LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X style %u", codepoint, styleIdx);
-    file.close();
     return nullptr;
   }
 
@@ -959,19 +933,15 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
     tempBitmap = new (std::nothrow) uint8_t[tempGlyph.dataLength];
     if (!tempBitmap) {
       LOG_ERR("SDCF", "Overflow: failed to allocate %u bytes for U+%04X bitmap", tempGlyph.dataLength, codepoint);
-      file.close();
       return nullptr;
     }
     file.seekSet(s.bitmapFileOffset + tempGlyph.dataOffset);
     if (file.read(tempBitmap, tempGlyph.dataLength) != static_cast<int>(tempGlyph.dataLength)) {
       LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
       delete[] tempBitmap;
-      file.close();
       return nullptr;
     }
   }
-
-  file.close();
 
   // All reads succeeded — commit to slot and advance ring buffer
   if (wasAtCapacity) {

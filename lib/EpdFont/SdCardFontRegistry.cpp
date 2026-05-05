@@ -98,7 +98,6 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     info.style = style;
     family.files.push_back(std::move(info));
   }
-  dir.close();
 }
 
 bool SdCardFontRegistry::discover() {
@@ -112,7 +111,6 @@ bool SdCardFontRegistry::discover() {
   }
   if (!root.isDirectory()) {
     LOG_ERR("SDREG", "Fonts path is not a directory: %s", FONTS_DIR);
-    root.close();
     return false;
   }
 
@@ -142,7 +140,6 @@ bool SdCardFontRegistry::discover() {
       entry.close();
     }
   }
-  root.close();
 
   // Sort families alphabetically
   std::sort(families_.begin(), families_.end(),
