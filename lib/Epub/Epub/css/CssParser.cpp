@@ -104,7 +104,7 @@ static std::optional<uint8_t> tryInterpretColor(const std::string& val) {
 
   if (normalized == "transparent" || normalized == "none") return 0;
 
-  // Named color path 
+  // Named color path
   int r = -1, g = -1, b = -1;
   if (normalized == "black") {
     return rgbToGrayscale(0, 0, 0);
@@ -171,13 +171,13 @@ static std::optional<uint8_t> tryInterpretColor(const std::string& val) {
     }
 
     return rgbToGrayscale(r, g, b);
-  } 
-  
+  }
+
   // rgb parsing path (rgb(0, 0, 0), rgba(0, 0, 0))
   if (normalized.size() >= 4 && normalized.substr(0, 3) == "rgb") {
     size_t start = normalized.find('(');
     size_t end = normalized.find(')');
-    
+
     if (start == std::string::npos || end == std::string::npos || end < start) {
       return std::nullopt;
     }
@@ -185,12 +185,12 @@ static std::optional<uint8_t> tryInterpretColor(const std::string& val) {
     std::string rgbPart = normalized.substr(start + 1, end - start - 1);
 
     size_t comma1 = rgbPart.find(',');
-    if(comma1 == std::string::npos) {
+    if (comma1 == std::string::npos) {
       return std::nullopt;
     }
 
     size_t comma2 = rgbPart.find(',', comma1 + 1);
-    if(comma2 == std::string::npos) {
+    if (comma2 == std::string::npos) {
       return std::nullopt;
     }
 
