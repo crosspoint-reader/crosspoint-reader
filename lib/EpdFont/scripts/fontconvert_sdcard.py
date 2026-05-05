@@ -212,17 +212,21 @@ def glyph_entries_by_codepoint(sd, code_point):
 
 
 def style_uses_synthetic_bold(base_sd, target_sd):
-    base_entry = next(glyph_entries_by_codepoint(base_sd, ord('A')), None)
-    target_entry = next(glyph_entries_by_codepoint(target_sd, ord('A')), None)
-    if base_entry is None or target_entry is None:
-        return False
-    base_glyph, base_packed = base_entry
-    target_glyph, target_packed = target_entry
-    if base_glyph.width != target_glyph.width or base_glyph.height != target_glyph.height:
-        return False
-    base_pixels = expand_processed_bitmap(base_glyph.width, base_glyph.height, base_packed, 2)
-    target_pixels = expand_processed_bitmap(target_glyph.width, target_glyph.height, target_packed, 2)
-    return base_pixels == target_pixels
+    sample_codepoints = [ord('A'), ord('a'), ord('g'), ord('0')]
+    for code_point in sample_codepoints:
+        base_entry = next(glyph_entries_by_codepoint(base_sd, code_point), None)
+        target_entry = next(glyph_entries_by_codepoint(target_sd, code_point), None)
+        if base_entry is None or target_entry is None:
+            return False
+        base_glyph, base_packed = base_entry
+        target_glyph, target_packed = target_entry
+        if base_glyph.width != target_glyph.width or base_glyph.height != target_glyph.height:
+            return False
+        base_pixels = expand_processed_bitmap(base_glyph.width, base_glyph.height, base_packed, 2)
+        target_pixels = expand_processed_bitmap(target_glyph.width, target_glyph.height, target_packed, 2)
+        if base_pixels != target_pixels:
+            return False
+    return True
 
 
 def apply_synthetic_bold(sd, style_label):
@@ -572,8 +576,7 @@ def extract_ligatures_fonttools(font_path, codepoints):
 
 def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False):
     """Rasterize all glyphs for one font style. Returns StyleRasterData."""
-    style_names = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
-    style_label = style_names.get(style_id, str(style_id))
+    style_label = STYLE_LABELS.get(style_id, str(style_id))
 
     face = freetype.Face(fontfile)
     # Set font size at 150 DPI (matching fontconvert.py) BEFORE any glyph load
@@ -891,8 +894,7 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
     for style_id in sorted(raster_data.keys()):
         sd = raster_data[style_id]
         secs = packed_sections[style_id]
-        style_names = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
-        sname = style_names.get(style_id, str(style_id))
+        sname = STYLE_LABELS.get(style_id, str(style_id))
         ssize = style_sections_total_size(secs)
         print(f"    {sname}: {len(sd.all_glyphs)} glyphs, {len(sd.intervals)} intervals, "
               f"{ssize} bytes", file=sys.stderr)
