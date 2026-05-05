@@ -15,6 +15,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -24,7 +25,7 @@ int HomeActivity::getMenuItemCount() const {
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
-  if (hasOpdsUrl) {
+  if (hasOpdsServers) {
     count++;
   }
   if (hasWebDavUrl) {
@@ -113,8 +114,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  // Check if OPDS browser URL is configured
-  hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
+  hasOpdsServers = OPDS_STORE.hasServers();
   hasWebDavUrl = strlen(SETTINGS.webdavServerUrl) > 0;
 
   selectorIndex = 0;
@@ -194,7 +194,7 @@ void HomeActivity::loop() {
     int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
     const int fileBrowserIdx = idx++;
     const int recentsIdx = idx++;
-    const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
+    const int opdsLibraryIdx = hasOpdsServers ? idx++ : -1;
     const int webDavIdx = hasWebDavUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
@@ -225,7 +225,8 @@ void HomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
 
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
@@ -236,22 +237,29 @@ void HomeActivity::render(RenderLock&&) {
                                         tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
-  if (hasOpdsUrl) {
+  if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
   if (hasWebDavUrl) {
-    int insertPos = hasOpdsUrl ? 3 : 2;
+    int insertPos = hasOpdsServers ? 3 : 2;
     menuItems.insert(menuItems.begin() + insertPos, tr(STR_WEBDAV_BROWSER));
     menuIcons.insert(menuIcons.begin() + insertPos, Library);
   }
 
+  if (metrics.homeContinueReadingInMenu) {
+    // Insert Continue Reading at the top if enabled in theme
+    menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
+    menuIcons.insert(menuIcons.begin(), Book);
+  }
+
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2 +
-                         metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
+      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
+                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
+      static_cast<int>(menuItems.size()),
+      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 

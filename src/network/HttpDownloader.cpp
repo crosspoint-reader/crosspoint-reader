@@ -7,31 +7,12 @@
 #include <StreamString.h>
 #include <base64.h>
 
-#include <cstring>
 #include <memory>
 #include <utility>
 
-#include "CrossPointSettings.h"
 #include "util/UrlUtils.h"
 
 namespace {
-
-void addBasicAuth(HTTPClient& http, const char* username, const char* password) {
-  if (username && password && strlen(username) > 0 && strlen(password) > 0) {
-    std::string credentials = std::string(username) + ":" + password;
-    String encoded = base64::encode(credentials.c_str());
-    http.addHeader("Authorization", "Basic " + encoded);
-  }
-}
-
-std::unique_ptr<NetworkClient> createClient(const std::string& url) {
-  if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
-    secureClient->setInsecure();
-    return std::unique_ptr<NetworkClient>(secureClient);
-  }
-  return std::make_unique<NetworkClient>();
-}
 
 class FileWriteStream final : public Stream {
  public:
@@ -70,16 +51,16 @@ class FileWriteStream final : public Stream {
 };
 }  // namespace
 
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent) {
-  return fetchUrl(url, outContent, SETTINGS.opdsUsername, SETTINGS.opdsPassword);
-}
-
-bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
-  return fetchUrl(url, outContent, SETTINGS.opdsUsername, SETTINGS.opdsPassword);
-}
-
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const char* username, const char* password) {
-  auto client = createClient(url);
+bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
+                              const std::string& password) {
+  std::unique_ptr<NetworkClient> client;
+  if (UrlUtils::isHttpsUrl(url)) {
+    auto* secureClient = new NetworkClientSecure();
+    secureClient->setInsecure();
+    client.reset(secureClient);
+  } else {
+    client.reset(new NetworkClient());
+  }
   HTTPClient http;
 
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
@@ -87,7 +68,12 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
-  addBasicAuth(http, username, password);
+
+  if (!username.empty() && !password.empty()) {
+    std::string credentials = username + ":" + password;
+    String encoded = base64::encode(credentials.c_str());
+    http.addHeader("Authorization", "Basic " + encoded);
+  }
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {
@@ -104,8 +90,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   return true;
 }
 
-bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const char* username,
-                              const char* password) {
+bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
+                              const std::string& password) {
   StreamString stream;
   if (!fetchUrl(url, stream, username, password)) {
     return false;
@@ -115,14 +101,16 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             ProgressCallback progress) {
-  return downloadToFile(url, destPath, SETTINGS.opdsUsername, SETTINGS.opdsPassword, std::move(progress));
-}
-
-HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             const char* username, const char* password,
-                                                             ProgressCallback progress) {
-  auto client = createClient(url);
+                                                             ProgressCallback progress, const std::string& username,
+                                                             const std::string& password) {
+  std::unique_ptr<NetworkClient> client;
+  if (UrlUtils::isHttpsUrl(url)) {
+    auto* secureClient = new NetworkClientSecure();
+    secureClient->setInsecure();
+    client.reset(secureClient);
+  } else {
+    client.reset(new NetworkClient());
+  }
   HTTPClient http;
 
   LOG_DBG("HTTP", "Downloading: %s", url.c_str());
@@ -131,7 +119,12 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
-  addBasicAuth(http, username, password);
+
+  if (!username.empty() && !password.empty()) {
+    std::string credentials = username + ":" + password;
+    String encoded = base64::encode(credentials.c_str());
+    http.addHeader("Authorization", "Basic " + encoded);
+  }
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {

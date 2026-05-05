@@ -1,6 +1,7 @@
 #include "OpdsParser.h"
 
 #include <Logging.h>
+#include <XmlParserUtils.h>
 
 #include <cstring>
 
@@ -12,15 +13,7 @@ OpdsParser::OpdsParser() {
   }
 }
 
-OpdsParser::~OpdsParser() {
-  if (parser) {
-    XML_StopParser(parser, XML_FALSE);
-    XML_SetElementHandler(parser, nullptr, nullptr);
-    XML_SetCharacterDataHandler(parser, nullptr);
-    XML_ParserFree(parser);
-    parser = nullptr;
-  }
-}
+OpdsParser::~OpdsParser() { destroyXmlParser(parser); }
 
 size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 
@@ -39,7 +32,8 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
     void* const buf = XML_GetBuffer(parser, chunkSize);
     if (!buf) {
       errorOccured = true;
-      XML_ParserFree(parser);
+      LOG_DBG("OPDS", "Couldn't allocate memory for buffer");
+      destroyXmlParser(parser);
       return length;
     }
 
@@ -48,7 +42,9 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), 0) == XML_STATUS_ERROR) {
       errorOccured = true;
-      XML_ParserFree(parser);
+      LOG_DBG("OPDS", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
+      destroyXmlParser(parser);
       return length;
     }
     currentPos += toRead;
@@ -60,8 +56,7 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
 void OpdsParser::flush() {
   if (XML_Parse(parser, nullptr, 0, XML_TRUE) != XML_STATUS_OK) {
     errorOccured = true;
-    XML_ParserFree(parser);
-    parser = nullptr;
+    destroyXmlParser(parser);
   }
 }
 

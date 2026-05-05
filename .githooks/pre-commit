@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Run formatter from repository root regardless of current directory.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+
+# Capture the files already staged for commit so we only re-stage those
+# paths after formatting.
+staged_files=()
+while IFS= read -r -d '' file; do
+  staged_files+=("${file}")
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+# Intentionally format all currently modified tracked C/C++ files.
+# The helper handles no-op cases and exits 0 when nothing matches.
+echo "Running clang-format fix before commit..."
+./bin/clang-format-fix
+
+# Ensure formatting changes are included in the pending commit without
+# staging unrelated tracked modifications from other files in the
+# working tree.
+if ((${#staged_files[@]})); then
+  git add -- "${staged_files[@]}"
+fi

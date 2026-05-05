@@ -7,8 +7,7 @@
 #include <esp_task_wdt.h>
 
 namespace {
-const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
@@ -230,8 +229,8 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       // Skip hidden/protected items
       bool shouldHide = fileName.startsWith(".");
       if (!shouldHide) {
-        for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-          if (fileName.equals(HIDDEN_ITEMS[i])) {
+        for (const auto* item : HIDDEN_ITEMS) {
+          if (fileName.equals(item)) {
             shouldHide = true;
             break;
           }
@@ -774,8 +773,8 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
 
     if (segment.startsWith(".")) return true;
 
-    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-      if (segment.equals(HIDDEN_ITEMS[i])) return true;
+    for (const auto* item : HIDDEN_ITEMS) {
+      if (segment.equals(item)) return true;
     }
 
     start = end + 1;

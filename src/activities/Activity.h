@@ -11,6 +11,7 @@
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "RenderLock.h"
+#include "util/ScreenshotInfo.h"
 
 class Activity {
   friend class ActivityManager;
@@ -43,6 +44,7 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+  virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes

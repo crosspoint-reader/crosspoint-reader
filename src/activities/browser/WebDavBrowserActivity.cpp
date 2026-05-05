@@ -292,13 +292,14 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
 
   LOG_DBG("DAV", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
-  const auto result =
-      HttpDownloader::downloadToFile(downloadUrl, filename, SETTINGS.webdavUsername, SETTINGS.webdavPassword,
-                                     [this](const size_t downloaded, const size_t total) {
-                                       downloadProgress = downloaded;
-                                       downloadTotal = total;
-                                       requestUpdate(true);
-                                     });
+  auto progressCb = [this](const size_t downloaded, const size_t total) {
+    downloadProgress = downloaded;
+    downloadTotal = total;
+    requestUpdate(true);
+  };
+
+  const auto result = HttpDownloader::downloadToFile(
+      downloadUrl, filename, progressCb, SETTINGS.webdavUsername, SETTINGS.webdavPassword);
 
   if (result == HttpDownloader::OK) {
     LOG_DBG("DAV", "Download complete: %s", filename.c_str());

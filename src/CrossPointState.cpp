@@ -5,6 +5,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <algorithm>
+
 namespace {
 constexpr uint8_t STATE_FILE_VERSION = 4;
 constexpr char STATE_FILE_BIN[] = "/.crosspoint/state.bin";
@@ -13,6 +15,21 @@ constexpr char STATE_FILE_BAK[] = "/.crosspoint/state.bin.bak";
 }  // namespace
 
 CrossPointState CrossPointState::instance;
+
+bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
+  const uint8_t effectiveCount = std::min(checkCount, recentSleepFill);
+  for (uint8_t i = 0; i < effectiveCount; i++) {
+    const uint8_t slot = (recentSleepPos + SLEEP_RECENT_COUNT - 1 - i) % SLEEP_RECENT_COUNT;
+    if (recentSleepImages[slot] == idx) return true;
+  }
+  return false;
+}
+
+void CrossPointState::pushRecentSleep(uint16_t idx) {
+  recentSleepImages[recentSleepPos] = idx;
+  recentSleepPos = (recentSleepPos + 1) % SLEEP_RECENT_COUNT;
+  if (recentSleepFill < SLEEP_RECENT_COUNT) recentSleepFill++;
+}
 
 bool CrossPointState::saveToFile() const {
   Storage.mkdir("/.crosspoint");
@@ -55,15 +72,16 @@ bool CrossPointState::loadFromBinaryFile() {
   serialization::readPod(inputFile, version);
   if (version > STATE_FILE_VERSION) {
     LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
-    inputFile.close();
     return false;
   }
 
   serialization::readString(inputFile, openEpubPath);
   if (version >= 2) {
-    serialization::readPod(inputFile, lastSleepImage);
-  } else {
-    lastSleepImage = UINT8_MAX;
+    uint8_t legacyLastSleep = UINT8_MAX;
+    serialization::readPod(inputFile, legacyLastSleep);
+    if (legacyLastSleep != UINT8_MAX) {
+      pushRecentSleep(static_cast<uint16_t>(legacyLastSleep));
+    }
   }
 
   if (version >= 3) {
@@ -76,6 +94,5 @@ bool CrossPointState::loadFromBinaryFile() {
     lastSleepFromReader = false;
   }
 
-  inputFile.close();
   return true;
 }
