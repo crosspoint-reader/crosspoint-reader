@@ -298,8 +298,8 @@ void WebDavBrowserActivity::downloadFile(const WebDavEntry& entry) {
     requestUpdate(true);
   };
 
-  const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename, progressCb, SETTINGS.webdavUsername, SETTINGS.webdavPassword);
+  const auto result = HttpDownloader::downloadToFile(downloadUrl, filename, progressCb, SETTINGS.webdavUsername,
+                                                     SETTINGS.webdavPassword);
 
   if (result == HttpDownloader::OK) {
     LOG_DBG("DAV", "Download complete: %s", filename.c_str());
