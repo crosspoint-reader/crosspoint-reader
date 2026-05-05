@@ -1,5 +1,6 @@
 #pragma once
 
+#include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
 
@@ -94,7 +95,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // ACTION-type entries and entries without a key are device-only.
 // Pass registry to include SD card fonts in the font family setting.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
-  return {
+  std::vector<SettingInfo> v = {
       // --- Display ---
       SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                         {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
@@ -113,8 +114,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
           "refreshFrequency", StrId::STR_CAT_DISPLAY),
       SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                        {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED}, "uiTheme",
-                        StrId::STR_CAT_DISPLAY),
+                        {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                         StrId::STR_THEME_ROUNDEDRAFF},
+                        "uiTheme", StrId::STR_CAT_DISPLAY),
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                           StrId::STR_CAT_DISPLAY),
 
@@ -148,12 +150,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       // --- Controls ---
       SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV}, "sideButtonLayout", StrId::STR_CAT_CONTROLS),
-      SettingInfo::Toggle(StrId::STR_LONG_PRESS_SKIP, &CrossPointSettings::longPressChapterSkip, "longPressChapterSkip",
-                          StrId::STR_CAT_CONTROLS),
+      SettingInfo::Enum(StrId::STR_LONG_PRESS_BEHAVIOR, &CrossPointSettings::longPressButtonBehavior,
+                        {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
+                         StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
+                        "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
       SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                         {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH},
                         "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-
       // --- System ---
       SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
                         {StrId::STR_MIN_1, StrId::STR_MIN_5, StrId::STR_MIN_10, StrId::STR_MIN_15, StrId::STR_MIN_30},
@@ -208,4 +211,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       SettingInfo::Toggle(StrId::STR_BATTERY, &CrossPointSettings::statusBarBattery, "statusBarBattery",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
   };
+  // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
+  if (halTiltSensor.isAvailable()) {
+    for (auto it = v.begin(); it != v.end(); ++it) {
+      if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
+        v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
+                                           {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED},
+                                           "tiltPageTurn", StrId::STR_CAT_CONTROLS));
+        break;
+      }
+    }
+  }
+  return v;
 }
