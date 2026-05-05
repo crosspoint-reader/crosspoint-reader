@@ -244,21 +244,22 @@ def main():
             print(f"  Building (env: {args.env})...", file=sys.stderr)
             rc, output = build_firmware(args.env)
 
-            if rc != 0:
+            build_failed = rc != 0
+            if build_failed:
                 print(f"  BUILD FAILED (exit {rc}) -- skipping", file=sys.stderr)
-                results.append((sha, title, None, None))
+                results.append((sha, title, None, None, True))
                 continue
 
             flash_used = parse_size_line(FLASH_RE, output)
             ram_used = parse_size_line(RAM_RE, output)
             if flash_used is None:
                 print("  Could not parse flash size from output -- skipping", file=sys.stderr)
-                results.append((sha, title, None, None))
+                results.append((sha, title, None, None, True))
                 continue
 
             ram_str = f", RAM: {ram_used:,}" if ram_used is not None else ""
             print(f"  Flash: {flash_used:,}{ram_str} bytes", file=sys.stderr)
-            results.append((sha, title, flash_used, ram_used))
+            results.append((sha, title, flash_used, ram_used, False))
 
     except KeyboardInterrupt:
         print("\n[info] Interrupted -- writing partial results.", file=sys.stderr)
@@ -273,19 +274,25 @@ def main():
     rows = []
     prev_flash = None
     prev_ram = None
-    for sha, title, flash_used, ram_used in results:
+    for sha, title, flash_used, ram_used, build_failed in results:
         flash_delta = ""
         ram_delta = ""
         if flash_used is not None and prev_flash is not None:
             flash_delta = flash_used - prev_flash
         if ram_used is not None and prev_ram is not None:
             ram_delta = ram_used - prev_ram
+        if build_failed:
+            flash_bytes = "FAILED"
+            ram_bytes = "FAILED"
+        else:
+            flash_bytes = flash_used if flash_used is not None else "N/A"
+            ram_bytes = ram_used if ram_used is not None else "N/A"
         rows.append({
             "commit": sha[:10],
             "title": title,
-            "flash_bytes": flash_used if flash_used is not None else "FAILED",
+            "flash_bytes": flash_bytes,
             "flash_delta": flash_delta,
-            "ram_bytes": ram_used if ram_used is not None else "FAILED",
+            "ram_bytes": ram_bytes,
             "ram_delta": ram_delta,
         })
         if flash_used is not None:
