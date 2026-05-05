@@ -932,19 +932,15 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   if (globalIdx < 0) return nullptr;
 
   // Pick overflow slot (ring buffer). Read into temporaries first so the
-  // existing slot stays valid if SD I/O fails.
+  // existing slot stays valid if SD I/O fails. Bookkeeping (count/next)
+  // is deferred until after all I/O succeeds to avoid inconsistent state.
   uint32_t slot = self->overflowNext_;
   bool wasAtCapacity = (self->overflowCount_ == OVERFLOW_CAPACITY);
-  if (!wasAtCapacity) {
-    self->overflowCount_++;
-  }
-  self->overflowNext_ = (slot + 1) % OVERFLOW_CAPACITY;
 
   // Read glyph metadata into temporary
   FsFile file;
   if (!Storage.openFileForRead("SDCF", self->filePath_, file)) {
     LOG_ERR("SDCF", "Overflow: failed to open .cpfont");
-    if (!wasAtCapacity) self->overflowCount_--;
     return nullptr;
   }
 
@@ -954,7 +950,6 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
     LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X style %u", codepoint, styleIdx);
     file.close();
-    if (!wasAtCapacity) self->overflowCount_--;
     return nullptr;
   }
 
@@ -965,7 +960,6 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
     if (!tempBitmap) {
       LOG_ERR("SDCF", "Overflow: failed to allocate %u bytes for U+%04X bitmap", tempGlyph.dataLength, codepoint);
       file.close();
-      if (!wasAtCapacity) self->overflowCount_--;
       return nullptr;
     }
     file.seekSet(s.bitmapFileOffset + tempGlyph.dataOffset);
@@ -973,17 +967,19 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
       LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
       delete[] tempBitmap;
       file.close();
-      if (!wasAtCapacity) self->overflowCount_--;
       return nullptr;
     }
   }
 
   file.close();
 
-  // All reads succeeded — commit to slot (evict old entry if at capacity)
+  // All reads succeeded — commit to slot and advance ring buffer
   if (wasAtCapacity) {
     delete[] self->overflow_[slot].bitmap;
+  } else {
+    self->overflowCount_++;
   }
+  self->overflowNext_ = (slot + 1) % OVERFLOW_CAPACITY;
   self->overflow_[slot].glyph = tempGlyph;
   self->overflow_[slot].bitmap = tempBitmap;
   self->overflow_[slot].codepoint = codepoint;
