@@ -95,7 +95,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // ACTION-type entries and entries without a key are device-only.
 // Pass registry to include SD card fonts in the font family setting.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
-  std::vector<SettingInfo> v = {
+  std::vector<SettingInfo> v{
       // --- Display ---
       SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                         {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
@@ -213,13 +213,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   };
   // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
   if (halTiltSensor.isAvailable()) {
-    for (auto it = v.begin(); it != v.end(); ++it) {
-      if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
-        v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
-                                           {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED},
-                                           "tiltPageTurn", StrId::STR_CAT_CONTROLS));
-        break;
-      }
+    auto it =
+        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SHORT_PWR_BTN; });
+    if (it != v.end()) {
+      v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
+                                         {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
+                                         StrId::STR_CAT_CONTROLS));
     }
   }
   return v;
