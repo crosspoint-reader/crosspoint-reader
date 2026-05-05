@@ -16,6 +16,11 @@ class BmpViewerActivity final : public Activity {
   void onScreenshotRequest() override;
 
  private:
-  std::string filePath;
+  void loadSiblingImages();
+  void doSetSleepCover();
   void renderGrayscaleImage();
+
+  std::string filePath;
+  std::vector<std::string> siblingImages;
+  int currentImageIndex = -1;
 };

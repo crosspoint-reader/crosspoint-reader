@@ -63,6 +63,41 @@ void SleepActivity::renderCustomSleepScreen() const {
   // Check if we have a /.sleep (preferred) or /sleep directory
   const char* sleepDir = nullptr;
   auto dir = Storage.open("/.sleep");
+
+  // Check root for sleep.pxc (preferred) or sleep.bmp before scanning the directory.
+  if (Storage.exists("/sleep.pxc")) {
+    LOG_DBG("SLP", "Loading: /sleep.pxc");
+    if (dir) dir.close();
+    if (renderPxcSleepScreen("/sleep.pxc")) {
+      return;
+    }
+    renderDefaultSleepScreen();
+    return;
+  }
+
+  // Look for sleep.bmp on the root of the sd card to determine if we should
+  // render a custom sleep screen instead of the default.
+  // This takes priority over the /sleep folder.
+  {
+    FsFile file;
+    if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
+      Bitmap bitmap(file, true);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        LOG_DBG("SLP", "Loading: /sleep.bmp");
+        if (bitmap.hasGreyscale() &&
+            SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER) {
+          lastGrayscalePath = "/sleep.bmp";
+          lastGrayscaleIsPxc = false;
+        }
+        renderBitmapSleepScreen(bitmap);
+        file.close();
+        if (dir) dir.close();
+        return;
+      }
+      file.close();
+    }
+  }
+
   if (dir && dir.isDirectory()) {
     sleepDir = "/.sleep";
   } else {
@@ -75,14 +110,16 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (sleepDir) {
     std::vector<std::string> files;
     char name[500];
-    // collect all valid BMP files
-    for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
-      if (file.isDirectory()) {
+    // collect all valid BMP/PXC files
+    for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+      if (dirFile.isDirectory()) {
+        dirFile.close();
         continue;
       }
-      file.getName(name, sizeof(name));
+      dirFile.getName(name, sizeof(name));
       auto filename = std::string(name);
       if (filename[0] == '.') {
+        dirFile.close();
         continue;
       }
 
@@ -90,33 +127,34 @@ void SleepActivity::renderCustomSleepScreen() const {
       const bool isPxc = FsHelpers::hasPxcExtension(filename);
       if (!isBmp && !isPxc) {
         LOG_DBG("SLP", "Skipping non-BMP/PXC file: %s", name);
-        file.close();
+        dirFile.close();
         continue;
       }
       if (isBmp) {
-        Bitmap bitmap(file);
+        Bitmap bitmap(dirFile);
         if (bitmap.parseHeaders() != BmpReaderError::Ok) {
           LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-          file.close();
+          dirFile.close();
           continue;
         }
       }
       if (isPxc) {
         uint16_t w, h;
-        if (file.read(&w, 2) != 2 || file.read(&h, 2) != 2) {
+        if (dirFile.read(&w, 2) != 2 || dirFile.read(&h, 2) != 2) {
           LOG_DBG("SLP", "Skipping PXC with unreadable header: %s", name);
-          file.close();
+          dirFile.close();
           continue;
         }
         const int sw = renderer.getScreenWidth();
         const int sh = renderer.getScreenHeight();
         if (w != sw || h != sh) {
           LOG_DBG("SLP", "Skipping PXC size mismatch %dx%d (screen %dx%d): %s", w, h, sw, sh, name);
-          file.close();
+          dirFile.close();
           continue;
         }
       }
       files.emplace_back(filename);
+      dirFile.close();
     }
     const auto numFiles = files.size();
     if (numFiles > 0) {
@@ -135,15 +173,15 @@ void SleepActivity::renderCustomSleepScreen() const {
       LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
       delay(100);
       if (FsHelpers::hasPxcExtension(files[randomFileIndex])) {
+        dir.close();
         if (!renderPxcSleepScreen(filename)) {
           renderDefaultSleepScreen();
         }
-        dir.close();
         return;
       }
-      FsFile file;
-      if (Storage.openFileForRead("SLP", filename, file)) {
-        Bitmap bitmap(file, true);
+      FsFile randFile;
+      if (Storage.openFileForRead("SLP", filename, randFile)) {
+        Bitmap bitmap(randFile, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           if (bitmap.hasGreyscale() &&
               SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER) {
@@ -151,37 +189,15 @@ void SleepActivity::renderCustomSleepScreen() const {
             lastGrayscaleIsPxc = false;
           }
           renderBitmapSleepScreen(bitmap);
+          randFile.close();
+          dir.close();
           return;
         }
+        randFile.close();
       }
     }
   }
   if (dir) dir.close();
-
-  // Check root for sleep.pxc (preferred) or sleep.bmp
-  if (Storage.exists("/sleep.pxc")) {
-    LOG_DBG("SLP", "Loading: /sleep.pxc");
-    if (renderPxcSleepScreen("/sleep.pxc")) {
-      return;
-    }
-  }
-
-  // Look for sleep.bmp on the root of the sd card to determine if we should
-  // render a custom sleep screen instead of the default.
-  FsFile file;
-  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
-    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      LOG_DBG("SLP", "Loading: /sleep.bmp");
-      if (bitmap.hasGreyscale() &&
-          SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER) {
-        lastGrayscalePath = "/sleep.bmp";
-        lastGrayscaleIsPxc = false;
-      }
-      renderBitmapSleepScreen(bitmap);
-      return;
-    }
-  }
 
   renderDefaultSleepScreen();
 }
