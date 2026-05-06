@@ -211,6 +211,12 @@ CssTextDecoration CssParser::interpretDecoration(const std::string& val) {
   return CssTextDecoration::None;
 }
 
+CssBorderStyle CssParser::interpretBorderStyle(const std::string& val) {
+  const std::string v = normalized(val);
+  if (v == "none" || v == "hidden") return CssBorderStyle::None;
+  return CssBorderStyle::Solid;
+}
+
 CssLength CssParser::interpretLength(const std::string& val) {
   CssLength result;
   tryInterpretLength(val, result);
@@ -344,6 +350,63 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
     const std::string_view displayValue = stripTrailingImportant(propValueBuf);
     style.display = (displayValue == "none") ? CssDisplay::None : CssDisplay::Block;
     style.defined.display = 1;
+  } else if (propNameBuf == "border-top-style") {
+    style.borderTopStyle = interpretBorderStyle(propValueBuf);
+    style.defined.borderTopStyle = 1;
+  } else if (propNameBuf == "border-bottom-style") {
+    style.borderBottomStyle = interpretBorderStyle(propValueBuf);
+    style.defined.borderBottomStyle = 1;
+  } else if (propNameBuf == "border-left-style") {
+    style.borderLeftStyle = interpretBorderStyle(propValueBuf);
+    style.defined.borderLeftStyle = 1;
+  } else if (propNameBuf == "border-right-style") {
+    style.borderRightStyle = interpretBorderStyle(propValueBuf);
+    style.defined.borderRightStyle = 1;
+  } else if (propNameBuf == "border-top-width") {
+    // Track zero-width independently from style; combined at check time via isBorderTopVisible().
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.defined.borderTopWidthZero = (len.value == 0.0f) ? 1 : 0;
+    }
+  } else if (propNameBuf == "border-bottom-width") {
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.defined.borderBottomWidthZero = (len.value == 0.0f) ? 1 : 0;
+    }
+  } else if (propNameBuf == "border-left-width") {
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.defined.borderLeftWidthZero = (len.value == 0.0f) ? 1 : 0;
+    }
+  } else if (propNameBuf == "border-right-width") {
+    CssLength len;
+    if (tryInterpretLength(propValueBuf, len)) {
+      style.defined.borderRightWidthZero = (len.value == 0.0f) ? 1 : 0;
+    }
+  } else if (propNameBuf == "border-width") {
+    // Shorthand: 1–4 values (top right bottom left). Track zero-width per side.
+    const auto values = splitWhitespace(propValueBuf);
+    if (!values.empty()) {
+      const std::string& top = values[0];
+      const std::string& right = values.size() >= 2 ? values[1] : values[0];
+      const std::string& bottom = values.size() >= 3 ? values[2] : values[0];
+      const std::string& left = values.size() >= 4 ? values[3] : right;
+      CssLength len;
+      if (tryInterpretLength(top, len)) style.defined.borderTopWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (tryInterpretLength(right, len)) style.defined.borderRightWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (tryInterpretLength(bottom, len)) style.defined.borderBottomWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (tryInterpretLength(left, len)) style.defined.borderLeftWidthZero = (len.value == 0.0f) ? 1 : 0;
+    }
+  } else if (propNameBuf == "border-style") {
+    const auto values = splitWhitespace(propValueBuf);
+    if (!values.empty()) {
+      style.borderTopStyle = interpretBorderStyle(values[0]);
+      style.borderRightStyle = values.size() >= 2 ? interpretBorderStyle(values[1]) : style.borderTopStyle;
+      style.borderBottomStyle = values.size() >= 3 ? interpretBorderStyle(values[2]) : style.borderTopStyle;
+      style.borderLeftStyle = values.size() >= 4 ? interpretBorderStyle(values[3]) : style.borderRightStyle;
+      style.defined.borderTopStyle = style.defined.borderRightStyle = style.defined.borderBottomStyle =
+          style.defined.borderLeftStyle = 1;
+    }
   }
 }
 
@@ -720,9 +783,13 @@ bool CssParser::saveToCache() const {
     writeLength(style.imageHeight);
     writeLength(style.imageWidth);
     file.write(static_cast<uint8_t>(style.display));
+    file.write(static_cast<uint8_t>(style.borderTopStyle));
+    file.write(static_cast<uint8_t>(style.borderBottomStyle));
+    file.write(static_cast<uint8_t>(style.borderLeftStyle));
+    file.write(static_cast<uint8_t>(style.borderRightStyle));
 
-    // Write defined flags as uint16_t
-    uint16_t definedBits = 0;
+    // Write defined flags as uint32_t
+    uint32_t definedBits = 0;
     if (style.defined.textAlign) definedBits |= 1 << 0;
     if (style.defined.fontStyle) definedBits |= 1 << 1;
     if (style.defined.fontWeight) definedBits |= 1 << 2;
@@ -739,6 +806,14 @@ bool CssParser::saveToCache() const {
     if (style.defined.imageHeight) definedBits |= 1 << 13;
     if (style.defined.imageWidth) definedBits |= 1 << 14;
     if (style.defined.display) definedBits |= 1 << 15;
+    if (style.defined.borderTopStyle) definedBits |= 1 << 16;
+    if (style.defined.borderBottomStyle) definedBits |= 1 << 17;
+    if (style.defined.borderLeftStyle) definedBits |= 1 << 18;
+    if (style.defined.borderRightStyle) definedBits |= 1 << 19;
+    if (style.defined.borderTopWidthZero) definedBits |= 1 << 20;
+    if (style.defined.borderBottomWidthZero) definedBits |= 1 << 21;
+    if (style.defined.borderLeftWidthZero) definedBits |= 1 << 22;
+    if (style.defined.borderRightWidthZero) definedBits |= 1 << 23;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -788,8 +863,11 @@ bool CssParser::loadFromCache() {
 
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
-  constexpr size_t CSS_FIXED_STYLE_BYTES =
-      4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint16_t);
+  constexpr size_t CSS_FIXED_STYLE_BYTES = sizeof(CssTextAlign) + sizeof(CssFontStyle) + sizeof(CssFontWeight) +
+                                           sizeof(CssTextDecoration) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) +
+                                           sizeof(CssDisplay) +
+                                           4 * sizeof(CssBorderStyle) +  // border{Top,Bottom,Left,Right}Style
+                                           sizeof(uint32_t);             // definedBits
 
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
@@ -880,8 +958,30 @@ bool CssParser::loadFromCache() {
     }
     style.display = static_cast<CssDisplay>(displayVal);
 
+    uint8_t borderStyleVal;
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderTopStyle = static_cast<CssBorderStyle>(borderStyleVal);
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderBottomStyle = static_cast<CssBorderStyle>(borderStyleVal);
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderLeftStyle = static_cast<CssBorderStyle>(borderStyleVal);
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderRightStyle = static_cast<CssBorderStyle>(borderStyleVal);
+
     // Read defined flags
-    uint16_t definedBits = 0;
+    uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
       rulesBySelector_.clear();
       return false;
@@ -902,6 +1002,14 @@ bool CssParser::loadFromCache() {
     style.defined.imageHeight = (definedBits & 1 << 13) != 0;
     style.defined.imageWidth = (definedBits & 1 << 14) != 0;
     style.defined.display = (definedBits & 1 << 15) != 0;
+    style.defined.borderTopStyle = (definedBits & 1 << 16) != 0;
+    style.defined.borderBottomStyle = (definedBits & 1 << 17) != 0;
+    style.defined.borderLeftStyle = (definedBits & 1 << 18) != 0;
+    style.defined.borderRightStyle = (definedBits & 1 << 19) != 0;
+    style.defined.borderTopWidthZero = (definedBits & 1 << 20) != 0;
+    style.defined.borderBottomWidthZero = (definedBits & 1 << 21) != 0;
+    style.defined.borderLeftWidthZero = (definedBits & 1 << 22) != 0;
+    style.defined.borderRightWidthZero = (definedBits & 1 << 23) != 0;
 
     rulesBySelector_[selector] = style;
   }
