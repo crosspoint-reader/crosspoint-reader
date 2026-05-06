@@ -128,7 +128,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
 
       if (!pendingAnchorId.empty()) {
-        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(typesetter.getCompletedPageCount())});
         pendingAnchorId.clear();
       }
       return;
@@ -138,11 +138,11 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   }
   // Record deferred anchor after previous block is flushed
   if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(typesetter.getCompletedPageCount())});
     pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
-  wordsExtractedInBlock = 0;
+  typesetter.resetWordsExtractedInBlock();
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -155,10 +155,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (strcmp(name, "p") == 0) {
-    self->xpathParagraphIndex++;
+    self->typesetter.incrementXpathParagraphIndex();
   }
   if (strcmp(name, "li") == 0) {
-    self->xpathListItemIndex++;
+    self->typesetter.incrementXpathListItemIndex();
   }
 
   // Extract class, style, and id attributes
@@ -448,45 +448,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   }
                 }
 
-                // Create page for image - only break if image won't fit remaining space
-                if (self->currentPage && !self->currentPage->elements.empty() &&
-                    (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
-                     self->viewportHeight)) {
-                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
-                                       self->xpathListItemIndex);
-                  self->completedPageCount++;
-                  self->currentPage.reset(new Page());
-                  if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create new page");
-                    return;
-                  }
-                  self->currentPageNextY = 0;
-                } else if (!self->currentPage) {
-                  self->currentPage.reset(new Page());
-                  if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create initial page");
-                    return;
-                  }
-                  self->currentPageNextY = 0;
-                }
-
-                // Apply top margin from container block
-                self->currentPageNextY += imageMarginTop;
-
-                // Create ImageBlock and add to page
                 auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
                 if (!imageBlock) {
                   LOG_ERR("EHP", "Failed to create ImageBlock");
                   return;
                 }
-                int xPos = (self->viewportWidth - displayWidth) / 2;
-                auto pageImage = std::make_shared<PageImage>(imageBlock, xPos, self->currentPageNextY);
-                if (!pageImage) {
-                  LOG_ERR("EHP", "Failed to create PageImage");
-                  return;
-                }
-                self->currentPage->elements.push_back(pageImage);
-                self->currentPageNextY += displayHeight + imageMarginBottom;
+                self->typesetter.submitImage(imageBlock, imageMarginTop, imageMarginBottom);
 
                 // The image consumed the empty block's accumulated vertical spacing.
                 // Reset the block so the Vertical merge in startNewTextBlock doesn't
@@ -885,13 +852,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
   if (self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+    self->typesetter.partialFlush(*self->currentTextBlock);
   }
 }
 
@@ -964,9 +925,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
-      int wordIndex =
-          self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
-      self->pendingFootnotes.push_back({wordIndex, entry});
+      int wordIndex = self->typesetter.getWordsExtractedInBlock() +
+                      (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
+      self->typesetter.addPendingFootnote(wordIndex, entry);
     }
     self->insideFootnoteLink = false;
   }
@@ -1116,46 +1077,14 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   if (currentTextBlock) {
     makePages();
     if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(typesetter.getCompletedPageCount())});
       pendingAnchorId.clear();
     }
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
-    completedPageCount++;
-    currentPage.reset();
+    typesetter.finish();
     currentTextBlock.reset();
   }
 
   return true;
-}
-
-void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
-
-  if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
-  }
-
-  if (currentPageNextY + lineHeight > viewportHeight) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
-    completedPageCount++;
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
-  }
-
-  // Track cumulative words to assign footnotes to the page containing their anchor
-  wordsExtractedInBlock += line->wordCount();
-  auto footnoteIt = pendingFootnotes.begin();
-  while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
-    currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
-    ++footnoteIt;
-  }
-  pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
-
-  // Apply horizontal left inset (margin + padding) as x position offset
-  const int16_t xOffset = line->getBlockStyle().leftInset();
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
-  currentPageNextY += lineHeight;
 }
 
 void ChapterHtmlSlimParser::makePages() {
@@ -1164,51 +1093,5 @@ void ChapterHtmlSlimParser::makePages() {
     return;
   }
 
-  if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
-  }
-
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
-
-  // Apply top spacing before the paragraph (stored in pixels)
-  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
-  }
-
-  // Calculate effective width accounting for horizontal margins/padding
-  const int horizontalInset = blockStyle.totalHorizontalInset();
-  const uint16_t effectiveWidth =
-      (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
-
-  currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
-
-  // Fallback: transfer any remaining pending footnotes to current page.
-  // Normally addLineToPage handles this via word-index tracking, but this catches
-  // edge cases where a footnote's word index equals the exact block size.
-  if (!pendingFootnotes.empty() && currentPage) {
-    for (const auto& [idx, fn] : pendingFootnotes) {
-      currentPage->addFootnote(fn.number, fn.href);
-    }
-    pendingFootnotes.clear();
-  }
-
-  // Apply bottom spacing after the paragraph (stored in pixels)
-  if (blockStyle.marginBottom > 0) {
-    currentPageNextY += blockStyle.marginBottom;
-  }
-  if (blockStyle.paddingBottom > 0) {
-    currentPageNextY += blockStyle.paddingBottom;
-  }
-
-  // Extra paragraph spacing if enabled (default behavior)
-  if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
-  }
+  typesetter.submitParagraph(std::move(currentTextBlock));
 }

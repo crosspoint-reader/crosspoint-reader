@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Typesetter.h>
 #include <expat.h>
 
 #include <climits>
@@ -25,8 +26,8 @@ class ChapterHtmlSlimParser {
   std::shared_ptr<Epub> epub;
   const std::string& filepath;
   GfxRenderer& renderer;
-  std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)> completePageFn;
   std::function<void()> popupFn;  // Popup callback
+  Typesetter typesetter;
   int depth = 0;
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
@@ -38,8 +39,6 @@ class ChapterHtmlSlimParser {
   int partWordBufferIndex = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
-  std::unique_ptr<Page> currentPage = nullptr;
-  int16_t currentPageNextY = 0;
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
@@ -73,19 +72,14 @@ class ChapterHtmlSlimParser {
   int tableColIndex = 0;
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
-  int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
-  uint16_t xpathParagraphIndex = 0;
-  uint16_t xpathListItemIndex = 0;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
   FootnoteEntry currentFootnote = {};
   int currentFootnoteLinkTextLen = 0;
-  std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
-  int wordsExtractedInBlock = 0;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
@@ -111,6 +105,9 @@ class ChapterHtmlSlimParser {
       : epub(epub),
         filepath(filepath),
         renderer(renderer),
+        popupFn(popupFn),
+        typesetter(renderer, fontId, lineCompression, extraParagraphSpacing, viewportWidth, viewportHeight,
+                   completePageFn),
         fontId(fontId),
         lineCompression(lineCompression),
         extraParagraphSpacing(extraParagraphSpacing),
@@ -119,8 +116,6 @@ class ChapterHtmlSlimParser {
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
-        completePageFn(completePageFn),
-        popupFn(popupFn),
         cssParser(cssParser),
         embeddedStyle(embeddedStyle),
         imageRendering(imageRendering),
@@ -129,6 +124,5 @@ class ChapterHtmlSlimParser {
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
-  void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 };
