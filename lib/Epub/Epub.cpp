@@ -535,10 +535,42 @@ bool Epub::generateCoverBmp(bool cropped) const {
     return false;
   }
 
-  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  const auto& coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+
   if (coverImageHref.empty()) {
-    LOG_ERR("EBP", "No known cover image");
-    return false;
+    const auto externalCoverPath = getCachePath() + "/.external_cover.jpg";
+    if (!Storage.exists(externalCoverPath.c_str())) {
+      LOG_ERR("EBP", "No known cover image");
+      return false;
+    }
+    FsFile coverJpg;
+    if (!Storage.openFileForRead("EBP", externalCoverPath, coverJpg)) return false;
+    FsFile coverBmp;
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+      coverJpg.close();
+      return false;
+    }
+    const bool ok = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped);
+    coverJpg.close();
+    coverBmp.close();
+    if (!ok) {
+      LOG_ERR("EBP", "Failed to generate BMP from external cover");
+      Storage.remove(getCoverBmpPath(cropped).c_str());
+      return false;
+    }
+    // A valid 2-bit BMP is larger than its 70-byte header; smaller means no pixel data
+    FsFile verify;
+    if (Storage.openFileForRead("EBP", getCoverBmpPath(cropped), verify)) {
+      const bool headerOnly = verify.size() <= 70;
+      verify.close();
+      if (headerOnly) {
+        LOG_ERR("EBP", "External cover BMP is header-only; JPEG may be unsupported");
+        Storage.remove(getCoverBmpPath(cropped).c_str());
+        return false;
+      }
+    }
+    LOG_DBG("EBP", "Generated BMP from external cover");
+    return true;
   }
 
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
@@ -617,7 +649,6 @@ std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].
 std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
 
 bool Epub::generateThumbBmp(int height) const {
-  // Already generated, return true
   if (Storage.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
@@ -627,9 +658,43 @@ bool Epub::generateThumbBmp(int height) const {
     return false;
   }
 
-  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  const auto& coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+
   if (coverImageHref.empty()) {
-    LOG_DBG("EBP", "No known cover image for thumbnail");
+    const auto externalCoverPath = getCachePath() + "/.external_cover.jpg";
+    if (!Storage.exists(externalCoverPath.c_str())) {
+      LOG_DBG("EBP", "No known cover image for thumbnail");
+    } else {
+      FsFile coverJpg;
+      if (!Storage.openFileForRead("EBP", externalCoverPath, coverJpg)) return false;
+      FsFile thumbBmp;
+      if (!Storage.openFileForWrite("EBP", getThumbBmpPath(height), thumbBmp)) {
+        coverJpg.close();
+        return false;
+      }
+      const int thumbW = height * 0.6;
+      const bool ok = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, thumbW, height);
+      coverJpg.close();
+      thumbBmp.close();
+      if (!ok) {
+        LOG_ERR("EBP", "Failed to generate thumb from external cover");
+        Storage.remove(getThumbBmpPath(height).c_str());
+      } else {
+        // A valid 1-bit BMP is larger than its 62-byte header; smaller means no pixel data
+        FsFile verify;
+        if (Storage.openFileForRead("EBP", getThumbBmpPath(height), verify)) {
+          const bool headerOnly = verify.size() <= 62;
+          verify.close();
+          if (headerOnly) {
+            LOG_ERR("EBP", "External cover thumb is header-only; JPEG may be unsupported");
+            Storage.remove(getThumbBmpPath(height).c_str());
+            return false;
+          }
+        }
+        LOG_DBG("EBP", "Generated thumb from external cover");
+        return true;
+      }
+    }
   } else if (FsHelpers::hasJpgExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating thumb BMP from JPG cover image");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";

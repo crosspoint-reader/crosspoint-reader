@@ -277,7 +277,18 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       server.username, server.password);
 
   if (result == HttpDownloader::OK) {
-    Epub(filename, "/.crosspoint").clearCache();
+    Epub epub(filename, "/.crosspoint");
+    epub.clearCache();
+
+    if (!book.imageHref.empty()) {
+      const std::string coverUrl = UrlUtils::buildUrl(feedUrl, book.imageHref);
+      epub.setupCacheDir();
+      HttpDownloader::downloadToFile(
+          coverUrl, epub.getCachePath() + "/.external_cover.jpg",
+          [this](const size_t, const size_t) { requestUpdate(true); },
+          server.username, server.password);
+    }
+
     state = BrowserState::BROWSING;
   } else {
     state = BrowserState::ERROR;
