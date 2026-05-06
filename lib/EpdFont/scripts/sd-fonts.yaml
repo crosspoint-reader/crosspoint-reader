@@ -144,7 +144,7 @@ families:
       bolditalic: {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/NV_Charis-BoldItalic.ttf"}
 
   - name: Sourcerer
-    description: "Thicker versionj of Source Serif"
+    description: "Thicker version of Source Serif"
     intervals: latin-cyrillic,musical-symbols
     sizes: [10, 12, 14, 16, 18]
     styles:
