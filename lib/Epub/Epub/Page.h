@@ -8,11 +8,13 @@
 
 #include "FootnoteEntry.h"
 #include "blocks/ImageBlock.h"
+#include "blocks/TableBlock.h"
 #include "blocks/TextBlock.h"
 
 enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
-  TAG_PageImage = 2,  // New tag
+  TAG_PageImage = 2,
+  TAG_PageTable = 3,
 };
 
 // represents something that has been added to a page
@@ -53,6 +55,21 @@ class PageImage final : public PageElement {
   PageElementTag getTag() const override { return TAG_PageImage; }
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
   const ImageBlock& getImageBlock() const { return *imageBlock; }
+};
+
+// A pre-laid-out table placed at a fixed position on the page.
+class PageTable final : public PageElement {
+  std::unique_ptr<TableBlock> tableBlock;
+  int16_t tableHeight;  // pre-computed total pixel height
+
+ public:
+  PageTable(std::unique_ptr<TableBlock> block, const int16_t xPos, const int16_t yPos, const int16_t height)
+      : PageElement(xPos, yPos), tableBlock(std::move(block)), tableHeight(height) {}
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(FsFile& file) override;
+  PageElementTag getTag() const override { return TAG_PageTable; }
+  int16_t getHeight() const { return tableHeight; }
+  static std::unique_ptr<PageTable> deserialize(FsFile& file);
 };
 
 class Page {
