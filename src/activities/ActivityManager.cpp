@@ -7,6 +7,8 @@
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
+#include <algorithm>
+
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontGlobals.h"
@@ -390,7 +392,11 @@ void ActivityManager::popActivity() {
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
 
-bool ActivityManager::isReaderActivity() const { return currentActivity && currentActivity->isReaderActivity(); }
+bool ActivityManager::isReaderActivity() const {
+  if (currentActivity && currentActivity->isReaderActivity()) return true;
+  return std::any_of(stackActivities.begin(), stackActivities.end(),
+                     [](const auto& activity) { return activity->isReaderActivity(); });
+}
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
