@@ -515,6 +515,43 @@ void EpubReaderActivity::startClipSelection() {
     return;
   }
 
+  // Mark paragraph-start words so ClipSelectionActivity can insert newlines in clipping text.
+  // Detection methods:
+  // 1. Em-space prefix (U+2003) — used when no CSS text-indent is defined
+  // 2. Xpos indent — first word of a line is more indented than previous line's first word
+  //    (CSS text-indent path: indent is a pixel offset in wordXpos, not in the word text)
+  // Note: TextBlock pointers can't be used because TextBlock = rendered line, not paragraph.
+  {
+    auto hasEmSpace = [](const std::string& w) -> bool {
+      return w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+             static_cast<unsigned char>(w[2]) == 0x83;
+    };
+    auto endsWithHyphen = [](const std::string& w) -> bool { return !w.empty() && w.back() == '-'; };
+    const int indentThreshold = renderer.getLineHeight(readerFontId) / 2;
+    LOG_DBG("CLIP", "Words: %d, indentThreshold: %d", words.size(), indentThreshold);
+    int prevLineFirstIdx = -1;
+    for (int i = 0; i < static_cast<int>(words.size()); ++i) {
+      const bool isNewLine = (i == 0) || (words[i].pageIdx != words[i - 1].pageIdx) || (words[i].y != words[i - 1].y);
+      if (isNewLine) {
+        const bool byEm = hasEmSpace(words[i].text);
+        const bool byXpos = !byEm && prevLineFirstIdx >= 0 &&
+                            words[i].x > words[prevLineFirstIdx].x + indentThreshold &&
+                            !endsWithHyphen(words[i - 1].text);
+        if (byEm || byXpos) {
+          words[i].paragraphStart = true;
+          LOG_DBG("CLIP", "PS w[%d] x=%d prevX=%d reason=%s text=%.20s", i, words[i].x,
+                  prevLineFirstIdx >= 0 ? words[prevLineFirstIdx].x : -1, byEm ? "em" : "xpos", words[i].text.c_str());
+        }
+        prevLineFirstIdx = i;
+      }
+      LOG_DBG("CLIP", "W[%d] x=%d y=%d w=%d pg=%d ps=%d text=%.30s", i, words[i].x, words[i].y, words[i].w,
+              words[i].pageIdx, words[i].paragraphStart, words[i].text.c_str());
+    }
+  }
+
+  std::string chapterTitle;
+  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
   startActivityForResult(
       std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
                                               epub->getAuthor(), chapterTitle, startPage + 1, readerFontId, *section,

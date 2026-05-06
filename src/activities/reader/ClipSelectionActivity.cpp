@@ -68,16 +68,40 @@ void ClipSelectionActivity::onExit() {
 void ClipSelectionActivity::loop() {
   const int total = static_cast<int>(words.size());
 
-  buttonNavigator.onNextRelease([this, total] {
-    if (cursorIdx + 1 >= total) return;
-    const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = cursorIdx + 1;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  });
+  if (SETTINGS.clipNavMode == CrossPointSettings::CLIP_NAV_DIRECTIONAL) {
+    using Btn = MappedInputManager::Button;
 
-  if (SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE) {
-    buttonNavigator.onNextContinuous([this] {
+    buttonNavigator.onRelease({Btn::Left}, [this] {
+      if (cursorIdx == 0) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Left}, [this] {
+      if (cursorIdx == 0) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+
+    buttonNavigator.onRelease({Btn::Right}, [this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Right}, [this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+
+    buttonNavigator.onRelease({Btn::Down}, [this] {
       const int prevPage = words[cursorIdx].pageIdx;
       const int next = lineEndForward(cursorIdx);
       if (next == cursorIdx) return;
@@ -85,26 +109,24 @@ void ClipSelectionActivity::loop() {
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
-  } else {
-    buttonNavigator.onNextContinuous([this, total] {
-      if (cursorIdx + 1 >= total) return;
+    buttonNavigator.onContinuous({Btn::Down}, [this] {
       const int prevPage = words[cursorIdx].pageIdx;
-      cursorIdx = cursorIdx + 1;
+      const int next = lineEndForward(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
-  }
 
-  buttonNavigator.onPreviousRelease([this] {
-    if (cursorIdx == 0) return;
-    const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx = cursorIdx - 1;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  });
-
-  if (SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE) {
-    buttonNavigator.onPreviousContinuous([this] {
+    buttonNavigator.onRelease({Btn::Up}, [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int prev = lineEndBackward(cursorIdx);
+      if (prev == cursorIdx) return;
+      cursorIdx = prev;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Up}, [this] {
       const int prevPage = words[cursorIdx].pageIdx;
       const int prev = lineEndBackward(cursorIdx);
       if (prev == cursorIdx) return;
@@ -113,10 +135,34 @@ void ClipSelectionActivity::loop() {
       requestUpdate();
     });
   } else {
-    buttonNavigator.onPreviousContinuous([this] {
+    buttonNavigator.onNextRelease([this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onNextContinuous([this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int next = lineEndForward(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+
+    buttonNavigator.onPreviousRelease([this] {
       if (cursorIdx == 0) return;
       const int prevPage = words[cursorIdx].pageIdx;
       cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onPreviousContinuous([this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int prev = lineEndBackward(cursorIdx);
+      if (prev == cursorIdx) return;
+      cursorIdx = prev;
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
@@ -185,6 +231,8 @@ void ClipSelectionActivity::loop() {
           text += '\n';
         } else if (!text.empty()) {
           const bool attached = (words[i].y == words[i - 1].y) && (words[i].x <= words[i - 1].x + words[i - 1].w + 2);
+          LOG_DBG("CLIP", "%s w[%d] gap=%d text=%.30s", attached ? "ATTACH" : "SEP", i,
+                  words[i].x - (words[i - 1].x + words[i - 1].w), words[i].text.c_str());
           if (!attached) {
             text += ' ';
           }

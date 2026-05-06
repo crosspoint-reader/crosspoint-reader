@@ -81,8 +81,8 @@ void ClippingsMenuActivity::render(RenderLock&&) {
       [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr, nullptr,
       [this](int index) {
         if (index == 0) {
-          return std::string(SETTINGS.clipNavMode == CrossPointSettings::LINE_AWARE ? tr(STR_CLIP_NAV_LINE)
-                                                                                    : tr(STR_CLIP_NAV_WORD));
+          return std::string(SETTINGS.clipNavMode == CrossPointSettings::CLIP_NAV_DIRECTIONAL ? tr(STR_CLIP_NAV_LINE)
+                                                                                              : tr(STR_CLIP_NAV_WORD));
         } else if (index == 1) {
           return std::string(SETTINGS.annotationVisibility ? tr(STR_STATE_OFF) : tr(STR_STATE_ON));
         } else if (index == 2) {
