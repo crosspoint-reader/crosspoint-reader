@@ -12,6 +12,7 @@
 
 #include "Epub.h"
 #include "Epub/Page.h"
+#include "Epub/blocks/TableBlock.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 #include "Epub/converters/ImageToFramebufferDecoder.h"
 #include "Epub/htmlEntities.h"
@@ -27,6 +28,29 @@ constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr const char* IMAGE_TAGS[] = {"img"};
 constexpr const char* SKIP_TAGS[] = {"head"};
+
+// Parse an HTML width attribute value to pixels.
+// Returns 0 if the value is empty or unparseable.
+static int16_t parseHtmlWidthAttr(const char* s, int16_t viewportWidth, float emSize) {
+  if (!s || !*s) return 0;
+  char* end;
+  const float val = strtof(s, &end);
+  if (end == s) return 0;  // no numeric part
+  while (*end == ' ') ++end;
+  if (*end == '%') {
+    return static_cast<int16_t>(val * viewportWidth / 100.0f);
+  }
+  if (strncmp(end, "em", 2) == 0) {
+    return static_cast<int16_t>(val * emSize);
+  }
+  if (strncmp(end, "rem", 3) == 0) {
+    return static_cast<int16_t>(val * emSize);
+  }
+  if (strncmp(end, "pt", 2) == 0) {
+    return static_cast<int16_t>(val * 1.33f);
+  }
+  return static_cast<int16_t>(val);  // treat bare number or px as pixels
+}
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
@@ -116,6 +140,10 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
+  if (inTableCellMode) {
+    // Inside a table cell: merge all content into the single cell ParsedText without resetting.
+    return;
+  }
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -199,9 +227,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
+  // Table handling: accumulate cells per row, lay out at </tr>, emit PageTable at </table>.
   if (strcmp(name, "table") == 0) {
-    // skip nested tables
+    // Nested tables are not supported — skip their content
     if (self->tableDepth > 0) {
       self->tableDepth += 1;
       return;
@@ -210,16 +238,28 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
+    // Flush any pre-table text block to the page before starting accumulation
+    if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+      self->makePages();
+    }
     self->tableDepth += 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
+    self->tableAccumRows.clear();
+    self->tableAccumRows.reserve(8);  // conservative estimate; avoids reallocation for typical tables
+    self->tableTotalCols = 0;
+    self->tableRowspanTracker.clear();
+    // Border declared on the <table> element itself.
+    // Handles e.g. <table style="border: 1px solid"> or a CSS rule like
+    // "table { border-style: solid }" that targets the table directly.
+    self->tableDrawBorderTop = cssStyle.isBorderTopVisible();
+    self->tableDrawBorderBottom = cssStyle.isBorderBottomVisible();
+    self->tableDrawBorderLeft = cssStyle.isBorderLeftVisible();
+    self->tableDrawBorderRight = cssStyle.isBorderRightVisible();
     self->depth += 1;
     return;
   }
 
   if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
-    self->tableRowIndex += 1;
-    self->tableColIndex = 0;
+    self->tableAccumRows.emplace_back();
     self->depth += 1;
     return;
   }
@@ -228,35 +268,105 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    self->tableColIndex += 1;
 
-    auto tableCellBlockStyle = BlockStyle();
-    tableCellBlockStyle.textAlignDefined = true;
-    const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                           ? CssTextAlign::Justify
-                           : static_cast<CssTextAlign>(self->paragraphAlignment);
-    tableCellBlockStyle.alignment = align;
-    self->startNewTextBlock(tableCellBlockStyle);
-
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
-    StyleStackEntry headerStyle;
-    headerStyle.depth = self->depth;
-    headerStyle.hasBold = true;
-    headerStyle.bold = false;
-    headerStyle.hasItalic = true;
-    headerStyle.italic = true;
-    headerStyle.hasUnderline = true;
-    headerStyle.underline = false;
-    self->inlineStyleStack.push_back(headerStyle);
-    self->updateEffectiveInlineStyle();
-    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+    // Guard against malformed HTML where <td> appears without a prior <tr>
+    if (self->tableAccumRows.empty()) {
+      self->tableAccumRows.emplace_back();
     }
-    self->nextWordContinues = false;
-    self->inlineStyleStack.pop_back();
-    self->updateEffectiveInlineStyle();
+
+    // --- CSS / attribute resolution for this cell ---
+    // `cssStyle` was already computed at the top of startElement (name+classAttr+styleAttr).
+    const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
+    const float vw = static_cast<float>(self->viewportWidth);
+
+    // Cell padding: CSS > default
+    const int16_t defPadX = TableBlock::CELL_PADDING_X;
+    const int16_t defPadY = TableBlock::CELL_PADDING_Y;
+    const int16_t padLeft = cssStyle.hasPaddingLeft() ? cssStyle.paddingLeft.toPixelsInt16(emSize, vw) : defPadX;
+    const int16_t padRight = cssStyle.hasPaddingRight() ? cssStyle.paddingRight.toPixelsInt16(emSize, vw) : defPadX;
+    const int16_t padTop = cssStyle.hasPaddingTop() ? cssStyle.paddingTop.toPixelsInt16(emSize, vw) : defPadY;
+    const int16_t padBottom = cssStyle.hasPaddingBottom() ? cssStyle.paddingBottom.toPixelsInt16(emSize, vw) : defPadY;
+
+    // Cell column width: HTML width attr > CSS width > 0 (unspecified)
+    // Also parse colspan.
+    int16_t reqWidth = 0;
+    uint8_t cellColspan = 1;
+    uint8_t cellRowspan = 1;
+    if (atts != nullptr) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "width") == 0) {
+          reqWidth = parseHtmlWidthAttr(atts[i + 1], static_cast<int16_t>(self->viewportWidth), emSize);
+        } else if (strcmp(atts[i], "colspan") == 0) {
+          const int cs = atoi(atts[i + 1]);
+          if (cs > 1 && cs <= 64) cellColspan = static_cast<uint8_t>(cs);
+        } else if (strcmp(atts[i], "rowspan") == 0) {
+          const int rs = atoi(atts[i + 1]);
+          if (rs > 1 && rs <= 64) cellRowspan = static_cast<uint8_t>(rs);
+        }
+      }
+    }
+    if (reqWidth == 0 && cssStyle.hasImageWidth()) {
+      reqWidth = cssStyle.imageWidth.toPixelsInt16(emSize, vw);
+    }
+
+    // Text alignment: CSS > user preference > justify
+    CssTextAlign cellAlign;
+    if (cssStyle.hasTextAlign()) {
+      cellAlign = cssStyle.textAlign;
+    } else if (self->paragraphAlignment != static_cast<uint8_t>(CssTextAlign::None)) {
+      cellAlign = static_cast<CssTextAlign>(self->paragraphAlignment);
+    } else {
+      cellAlign = CssTextAlign::Justify;
+    }
+
+    BlockStyle cellBlockStyle;
+    cellBlockStyle.textAlignDefined = true;
+    cellBlockStyle.alignment = cellAlign;
+
+    // Push a new cell and populate its padding + width.
+    self->tableAccumRows.back().cells.emplace_back();
+    auto& newCell = self->tableAccumRows.back().cells.back();
+    newCell.paddingLeft = padLeft;
+    newCell.paddingRight = padRight;
+    newCell.paddingTop = padTop;
+    newCell.paddingBottom = padBottom;
+    newCell.requestedWidth = reqWidth;
+    newCell.colspan = cellColspan;
+    newCell.rowspan = cellRowspan;
+
+    self->currentTextBlock.reset(new ParsedText(self->extraParagraphSpacing, self->hyphenationEnabled, cellBlockStyle));
+    self->inTableCellMode = true;
+
+    // Bold/italic from CSS or <th> default.
+    if (cssStyle.hasFontWeight()) {
+      StyleStackEntry entry;
+      entry.depth = self->depth;
+      entry.hasBold = true;
+      entry.bold = (cssStyle.fontWeight == CssFontWeight::Bold);
+      self->inlineStyleStack.push_back(entry);
+      self->updateEffectiveInlineStyle();
+    } else if (strcmp(name, "th") == 0) {
+      // <th> default: bold
+      self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
+      self->updateEffectiveInlineStyle();
+    }
+    if (cssStyle.hasFontStyle()) {
+      StyleStackEntry entry;
+      entry.depth = self->depth;
+      entry.hasItalic = true;
+      entry.italic = (cssStyle.fontStyle == CssFontStyle::Italic);
+      self->inlineStyleStack.push_back(entry);
+      self->updateEffectiveInlineStyle();
+    }
+
+    // Border declared on individual <td>/<th> cells rather than on <table>.
+    // Some EPUBs use border-collapse:collapse on the table
+    // with no border-style on the table element; the actual borders live on each cell.
+    // OR in each cell's per-side flags to accumulate the full set of visible borders.
+    self->tableDrawBorderTop |= cssStyle.isBorderTopVisible();
+    self->tableDrawBorderBottom |= cssStyle.isBorderBottomVisible();
+    self->tableDrawBorderLeft |= cssStyle.isBorderLeftVisible();
+    self->tableDrawBorderRight |= cssStyle.isBorderRightVisible();
 
     self->depth += 1;
     return;
@@ -879,11 +989,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
 
-  // If we have > 750 words buffered up, perform the layout and consume out all but the last line
-  // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
-  // memory.
-  // Spotted when reading Intermezzo, there are some really long text blocks in there.
-  if (self->currentTextBlock->size() > 750) {
+  // If we have > 750 words buffered up, perform the layout and consume out all but the last line.
+  // Skip this optimisation inside table cells — cells are laid out in bulk at </tr>.
+  if (!self->inTableCellMode && self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
     const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
@@ -977,18 +1085,317 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    // Move the accumulated cell ParsedText into the cell accumulator for later layout
+    if (!self->tableAccumRows.empty()) {
+      auto& cell = self->tableAccumRows.back().cells.back();
+      cell.text = std::move(self->currentTextBlock);
+    }
+    self->inTableCellMode = false;
+    // Reset currentTextBlock for any content between </td> and next <td>/<tr>
+    self->currentTextBlock.reset(new ParsedText(self->extraParagraphSpacing, self->hyphenationEnabled));
     self->nextWordContinues = false;
   }
 
-  if (self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+  if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
+    // Layout all cells in this row now that we know the column count
+    if (!self->tableAccumRows.empty()) {
+      auto& row = self->tableAccumRows.back();
+
+      // Interleave phantom cells for columns occupied by rowspan cells from previous rows.
+      {
+        std::vector<TableCellAccum> interleaved;
+        interleaved.reserve(row.cells.size() + self->tableRowspanTracker.size());
+        uint8_t lc = 0;
+        for (auto& ca : row.cells) {
+          // Insert a phantom for each occupied column before this cell.
+          while (lc < static_cast<uint8_t>(self->tableRowspanTracker.size()) && self->tableRowspanTracker[lc] > 0) {
+            TableCellAccum phantom;
+            phantom.rowspan = 0;
+            interleaved.push_back(std::move(phantom));
+            self->tableRowspanTracker[lc]--;
+            lc++;
+          }
+          // If this cell has rowspan > 1, mark covered columns for future rows.
+          if (ca.rowspan > 1) {
+            for (uint8_t k = 0; k < ca.colspan; k++) {
+              const uint8_t c = static_cast<uint8_t>(lc + k);
+              if (c >= static_cast<uint8_t>(self->tableRowspanTracker.size()))
+                self->tableRowspanTracker.resize(c + 1, 0);
+              self->tableRowspanTracker[c] = ca.rowspan - 1;
+            }
+          }
+          lc = static_cast<uint8_t>(std::min(255, lc + ca.colspan));
+          interleaved.push_back(std::move(ca));
+        }
+        // Trailing phantom columns after all actual cells.
+        while (lc < static_cast<uint8_t>(self->tableRowspanTracker.size()) && self->tableRowspanTracker[lc] > 0) {
+          TableCellAccum phantom;
+          phantom.rowspan = 0;
+          interleaved.push_back(std::move(phantom));
+          self->tableRowspanTracker[lc]--;
+          lc++;
+        }
+        row.cells = std::move(interleaved);
+      }
+
+      // Count logical columns by summing colspan values across cells.
+      int logicalColCount = 0;
+      for (const auto& ca : row.cells) logicalColCount += ca.colspan;
+      const auto numCols = static_cast<uint8_t>(std::min(logicalColCount, 255));
+      if (numCols > self->tableTotalCols) {
+        self->tableTotalCols = numCols;
+      }
+
+      // Determine per-column widths for this row.
+      // Only colspan=1 cells with an explicit requestedWidth contribute to column width establishment;
+      // spanning cells' widths are ambiguous and skipped.
+      if (self->tableColWidths.empty() && numCols > 0) {
+        bool anyExplicit = false;
+        for (const auto& ca : row.cells) {
+          if (ca.colspan == 1 && ca.requestedWidth > 0) {
+            anyExplicit = true;
+            break;
+          }
+        }
+        if (anyExplicit) {
+          // Build per-logical-column widths, distributing remainder to unspecified slots.
+          std::vector<int16_t> slotWidths(numCols, 0);
+          int16_t totalExplicit = 0;
+          int unspecifiedCount = 0;
+          uint8_t logCol = 0;
+          for (const auto& ca : row.cells) {
+            if (ca.colspan == 1 && ca.requestedWidth > 0) {
+              if (logCol < numCols) {
+                slotWidths[logCol] = ca.requestedWidth;
+                totalExplicit += ca.requestedWidth;
+              }
+            } else {
+              // Spanning or unspecified: leave slots as 0 (unspecified).
+              for (uint8_t k = 0; k < ca.colspan && (logCol + k) < numCols; k++) {
+                ++unspecifiedCount;
+              }
+            }
+            logCol = static_cast<uint8_t>(std::min(255, logCol + ca.colspan));
+          }
+          const int16_t remaining = static_cast<int16_t>(self->viewportWidth - totalExplicit);
+          const int16_t fallback = (unspecifiedCount > 0)
+                                       ? static_cast<int16_t>(std::max(1, remaining / unspecifiedCount))
+                                       : static_cast<int16_t>(self->viewportWidth / numCols);
+          self->tableColWidths.reserve(numCols);
+          for (auto w : slotWidths) {
+            self->tableColWidths.push_back(w > 0 ? w : fallback);
+          }
+        }
+      }
+
+      // Layout each cell; cells spanning multiple columns get the summed column widths.
+      uint8_t maxLines = 0;
+      int16_t maxPadTop = TableBlock::CELL_PADDING_Y;
+      int16_t maxPadBot = TableBlock::CELL_PADDING_Y;
+      {
+        uint8_t logCol = 0;
+        for (auto& ca : row.cells) {
+          // Phantom cells (rowspan==0) occupy one column with no content — skip layout.
+          if (ca.rowspan == 0) {
+            logCol++;
+            continue;
+          }
+          // Sum widths of all columns in this cell's span.
+          int16_t cellColWidth = 0;
+          for (uint8_t k = 0; k < ca.colspan; k++) {
+            const uint8_t c = logCol + k;
+            if (c < static_cast<uint8_t>(self->tableColWidths.size())) {
+              cellColWidth = static_cast<int16_t>(cellColWidth + self->tableColWidths[c]);
+            } else if (numCols > 0) {
+              cellColWidth = static_cast<int16_t>(cellColWidth + self->viewportWidth / numCols);
+            } else {
+              cellColWidth = static_cast<int16_t>(cellColWidth + self->viewportWidth);
+            }
+          }
+          // Subtract left border (1px) + horizontal padding; ensure at least 1px.
+          const int16_t textWidth =
+              static_cast<int16_t>(std::max(1, cellColWidth - 1 - ca.paddingLeft - ca.paddingRight));
+
+          if (ca.text && !ca.text->isEmpty()) {
+            ca.text->layoutAndExtractLines(self->renderer, self->fontId, textWidth,
+                                           [&ca](const std::shared_ptr<TextBlock>& line) { ca.lines.push_back(line); });
+          }
+          const auto lineCount = static_cast<uint8_t>(std::min(ca.lines.size(), size_t(255)));
+          if (lineCount > maxLines) maxLines = lineCount;
+          if (ca.paddingTop > maxPadTop) maxPadTop = ca.paddingTop;
+          if (ca.paddingBottom > maxPadBot) maxPadBot = ca.paddingBottom;
+
+          logCol = static_cast<uint8_t>(std::min(255, logCol + ca.colspan));
+        }
+      }
+      row.maxLines = maxLines;
+      row.maxPaddingTop = maxPadTop;
+      row.maxPaddingBottom = maxPadBot;
+    }
     self->nextWordContinues = false;
   }
 
   if (self->tableDepth == 1 && strcmp(name, "table") == 0) {
     self->tableDepth -= 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
     self->nextWordContinues = false;
+
+    if (!self->tableAccumRows.empty() && self->tableTotalCols > 0) {
+      const auto numCols = static_cast<uint8_t>(self->tableTotalCols);
+      // Use established per-column widths, or fall back to equal distribution.
+      const bool hasPerColWidths = (static_cast<int>(self->tableColWidths.size()) == numCols);
+      const auto colWidthFallback =
+          static_cast<int16_t>(numCols > 0 ? self->viewportWidth / numCols : self->viewportWidth);
+      const auto lh = static_cast<int16_t>(self->renderer.getLineHeight(self->fontId) * self->lineCompression);
+
+      // Emit rows across one or more pages, splitting when the remaining rows don't fit.
+      size_t rowStart = 0;
+      size_t totalRows = self->tableAccumRows.size();  // non-const: may grow if a row is split
+
+      while (rowStart < totalRows) {
+        // Ensure we have a current page to place content on.
+        if (!self->currentPage) {
+          self->currentPage.reset(new Page());
+          self->currentPageNextY = 0;
+        }
+
+        // Flush if the page is already full.
+        if (self->currentPageNextY >= self->viewportHeight) {
+          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+          self->completedPageCount++;
+          self->currentPage.reset(new Page());
+          self->currentPageNextY = 0;
+        }
+
+        const int16_t available = static_cast<int16_t>(self->viewportHeight - self->currentPageNextY);
+
+        // Greedily fit as many rows as possible into `available` pixels.
+        // The first row is always included even if it doesn't fit (avoids infinite loop).
+        // Height accounting matches TableBlock::totalHeight():
+        //   (numRows + 1) border px  +  sum(maxPaddingTop + maxLines * lh + maxPaddingBottom)
+        int16_t accumulated = 1;  // top border of the slice
+        size_t rowEnd = rowStart;
+        while (rowEnd < totalRows) {
+          const auto& ra = self->tableAccumRows[rowEnd];
+          const int16_t rowCost = static_cast<int16_t>(1 + ra.maxLines * lh + ra.maxPaddingTop + ra.maxPaddingBottom);
+          // Only break if at least one row has already been included.
+          if (rowEnd > rowStart && accumulated + rowCost > available) {
+            break;
+          }
+          accumulated += rowCost;
+          rowEnd++;
+        }
+
+        // If no rows fit on a non-empty page, flush and retry from a fresh page.
+        if (rowEnd == rowStart && self->currentPageNextY > 0) {
+          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+          self->completedPageCount++;
+          self->currentPage.reset(new Page());
+          self->currentPageNextY = 0;
+          continue;  // re-evaluate available on the new page
+        }
+
+        // If the sole row to emit is taller than the full page, split it line by line
+        // so the overflow continues on the next page rather than rendering off-screen.
+        if (rowEnd == rowStart + 1 && accumulated > available) {
+          auto& accumRow = self->tableAccumRows[rowStart];
+          const int16_t contentAvail =
+              static_cast<int16_t>(available - 2 - accumRow.maxPaddingTop - accumRow.maxPaddingBottom);
+          const int16_t fittableLines =
+              static_cast<int16_t>(std::max(int16_t(1), static_cast<int16_t>(contentAvail / lh)));
+
+          if (fittableLines < static_cast<int16_t>(accumRow.maxLines)) {
+            // Build a remainder row with the leftover lines.
+            TableRowAccum remainder;
+            remainder.maxPaddingTop = accumRow.maxPaddingTop;
+            remainder.maxPaddingBottom = accumRow.maxPaddingBottom;
+            uint8_t remMaxLines = 0;
+
+            for (auto& ca : accumRow.cells) {
+              TableCellAccum remCell;
+              remCell.colspan = ca.colspan;
+              remCell.rowspan = ca.rowspan;
+              remCell.paddingLeft = ca.paddingLeft;
+              remCell.paddingRight = ca.paddingRight;
+              remCell.paddingTop = ca.paddingTop;
+              remCell.paddingBottom = ca.paddingBottom;
+
+              const auto splitAt = static_cast<size_t>(fittableLines);
+              if (ca.lines.size() > splitAt) {
+                remCell.lines.assign(std::make_move_iterator(ca.lines.begin() + static_cast<ptrdiff_t>(splitAt)),
+                                     std::make_move_iterator(ca.lines.end()));
+                ca.lines.resize(splitAt);
+              }
+              const auto remCount = static_cast<uint8_t>(std::min(remCell.lines.size(), size_t(255)));
+              if (remCount > remMaxLines) remMaxLines = remCount;
+              remainder.cells.push_back(std::move(remCell));
+            }
+            remainder.maxLines = remMaxLines;
+            accumRow.maxLines = static_cast<uint8_t>(fittableLines);
+
+            // Insert remainder immediately after the current row.
+            self->tableAccumRows.insert(self->tableAccumRows.begin() + static_cast<ptrdiff_t>(rowStart + 1),
+                                        std::move(remainder));
+            totalRows++;  // one more row to process
+            // rowEnd stays at rowStart+1; fall through to emit the trimmed row.
+          }
+        }
+
+        // Build a TableBlock for rows [rowStart, rowEnd).
+        auto tableBlock = std::make_unique<TableBlock>();
+        tableBlock->numCols = numCols;
+        tableBlock->colWidth = colWidthFallback;
+        tableBlock->lineHeight = lh;
+        tableBlock->drawBorderTop = self->tableDrawBorderTop;
+        tableBlock->drawBorderBottom = self->tableDrawBorderBottom;
+        tableBlock->drawBorderLeft = self->tableDrawBorderLeft;
+        tableBlock->drawBorderRight = self->tableDrawBorderRight;
+        if (hasPerColWidths) tableBlock->colWidths = self->tableColWidths;
+        tableBlock->rows.reserve(rowEnd - rowStart);
+        for (size_t r = rowStart; r < rowEnd; r++) {
+          TableRow row;
+          row.maxLines = self->tableAccumRows[r].maxLines;
+          row.maxPaddingTop = self->tableAccumRows[r].maxPaddingTop;
+          row.maxPaddingBottom = self->tableAccumRows[r].maxPaddingBottom;
+          row.cells.reserve(self->tableAccumRows[r].cells.size());
+          for (auto& ca : self->tableAccumRows[r].cells) {
+            TableCell cell;
+            cell.lines = std::move(ca.lines);
+            cell.paddingLeft = ca.paddingLeft;
+            cell.paddingRight = ca.paddingRight;
+            cell.paddingTop = ca.paddingTop;
+            cell.paddingBottom = ca.paddingBottom;
+            cell.colspan = ca.colspan;
+            cell.rowspan = ca.rowspan;
+            row.cells.push_back(std::move(cell));
+          }
+          tableBlock->rows.push_back(std::move(row));
+        }
+
+        const int16_t tableHeight = tableBlock->totalHeight();
+        self->currentPage->elements.push_back(
+            std::make_shared<PageTable>(std::move(tableBlock), 0, self->currentPageNextY, tableHeight));
+        self->currentPageNextY += tableHeight;
+
+        rowStart = rowEnd;
+
+        // Flush the page if more rows still need to be placed.
+        if (rowStart < totalRows) {
+          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+          self->completedPageCount++;
+          self->currentPage.reset();
+          self->currentPageNextY = 0;
+        }
+      }
+    }
+
+    self->tableAccumRows.clear();
+    self->tableTotalCols = 0;
+    self->tableColWidths.clear();
+    self->tableRowspanTracker.clear();
+    self->tableDrawBorderTop = false;
+    self->tableDrawBorderBottom = false;
+    self->tableDrawBorderLeft = false;
+    self->tableDrawBorderRight = false;
   }
 
   // Leaving bold tag

@@ -11,6 +11,7 @@
 #include "Epub/FootnoteEntry.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
+#include "Epub/blocks/TableBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
 #include "Epub/css/CssStyle.h"
@@ -69,8 +70,34 @@ class ChapterHtmlSlimParser {
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
   int tableDepth = 0;
-  int tableRowIndex = 0;
-  int tableColIndex = 0;
+
+  // Table accumulation: cells are collected per-row, laid out at </tr>.
+  struct TableCellAccum {
+    std::unique_ptr<ParsedText> text;               // raw words; laid out at </tr>
+    std::vector<std::shared_ptr<TextBlock>> lines;  // filled after layout
+    int16_t paddingLeft = TableBlock::CELL_PADDING_X;
+    int16_t paddingRight = TableBlock::CELL_PADDING_X;
+    int16_t paddingTop = TableBlock::CELL_PADDING_Y;
+    int16_t paddingBottom = TableBlock::CELL_PADDING_Y;
+    int16_t requestedWidth = 0;  // 0 = unspecified (equal distribution)
+    uint8_t colspan = 1;         // number of logical columns this cell spans
+    uint8_t rowspan = 1;         // 0 = phantom (occupied by rowspan above), 1 = normal, >1 = rowspan cell
+  };
+  struct TableRowAccum {
+    std::vector<TableCellAccum> cells;
+    uint8_t maxLines = 0;
+    int16_t maxPaddingTop = TableBlock::CELL_PADDING_Y;
+    int16_t maxPaddingBottom = TableBlock::CELL_PADDING_Y;
+  };
+  bool inTableCellMode = false;
+  std::vector<TableRowAccum> tableAccumRows;
+  int tableTotalCols = 0;                    // max columns seen across all rows
+  std::vector<int16_t> tableColWidths;       // per-column widths once established (first row with explicit widths)
+  std::vector<uint8_t> tableRowspanTracker;  // remaining rowspan rows per logical column
+  bool tableDrawBorderTop = false;           // accumulated from <table>/<td>/<th> CSS: draw top edge
+  bool tableDrawBorderBottom = false;        // accumulated from <table>/<td>/<th> CSS: draw bottom edge
+  bool tableDrawBorderLeft = false;          // accumulated from <table>/<td>/<th> CSS: draw left edge
+  bool tableDrawBorderRight = false;         // accumulated from <table>/<td>/<th> CSS: draw right edge
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
