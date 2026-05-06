@@ -21,10 +21,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr unsigned long skipPageMs = 700;
-}  // namespace
-
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -97,8 +93,8 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages =
-      !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages = !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP &&
+                         mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
