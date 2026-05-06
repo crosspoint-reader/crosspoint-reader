@@ -170,6 +170,23 @@ file will use a new cache directory, resetting the reading progress.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 
+### Font system roadmap
+
+The current reader fonts (NotoSerif, NotoSans, OpenDyslexic at 12–18 pt) ship as `static const` Flash arrays sized
+for European-language coverage (~1070 glyphs each). This works for the 23 currently-supported languages but does not
+scale to CJK reading (~5000+ glyphs), Hebrew/Arabic, Indic, Thai, etc.
+
+A draft architecture (Font System v3) is in development to support **plug-in fonts via SD card** with multi-script
+fallback chains, while staying within the C3's 380 KB RAM budget (no PSRAM). Design documents:
+
+* [Architecture overview](./docs/architecture/font-system-v3.md) — long-form RFC
+* [ADR 0001 — `.cpf` paged glyph metadata](./docs/adr/0001-cpf-paged-metadata.md) — how we fit ~5000 CJK glyphs in 1 KB resident
+* [ADR 0002 — Multi-font fallback chain (`FontStack`)](./docs/adr/0002-font-fallback-chain.md) — the CSS-style fallback model
+* [ADR 0003 — Defer complex-script shaping](./docs/adr/0003-defer-harfbuzz-bidi.md) — why HarfBuzz / bidi / Indic / vector
+  rasterisation are out of scope for v3 and what triggers their re-entry
+
+These documents are RFCs, not implemented yet. Comments and pushback welcome on the corresponding GitHub discussion.
+
 ## Contributing
 
 Contributions are very welcome!
