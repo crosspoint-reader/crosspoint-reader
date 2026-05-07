@@ -6,6 +6,7 @@ This is a personal fork of [CrossPoint](https://github.com/crosspoint-reader/cro
 
 ### EpubReader modifications
 * Modify built-in fonts. *Will revert when CrossPoint officially releases user-replaceable fonts.*
+* Horizontal Rule `hr` support, inspired by [CrossInk](https://github.com/uxjulia/CrossInk)
 
 ## CrossPoint Reader
 
