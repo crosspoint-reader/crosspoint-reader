@@ -282,6 +282,47 @@ void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butt
   drawScrollBar(renderer, rect, buttonCount, pageStartIndex, pageItems);
 }
 
+Rect RoundedRaffTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
+  constexpr int marginX = 20;
+  constexpr int marginY = 14;
+  constexpr int frameThickness = 2;
+  constexpr int popupRadius = 18;
+  const int y = static_cast<int>(renderer.getScreenHeight() * 0.12f);
+  const int textWidth = renderer.getTextWidth(kTitleFontId, message, EpdFontFamily::BOLD);
+  const int textHeight = renderer.getLineHeight(kTitleFontId);
+  const int w = textWidth + marginX * 2;
+  const int h = textHeight + marginY * 2;
+  const int x = (renderer.getScreenWidth() - w) / 2;
+
+  renderer.fillRoundedRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2,
+                           popupRadius + frameThickness, Color::White);
+  renderer.fillRoundedRect(x, y, w, h, popupRadius, Color::Black);
+
+  const int textX = x + (w - textWidth) / 2;
+  const int textY = y + marginY - 2;
+  renderer.drawText(kTitleFontId, textX, textY, message, false, EpdFontFamily::BOLD);
+  renderer.displayBuffer();
+
+  return Rect{x, y, w, h};
+}
+
+void RoundedRaffTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
+  constexpr int barHeight = 4;
+  constexpr int barMarginX = 20;
+  const int barWidth = std::max(0, layout.width - barMarginX * 2);
+  const int barX = layout.x + barMarginX;
+  const int barY = layout.y + layout.height - 10;
+  const int clampedProgress = std::clamp(progress, 0, 100);
+  const int fillWidth = barWidth * clampedProgress / 100;
+
+  renderer.drawRect(barX, barY, barWidth, barHeight, 1, false);
+  if (fillWidth > 0) {
+    renderer.fillRect(barX, barY, fillWidth, barHeight, false);
+  }
+
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+}
+
 void RoundedRaffTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
                                      int contentStartX, int contentWidth) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
