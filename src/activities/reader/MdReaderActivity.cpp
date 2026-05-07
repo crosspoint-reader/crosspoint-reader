@@ -24,7 +24,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 constexpr size_t MAX_LINE_LENGTH = 64 * 1024;
 constexpr uint32_t CACHE_MAGIC = 0x4D4B4449;  // "MKDI"
-constexpr uint8_t CACHE_VERSION = 3;          // Bumped: nested list indent + task checkboxes
+constexpr uint8_t CACHE_VERSION = 4;          // Bumped: GFM pipe table support
 
 static std::string flattenHeadingText(const MdParser::ParsedLine& parsed) {
   std::string result;
@@ -533,6 +533,68 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
       parsed.blockType = MdParser::BlockType::CodeBlock;
     } else {
       parsed = MdParser::parseLine(rawLine, inCodeBlock);
+    }
+
+    // GFM table handling: separator rows are invisible; the first data row in a table
+    // block is promoted to TableHeader (bold cells + separator line drawn after it).
+    if (parsed.blockType == MdParser::BlockType::TableSeparator) {
+      pos = lineEnd + 1;
+      continue;
+    }
+    if (parsed.blockType == MdParser::BlockType::TableRow) {
+      // Promote first row of a table to header if immediately followed by a separator.
+      // We detect this by peeking ahead at the next line in the buffer.
+      bool isHeader = false;
+      {
+        size_t nextLineStart = lineEnd + 1;
+        size_t nextLineEnd = nextLineStart;
+        while (nextLineEnd < bufferSize && pageBuffer[nextLineEnd] != '\n') nextLineEnd++;
+        std::string nextRaw(reinterpret_cast<char*>(pageBuffer.data() + nextLineStart), nextLineEnd - nextLineStart);
+        if (!nextRaw.empty() && nextRaw.back() == '\r') nextRaw.pop_back();
+        isHeader = MdParser::isTableSeparator(nextRaw);
+      }
+      if (isHeader) parsed.blockType = MdParser::BlockType::TableHeader;
+
+      // Flatten cells into a single line: "Cell1  │  Cell2  │  Cell3"
+      // Bold all spans when this is a header row.
+      MdParser::ParsedLine flatLine;
+      flatLine.blockType = MdParser::BlockType::Paragraph;
+      bool first = true;
+      for (auto& cell : parsed.tableCells) {
+        if (!first) {
+          flatLine.spans.push_back({"  \xe2\x94\x82  ", EpdFontFamily::REGULAR});  // " │ "
+        }
+        first = false;
+        for (auto& span : cell) {
+          if (isHeader) {
+            span.style = static_cast<EpdFontFamily::Style>(static_cast<uint8_t>(span.style) |
+                                                           static_cast<uint8_t>(EpdFontFamily::BOLD));
+          }
+          flatLine.spans.push_back(span);
+        }
+      }
+
+      size_t linesBefore = outLines.size();
+      int remainingLines = linesPerPage - static_cast<int>(outLines.size());
+      bool fullyConsumed = wordWrapParsedLine(flatLine, 0, outLines, remainingLines);
+      if (!fullyConsumed) {
+        if (linesBefore > 0) {
+          outLines.resize(linesBefore);
+        } else {
+          pos = lineComplete ? lineEnd + 1 : lineEnd;
+        }
+        break;
+      }
+
+      // After a header row, add a thin separator line (reuse isHR rendering)
+      if (isHeader && static_cast<int>(outLines.size()) < linesPerPage) {
+        RenderedLine sep;
+        sep.isHR = true;
+        outLines.push_back(sep);
+      }
+
+      pos = lineEnd + 1;
+      continue;
     }
 
     // Determine indent (base + nesting level)

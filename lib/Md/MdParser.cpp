@@ -234,6 +234,47 @@ std::vector<Span> parseInline(const std::string& text) {
   return spans;
 }
 
+// Split a pipe-table row into trimmed cell strings.
+// Input: "| foo | **bar** |" → ["foo", "**bar**"]
+static std::vector<std::string> splitTableCells(const std::string& line) {
+  std::vector<std::string> cells;
+  size_t i = 0;
+  // Skip optional leading pipe
+  if (i < line.size() && line[i] == '|') i++;
+  while (i < line.size()) {
+    size_t start = i;
+    // Find next unescaped pipe
+    while (i < line.size() && !(line[i] == '|' && (i == 0 || line[i - 1] != '\\'))) i++;
+    std::string cell = line.substr(start, i - start);
+    // Trim whitespace
+    size_t cs = 0, ce = cell.size();
+    while (cs < ce && (cell[cs] == ' ' || cell[cs] == '\t')) cs++;
+    while (ce > cs && (cell[ce - 1] == ' ' || cell[ce - 1] == '\t')) ce--;
+    cells.push_back(cell.substr(cs, ce - cs));
+    if (i < line.size()) i++;  // skip the pipe
+  }
+  // Drop trailing empty cell produced by trailing pipe
+  if (!cells.empty() && cells.back().empty()) cells.pop_back();
+  return cells;
+}
+
+bool isTableRow(const std::string& line) {
+  const std::string& t = line;
+  size_t i = 0;
+  while (i < t.size() && (t[i] == ' ' || t[i] == '\t')) i++;
+  return i < t.size() && t[i] == '|';
+}
+
+bool isTableSeparator(const std::string& line) {
+  if (!isTableRow(line)) return false;
+  // Every non-pipe, non-space character must be - or :
+  for (char c : line) {
+    if (c != '|' && c != '-' && c != ':' && c != ' ' && c != '\t') return false;
+  }
+  // Must contain at least one -
+  return line.find('-') != std::string::npos;
+}
+
 bool isCodeFence(const std::string& line) {
   auto trimmed = trimLeft(line);
   if (trimmed.size() < 3) return false;
@@ -379,6 +420,20 @@ ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock) {
     std::string content = trimmed.substr(1);
     if (!content.empty() && content[0] == ' ') content = content.substr(1);
     result.spans = parseInline(content);
+    return result;
+  }
+
+  // GFM pipe table
+  if (isTableRow(trimmed)) {
+    if (isTableSeparator(trimmed)) {
+      result.blockType = BlockType::TableSeparator;
+      return result;
+    }
+    result.blockType = BlockType::TableRow;  // promoted to TableHeader by caller if needed
+    auto cells = splitTableCells(trimmed);
+    for (auto& cell : cells) {
+      result.tableCells.push_back(parseInline(cell));
+    }
     return result;
   }
 

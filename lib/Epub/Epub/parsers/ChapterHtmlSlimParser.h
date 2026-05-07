@@ -73,9 +73,22 @@ class ChapterHtmlSlimParser final : public Print {
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
   bool effectiveStrikethrough = false;
-  int tableDepth = 0;
-  int tableRowIndex = 0;
-  int tableColIndex = 0;
+  // Buffered table model — populated while inside <table>, emitted on </table>
+  struct BufferedTableCell {
+    std::unique_ptr<ParsedText> text;
+    bool isHeader = false;
+  };
+  struct BufferedTableRow {
+    std::vector<BufferedTableCell> cells;
+    bool isHeaderRow = false;  // true when all cells in this row are <th>
+  };
+  struct BufferedTable {
+    std::vector<BufferedTableRow> rows;
+    int depth = 0;             // nesting depth; > 1 means we're inside a nested table
+    bool unsupported = false;  // true → emit as paragraphs instead of grid
+  };
+  std::unique_ptr<BufferedTable> currentTable;
+  BufferedTableCell* currentTableCell = nullptr;  // non-null while inside <td>/<th>
 
   struct ListEntry {
     int depth;
@@ -140,6 +153,9 @@ class ChapterHtmlSlimParser final : public Print {
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPartWordBuffer();
   void makePages();
+  void emitBufferedTable();
+  void emitTableAsFragments(BufferedTable& table);
+  void emitTableAsParagraphs(BufferedTable& table);
   // Emit currentPage to the consumer while keeping paragraphLutPerPage and completedPageCount
   // in lockstep. Every page break MUST go through this helper; open-coded completePageFn
   // calls risk desynchronising paragraphLutPerPage and failing the size check in Section.cpp.
