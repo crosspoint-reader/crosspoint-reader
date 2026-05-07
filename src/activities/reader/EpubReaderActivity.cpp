@@ -448,6 +448,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }
           LOG_DBG("ERS", "COVER_ACTION: cover disabled, cleared forcePath");
         } else {
+          RECENT_BOOKS.setCoverDisabled(epub->getPath(), false);
           APP_STATE.forceRenderCoverPath = epub->getPath();
           LOG_DBG("ERS", "COVER_ACTION: cover enabled, set forcePath='%s'", epub->getPath().c_str());
         }
