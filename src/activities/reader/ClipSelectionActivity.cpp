@@ -209,7 +209,8 @@ void ClipSelectionActivity::loop() {
           const auto& prev = words[i - 1].text;
           const auto& prevStripped = stripEmSpace(prev);
           if (prevStripped.size() >= 1 && prevStripped.back() == '-' && !wtext.empty() &&
-              static_cast<unsigned char>(wtext[0]) >= 'a' && static_cast<unsigned char>(wtext[0]) <= 'z' &&
+              !std::isspace(static_cast<unsigned char>(wtext[0])) &&
+              !std::ispunct(static_cast<unsigned char>(wtext[0])) &&
               prevStripped.find('-') == prevStripped.size() - 1) {
             LOG_DBG("CLIP", "MERGE w[%d] \"%.15s\"+\"%.15s\"", i - 1, prevStripped.c_str(), wtext.c_str());
             text.pop_back();
@@ -270,7 +271,7 @@ void ClipSelectionActivity::loop() {
       {
         constexpr int MID_WORDS = 4;
         int midStart = (from + to) / 2 - (MID_WORDS / 2);
-        int midEnd = midStart + MID_WORDS;
+        int midEnd = midStart + MID_WORDS - 1;
         if (midStart < from) midStart = from;
         if (midEnd > to) midEnd = to;
         for (int i = midStart; i <= midEnd; ++i) {
@@ -422,12 +423,6 @@ void ClipSelectionActivity::drawHighlights() {
       }
     }
   }
-}
-
-ClipSelectionActivity::Rect ClipSelectionActivity::alignedRect(int x, int y, int w, int h) const {
-  const int alignedX = (x / 8) * 8;
-  const int alignedW = ((x + w + 7) / 8) * 8 - alignedX;
-  return {alignedX, y, alignedW, h};
 }
 
 int ClipSelectionActivity::lineEndForward(int idx) const {

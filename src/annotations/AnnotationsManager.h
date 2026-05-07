@@ -7,10 +7,10 @@
 class AnnotationsManager {
  public:
   struct AnnotationRecord {
-    uint16_t sectionIdx;
-    uint16_t sectionPage;
-    uint16_t endSectionPage;
-    uint16_t wordCount;
+    uint16_t sectionIdx = 0;
+    uint16_t sectionPage = 0;
+    uint16_t endSectionPage = 0;
+    uint16_t wordCount = 0;
     std::string startText;
     std::string endText;
     std::string beforeStartText;

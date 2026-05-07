@@ -590,6 +590,7 @@ void EpubReaderActivity::startClipSelection() {
               annotations.add(std::move(rec));
               annotationsDirty = true;
               annotations.save(epub->getCachePath().c_str());
+              annotationsDirty = false;
             }
           }
         }
@@ -1063,12 +1064,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               pageWords.size());
 
       for (const auto& rec : sectionAnnotations) {
+        const auto curPage = static_cast<uint16_t>(section->currentPage);
+        if (curPage < rec.sectionPage || curPage > rec.endSectionPage) continue;
+
         int startIdx = -1;
         int endIdx = -1;
 
         startIdx = findContextStart(rec.beforeStartText);
         if (startIdx < 0) startIdx = findAnchorStart(rec.startText);
-        if (endIdx < 0) endIdx = findAnchorEnd(rec.endText);
+        endIdx = findAnchorEnd(rec.endText);
 
         if (endIdx < 0) {
           std::string suffix = rec.endText;

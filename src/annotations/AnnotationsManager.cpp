@@ -48,7 +48,7 @@ bool AnnotationsManager::load(const char* bookCachePath) {
   }
   if (file.read(&count, sizeof(count)) != sizeof(count)) {
     file.close();
-    return false;
+    return true;
   }
 
   records.reserve(count);

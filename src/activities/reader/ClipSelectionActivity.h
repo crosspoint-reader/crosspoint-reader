@@ -31,10 +31,6 @@ class ClipSelectionActivity final : public Activity {
   bool isReaderActivity() const override { return true; }
 
  private:
-  struct Rect {
-    int x, y, w, h;
-  };
-
   std::vector<WordRef> words;
   std::string bookTitle;
   std::string author;
@@ -55,11 +51,9 @@ class ClipSelectionActivity final : public Activity {
   int cursorIdx = 0;
   int startMarkIdx = -1;
   bool needsPageSwitch = false;
-  bool initialRender = true;
 
   ButtonNavigator buttonNavigator;
 
-  Rect alignedRect(int x, int y, int w, int h) const;
   void switchToPage(int pageIdx);
   void drawHighlights();
   int lineEndForward(int idx) const;

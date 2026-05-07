@@ -56,30 +56,16 @@ bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::str
   static constexpr size_t MAX_TEXT = 2000;
   const size_t textLen = selectedText.size() < MAX_TEXT ? selectedText.size() : MAX_TEXT;
 
-  // Concatenate into a single buffer and perform one write to avoid partial records on SD failure
   static constexpr char separator[] = "\n==========\n";
-  static constexpr size_t separatorLen = sizeof(separator) - 1;
-  const size_t totalLen = header.size() + location.size() + 1 + textLen + separatorLen;
+  std::string buf;
+  buf.reserve(header.size() + location.size() + 1 + textLen + sizeof(separator) - 1);
+  buf += header;
+  buf += location;
+  buf += '\n';
+  buf.append(selectedText.c_str(), textLen);
+  buf += separator;
 
-  auto* buf = static_cast<char*>(malloc(totalLen));
-  if (!buf) {
-    LOG_ERR("CLIP", "malloc failed: %zu bytes", totalLen);
-    file.close();
-    return false;
-  }
-
-  size_t pos = 0;
-  memcpy(buf + pos, header.c_str(), header.size());
-  pos += header.size();
-  memcpy(buf + pos, location.c_str(), location.size());
-  pos += location.size();
-  buf[pos++] = '\n';
-  memcpy(buf + pos, selectedText.c_str(), textLen);
-  pos += textLen;
-  memcpy(buf + pos, separator, separatorLen);
-
-  const bool ok = file.write(buf, totalLen) == totalLen;
-  free(buf);
+  const bool ok = file.write(buf.data(), buf.size()) == buf.size();
   file.flush();
   file.close();
 
