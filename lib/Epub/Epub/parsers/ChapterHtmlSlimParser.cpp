@@ -188,25 +188,29 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::STRIKETHROUGH);
   }
 
-  // flush the buffer
+  // flush the buffer — route to table cell text when inside a <td>/<th>
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  if (currentTableCell) {
+    currentTableCell->text->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  } else if (currentTextBlock) {
+    currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+
+    if (currentTextBlock->size() > 96) {
+      LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
+      const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
+      const uint16_t effectiveWidth =
+          (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
+      currentTextBlock->layoutAndExtractLines(
+          renderer, fontId, effectiveWidth,
+          [this](const std::shared_ptr<TextBlock>& textBlock, const bool lineEndsWithHyphenatedWord,
+                 const bool suppressHyphenationRetry) {
+            return addLineToPage(textBlock, lineEndsWithHyphenatedWord, suppressHyphenationRetry);
+          },
+          false);
+    }
+  }
   partWordBufferIndex = 0;
   nextWordContinues = false;
-
-  if (currentTextBlock->size() > 96) {
-    LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
-    const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth =
-        (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
-    currentTextBlock->layoutAndExtractLines(
-        renderer, fontId, effectiveWidth,
-        [this](const std::shared_ptr<TextBlock>& textBlock, const bool lineEndsWithHyphenatedWord,
-               const bool suppressHyphenationRetry) {
-          return addLineToPage(textBlock, lineEndsWithHyphenatedWord, suppressHyphenationRetry);
-        },
-        false);
-  }
 }
 
 // Emit the current page, keeping paragraphLutPerPage and completedPageCount in lockstep.
@@ -341,65 +345,54 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
+  // Buffered table rendering: accumulate cells in memory, emit as PageTableFragment on </table>.
   if (strcmp(name, "table") == 0) {
-    // skip nested tables
-    if (self->tableDepth > 0) {
-      self->tableDepth += 1;
+    if (self->currentTable) {
+      // Nested table — mark unsupported and track depth
+      self->currentTable->depth += 1;
+      self->currentTable->unsupported = true;
+      self->depth += 1;
       return;
     }
-
+    // Flush any pending text before starting the table
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    self->tableDepth += 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
+    if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+      self->makePages();
+    }
+    self->currentTable = std::unique_ptr<BufferedTable>(new BufferedTable());
+    self->currentTable->depth = 1;
     self->depth += 1;
     return;
   }
 
-  if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
-    self->tableRowIndex += 1;
-    self->tableColIndex = 0;
+  if (self->currentTable && self->currentTable->depth == 1 && strcmp(name, "tr") == 0) {
+    self->currentTable->rows.emplace_back();
+    if (self->currentTable->rows.size() > MAX_TABLE_ROWS) {
+      self->currentTable->unsupported = true;
+    }
     self->depth += 1;
     return;
   }
 
-  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+  if (self->currentTable && self->currentTable->depth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    self->tableColIndex += 1;
-
-    auto tableCellBlockStyle = BlockStyle();
-    tableCellBlockStyle.textAlignDefined = true;
-    const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                           ? CssTextAlign::Justify
-                           : static_cast<CssTextAlign>(self->paragraphAlignment);
-    tableCellBlockStyle.alignment = align;
-    self->startNewTextBlock(tableCellBlockStyle);
-
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
-    StyleStackEntry headerStyle;
-    headerStyle.depth = self->depth;
-    headerStyle.hasBold = true;
-    headerStyle.bold = false;
-    headerStyle.hasItalic = true;
-    headerStyle.italic = true;
-    headerStyle.hasUnderline = true;
-    headerStyle.underline = false;
-    self->inlineStyleStack.push_back(headerStyle);
-    self->updateEffectiveInlineStyle();
-    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+    if (self->currentTable->rows.empty()) {
+      self->currentTable->rows.emplace_back();
     }
-    self->nextWordContinues = false;
-    self->inlineStyleStack.pop_back();
-    self->updateEffectiveInlineStyle();
-
+    BufferedTableRow& row = self->currentTable->rows.back();
+    if (row.cells.size() >= MAX_TABLE_COLS) {
+      self->currentTable->unsupported = true;
+    }
+    const bool isHeader = (strcmp(name, "th") == 0);
+    row.cells.emplace_back();
+    row.cells.back().isHeader = isHeader;
+    row.cells.back().text =
+        std::unique_ptr<ParsedText>(new ParsedText(false, false));  // no paragraph spacing, no hyphenation in cells
+    self->currentTableCell = &row.cells.back();
     self->depth += 1;
     return;
   }
@@ -1093,9 +1086,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
-  // Skip content of nested table
-  if (self->tableDepth > 1) {
+  // Skip content of nested tables (depth > 1 means we're inside a nested table)
+  if (self->currentTable && self->currentTable->depth > 1) {
     return;
+  }
+
+  // Route character data into the active table cell's ParsedText
+  if (self->currentTableCell) {
+    // Use the existing partWordBuffer + word-level accumulation logic below,
+    // but the flush target will be currentTableCell->text (handled in flushPartWordBuffer).
+    // Fall through to the normal character accumulation path.
   }
 
   // Middle of skip
@@ -1312,11 +1312,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   const bool headerOrBlockTag = isHeaderOrBlock(name);
   const bool tableStructuralTag = isTableStructuralTag(name);
 
-  if (self->tableDepth > 1 && strcmp(name, "table") == 0) {
-    // get rid of all text inside the nested table
+  if (self->currentTable && self->currentTable->depth > 1 && strcmp(name, "table") == 0) {
     self->partWordBufferIndex = 0;
-    self->tableDepth -= 1;
-    LOG_DBG("EHP", "nested table detected, get rid of its content");
+    self->currentTable->depth -= 1;
+    self->depth -= 1;
+    LOG_DBG("EHP", "nested table end, depth now %d", self->currentTable->depth);
     return;
   }
 
@@ -1372,18 +1372,37 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->skipTextUntilDepth = INT_MAX;
   }
 
-  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+  if (self->currentTable && self->currentTable->depth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    // Determine if the whole row consists of header cells
+    if (!self->currentTable->rows.empty()) {
+      auto& row = self->currentTable->rows.back();
+      bool allHeaders = !row.cells.empty();
+      for (const auto& c : row.cells) {
+        if (!c.isHeader) {
+          allHeaders = false;
+          break;
+        }
+      }
+      row.isHeaderRow = allHeaders;
+    }
+    self->currentTableCell = nullptr;
     self->nextWordContinues = false;
   }
 
-  if (self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+  if (self->currentTable && self->currentTable->depth == 1 && strcmp(name, "tr") == 0) {
     self->nextWordContinues = false;
   }
 
-  if (self->tableDepth == 1 && strcmp(name, "table") == 0) {
-    self->tableDepth -= 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
+  if (self->currentTable && self->currentTable->depth == 1 && strcmp(name, "table") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->currentTableCell = nullptr;
+    self->emitBufferedTable();
+    self->currentTable.reset();
     self->nextWordContinues = false;
   }
 
@@ -1691,5 +1710,199 @@ void ChapterHtmlSlimParser::makePages() {
   // preUntilDepth has already been reset, so it still receives normal paragraph spacing.
   if (extraParagraphSpacing && preUntilDepth == INT_MAX) {
     currentPageNextY += lineHeight / 2;
+  }
+}
+
+// Guard: minimum free heap before attempting table layout (cell wrapping allocates TextBlock vectors)
+static constexpr size_t MIN_FREE_HEAP_FOR_TABLE = 20 * 1024;
+
+void ChapterHtmlSlimParser::emitBufferedTable() {
+  if (!currentTable) return;
+
+  if (currentTable->unsupported || currentTable->rows.empty()) {
+    LOG_DBG("EHP", "Table unsupported or empty — falling back to paragraph mode");
+    emitTableAsParagraphs(*currentTable);
+    return;
+  }
+
+  if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_TABLE) {
+    LOG_ERR("EHP", "Low heap (%u), falling back to paragraph mode for table", ESP.getFreeHeap());
+    emitTableAsParagraphs(*currentTable);
+    return;
+  }
+
+  emitTableAsFragments(*currentTable);
+}
+
+void ChapterHtmlSlimParser::emitTableAsFragments(BufferedTable& table) {
+  // Determine column count (max cells in any row)
+  uint8_t columnCount = 0;
+  for (const auto& row : table.rows) {
+    if (row.cells.size() > columnCount) {
+      columnCount = static_cast<uint8_t>(row.cells.size());
+    }
+  }
+  if (columnCount == 0 || columnCount > MAX_TABLE_COLS) {
+    emitTableAsParagraphs(table);
+    return;
+  }
+
+  const uint16_t totalWidth = viewportWidth;
+  const uint16_t colWidth = totalWidth / columnCount;
+  const uint16_t innerColWidth =
+      (colWidth > 2 * TABLE_CELL_PADDING) ? static_cast<uint16_t>(colWidth - 2 * TABLE_CELL_PADDING) : 0;
+  if (innerColWidth < MIN_COL_INNER_WIDTH) {
+    LOG_DBG("EHP", "Table columns too narrow (%u px inner) — falling back to paragraphs", innerColWidth);
+    emitTableAsParagraphs(table);
+    return;
+  }
+
+  std::array<uint16_t, MAX_TABLE_COLS> colWidths = {};
+  for (uint8_t c = 0; c < columnCount; c++) {
+    colWidths[c] = colWidth;
+  }
+
+  const int lineHeight = static_cast<int>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
+
+  // Pre-wrap all cells and compute row heights
+  struct LayoutRow {
+    std::vector<TableCell> cells;
+    uint16_t height = 0;
+    bool isHeaderRow = false;
+  };
+  std::vector<LayoutRow> layoutRows;
+  layoutRows.reserve(table.rows.size());
+
+  for (auto& bufRow : table.rows) {
+    LayoutRow lr;
+    lr.isHeaderRow = bufRow.isHeaderRow;
+    lr.cells.reserve(bufRow.cells.size());
+    uint16_t maxLines = 0;
+
+    for (auto& bufCell : bufRow.cells) {
+      TableCell cell;
+      cell.isHeader = bufCell.isHeader;
+
+      if (bufCell.text && !bufCell.text->isEmpty()) {
+        // Wrap cell text to inner column width, collecting resulting TextBlock lines
+        bufCell.text->layoutAndExtractLines(renderer, fontId, innerColWidth,
+                                            [&cell](const std::shared_ptr<TextBlock>& tb, bool, bool) {
+                                              if (cell.lines.size() < MAX_CELL_LINES) {
+                                                cell.lines.push_back(tb);
+                                              }
+                                              return ParsedText::LineProcessResult::Accepted;
+                                            });
+      }
+
+      if (cell.lines.size() > maxLines) {
+        maxLines = static_cast<uint16_t>(cell.lines.size());
+      }
+      lr.cells.push_back(std::move(cell));
+    }
+
+    // Pad rows that have fewer cells than columnCount with empty cells
+    while (lr.cells.size() < columnCount) {
+      lr.cells.emplace_back();
+    }
+
+    lr.height = static_cast<uint16_t>(maxLines * lineHeight + 2 * TABLE_CELL_PADDING);
+    if (lr.height == 0) lr.height = static_cast<uint16_t>(lineHeight + 2 * TABLE_CELL_PADDING);
+    layoutRows.push_back(std::move(lr));
+  }
+
+  // Ensure page is initialised
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  // Greedily pack rows into fragments, page-breaking between fragments
+  std::vector<TableRow> fragmentRows;
+  uint16_t fragmentHeight = 0;
+
+  auto emitFragment = [&]() {
+    if (fragmentRows.empty()) return;
+
+    // Total height = sum of row heights + top border (1px) + bottom border included in outer rect
+    const uint16_t fragTotalHeight = static_cast<uint16_t>(fragmentHeight + 1);  // +1 for top border pixel
+
+    // If this fragment won't fit on the current page, page-break first
+    if (currentPageNextY + fragTotalHeight > viewportHeight && currentPageNextY > 0) {
+      emitPage(lastBodyChildByteOffset);
+    }
+
+    auto fragment = std::make_shared<PageTableFragment>(columnCount, totalWidth, fragTotalHeight, colWidths,
+                                                        std::move(fragmentRows),
+                                                        /*xPos=*/0, /*yPos=*/static_cast<int16_t>(currentPageNextY));
+    currentPage->elements.push_back(fragment);
+    currentPageNextY += fragTotalHeight;
+    fragmentRows.clear();
+    fragmentHeight = 0;
+  };
+
+  for (auto& lr : layoutRows) {
+    // If a single row is taller than the full viewport, fall back for this row
+    if (lr.height > viewportHeight) {
+      // Emit whatever we have so far
+      emitFragment();
+      // Emit this oversized row as a paragraph fallback
+      BufferedTable singleRowFallback;
+      BufferedTableRow fbRow;
+      fbRow.isHeaderRow = lr.isHeaderRow;
+      for (auto& cell : lr.cells) {
+        BufferedTableCell fbc;
+        fbc.isHeader = cell.isHeader;
+        // Re-create a minimal ParsedText from the already-wrapped lines
+        // by emitting each line's words as a new ParsedText paragraph
+        fbc.text = std::unique_ptr<ParsedText>(new ParsedText(false, false));
+        for (const auto& line : cell.lines) {
+          for (const auto& word : line->getWords()) {
+            fbc.text->addWord(word, EpdFontFamily::REGULAR, false, false);
+          }
+        }
+        fbRow.cells.push_back(std::move(fbc));
+      }
+      singleRowFallback.rows.push_back(std::move(fbRow));
+      emitTableAsParagraphs(singleRowFallback);
+      continue;
+    }
+
+    const uint16_t rowContrib = static_cast<uint16_t>(lr.height + 1);  // +1 for separator line
+
+    if (!fragmentRows.empty() && currentPageNextY + fragmentHeight + rowContrib > viewportHeight) {
+      emitFragment();
+    }
+
+    TableRow tr;
+    tr.isHeaderRow = lr.isHeaderRow;
+    tr.height = lr.height;
+    tr.cells = std::move(lr.cells);
+    fragmentRows.push_back(std::move(tr));
+    fragmentHeight += rowContrib;
+  }
+
+  emitFragment();
+}
+
+void ChapterHtmlSlimParser::emitTableAsParagraphs(BufferedTable& table) {
+  // Emit each cell as a sequential paragraph (content-preserving fallback)
+  for (auto& row : table.rows) {
+    for (auto& cell : row.cells) {
+      if (!cell.text || cell.text->isEmpty()) continue;
+      auto cellBlockStyle = BlockStyle();
+      cellBlockStyle.textAlignDefined = true;
+      cellBlockStyle.alignment = (paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                                     ? CssTextAlign::Justify
+                                     : static_cast<CssTextAlign>(paragraphAlignment);
+      // Re-use the existing paragraph pipeline by moving the cell text into currentTextBlock
+      startNewTextBlock(cellBlockStyle);
+      // Transfer words from the buffered cell text into the new currentTextBlock
+      // by re-running layout directly
+      cell.text->layoutAndExtractLines(
+          renderer, fontId, viewportWidth,
+          [this](const std::shared_ptr<TextBlock>& tb, bool lineEndsWithHyphen, bool suppressRetry) {
+            return addLineToPage(tb, lineEndsWithHyphen, suppressRetry);
+          });
+    }
   }
 }

@@ -2,6 +2,7 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,9 +11,16 @@
 #include "blocks/ImageBlock.h"
 #include "blocks/TextBlock.h"
 
+static constexpr uint8_t MAX_TABLE_COLS = 8;
+static constexpr uint16_t MAX_TABLE_ROWS = 48;
+static constexpr uint8_t TABLE_CELL_PADDING = 5;
+static constexpr uint16_t MIN_COL_INNER_WIDTH = 24;
+static constexpr uint8_t MAX_CELL_LINES = 64;
+
 enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
-  TAG_PageImage = 2,  // New tag
+  TAG_PageImage = 2,
+  TAG_PageTable = 3,
 };
 
 // represents something that has been added to a page
@@ -53,6 +61,42 @@ class PageImage final : public PageElement {
   PageElementTag getTag() const override { return TAG_PageImage; }
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
   const ImageBlock& getImageBlock() const { return *imageBlock; }
+};
+
+struct TableCell {
+  std::vector<std::shared_ptr<TextBlock>> lines;
+  bool isHeader = false;
+};
+
+struct TableRow {
+  std::vector<TableCell> cells;
+  uint16_t height = 0;       // pixel height including 2×CELL_PADDING
+  bool isHeaderRow = false;  // drives 2px separator below this row
+};
+
+class PageTableFragment final : public PageElement {
+  uint8_t columnCount = 0;
+  uint16_t totalWidth = 0;
+  uint16_t totalHeight = 0;
+  std::array<uint16_t, MAX_TABLE_COLS> colWidths = {};
+  std::vector<TableRow> rows;
+
+ public:
+  PageTableFragment(uint8_t colCount, uint16_t totalWidth, uint16_t totalHeight,
+                    std::array<uint16_t, MAX_TABLE_COLS> colWidths, std::vector<TableRow> rows, int16_t xPos,
+                    int16_t yPos)
+      : PageElement(xPos, yPos),
+        columnCount(colCount),
+        totalWidth(totalWidth),
+        totalHeight(totalHeight),
+        colWidths(colWidths),
+        rows(std::move(rows)) {}
+
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(FsFile& file) override;
+  static std::unique_ptr<PageTableFragment> deserialize(FsFile& file);
+  PageElementTag getTag() const override { return TAG_PageTable; }
+  uint16_t getTotalHeight() const { return totalHeight; }
 };
 
 class Page {
