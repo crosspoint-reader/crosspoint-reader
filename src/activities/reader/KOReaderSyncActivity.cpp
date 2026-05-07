@@ -233,6 +233,7 @@ void KOReaderSyncActivity::performUpload() {
 
 void KOReaderSyncActivity::onEnter() {
   Activity::onEnter();
+  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
