@@ -38,7 +38,7 @@ Last update: April, 12th, 2026
 | Reader                               | Visual appeal | Functionality | Formats | Pros | Cons | Custom fonts | CJK | Bluetooth |
 | ------------------------------------ | ------------- | ------------- | ------- | ---- | ---- | ------------ | --- | --- |
 | [Stock](https://www.xteink.com)       | Okay          | Reader        | XTC, EPUB, TXT | Frequent official updates | Lot of rendering issues | Yes | Yes | Yes |
-| [THIS FORK: CrossPoint ++](https://github.com/jpirnay/crosspoint-reader) | Okay | Calibre Wireless support; Proper KOReader progress sync; Wi-Fi transfer; Book Info; Clock, Weather Info | EPUB, XTC, TXT, MD | Faster integration of functionality | Small team | No | No | No |
+| [THIS FORK: CrossPoint ++](https://github.com/jpirnay/crosspoint-reader) | Okay | Calibre Wireless support; Proper KOReader progress sync; Wi-Fi transfer; Book Info; Clock, Weather Info | EPUB, XTC, TXT, MD | Faster integration of functionality | Small team | Yes | Limited | No |
 | [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) | Okay | Calibre Wireless support; KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | Biggest community | Least common denominator approach | No | No | No |
 | [CrossPet](https://github.com/trilwu/crosspet) | Excellent, Playful | Virtual pet motivator; mini-games | EPUB, TXT | A lot of additional apps | Higher battery drain, Small team, bloaty | Yes | Yes | Yes |
 | [Papyrix](https://github.com/bigbag/papyrix-reader) | Minimalist | Calibre Wireless support; exFAT support | EPUB, FB2, MD, TXT | A lot of good ideas | Small team | Yes | Yes | No |
@@ -46,3 +46,4 @@ Last update: April, 12th, 2026
 | [vCodex](https://github.com/franssjz/cpr-vcodex) | Nice | mainly crosspoint functionality plus reading statistics | EPUB, XTC, TXT | Good reading stats | Small team | No | No | No |
 | [PlusPoint](https://github.com/ngxson/pluspoint-reader) | Okay | Experimental | EPUB, TXT, JS Apps | Support for custom JS apps; better RTC | Based on older code, small team | Yes | Yes | No |
 | [SUMI](https://github.com/psychoplath9450/SUMI) | Nice | Lua custom apps; Bluetooth keyboard support for notes; Game Boy emulator; Bluetooth Transfer | EPUB, TXT, XTC, MD | Many apps, customizable, Papyrix fork | Single Contributor, **No Wi-Fi** | Yes | Yes | Yes |
+| [CrossInk](https://github.com/uxjulia/CrossInk) | Okay | Calibre Wireless support; KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | Small team | One of the best alternatives | No | No | No |
