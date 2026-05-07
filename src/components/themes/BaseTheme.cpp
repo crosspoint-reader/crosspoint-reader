@@ -20,37 +20,6 @@ constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
 
-// Helper: draw battery icon at given position
-void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight, uint16_t percentage) {
-  // Draw battery outline (shared code)
-  BaseTheme::drawBatteryOutline(renderer, x, y, battWidth, rectHeight);
-
-  const bool charging = gpio.isUsbConnected();
-
-  // The +1 is to round up, so that we always fill at least one pixel
-  const int maxFillWidth = battWidth - 5;
-  const int fillHeight = rectHeight - 4;
-  if (maxFillWidth <= 0 || fillHeight <= 0) {
-    return;
-  }
-  int filledWidth = percentage * maxFillWidth / 100 + 1;
-  if (filledWidth > maxFillWidth) {
-    filledWidth = maxFillWidth;
-  }
-
-  // When charging, ensure minimum fill so lightning bolt is fully visible
-  constexpr int minFillForBolt = 8;
-  if (charging && filledWidth < minFillForBolt) {
-    filledWidth = std::min(minFillForBolt, maxFillWidth);
-  }
-
-  renderer.fillRect(x + 2, y + 2, filledWidth, fillHeight);
-
-  // Draw lightning bolt when charging (white/inverted on black fill for visibility)
-  if (charging) {
-    BaseTheme::drawBatteryLightningBolt(renderer, x + 4, y + 2);
-  }
-}
 }  // namespace
 
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
@@ -79,6 +48,33 @@ void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX,
   renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
 }
 
+void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
+  const bool charging = gpio.isUsbConnected();
+
+  const int maxFillWidth = rect.width - 5;
+  const int fillHeight = rect.height - 4;
+  if (maxFillWidth <= 0 || fillHeight <= 0) {
+    return;
+  }
+  // +1 to round up so we always fill at least one pixel
+  int filledWidth = percentage * maxFillWidth / 100 + 1;
+  if (filledWidth > maxFillWidth) {
+    filledWidth = maxFillWidth;
+  }
+
+  // When charging, ensure minimum fill so lightning bolt is fully visible
+  constexpr int minFillForBolt = 8;
+  if (charging && filledWidth < minFillForBolt) {
+    filledWidth = std::min(minFillForBolt, maxFillWidth);
+  }
+
+  renderer.fillRect(rect.x + 2, rect.y + 2, filledWidth, fillHeight);
+
+  if (charging) {
+    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
+  }
+}
+
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = powerManager.getBatteryPercentage();
@@ -86,11 +82,12 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + BaseTheme::batteryPercentSpacing + BaseMetrics::values.batteryWidth,
-                      rect.y, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
   }
 
-  drawBatteryIcon(renderer, rect.x, y, BaseMetrics::values.batteryWidth, rect.height, percentage);
+  const Rect iconRect{rect.x, y, rect.width, rect.height};
+  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
+  fillBatteryIcon(renderer, iconRect, percentage);
 }
 
 void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
@@ -102,16 +99,12 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    // Clear the area where we're going to draw the text to prevent ghosting
-    const auto textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.fillRect(rect.x - textWidth - BaseTheme::batteryPercentSpacing, rect.y, textWidth, textHeight, false);
-    // Draw text to the left of the icon
-    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - BaseTheme::batteryPercentSpacing, rect.y,
-                      percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
   }
 
-  // Icon is already at correct position from rect.x
-  drawBatteryIcon(renderer, rect.x, y, BaseMetrics::values.batteryWidth, rect.height, percentage);
+  const Rect iconRect{rect.x, y, rect.width, rect.height};
+  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
+  fillBatteryIcon(renderer, iconRect, percentage);
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
