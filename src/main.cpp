@@ -394,12 +394,13 @@ void loop() {
     return;
   }
   if (screenshotComboActive) {
-    screenshotButtonsReleased = true;
     if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
     if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
+      screenshotButtonsReleased = true;
       screenshotComboActive = false;
       return;
     }
+    screenshotButtonsReleased = true;
     screenshotComboActive = false;
   }
 
