@@ -176,28 +176,10 @@ void ClipSelectionActivity::loop() {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
       std::string text;
-      std::vector<ClippingResult::AnnotationRect> rects;
-      rects.reserve(to - from + 1);
-      auto pushWordRect = [this](int i, std::vector<ClippingResult::AnnotationRect>& out) {
-        int rx = words[i].x;
-        int rw = words[i].w;
-        const auto& t = words[i].text;
-        if (t.size() >= 3 && static_cast<unsigned char>(t[0]) == 0xE2 && static_cast<unsigned char>(t[1]) == 0x80 &&
-            static_cast<unsigned char>(t[2]) == 0x83) {
-          const auto s = static_cast<EpdFontFamily::Style>(words[i].style & ~EpdFontFamily::UNDERLINE);
-          const int skip = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s);
-          rx += skip;
-          rw -= skip;
-        }
-        out.push_back({static_cast<int16_t>(rx), static_cast<int16_t>(words[i].y), static_cast<int16_t>(rw),
-                       static_cast<int16_t>(words[i].h), static_cast<uint16_t>(startPageInSection + words[i].pageIdx)});
-      };
-      auto stripEmSpace = [](const std::string& w) -> const std::string& {
-        static thread_local std::string buf;
+      auto stripEmSpace = [](const std::string& w) -> std::string {
         if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
             static_cast<unsigned char>(w[2]) == 0x83) {
-          buf = w.substr(3);
-          return buf;
+          return w.substr(3);
         }
         return w;
       };
@@ -205,6 +187,15 @@ void ClipSelectionActivity::loop() {
         return w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
                static_cast<unsigned char>(w[2]) == 0x83;
       };
+      auto stripTrailingHyphen = [](std::string w) -> std::string {
+        while (!w.empty() && w.back() == '-') w.pop_back();
+        return w;
+      };
+
+      constexpr int ANCHOR_WORDS = 4;
+      std::string startAnchor;
+      int anchorCount = 0;
+
       for (int i = from; i <= to; ++i) {
         const auto& wtext = stripEmSpace(words[i].text);
         const bool yGap =
@@ -223,7 +214,6 @@ void ClipSelectionActivity::loop() {
             LOG_DBG("CLIP", "MERGE w[%d] \"%.15s\"+\"%.15s\"", i - 1, prevStripped.c_str(), wtext.c_str());
             text.pop_back();
             text += wtext;
-            pushWordRect(i, rects);
             continue;
           }
         }
@@ -238,11 +228,59 @@ void ClipSelectionActivity::loop() {
           }
         }
         text += wtext;
-        pushWordRect(i, rects);
+
+        if (anchorCount < ANCHOR_WORDS) {
+          if (!startAnchor.empty()) startAnchor += ' ';
+          startAnchor += stripTrailingHyphen(wtext);
+          anchorCount++;
+        }
       }
 
+      std::string endAnchorFull;
+      anchorCount = 0;
+      for (int i = to; i >= from && anchorCount < ANCHOR_WORDS; --i) {
+        const auto wtext = stripTrailingHyphen(stripEmSpace(words[i].text));
+        if (!endAnchorFull.empty())
+          endAnchorFull = wtext + ' ' + endAnchorFull;
+        else
+          endAnchorFull = wtext;
+        anchorCount++;
+      }
+
+      constexpr int CONTEXT_WORDS = 3;
+      std::string beforeStart;
+      for (int i = from - 1; i >= 0 && (from - i) <= CONTEXT_WORDS; --i) {
+        const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
+        if (stripped.find_first_not_of(' ') == std::string::npos) continue;
+        if (!beforeStart.empty())
+          beforeStart = stripped + ' ' + beforeStart;
+        else
+          beforeStart = stripped;
+      }
+      std::string afterEnd;
+      for (int i = to + 1; i < total && (i - to) <= CONTEXT_WORDS; ++i) {
+        const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
+        if (stripped.find_first_not_of(' ') == std::string::npos) continue;
+        if (!afterEnd.empty())
+          afterEnd += ' ' + stripped;
+        else
+          afterEnd = stripped;
+      }
+
+      LOG_DBG("CLIP", "Anchors: start=\"%.40s\" end=\"%.40s\" ctx=[\"%.20s\"] [\"%.20s\"] wc=%d", startAnchor.c_str(),
+              endAnchorFull.c_str(), beforeStart.c_str(), afterEnd.c_str(), to - from + 1);
+
       ActivityResult result;
-      result.data = ClippingResult{std::move(text), from, to, std::move(rects)};
+      result.data = ClippingResult{std::move(text),
+                                   from,
+                                   to,
+                                   static_cast<uint16_t>(startPageInSection + words[from].pageIdx),
+                                   static_cast<uint16_t>(startPageInSection + words[to].pageIdx),
+                                   std::move(startAnchor),
+                                   std::move(endAnchorFull),
+                                   std::move(beforeStart),
+                                   std::move(afterEnd),
+                                   static_cast<uint16_t>(to - from + 1)};
       setResult(std::move(result));
       finish();
     }

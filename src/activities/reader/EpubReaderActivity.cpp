@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <sstream>
 
 #include "ClipSelectionActivity.h"
 #include "CrossPointSettings.h"
@@ -480,6 +481,14 @@ void EpubReaderActivity::startClipSelection() {
   std::vector<ClipSelectionActivity::WordRef> words;
   words.reserve(pagesToLoad * 60);
 
+  auto stripEmSpace = [](const std::string& w) -> std::string {
+    if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+        static_cast<unsigned char>(w[2]) == 0x83) {
+      return w.substr(3);
+    }
+    return w;
+  };
+
   for (int pi = 0; pi < pagesToLoad; ++pi) {
     section->currentPage = startPage + pi;
     auto page = section->loadPageFromSectionFile();
@@ -495,6 +504,7 @@ void EpubReaderActivity::startClipSelection() {
       const auto& styles = block.getWordStyles();
 
       for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
+        if (stripEmSpace(wlist[i]).find_first_not_of(' ') == std::string::npos) continue;
         const int wx = mLeft + line.xPos + xpos[i];
         const int wy = mTop + line.yPos;
         const auto s = i < static_cast<int>(styles.size()) ? styles[i] : EpdFontFamily::REGULAR;
@@ -559,14 +569,23 @@ void EpubReaderActivity::startClipSelection() {
       [this, chapterTitle, startPage](const ActivityResult& result) {
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
+          LOG_DBG(
+              "ANNOT",
+              "Clip result: text=%.40s start=\"%.20s\" end=\"%.20s\" sp=%d esp=%d wc=%d ctx=[\"%.20s\"] [\"%.20s\"]",
+              clip.text.c_str(), clip.startText.c_str(), clip.endText.c_str(), clip.sectionPage, clip.endSectionPage,
+              clip.wordCount, clip.beforeStartText.c_str(), clip.afterEndText.c_str());
           if (!clip.text.empty()) {
             ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle, startPage + 1, clip.text);
-            if (!clip.rects.empty()) {
+            if (!clip.startText.empty() && !clip.endText.empty()) {
               AnnotationsManager::AnnotationRecord rec;
               rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
-              for (const auto& r : clip.rects) {
-                rec.rects.push_back({r.x, r.y, r.w, r.h, r.sectionPage});
-              }
+              rec.sectionPage = clip.sectionPage;
+              rec.endSectionPage = clip.endSectionPage;
+              rec.wordCount = clip.wordCount;
+              rec.startText = clip.startText;
+              rec.endText = clip.endText;
+              rec.beforeStartText = clip.beforeStartText;
+              rec.afterEndText = clip.afterEndText;
               annotations.add(std::move(rec));
               annotationsDirty = true;
               annotations.save(epub->getCachePath().c_str());
@@ -909,28 +928,225 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int screenH = renderer.getScreenHeight();
     const int screenW = renderer.getScreenWidth();
     const auto sectionAnnotations = annotations.forSection(static_cast<uint16_t>(currentSpineIndex));
-    for (const auto& rec : sectionAnnotations) {
-      struct RowSpan {
-        int underlineY, xMin, xMax;
+
+    if (!sectionAnnotations.empty()) {
+      auto stripEmSpace = [](const std::string& w) -> std::string {
+        if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+            static_cast<unsigned char>(w[2]) == 0x83) {
+          return w.substr(3);
+        }
+        return w;
       };
-      std::vector<RowSpan> spans;
-      spans.reserve(rec.rects.size());
-      for (const auto& r : rec.rects) {
-        if (r.sectionPage != static_cast<uint16_t>(section->currentPage)) continue;
-        const int underlineY = r.y + r.h;
-        if (underlineY < 0 || underlineY >= screenH) continue;
-        if (r.x < 0 || r.x >= screenW) continue;
-        auto it = std::find_if(spans.begin(), spans.end(),
-                               [underlineY](const RowSpan& s) { return s.underlineY == underlineY; });
-        if (it != spans.end()) {
-          if (r.x < it->xMin) it->xMin = r.x;
-          if (r.x + r.w - 1 > it->xMax) it->xMax = r.x + r.w - 1;
-        } else {
-          spans.push_back({underlineY, r.x, r.x + r.w - 1});
+      auto stripTrailingHyphen = [](std::string w) -> std::string {
+        while (!w.empty() && w.back() == '-') w.pop_back();
+        return w;
+      };
+
+      struct PageWord {
+        int x, w, y, h;
+        std::string text;
+      };
+      std::vector<PageWord> pageWords;
+      const int fontId = SETTINGS.getReaderFontId();
+
+      for (const auto& el : page->elements) {
+        if (el->getTag() != TAG_PageLine) continue;
+        const auto& line = static_cast<const PageLine&>(*el);
+        if (!line.getBlock()) continue;
+        const auto& block = *line.getBlock();
+        const auto& wlist = block.getWords();
+        const auto& xpos = block.getWordXpos();
+        const int lineH = renderer.getLineHeight(fontId);
+        const int wy = orientedMarginTop + line.yPos;
+        for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
+          const auto& rawText = wlist[i];
+          const auto s =
+              i < static_cast<int>(block.getWordStyles().size()) ? block.getWordStyles()[i] : EpdFontFamily::REGULAR;
+          const bool hasEm = rawText.size() >= 3 && static_cast<unsigned char>(rawText[0]) == 0xE2 &&
+                             static_cast<unsigned char>(rawText[1]) == 0x80 &&
+                             static_cast<unsigned char>(rawText[2]) == 0x83;
+          const int emSkip = hasEm ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s) : 0;
+          const int wordW = renderer.getTextWidth(fontId, rawText.c_str(), s) - emSkip;
+          const auto stripped = stripTrailingHyphen(stripEmSpace(rawText));
+          if (stripped.find_first_not_of(' ') == std::string::npos) continue;
+          pageWords.push_back({orientedMarginLeft + line.xPos + xpos[i] + emSkip, wordW, wy, lineH, stripped});
         }
       }
-      for (const auto& span : spans) {
-        renderer.drawLine(span.xMin, span.underlineY, span.xMax, span.underlineY, 2, true);
+
+      auto findAnchorStart = [&pageWords](const std::string& anchor) -> int {
+        if (anchor.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(anchor);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+
+        for (int start = 0; start <= static_cast<int>(pageWords.size()) - static_cast<int>(tokens.size()); ++start) {
+          bool match = true;
+          for (int t = 0; t < static_cast<int>(tokens.size()); ++t) {
+            if (pageWords[start + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return start;
+        }
+        return -1;
+      };
+
+      auto findAnchorEnd = [&pageWords](const std::string& anchor) -> int {
+        if (anchor.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(anchor);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+        const int tsize = static_cast<int>(tokens.size());
+
+        for (int end = pageWords.size() - 1; end >= tsize - 1; --end) {
+          bool match = true;
+          for (int t = 0; t < tsize; ++t) {
+            if (pageWords[end - tsize + 1 + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return end;
+        }
+        return -1;
+      };
+
+      auto findContextStart = [&pageWords](const std::string& context) -> int {
+        if (context.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(context);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+        const int tsize = static_cast<int>(tokens.size());
+        for (int i = 0; i <= static_cast<int>(pageWords.size()) - tsize; ++i) {
+          bool match = true;
+          for (int t = 0; t < tsize; ++t) {
+            if (pageWords[i + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return i + tsize;
+        }
+        return -1;
+      };
+
+      auto findContextEnd = [&pageWords](const std::string& context) -> int {
+        if (context.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(context);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+        const int tsize = static_cast<int>(tokens.size());
+        for (int i = 0; i <= static_cast<int>(pageWords.size()) - tsize; ++i) {
+          bool match = true;
+          for (int t = 0; t < tsize; ++t) {
+            if (pageWords[i + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return i - 1;
+        }
+        return -1;
+      };
+
+      LOG_DBG("ANNOT", "Page %d: %zu annotations, %zu pageWords", section->currentPage, sectionAnnotations.size(),
+              pageWords.size());
+
+      for (const auto& rec : sectionAnnotations) {
+        const auto curPage = static_cast<uint16_t>(section->currentPage);
+        if (curPage < rec.sectionPage || curPage > rec.endSectionPage) continue;
+
+        const bool isStartPage = (curPage == rec.sectionPage);
+        const bool isEndPage = (curPage == rec.endSectionPage);
+        const bool isSinglePage = (isStartPage && isEndPage);
+
+        int startIdx = -1;
+        int endIdx = -1;
+
+        if (isSinglePage) {
+          startIdx = findContextStart(rec.beforeStartText);
+          if (startIdx >= 0 && rec.wordCount > 0) {
+            endIdx = startIdx + rec.wordCount - 1;
+            if (endIdx >= static_cast<int>(pageWords.size())) endIdx = static_cast<int>(pageWords.size()) - 1;
+          }
+          if (startIdx < 0) startIdx = findAnchorStart(rec.startText);
+          if (startIdx >= 0 && endIdx < 0) endIdx = findAnchorEnd(rec.endText);
+          if (startIdx < 0) continue;
+          if (endIdx < 0 || endIdx < startIdx) continue;
+          LOG_DBG("ANNOT", "  rec sp=%d-%d ctx=[%.15s/%.15s] wc=%d -> %d..%d", rec.sectionPage, rec.endSectionPage,
+                  rec.beforeStartText.c_str(), rec.afterEndText.c_str(), rec.wordCount, startIdx, endIdx);
+        } else if (isStartPage) {
+          startIdx = findContextStart(rec.beforeStartText);
+          if (startIdx < 0) {
+            std::string anchor = rec.startText;
+            while (!anchor.empty()) {
+              startIdx = findAnchorStart(anchor);
+              if (startIdx >= 0) break;
+              auto pos = anchor.rfind(' ');
+              if (pos == std::string::npos) break;
+              anchor.erase(pos);
+            }
+          }
+          LOG_DBG("ANNOT", "  rec sp=%d-%d (start) ctx=[%.15s] -> idx=%d", rec.sectionPage, rec.endSectionPage,
+                  rec.beforeStartText.c_str(), startIdx);
+          if (startIdx < 0) continue;
+          endIdx = static_cast<int>(pageWords.size()) - 1;
+        } else if (isEndPage) {
+          endIdx = findContextEnd(rec.afterEndText);
+          if (endIdx < 0) {
+            std::string anchor = rec.endText;
+            while (!anchor.empty()) {
+              endIdx = findAnchorEnd(anchor);
+              if (endIdx >= 0) break;
+              auto pos = anchor.find(' ');
+              if (pos == std::string::npos) break;
+              anchor.erase(0, pos + 1);
+            }
+          }
+          LOG_DBG("ANNOT", "  rec sp=%d-%d (end) ctx=[%.15s] -> idx=%d", rec.sectionPage, rec.endSectionPage,
+                  rec.afterEndText.c_str(), endIdx);
+          if (endIdx < 0) continue;
+          startIdx = 0;
+        } else {
+          startIdx = 0;
+          endIdx = static_cast<int>(pageWords.size()) - 1;
+          LOG_DBG("ANNOT", "  rec sp=%d-%d (middle) full page", rec.sectionPage, rec.endSectionPage);
+        }
+
+        struct RowSpan {
+          int underlineY, xMin, xMax;
+        };
+        std::vector<RowSpan> spans;
+        spans.reserve(endIdx - startIdx + 1);
+
+        for (int i = startIdx; i <= endIdx; ++i) {
+          const auto& pw = pageWords[i];
+          if (pw.text.empty()) continue;
+          const int underlineY = pw.y + pw.h;
+          if (underlineY < 0 || underlineY >= screenH) continue;
+          if (pw.x < 0 || pw.x >= screenW) continue;
+          auto it = std::find_if(spans.begin(), spans.end(),
+                                 [underlineY](const RowSpan& s) { return s.underlineY == underlineY; });
+          if (it != spans.end()) {
+            if (pw.x < it->xMin) it->xMin = pw.x;
+            if (pw.x + pw.w - 1 > it->xMax) it->xMax = pw.x + pw.w - 1;
+          } else {
+            spans.push_back({underlineY, pw.x, pw.x + pw.w - 1});
+          }
+        }
+
+        for (const auto& span : spans) {
+          renderer.drawLine(span.xMin, span.underlineY, span.xMax, span.underlineY, 2, true);
+        }
       }
     }
   }

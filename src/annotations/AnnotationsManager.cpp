@@ -12,18 +12,37 @@ std::string AnnotationsManager::annotationsPath(const char* bookCachePath) {
   return std::string(bookCachePath) + ANNOT_FILENAME;
 }
 
+static bool readString(HalFile& file, std::string& out) {
+  uint16_t len = 0;
+  if (file.read(&len, sizeof(len)) != sizeof(len)) return false;
+  if (len == 0) {
+    out.clear();
+    return true;
+  }
+  out.resize(len);
+  return file.read(&out[0], len) == len;
+}
+
+static void writeString(HalFile& file, const std::string& s) {
+  const uint16_t len = static_cast<uint16_t>(s.size());
+  file.write(&len, sizeof(len));
+  if (len > 0) {
+    file.write(s.c_str(), len);
+  }
+}
+
 bool AnnotationsManager::load(const char* bookCachePath) {
   records.clear();
   const std::string path = annotationsPath(bookCachePath);
 
   HalFile file;
   if (!Storage.openFileForRead("ANNOT", path.c_str(), file)) {
-    return true;  // No annotations file yet — not an error
+    return true;
   }
 
   uint8_t version = 0;
   uint16_t count = 0;
-  if (file.read(&version, 1) != 1 || version != FILE_VERSION) {
+  if (file.read(&version, 1) != 1 || version < 4 || version > FILE_VERSION) {
     file.close();
     return true;
   }
@@ -36,18 +55,26 @@ bool AnnotationsManager::load(const char* bookCachePath) {
   for (uint16_t i = 0; i < count; ++i) {
     AnnotationRecord rec;
     if (file.read(&rec.sectionIdx, sizeof(rec.sectionIdx)) != sizeof(rec.sectionIdx)) break;
-
-    uint16_t rectCount = 0;
-    if (file.read(&rectCount, sizeof(rectCount)) != sizeof(rectCount)) break;
-    rec.rects.resize(rectCount);
-    for (uint16_t r = 0; r < rectCount; ++r) {
-      if (file.read(&rec.rects[r], sizeof(Rect)) != sizeof(Rect)) goto done;
+    if (file.read(&rec.sectionPage, sizeof(rec.sectionPage)) != sizeof(rec.sectionPage)) break;
+    if (version >= 5) {
+      if (file.read(&rec.endSectionPage, sizeof(rec.endSectionPage)) != sizeof(rec.endSectionPage)) break;
+    } else {
+      rec.endSectionPage = rec.sectionPage;
     }
-
+    if (version >= 6) {
+      if (file.read(&rec.wordCount, sizeof(rec.wordCount)) != sizeof(rec.wordCount)) break;
+    } else {
+      rec.wordCount = 0;
+    }
+    if (!readString(file, rec.startText)) break;
+    if (!readString(file, rec.endText)) break;
+    if (version >= 6) {
+      if (!readString(file, rec.beforeStartText)) break;
+      if (!readString(file, rec.afterEndText)) break;
+    }
     records.push_back(std::move(rec));
   }
 
-done:
   file.close();
   LOG_DBG("ANNOT", "Loaded %zu annotations from %s", records.size(), path.c_str());
   return true;
@@ -69,11 +96,13 @@ bool AnnotationsManager::save(const char* bookCachePath) const {
 
   for (const auto& rec : records) {
     file.write(&rec.sectionIdx, sizeof(rec.sectionIdx));
-    const uint16_t rectCount = static_cast<uint16_t>(rec.rects.size());
-    file.write(&rectCount, sizeof(rectCount));
-    for (const auto& r : rec.rects) {
-      file.write(&r, sizeof(Rect));
-    }
+    file.write(&rec.sectionPage, sizeof(rec.sectionPage));
+    file.write(&rec.endSectionPage, sizeof(rec.endSectionPage));
+    file.write(&rec.wordCount, sizeof(rec.wordCount));
+    writeString(file, rec.startText);
+    writeString(file, rec.endText);
+    writeString(file, rec.beforeStartText);
+    writeString(file, rec.afterEndText);
   }
 
   file.flush();
