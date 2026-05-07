@@ -19,7 +19,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -223,8 +223,14 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     // Track position within this source line (in bytes from pos)
     size_t lineBytePos = 0;
 
-    // Word wrap if needed
-    while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
+    // Emit at least one visual line for each source line (including blank lines),
+    // then continue with wrapping when needed.
+    do {
+      if (line.empty()) {
+        outLines.emplace_back();
+        break;
+      }
+
       int lineWidth = renderer.getTextWidth(cachedFontId, line.c_str());
 
       if (lineWidth <= viewportWidth) {
@@ -264,7 +270,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       }
       lineBytePos += skipChars;
       line = line.substr(skipChars);
-    }
+    } while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage);
 
     // Determine how much of the source buffer we consumed
     if (line.empty()) {
