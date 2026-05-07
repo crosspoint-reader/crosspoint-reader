@@ -160,6 +160,10 @@ std::unique_ptr<PageTableFragment> PageTableFragment::deserialize(FsFile& file) 
       serialization::readPod(file, cell.isHeader);
       uint8_t lineCount;
       serialization::readPod(file, lineCount);
+      if (lineCount > MAX_CELL_LINES) {
+        LOG_ERR("PGE", "TableFragment: invalid lineCount %u at row %u cell %u", lineCount, r, c);
+        return nullptr;
+      }
       cell.lines.reserve(lineCount);
       for (uint8_t l = 0; l < lineCount; l++) {
         auto tb = TextBlock::deserialize(file);

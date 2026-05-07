@@ -1315,6 +1315,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (self->currentTable && self->currentTable->depth > 1 && strcmp(name, "table") == 0) {
     self->partWordBufferIndex = 0;
     self->currentTable->depth -= 1;
+    self->depth -= 1;
     LOG_DBG("EHP", "nested table end, depth now %d", self->currentTable->depth);
     return;
   }
