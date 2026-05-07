@@ -62,7 +62,11 @@ void KOReaderSyncActivity::ensureEpubLoaded() {
     epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
     epub->setupCacheDir();
     // Load metadata only (no CSS needed for progress mapping, don't rebuild if cache is missing).
-    epub->load(false, true);
+    if (!epub->load(false, true)) {
+      LOG_ERR("KOSync", "Failed to load epub for progress mapping");
+      epub.reset();
+      return;
+    }
     LOG_DBG("KOSync", "Epub loaded (heap: %u)", (unsigned)ESP.getFreeHeap());
   }
 }
@@ -165,6 +169,15 @@ void KOReaderSyncActivity::performSync() {
   // Epub was released before sync to free RAM for the TLS handshake — reload it now.
   hasRemoteProgress = true;
   ensureEpubLoaded();
+  if (!epub) {
+    {
+      RenderLock lock(*this);
+      state = SYNC_FAILED;
+      statusMessage = "";
+    }
+    requestUpdate(true);
+    return;
+  }
 
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);

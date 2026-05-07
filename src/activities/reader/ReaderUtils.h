@@ -16,6 +16,11 @@ constexpr unsigned long SKIP_HOLD_MS = 700;
 
 // Persists reader progress for an EPUB to its cache directory. Returns true on success.
 inline bool saveProgress(Epub& epub, int spineIndex, int currentPage, int pageCount) {
+  if (spineIndex < 0 || spineIndex > 0xFFFF || currentPage < 0 || currentPage > 0xFFFF || pageCount < 0 ||
+      pageCount > 0xFFFF) {
+    LOG_ERR("ERS", "Progress values out of range: spine=%d page=%d count=%d", spineIndex, currentPage, pageCount);
+    return false;
+  }
   FsFile f;
   if (!Storage.openFileForWrite("ERS", epub.getCachePath() + "/progress.bin", f)) {
     LOG_ERR("ERS", "Could not open progress file for write!");
