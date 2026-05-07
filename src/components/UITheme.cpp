@@ -13,6 +13,7 @@
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
+#include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 
 namespace {
@@ -65,6 +66,16 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Lyra 3 Covers theme");
       currentTheme = std::make_unique<Lyra3CoversTheme>();
       currentMetrics = &Lyra3CoversMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::LYRA_CAROUSEL:
+      LOG_DBG("UI", "Using Lyra Carousel theme");
+      currentTheme = std::make_unique<LyraCarouselTheme>();
+      currentMetrics = &LyraCarouselMetrics::values;
+      break;
+    default:
+      LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));
+      currentTheme = std::make_unique<BaseTheme>();
+      currentMetrics = &BaseMetrics::values;
       break;
   }
 }
@@ -157,6 +168,14 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
   size_t pos = coverBmpPath.find("[HEIGHT]", 0);
   if (pos != std::string::npos) {
     coverBmpPath.replace(pos, 8, std::to_string(coverHeight));
+  }
+  return coverBmpPath;
+}
+
+std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int width, int height) {
+  size_t pos = coverBmpPath.find("[HEIGHT]", 0);
+  if (pos != std::string::npos) {
+    coverBmpPath.replace(pos, 8, std::to_string(width) + "x" + std::to_string(height));
   }
   return coverBmpPath;
 }

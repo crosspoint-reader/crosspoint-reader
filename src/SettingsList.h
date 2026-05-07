@@ -79,8 +79,9 @@ inline const std::vector<SettingInfo> list = {
     SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                         StrId::STR_CAT_DISPLAY),
     SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                      {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED}, "uiTheme",
-                      StrId::STR_CAT_DISPLAY),
+                      {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                       StrId::STR_THEME_LYRA_CAROUSEL},
+                      "uiTheme", StrId::STR_CAT_DISPLAY),
 
     // --- Reader ---
     // General reader settings

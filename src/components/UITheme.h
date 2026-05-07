@@ -60,6 +60,7 @@ class UITheme {
   // The mapping to logical edges is orientation-dependent.
   static Rect getContentRect(const GfxRenderer& renderer, bool hasBottomHints, bool hasSideHints);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
+  static std::string getCoverThumbPath(std::string coverBmpPath, int width, int height);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarTopHeight(bool forceStatusItems = false);
   static int getStatusBarBottomHeight(bool forceStatusItems = false);

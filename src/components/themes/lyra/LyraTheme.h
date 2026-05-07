@@ -81,4 +81,5 @@ class LyraTheme : public BaseTheme {
  protected:
   static int getRecentBookProgressPercent(const RecentBook& book);
   static void drawProgressBadge(const GfxRenderer& renderer, Rect anchorRect, int progressPercent);
+  static const uint8_t* iconForName(UIIcon icon, int size);
 };

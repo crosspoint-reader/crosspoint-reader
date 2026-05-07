@@ -81,7 +81,9 @@ void drawLyraBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidt
   }
 }
 
-const uint8_t* iconForName(UIIcon icon, int size) {
+}  // namespace
+
+const uint8_t* LyraTheme::iconForName(UIIcon icon, int size) {
   if (size == 24) {
     switch (icon) {
       case UIIcon::Folder:
@@ -125,7 +127,6 @@ const uint8_t* iconForName(UIIcon icon, int size) {
   }
   return nullptr;
 }
-}  // namespace
 
 // Reads the overall progress percent stored as the last byte of progress.bin.
 // The cache path is derived from the book path alone (no epub/xtc/txt loading needed).

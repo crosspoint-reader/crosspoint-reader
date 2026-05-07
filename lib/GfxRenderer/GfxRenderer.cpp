@@ -1482,6 +1482,61 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
+void GfxRenderer::drawIconInverted(const uint8_t bitmap[], const int x, const int y, const int width,
+                                   const int height) const {
+  // Portrait-mode coordinate transform (x↔y swap), matching drawIcon.
+  // OR with ~srcByte sets framebuffer bits to 1 (white) wherever the icon
+  // bitmap is 0 (black) — produces a white icon on a black background.
+  const int physX = y;
+  const int physY = getScreenWidth() - width - x;
+  const int imgW = height;  // dimensions swapped by portrait transform
+  const int imgH = width;
+  const int srcStride = (imgW + 7) / 8;
+
+  if (physX + imgW <= 0 || physX >= static_cast<int>(panelWidthBytes) * 8) return;
+  if (physY + imgH <= 0 || physY >= static_cast<int>(panelHeight)) return;
+
+  const int baseByte = (physX >= 0) ? (physX >> 3) : -(((-physX) + 7) >> 3);
+  const int bitShift = ((physX % 8) + 8) % 8;
+
+  const int trail = srcStride * 8 - imgW;
+  const uint8_t trailMask = static_cast<uint8_t>(0xFF << trail);
+  const int lastCol = srcStride - 1;
+
+  for (int row = 0; row < imgH; ++row) {
+    const int destY = physY + row;
+    if (destY < 0 || destY >= static_cast<int>(panelHeight)) continue;
+    const int rowBase = destY * static_cast<int>(panelWidthBytes);
+    const int srcOffset = row * srcStride;
+
+    if (bitShift == 0) {
+      for (int col = 0; col < srcStride; ++col) {
+        const int dst = baseByte + col;
+        if (dst < 0) continue;
+        if (dst >= static_cast<int>(panelWidthBytes)) break;
+        uint8_t inv = ~bitmap[srcOffset + col];
+        if (col == lastCol && trail > 0) inv &= trailMask;
+        frameBuffer[rowBase + dst] |= inv;
+      }
+    } else {
+      const int rsh = bitShift;
+      const int lsh = 8 - bitShift;
+      for (int col = 0; col < srcStride; ++col) {
+        uint8_t inv = ~bitmap[srcOffset + col];
+        if (col == lastCol && trail > 0) inv &= trailMask;
+        const int dstHi = baseByte + col;
+        const int dstLo = dstHi + 1;
+        if (dstHi >= 0 && dstHi < static_cast<int>(panelWidthBytes)) {
+          frameBuffer[rowBase + dstHi] |= static_cast<uint8_t>(inv >> rsh);
+        }
+        if (dstLo >= 0 && dstLo < static_cast<int>(panelWidthBytes)) {
+          frameBuffer[rowBase + dstLo] |= static_cast<uint8_t>(inv << lsh);
+        }
+      }
+    }
+  }
+}
+
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
