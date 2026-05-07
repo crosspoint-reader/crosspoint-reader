@@ -13,6 +13,7 @@
 enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
   TAG_PageImage = 2,  // New tag
+  TAG_PageHorizontalRule = 3,
 };
 
 // represents something that has been added to a page
@@ -53,6 +54,20 @@ class PageImage final : public PageElement {
   PageElementTag getTag() const override { return TAG_PageImage; }
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
   const ImageBlock& getImageBlock() const { return *imageBlock; }
+};
+
+class PageHorizontalRule final : public PageElement {
+  uint16_t width;
+  uint8_t thickness;
+
+ public:
+  PageHorizontalRule(uint16_t width, uint8_t thickness, const int16_t xPos, const int16_t yPos)
+      : PageElement(xPos, yPos), width(width), thickness(thickness) {}
+
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(FsFile& file) override;
+  PageElementTag getTag() const override { return TAG_PageHorizontalRule; }
+  static std::unique_ptr<PageHorizontalRule> deserialize(FsFile& file);
 };
 
 class Page {

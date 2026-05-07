@@ -1,5 +1,6 @@
 #include "Page.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
 
@@ -82,6 +83,47 @@ bool Page::serialize(FsFile& file) const {
   return true;
 }
 
+void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  (void)fontId;
+  if (width == 0 || thickness == 0) {
+    return;
+  }
+
+  renderer.drawLine(xPos + xOffset, yPos + yOffset, xPos + xOffset + width - 1, yPos + yOffset, thickness, true);
+}
+
+bool PageHorizontalRule::serialize(FsFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, width);
+  serialization::writePod(file, thickness);
+  return true;
+}
+
+std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(FsFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  uint16_t width = 0;
+  uint8_t thickness = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, width);
+  serialization::readPod(file, thickness);
+
+  if (width == 0 || thickness == 0) {
+    LOG_ERR("PGE", "Deserialization failed: invalid horizontal rule metadata (width=%u thickness=%u)", width,
+            thickness);
+    return nullptr;
+  }
+
+  auto* rule = new (std::nothrow) PageHorizontalRule(width, thickness, xPos, yPos);
+  if (!rule) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageHorizontalRule");
+    return nullptr;
+  }
+  return std::unique_ptr<PageHorizontalRule>(rule);
+}
+
 std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
 
@@ -98,6 +140,12 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
     } else if (tag == TAG_PageImage) {
       auto pi = PageImage::deserialize(file);
       page->elements.push_back(std::move(pi));
+    } else if (tag == TAG_PageHorizontalRule) {
+      auto rule = PageHorizontalRule::deserialize(file);
+      if (!rule) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(rule));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;
