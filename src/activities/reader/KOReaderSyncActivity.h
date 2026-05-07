@@ -21,20 +21,20 @@
  */
 class KOReaderSyncActivity final : public Activity {
  public:
-  explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                const std::shared_ptr<Epub>& epub, const std::string& epubPath, int currentSpineIndex,
-                                int currentPage, int totalPagesInSpine,
+  explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
+                                int currentSpineIndex, int currentPage, int totalPagesInSpine,
+                                KOReaderPosition localKoPos, std::string localChapterName,
                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt)
       : Activity("KOReaderSync", renderer, mappedInput),
-        epub(epub),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
         totalPagesInSpine(totalPagesInSpine),
         currentParagraphIndex(currentParagraphIndex),
+        localChapterName(std::move(localChapterName)),
         remoteProgress{},
         remotePosition{},
-        localProgress{} {}
+        localProgress(std::move(localKoPos)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -55,8 +55,9 @@ class KOReaderSyncActivity final : public Activity {
     NO_CREDENTIALS
   };
 
-  std::shared_ptr<Epub> epub;
+  std::shared_ptr<Epub> epub;  // null until lazy-loaded after TLS in performSync()
   std::string epubPath;
+  std::string localChapterName;
   int currentSpineIndex;
   int currentPage;
   int totalPagesInSpine;
@@ -80,4 +81,5 @@ class KOReaderSyncActivity final : public Activity {
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
+  void ensureEpubLoaded();
 };

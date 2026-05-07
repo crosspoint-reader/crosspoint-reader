@@ -6,6 +6,8 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 
+#include <cassert>
+
 #include "Epub/Section.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
@@ -15,16 +17,6 @@
 #include "fontIds.h"
 
 namespace {
-CrossPointPosition makeLocalPositionWithParagraph(const int spineIndex, const int page, const int totalPages,
-                                                  const std::optional<uint16_t>& paragraphIndex) {
-  CrossPointPosition pos = {spineIndex, page, totalPages};
-  if (paragraphIndex.has_value()) {
-    pos.paragraphIndex = *paragraphIndex;
-    pos.hasParagraphIndex = true;
-  }
-  return pos;
-}
-
 void syncTimeWithNTP() {
   // Stop SNTP if already running (can't reconfigure while running)
   if (esp_sntp_enabled()) {
@@ -60,6 +52,17 @@ void wifiOff() {
   delay(100);
 }
 }  // namespace
+
+void KOReaderSyncActivity::ensureEpubLoaded() {
+  if (!epub) {
+    LOG_DBG("KOSync", "Loading epub for progress mapping (heap: %u)", (unsigned)ESP.getFreeHeap());
+    epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
+    epub->setupCacheDir();
+    // Load metadata only (no CSS needed for progress mapping, don't rebuild if cache is missing).
+    epub->load(false, true);
+    LOG_DBG("KOSync", "Epub loaded (heap: %u)", (unsigned)ESP.getFreeHeap());
+  }
+}
 
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
@@ -141,8 +144,10 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  // Convert remote progress to CrossPoint position
+  // Epub was released before sync to free RAM for the TLS handshake — reload it now.
   hasRemoteProgress = true;
+  ensureEpubLoaded();
+
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
@@ -157,11 +162,7 @@ void KOReaderSyncActivity::performSync() {
       remotePosition.pageNumber = *paragraphPage;
     }
   }
-
-  // Calculate local progress in KOReader format (for display)
-  CrossPointPosition localPos =
-      makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine, currentParagraphIndex);
-  localProgress = ProgressMapper::toKOReader(epub, localPos);
+  // localProgress was pre-computed in EpubReaderActivity before the Epub was released.
 
   {
     RenderLock lock(*this);
@@ -185,15 +186,11 @@ void KOReaderSyncActivity::performUpload() {
   }
   requestUpdateAndWait();
 
-  // Convert current position to KOReader format
-  CrossPointPosition localPos =
-      makeLocalPositionWithParagraph(currentSpineIndex, currentPage, totalPagesInSpine, currentParagraphIndex);
-  KOReaderPosition koPos = ProgressMapper::toKOReader(epub, localPos);
-
+  // localProgress was pre-computed in EpubReaderActivity before the Epub was released.
   KOReaderProgress progress;
   progress.document = documentHash;
-  progress.progress = koPos.xpath;
-  progress.percentage = koPos.percentage;
+  progress.progress = localProgress.xpath;
+  progress.percentage = localProgress.percentage;
 
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
@@ -271,15 +268,16 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     // Show comparison
     renderer.drawCenteredText(UI_10_FONT_ID, 120, tr(STR_PROGRESS_FOUND), true, EpdFontFamily::BOLD);
 
-    // Get chapter names from TOC
+    // Remote chapter name requires Epub (loaded lazily in performSync before this state).
+    assert(epub);
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
-    const int localTocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
     const std::string remoteChapter =
         (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
                               : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(remotePosition.spineIndex + 1));
+    // Local chapter name was pre-computed before Epub was released.
     const std::string localChapter =
-        (localTocIndex >= 0) ? epub->getTocItem(localTocIndex).title
-                             : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
+        !localChapterName.empty() ? localChapterName
+                                  : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
 
     // Remote progress - chapter and page
     renderer.drawText(UI_10_FONT_ID, 20, 160, tr(STR_REMOTE_LABEL), true);

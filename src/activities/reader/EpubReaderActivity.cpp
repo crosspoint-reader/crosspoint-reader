@@ -21,6 +21,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -418,22 +419,62 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             paragraphIndex = *pIdx;
           }
         }
+
+        // Pre-compute local KO position and chapter name while Epub is still in RAM.
+        CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
+        if (paragraphIndex.has_value()) {
+          localPos.paragraphIndex = *paragraphIndex;
+          localPos.hasParagraphIndex = true;
+        }
+        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+        const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+        std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
+        const std::string savedEpubPath = epub->getPath();
+
+        // Release Epub and Section under RenderLock (same pattern as applyOrientation/pageTurn)
+        // to avoid racing with the render thread. Also persists currentPage before section drops.
+        LOG_DBG("KOSync", "Releasing epub for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
+        {
+          RenderLock lock(*this);
+          if (section) {
+            nextPageNumber = section->currentPage;
+          }
+          section.reset();
+          epub.reset();
+        }
+        LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
+
         startActivityForResult(
-            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, epub, epub->getPath(), currentSpineIndex,
-                                                   currentPage, totalPages, paragraphIndex),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& sync = std::get<SyncResult>(result.data);
-                if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
-                  RenderLock lock(*this);
-                  currentSpineIndex = sync.spineIndex;
-                  nextPageNumber = sync.page;
-                  cachedChapterTotalPageCount = 0;  // Prevent rescaling sync page
-                  pendingPageJump.reset();
-                  saveProgress(currentSpineIndex, nextPageNumber, 0);
-                  section.reset();
+            std::make_unique<KOReaderSyncActivity>(renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage,
+                                                   totalPages, std::move(localKoPos), std::move(localChapterName),
+                                                   paragraphIndex),
+            [this, savedEpubPath](const ActivityResult& result) {
+              // Reload Epub and apply any position change under a single RenderLock so render()
+              // cannot dereference epub while it is being constructed or partially loaded.
+              LOG_DBG("KOSync", "Reloading epub after sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
+              {
+                RenderLock lock(*this);
+                epub = std::make_shared<Epub>(savedEpubPath, "/.crosspoint");
+                epub->setupCacheDir();
+                if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
+                  LOG_ERR("KOSync", "Failed to reload epub after sync");
+                  epub.reset();
+                }
+
+                if (!result.isCancelled) {
+                  const auto& sync = std::get<SyncResult>(result.data);
+                  // section is null here (released before launch), so compare nextPageNumber
+                  // directly rather than section->currentPage.
+                  if (currentSpineIndex != sync.spineIndex || nextPageNumber != sync.page) {
+                    currentSpineIndex = sync.spineIndex;
+                    nextPageNumber = sync.page;
+                    cachedChapterTotalPageCount = 0;  // Prevent rescaling sync page
+                    pendingPageJump.reset();
+                    saveProgress(currentSpineIndex, nextPageNumber, 0);
+                  }
                 }
               }
+              LOG_DBG("KOSync", "Epub reloaded (heap after: %u)", (unsigned)ESP.getFreeHeap());
             });
       }
       break;
