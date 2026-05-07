@@ -1166,8 +1166,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
           for (const auto& ca : row.cells) {
             if (ca.colspan == 1 && ca.requestedWidth > 0) {
               if (logCol < numCols) {
-                slotWidths[logCol] = ca.requestedWidth;
-                totalExplicit += ca.requestedWidth;
+                // CSS width is content-box; column width must include horizontal padding
+                // so that textWidth = cellColWidth - 1 - padL - padR ≈ requestedWidth - 1
+                const int16_t colW = static_cast<int16_t>(ca.requestedWidth + ca.paddingLeft + ca.paddingRight);
+                slotWidths[logCol] = colW;
+                totalExplicit += colW;
               }
             } else {
               // Spanning or unspecified: leave slots as 0 (unspecified).
@@ -1184,6 +1187,16 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
           self->tableColWidths.reserve(numCols);
           for (auto w : slotWidths) {
             self->tableColWidths.push_back(w > 0 ? w : fallback);
+          }
+          // Scale columns proportionally to fit viewport
+          // (must happen here so text layout uses the scaled widths)
+          int16_t totalColW = 0;
+          for (auto w : self->tableColWidths) totalColW += w;
+          if (totalColW > 0 && totalColW != self->viewportWidth) {
+            const float scale = static_cast<float>(self->viewportWidth) / totalColW;
+            for (auto& w : self->tableColWidths) {
+              w = static_cast<int16_t>(std::max(1.0f, w * scale));
+            }
           }
         }
       }
