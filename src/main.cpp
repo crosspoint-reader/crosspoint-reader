@@ -8,6 +8,7 @@
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <HalSystem.h>
+#include <HalTiltSensor.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
@@ -23,6 +24,7 @@
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -186,6 +188,7 @@ void enterDeepSleep() {
 
   activityManager.goToSleep();
 
+  halTiltSensor.deepSleep();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
@@ -231,6 +234,7 @@ void setup() {
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();
+  halTiltSensor.begin();
 
 #ifdef ENABLE_SERIAL_LOG
   if (gpio.isUsbConnected()) {
@@ -256,7 +260,7 @@ void setup() {
   HalSystem::checkPanic();
 
   SETTINGS.loadFromFile();
-  I18N.loadSettings();
+  I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
@@ -281,6 +285,25 @@ void setup() {
       break;
   }
 
+  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
+  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
+  // flashing has been locked down (e.g. recent X3 firmware).
+  bool recoveryFirmwareMode = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
+    // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
+    // settle window even if the loop body takes longer than expected on slow boots.
+    const unsigned long settleStart = millis();
+    while (millis() - settleStart < 500) {
+      gpio.update();
+      delay(10);
+    }
+    if (gpio.isPressed(HalGPIO::BTN_UP)) {
+      recoveryFirmwareMode = true;
+      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+    }
+  }
+
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
@@ -291,7 +314,11 @@ void setup() {
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
 
-  if (HalSystem::isRebootFromPanic()) {
+  if (recoveryFirmwareMode) {
+    // Skip normal home/reader routing: jump straight into the SD firmware picker.
+    activityManager.replaceActivity(
+        std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
+  } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
@@ -318,6 +345,7 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+  halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 
@@ -346,13 +374,16 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
+      activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
   static bool screenshotButtonsReleased = true;
+  static bool screenshotComboActive = false;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
       {
@@ -361,8 +392,16 @@ void loop() {
       }
     }
     return;
-  } else {
+  }
+  if (screenshotComboActive) {
+    if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
+    if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
+      screenshotButtonsReleased = true;
+      screenshotComboActive = false;
+      return;
+    }
     screenshotButtonsReleased = true;
+    screenshotComboActive = false;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();

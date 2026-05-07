@@ -131,11 +131,21 @@ class CrossPointSettings {
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
+  // Page turn button long press behavior
+  enum LONG_PRESS_BUTTON_BEHAVIOR {
+    OFF = 0,
+    CHAPTER_SKIP = 1,
+    ORIENTATION_CHANGE = 2,
+    LONG_PRESS_BUTTON_BEHAVIOR_COUNT
+  };
+
   // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2 };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
 
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
+
+  enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -187,8 +197,8 @@ class CrossPointSettings {
   char opdsPassword[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
-  // Long-press chapter skip on side buttons
-  uint8_t longPressChapterSkip = 1;
+  // Long-press page turn button behavior
+  uint8_t longPressButtonBehavior = OFF;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
@@ -199,6 +209,10 @@ class CrossPointSettings {
   uint8_t showHiddenFiles = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Tilt-based page turning (X3 only — requires QMI8658 IMU)
+  uint8_t tiltPageTurn = TILT_OFF;
+  // Language setting (Language enum index, default 0 = EN)
+  uint8_t language = 0;
 
   ~CrossPointSettings() = default;
 
@@ -220,6 +234,7 @@ class CrossPointSettings {
 
  private:
   bool loadFromBinaryFile();
+  bool migrateLanguageBinaryFile();
 
  public:
   float getReaderLineCompression() const;

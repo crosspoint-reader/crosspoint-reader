@@ -15,5 +15,10 @@ class BmpViewerActivity final : public Activity {
   void loop() override;
 
  private:
+  void loadSiblingImages();
+  void doSetSleepCover();
+
   std::string filePath;
+  std::vector<std::string> siblingImages;
+  int currentImageIndex = -1;
 };

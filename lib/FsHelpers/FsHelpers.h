@@ -3,10 +3,13 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace FsHelpers {
 
 std::string normalisePath(const std::string& path);
+
+void sortFileList(std::vector<std::string>& strs);
 
 /**
  * Check if the given filename ends with the specified extension (case-insensitive).
@@ -56,5 +59,11 @@ inline bool hasTxtExtension(const String& fileName) {
 bool hasMarkdownExtension(std::string_view fileName);
 
 std::string extractFolderPath(const std::string& filePath);
+
+/**
+ * Sanitize a filename/path component for FAT32 in a caller-provided buffer.
+ * Replaces invalid path characters, spaces, and control characters with '-'.
+ */
+void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen);
 
 }  // namespace FsHelpers

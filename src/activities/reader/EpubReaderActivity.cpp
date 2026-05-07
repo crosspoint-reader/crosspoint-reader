@@ -10,6 +10,7 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <iterator>
 #include <limits>
 
 #include "CrossPointSettings.h"
@@ -29,9 +30,8 @@
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
-constexpr unsigned long skipChapterMs = 700;
 // pages per minute, first item is 1 to prevent division by zero if accessed
-const std::vector<int> PAGE_TURN_LABELS = {1, 1, 3, 6, 12};
+constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -184,7 +184,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -202,15 +202,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const bool skipChapter = SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipChapterMs;
+  const bool longPress = !fromTilt && mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
 
   // Don't skip chapter after screenshot
   if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
     return;
   }
 
-  if (skipChapter) {
-    lastPageTurnTime = millis();
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
     // We don't want to delete the section mid-render, so grab the semaphore
     {
       RenderLock lock(*this);
@@ -218,6 +217,15 @@ void EpubReaderActivity::loop() {
       currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
       section.reset();
     }
+    requestUpdate();
+    return;
+  }
+
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
+    const uint8_t newOrientation =
+        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
+                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
+    applyOrientation(newOrientation);
     requestUpdate();
     return;
   }
@@ -450,14 +458,14 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= PAGE_TURN_LABELS.size()) {
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
     automaticPageTurnActive = false;
     return;
   }
 
   lastPageTurnTime = millis();
   // calculates page turn duration by dividing by number of pages
-  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_LABELS[selectedPageTurnOption];
+  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_RATES[selectedPageTurnOption];
   automaticPageTurnActive = true;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
@@ -903,4 +911,25 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
+  ScreenshotInfo info;
+  info.readerType = ScreenshotInfo::ReaderType::Epub;
+  if (epub) {
+    snprintf(info.title, sizeof(info.title), "%s", epub->getTitle().c_str());
+    info.spineIndex = currentSpineIndex;
+  }
+  if (section) {
+    info.currentPage = section->currentPage + 1;
+    info.totalPages = section->pageCount;
+    if (epub && epub->getBookSize() > 0 && section->pageCount > 0) {
+      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+      int pct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      info.progressPercent = pct;
+    }
+  }
+  return info;
 }
