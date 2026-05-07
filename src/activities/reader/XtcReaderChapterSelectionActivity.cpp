@@ -127,7 +127,15 @@ void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? tr(STR_UNNAMED) : chapter.name.c_str();
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, title, i != selectorIndex);
+
+    char prefix[32];
+    snprintf(prefix, sizeof(prefix), "%d. ", i + 1);
+    std::string fullTitle = prefix;
+    fullTitle += title;
+
+    const std::string displayedTitle = renderer.truncatedText(UI_10_FONT_ID, fullTitle.c_str(), contentWidth - 40);
+    renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, displayedTitle.c_str(),
+                      i != selectorIndex);
   }
 
   // Skip button hints in landscape CW mode (they overlap content)

@@ -124,8 +124,14 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
 
     // Indent per TOC level while keeping content within the gutter-safe region.
     const int indentSize = contentX + 20 + (item.level - 1) * 15;
+
+    char prefix[32];
+    snprintf(prefix, sizeof(prefix), "%d. ", itemIndex + 1);
+    std::string fullTitle = prefix;
+    fullTitle += item.title;
+
     const std::string chapterName =
-        renderer.truncatedText(UI_10_FONT_ID, item.title.c_str(), contentWidth - 40 - indentSize);
+        renderer.truncatedText(UI_10_FONT_ID, fullTitle.c_str(), contentWidth - 40 - (indentSize - contentX));
 
     renderer.drawText(UI_10_FONT_ID, indentSize, displayY, chapterName.c_str(), !isSelected);
   }
