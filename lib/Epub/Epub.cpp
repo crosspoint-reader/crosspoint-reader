@@ -680,6 +680,7 @@ bool Epub::generateThumbBmp(int height) const {
         LOG_ERR("EBP", "Failed to generate thumb from external cover");
         Storage.remove(getThumbBmpPath(height).c_str());
       } else {
+        bool thumbOk = true;
         // A valid 1-bit BMP is larger than its 62-byte header; smaller means no pixel data
         FsFile verify;
         if (Storage.openFileForRead("EBP", getThumbBmpPath(height), verify)) {
@@ -688,11 +689,13 @@ bool Epub::generateThumbBmp(int height) const {
           if (headerOnly) {
             LOG_ERR("EBP", "External cover thumb is header-only; JPEG may be unsupported");
             Storage.remove(getThumbBmpPath(height).c_str());
-            return false;
+            thumbOk = false;
           }
         }
-        LOG_DBG("EBP", "Generated thumb from external cover");
-        return true;
+        if (thumbOk) {
+          LOG_DBG("EBP", "Generated thumb from external cover");
+          return true;
+        }
       }
     }
   } else if (FsHelpers::hasJpgExtension(coverImageHref)) {
