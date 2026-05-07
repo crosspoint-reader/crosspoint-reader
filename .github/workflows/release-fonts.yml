@@ -7,6 +7,12 @@ name: Build & Publish SD Card Fonts
 on:
   workflow_dispatch:
 
+# metadata & binary version numbers to use for release
+env:
+  VERSION_METADATA: 1
+  VERSION_BINARY_FORMAT: 4
+  
+  
 jobs:
   build-fonts:
     runs-on: ubuntu-latest
@@ -40,7 +46,7 @@ jobs:
         run: >
           python3 scripts/generate-font-manifest.py
           --input dist
-          --base-url "https://github.com/${{ github.repository }}/releases/download/sd-fonts/"
+          --base-url "https://github.com/${{ github.repository }}/releases/download/sd-fonts-m${VERSION_METADATA}-b${VERSION_BINARY_FORMAT}/"
           --output dist/fonts.json
           --descriptions-from lib/EpdFont/scripts/sd-fonts.yaml
 
