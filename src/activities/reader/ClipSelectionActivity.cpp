@@ -266,6 +266,19 @@ void ClipSelectionActivity::loop() {
         else
           afterEnd = stripped;
       }
+      std::string midText;
+      {
+        constexpr int MID_WORDS = 4;
+        int midStart = (from + to) / 2 - (MID_WORDS / 2);
+        int midEnd = midStart + MID_WORDS;
+        if (midStart < from) midStart = from;
+        if (midEnd > to) midEnd = to;
+        for (int i = midStart; i <= midEnd; ++i) {
+          const auto wtext = stripTrailingHyphen(stripEmSpace(words[i].text));
+          if (!midText.empty()) midText += ' ';
+          midText += wtext;
+        }
+      }
 
       LOG_DBG("CLIP", "Anchors: start=\"%.40s\" end=\"%.40s\" ctx=[\"%.20s\"] [\"%.20s\"] wc=%d", startAnchor.c_str(),
               endAnchorFull.c_str(), beforeStart.c_str(), afterEnd.c_str(), to - from + 1);
@@ -280,6 +293,7 @@ void ClipSelectionActivity::loop() {
                                    std::move(endAnchorFull),
                                    std::move(beforeStart),
                                    std::move(afterEnd),
+                                   std::move(midText),
                                    static_cast<uint16_t>(to - from + 1)};
       setResult(std::move(result));
       finish();

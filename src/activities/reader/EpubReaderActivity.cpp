@@ -586,6 +586,7 @@ void EpubReaderActivity::startClipSelection() {
               rec.endText = clip.endText;
               rec.beforeStartText = clip.beforeStartText;
               rec.afterEndText = clip.afterEndText;
+              rec.midText = clip.midText;
               annotations.add(std::move(rec));
               annotationsDirty = true;
               annotations.save(epub->getCachePath().c_str());
@@ -1062,65 +1063,42 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               pageWords.size());
 
       for (const auto& rec : sectionAnnotations) {
-        const auto curPage = static_cast<uint16_t>(section->currentPage);
-        if (curPage < rec.sectionPage || curPage > rec.endSectionPage) continue;
-
-        const bool isStartPage = (curPage == rec.sectionPage);
-        const bool isEndPage = (curPage == rec.endSectionPage);
-        const bool isSinglePage = (isStartPage && isEndPage);
-
         int startIdx = -1;
         int endIdx = -1;
 
-        if (isSinglePage) {
-          startIdx = findContextStart(rec.beforeStartText);
-          if (startIdx >= 0 && rec.wordCount > 0) {
-            endIdx = startIdx + rec.wordCount - 1;
-            if (endIdx >= static_cast<int>(pageWords.size())) endIdx = static_cast<int>(pageWords.size()) - 1;
+        startIdx = findContextStart(rec.beforeStartText);
+        if (startIdx < 0) startIdx = findAnchorStart(rec.startText);
+        if (endIdx < 0) endIdx = findAnchorEnd(rec.endText);
+
+        if (endIdx < 0) {
+          std::string suffix = rec.endText;
+          while (!suffix.empty()) {
+            endIdx = findAnchorEnd(suffix);
+            if (endIdx >= 0) break;
+            auto pos = suffix.find(' ');
+            if (pos == std::string::npos) break;
+            suffix.erase(0, pos + 1);
           }
-          if (startIdx < 0) startIdx = findAnchorStart(rec.startText);
-          if (startIdx >= 0 && endIdx < 0) endIdx = findAnchorEnd(rec.endText);
-          if (startIdx < 0) continue;
-          if (endIdx < 0 || endIdx < startIdx) continue;
-          LOG_DBG("ANNOT", "  rec sp=%d-%d ctx=[%.15s/%.15s] wc=%d -> %d..%d", rec.sectionPage, rec.endSectionPage,
-                  rec.beforeStartText.c_str(), rec.afterEndText.c_str(), rec.wordCount, startIdx, endIdx);
-        } else if (isStartPage) {
-          startIdx = findContextStart(rec.beforeStartText);
-          if (startIdx < 0) {
-            std::string anchor = rec.startText;
-            while (!anchor.empty()) {
-              startIdx = findAnchorStart(anchor);
-              if (startIdx >= 0) break;
-              auto pos = anchor.rfind(' ');
-              if (pos == std::string::npos) break;
-              anchor.erase(pos);
-            }
-          }
-          LOG_DBG("ANNOT", "  rec sp=%d-%d (start) ctx=[%.15s] -> idx=%d", rec.sectionPage, rec.endSectionPage,
-                  rec.beforeStartText.c_str(), startIdx);
-          if (startIdx < 0) continue;
-          endIdx = static_cast<int>(pageWords.size()) - 1;
-        } else if (isEndPage) {
-          endIdx = findContextEnd(rec.afterEndText);
-          if (endIdx < 0) {
-            std::string anchor = rec.endText;
-            while (!anchor.empty()) {
-              endIdx = findAnchorEnd(anchor);
-              if (endIdx >= 0) break;
-              auto pos = anchor.find(' ');
-              if (pos == std::string::npos) break;
-              anchor.erase(0, pos + 1);
-            }
-          }
-          LOG_DBG("ANNOT", "  rec sp=%d-%d (end) ctx=[%.15s] -> idx=%d", rec.sectionPage, rec.endSectionPage,
-                  rec.afterEndText.c_str(), endIdx);
-          if (endIdx < 0) continue;
-          startIdx = 0;
-        } else {
-          startIdx = 0;
-          endIdx = static_cast<int>(pageWords.size()) - 1;
-          LOG_DBG("ANNOT", "  rec sp=%d-%d (middle) full page", rec.sectionPage, rec.endSectionPage);
         }
+        if (endIdx < 0) {
+          int ctxEnd = findContextEnd(rec.afterEndText);
+          if (ctxEnd >= 0) endIdx = ctxEnd;
+        }
+
+        if (startIdx < 0 && endIdx >= 0) {
+          startIdx = 0;
+        } else if (startIdx >= 0 && endIdx < 0) {
+          endIdx = static_cast<int>(pageWords.size()) - 1;
+        } else if (startIdx < 0 && endIdx < 0 && !rec.midText.empty()) {
+          int midIdx = findAnchorStart(rec.midText);
+          if (midIdx >= 0) {
+            startIdx = 0;
+            endIdx = static_cast<int>(pageWords.size()) - 1;
+          }
+        }
+        if (startIdx < 0) continue;
+        LOG_DBG("ANNOT", "  rec sp=%d-%d ctx=[%.15s/%.15s] wc=%d -> %d..%d", rec.sectionPage, rec.endSectionPage,
+                rec.beforeStartText.c_str(), rec.afterEndText.c_str(), rec.wordCount, startIdx, endIdx);
 
         struct RowSpan {
           int underlineY, xMin, xMax;

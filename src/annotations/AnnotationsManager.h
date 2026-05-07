@@ -15,6 +15,7 @@ class AnnotationsManager {
     std::string endText;
     std::string beforeStartText;
     std::string afterEndText;
+    std::string midText;
   };
 
   bool load(const char* bookCachePath);
@@ -28,7 +29,7 @@ class AnnotationsManager {
   size_t size() const { return records.size(); }
 
  private:
-  static constexpr uint8_t FILE_VERSION = 6;
+  static constexpr uint8_t FILE_VERSION = 7;
 
   std::vector<AnnotationRecord> records;
 

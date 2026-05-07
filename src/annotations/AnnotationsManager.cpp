@@ -72,6 +72,9 @@ bool AnnotationsManager::load(const char* bookCachePath) {
       if (!readString(file, rec.beforeStartText)) break;
       if (!readString(file, rec.afterEndText)) break;
     }
+    if (version >= 7) {
+      if (!readString(file, rec.midText)) break;
+    }
     records.push_back(std::move(rec));
   }
 
@@ -103,6 +106,7 @@ bool AnnotationsManager::save(const char* bookCachePath) const {
     writeString(file, rec.endText);
     writeString(file, rec.beforeStartText);
     writeString(file, rec.afterEndText);
+    writeString(file, rec.midText);
   }
 
   file.flush();

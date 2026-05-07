@@ -64,6 +64,7 @@ struct ClippingResult {
   std::string endText;
   std::string beforeStartText;
   std::string afterEndText;
+  std::string midText;
   uint16_t wordCount = 0;
 };
 
