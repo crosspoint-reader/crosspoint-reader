@@ -141,7 +141,6 @@ void XtcReaderActivity::renderStatusBarOverlayCallback(const GfxRenderer&, const
   const auto* activity = static_cast<const XtcReaderActivity*>(raw);
   activity->renderConfiguredStatusBarOverlay();
 }
-
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
   const int bookPageCount = static_cast<int>(xtc->getPageCount());
   const int bookPage = static_cast<int>(currentPage) + 1;
@@ -216,7 +215,6 @@ void XtcReaderActivity::renderConfiguredStatusBarOverlay() const {
   renderStatusBarOverlay(StatusBarOverlayPosition::Top);
   renderStatusBarOverlay(StatusBarOverlayPosition::Bottom);
 }
-
 void XtcReaderActivity::renderPage() {
   const uint16_t pageWidth = xtc->getPageWidth();
   const uint16_t pageHeight = xtc->getPageHeight();

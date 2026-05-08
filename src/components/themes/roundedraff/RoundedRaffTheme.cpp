@@ -1,7 +1,6 @@
 #include "RoundedRaffTheme.h"
 
 #include <GfxRenderer.h>
-#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -22,7 +21,6 @@ constexpr int kBottomRadius = 15;
 constexpr int kRowRadius = 20;
 constexpr int kInteractiveInsetX = 20;
 constexpr int kSelectableRowGap = 6;
-constexpr int batteryPercentSpacing = 4;
 constexpr int kTitleFontId = UI_12_FONT_ID;     // Requested main title size: 12px
 constexpr int kSubtitleFontId = SMALL_FONT_ID;  // Requested subtitle size: 8px
 constexpr int kGuideFontId = SMALL_FONT_ID;     // Closest available to requested 6px
@@ -44,42 +42,6 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
   const int thumbY = barY + (clampedStart * maxTravel) / maxStart;
 
   renderer.fillRect(barX, thumbY, barW, thumbH);
-}
-
-void drawBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight, uint16_t percentage) {
-  // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
-  // Bottom line
-  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
-  // Left line
-  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
-  // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
-
-  // The +1 is to round up, so that we always fill at least one pixel.
-  int filledWidth = percentage * (battWidth - 5) / 100 + 1;
-  if (filledWidth > battWidth - 5) {
-    filledWidth = battWidth - 5;  // Ensure we don't overflow.
-  }
-
-  renderer.fillRect(x + 2, y + 2, filledWidth, rectHeight - 4);
-}
-
-void drawBatteryRightStable(const GfxRenderer& renderer, Rect iconRect, uint16_t percentage, bool showPercentage) {
-  // Match BaseTheme::drawBatteryRight layout, but use a stable percentage value for this render.
-  const int iconY = iconRect.y + 6;
-
-  if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    renderer.drawText(SMALL_FONT_ID, iconRect.x - textWidth - batteryPercentSpacing, iconRect.y,
-                      percentageText.c_str());
-  }
-
-  drawBatteryIcon(renderer, iconRect.x, iconY, RoundedRaffMetrics::values.batteryWidth, iconRect.height, percentage);
 }
 
 std::string sanitizeButtonLabel(std::string label) {
@@ -110,28 +72,27 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  const uint16_t percentage = powerManager.getBatteryPercentage();
   const int batteryIconX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+
+  // Reserve space for the widest possible percentage text to avoid title/battery overlap
   int batteryGroupLeftX = batteryIconX;
   if (showBatteryPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    batteryGroupLeftX -= renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str()) + batteryPercentSpacing;
-
-    // Clear a fixed-width area for the battery percentage to avoid ghosting when digit count changes (e.g. 100% ->
-    // 99%).
+    // Clear a fixed-width area for the battery percentage to avoid ghosting when digit count changes (e.g. 100% -> 99%)
     const int maxTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "100%");
+    batteryGroupLeftX -= maxTextWidth + batteryPercentSpacing;
+
     const int clearW = maxTextWidth + batteryPercentSpacing + RoundedRaffMetrics::values.batteryWidth;
     const int clearH = std::max(renderer.getTextHeight(SMALL_FONT_ID), RoundedRaffMetrics::values.batteryHeight + 8);
     renderer.fillRect(batteryIconX - maxTextWidth - batteryPercentSpacing, rect.y + 14, clearW, clearH, false);
   }
 
-  const int maxTextWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
-  auto headerTitle = renderer.truncatedText(kTitleFontId, title, maxTextWidth, EpdFontFamily::BOLD);
+  const int maxTitleWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
+  auto headerTitle = renderer.truncatedText(kTitleFontId, title, maxTitleWidth, EpdFontFamily::BOLD);
   renderer.drawText(kTitleFontId, titleX, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
-  drawBatteryRightStable(renderer,
-                         Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
-                              RoundedRaffMetrics::values.batteryHeight},
-                         percentage, showBatteryPercentage);
+  drawBatteryRight(renderer,
+                   Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
+                        RoundedRaffMetrics::values.batteryHeight},
+                   showBatteryPercentage);
 }
 
 void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
