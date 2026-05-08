@@ -434,7 +434,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         // Persist current position so the reader resumes at the right page on return.
         // goToReader() depends on this file, so abort the sync if the write fails.
         if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
-          break;
+          LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
+          return;
         }
 
         // Release Epub and Section to free ~65KB RAM for the TLS handshake.
