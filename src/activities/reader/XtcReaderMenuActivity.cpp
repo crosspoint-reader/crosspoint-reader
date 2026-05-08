@@ -84,11 +84,10 @@ void XtcReaderMenuActivity::render(RenderLock&&) {
   // Progress summary
   std::string progressLine;
   if (totalChapters > 0) {
-    progressLine =
-        std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentChapter) + "/" + std::to_string(totalChapters);
+    progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentChapter) + "/" +
+                   std::to_string(totalChapters) + std::string(tr(STR_PAGES_SEPARATOR));
   }
-  if (!progressLine.empty()) progressLine += "  |  ";
-  progressLine += "Page: " + std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
+  progressLine += std::string(tr(STR_PAGE_PREFIX)) + std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
 
   renderer.drawCenteredText(UI_10_FONT_ID, 45 + contentY, progressLine.c_str());
 
