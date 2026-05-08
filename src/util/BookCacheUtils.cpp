@@ -16,5 +16,5 @@ void clearBookCache(const std::string& path) {
   } else {
     return;
   }
-  LOG_DBG("BookCache", "Cleared metadata cache for: %s", path.c_str());
+  LOG_DBG("BookCache", "Done checking metadata cache for: %s", path.c_str());
 }
