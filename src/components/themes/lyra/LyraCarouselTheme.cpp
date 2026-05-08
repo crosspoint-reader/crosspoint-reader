@@ -30,6 +30,7 @@
 #include "components/icons/settings2.h"
 #include "components/icons/text24.h"
 #include "components/icons/transfer.h"
+#include "components/icons/weather32.h"
 #include "components/icons/wifi.h"
 #include "fontIds.h"
 
@@ -74,6 +75,12 @@ const uint8_t* iconBitmapFor(UIIcon icon) {
       return BookIcon;
     case UIIcon::Library:
       return LibraryIcon;
+    case UIIcon::Weather:
+      return Weather32Icon;
+    case UIIcon::Wifi:
+      return WifiIcon;
+    case UIIcon::Hotspot:
+      return HotspotIcon;
     default:
       return nullptr;
   }
@@ -315,6 +322,12 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
+          // White-out the four corners so the rounded outline is not obscured by bitmap pixels.
+          renderer.fillRect(x, y, kCornerRadius, kCornerRadius, false);
+          renderer.fillRect(x + maxW - kCornerRadius, y, kCornerRadius, kCornerRadius, false);
+          renderer.fillRect(x, y + maxH - kCornerRadius, kCornerRadius, kCornerRadius, false);
+          renderer.fillRect(x + maxW - kCornerRadius, y + maxH - kCornerRadius, kCornerRadius, kCornerRadius, false);
+          renderer.drawRoundedRect(x, y, maxW, maxH, kThinOutlineW, kCornerRadius, true);
           hasCover = true;
         }
         file.close();
@@ -333,9 +346,10 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   if (!coverRendered) {
     lastCarouselSelectorIndex = centerIdx;
 
-    // Clear the entire cover tile to white so stale pixels from old positions
-    // don't persist (drawBitmap only sets black pixels, never clears).
-    renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+    // Clear the full band — cover tile plus the author/title text below it —
+    // so stale pixels from a previous book don't persist on book change.
+    renderer.fillRect(rect.x, rect.y, rect.width,
+                      rect.height + renderer.getLineHeight(kTitleFontId) * 2 + kDotSize + 20, false);
 
     // Sides first so centre renders on top.
     // Left side only when there are 3+ books; right side when there are 2+ books.
@@ -399,16 +413,36 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
                                        const std::function<std::string(int index)>& buttonLabel,
                                        const std::function<UIIcon(int index)>& rowIcon) const {
   if (buttonCount <= 0) return;
-  (void)buttonLabel;
 
+  const int screenW = renderer.getScreenWidth();
   const int tileH = kMenuIconPad + kMenuIconSize + kMenuIconPad;
-  const int tileW = renderer.getScreenWidth() / buttonCount;
-  // Anchor row just above button hints, ignoring rect.y which may be off-screen
-  // for large cover tiles
+  // Anchor row just above button hints, ignoring rect.y which may be off-screen for large cover tiles
   const int rowY = renderer.getScreenHeight() - kButtonHintsH - tileH;
 
-  for (int i = 0; i < buttonCount; ++i) {
-    const int tileX = i * tileW;
+  // How many icons fit side-by-side? Each needs at least (kMenuIconSize + 2*kHighlightPad).
+  const int minTileW = kMenuIconSize + 2 * kHighlightPad;
+  const int visibleCount = std::min(buttonCount, screenW / minTileW);
+  const int tileW = screenW / visibleCount;
+
+  // Sliding window: keep selectedIndex centred when we can't show all icons.
+  int firstVisible = 0;
+  if (selectedIndex >= 0 && visibleCount < buttonCount) {
+    firstVisible = selectedIndex - visibleCount / 2;
+    firstVisible = std::max(0, std::min(firstVisible, buttonCount - visibleCount));
+  }
+
+  // Draw the selected item's label in the header area so the user knows what they're about to open.
+  if (selectedIndex >= 0 && buttonLabel != nullptr) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const std::string label = buttonLabel(selectedIndex);
+    drawHeader(renderer, Rect{0, metrics.topPadding, screenW, metrics.homeTopPadding}, label.c_str(), nullptr);
+  }
+
+  for (int slot = 0; slot < visibleCount; ++slot) {
+    const int i = firstVisible + slot;
+    if (i >= buttonCount) break;
+
+    const int tileX = slot * tileW;
     const int iconX = tileX + (tileW - kMenuIconSize) / 2;
     const int iconY = rowY + kMenuIconPad;
 
@@ -428,6 +462,16 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
         else
           renderer.drawIcon(bmp, iconX, iconY, kMenuIconSize, kMenuIconSize);
       }
+    }
+
+    // Overflow indicators: small filled square at left/right edge when icons are clipped
+    if (visibleCount < buttonCount) {
+      constexpr int kArrowDotR = 3;
+      const int arrowY = rowY + tileH / 2;
+      if (firstVisible > 0 && slot == 0)
+        renderer.fillRect(2, arrowY - kArrowDotR, kArrowDotR * 2, kArrowDotR * 2, true);
+      if (firstVisible + visibleCount < buttonCount && slot == visibleCount - 1)
+        renderer.fillRect(screenW - 2 - kArrowDotR * 2, arrowY - kArrowDotR, kArrowDotR * 2, kArrowDotR * 2, true);
     }
   }
 }
@@ -468,8 +512,10 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
       (totalPages > 1 ? (LyraCarouselMetrics::values.scrollBarWidth + LyraCarouselMetrics::values.scrollBarRightOffset)
                       : 1);
 
-  // Solid black highlight bar
-  if (selectedIndex >= 0) {
+  // Solid black highlight bar — skip if selected item is a separator
+  const bool selectedIsSeparator = (selectedIndex >= 0 && selectedIndex < itemCount && rowTitle != nullptr &&
+                                    UITheme::isSeparatorTitle(rowTitle(selectedIndex)));
+  if (selectedIndex >= 0 && !selectedIsSeparator) {
     renderer.fillRoundedRect(
         rect.x + LyraCarouselMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
         contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2, rowHeight, kCornerRadius, Color::Black);
@@ -501,6 +547,14 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
     }
 
     auto itemName = rowTitle(i);
+    if (UITheme::isSeparatorTitle(itemName)) {
+      itemName = UITheme::stripSeparatorTitle(itemName);
+      drawListSeparator(renderer,
+                        Rect{rect.x + LyraCarouselMetrics::values.contentSidePadding, itemY,
+                             contentWidth - LyraCarouselMetrics::values.contentSidePadding * 2, rowHeight},
+                        textX, rowTextWidth, itemName);
+      continue;
+    }
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
     renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), !sel);
 
