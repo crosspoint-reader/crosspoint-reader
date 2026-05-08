@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -31,7 +32,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 4;
+  static constexpr uint8_t CSS_CACHE_VERSION = 5;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -123,6 +124,11 @@ class CssParser {
   static CssLength interpretLength(const std::string& val);
   /** Returns true only when a numeric length was parsed (e.g. 2em, 50%). False for auto/inherit/initial. */
   static bool tryInterpretLength(const std::string& val, CssLength& out);
+  /**
+   * Parse a CSS color value into an 8-bit grayscale color.
+   * Returns std::nullopt if the color could not be parsed.
+   */
+  static std::optional<uint8_t> tryInterpretColor(const std::string& val);
 
   // String utilities
   static std::string normalized(const std::string& s);

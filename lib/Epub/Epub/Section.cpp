@@ -80,6 +80,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   {
     uint8_t version;
     serialization::readPod(file, version);
+    sectionFileVersion = version;  // store for downstream deserialization
     if (version != SECTION_FILE_VERSION) {
       // Explicit close() required: member variable persists beyond function scope
       file.close();
@@ -281,6 +282,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   if (cssParser) {
     cssParser->clear();
   }
+  sectionFileVersion = SECTION_FILE_VERSION;  // Mark as current version for downstream consumers
   return true;
 }
 
@@ -289,6 +291,7 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
+  // We already validated version in loadSectionFile; sectionFileVersion is correct
   file.seek(HEADER_SIZE - sizeof(uint32_t) * 3);
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
@@ -297,7 +300,7 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   serialization::readPod(file, pagePos);
   file.seek(pagePos);
 
-  auto page = Page::deserialize(file);
+  auto page = Page::deserialize(file, sectionFileVersion);
   // Explicit close() required: member variable persists beyond function scope
   file.close();
   return page;

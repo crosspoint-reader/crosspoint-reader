@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <cassert>
 #include <functional>
 #include <memory>
 #include <string>
@@ -15,7 +16,8 @@ class GfxRenderer;
 class ParsedText {
   std::vector<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<bool> wordContinues;  // true = word attaches to previous (no space before it)
+  std::vector<bool> wordContinues;       // true = word attaches to previous (no space before it)
+  std::vector<uint8_t> wordBackgrounds;  // per-word background color (0 = none)
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
@@ -39,11 +41,17 @@ class ParsedText {
       : blockStyle(blockStyle), extraParagraphSpacing(extraParagraphSpacing), hyphenationEnabled(hyphenationEnabled) {}
   ~ParsedText() = default;
 
-  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);
+  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
+               uint8_t backgroundColor = 0);
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  const std::vector<uint8_t>& getWordBackgrounds() const { return wordBackgrounds; }
+  void setWordBackgrounds(std::vector<uint8_t> backgrounds) {
+    if (backgrounds.size() != words.size()) return;
+    wordBackgrounds = std::move(backgrounds);
+  }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);

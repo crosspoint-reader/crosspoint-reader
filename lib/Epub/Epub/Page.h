@@ -38,7 +38,7 @@ class PageLine final : public PageElement {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(FsFile& file) override;
   PageElementTag getTag() const override { return TAG_PageLine; }
-  static std::unique_ptr<PageLine> deserialize(FsFile& file);
+  static std::unique_ptr<PageLine> deserialize(FsFile& file, uint8_t sectionFileVersion);
 };
 
 // New PageImage class
@@ -51,7 +51,7 @@ class PageImage final : public PageElement {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(FsFile& file) override;
   PageElementTag getTag() const override { return TAG_PageImage; }
-  static std::unique_ptr<PageImage> deserialize(FsFile& file);
+  static std::unique_ptr<PageImage> deserialize(FsFile& file, uint8_t sectionFileVersion);
   const ImageBlock& getImageBlock() const { return *imageBlock; }
 };
 
@@ -74,7 +74,7 @@ class Page {
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
-  static std::unique_ptr<Page> deserialize(FsFile& file);
+  static std::unique_ptr<Page> deserialize(FsFile& file, uint8_t sectionFileVersion);
 
   // Check if page contains any images (used to force full refresh)
   bool hasImages() const {

@@ -15,6 +15,7 @@ class Section {
   GfxRenderer& renderer;
   std::string filePath;
   FsFile file;
+  uint8_t sectionFileVersion = 0;  // Loaded from file header for deserialization compatibility
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
@@ -24,6 +25,7 @@ class Section {
  public:
   uint16_t pageCount = 0;
   int currentPage = 0;
+  uint8_t getSectionFileVersion() const { return sectionFileVersion; }
 
   explicit Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRenderer& renderer)
       : epub(epub),

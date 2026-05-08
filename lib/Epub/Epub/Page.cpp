@@ -15,13 +15,16 @@ bool PageLine::serialize(FsFile& file) {
   return block->serialize(file);
 }
 
-std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
+std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file, uint8_t sectionFileVersion) {
   int16_t xPos;
   int16_t yPos;
   serialization::readPod(file, xPos);
   serialization::readPod(file, yPos);
 
-  auto tb = TextBlock::deserialize(file);
+  auto tb = TextBlock::deserialize(file, sectionFileVersion);
+  if (!tb) {
+    return nullptr;
+  }
   return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
 }
 
@@ -38,7 +41,7 @@ bool PageImage::serialize(FsFile& file) {
   return imageBlock->serialize(file);
 }
 
-std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
+std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file, uint8_t /*sectionFileVersion*/) {
   int16_t xPos;
   int16_t yPos;
   serialization::readPod(file, xPos);
@@ -82,7 +85,7 @@ bool Page::serialize(FsFile& file) const {
   return true;
 }
 
-std::unique_ptr<Page> Page::deserialize(FsFile& file) {
+std::unique_ptr<Page> Page::deserialize(FsFile& file, uint8_t sectionFileVersion) {
   auto page = std::unique_ptr<Page>(new Page());
 
   uint16_t count;
@@ -93,10 +96,10 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
     serialization::readPod(file, tag);
 
     if (tag == TAG_PageLine) {
-      auto pl = PageLine::deserialize(file);
+      auto pl = PageLine::deserialize(file, sectionFileVersion);
       page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
-      auto pi = PageImage::deserialize(file);
+      auto pi = PageImage::deserialize(file, sectionFileVersion);
       page->elements.push_back(std::move(pi));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);

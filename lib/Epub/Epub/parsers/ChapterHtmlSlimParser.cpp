@@ -72,6 +72,7 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
   effectiveUnderline =
       currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
+  effectiveBackgroundColor = currentCssStyle.hasBackgroundColor() ? currentCssStyle.backgroundColor : 0;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -84,7 +85,13 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasUnderline) {
       effectiveUnderline = entry.underline;
     }
+    if (entry.hasBackgroundColor) {
+      effectiveBackgroundColor = entry.backgroundColor;
+    }
   }
+  LOG_DBG("EHP", "updateEffStyle: depth=%d b=%d i=%d u=%d bg=%d stack=%u", depth, (int)effectiveBold,
+          (int)effectiveItalic, (int)effectiveUnderline, (int)effectiveBackgroundColor,
+          (uint32_t)inlineStyleStack.size());
 }
 
 // flush the contents of partWordBuffer to currentTextBlock
@@ -108,7 +115,9 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  LOG_DBG("EHP", "flush: effBg=%d buf='%s' len=%d continues=%d", (int)effectiveBackgroundColor, partWordBuffer,
+          partWordBufferIndex, (int)nextWordContinues);
+  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, effectiveBackgroundColor);
   partWordBufferIndex = 0;
   nextWordContinues = false;
 }
@@ -625,7 +634,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false,
+                                        self->effectiveBackgroundColor);
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -696,12 +706,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
-    if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
+    if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
+        cssStyle.hasBackgroundColor()) {
+      LOG_DBG("EHP", "span/inline: entering, hasBg=%d bg=%d class='%s'", cssStyle.hasBackgroundColor(),
+              (int)cssStyle.backgroundColor, classAttr.c_str());
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
         self->nextWordContinues = true;
       }
+      // Track that we're at a styled inline boundary - first content here should not
+      // continue from previous word (e.g., &nbsp; should create visible space, not attach)
+      self->atInlineStyleBoundary = true;
       StyleStackEntry entry;
       entry.depth = self->depth;  // Track depth for matching pop
       if (cssStyle.hasFontWeight()) {
@@ -716,8 +732,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.hasUnderline = true;
         entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
       }
+      if (cssStyle.hasBackgroundColor()) {
+        entry.hasBackgroundColor = true;
+        entry.backgroundColor = cssStyle.backgroundColor;
+      }
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
+    } else {
+      LOG_DBG("EHP", "span/inline: SKIPPED (no relevant style) class='%s'", classAttr.c_str());
     }
   }
 
@@ -804,10 +826,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->partWordBuffer[0] = ' ';
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
-      self->nextWordContinues = true;  // Attach space to previous word (no break).
+      // If at styled inline boundary, space should not attach to previous word
+      // (creates visible separation between "Agent" and styled span content)
+      self->nextWordContinues = !self->atInlineStyleBoundary;
       self->flushPartWordBuffer();
 
-      self->nextWordContinues = true;  // Next real word attaches to this space (no break).
+      self->nextWordContinues = true;       // Next real word attaches to this space (no break).
+      self->atInlineStyleBoundary = false;  // Clear boundary flag after first content
 
       i++;  // Skip the second byte (0xA0)
       continue;
@@ -823,10 +848,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->partWordBuffer[0] = ' ';
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
-      self->nextWordContinues = true;
+      // If at styled inline boundary, space should not attach to previous word
+      self->nextWordContinues = !self->atInlineStyleBoundary;
       self->flushPartWordBuffer();
 
       self->nextWordContinues = true;
+      self->atInlineStyleBoundary = false;  // Clear boundary flag after first content
 
       i += 2;  // Skip the remaining two bytes (0x80 0xAF)
       continue;
@@ -871,6 +898,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         self->flushPartWordBuffer();
       }
     }
+
+    // Clear inline style boundary flag once we process any real character content
+    self->atInlineStyleBoundary = false;
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
