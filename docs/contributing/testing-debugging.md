@@ -1,6 +1,8 @@
 # Testing and Debugging
 
 CrossPoint runs on real hardware, so debugging usually combines local build checks and on-device logs.
+For UI and reader flow changes, the native emulator can provide a faster first pass before hardware testing:
+[Native Emulator](./native-emulator.md).
 
 ## Local checks
 

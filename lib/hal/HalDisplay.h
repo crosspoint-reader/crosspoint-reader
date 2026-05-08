@@ -1,6 +1,10 @@
 #pragma once
 #include <Arduino.h>
+#if CROSSPOINT_EMULATED
+#include <cstdint>
+#else
 #include <EInkDisplay.h>
+#endif
 
 class HalDisplay {
  public:
@@ -17,12 +21,16 @@ class HalDisplay {
     FAST_REFRESH   // Fast refresh using custom LUT
   };
 
+#if CROSSPOINT_EMULATED
+  static constexpr uint16_t DISPLAY_WIDTH = 800;
+  static constexpr uint16_t DISPLAY_HEIGHT = 480;
+#else
   // Initialize the display hardware and driver
-  void begin();
-
   // Display dimensions
   static constexpr uint16_t DISPLAY_WIDTH = EInkDisplay::DISPLAY_WIDTH;
   static constexpr uint16_t DISPLAY_HEIGHT = EInkDisplay::DISPLAY_HEIGHT;
+#endif
+  void begin();
   static constexpr uint16_t DISPLAY_WIDTH_BYTES = DISPLAY_WIDTH / 8;
   static constexpr uint32_t BUFFER_SIZE = DISPLAY_WIDTH_BYTES * DISPLAY_HEIGHT;
 
@@ -56,7 +64,9 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
+#if !CROSSPOINT_EMULATED
   EInkDisplay einkDisplay;
+#endif
 };
 
 extern HalDisplay display;

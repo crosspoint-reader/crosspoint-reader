@@ -1,5 +1,21 @@
 #include "HalPowerManager.h"
 
+#if CROSSPOINT_EMULATED
+
+HalPowerManager powerManager;
+
+void HalPowerManager::begin() {
+  normalFreq = 160;
+  modeMutex = xSemaphoreCreateMutex();
+}
+void HalPowerManager::setPowerSaving(bool) {}
+void HalPowerManager::startDeepSleep(HalGPIO&) const {}
+uint16_t HalPowerManager::getBatteryPercentage() const { return 80; }
+HalPowerManager::Lock::Lock() { valid = true; }
+HalPowerManager::Lock::~Lock() {}
+
+#else
+
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
@@ -147,3 +163,4 @@ HalPowerManager::Lock::~Lock() {
   }
   xSemaphoreGive(powerManager.modeMutex);
 }
+#endif

@@ -7,18 +7,27 @@
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
+#if !CROSSPOINT_EMULATED
 #include "browser/OpdsBookBrowserActivity.h"
+#endif
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
+#if !CROSSPOINT_EMULATED
 #include "network/CrossPointWebServerActivity.h"
+#endif
 #include "reader/ReaderActivity.h"
+#if !CROSSPOINT_EMULATED
 #include "settings/OpdsServerListActivity.h"
+#endif
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
 void ActivityManager::begin() {
+#if CROSSPOINT_EMULATED
+  renderTaskHandle = reinterpret_cast<TaskHandle_t>(1);
+#else
   xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
               8192,              // Stack size
               this,              // Parameters
@@ -26,6 +35,7 @@ void ActivityManager::begin() {
               &renderTaskHandle  // Task handle
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
+#endif
 }
 
 void ActivityManager::renderTaskTrampoline(void* param) {
@@ -138,11 +148,16 @@ void ActivityManager::loop() {
 
   if (requestedUpdate) {
     requestedUpdate = false;
+#if CROSSPOINT_EMULATED
+    RenderLock lock;
+    if (currentActivity) currentActivity->render(std::move(lock));
+#else
     // Using direct notification to signal the render task to update
     // Increment counter so multiple rapid calls won't be lost
     if (renderTaskHandle) {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
     }
+#endif
   }
 }
 
@@ -169,7 +184,11 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
 }
 
 void ActivityManager::goToFileTransfer() {
+#if CROSSPOINT_EMULATED
+  goToFullScreenMessage("File transfer is not emulated");
+#else
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
+#endif
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
@@ -183,6 +202,9 @@ void ActivityManager::goToRecentBooks() {
 }
 
 void ActivityManager::goToBrowser() {
+#if CROSSPOINT_EMULATED
+  goToFullScreenMessage("OPDS browser is not emulated");
+#else
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
   if (servers.size() == 1) {
@@ -190,6 +212,7 @@ void ActivityManager::goToBrowser() {
   } else {
     replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
   }
+#endif
 }
 
 void ActivityManager::goToReader(std::string path) {
@@ -248,6 +271,14 @@ ScreenshotInfo ActivityManager::getScreenshotInfo() const {
 }
 
 void ActivityManager::requestUpdate(bool immediate) {
+#if CROSSPOINT_EMULATED
+  if (immediate || renderTaskHandle) {
+    RenderLock lock;
+    if (currentActivity) currentActivity->render(std::move(lock));
+  } else {
+    requestedUpdate = true;
+  }
+#else
   if (immediate) {
     if (renderTaskHandle) {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
@@ -257,8 +288,12 @@ void ActivityManager::requestUpdate(bool immediate) {
     // This is to avoid multiple updates being requested in the same loop
     requestedUpdate = true;
   }
+#endif
 }
 void ActivityManager::requestUpdateAndWait() {
+#if CROSSPOINT_EMULATED
+  requestUpdate(true);
+#else
   if (!renderTaskHandle) {
     return;
   }
@@ -286,6 +321,7 @@ void ActivityManager::requestUpdateAndWait() {
 
   xTaskNotify(renderTaskHandle, 1, eIncrement);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+#endif
 }
 
 // RenderLock

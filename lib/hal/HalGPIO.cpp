@@ -1,4 +1,98 @@
 #include <HalGPIO.h>
+
+#if CROSSPOINT_EMULATED
+#include <SDL.h>
+
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+
+HalGPIO gpio;
+
+namespace {
+std::array<bool, 7> currentButtons{};
+std::array<bool, 7> previousButtons{};
+std::array<unsigned long, 7> pressedAt{};
+unsigned long heldTime = 0;
+
+void setButton(SDL_Keycode key, bool down) {
+  int button = -1;
+  switch (key) {
+    case SDLK_ESCAPE:
+    case SDLK_BACKSPACE:
+      button = HalGPIO::BTN_BACK;
+      break;
+    case SDLK_RETURN:
+    case SDLK_SPACE:
+      button = HalGPIO::BTN_CONFIRM;
+      break;
+    case SDLK_LEFT:
+      button = HalGPIO::BTN_LEFT;
+      break;
+    case SDLK_RIGHT:
+      button = HalGPIO::BTN_RIGHT;
+      break;
+    case SDLK_UP:
+      button = HalGPIO::BTN_UP;
+      break;
+    case SDLK_DOWN:
+      button = HalGPIO::BTN_DOWN;
+      break;
+    case SDLK_TAB:
+    case SDLK_p:
+      button = HalGPIO::BTN_POWER;
+      break;
+    default:
+      break;
+  }
+  if (button >= 0) {
+    currentButtons[button] = down;
+    if (down && !previousButtons[button]) pressedAt[button] = millis();
+  }
+}
+}  // namespace
+
+void HalGPIO::begin() { _deviceType = DeviceType::X4; }
+void HalGPIO::update() {
+  previousButtons = currentButtons;
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    if (event.type == SDL_QUIT) std::_Exit(0);
+    if (event.type == SDL_KEYDOWN && !event.key.repeat) setButton(event.key.keysym.sym, true);
+    if (event.type == SDL_KEYUP) setButton(event.key.keysym.sym, false);
+  }
+  heldTime = 0;
+  for (size_t i = 0; i < currentButtons.size(); i++) {
+    if (currentButtons[i]) heldTime = std::max(heldTime, millis() - pressedAt[i]);
+  }
+}
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+  return buttonIndex < currentButtons.size() && currentButtons[buttonIndex];
+}
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+  return buttonIndex < currentButtons.size() && currentButtons[buttonIndex] && !previousButtons[buttonIndex];
+}
+bool HalGPIO::wasAnyPressed() const {
+  for (size_t i = 0; i < currentButtons.size(); i++)
+    if (currentButtons[i] && !previousButtons[i]) return true;
+  return false;
+}
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+  return buttonIndex < currentButtons.size() && !currentButtons[buttonIndex] && previousButtons[buttonIndex];
+}
+bool HalGPIO::wasAnyReleased() const {
+  for (size_t i = 0; i < currentButtons.size(); i++)
+    if (!currentButtons[i] && previousButtons[i]) return true;
+  return false;
+}
+unsigned long HalGPIO::getHeldTime() const { return heldTime; }
+void HalGPIO::startDeepSleep() {}
+void HalGPIO::verifyPowerButtonWakeup(uint16_t, bool) {}
+bool HalGPIO::isUsbConnected() const { return true; }
+bool HalGPIO::wasUsbStateChanged() const { return false; }
+HalGPIO::WakeupReason HalGPIO::getWakeupReason() const { return WakeupReason::Other; }
+
+#else
 #include <Logging.h>
 #include <Preferences.h>
 #include <SPI.h>
@@ -302,3 +396,4 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   }
   return WakeupReason::Other;
 }
+#endif

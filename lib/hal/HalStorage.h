@@ -72,7 +72,7 @@ class HalFile : public Print {
   HalFile(const HalFile&) = delete;
   HalFile& operator=(const HalFile&) = delete;
 
-  void flush();
+  void flush() override;
   size_t getName(char* name, size_t len);
   size_t size();
   size_t fileSize();
@@ -86,6 +86,7 @@ class HalFile : public Print {
   int read(void* buf, size_t count);
   int read();  // read a single byte
   size_t write(const void* buf, size_t count);
+  size_t write(const uint8_t* buf, size_t count) override;
   size_t write(uint8_t b) override;
   bool rename(const char* newPath);
   bool isDirectory() const;

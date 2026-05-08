@@ -1,5 +1,18 @@
 #include "HalSystem.h"
 
+#if CROSSPOINT_EMULATED
+#include "Logging.h"
+
+namespace HalSystem {
+void begin() { clearLastLogs(); }
+void checkPanic() {}
+void clearPanic() { clearLastLogs(); }
+std::string getPanicInfo(bool) { return {}; }
+bool isRebootFromPanic() { return false; }
+}  // namespace HalSystem
+
+#else
+
 #include <string>
 
 #include "Arduino.h"
@@ -146,3 +159,4 @@ bool isRebootFromPanic() {
 }
 
 }  // namespace HalSystem
+#endif

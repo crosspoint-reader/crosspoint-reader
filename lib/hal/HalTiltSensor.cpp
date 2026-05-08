@@ -1,5 +1,20 @@
 #include "HalTiltSensor.h"
 
+#if CROSSPOINT_EMULATED
+
+HalTiltSensor halTiltSensor;
+
+void HalTiltSensor::begin() { _available = false; }
+bool HalTiltSensor::wake() { return false; }
+bool HalTiltSensor::deepSleep() { return false; }
+void HalTiltSensor::update(const uint8_t, const uint8_t, const bool) {}
+bool HalTiltSensor::wasTiltedForward() { return false; }
+bool HalTiltSensor::wasTiltedBack() { return false; }
+bool HalTiltSensor::hadActivity() { return false; }
+void HalTiltSensor::clearPendingEvents() {}
+
+#else
+
 #include <Logging.h>
 
 HalTiltSensor halTiltSensor;  // Singleton instance
@@ -232,3 +247,4 @@ void HalTiltSensor::clearPendingEvents() {
   _hadActivity = false;
   // Intentionally preserve _inTilt so a held tilt doesn't retrigger on next poll
 }
+#endif

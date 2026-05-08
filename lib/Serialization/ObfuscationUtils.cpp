@@ -1,5 +1,20 @@
 #include "ObfuscationUtils.h"
 
+#if CROSSPOINT_EMULATED
+
+namespace obfuscation {
+void xorTransform(std::string&) {}
+void xorTransform(std::string&, const uint8_t*, size_t) {}
+String obfuscateToBase64(const std::string& plaintext) { return String(plaintext); }
+std::string deobfuscateFromBase64(const char* encoded, bool* ok) {
+  if (ok) *ok = encoded != nullptr;
+  return encoded ? encoded : "";
+}
+void selfTest() {}
+}  // namespace obfuscation
+
+#else
+
 #include <Logging.h>
 #include <base64.h>
 #include <esp_mac.h>
@@ -96,3 +111,4 @@ void selfTest() {
 }
 
 }  // namespace obfuscation
+#endif

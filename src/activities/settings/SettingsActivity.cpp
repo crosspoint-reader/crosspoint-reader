@@ -6,15 +6,21 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#if !CROSSPOINT_EMULATED
 #include "KOReaderSettingsActivity.h"
+#endif
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
+#if !CROSSPOINT_EMULATED
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
 #include "SdFirmwareUpdateActivity.h"
+#endif
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
+#if !CROSSPOINT_EMULATED
 #include "activities/network/WifiSelectionActivity.h"
+#endif
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -177,22 +183,42 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
+#if CROSSPOINT_EMULATED
+        activityManager.goToFullScreenMessage("KOReader sync is not emulated");
+#else
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
+#endif
         break;
       case SettingAction::OPDSBrowser:
+#if CROSSPOINT_EMULATED
+        activityManager.goToFullScreenMessage("OPDS settings are not emulated");
+#else
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
+#endif
         break;
       case SettingAction::Network:
+#if CROSSPOINT_EMULATED
+        activityManager.goToFullScreenMessage("WiFi is not emulated");
+#else
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+#endif
         break;
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
+#if CROSSPOINT_EMULATED
+        activityManager.goToFullScreenMessage("OTA updates are not emulated");
+#else
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
+#endif
         break;
       case SettingAction::SdFirmwareUpdate:
+#if CROSSPOINT_EMULATED
+        activityManager.goToFullScreenMessage("Firmware updates are not emulated");
+#else
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+#endif
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
