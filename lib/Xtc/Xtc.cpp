@@ -302,7 +302,7 @@ bool Xtc::generateThumbBmp(int width, int height) const {
 
   float scaleX = static_cast<float>(THUMB_TARGET_WIDTH) / pageInfo.width;
   float scaleY = static_cast<float>(THUMB_TARGET_HEIGHT) / pageInfo.height;
-  float scale = (scaleX > scaleY) ? scaleX : scaleY;
+  float scale = (scaleX < scaleY) ? scaleX : scaleY;
 
   if (scale >= 1.0f) {
     if (generateCoverBmp()) {
