@@ -383,7 +383,7 @@ void loop() {
 
   static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN) && !APP_STATE.buttonsLocked) {
     screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
@@ -418,6 +418,10 @@ void loop() {
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
+    // If the unlock combination is being pressed while locked, don't sleep
+    if (APP_STATE.buttonsLocked && mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+      return;
+    }
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
@@ -431,20 +435,46 @@ void loop() {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 
+  static bool lockButtonComboActive = false;
+  if (gpio.isPressed(HalGPIO::BTN_POWER) && mappedInputManager.isPressed(MappedInputManager::Button::Back) &&
+      APP_STATE.buttonsLocked) {
+    lockButtonComboActive = true;
+    return;
+  }
+
+  // If unlock combo was just activated, wait for buttons to be released before processing further
+  if (lockButtonComboActive &&
+      (!gpio.isPressed(HalGPIO::BTN_POWER) || !mappedInputManager.isPressed(MappedInputManager::Button::Back))) {
+    if (!gpio.isPressed(HalGPIO::BTN_POWER) && !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+      lockButtonComboActive = false;
+      APP_STATE.buttonsLocked = false;
+      APP_STATE.buttonsLockedDisplayed = false;  // Reset flag so popup shows next frame
+      LOG_DBG("MAIN", "Buttons UNLOCKED");
+      activityManager.requestUpdate();  // Update display when lock state changes
+      return;                           // Don't process any button presses in this frame
+    }
+    return;  // Wait for both buttons to be released
+  }
+
   // Handle LOCK_BUTTONS - lock/unlock buttons with short power press
   // MUST be checked BEFORE the lock block below so unlock always works!
   if (mappedInputManager.wasReleased(MappedInputManager::Button::Power) &&
-      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::LOCK_BUTTONS) {
-    APP_STATE.buttonsLocked = !APP_STATE.buttonsLocked;
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::LOCK_BUTTONS && !lockButtonComboActive &&
+      !APP_STATE.buttonsLocked) {
+    APP_STATE.buttonsLocked = true;
     APP_STATE.buttonsLockedDisplayed = false;  // Reset flag so popup shows next frame
-    LOG_DBG("MAIN", "Buttons %s", APP_STATE.buttonsLocked ? "LOCKED" : "UNLOCKED");
+    LOG_DBG("MAIN", "Buttons LOCKED");
     activityManager.requestUpdate();  // Update display when lock state changes
+    return;                           // Don't process any button presses in this frame
   }
 
   // Show lock indicator popup when buttons are locked (only once per lock activation)
   if (APP_STATE.buttonsLocked) {
     if (!APP_STATE.buttonsLockedDisplayed) {
-      GUI.drawPopup(renderer, tr(STR_BUTTONS_LOCKED));
+      {
+        RenderLock lock;
+        GUI.drawPopup(renderer, tr(STR_BUTTONS_LOCKED));
+      }
       APP_STATE.buttonsLockedDisplayed = true;
     }
     return;
