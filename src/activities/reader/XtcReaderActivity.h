@@ -20,15 +20,15 @@ class XtcReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
-  struct StatusBarPageInfo {
+  struct StatusBarInfo {
     int currentPage;
     int pageCount;
+    std::string title;
   };
 
   void renderPage();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
-  std::string getStatusBarTitle() const;
-  StatusBarPageInfo getStatusBarPageInfo() const;
+  StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;
   void loadProgress();
 

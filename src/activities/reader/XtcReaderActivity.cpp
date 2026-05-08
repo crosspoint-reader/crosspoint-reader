@@ -133,36 +133,14 @@ void XtcReaderActivity::render(RenderLock&&) {
   saveProgress();
 }
 
-std::string XtcReaderActivity::getStatusBarTitle() const {
-  if (!xtc) {
-    return "";
-  }
-
-  if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
-    return xtc->getTitle();
-  }
-
-  if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE || !xtc->hasChapters()) {
-    return "";
-  }
-
-  const auto& chapters = xtc->getChapters();
-  const auto chapterIt = std::find_if(chapters.begin(), chapters.end(), [this](const xtc::ChapterInfo& chapter) {
-    return currentPage >= chapter.startPage && currentPage <= chapter.endPage;
-  });
-  if (chapterIt != chapters.end()) {
-    return chapterIt->name.empty() ? tr(STR_UNNAMED) : chapterIt->name;
-  }
-
-  return "";
-}
-
-XtcReaderActivity::StatusBarPageInfo XtcReaderActivity::getStatusBarPageInfo() const {
+XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
   const int bookPageCount = xtc ? static_cast<int>(xtc->getPageCount()) : 0;
   const int bookPage = static_cast<int>(currentPage) + 1;
+  const std::string bookTitle =
+      xtc && SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE ? xtc->getTitle() : "";
 
   if (!xtc || !xtc->hasChapters()) {
-    return StatusBarPageInfo{bookPage, bookPageCount};
+    return StatusBarInfo{bookPage, bookPageCount, bookTitle};
   }
 
   const auto& chapters = xtc->getChapters();
@@ -171,18 +149,19 @@ XtcReaderActivity::StatusBarPageInfo XtcReaderActivity::getStatusBarPageInfo() c
   });
 
   if (chapterIt == chapters.end() || chapterIt->endPage < chapterIt->startPage) {
-    return StatusBarPageInfo{bookPage, bookPageCount};
+    return StatusBarInfo{bookPage, bookPageCount, bookTitle};
   }
 
-  return StatusBarPageInfo{static_cast<int>(currentPage - chapterIt->startPage) + 1,
-                           static_cast<int>(chapterIt->endPage - chapterIt->startPage) + 1};
+  std::string title = bookTitle;
+  if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
+    title = chapterIt->name.empty() ? tr(STR_UNNAMED) : chapterIt->name;
+  }
+
+  return StatusBarInfo{static_cast<int>(currentPage - chapterIt->startPage) + 1,
+                       static_cast<int>(chapterIt->endPage - chapterIt->startPage) + 1, title};
 }
 
 void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition position) const {
-  if (!xtc) {
-    return;
-  }
-
   const bool drawBottom = SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_BOTTOM &&
                           position == StatusBarOverlayPosition::Bottom;
   const bool drawTop = SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP &&
@@ -199,9 +178,6 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  (void)orientedMarginTop;
-  (void)orientedMarginRight;
-  (void)orientedMarginLeft;
 
   int clearY;
   int paddingBottom = 0;
@@ -224,8 +200,8 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   const int pageCount = static_cast<int>(xtc->getPageCount());
   const int displayPage = static_cast<int>(currentPage) + 1;
   const float progress = pageCount > 0 ? (static_cast<float>(displayPage) * 100.0f) / pageCount : 0.0f;
-  const auto pageInfo = getStatusBarPageInfo();
-  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, getStatusBarTitle(), paddingBottom);
+  const auto pageInfo = getStatusBarInfo();
+  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom);
 }
 
 void XtcReaderActivity::renderPage() {
