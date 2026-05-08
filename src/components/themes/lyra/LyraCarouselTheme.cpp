@@ -90,9 +90,9 @@ const uint8_t* iconBitmapFor(UIIcon icon) {
 // home after settings doesn't re-read covers from SD.
 // Freed explicitly via invalidateFrameCache() before entering the reader.
 // ---------------------------------------------------------------------------
-constexpr int kFrameCount = 3;
+constexpr int kFrameCount = 1;
 uint8_t* gCachedFrames[kFrameCount] = {};
-int gCachedFrameBookIdx[kFrameCount] = {-1, -1, -1};
+int gCachedFrameBookIdx[kFrameCount] = {-1};
 int gCachedFrameCount = 0;
 std::string gCacheKey;
 
@@ -102,14 +102,8 @@ int findFrameSlot(int bookIdx) {
   }
   return -1;
 }
-}  // namespace
 
-// ---------------------------------------------------------------------------
-// Static helpers
-// ---------------------------------------------------------------------------
-void LyraCarouselTheme::setPreRenderIndex(int idx) { lastCarouselSelectorIndex = idx; }
-
-void LyraCarouselTheme::invalidateFrameCache() const {
+void freeFrameCache() {
   for (int i = 0; i < kFrameCount; ++i) {
     if (gCachedFrames[i]) {
       free(gCachedFrames[i]);
@@ -120,6 +114,14 @@ void LyraCarouselTheme::invalidateFrameCache() const {
   gCachedFrameCount = 0;
   gCacheKey.clear();
 }
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Static helpers
+// ---------------------------------------------------------------------------
+void LyraCarouselTheme::setPreRenderIndex(int idx) { lastCarouselSelectorIndex = idx; }
+
+void LyraCarouselTheme::invalidateFrameCache() { freeFrameCache(); }
 
 void LyraCarouselTheme::onBookWillClose(const std::string& /*path*/, Epub* epub, Xtc* xtc, Txt* /*txt*/) {
   if (epub) {
@@ -212,13 +214,13 @@ bool LyraCarouselTheme::tryFastHomeRender(GfxRenderer& renderer, const std::vect
 
   if (!framesReady) {
     // Free old cache and allocate fresh frames
-    invalidateFrameCache();
+    freeFrameCache();
     const int frameCount = std::min(bookCount, kFrameCount);
     for (int i = 0; i < frameCount; ++i) {
       gCachedFrames[i] = static_cast<uint8_t*>(malloc(bufferSize));
       if (!gCachedFrames[i]) {
         LOG_ERR("CAROUSEL", "tryFastHomeRender: malloc failed for frame %d", i);
-        invalidateFrameCache();
+        freeFrameCache();
         return false;
       }
     }

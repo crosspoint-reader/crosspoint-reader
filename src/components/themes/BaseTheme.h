@@ -193,6 +193,10 @@ class BaseTheme {
   // Only one of epub/xtc/txt will be non-null depending on the reader.
   virtual void onBookWillClose(const std::string& path, Epub* epub, Xtc* xtc, Txt* txt) {}
 
+  // Called when HomeActivity exits. Themes that hold heap-allocated render caches
+  // should free them here so the memory is available to child activities.
+  virtual void invalidateFrameCache() {}
+
   // ---- Shared constants and helpers for battery drawing (used by all themes) ----
   static constexpr int batteryPercentSpacing = 4;
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);

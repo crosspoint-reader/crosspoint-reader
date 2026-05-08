@@ -62,8 +62,13 @@ std::string ReaderActivity::sidecarCoverPath(const std::string& bookPath) {
   const std::string base = bookPath.substr(0, dot);
   for (const char* ext : {".jpg", ".jpeg", ".png", ".bmp"}) {
     const std::string candidate = base + ext;
-    if (Storage.exists(candidate.c_str())) return candidate;
+    LOG_DBG("SIDECAR", "Checking: %s", candidate.c_str());
+    if (Storage.exists(candidate.c_str())) {
+      LOG_DBG("SIDECAR", "Found sidecar cover: %s", candidate.c_str());
+      return candidate;
+    }
   }
+  LOG_DBG("SIDECAR", "No sidecar found for: %s", bookPath.c_str());
   return "";
 }
 

@@ -182,7 +182,10 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     if (!sidecar.empty()) {
       const bool sidecarAlreadyStored =
           book.coverBmpPath == sidecar || book.coverBmpPath.find("sidecar_") != std::string::npos;
+      LOG_DBG("HOME", "Sidecar for %s: stored=%s alreadyStored=%d", book.path.c_str(), book.coverBmpPath.c_str(),
+              sidecarAlreadyStored ? 1 : 0);
       if (!sidecarAlreadyStored) {
+        LOG_DBG("HOME", "Updating coverBmpPath to sidecar: %s", sidecar.c_str());
         RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, sidecar);
         RecentBook updated = book;
         updated.coverBmpPath = sidecar;
@@ -208,7 +211,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       const bool isSidecar =
           FsHelpers::hasJpgExtension(book.coverBmpPath) || FsHelpers::hasPngExtension(book.coverBmpPath);
       if (isSidecar) {
+        LOG_DBG("HOME", "Converting sidecar %s for book %s", book.coverBmpPath.c_str(), book.path.c_str());
         if (!Storage.exists(book.coverBmpPath.c_str())) {
+          LOG_ERR("HOME", "Sidecar file missing: %s", book.coverBmpPath.c_str());
           RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, "");
           book.coverBmpPath = "";
         } else {
@@ -229,6 +234,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             if (convertSidecarToBmp(book.path, book.coverBmpPath, w, coverHeight, name).empty()) success = false;
           }
           if (success) {
+            LOG_DBG("HOME", "Sidecar converted, placeholder: %s", placeholder.c_str());
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, placeholder);
             book.coverBmpPath = placeholder;
           } else {
@@ -374,6 +380,7 @@ void HomeActivity::onEnter() {
 void HomeActivity::onExit() {
   Activity::onExit();
   freeCoverBuffer();
+  UITheme::getInstance().getMutableTheme().invalidateFrameCache();
 }
 
 bool HomeActivity::storeCoverBuffer() {
@@ -564,6 +571,9 @@ void HomeActivity::render(RenderLock&&) {
   if (!firstRenderDone) {
     firstRenderDone = true;
     requestUpdate();
+  } else if (!recentsLoaded && !recentsLoading) {
+    recentsLoading = true;
+    loadRecentCovers(getHomeCoverRenderHeight(computeHomeScreenLayout(metrics, contentRect.height, menuCount)));
   }
 }
 
