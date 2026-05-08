@@ -322,12 +322,15 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
-          // Clear only the pixels outside the arc in each corner so the rounded
-          // outline has white backing. Circle test: pixel (dx,dy) from the arc
-          // centre is outside if dx²+dy² > r², where r = kCornerRadius.
+          // Clear only the pixels outside the arc in each corner.
+          // The arc centre for the top-left corner is (x+r, y+r). A pixel at
+          // (x+dx, y+dy) is outside the arc when its distance from that centre
+          // exceeds r, i.e. (r-1-dx)²+(r-1-dy)² > (r-1)².
           for (int dy = 0; dy < kCornerRadius; ++dy) {
             for (int dx = 0; dx < kCornerRadius; ++dx) {
-              if (dx * dx + dy * dy > kCornerRadius * kCornerRadius) {
+              const int ex = kCornerRadius - 1 - dx;
+              const int ey = kCornerRadius - 1 - dy;
+              if (ex * ex + ey * ey > (kCornerRadius - 1) * (kCornerRadius - 1)) {
                 renderer.drawPixel(x + dx, y + dy, false);                        // top-left
                 renderer.drawPixel(x + maxW - 1 - dx, y + dy, false);             // top-right
                 renderer.drawPixel(x + dx, y + maxH - 1 - dy, false);             // bottom-left
