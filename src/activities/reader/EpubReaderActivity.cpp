@@ -431,9 +431,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
         const std::string savedEpubPath = epub->getPath();
 
-        // Best-effort: persist current position so the reader resumes at the right page
-        // on return. If this fails KOSync still runs — the helper logs the error.
-        saveProgress(currentSpineIndex, currentPage, totalPages);
+        // Persist current position so the reader resumes at the right page on return.
+        // goToReader() depends on this file, so abort the sync if the write fails.
+        if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
+          break;
+        }
 
         // Release Epub and Section to free ~65KB RAM for the TLS handshake.
         LOG_DBG("KOSync", "Releasing epub for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
