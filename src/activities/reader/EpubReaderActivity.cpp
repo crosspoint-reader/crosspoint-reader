@@ -435,6 +435,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         // goToReader() depends on this file, so abort the sync if the write fails.
         if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
           LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
+          pendingSyncSaveError = true;
+          requestUpdate();
           return;
         }
 
@@ -704,6 +706,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+
+  if (pendingSyncSaveError) {
+    pendingSyncSaveError = false;
+    GUI.drawPopup(renderer, tr(STR_SAVE_PROGRESS_FAILED));
+  }
 
   if (pendingScreenshot) {
     pendingScreenshot = false;
