@@ -38,7 +38,6 @@ class WebDAVHandler : public RequestHandler {
   bool isProtectedPath(const String& path) const;
   int getDepth(WebServer& s) const;
   bool getOverwrite(WebServer& s) const;
-  void clearEpubCacheIfNeeded(const String& path) const;
   void sendPropEntry(WebServer& s, const String& href, bool isDir, size_t size, const String& lastModified) const;
   String getMimeType(const String& path) const;
 };
