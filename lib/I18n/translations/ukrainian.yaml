@@ -325,4 +325,4 @@ STR_KB_HINT_SECONDARY_CHAR: "Затисніть ВИБРАТИ для додат
 STR_KB_HINT_UPPER_SECONDARY: "Затисніть ВИБРАТИ для ВЕЛИКИХ літер / символів"
 STR_KB_HINT_LOWER_SECONDARY: "Затисніть ВИБРАТИ для малих літер / символів"
 STR_KB_HINT_URL_SNIPPETS: "Натисніть URL для вибору шаблонів"
-STR_PAGE_PREFIX: "Сторінка: "
+STR_PAGE: "Сторінка: "
