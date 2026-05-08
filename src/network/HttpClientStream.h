@@ -8,7 +8,7 @@
 
 class HttpClientStream final : public Stream {
  public:
-  explicit HttpClientStream(esp_http_client_handle_t client, int64_t contentLength);
+  explicit HttpClientStream(esp_http_client_handle_t client, int64_t contentLength, size_t maxBytes = 0);
 
   int available() override;
   int read() override;
@@ -19,11 +19,14 @@ class HttpClientStream final : public Stream {
   size_t bytesReadCount() const { return bytesRead; }
   bool hasError() const { return lastReadError < 0; }
   int lastError() const { return lastReadError; }
+  bool isLimitExceeded() const { return limitExceeded; }
 
  private:
   esp_http_client_handle_t client;
   int64_t contentLength;
+  size_t maxBytes;
   size_t bytesRead = 0;
   int lastReadError = 0;
   bool endOfStream = false;
+  bool limitExceeded = false;
 };

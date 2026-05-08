@@ -32,14 +32,46 @@ jobs:
 
       - name: Extract env
         run: |
-          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "BRANCH_SUFFIX=${GITHUB_REF_NAME#release/}" >> $GITHUB_ENV
-          echo "RC_TAG=${GITHUB_REF_NAME#release/}-rc.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> $GITHUB_ENV
+          VERSION="$(python3 - <<'PY'
+          import configparser
+
+          config = configparser.ConfigParser()
+          config.read("platformio.ini")
+          version = config["crosspoint"]["version"].strip()
+          if version.count(".") == 1:
+              version = f"{version}.0"
+          print(version)
+          PY
+          )"
+
+          NEXT_RC="$(python3 - "$VERSION" <<'PY'
+          import re
+          import subprocess
+          import sys
+
+          version = sys.argv[1]
+          pattern = re.compile(rf"^{re.escape(version)}-rc\.(\d+)(?:\.\d+)?$")
+
+          highest = 0
+          tags = subprocess.check_output(
+              ["git", "tag", "-l", f"{version}-rc.*"],
+              text=True,
+          )
+          for tag in tags.splitlines():
+              match = pattern.match(tag)
+              if match:
+                  highest = max(highest, int(match.group(1)))
+
+          print(highest + 1)
+          PY
+          )"
+
+          echo "RC_TAG=${VERSION}-rc.${NEXT_RC}" >> $GITHUB_ENV
           echo "RELEASE_NOTES_PATH=${RUNNER_TEMP}/release-notes.md" >> $GITHUB_ENV
 
       - name: Build CrossPoint Release Candidate
         env:
-          CROSSPOINT_RC_HASH: ${{ env.SHORT_SHA }}
+          CROSSPOINT_RC_VERSION: ${{ env.RC_TAG }}
         run: pio run -e gh_release_rc
 
       - name: Patch min_chip_rev_full to 0

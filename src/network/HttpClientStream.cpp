@@ -2,21 +2,31 @@
 
 #include <climits>
 
-HttpClientStream::HttpClientStream(esp_http_client_handle_t client, int64_t contentLength)
-    : client(client), contentLength(contentLength) {}
+HttpClientStream::HttpClientStream(esp_http_client_handle_t client, int64_t contentLength, size_t maxBytes)
+    : client(client), contentLength(contentLength), maxBytes(maxBytes) {}
 
 int HttpClientStream::available() {
   if (hasError() || endOfStream) {
     return 0;
   }
   if (contentLength < 0) {
+    if (maxBytes > 0 && bytesRead >= maxBytes) {
+      return 0;
+    }
     return 1;
   }
   const int64_t remaining = contentLength - bytesRead;
   if (remaining <= 0) {
     return 0;
   }
-  return remaining > INT_MAX ? INT_MAX : static_cast<int>(remaining);
+  size_t availableBytes = remaining > INT_MAX ? INT_MAX : static_cast<size_t>(remaining);
+  if (maxBytes > 0) {
+    const size_t remainingLimit = bytesRead >= maxBytes ? 0 : maxBytes - bytesRead;
+    if (availableBytes > remainingLimit) {
+      availableBytes = remainingLimit;
+    }
+  }
+  return static_cast<int>(availableBytes);
 }
 
 int HttpClientStream::read() {
@@ -33,6 +43,19 @@ size_t HttpClientStream::readBytes(char* buffer, size_t length) {
   if (buffer == nullptr || length == 0) {
     return 0;
   }
+
+  if (maxBytes > 0) {
+    if (bytesRead >= maxBytes) {
+      limitExceeded = true;
+      endOfStream = true;
+      return 0;
+    }
+    const size_t remainingLimit = maxBytes - bytesRead;
+    if (length > remainingLimit) {
+      length = remainingLimit;
+    }
+  }
+
   const int readLen = esp_http_client_read(client, buffer, static_cast<int>(length));
   if (readLen == 0) {
     endOfStream = true;

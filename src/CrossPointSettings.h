@@ -276,6 +276,8 @@ class CrossPointSettings {
   uint8_t useClock = 0;
   // Show the Weather home screen menu item (1 = enabled, 0 = hidden)
   uint8_t useWeather = 1;
+  // Include release candidate builds when checking for OTA updates.
+  uint8_t includeBetaUpdates = 0;
 
   // Configurable actions for short / double / long press on each logical button.
   // BTN_DEFAULT means "use the button's normal built-in behaviour".

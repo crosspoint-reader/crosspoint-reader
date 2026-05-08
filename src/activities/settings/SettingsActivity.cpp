@@ -64,6 +64,8 @@ void SettingsActivity::onEnter() {
 
   bool sawReaderFontSection = false;
   bool insertedFontDownload = false;
+  bool sawIncludeBetaUpdates = false;
+  SettingInfo includeBetaUpdatesSetting{};
 
   auto insertFontDownloadBelowFontSection = [&]() {
     auto fontDownload = SettingInfo::Action(StrId::STR_FONT_DOWNLOAD, SettingAction::DownloadFonts);
@@ -87,6 +89,11 @@ void SettingsActivity::onEnter() {
       enriched.enumLabels.clear();
       enriched.enumLabels.reserve(n);
       for (uint8_t i = 0; i < n; i++) enriched.enumLabels.push_back(fontFamilyOptionLabel(i));
+    }
+    if (enriched.nameId == StrId::STR_INCLUDE_BETA_UPDATES) {
+      includeBetaUpdatesSetting = enriched;
+      sawIncludeBetaUpdates = true;
+      continue;
     }
     const bool isReaderFontEntry =
         enriched.category == StrId::STR_CAT_READER && (enriched.subcategory == StrId::STR_MENU_READER_FONT ||
@@ -150,6 +157,10 @@ void SettingsActivity::onEnter() {
   addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates)
                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+  if (sawIncludeBetaUpdates) {
+    addToMoved(systemSettings, lastSystemSub,
+               std::move(includeBetaUpdatesSetting.withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+  }
   addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate)
                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));

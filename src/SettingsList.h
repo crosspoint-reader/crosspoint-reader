@@ -229,6 +229,8 @@ inline const std::vector<SettingInfo> list = {
                         StrId::STR_CAT_SYSTEM),
     SettingInfo::Toggle(StrId::STR_SHOW_FILE_EXTENSIONS, &CrossPointSettings::showFileExtensions, "showFileExtensions",
                         StrId::STR_CAT_SYSTEM),
+    SettingInfo::Toggle(StrId::STR_INCLUDE_BETA_UPDATES, &CrossPointSettings::includeBetaUpdates, "includeRcUpdates",
+                        StrId::STR_CAT_SYSTEM),
 
     // Will be dealt with separately , so do receive none of the main categories to be visible in the web UI but not the
     // device UI

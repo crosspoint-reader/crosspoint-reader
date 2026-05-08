@@ -129,7 +129,7 @@ def categorize_commit(subject: str) -> tuple[str, str]:
         return "other", subject
 
     commit_type = match.group("type").lower()
-    description = match.group("description")
+    description = f'{commit_type}: {match.group("description")}'
     if match.group("breaking"):
         description = f"BREAKING: {description}"
 

@@ -107,12 +107,6 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
     return false;
   }
   const unsigned long streamMs = millis() - streamStart;
-  LOG_DBG("EBP",
-          "content.opf stream=%lu ms, parser.write_calls=%zu, bytes=%zu, parse_buffer=%lu ms, manifest_open=%lu ms, "
-          "spine_open=%lu ms, guide_open=%lu ms, itemrefs=%zu, itemref_lookup=%lu ms, create_spine=%lu ms",
-          streamMs, opfParser.stats.writeCalls, opfParser.stats.bytesParsed, opfParser.stats.parseBufferMs,
-          opfParser.stats.manifestOpenMs, opfParser.stats.spineOpenMs, opfParser.stats.guideOpenMs,
-          opfParser.stats.itemRefCount, opfParser.stats.itemRefLookupMs, opfParser.stats.createSpineEntryMs);
 
   // Grab data from opfParser into epub
   bookMetadata.title = opfParser.title;
