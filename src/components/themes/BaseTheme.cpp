@@ -576,7 +576,6 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   constexpr int margin = 15;
-  // Scale y position proportionally to screen height (7.5% from top)
   const int y = static_cast<int>(renderer.getScreenHeight() * 0.075f);
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::BOLD);
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
@@ -584,7 +583,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   const int h = textHeight + margin * 2;
   const int x = (renderer.getScreenWidth() - w) / 2;
 
-  renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);  // frame thickness 2
+  renderer.fillRect(x - 2, y - 2, w + 4, h + 4, true);
   renderer.fillRect(x, y, w, h, false);
 
   const int textX = x + (w - textWidth) / 2;
@@ -592,6 +591,12 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   renderer.drawText(UI_12_FONT_ID, textX, textY, message, true, EpdFontFamily::BOLD);
   renderer.displayBuffer();
   return Rect{x, y, w, h};
+}
+
+void BaseTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
+  constexpr int border = 2;
+  renderer.fillRect(rect.x - border, rect.y - border, rect.width + border * 2, rect.height + border * 2, true);
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {

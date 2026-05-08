@@ -564,6 +564,13 @@ Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   return Rect{x, y, w, h};
 }
 
+void LyraTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
+  constexpr int outline = 2;
+  renderer.fillRoundedRect(rect.x - outline, rect.y - outline, rect.width + outline * 2, rect.height + outline * 2,
+                           cornerRadius + outline, Color::Black);
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::White);
+}
+
 void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
   constexpr int barHeight = 4;
 

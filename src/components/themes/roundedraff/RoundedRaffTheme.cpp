@@ -384,3 +384,10 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
 
   renderer.setOrientation(origOrientation);
 }
+
+void RoundedRaffTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
+  constexpr int outline = 2;
+  renderer.fillRoundedRect(rect.x - outline, rect.y - outline, rect.width + outline * 2, rect.height + outline * 2,
+                           kRowRadius + outline, Color::Black);
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, kRowRadius, Color::White);
+}

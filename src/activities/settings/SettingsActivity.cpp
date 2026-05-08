@@ -1,6 +1,10 @@
 #include "SettingsActivity.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
+#include <HalStorage.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include "ButtonRemapActivity.h"
@@ -14,6 +18,7 @@
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
 #include "SdCardFontGlobals.h"
+#include "RecentBooksStore.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
@@ -100,6 +105,11 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
+  if (coverDisablePopupVisible) {
+    handleCoverDisablePopup();
+    return;
+  }
+
   bool hasChangedCategory = false;
 
   // Handle actions with early return
@@ -186,7 +196,6 @@ void SettingsActivity::toggleCurrentSetting() {
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
     if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      // Launch font selection submenu instead of cycling
       startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                              [this](const ActivityResult&) {
                                SETTINGS.saveToFile();
@@ -313,6 +322,136 @@ void SettingsActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  // Always use standard refresh for settings screen
-  renderer.displayBuffer();
+  if (coverDisablePopupVisible) {
+    renderCoverDisablePopup();
+    renderer.displayBuffer(HalDisplay::RefreshMode::FAST_REFRESH);
+  } else {
+    renderer.displayBuffer();
+  }
+}
+
+void SettingsActivity::handleCoverDisablePopup() {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    if (coverDisableSelection > 0) {
+      coverDisableSelection--;
+      requestUpdate();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) ||
+             mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    if (coverDisableSelection < 1) {
+      coverDisableSelection++;
+      requestUpdate();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (coverDisableSelection == 1) {
+      deleteAllCoverThumbs();
+    }
+    coverDisablePopupVisible = false;
+    SETTINGS.saveToFile();
+    requestUpdate();
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
+    coverDisablePopupVisible = false;
+    requestUpdate();
+  }
+}
+
+void SettingsActivity::deleteAllCoverThumbs() {
+  auto root = Storage.open("/.crosspoint");
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return;
+  }
+
+  char name[128];
+  for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    file.getName(name, sizeof(name));
+    String itemName(name);
+
+    if (file.isDirectory() && itemName.startsWith("epub_")) {
+      file.close();
+      String dirPath = "/.crosspoint/" + itemName;
+      auto dir = Storage.open(dirPath.c_str());
+      if (dir && dir.isDirectory()) {
+        char entryName[64];
+        for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+          entry.getName(entryName, sizeof(entryName));
+          String eName(entryName);
+          if (!entry.isDirectory() && eName.startsWith("thumb_") && eName.endsWith(".bmp")) {
+            String thumbPath = dirPath + "/" + eName;
+            Storage.remove(thumbPath.c_str());
+          }
+          entry.close();
+        }
+      }
+      if (dir) dir.close();
+    } else {
+      file.close();
+    }
+  }
+  root.close();
+
+  const auto& books = RECENT_BOOKS.getBooks();
+  for (const auto& book : books) {
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      RECENT_BOOKS.setCoverDisabled(book.path, true);
+    }
+  }
+}
+
+void SettingsActivity::renderCoverDisablePopup() {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto height10 = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto height12 = renderer.getLineHeight(UI_12_FONT_ID);
+  const auto heightSmall = renderer.getLineHeight(SMALL_FONT_ID);
+
+  constexpr int padding = 20;
+  const int contentHeight = height12 + height10 + height10 + height10 + heightSmall;
+  const int dialogH = contentHeight + padding * 2;
+  const int dialogY = (pageHeight - dialogH) / 2;
+  const int dialogW = pageWidth - padding * 2;
+  const int dialogX = padding;
+
+  GUI.drawDialogBackground(renderer, Rect{dialogX, dialogY, dialogW, dialogH});
+
+  int y = dialogY + padding;
+
+  renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_COVER_DISABLE_TITLE), true, EpdFontFamily::BOLD);
+  y += height12 + 8;
+
+  renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_COVER_DISABLE_DESC), true);
+  y += height10 + 12;
+
+  constexpr int buttonSpacing = 30;
+  const int btn1Width = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_COVER_DISABLE_ONLY)) + 8;
+  const int btn2Width = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_COVER_DISABLE_AND_REMOVE)) + 8;
+  const int totalBtnWidth = btn1Width + buttonSpacing + btn2Width;
+  int startX = (pageWidth - totalBtnWidth) / 2;
+
+  if (coverDisableSelection == 0) {
+    std::string text = "[" + std::string(tr(STR_COVER_DISABLE_ONLY)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX, y, text.c_str(), true, EpdFontFamily::BOLD);
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + 4, y, tr(STR_COVER_DISABLE_ONLY), true);
+  }
+
+  const int btn2X = startX + btn1Width + buttonSpacing;
+  if (coverDisableSelection == 1) {
+    std::string text = "[" + std::string(tr(STR_COVER_DISABLE_AND_REMOVE)) + "]";
+    renderer.drawText(UI_10_FONT_ID, btn2X, y, text.c_str(), true, EpdFontFamily::BOLD);
+  } else {
+    renderer.drawText(UI_10_FONT_ID, btn2X + 4, y, tr(STR_COVER_DISABLE_AND_REMOVE), true);
+  }
+  y += height10 + 8;
+
+  if (coverDisableSelection == 0) {
+    renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_COVER_DISABLE_ONLY_DESC), true);
+  } else {
+    renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_COVER_DISABLE_AND_REMOVE_DESC), true);
+  }
+
+  const auto hintLabels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  GUI.drawButtonHints(renderer, hintLabels.btn1, hintLabels.btn2, hintLabels.btn3, hintLabels.btn4);
 }

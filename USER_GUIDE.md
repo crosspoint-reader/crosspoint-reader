@@ -151,6 +151,12 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Classic" - The original Crosspoint theme
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
+- **Home Screen Cover**: How book covers are displayed on the home screen:
+  - "Enabled" (default) - Show book covers on the home screen
+  - "Timeout (10s)" - Show covers with a generation timeout
+  - "Disabled" - When switching to Disabled, a prompt offers two options:
+    - "Disable" - Stop generating covers for new books only
+    - "Remove" - Stop generating covers and delete all existing cover thumbnails
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
