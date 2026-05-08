@@ -75,7 +75,19 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
   // epub is guaranteed non-null here: ensureEpubLoaded() was called in performSync() before
   // SHOWING_RESULT state is entered, and this method is only called from that state.
   assert(epub);
-  if (!ReaderUtils::saveProgress(*epub, spineIndex, page, 0)) {
+  FsFile f;
+  bool ok = spineIndex >= 0 && spineIndex <= 0xFFFF && page >= 0 && page <= 0xFFFF &&
+            Storage.openFileForWrite("KOSync", epub->getCachePath() + "/progress.bin", f);
+  if (ok) {
+    uint8_t data[6] = {};
+    data[0] = spineIndex & 0xFF;
+    data[1] = (spineIndex >> 8) & 0xFF;
+    data[2] = page & 0xFF;
+    data[3] = (page >> 8) & 0xFF;
+    ok = f.write(data, sizeof(data)) == sizeof(data);
+  }
+  if (!ok) {
+    LOG_ERR("KOSync", "Failed to save progress: spine=%d page=%d", spineIndex, page);
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -301,7 +313,6 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, 120, tr(STR_PROGRESS_FOUND), true, EpdFontFamily::BOLD);
 
     // Remote chapter name requires Epub (loaded lazily in performSync before this state).
-    assert(epub);
     const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
     const std::string remoteChapter =
         (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
