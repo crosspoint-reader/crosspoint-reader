@@ -235,8 +235,20 @@ bool LyraCarouselTheme::tryFastHomeRender(GfxRenderer& renderer, const std::vect
   const bool inCarouselRow = (selectorIndex < bookCount);
   const int centerIdx =
       inCarouselRow ? selectorIndex : (lastCarouselSelectorIndex >= 0 ? lastCarouselSelectorIndex : 0);
-  const int slotIdx = findFrameSlot(centerIdx);
-  if (slotIdx < 0 || !gCachedFrames[slotIdx]) return false;
+  int slotIdx = findFrameSlot(centerIdx);
+  if (slotIdx < 0) {
+    slotIdx = 0;
+  }
+  if (!gCachedFrames[slotIdx]) {
+    gCachedFrames[slotIdx] = static_cast<uint8_t*>(malloc(bufferSize));
+    if (!gCachedFrames[slotIdx]) {
+      LOG_ERR("CAROUSEL", "tryFastHomeRender: malloc failed for frame %d", slotIdx);
+      return false;
+    }
+  }
+  if (findFrameSlot(centerIdx) < 0 || gCachedFrameBookIdx[slotIdx] != centerIdx) {
+    renderOneCarouselFrame(renderer, recentBooks, centerIdx, slotIdx, metrics);
+  }
 
   memcpy(frameBuffer, gCachedFrames[slotIdx], bufferSize);
 
