@@ -12,7 +12,7 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 8;
+constexpr int MENU_ITEMS = 9;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT,
                                      StrId::STR_BOOK_PROGRESS_PERCENTAGE,
                                      StrId::STR_PROGRESS_BAR,
@@ -20,7 +20,8 @@ const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT,
                                      StrId::STR_TITLE,
                                      StrId::STR_BATTERY,
                                      StrId::STR_CLOCK,
-                                     StrId::STR_CLOCK_UTC_OFFSET};
+                                     StrId::STR_CLOCK_UTC_OFFSET,
+                                     StrId::STR_XTC_STATUS_BAR};
 
 // UTC offset range: 0 = UTC-12:00, 24 = UTC+0, 52 = UTC+14:00 (half-hour steps)
 constexpr uint8_t UTC_OFFSET_MIN = 0;
@@ -46,6 +47,9 @@ const StrId progressBarThicknessNames[PROGRESS_BAR_THICKNESS_ITEMS] = {
 constexpr int TITLE_ITEMS = 3;
 const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
 
+constexpr int XTC_STATUS_BAR_ITEMS = 3;
+const StrId xtcStatusBarNames[XTC_STATUS_BAR_ITEMS] = {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP};
+
 const int widthMargin = 10;
 const int verticalPreviewPadding = 50;
 const int verticalPreviewTextPadding = 40;
@@ -67,6 +71,10 @@ void StatusBarSettingsActivity::onEnter() {
 
   if (SETTINGS.statusBarTitle >= TITLE_ITEMS) {
     SETTINGS.statusBarTitle = CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE;
+  }
+
+  if (SETTINGS.xtcStatusBarMode >= XTC_STATUS_BAR_ITEMS) {
+    SETTINGS.xtcStatusBarMode = CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_HIDE;
   }
 
   requestUpdate();
@@ -138,6 +146,9 @@ void StatusBarSettingsActivity::handleSelection() {
     } else {
       SETTINGS.clockUtcOffset++;
     }
+  } else if (selectedIndex == 8) {
+    // XTC Status Bar
+    SETTINGS.xtcStatusBarMode = (SETTINGS.xtcStatusBarMode + 1) % XTC_STATUS_BAR_ITEMS;
   }
   SETTINGS.saveToFile();
 }
@@ -175,6 +186,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
           return (halClock.isAvailable() && SETTINGS.statusBarClock) ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 7) {
           return formatUtcOffset(SETTINGS.clockUtcOffset);
+        } else if (index == 8) {
+          return I18N.get(xtcStatusBarNames[SETTINGS.xtcStatusBarMode]);
         } else {
           return tr(STR_HIDE);
         }

@@ -104,7 +104,16 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 -DUSE_UTF8_LONG_NAMES=1              // SD card long filename support
 -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES=1   // Avoid zlib name conflicts
 -DXML_GE=0                           // Disable XML general entities (security)
+-DDESTRUCTOR_CLOSES_FILE=1           // FsFile destructor auto-closes (SdFat)
 ```
+
+**DESTRUCTOR_CLOSES_FILE implications**:
+- SdFat's `FsBaseFile` destructor calls `close()` automatically when the object goes out of scope
+- **Do NOT add explicit `file.close()` calls** for local `FsFile` variables — the destructor handles it
+- Explicit `close()` is still required in these cases:
+  1. **Close before delete**: Must close before `Storage.remove()` on the same path
+  2. **Close before reopen**: Must close before reopening the same `FsFile` variable (e.g., write then reopen for read, or rewrite the same path)
+  3. **Member variables**: `FsFile` members persist beyond any single function scope, so close at the intended release point (e.g., in `onExit()`)
 
 **SINGLE_BUFFER_MODE implications**:
 - Only ONE framebuffer exists (not double-buffered)
@@ -145,11 +154,11 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 FsFile file;
 if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
   // Read from file
-  file.close();  // Explicit close required
+  // No file.close() needed — DESTRUCTOR_CLOSES_FILE=1 handles it at scope exit
 }
 ```
 
-**Usage**: See example above. Uses `FsFile` (SdFat), NOT Arduino `File`.
+**Usage**: See example above. Uses `FsFile` (SdFat), NOT Arduino `File`. Do NOT add `file.close()` for local variables (see DESTRUCTOR_CLOSES_FILE above).
 
 ---
 
@@ -167,7 +176,7 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 
 ### Memory Safety and RAII
 * Smart Pointers: Prefer std::unique_ptr. Avoid std::shared_ptr (unnecessary atomic overhead for a single-core RISC-V).
-* RAII: Use destructors for cleanup, but call file.close() or vTaskDelete() explicitly for deterministic resource release.
+* RAII: Use destructors for cleanup. Call `vTaskDelete()` explicitly for deterministic task release. Do NOT call `file.close()` on local `FsFile` variables — `DESTRUCTOR_CLOSES_FILE=1` handles it at scope exit (see Critical Build Flags).
 
 ### ESP32-C3 Platform Pitfalls
 
@@ -376,13 +385,13 @@ void enterNewActivity(Activity* activity) {
 - Activity navigation = `delete` old activity + `new` create next activity
 - Any memory allocated in `onEnter()` MUST be freed in `onExit()`
 - FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
-- File handles MUST be closed in `onExit()`
+- Member `FsFile` handles MUST be closed in `onExit()` (local `FsFile` variables auto-close via destructor)
 
 **Activity Pattern**:
 ```cpp
 void onEnter()  { Activity::onEnter(); /* alloc: buffer, tasks */ render(); }
 void loop()     { mappedInput.update(); /* handle input */ }
-void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::onExit(); }
+void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Activity::onExit(); }
 ```
 
 **Critical**: Free resources in reverse order. Delete tasks BEFORE activity destruction.
@@ -405,7 +414,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close files */ Activity::on
 **Source**: [src/main.cpp:40-115](../src/main.cpp)
 
 **All fonts are loaded as global static objects** at firmware startup:
-- Bookerly: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
+- Noto Serif: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
 - Noto Sans: 12, 14, 16, 18pt (4 styles each)
 - OpenDyslexic: 8, 10, 12, 14pt (4 styles each)
 - Ubuntu UI fonts: 10, 12pt (2 styles)
