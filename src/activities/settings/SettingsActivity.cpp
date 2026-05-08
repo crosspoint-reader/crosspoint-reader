@@ -154,16 +154,21 @@ void SettingsActivity::onEnter() {
   addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache)
                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Separator(StrId::STR_SYSTEM_UPDATE_TYPE1).withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates)
-                           .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+                           .withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   if (sawIncludeBetaUpdates) {
     addToMoved(systemSettings, lastSystemSub,
-               std::move(includeBetaUpdatesSetting.withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+               std::move(includeBetaUpdatesSetting.withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   }
   addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Separator(StrId::STR_SYSTEM_UPDATE_TYPE2).withSubmenu(StrId::STR_SYSTEM_UPDATE)));
+  addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate)
-                           .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+                           .withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_SYSTEM_INFO, SettingAction::SystemInfo)
                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));

@@ -156,8 +156,13 @@ STR_DST_UNKNOWN: "DST: unknown"
 STR_REFRESH_FREQ: "Refresh Frequency"
 STR_REFRESH_AFTER_IMAGE_PAGES: "Refresh after image pages"
 STR_KOREADER_SYNC: "KOReader Sync"
+
+STR_SYSTEM_UPDATE: "System Update"
+STR_SYSTEM_UPDATE_TYPE1: "CrossPoint++ Updates"
 STR_CHECK_UPDATES: "Check for updates"
+STR_SYSTEM_UPDATE_TYPE2: "Alternative Firmware Updates"
 STR_INCLUDE_BETA_UPDATES: "Include beta updates"
+
 STR_LANGUAGE: "Language"
 STR_CLEAR_READING_CACHE: "Clear Reading Cache"
 STR_USERNAME: "Username"
