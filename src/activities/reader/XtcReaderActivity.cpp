@@ -268,8 +268,8 @@ void XtcReaderActivity::renderPage() {
       renderer.displayBuffer(HalDisplay::FULL_REFRESH);
     }
 
-    renderer.displayXtchPlanes(plane1, plane2, pageWidth, pageHeight, &XtcReaderActivity::renderStatusBarOverlayCallback,
-                               this);
+    renderer.displayXtchPlanes(plane1, plane2, pageWidth, pageHeight,
+                               &XtcReaderActivity::renderStatusBarOverlayCallback, this);
     free(plane1);
     free(plane2);
 
