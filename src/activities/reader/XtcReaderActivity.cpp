@@ -18,8 +18,14 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
+#include "XtcReaderMenuActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
+}  // namespace
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -51,16 +57,48 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
-  // Enter chapter selection activity
+  if (automaticPageTurnActive) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      automaticPageTurnActive = false;
+      requestUpdate();
+      return;
+    }
+
+    if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
+      currentPage++;
+      if (currentPage >= xtc->getPageCount()) {
+        currentPage = xtc->getPageCount();
+        automaticPageTurnActive = false;
+      }
+      lastPageTurnTime = millis();
+      requestUpdate();
+      return;
+    }
+  }
+
+  // Enter reader menu activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
-      startActivityForResult(
-          std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              currentPage = std::get<PageResult>(result.data).page;
-            }
-          });
+    if (xtc) {
+      int currentChapterIdx = 0;
+      const auto& chapters = xtc->getChapters();
+      for (size_t i = 0; i < chapters.size(); ++i) {
+        if (currentPage >= chapters[i].startPage) {
+          currentChapterIdx = i + 1;
+        } else {
+          break;
+        }
+      }
+
+      startActivityForResult(std::make_unique<XtcReaderMenuActivity>(renderer, mappedInput, currentChapterIdx,
+                                                                     chapters.size(), currentPage, xtc->getPageCount()),
+                             [this](const ActivityResult& result) {
+                               const auto& menu = std::get<MenuResult>(result.data);
+                               toggleAutoPageTurn(menu.pageTurnOption);
+                               if (!result.isCancelled) {
+                                 onReaderMenuConfirm(static_cast<XtcReaderMenuActivity::MenuAction>(menu.action));
+                               }
+                             });
     }
   }
 
@@ -309,6 +347,68 @@ void XtcReaderActivity::saveProgress() const {
     f.write(data, 4);
     f.close();
   }
+}
+
+void XtcReaderActivity::onReaderMenuConfirm(XtcReaderMenuActivity::MenuAction action) {
+  switch (action) {
+    case XtcReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
+      if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
+        startActivityForResult(
+            std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled) {
+                currentPage = std::get<PageResult>(result.data).page;
+              }
+            });
+      }
+      break;
+    }
+    case XtcReaderMenuActivity::MenuAction::GO_TO_PAGE: {
+      startActivityForResult(
+          std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_GO_TO_PAGE), "", 10, InputType::Text),
+          [this](const ActivityResult& result) {
+            if (!result.isCancelled) {
+              const std::string& text = std::get<KeyboardResult>(result.data).text;
+              if (!text.empty()) {
+                long pageNum = strtol(text.c_str(), nullptr, 10);
+                if (pageNum > 0) {
+                  currentPage = static_cast<uint32_t>(pageNum - 1);
+                  if (currentPage >= xtc->getPageCount()) {
+                    currentPage = xtc->getPageCount() - 1;
+                  }
+                  requestUpdate();
+                }
+              }
+            }
+          });
+      break;
+    }
+    case XtcReaderMenuActivity::MenuAction::GO_HOME: {
+      onGoHome();
+      break;
+    }
+    case XtcReaderMenuActivity::MenuAction::DELETE_CACHE: {
+      if (xtc) {
+        xtc->clearCache();
+        xtc->setupCacheDir();
+      }
+      onGoHome();
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+void XtcReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
+  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
+    automaticPageTurnActive = false;
+    return;
+  }
+
+  lastPageTurnTime = millis();
+  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_RATES[selectedPageTurnOption];
+  automaticPageTurnActive = true;
 }
 
 void XtcReaderActivity::loadProgress() {
