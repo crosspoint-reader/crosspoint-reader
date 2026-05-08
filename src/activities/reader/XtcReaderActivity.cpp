@@ -80,8 +80,18 @@ void XtcReaderActivity::loop() {
   // Enter reader menu activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc) {
-      startActivityForResult(std::make_unique<XtcReaderMenuActivity>(renderer, mappedInput, xtc->getTitle(),
-                                                                     currentPage, xtc->getPageCount()),
+      int currentChapterIdx = 0;
+      const auto& chapters = xtc->getChapters();
+      for (size_t i = 0; i < chapters.size(); ++i) {
+        if (currentPage >= chapters[i].startPage) {
+          currentChapterIdx = i + 1;
+        } else {
+          break;
+        }
+      }
+
+      startActivityForResult(std::make_unique<XtcReaderMenuActivity>(renderer, mappedInput, currentChapterIdx,
+                                                                     chapters.size(), currentPage, xtc->getPageCount()),
                              [this](const ActivityResult& result) {
                                const auto& menu = std::get<MenuResult>(result.data);
                                toggleAutoPageTurn(menu.pageTurnOption);

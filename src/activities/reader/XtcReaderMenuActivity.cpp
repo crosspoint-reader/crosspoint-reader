@@ -7,12 +7,12 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-XtcReaderMenuActivity::XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const std::string& title, const uint32_t currentPage,
-                                             const uint32_t totalPages)
+XtcReaderMenuActivity::XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int currentChapter,
+                                             int totalChapters, uint32_t currentPage, uint32_t totalPages)
     : Activity("XtcReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems()),
-      title(title),
+      currentChapter(currentChapter),
+      totalChapters(totalChapters),
       currentPage(currentPage),
       totalPages(totalPages) {}
 
@@ -81,19 +81,16 @@ void XtcReaderMenuActivity::render(RenderLock&&) {
   const int hintGutterHeight = isPortraitInverted ? 50 : 0;
   const int contentY = hintGutterHeight;
 
-  // Title
-  const std::string truncTitle =
-      renderer.truncatedText(UI_12_FONT_ID, title.c_str(), contentWidth - 40, EpdFontFamily::BOLD);
-  const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
-
   // Progress summary
-  std::string progressLine = std::string(tr(STR_BOOK_PREFIX));
-  if (totalPages > 0) {
-    progressLine += std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
+  std::string progressLine;
+  if (totalChapters > 0) {
+    progressLine =
+        std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentChapter) + "/" + std::to_string(totalChapters);
   }
-  renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
+  if (!progressLine.empty()) progressLine += "  |  ";
+  progressLine += "Page: " + std::to_string(currentPage + 1) + "/" + std::to_string(totalPages);
+
+  renderer.drawCenteredText(UI_10_FONT_ID, 45 + contentY, progressLine.c_str());
 
   // Menu Items
   const int startY = 75 + contentY;

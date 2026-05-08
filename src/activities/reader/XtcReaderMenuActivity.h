@@ -12,8 +12,8 @@ class XtcReaderMenuActivity final : public Activity {
  public:
   enum class MenuAction { SELECT_CHAPTER, AUTO_PAGE_TURN, GO_TO_PAGE, GO_HOME, DELETE_CACHE };
 
-  explicit XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                 const uint32_t currentPage, const uint32_t totalPages);
+  explicit XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int currentChapter,
+                                 int totalChapters, uint32_t currentPage, uint32_t totalPages);
 
   void onEnter() override;
   void onExit() override;
@@ -32,9 +32,10 @@ class XtcReaderMenuActivity final : public Activity {
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
-  std::string title = "Reader Menu";
   uint8_t selectedPageTurnOption = 0;
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
+  int currentChapter = 0;
+  int totalChapters = 0;
   uint32_t currentPage = 0;
   uint32_t totalPages = 0;
 };
