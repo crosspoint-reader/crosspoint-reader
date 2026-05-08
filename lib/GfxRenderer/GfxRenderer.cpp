@@ -1509,7 +1509,7 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
 }
 
 void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, const uint16_t pageWidth,
-                                    const uint16_t pageHeight) {
+                                    const uint16_t pageHeight, RenderHook overlayFn, const void* overlayCtx) {
   const size_t colBytes = (pageHeight + 7) / 8;
   const uint16_t fbStride = panelWidthBytes;
 
@@ -1534,6 +1534,8 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
       dstRow[b] = srcCol[b];
     }
   }
+  setRenderMode(GRAY2_LSB);
+  if (overlayFn) overlayFn(*this, overlayCtx);
 
   copyGrayscaleLsbBuffers();
 
@@ -1546,6 +1548,8 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
       dstRow[b] = srcCol[b];
     }
   }
+  setRenderMode(GRAY2_MSB);
+  if (overlayFn) overlayFn(*this, overlayCtx);
   copyGrayscaleMsbBuffers();
 
   // Fire hook: plane1 input IS already in framebuffer format (colBytes == fbStride for portrait
@@ -1560,7 +1564,9 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
   setRenderMode(BW);
 }
 
-void GfxRenderer::displayXtcBwPage(const uint8_t* pageBuffer, const uint16_t pageWidth, const uint16_t pageHeight) {
+void GfxRenderer::displayXtcBwPage(const uint8_t* pageBuffer, const uint16_t pageWidth, const uint16_t pageHeight,
+                                   const HalDisplay::RefreshMode refreshMode, RenderHook overlayFn,
+                                   const void* overlayCtx) {
   const size_t srcRowBytes = (pageWidth + 7) / 8;
 
   // 1-bit content has no AA — render as plain BW and use the standard differential fast-refresh
@@ -1573,7 +1579,8 @@ void GfxRenderer::displayXtcBwPage(const uint8_t* pageBuffer, const uint16_t pag
       }
     }
   }
-  displayBuffer(HalDisplay::FAST_REFRESH);
+  if (overlayFn) overlayFn(*this, overlayCtx);
+  displayBuffer(refreshMode);
 }
 
 void GfxRenderer::freeBwBufferChunks() {

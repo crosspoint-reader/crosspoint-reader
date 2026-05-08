@@ -54,6 +54,7 @@ class GfxRenderer {
   // Hook is cleared automatically after firing.
   using ScreenshotHook = void (*)(const uint8_t* lsbPlane, const uint8_t* msbPlane, int physWidth, int physHeight,
                                   void* ctx);
+  using RenderHook = void (*)(const GfxRenderer&, const void*);
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
@@ -206,11 +207,14 @@ class GfxRenderer {
   // Direct 2-bit XTCH plane blit using factory LUT. Caller supplies the two decoded bit planes
   // (plane1 = BW RAM / LSB, plane2 = RED RAM / MSB) in column-major order matching XTCH encoding.
   // Handles pre-flash, both RAM writes, factory LUT fire, and BW controller sync internally.
-  void displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, uint16_t pageWidth, uint16_t pageHeight);
+  void displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, uint16_t pageWidth, uint16_t pageHeight,
+                         RenderHook overlayFn = nullptr, const void* overlayCtx = nullptr);
 
   // 1-bit XTC page via the same grayscale LUT pipeline. Row-major pageBuffer (XTC: 0=black, 1=white).
   // BW and RED RAM receive identical data since there are no intermediate gray levels.
-  void displayXtcBwPage(const uint8_t* pageBuffer, uint16_t pageWidth, uint16_t pageHeight);
+  void displayXtcBwPage(const uint8_t* pageBuffer, uint16_t pageWidth, uint16_t pageHeight,
+                        HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH, RenderHook overlayFn = nullptr,
+                        const void* overlayCtx = nullptr);
 
   // Font helpers
   const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
