@@ -207,7 +207,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   const JsonVariantConst release = selectRelease(doc);
   if (release.isNull()) {
     LOG_ERR("OTA", "No release found in response");
-    return JSON_PARSE_ERROR;
+    return NO_UPDATE;
   }
 
   if (!release["tag_name"].is<std::string>()) {
