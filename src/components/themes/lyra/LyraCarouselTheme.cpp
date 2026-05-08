@@ -1,9 +1,17 @@
 #include "LyraCarouselTheme.h"
 
 #include <Bitmap.h>
+#include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <I18n.h>
+#include <Logging.h>
+#include <Txt.h>
+#include <Xtc.h>
 
+#include <algorithm>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -70,6 +78,23 @@ const uint8_t* iconBitmapFor(UIIcon icon) {
       return nullptr;
   }
 }
+// ---------------------------------------------------------------------------
+// Static frame cache — survives HomeActivity re-creation so that returning to
+// home after settings doesn't re-read covers from SD.
+// Freed explicitly via invalidateFrameCache() before entering the reader.
+// ---------------------------------------------------------------------------
+constexpr int kFrameCount = 3;
+uint8_t* gCachedFrames[kFrameCount] = {};
+int gCachedFrameBookIdx[kFrameCount] = {-1, -1, -1};
+int gCachedFrameCount = 0;
+std::string gCacheKey;
+
+int findFrameSlot(int bookIdx) {
+  for (int i = 0; i < kFrameCount; ++i) {
+    if (gCachedFrameBookIdx[i] == bookIdx && gCachedFrames[i] != nullptr) return i;
+  }
+  return -1;
+}
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -77,13 +102,159 @@ const uint8_t* iconBitmapFor(UIIcon icon) {
 // ---------------------------------------------------------------------------
 void LyraCarouselTheme::setPreRenderIndex(int idx) { lastCarouselSelectorIndex = idx; }
 
-void LyraCarouselTheme::drawCarouselBorder(GfxRenderer& renderer, Rect coverRect, bool inCarouselRow) const {
-  if (!inCarouselRow) return;
-  const int screenW = renderer.getScreenWidth();
-  const int centerX = (screenW - kCenterCoverMaxW) / 2;
-  const int centerTileY = coverRect.y + kCoverTopPad;
-  renderer.drawRoundedRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, kSelectionLineW, kCornerRadius,
-                           true);
+void LyraCarouselTheme::invalidateFrameCache() const {
+  for (int i = 0; i < kFrameCount; ++i) {
+    if (gCachedFrames[i]) {
+      free(gCachedFrames[i]);
+      gCachedFrames[i] = nullptr;
+    }
+    gCachedFrameBookIdx[i] = -1;
+  }
+  gCachedFrameCount = 0;
+  gCacheKey.clear();
+}
+
+void LyraCarouselTheme::onBookWillClose(const std::string& /*path*/, Epub* epub, Xtc* xtc, Txt* /*txt*/) {
+  if (epub) {
+    epub->generateThumbBmp(kCenterCoverW, kCenterCoverH);
+    epub->generateThumbBmp(kSideCoverW, kSideCoverH);
+  }
+  if (xtc) {
+    xtc->generateThumbBmp(kCenterCoverW, kCenterCoverH);
+    xtc->generateThumbBmp(kSideCoverW, kSideCoverH);
+  }
+  // txt files have no cover image — nothing to generate
+  invalidateFrameCache();
+}
+
+// ---------------------------------------------------------------------------
+// tryFastHomeRender — pre-renders carousel frames and composites them
+// ---------------------------------------------------------------------------
+namespace {
+void renderOneCarouselFrame(GfxRenderer& renderer, const std::vector<RecentBook>& recentBooks, int bookIdx, int slotIdx,
+                            const ThemeMetrics& metrics) {
+  if (!gCachedFrames[slotIdx]) return;
+  const int pageWidth = renderer.getScreenWidth();
+  const int bookCount = static_cast<int>(recentBooks.size());
+  bool d1 = false, d2 = false, d3 = false;
+
+  lastCarouselSelectorIndex = bookIdx;
+  renderer.clearScreen();
+  UITheme::getInstance().getTheme().drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+                                               nullptr);
+  UITheme::getInstance().getTheme().drawRecentBookCover(
+      renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, bookCount, d1, d2,
+      d3, []() { return true; });
+
+  memcpy(gCachedFrames[slotIdx], renderer.getFrameBuffer(), renderer.getBufferSize());
+  gCachedFrameBookIdx[slotIdx] = bookIdx;
+}
+
+void updateSlidingWindow(GfxRenderer& renderer, const std::vector<RecentBook>& recentBooks, int centerIdx,
+                         const ThemeMetrics& metrics) {
+  const int bookCount = static_cast<int>(recentBooks.size());
+  if (bookCount <= kFrameCount || gCachedFrameCount == 0) return;
+
+  const int prevIdx = (centerIdx + bookCount - 1) % bookCount;
+  const int nextIdx = (centerIdx + 1) % bookCount;
+  const bool hasPrev = findFrameSlot(prevIdx) >= 0;
+  const bool hasNext = findFrameSlot(nextIdx) >= 0;
+  if (hasPrev && hasNext) return;
+
+  const int missingIdx = !hasPrev ? prevIdx : nextIdx;
+  int evictSlot = -1, maxDist = -1;
+  for (int i = 0; i < kFrameCount; ++i) {
+    if (!gCachedFrames[i]) continue;
+    const int b = gCachedFrameBookIdx[i];
+    if (b == centerIdx || (hasPrev && b == prevIdx) || (hasNext && b == nextIdx)) continue;
+    const int diff = std::abs(b - centerIdx);
+    const int dist = std::min(diff, bookCount - diff);
+    if (dist > maxDist) {
+      maxDist = dist;
+      evictSlot = i;
+    }
+  }
+  if (evictSlot >= 0) renderOneCarouselFrame(renderer, recentBooks, missingIdx, evictSlot, metrics);
+}
+}  // namespace
+
+bool LyraCarouselTheme::tryFastHomeRender(GfxRenderer& renderer, const std::vector<RecentBook>& recentBooks,
+                                          int selectorIndex, int menuCount,
+                                          const std::function<std::string(int)>& menuLabel,
+                                          const std::function<UIIcon(int)>& menuIcon, const char* hintBtn1,
+                                          const char* hintBtn2, const char* hintBtn3, const char* hintBtn4) const {
+  const int bookCount = static_cast<int>(recentBooks.size());
+  if (bookCount == 0) return false;
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const size_t bufferSize = renderer.getBufferSize();
+  uint8_t* frameBuffer = renderer.getFrameBuffer();
+  if (!frameBuffer) return false;
+
+  // Build cache key from book paths
+  std::string newKey;
+  newKey.reserve(128);
+  for (const auto& b : recentBooks) {
+    newKey += b.path;
+    newKey += '\0';
+  }
+
+  bool framesReady = (newKey == gCacheKey && gCachedFrameCount > 0);
+
+  if (!framesReady) {
+    // Free old cache and allocate fresh frames
+    invalidateFrameCache();
+    const int frameCount = std::min(bookCount, kFrameCount);
+    for (int i = 0; i < frameCount; ++i) {
+      gCachedFrames[i] = static_cast<uint8_t*>(malloc(bufferSize));
+      if (!gCachedFrames[i]) {
+        LOG_ERR("CAROUSEL", "tryFastHomeRender: malloc failed for frame %d", i);
+        invalidateFrameCache();
+        return false;
+      }
+    }
+    // Render only the initially-selected frame; neighbours are filled lazily.
+    const int initialIdx = (selectorIndex < bookCount) ? selectorIndex : 0;
+    renderOneCarouselFrame(renderer, recentBooks, initialIdx, 0, metrics);
+    gCachedFrameCount = frameCount;
+    gCacheKey = newKey;
+    framesReady = true;
+  }
+
+  const bool inCarouselRow = (selectorIndex < bookCount);
+  const int centerIdx =
+      inCarouselRow ? selectorIndex : (lastCarouselSelectorIndex >= 0 ? lastCarouselSelectorIndex : 0);
+  const int slotIdx = findFrameSlot(centerIdx);
+  if (slotIdx < 0 || !gCachedFrames[slotIdx]) return false;
+
+  memcpy(frameBuffer, gCachedFrames[slotIdx], bufferSize);
+
+  // Overlay the selection border when carousel row is active
+  if (inCarouselRow) {
+    const int screenW = renderer.getScreenWidth();
+    const int centerTileY = metrics.homeTopPadding + kCoverTopPad;
+    const int centerX = (screenW - kCenterCoverMaxW) / 2;
+    renderer.drawRoundedRect(centerX, centerTileY, kCenterCoverMaxW, kCenterCoverMaxH, kSelectionLineW, kCornerRadius,
+                             true);
+  }
+
+  // Menu row
+  const int menuIdx = inCarouselRow ? -1 : (selectorIndex - bookCount);
+  UITheme::getInstance().getTheme().drawButtonMenu(
+      renderer,
+      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing, pageWidth,
+           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2 +
+                         metrics.buttonHintsHeight)},
+      menuCount, menuIdx, menuLabel, menuIcon);
+
+  // Button hints
+  UITheme::getInstance().getTheme().drawButtonHints(renderer, hintBtn1, hintBtn2, hintBtn3, hintBtn4);
+
+  renderer.displayBuffer();
+  updateSlidingWindow(renderer, recentBooks, centerIdx, metrics);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +315,6 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
-          renderer.maskRoundedRectOutsideCorners(x, y, maxW, maxH, kCornerRadius, Color::White);
           hasCover = true;
         }
         file.close();

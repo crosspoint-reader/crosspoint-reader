@@ -4,9 +4,13 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 class GfxRenderer;
+class Epub;
+class Txt;
+class Xtc;
 struct RecentBook;
 
 struct Rect {
@@ -48,6 +52,8 @@ struct ThemeMetrics {
   int homeCoverHeight;
   int homeCoverTileHeight;
   int homeRecentBooksCount;
+  bool homeContinueReadingInMenu = false;
+  int homeMenuTopOffset = 0;
 
   int buttonHintsHeight;
   int sideButtonHintsWidth;
@@ -67,11 +73,14 @@ struct ThemeMetrics {
   int keyboardVerticalOffset;
   int keyboardTextFieldWidthPercent;
   int keyboardWidthPercent;
+  int keyboardKeyCornerRadius = 0;
 };
 
 enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Weather };
 
 enum class KeyboardKeyType { Normal, Shift, Mode, Reveal, Space, Del, Ok, Disabled };
+
+enum class HomeNavigation { Linear, Carousel };
 
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed
@@ -159,9 +168,32 @@ class BaseTheme {
                                const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
                                bool inactiveSelection = false) const;
   virtual bool showsFileIcons() const { return false; }
-  virtual void drawCarouselBorder(GfxRenderer& renderer, Rect coverRect, bool inCarouselRow) const {}
 
-  // Shared constants and helpers for battery drawing (used by all themes)
+  // ---- Home screen navigation / rendering contract ----
+
+  // Return Carousel to opt in to left/right book navigation and tryFastHomeRender().
+  virtual HomeNavigation getHomeNavigation() const { return HomeNavigation::Linear; }
+
+  // Return the cover thumbnail sizes this theme needs for its home screen.
+  // HomeActivity calls generateThumbBmp() for each pair. Empty = use height-only path.
+  virtual std::vector<std::pair<int, int>> getCoverThumbSizes(int coverHeight) const { return {}; }
+
+  // Attempt a full home-screen render from pre-cached state.
+  // Return true if the theme handled the render (HomeActivity must not draw anything else).
+  // Return false to fall through to the standard slow-path render in HomeActivity.
+  virtual bool tryFastHomeRender(GfxRenderer& renderer, const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                                 int menuCount, const std::function<std::string(int)>& menuLabel,
+                                 const std::function<UIIcon(int)>& menuIcon, const char* hintBtn1, const char* hintBtn2,
+                                 const char* hintBtn3, const char* hintBtn4) const {
+    return false;
+  }
+
+  // Called by readers just before releasing the book object. Themes that cache
+  // cover thumbnails can generate them here while the book is still loaded.
+  // Only one of epub/xtc/txt will be non-null depending on the reader.
+  virtual void onBookWillClose(const std::string& path, Epub* epub, Xtc* xtc, Txt* txt) {}
+
+  // ---- Shared constants and helpers for battery drawing (used by all themes) ----
   static constexpr int batteryPercentSpacing = 4;
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);
   static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY);

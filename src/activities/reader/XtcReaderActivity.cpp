@@ -20,6 +20,7 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 void XtcReaderActivity::onEnter() {
@@ -52,6 +53,8 @@ void XtcReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+
+  UITheme::getInstance().getMutableTheme().onBookWillClose(xtc ? xtc->getPath() : "", nullptr, xtc.get(), nullptr);
   xtc.reset();
 }
 

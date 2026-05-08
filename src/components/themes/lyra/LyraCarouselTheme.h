@@ -1,9 +1,15 @@
 
 #pragma once
 
+#include <utility>
+#include <vector>
+
 #include "components/themes/lyra/LyraTheme.h"
 
 class GfxRenderer;
+class Epub;
+class Txt;
+class Xtc;
 
 // Lyra Carousel theme metrics (zero runtime cost)
 namespace LyraCarouselMetrics {
@@ -56,13 +62,24 @@ class LyraCarouselTheme : public LyraTheme {
   static constexpr int kSideCoverH = LyraCarouselMetrics::values.homeCoverHeight - 210;  // 390
 
   static void setPreRenderIndex(int idx);
+
+  HomeNavigation getHomeNavigation() const override { return HomeNavigation::Carousel; }
+  std::vector<std::pair<int, int>> getCoverThumbSizes(int /*coverHeight*/) const override {
+    return {{kCenterCoverW, kCenterCoverH}, {kSideCoverW, kSideCoverH}};
+  }
+  bool tryFastHomeRender(GfxRenderer& renderer, const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                         int menuCount, const std::function<std::string(int)>& menuLabel,
+                         const std::function<UIIcon(int)>& menuIcon, const char* hintBtn1, const char* hintBtn2,
+                         const char* hintBtn3, const char* hintBtn4) const override;
+  void onBookWillClose(const std::string& path, Epub* epub, Xtc* xtc, Txt* txt) override;
+  void invalidateFrameCache() const;
+
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;
-  void drawCarouselBorder(GfxRenderer& renderer, Rect coverRect, bool inCarouselRow) const override;
   void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                 const std::function<std::string(int index)>& rowTitle,
                 const std::function<std::string(int index)>& rowSubtitle,

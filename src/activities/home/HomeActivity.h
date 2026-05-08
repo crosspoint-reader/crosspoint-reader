@@ -13,8 +13,6 @@ struct Rect;
 
 class HomeActivity final : public Activity {
  public:
-  static constexpr int kCarouselFrameCount = 3;
-
   enum class MenuAction {
     FileBrowser,
     Recents,
@@ -39,20 +37,17 @@ class HomeActivity final : public Activity {
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
-  bool coverRendered = false;      // Track if cover has been rendered once
-  bool coverBufferStored = false;  // Track if cover buffer is stored
+  bool coverRendered = false;
+  bool coverBufferStored = false;
   size_t nextRecentCoverIndex = 0;
-  uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
-
-  uint8_t* carouselFrames[kCarouselFrameCount] = {nullptr, nullptr, nullptr};
-  bool carouselFramesReady = false;
+  uint8_t* coverBuffer = nullptr;
 
   std::vector<RecentBook> recentBooks;
   std::vector<MenuEntry> menuEntries;
   bool menuEntriesDirty = true;
 
-  std::string focusBookPath;    // book path to re-select on first render, if present in recents
-  int focusSelectorIndex = -1;  // fallback combined-selector index when focusBookPath doesn't match
+  std::string focusBookPath;
+  int focusSelectorIndex = -1;
 
   void onSelectBook(const std::string& path);
   void dispatchMenuAction(MenuAction action);
@@ -61,10 +56,6 @@ class HomeActivity final : public Activity {
   bool storeCoverBuffer();
   bool restoreCoverBuffer();
   void freeCoverBuffer();
-  void preRenderCarouselFrames();
-  void freeCarouselFrames();
-  void renderCarouselFrame(int bookIdx, int slotIdx);
-  void updateSlidingWindowCache(int centerIdx, int bookCount);
   void loadRecentBooks(int maxBooks);
   void loadRecentCovers(int coverHeight);
 
