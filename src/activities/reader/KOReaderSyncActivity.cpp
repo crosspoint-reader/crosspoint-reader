@@ -221,8 +221,10 @@ void KOReaderSyncActivity::performSync() {
             refinedPage = static_cast<int>(*nextParagraphPage) - 1;
           }
         }
-        LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, intra page %d, using %d", remotePosition.paragraphIndex,
-                *paragraphPage, remotePosition.pageNumber, refinedPage);
+        LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
+                remotePosition.paragraphIndex, *paragraphPage,
+                nextParagraphPage.has_value() ? std::to_string(*nextParagraphPage).c_str() : "none",
+                remotePosition.pageNumber, refinedPage);
         remotePosition.pageNumber = refinedPage;
       } else {
         LOG_DBG("KOSync", "Paragraph %u not found in section LUT", remotePosition.paragraphIndex);

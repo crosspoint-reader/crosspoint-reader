@@ -168,7 +168,10 @@ class ParagraphStreamer final : public Print {
   void onVisibleCodepoint() {
     totalVisChars++;
     if (revPFound && !revDone) {
-      const bool inTargetNode = (stepCount > 0) || (currentTextNode == targetTextNode);
+      // Ancestry mode: count only while inside the fully-matched element and in the target text node.
+      // Legacy mode: count only while still inside the matched paragraph and in the target text node.
+      const bool inTargetNode = (stepCount > 0) ? (matchedDepth == stepCount && currentTextNode == targetTextNode)
+                                                 : (paragraphHtmlDepth >= 0 && currentTextNode == targetTextNode);
       if (inTargetNode) {
         revVisChars++;
         if (revVisChars >= revChar) {
@@ -250,7 +253,8 @@ class ParagraphStreamer final : public Print {
             revPFound = true;
             capturedAnchorIdLen = 0;
             revVisChars = 0;
-            if (revChar <= 0) {
+            currentTextNode = 1;  // Reset text node counter for this element
+            if (revChar <= 0 && targetTextNode <= 1) {
               targetVisChars = totalVisChars;
               revDone = true;
             }
@@ -269,12 +273,33 @@ class ParagraphStreamer final : public Print {
         revDone = true;
       }
     }
+    // Legacy mode: stop tracking when the matched paragraph itself closes.
+    if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth) {
+      revPFound = false;
+      paragraphHtmlDepth = -1;
+    }
+
+    // Ancestry mode: advance text node when a direct child of the fully-matched element closes.
+    if (stepCount > 0 && matchedDepth == stepCount && revPFound && !revDone) {
+      const int elementDepth = stepEnteredAtDepth[stepCount - 1];
+      if (htmlDepth == elementDepth + 1) {
+        currentTextNode++;
+        if (currentTextNode == targetTextNode && revChar <= 0) {
+          targetVisChars = totalVisChars;
+          revDone = true;
+        }
+      }
+    }
 
     if (stepCount > 0 && matchedDepth > 0) {
       const int step = matchedDepth - 1;
       if (insideStep[step] && htmlDepth == stepEnteredAtDepth[step]) {
         insideStep[step] = false;
         matchedDepth--;
+        // If the fully-matched element just closed without finding the target, abort.
+        if (matchedDepth < stepCount && revPFound && !revDone) {
+          revPFound = false;
+        }
         for (int i = matchedDepth + 1; i < stepCount; i++) {
           siblingCounters[i] = 0;
           insideStep[i] = false;
@@ -366,8 +391,9 @@ class ParagraphStreamer final : public Print {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
 
-  ParagraphStreamer(const XPathStep* xpathSteps, int xpathStepCount, int charOff)
-      : fwdTarget(SIZE_MAX), revChar(charOff), steps(xpathSteps), stepCount(xpathStepCount) {
+  ParagraphStreamer(const XPathStep* xpathSteps, int xpathStepCount, int charOff, int textNodeIdx = 1)
+      : fwdTarget(SIZE_MAX), revChar(charOff), steps(xpathSteps), stepCount(xpathStepCount),
+        targetTextNode(textNodeIdx) {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
 
@@ -443,6 +469,8 @@ class ParagraphStreamer final : public Print {
   const char* getCapturedAnchorId() const { return capturedAnchorIdLen > 0 ? capturedAnchorId : nullptr; }
   size_t totalBytes() const { return bytesWritten; }
   bool found() const { return revDone || revPFound; }
+  size_t getTotalVisChars() const { return totalVisChars; }
+  size_t getTargetVisChars() const { return targetVisChars; }
   float progress() const {
     return totalVisChars > 0 ? static_cast<float>(targetVisChars) / static_cast<float>(totalVisChars) : 0.0f;
   }
@@ -489,12 +517,8 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
   XPathStep xpathSteps[MAX_XPATH_DEPTH];
   const int xpathStepCount = parseXPathSteps(koPos.xpath, xpathSteps);
-  const bool useAncestry = xpathStepCount > 0 && strcasecmp(xpathSteps[xpathStepCount - 1].tag, "p") != 0;
-
-  if (xpathP > 0 && !useAncestry) {
-    result.paragraphIndex = static_cast<uint16_t>(xpathP);
-    result.hasParagraphIndex = true;
-  }
+  // Use ancestry mode whenever the XPath has a structured path (always more accurate than global counting).
+  const bool useAncestry = xpathStepCount > 0;
 
   if (xpathSpine >= 0 && xpathSpine < spineCount) {
     result.spineIndex = xpathSpine;
@@ -524,7 +548,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
   float intra = 0.0f;
   if (useAncestry) {
-    ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar);
+    ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
       const int pAtMatch = s.getParagraphAtMatch();
@@ -543,15 +567,17 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       if (anchorId) {
         strncpy(result.xpathAnchorId, anchorId, sizeof(result.xpathAnchorId) - 1);
       }
-      LOG_DBG("PM", "XPath ancestry(%s[%d])+%d -> %.1f%% (p~%d li~%d anchor=%s)", xpathSteps[xpathStepCount - 1].tag,
-              xpathSteps[xpathStepCount - 1].siblingIndex, xpathChar, intra * 100, pAtMatch,
+      LOG_DBG("PM", "XPath ancestry(%s[%d])/text()[%d]+%d -> %.1f%% (target=%zu total=%zu p~%d li~%d anchor=%s)",
+              xpathSteps[xpathStepCount - 1].tag, xpathSteps[xpathStepCount - 1].siblingIndex, xpathTextNode,
+              xpathChar, intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
               result.hasLiIndex ? static_cast<int>(result.liIndex) : 0, anchorId ? anchorId : "none");
     }
   } else if (xpathP > 0) {
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
-      LOG_DBG("PM", "XPath p[%d]/text()[%d]+%d -> %.1f%%", xpathP, xpathTextNode, xpathChar, intra * 100);
+      LOG_DBG("PM", "XPath p[%d]/text()[%d]+%d -> %.1f%% (target=%zu total=%zu)", xpathP, xpathTextNode, xpathChar,
+              intra * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }
   }
   if (intra <= 0.0f) {
