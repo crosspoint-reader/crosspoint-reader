@@ -2,6 +2,7 @@
 
 #include <Logging.h>
 
+#include <cctype>
 #include <memory>
 #include <string>
 
@@ -17,7 +18,7 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
   if (dotPos != std::string::npos) {
     ext = ext.substr(dotPos);
     for (auto& c : ext) {
-      c = tolower(c);
+      c = static_cast<char>(tolower(c));
     }
   } else {
     ext = "";
@@ -39,4 +40,6 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
   return nullptr;
 }
 
-bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) { return getDecoder(imagePath) != nullptr; }
+bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) {
+  return getDecoder(imagePath) != nullptr;
+}

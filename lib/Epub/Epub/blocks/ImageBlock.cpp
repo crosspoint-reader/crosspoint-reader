@@ -1,6 +1,8 @@
 #include "ImageBlock.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <JpegRender.h>
 #include <Logging.h>
 #include <Serialization.h>
 
@@ -28,8 +30,93 @@ std::string getCachePath(const std::string& imagePath) {
   return imagePath + ".pxc";
 }
 
+inline void rotateLogicalToPhysical(const GfxRenderer::Orientation orientation, int x, int y, int* phyX, int* phyY) {
+  switch (orientation) {
+    case GfxRenderer::Portrait:
+      *phyX = y;
+      *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
+      break;
+    case GfxRenderer::LandscapeClockwise:
+      *phyX = HalDisplay::DISPLAY_WIDTH - 1 - x;
+      *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - y;
+      break;
+    case GfxRenderer::PortraitInverted:
+      *phyX = HalDisplay::DISPLAY_WIDTH - 1 - y;
+      *phyY = x;
+      break;
+    case GfxRenderer::LandscapeCounterClockwise:
+    default:
+      *phyX = x;
+      *phyY = y;
+      break;
+  }
+}
+
+bool writeOneBitRegionToCache(const GfxRenderer& renderer, const std::string& cachePath, int x, int y, int width, int height) {
+  FsFile cacheFile;
+  if (!Storage.openFileForWrite("IMG", cachePath, cacheFile)) {
+    LOG_ERR("IMG", "Failed to open cache for write: %s", cachePath.c_str());
+    return false;
+  }
+
+  const uint16_t w16 = static_cast<uint16_t>(width);
+  const uint16_t h16 = static_cast<uint16_t>(height);
+  if (cacheFile.write(&w16, 2) != 2 || cacheFile.write(&h16, 2) != 2) {
+    cacheFile.close();
+    LOG_ERR("IMG", "Failed to write cache header: %s", cachePath.c_str());
+    return false;
+  }
+
+  const uint8_t* fb = renderer.getFrameBuffer();
+  if (!fb) {
+    cacheFile.close();
+    LOG_ERR("IMG", "Framebuffer unavailable while writing cache");
+    return false;
+  }
+
+  const int bytesPerRow = (width + 3) / 4;  // 2bpp packed
+  uint8_t* row = static_cast<uint8_t*>(malloc(bytesPerRow));
+  if (!row) {
+    cacheFile.close();
+    LOG_ERR("IMG", "Failed to allocate cache row buffer");
+    return false;
+  }
+
+  const auto orientation = renderer.getOrientation();
+  for (int oy = 0; oy < height; oy++) {
+    memset(row, 0xFF, bytesPerRow);  // default white (stage 3)
+    for (int ox = 0; ox < width; ox++) {
+      int phyX = 0;
+      int phyY = 0;
+      rotateLogicalToPhysical(orientation, x + ox, y + oy, &phyX, &phyY);
+      if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) {
+        continue;
+      }
+      const uint32_t byteIndex =
+          static_cast<uint32_t>(phyY) * HalDisplay::DISPLAY_WIDTH_BYTES + static_cast<uint32_t>(phyX / 8);
+      const uint8_t bitPosition = 7 - (phyX % 8);
+      const bool isBlack = ((fb[byteIndex] >> bitPosition) & 1u) == 0u;  // drawPixel(true) clears bit
+      const uint8_t stage = isBlack ? 0u : 3u;
+      const int outByte = ox >> 2;
+      const int shift = 6 - ((ox & 3) * 2);
+      row[outByte] = static_cast<uint8_t>((row[outByte] & ~(0x03u << shift)) | (stage << shift));
+    }
+    if (cacheFile.write(row, bytesPerRow) != static_cast<size_t>(bytesPerRow)) {
+      free(row);
+      cacheFile.close();
+      LOG_ERR("IMG", "Failed to write cache row: %s", cachePath.c_str());
+      return false;
+    }
+  }
+
+  free(row);
+  cacheFile.flush();
+  cacheFile.close();
+  return true;
+}
+
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
-                     int expectedHeight) {
+                     int expectedHeight, bool jpegStyleOneBit = false) {
   FsFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
     return false;
@@ -79,6 +166,11 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
       const int byteIdx = col >> 2;            // col / 4
       const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
       uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+      if (jpegStyleOneBit) {
+        // Make cached JPEG playback match JpegRender one-bit behavior.
+        // Any non-solid-black stage is treated as white.
+        pixelValue = (pixelValue == 0) ? 0 : 3;
+      }
 
       pw.writePixel(x + col, pixelValue);
     }
@@ -104,10 +196,33 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
 
-  // Try to render from cache first
+  // Try to render from cache first.
   std::string cachePath = getCachePath(imagePath);
-  if (renderFromCache(renderer, cachePath, x, y, width, height)) {
-    return;  // Successfully rendered from cache
+  const bool isJpeg = FsHelpers::hasJpgExtension(imagePath);
+  if (renderFromCache(renderer, cachePath, x, y, width, height, isJpeg)) {
+    return;
+  }
+
+  // JPEG hybrid path:
+  // 1) First draw with JpegRender (requested renderer behavior)
+  // 2) Then build legacy .pxc cache through decoder pipeline for subsequent fast loads.
+  if (isJpeg) {
+    FsFile jpegFile;
+    if (!Storage.openFileForRead("IMG", imagePath, jpegFile)) {
+      LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
+      return;
+    }
+    JpegRender jpeg(renderer);
+    const bool rendered = jpeg.oneBit(jpegFile, x, y, width, height, false, true);
+    jpegFile.close();
+    if (!rendered) {
+      LOG_ERR("IMG", "Failed to render JPEG: %s", imagePath.c_str());
+      return;
+    }
+
+    // Build .pxc directly from what JpegRender drew, so cache playback matches renderer output.
+    writeOneBitRegionToCache(renderer, cachePath, x, y, width, height);
+    return;
   }
 
   // No cache - need to decode the image

@@ -348,25 +348,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 }
 
                 if (hasCssHeight && hasCssWidth && dims.width > 0 && dims.height > 0) {
-                  // Both CSS height and width set: resolve both, then clamp to viewport preserving requested ratio
+                  // Both CSS height and width set: honor both explicitly (no aspect-ratio correction),
+                  // then clamp independently to viewport/container bounds.
                   displayHeight = static_cast<int>(
                       imgStyle.imageHeight.toPixels(emSize, static_cast<float>(self->viewportHeight)) + 0.5f);
                   displayWidth =
                       static_cast<int>(imgStyle.imageWidth.toPixels(emSize, static_cast<float>(containerWidth)) + 0.5f);
-                  if (displayHeight < 1) displayHeight = 1;
                   if (displayWidth < 1) displayWidth = 1;
-                  if (displayWidth > containerWidth || displayHeight > self->viewportHeight) {
-                    float scaleX =
-                        (displayWidth > containerWidth) ? static_cast<float>(containerWidth) / displayWidth : 1.0f;
-                    float scaleY = (displayHeight > self->viewportHeight)
-                                       ? static_cast<float>(self->viewportHeight) / displayHeight
-                                       : 1.0f;
-                    float scale = (scaleX < scaleY) ? scaleX : scaleY;
-                    displayWidth = static_cast<int>(displayWidth * scale + 0.5f);
-                    displayHeight = static_cast<int>(displayHeight * scale + 0.5f);
-                    if (displayWidth < 1) displayWidth = 1;
-                    if (displayHeight < 1) displayHeight = 1;
-                  }
+                  if (displayHeight < 1) displayHeight = 1;
+                  if (displayWidth > containerWidth) displayWidth = containerWidth;
+                  if (displayHeight > self->viewportHeight) displayHeight = self->viewportHeight;
                   LOG_DBG("EHP", "Display size from CSS height+width: %dx%d", displayWidth, displayHeight);
                 } else if (hasCssHeight && !hasCssWidth && dims.width > 0 && dims.height > 0) {
                   // Use CSS height (resolve % against viewport height) and derive width from aspect ratio
