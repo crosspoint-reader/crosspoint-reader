@@ -322,11 +322,19 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
-          // White-out the four corners so the rounded outline is not obscured by bitmap pixels.
-          renderer.fillRect(x, y, kCornerRadius, kCornerRadius, false);
-          renderer.fillRect(x + maxW - kCornerRadius, y, kCornerRadius, kCornerRadius, false);
-          renderer.fillRect(x, y + maxH - kCornerRadius, kCornerRadius, kCornerRadius, false);
-          renderer.fillRect(x + maxW - kCornerRadius, y + maxH - kCornerRadius, kCornerRadius, kCornerRadius, false);
+          // Clear only the pixels outside the arc in each corner so the rounded
+          // outline has white backing. Circle test: pixel (dx,dy) from the arc
+          // centre is outside if dx²+dy² > r², where r = kCornerRadius.
+          for (int dy = 0; dy < kCornerRadius; ++dy) {
+            for (int dx = 0; dx < kCornerRadius; ++dx) {
+              if (dx * dx + dy * dy > kCornerRadius * kCornerRadius) {
+                renderer.drawPixel(x + dx, y + dy, false);                        // top-left
+                renderer.drawPixel(x + maxW - 1 - dx, y + dy, false);             // top-right
+                renderer.drawPixel(x + dx, y + maxH - 1 - dy, false);             // bottom-left
+                renderer.drawPixel(x + maxW - 1 - dx, y + maxH - 1 - dy, false);  // bottom-right
+              }
+            }
+          }
           renderer.drawRoundedRect(x, y, maxW, maxH, kThinOutlineW, kCornerRadius, true);
           hasCover = true;
         }
@@ -346,10 +354,15 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   if (!coverRendered) {
     lastCarouselSelectorIndex = centerIdx;
 
-    // Clear the full band — cover tile plus the author/title text below it —
-    // so stale pixels from a previous book don't persist on book change.
-    renderer.fillRect(rect.x, rect.y, rect.width,
-                      rect.height + renderer.getLineHeight(kTitleFontId) * 2 + kDotSize + 20, false);
+    // Clear from the top of the tile down through the author/title text area.
+    // Use absolute coordinates so the clear covers the text regardless of what
+    // rect.height HomeActivity computed (it may be smaller than homeCoverTileHeight).
+    const int textAreaBottom = centerTileY + kCenterCoverMaxH              // bottom of centre cover
+                               + 8 + kDotSize                              // dots
+                               + 6 + renderer.getLineHeight(kTitleFontId)  // author line
+                               + 2 + renderer.getLineHeight(kTitleFontId)  // title line
+                               + 4;                                        // small margin
+    renderer.fillRect(rect.x, rect.y, rect.width, textAreaBottom - rect.y, false);
 
     // Sides first so centre renders on top.
     // Left side only when there are 3+ books; right side when there are 2+ books.
@@ -435,7 +448,10 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
   if (selectedIndex >= 0 && buttonLabel != nullptr) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const std::string label = buttonLabel(selectedIndex);
-    drawHeader(renderer, Rect{0, metrics.topPadding, screenW, metrics.homeTopPadding}, label.c_str(), nullptr);
+    const int labelY = metrics.topPadding + 5;  // same y as battery / clock
+    const int labelW = renderer.getTextWidth(UI_12_FONT_ID, label.c_str(), EpdFontFamily::BOLD);
+    const int labelX = (screenW - labelW) / 2;
+    renderer.drawText(UI_12_FONT_ID, labelX, labelY, label.c_str(), true, EpdFontFamily::BOLD);
   }
 
   for (int slot = 0; slot < visibleCount; ++slot) {
