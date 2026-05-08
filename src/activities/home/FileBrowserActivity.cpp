@@ -230,19 +230,21 @@ void FileBrowserActivity::loop() {
 
       const std::string& entry = files[selectorIndex];
       const bool isDirectory = (entry.back() == '/');
+      std::string entryName = entry;
       if (isDirectory) {
-        return;
+        entryName.pop_back();
       }
 
       std::string cleanBase = basepath;
       if (cleanBase.back() != '/') cleanBase += "/";
-      const std::string fullPath = cleanBase + entry;
+      const std::string fullPath = cleanBase + entryName;
 
-      auto handler = [this, fullPath](const ActivityResult& res) {
+      auto handler = [this, fullPath, isDirectory](const ActivityResult& res) {
         if (!res.isCancelled) {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           clearFileMetadata(fullPath);
-          if (Storage.remove(fullPath.c_str())) {
+          const bool deleted = isDirectory ? Storage.removeDir(fullPath.c_str()) : Storage.remove(fullPath.c_str());
+          if (deleted) {
             LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
             if (files.empty()) {
@@ -252,7 +254,7 @@ void FileBrowserActivity::loop() {
             }
             requestUpdate(true);
           } else {
-            LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
+            LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
           }
         } else {
           LOG_DBG("FileBrowser", "Delete cancelled by user");
