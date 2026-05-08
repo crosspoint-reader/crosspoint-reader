@@ -208,9 +208,7 @@ bool LyraCarouselTheme::tryFastHomeRender(GfxRenderer& renderer, const std::vect
     newKey += '\0';
   }
 
-  bool framesReady = (newKey == gCacheKey && gCachedFrameCount > 0);
-
-  if (!framesReady) {
+  if (newKey != gCacheKey || gCachedFrameCount == 0) {
     // Free old cache and allocate fresh frames
     freeFrameCache();
     const int frameCount = std::min(bookCount, kFrameCount);
@@ -227,7 +225,6 @@ bool LyraCarouselTheme::tryFastHomeRender(GfxRenderer& renderer, const std::vect
     renderOneCarouselFrame(renderer, recentBooks, initialIdx, 0, metrics);
     gCachedFrameCount = frameCount;
     gCacheKey = newKey;
-    framesReady = true;
   }
 
   const bool inCarouselRow = (selectorIndex < bookCount);
