@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ELF_FILE=".pio/build/default/firmware.elf"
 

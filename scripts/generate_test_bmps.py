@@ -34,29 +34,29 @@ GRAY_LEVELS = [0, 85, 170, 255]
 
 
 def write_bmp_file_header(f, pixel_data_offset, file_size):
-    f.write(b'BM')
-    f.write(struct.pack('<I', file_size))
-    f.write(struct.pack('<HH', 0, 0))  # reserved
-    f.write(struct.pack('<I', pixel_data_offset))
+    f.write(b"BM")
+    f.write(struct.pack("<I", file_size))
+    f.write(struct.pack("<HH", 0, 0))  # reserved
+    f.write(struct.pack("<I", pixel_data_offset))
 
 
 def write_bmp_dib_header(f, width, height, bpp, colors_used=0):
-    f.write(struct.pack('<I', 40))  # DIB header size (BITMAPINFOHEADER)
-    f.write(struct.pack('<i', width))
-    f.write(struct.pack('<i', -height))  # negative = top-down
-    f.write(struct.pack('<HH', 1, bpp))  # planes, bpp
-    f.write(struct.pack('<I', 0))  # compression (BI_RGB)
-    f.write(struct.pack('<I', 0))  # image size (can be 0 for BI_RGB)
-    f.write(struct.pack('<i', 0))  # X pixels per meter
-    f.write(struct.pack('<i', 0))  # Y pixels per meter
-    f.write(struct.pack('<I', colors_used))
-    f.write(struct.pack('<I', 0))  # important colors
+    f.write(struct.pack("<I", 40))  # DIB header size (BITMAPINFOHEADER)
+    f.write(struct.pack("<i", width))
+    f.write(struct.pack("<i", -height))  # negative = top-down
+    f.write(struct.pack("<HH", 1, bpp))  # planes, bpp
+    f.write(struct.pack("<I", 0))  # compression (BI_RGB)
+    f.write(struct.pack("<I", 0))  # image size (can be 0 for BI_RGB)
+    f.write(struct.pack("<i", 0))  # X pixels per meter
+    f.write(struct.pack("<i", 0))  # Y pixels per meter
+    f.write(struct.pack("<I", colors_used))
+    f.write(struct.pack("<I", 0))  # important colors
 
 
 def write_palette(f, entries):
     """Write palette entries as BGRA (B, G, R, 0x00)."""
     for gray in entries:
-        f.write(struct.pack('BBBB', gray, gray, gray, 0))
+        f.write(struct.pack("BBBB", gray, gray, gray, 0))
 
 
 def get_test_pattern_index(x, y, width, height):
@@ -131,7 +131,7 @@ def get_test_pattern_lum(x, y, width, height):
 
     else:
         # Diagonal bands with smooth transitions
-        return ((x + y) * 255 // (width + height))
+        return (x + y) * 255 // (width + height)
 
 
 def generate_1bit(path):
@@ -143,7 +143,7 @@ def generate_1bit(path):
     pixel_offset = 14 + 40 + palette_size
     file_size = pixel_offset + row_bytes * HEIGHT
 
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         write_bmp_file_header(f, pixel_offset, file_size)
         write_bmp_dib_header(f, WIDTH, HEIGHT, bpp, len(palette))
         write_palette(f, palette)
@@ -154,7 +154,7 @@ def generate_1bit(path):
                 # 16x16 checkerboard
                 val = ((x // 16) + (y // 16)) % 2
                 if val:
-                    row[x >> 3] |= (0x80 >> (x & 7))
+                    row[x >> 3] |= 0x80 >> (x & 7)
             f.write(row)
 
     print(f"  Created: {path} ({bpp}-bit, {len(palette)} colors)")
@@ -169,7 +169,7 @@ def generate_2bit(path):
     pixel_offset = 14 + 40 + palette_size
     file_size = pixel_offset + row_bytes * HEIGHT
 
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         write_bmp_file_header(f, pixel_offset, file_size)
         write_bmp_dib_header(f, WIDTH, HEIGHT, bpp, len(palette))
         write_palette(f, palette)
@@ -180,7 +180,7 @@ def generate_2bit(path):
                 idx = get_test_pattern_index(x, y, WIDTH, HEIGHT)
                 byte_pos = x >> 2
                 bit_shift = 6 - ((x & 3) * 2)
-                row[byte_pos] |= (idx << bit_shift)
+                row[byte_pos] |= idx << bit_shift
             f.write(row)
 
     print(f"  Created: {path} ({bpp}-bit, {len(palette)} colors)")
@@ -195,7 +195,7 @@ def generate_4bit(path):
     pixel_offset = 14 + 40 + palette_size
     file_size = pixel_offset + row_bytes * HEIGHT
 
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         write_bmp_file_header(f, pixel_offset, file_size)
         write_bmp_dib_header(f, WIDTH, HEIGHT, bpp, len(palette))
         write_palette(f, palette)
@@ -208,7 +208,7 @@ def generate_4bit(path):
                 if x & 1:
                     row[byte_pos] |= idx
                 else:
-                    row[byte_pos] |= (idx << 4)
+                    row[byte_pos] |= idx << 4
             f.write(row)
 
     print(f"  Created: {path} ({bpp}-bit, {len(palette)} colors)")
@@ -223,7 +223,7 @@ def generate_8bit_4colors(path):
     pixel_offset = 14 + 40 + palette_size
     file_size = pixel_offset + row_bytes * HEIGHT
 
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         write_bmp_file_header(f, pixel_offset, file_size)
         write_bmp_dib_header(f, WIDTH, HEIGHT, bpp, len(palette))
         write_palette(f, palette)
@@ -246,7 +246,7 @@ def generate_8bit_256colors(path):
     pixel_offset = 14 + 40 + palette_size
     file_size = pixel_offset + row_bytes * HEIGHT
 
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         write_bmp_file_header(f, pixel_offset, file_size)
         write_bmp_dib_header(f, WIDTH, HEIGHT, bpp, len(palette))
         write_palette(f, palette)
@@ -267,7 +267,7 @@ def generate_24bit(path):
     pixel_offset = 14 + 40
     file_size = pixel_offset + row_bytes * HEIGHT
 
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         write_bmp_file_header(f, pixel_offset, file_size)
         write_bmp_dib_header(f, WIDTH, HEIGHT, bpp, 0)
 
@@ -276,7 +276,7 @@ def generate_24bit(path):
             for x in range(WIDTH):
                 gray = get_test_pattern_lum(x, y, WIDTH, HEIGHT)
                 offset = x * 3
-                row[offset] = gray      # B
+                row[offset] = gray  # B
                 row[offset + 1] = gray  # G
                 row[offset + 2] = gray  # R
             f.write(row)
@@ -285,19 +285,19 @@ def generate_24bit(path):
 
 
 def main():
-    output_dir = sys.argv[1] if len(sys.argv) > 1 else './test_bmps'
+    output_dir = sys.argv[1] if len(sys.argv) > 1 else "./test_bmps"
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"Generating test BMPs in {output_dir}/")
     print(f"Resolution: {WIDTH}x{HEIGHT}")
     print()
 
-    generate_1bit(os.path.join(output_dir, 'test_1bit_bw.bmp'))
-    generate_2bit(os.path.join(output_dir, 'test_2bit_4gray.bmp'))
-    generate_4bit(os.path.join(output_dir, 'test_4bit_4gray.bmp'))
-    generate_8bit_4colors(os.path.join(output_dir, 'test_8bit_4colors.bmp'))
-    generate_8bit_256colors(os.path.join(output_dir, 'test_8bit_256gray_gradient.bmp'))
-    generate_24bit(os.path.join(output_dir, 'test_24bit_gradient.bmp'))
+    generate_1bit(os.path.join(output_dir, "test_1bit_bw.bmp"))
+    generate_2bit(os.path.join(output_dir, "test_2bit_4gray.bmp"))
+    generate_4bit(os.path.join(output_dir, "test_4bit_4gray.bmp"))
+    generate_8bit_4colors(os.path.join(output_dir, "test_8bit_4colors.bmp"))
+    generate_8bit_256colors(os.path.join(output_dir, "test_8bit_256gray_gradient.bmp"))
+    generate_24bit(os.path.join(output_dir, "test_24bit_gradient.bmp"))
 
     print()
     print("Test pattern layout (4 horizontal bands):")
@@ -312,18 +312,34 @@ def main():
     print()
     print("Expected results on device:")
     print("  1-bit:  Clean B&W checkerboard, no dithering")
-    print("  2-bit:  Clean 4-gray pattern, no dithering  (non-standard BMP, won't open on PC)")
-    print("  4-bit:  Clean 4-gray pattern, no dithering  (standard BMP, viewable on PC)")
-    print("  8-bit (4 colors):   Clean 4-gray pattern, no dithering  (standard BMP, viewable on PC)")
-    print("  8-bit (256 colors): Same layout but with intermediate grays, WITH dithering")
+    print(
+        "  2-bit:  Clean 4-gray pattern, no dithering  (non-standard BMP, won't open on PC)"
+    )
+    print(
+        "  4-bit:  Clean 4-gray pattern, no dithering  (standard BMP, viewable on PC)"
+    )
+    print(
+        "  8-bit (4 colors):   Clean 4-gray pattern, no dithering  (standard BMP, viewable on PC)"
+    )
+    print(
+        "  8-bit (256 colors): Same layout but with intermediate grays, WITH dithering"
+    )
     print("  24-bit: Same layout but with intermediate grays, WITH dithering")
     print()
-    print("Note: 2-bit BMP is a non-standard CrossPoint extension. Standard image viewers")
-    print("will not open it. Use the 4-bit BMP instead for images created with standard tools")
-    print("(e.g. ImageMagick: convert input.png -colorspace Gray -colors 4 -depth 4 BMP3:output.bmp)")
+    print(
+        "Note: 2-bit BMP is a non-standard CrossPoint extension. Standard image viewers"
+    )
+    print(
+        "will not open it. Use the 4-bit BMP instead for images created with standard tools"
+    )
+    print(
+        "(e.g. ImageMagick: convert input.png -colorspace Gray -colors 4 -depth 4 BMP3:output.bmp)"
+    )
     print()
-    print("Copy files to /sleep/ folder on SD card to test as custom sleep screen images.")
+    print(
+        "Copy files to /sleep/ folder on SD card to test as custom sleep screen images."
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

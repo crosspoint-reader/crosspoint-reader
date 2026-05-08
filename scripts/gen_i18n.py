@@ -554,16 +554,34 @@ def generate_keys_header(
     # If a Language enum value listed here is ever removed, this will fail to
     # compile, signalling that the migration table needs updating.
     v1_codes = [
-        "EN", "ES", "FR", "DE", "CS", "PT", "RU", "SV", "RO", "CA", "UK",
-        "BE", "IT", "PL", "FI", "DA", "NL", "TR", "KK", "HU", "LT", "SI",
+        "EN",
+        "ES",
+        "FR",
+        "DE",
+        "CS",
+        "PT",
+        "RU",
+        "SV",
+        "RO",
+        "CA",
+        "UK",
+        "BE",
+        "IT",
+        "PL",
+        "FI",
+        "DA",
+        "NL",
+        "TR",
+        "KK",
+        "HU",
+        "LT",
+        "SI",
     ]
     lines.append("// V1 language.bin migration table (frozen enum order from 2f969a9)")
     lines.append("constexpr Language V1_LANGUAGES[] = {")
     lines.append("    " + ", ".join(f"Language::{c}" for c in v1_codes) + ",")
     lines.append("};")
-    lines.append(
-        f"constexpr uint8_t V1_LANGUAGE_COUNT = {len(v1_codes)};"
-    )
+    lines.append(f"constexpr uint8_t V1_LANGUAGE_COUNT = {len(v1_codes)};")
 
     _write_file(output_path, lines, verbose)
 
@@ -886,7 +904,9 @@ def main(
         for i in range(len(languages)):
             if i == 0:
                 data_sizes.append(
-                    sum(len(translations[k][0].encode("utf-8")) + 1 for k in string_keys)
+                    sum(
+                        len(translations[k][0].encode("utf-8")) + 1 for k in string_keys
+                    )
                 )
             else:
                 data_sizes.append(

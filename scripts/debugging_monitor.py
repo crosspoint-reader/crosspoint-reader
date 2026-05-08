@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+
+# /// script
+# dependencies = [
+#   "pyserial",
+#   "colorama",
+#   "pillow",
+#   "matplotlib"
+# ]
+# ///
+
+
 """
 ESP32 Serial Monitor with Memory Graph
 
@@ -55,6 +66,15 @@ try:
         Image = None
 except ImportError as e:
     ERROR_MSG = str(e).lower()
+
+    # Catch numpy system failure
+    if (
+        "important: please read this for advice on how to solve this issue!"
+        in ERROR_MSG
+    ):
+        print(str(e))
+        sys.exit(1)
+
     missing_packages = [pkg for mod, pkg in PACKAGE_MAPPING.items() if mod in ERROR_MSG]
 
     if not missing_packages:
@@ -179,6 +199,7 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     Format: Free: N bytes, Total: N bytes, Min Free: N bytes, MaxAlloc: N bytes
     Returns: (free_bytes, total_bytes, max_alloc_bytes)
     """
+
     def _find(pattern: str) -> int | None:
         m = re.search(pattern, line)
         if m:
@@ -271,7 +292,9 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
                     # Check for Memory Line
                     if "[MEM]" in formatted_line:
-                        free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
+                        free_val, total_val, max_alloc_val = parse_memory_line(
+                            formatted_line
+                        )
                         if free_val is not None and total_val is not None:
                             with data_lock:
                                 time_data.append(pc_time)

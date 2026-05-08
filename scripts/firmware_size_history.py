@@ -33,19 +33,13 @@ import re
 import subprocess
 import sys
 
-RAM_RE = re.compile(
-    r"RAM:.*?(\d+)\s+bytes\s+from\s+(\d+)\s+bytes"
-)
-FLASH_RE = re.compile(
-    r"Flash:.*?(\d+)\s+bytes\s+from\s+(\d+)\s+bytes"
-)
+RAM_RE = re.compile(r"RAM:.*?(\d+)\s+bytes\s+from\s+(\d+)\s+bytes")
+FLASH_RE = re.compile(r"Flash:.*?(\d+)\s+bytes\s+from\s+(\d+)\s+bytes")
 BOX_CHAR = "\u2500"
 
 
 def run(cmd, capture=True, check=True):
-    result = subprocess.run(
-        cmd, capture_output=capture, text=True, check=check
-    )
+    result = subprocess.run(cmd, capture_output=capture, text=True, check=check)
     return result
 
 
@@ -70,10 +64,15 @@ def git_current_ref():
 
 def git_commit_list(start, end):
     """Return list of (hash, title) from start (exclusive) to end (inclusive), oldest first."""
-    r = run([
-        "git", "log", "--reverse", "--format=%H %s",
-        f"{start}..{end}",
-    ])
+    r = run(
+        [
+            "git",
+            "log",
+            "--reverse",
+            "--format=%H %s",
+            f"{start}..{end}",
+        ]
+    )
     commits = []
     for line in r.stdout.strip().splitlines():
         if not line:
@@ -90,8 +89,7 @@ def git_checkout(ref):
 def build_firmware(env):
     """Run pio build and return the raw combined stdout+stderr."""
     result = subprocess.run(
-        ["pio", "run", "-e", env],
-        capture_output=True, text=True, check=False
+        ["pio", "run", "-e", env], capture_output=True, text=True, check=False
     )
     return result.returncode, result.stdout + "\n" + result.stderr
 
@@ -193,17 +191,27 @@ def main():
 
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(
-        "--range", nargs=2, metavar=("START", "END"),
+        "--range",
+        nargs=2,
+        metavar=("START", "END"),
         help="Older commit (exclusive baseline) and newer commit (inclusive)",
     )
     mode.add_argument(
-        "--commits", nargs="+", metavar="REF",
+        "--commits",
+        nargs="+",
+        metavar="REF",
         help="One or more git refs to build (SHAs, branches, tags, HEAD~N, ...)",
     )
 
-    parser.add_argument("--env", default="default", help="PlatformIO environment (default: 'default')")
     parser.add_argument(
-        "--csv", nargs="?", const="-", default=None, metavar="FILE",
+        "--env", default="default", help="PlatformIO environment (default: 'default')"
+    )
+    parser.add_argument(
+        "--csv",
+        nargs="?",
+        const="-",
+        default=None,
+        metavar="FILE",
         help="Output as CSV (default: stdout, or specify FILE)",
     )
     args = parser.parse_args()
@@ -253,7 +261,10 @@ def main():
             flash_used = parse_size_line(FLASH_RE, output)
             ram_used = parse_size_line(RAM_RE, output)
             if flash_used is None:
-                print("  Could not parse flash size from output -- skipping", file=sys.stderr)
+                print(
+                    "  Could not parse flash size from output -- skipping",
+                    file=sys.stderr,
+                )
                 results.append((sha, title, None, None, True))
                 continue
 
@@ -287,20 +298,29 @@ def main():
         else:
             flash_bytes = flash_used if flash_used is not None else "N/A"
             ram_bytes = ram_used if ram_used is not None else "N/A"
-        rows.append({
-            "commit": sha[:10],
-            "title": title,
-            "flash_bytes": flash_bytes,
-            "flash_delta": flash_delta,
-            "ram_bytes": ram_bytes,
-            "ram_delta": ram_delta,
-        })
+        rows.append(
+            {
+                "commit": sha[:10],
+                "title": title,
+                "flash_bytes": flash_bytes,
+                "flash_delta": flash_delta,
+                "ram_bytes": ram_bytes,
+                "ram_delta": ram_delta,
+            }
+        )
         if flash_used is not None:
             prev_flash = flash_used
         if ram_used is not None:
             prev_ram = ram_used
 
-    fieldnames = ["commit", "title", "flash_bytes", "flash_delta", "ram_bytes", "ram_delta"]
+    fieldnames = [
+        "commit",
+        "title",
+        "flash_bytes",
+        "flash_delta",
+        "ram_bytes",
+        "ram_delta",
+    ]
 
     if args.csv is not None:
         if args.csv == "-":

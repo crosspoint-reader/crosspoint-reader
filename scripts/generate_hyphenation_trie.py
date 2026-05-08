@@ -11,22 +11,22 @@ def _format_bytes(blob: bytes, per_line: int = 16) -> str:
     # Render the blob as a comma separated list of hex literals with consistent wrapping.
     lines = []
     for i in range(0, len(blob), per_line):
-        chunk = ', '.join(f"0x{b:02X}" for b in blob[i : i + per_line])
+        chunk = ", ".join(f"0x{b:02X}" for b in blob[i : i + per_line])
         lines.append(f"    {chunk},")
     if not lines:
         lines.append("    0x00,")
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _symbol_from_output(path: pathlib.Path) -> str:
     # Derive a stable C identifier from the destination header name (e.g., hyph-en.trie.h -> en).
     name = path.name
-    if name.endswith('.trie.h'):
+    if name.endswith(".trie.h"):
         name = name[:-7]
-    if name.startswith('hyph-'):
+    if name.startswith("hyph-"):
         name = name[5:]
-    name = name.replace('-', '_')
-    if name.endswith('.trie'):
+    name = name.replace("-", "_")
+    if name.endswith(".trie"):
         name = name[:-5]
     return name
 
@@ -37,16 +37,16 @@ def write_header(path: pathlib.Path, blob: bytes, symbol: str) -> None:
     #   - 4 bytes: big-endian root address
     #   - levels tape: from byte 4 to root_addr
     #   - nodes data: from root_addr onwards
-    
+
     if len(blob) < 4:
         raise ValueError(f"Blob too small: {len(blob)} bytes")
-    
+
     # Parse root address (big-endian uint32)
     root_addr = (blob[0] << 24) | (blob[1] << 16) | (blob[2] << 8) | blob[3]
-    
+
     if root_addr > len(blob):
         raise ValueError(f"Root address {root_addr} exceeds blob size {len(blob)}")
-    
+
     # Remove the 4-byte root address and adjust the offset
     bytes_literal = _format_bytes(blob[4:])
     root_addr_new = root_addr - 4
@@ -78,14 +78,24 @@ constexpr SerializedHyphenationPatterns {patterns_symbol} = {{
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', dest='inputs', action='append', required=True,
-                        help='Path to a hypher-generated .bin trie')
-    parser.add_argument('--output', dest='outputs', action='append', required=True,
-                        help='Destination header path (hyph-*.trie.h)')
+    parser.add_argument(
+        "--input",
+        dest="inputs",
+        action="append",
+        required=True,
+        help="Path to a hypher-generated .bin trie",
+    )
+    parser.add_argument(
+        "--output",
+        dest="outputs",
+        action="append",
+        required=True,
+        help="Destination header path (hyph-*.trie.h)",
+    )
     args = parser.parse_args()
 
     if len(args.inputs) != len(args.outputs):
-        raise SystemExit('input/output counts must match')
+        raise SystemExit("input/output counts must match")
 
     for src, dst in zip(args.inputs, args.outputs):
         # Process each input/output pair independently so mixed-language refreshes work in one invocation.
@@ -94,8 +104,8 @@ def main() -> None:
         out_path = pathlib.Path(dst)
         symbol = _symbol_from_output(out_path)
         write_header(out_path, blob, symbol)
-        print(f'wrote {dst} ({len(blob)} bytes payload)')
+        print(f"wrote {dst} ({len(blob)} bytes payload)")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

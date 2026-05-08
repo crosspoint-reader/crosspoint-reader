@@ -4,33 +4,38 @@ import gzip
 
 SRC_DIR = "src"
 
+
 def minify_html(html: str) -> str:
     # Tags where whitespace should be preserved
-    preserve_tags = ['pre', 'code', 'textarea', 'script', 'style']
-    preserve_regex = '|'.join(preserve_tags)
+    preserve_tags = ["pre", "code", "textarea", "script", "style"]
+    preserve_regex = "|".join(preserve_tags)
 
     # Protect preserve blocks with placeholders
     preserve_blocks = []
+
     def preserve(match):
         preserve_blocks.append(match.group(0))
-        return f"__PRESERVE_BLOCK_{len(preserve_blocks)-1}__"
+        return f"__PRESERVE_BLOCK_{len(preserve_blocks) - 1}__"
 
-    html = re.sub(rf'<({preserve_regex})[\s\S]*?</\1>', preserve, html, flags=re.IGNORECASE)
+    html = re.sub(
+        rf"<({preserve_regex})[\s\S]*?</\1>", preserve, html, flags=re.IGNORECASE
+    )
 
     # Remove HTML comments
-    html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+    html = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
 
     # Collapse all whitespace between tags
-    html = re.sub(r'>\s+<', '><', html)
+    html = re.sub(r">\s+<", "><", html)
 
     # Collapse multiple spaces inside tags
-    html = re.sub(r'\s+', ' ', html)
+    html = re.sub(r"\s+", " ", html)
 
     # Restore preserved blocks
     for i, block in enumerate(preserve_blocks):
         html = html.replace(f"__PRESERVE_BLOCK_{i}__", block)
 
     return html.strip()
+
 
 def sanitize_identifier(name: str) -> str:
     """Sanitize a filename to create a valid C identifier.
@@ -40,11 +45,12 @@ def sanitize_identifier(name: str) -> str:
     - Contain only letters, digits, and underscores
     """
     # Replace non-alphanumeric characters (including hyphens) with underscores
-    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", name)
     # Prefix with underscore if starts with a digit
     if sanitized and sanitized[0].isdigit():
         sanitized = f"_{sanitized}"
     return sanitized
+
 
 for root, _, files in os.walk(SRC_DIR):
     for file in files:
@@ -61,7 +67,7 @@ for root, _, files in os.walk(SRC_DIR):
 
             # Compress with gzip (compresslevel 9 is maximum compression)
             # IMPORTANT: we don't use brotli because Firefox doesn't support brotli with insecured context (only supported on HTTPS)
-            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9)
+            compressed = gzip.compress(processed.encode("utf-8"), compresslevel=9)
 
             # Create valid C identifier from filename
             # Use appropriate suffix based on file type
@@ -79,15 +85,23 @@ for root, _, files in os.walk(SRC_DIR):
 
                 # Write bytes in rows of 16
                 for i in range(0, len(compressed), 16):
-                    chunk = compressed[i:i+16]
-                    hex_values = ', '.join(f'0x{b:02x}' for b in chunk)
+                    chunk = compressed[i : i + 16]
+                    hex_values = ", ".join(f"0x{b:02x}" for b in chunk)
                     h.write(f"  {hex_values},\n")
 
                 h.write(f"}};\n\n")
-                h.write(f"constexpr size_t {base_name}CompressedSize = {len(compressed)};\n")
-                h.write(f"constexpr size_t {base_name}OriginalSize = {len(processed)};\n")
+                h.write(
+                    f"constexpr size_t {base_name}CompressedSize = {len(compressed)};\n"
+                )
+                h.write(
+                    f"constexpr size_t {base_name}OriginalSize = {len(processed)};\n"
+                )
 
             print(f"Generated: {header_path}")
             print(f"  Original: {len(content)} bytes")
-            print(f"  Minified: {len(processed)} bytes ({100*len(processed)/len(content):.1f}%)")
-            print(f"  Compressed: {len(compressed)} bytes ({100*len(compressed)/len(content):.1f}%)")
+            print(
+                f"  Minified: {len(processed)} bytes ({100 * len(processed) / len(content):.1f}%)"
+            )
+            print(
+                f"  Compressed: {len(compressed)} bytes ({100 * len(compressed) / len(content):.1f}%)"
+            )

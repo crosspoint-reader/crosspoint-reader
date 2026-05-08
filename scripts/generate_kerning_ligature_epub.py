@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+
+# /// script
+# dependencies = [
+#   "pillow",
+# ]
+# ///
+
+
 """
 Generate a small EPUB with prose that exercises kerning and ligature edge cases.
 
@@ -150,8 +158,13 @@ except ImportError:
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _NOTOSERIF_FONT = os.path.join(
-    _PROJECT_ROOT, "lib", "EpdFont", "builtinFonts", "source",
-    "NotoSerif", "NotoSerif-Regular.ttf",
+    _PROJECT_ROOT,
+    "lib",
+    "EpdFont",
+    "builtinFonts",
+    "source",
+    "NotoSerif",
+    "NotoSerif-Regular.ttf",
 )
 
 
@@ -197,15 +210,23 @@ def create_cover_image():
     _draw_text_centered(draw, ornament_y, "*", font_ornament, text_color, width)
 
     subtitle_y = ornament_y + 72
-    _draw_text_centered(draw, subtitle_y, "A Typographer\u2019s Compendium",
-                        font_subtitle, text_color, width)
+    _draw_text_centered(
+        draw,
+        subtitle_y,
+        "A Typographer\u2019s Compendium",
+        font_subtitle,
+        text_color,
+        width,
+    )
 
-    _draw_text_centered(draw, height - 70, "CROSSPOINT TEST FIXTURES",
-                        font_author, text_color, width)
+    _draw_text_centered(
+        draw, height - 70, "CROSSPOINT TEST FIXTURES", font_author, text_color, width
+    )
 
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=90)
     return buf.getvalue()
+
 
 BOOK_UUID = str(uuid.uuid4())
 TITLE = "Kerning &amp; Ligature Edge Cases"
@@ -1681,7 +1702,9 @@ def build_epub(output_path: str):
     cover_data = create_cover_image()
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        zf.writestr(
+            "mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED
+        )
         zf.writestr("META-INF/container.xml", CONTAINER_XML)
         zf.writestr("OEBPS/content.opf", CONTENT_OPF)
         zf.writestr("OEBPS/toc.xhtml", TOC_XHTML)
