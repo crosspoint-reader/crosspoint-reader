@@ -1656,7 +1656,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   }
   if (maxHeight > 0) {
     const float s = static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight());
-    if (s < scale) {
+    if (s < scale || (scale == 1.0f && s != 1.0f)) {
       scale = s;
       isScaled = (scale != 1.0f);
     }
