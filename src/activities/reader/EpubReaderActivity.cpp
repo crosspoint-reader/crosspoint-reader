@@ -161,23 +161,23 @@ void EpubReaderActivity::loop() {
     openReaderMenu();
   }
 
-  // Suppress Back bleed-through after dictionary chain exit (long-press fires at threshold
-  // while Back is still held; ignore until fully released).
-  if (ignoreBackUntilRelease) {
-    if (!mappedInput.isPressed(MappedInputManager::Button::Back)) {
-      ignoreBackUntilRelease = false;
-    }
+  // Suppress Back bleed-through after dictionary chain exit. Capture the flag BEFORE
+  // updating it so the release frame itself is gated — otherwise the flag clears and
+  // wasReleased(Back) fires onGoHome() on the same tick the user lets go.
+  const bool suppressBack = ignoreBackUntilRelease;
+  if (ignoreBackUntilRelease && !mappedInput.isPressed(MappedInputManager::Button::Back)) {
+    ignoreBackUntilRelease = false;
   }
 
   // Long press BACK (1s+) goes to file selection
-  if (!ignoreBackUntilRelease && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+  if (!suppressBack && mappedInput.isPressed(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
-  if (!ignoreBackUntilRelease && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!suppressBack && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
