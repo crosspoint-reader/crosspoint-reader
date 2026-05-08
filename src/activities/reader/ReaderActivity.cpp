@@ -57,8 +57,9 @@ bool ReaderActivity::isImageFile(const std::string& path) {
 }
 
 std::string ReaderActivity::sidecarCoverPath(const std::string& bookPath) {
+  const auto sep = bookPath.find_last_of("/\\");
   const auto dot = bookPath.rfind('.');
-  if (dot == std::string::npos) return "";
+  if (dot == std::string::npos || (sep != std::string::npos && dot < sep)) return "";
   const std::string base = bookPath.substr(0, dot);
   for (const char* ext : {".jpg", ".jpeg", ".png", ".bmp"}) {
     const std::string candidate = base + ext;
