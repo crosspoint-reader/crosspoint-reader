@@ -550,6 +550,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
+  const auto showPendingSyncSaveError = [this]() {
+    if (!pendingSyncSaveError) return;
+    pendingSyncSaveError = false;
+    GUI.drawPopup(renderer, tr(STR_SAVE_PROGRESS_FAILED));
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -565,6 +571,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
+    showPendingSyncSaveError();
     return;
   }
 
@@ -610,6 +617,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                       SETTINGS.imageRendering, popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
+        showPendingSyncSaveError();
         return;
       }
     } else {
@@ -673,6 +681,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
+    showPendingSyncSaveError();
     return;
   }
 
@@ -682,6 +691,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
+    showPendingSyncSaveError();
     return;
   }
 
@@ -694,6 +704,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       requestUpdate();  // Try again after clearing cache
                         // TODO: prevent infinite loop if the page keeps failing to load for some reason
       automaticPageTurnActive = false;
+      showPendingSyncSaveError();
       return;
     }
 
@@ -707,10 +718,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 
-  if (pendingSyncSaveError) {
-    pendingSyncSaveError = false;
-    GUI.drawPopup(renderer, tr(STR_SAVE_PROGRESS_FAILED));
-  }
+  showPendingSyncSaveError();
 
   if (pendingScreenshot) {
     pendingScreenshot = false;
