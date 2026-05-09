@@ -271,8 +271,13 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   // Draw all items
   // Cap value column width and reserve a small gap so a long value can never overlap the title.
   // Mirrors LyraTheme/RoundedRaffTheme: truncate the value, deduct its measured width from the title's space.
+  // Reserve a minimum slice for the title before sizing the value cap, so on pathologically narrow
+  // rows the value gets squeezed instead of the title vanishing (mirrors RoundedRaffTheme::drawList).
   constexpr int maxValueWidth = 200;
   constexpr int valueGap = 10;
+  constexpr int minTitleWidth = 40;
+  const int valueBudget = std::max(
+      0, std::min(maxValueWidth, contentWidth - BaseMetrics::values.contentSidePadding * 2 - valueGap - minTitleWidth));
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
@@ -281,7 +286,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     std::string valueText;
     int valueTextWidth = 0;
     if (rowValue != nullptr) {
-      valueText = renderer.truncatedText(UI_10_FONT_ID, rowValue(i).c_str(), maxValueWidth);
+      valueText = renderer.truncatedText(UI_10_FONT_ID, rowValue(i).c_str(), valueBudget);
       valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
     }
 
