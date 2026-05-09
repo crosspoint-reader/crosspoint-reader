@@ -124,7 +124,14 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       ManifestFile file;
       file.name = fileObj["name"] | "";
       file.size = fileObj["size"] | 0;
+
+      if (!fileObj["crc32"].is<uint32_t>()) {
+        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
+        errorMessage_ = "Invalid font manifest";
+        return false;
+      }
       file.crc32 = fileObj["crc32"].as<uint32_t>();
+
       family.totalSize += file.size;
       family.files.push_back(std::move(file));
     }
