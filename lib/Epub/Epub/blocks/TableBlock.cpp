@@ -212,8 +212,13 @@ std::unique_ptr<TableBlock> TableBlock::deserialize(FsFile& file) {
         cell.colspan = 1;  // phantom cells always span 1 column
       else if (cell.colspan == 0)
         cell.colspan = 1;  // guard against corrupt data
+      constexpr uint16_t kMaxCellLines = 4096;
       uint16_t numLines = 0;
       serialization::readPod(file, numLines);
+      if (numLines > kMaxCellLines) {
+        LOG_ERR("TBL", "Sanity check failed: cell lines=%u", numLines);
+        return nullptr;
+      }
       cell.lines.reserve(numLines);
       for (uint16_t l = 0; l < numLines; l++) {
         auto line = TextBlock::deserialize(file);
