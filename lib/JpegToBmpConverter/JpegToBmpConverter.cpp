@@ -386,11 +386,21 @@ static bool isProgressiveJpeg(FsFile& file) {
     if (file.read(&b, 1) != 1 || b != 0xFF) break;
     // skip fill bytes (JPEG allows 0xFF padding before a marker byte)
     do {
-      if (file.read(&b, 1) != 1) { file.seek(0); return false; }
+      if (file.read(&b, 1) != 1) {
+        file.seek(0);
+        return false;
+      }
     } while (b == 0xFF);
     const uint8_t marker = b;
-    if (marker == 0xC2) { LOG_DBG("JPG", "Detected progressive JPEG (SOF2)"); file.seek(0); return true; }
-    if (marker == 0xC0 || marker == 0xC1 || marker == 0xC3) { file.seek(0); return false; }
+    if (marker == 0xC2) {
+      LOG_DBG("JPG", "Detected progressive JPEG (SOF2)");
+      file.seek(0);
+      return true;
+    }
+    if (marker == 0xC0 || marker == 0xC1 || marker == 0xC3) {
+      file.seek(0);
+      return false;
+    }
     if (marker == 0xD9) break;
     if (file.read(buf, 2) != 2) break;
     const int segLen = (static_cast<int>(buf[0]) << 8) | buf[1];

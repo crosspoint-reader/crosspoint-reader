@@ -2,12 +2,11 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
-
-#include <HalStorage.h>
 
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -215,7 +214,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   entries = std::move(parser).getEntries();
 
   if (!prevUrl.empty()) {
-    entries.insert(entries.begin(), OpdsEntry{.type = OpdsEntryType::NAVIGATION, .title = tr(STR_PREV_PAGE), .href = prevUrl});
+    entries.insert(entries.begin(),
+                   OpdsEntry{.type = OpdsEntryType::NAVIGATION, .title = tr(STR_PREV_PAGE), .href = prevUrl});
   }
   if (!nextUrl.empty()) {
     entries.push_back(OpdsEntry{.type = OpdsEntryType::NAVIGATION, .title = tr(STR_NEXT_PAGE), .href = nextUrl});
@@ -287,8 +287,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       epub.setupCacheDir();
       const auto coverDlResult = HttpDownloader::downloadToFile(
           coverUrl, epub.getCachePath() + "/.external_cover.jpg",
-          [this](const size_t, const size_t) { requestUpdate(true); },
-          server.username, server.password);
+          [this](const size_t, const size_t) { requestUpdate(true); }, server.username, server.password);
       if (coverDlResult != HttpDownloader::OK) {
         LOG_ERR("OPDS", "Failed to download cover from %s (err %d)", coverUrl.c_str(), (int)coverDlResult);
         Storage.remove((epub.getCachePath() + "/.external_cover.jpg").c_str());
