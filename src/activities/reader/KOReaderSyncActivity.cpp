@@ -10,10 +10,10 @@
 #include <cassert>
 
 #include "Epub/Section.h"
+#include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
-#include "EpubReaderUtils.h"
 #include "ReaderUtils.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
