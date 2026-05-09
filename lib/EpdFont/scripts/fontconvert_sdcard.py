@@ -289,11 +289,29 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
             lookup = gpos.LookupList.Lookup[li]
             for st in lookup.SubTable:
                 actual = st
-                # Unwrap Extension (lookup type 9) wrappers
+                # Unwrap Extension (lookup type 9) wrappers. After unwrapping,
+                # `lookup.LookupType` is still 9, so we must look at the
+                # *effective* type carried on the extension subtable to know
+                # whether `actual` is a PairPos table.
                 if lookup.LookupType == 9 and hasattr(st, 'ExtSubTable'):
                     actual = st.ExtSubTable
+                effective_type = getattr(st, 'ExtensionLookupType', lookup.LookupType)
                 if hasattr(actual, 'Format'):
-                    _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern)
+                    # _extract_pairpos_subtable assumes a Type-2 (PairPos)
+                    # subtable. Other lookup types reachable through the kern
+                    # feature (cursive attachment, mark-to-mark, contextual,
+                    # etc.) have a different shape and crash inside the
+                    # extractor. Skip them with a debug note rather than
+                    # aborting the whole build. Modern fonts often ship kern
+                    # via Extension-wrapped PairPos, so checking the effective
+                    # type instead of the outer type is what makes those
+                    # lookups actually reach the extractor.
+                    if effective_type == 2:
+                        _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern)
+                    else:
+                        print(f"  Debug: skipping unsupported GPOS kern lookupType="
+                              f"{effective_type} (outer={lookup.LookupType}, Format={actual.Format})",
+                              file=sys.stderr)
 
     font.close()
 
@@ -448,11 +466,20 @@ def extract_ligatures_fonttools(font_path, codepoints):
     font.close()
 
     # Filter: only keep ligatures where all input and output codepoints are
-    # in our generated glyph set
+    # in our generated glyph set, and all codepoints fit in 16 bits.
+    #
+    # The on-disk format packs each component as a uint16 (the 3+ chained
+    # path packs `intermediate_cp << 16 | last_cp`, where `intermediate_cp`
+    # is the lig_cp of the prefix). Dropping any seq with an SMP cp here —
+    # plus any lig_cp > 0xFFFF — means every cp that reaches `packed = … <<
+    # 16 | …` below is already 16-bit safe, including the chained path
+    # (intermediate_cp = filtered[prefix] is filtered too).
     codepoints_set = set(codepoints)
     filtered = {}
     for seq, lig_cp in raw_ligatures.items():
-        if lig_cp not in codepoints_set:
+        if lig_cp not in codepoints_set or lig_cp > 0xFFFF:
+            continue
+        if any(cp > 0xFFFF for cp in seq):
             continue
         if all(cp in codepoints_set for cp in seq):
             filtered[seq] = lig_cp
@@ -491,6 +518,12 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     style_label = style_names.get(style_id, str(style_id))
 
     face = freetype.Face(fontfile)
+    # Set font size at 150 DPI (matching fontconvert.py) BEFORE any glyph load.
+    # load_glyph() with FT_LOAD_RENDER renders at the active size, so calling
+    # it before set_char_size() would waste work at the default size and risk
+    # Invalid_Size_Handle on some fonts.
+    face.set_char_size(size << 6, size << 6, 150, 150)
+
     load_flags = freetype.FT_LOAD_RENDER
     if force_autohint:
         load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
@@ -520,9 +553,6 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     total_glyphs = sum(end - start + 1 for start, end in intervals)
     print(f"  [{style_label}] Validated: {len(intervals)} intervals, {total_glyphs} glyphs", file=sys.stderr)
 
-    # Set font size at 150 DPI (matching fontconvert.py)
-    face.set_char_size(size << 6, size << 6, 150, 150)
-
     # Rasterize all glyphs
     total_bitmap_size = 0
     all_glyphs = []
@@ -537,18 +567,28 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
 
             bitmap = f.glyph.bitmap
 
-            # Build 4-bit greyscale bitmap (same logic as fontconvert.py)
+            # Build 4-bit greyscale bitmap (same logic as fontconvert.py).
+            #
+            # FreeType returns the buffer with bitmap.pitch as the row stride
+            # in bytes, which can be negative when the bitmap is stored
+            # bottom-up. Iterating bitmap.buffer linearly assumes
+            # pitch == width and a top-down layout — that holds in the common
+            # case but breaks on padded or flipped bitmaps and corrupts the
+            # output. Walk by (row, col) using the real pitch instead.
             pixels4g = []
             px = 0
-            for i, v in enumerate(bitmap.buffer):
-                x = i % bitmap.width
-                if x % 2 == 0:
-                    px = (v >> 4)
-                else:
-                    px = px | (v & 0xF0)
-                    pixels4g.append(px)
-                    px = 0
-                if x == bitmap.width - 1 and bitmap.width % 2 > 0:
+            abs_pitch = abs(bitmap.pitch)
+            for y in range(bitmap.rows):
+                row_offset = y * abs_pitch if bitmap.pitch >= 0 else (bitmap.rows - 1 - y) * abs_pitch
+                for x in range(bitmap.width):
+                    v = bitmap.buffer[row_offset + x]
+                    if x % 2 == 0:
+                        px = (v >> 4)
+                    else:
+                        px = px | (v & 0xF0)
+                        pixels4g.append(px)
+                        px = 0
+                if bitmap.width % 2 > 0:
                     pixels4g.append(px)
                     px = 0
 
@@ -573,7 +613,12 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
                         pixels2b.append(px)
                         px = 0
             if (bitmap.width * bitmap.rows) % 4 != 0:
-                px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
+                # Outer parens are for clarity: in Python `*` binds tighter
+                # than `<<`, so the original `px << (4 - … % 4) * 2` already
+                # evaluates as `px << ((4 - … % 4) * 2)`. Match the explicit
+                # bracketing here so the shift width is obvious at a glance,
+                # mirroring the inner-loop style in fontconvert.py.
+                px = px << ((4 - (bitmap.width * bitmap.rows) % 4) * 2)
                 pixels2b.append(px)
 
             packed = bytes(pixels2b)
@@ -605,6 +650,10 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     all_cps = set(g.code_point for g, _ in all_glyphs)
 
     kern_map = extract_kerning_fonttools(fontfile, all_cps, ppem)
+    # SMP codepoints (> U+FFFF) cannot be stored in the uint16 kern codepoint
+    # field; drop them before class derivation to avoid a downstream
+    # struct.error when packing the binary kern tables.
+    kern_map = {(lcp, rcp): v for (lcp, rcp), v in kern_map.items() if lcp <= 0xFFFF and rcp <= 0xFFFF}
     print(f"  [{style_label}] Kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
     (kern_left_classes, kern_right_classes, kern_matrix,
@@ -616,6 +665,9 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
         print(f"  [{style_label}] Kerning classes: {kern_left_class_count} left, {kern_right_class_count} right, "
               f"{matrix_size + entries_size} bytes", file=sys.stderr)
 
+    # SMP codepoints in ligature inputs / outputs are filtered inside
+    # extract_ligatures_fonttools (see the codepoints_set filter), so every
+    # entry returned here is already 16-bit safe.
     ligature_pairs = extract_ligatures_fonttools(fontfile, all_cps)
     if len(ligature_pairs) > 255:
         print(f"  [{style_label}] WARNING: {len(ligature_pairs)} ligature pairs exceeds uint8_t max (255), truncating",

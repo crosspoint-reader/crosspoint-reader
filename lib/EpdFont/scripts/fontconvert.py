@@ -8,6 +8,12 @@ import argparse
 from collections import namedtuple
 from fontTools.ttLib import TTFont
 
+# Force UTF-8 stdout so that `python fontconvert.py … > foo.h` on Windows
+# (default cp1252) doesn't emit UTF-16 LE / replacement chars in the generated
+# header. Wrapped in a hasattr guard so it's a no-op on older Pythons.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 # Originally from https://github.com/vroland/epdiy
 
 parser = argparse.ArgumentParser(description="Generate a header file from a font to be used with epdiy.")
