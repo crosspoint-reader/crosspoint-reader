@@ -174,6 +174,8 @@ class CrossPointSettings {
   // Clock UTC offset in half-hour steps, biased by 24 so it fits in uint8_t.
   // Value 24 = UTC+0, 0 = UTC-12:00, 52 = UTC+14:00.
   uint8_t clockUtcOffset = 24;
+  // Clock display format: 0 = 24-hour, 1 = 12-hour
+  uint8_t clockFormat = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;

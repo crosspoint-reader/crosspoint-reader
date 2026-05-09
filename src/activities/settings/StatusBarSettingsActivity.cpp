@@ -12,7 +12,7 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 9;
+constexpr int MENU_ITEMS = 10;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT,
                                      StrId::STR_BOOK_PROGRESS_PERCENTAGE,
                                      StrId::STR_PROGRESS_BAR,
@@ -21,7 +21,11 @@ const StrId menuNames[MENU_ITEMS] = {StrId::STR_CHAPTER_PAGE_COUNT,
                                      StrId::STR_BATTERY,
                                      StrId::STR_XTC_STATUS_BAR,
                                      StrId::STR_CLOCK,
-                                     StrId::STR_CLOCK_UTC_OFFSET};
+                                     StrId::STR_CLOCK_UTC_OFFSET,
+                                     StrId::STR_CLOCK_FORMAT};
+
+constexpr int CLOCK_FORMAT_ITEMS = 2;
+const StrId clockFormatNames[CLOCK_FORMAT_ITEMS] = {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H};
 
 // UTC offset range: 0 = UTC-12:00, 24 = UTC+0, 52 = UTC+14:00 (half-hour steps)
 constexpr uint8_t UTC_OFFSET_MIN = 0;
@@ -149,6 +153,9 @@ void StatusBarSettingsActivity::handleSelection() {
     } else {
       SETTINGS.clockUtcOffset++;
     }
+  } else if (selectedIndex == 9) {
+    // Clock Format (12h / 24h)
+    SETTINGS.clockFormat = (SETTINGS.clockFormat + 1) % CLOCK_FORMAT_ITEMS;
   }
   SETTINGS.saveToFile();
 }
@@ -188,6 +195,9 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
           return (halClock.isAvailable() && SETTINGS.statusBarClock) ? tr(STR_SHOW) : tr(STR_HIDE);
         } else if (index == 8) {
           return formatUtcOffset(SETTINGS.clockUtcOffset);
+        } else if (index == 9) {
+          const uint8_t fmt = SETTINGS.clockFormat < CLOCK_FORMAT_ITEMS ? SETTINGS.clockFormat : 0;
+          return std::string(I18N.get(clockFormatNames[fmt]));
         } else {
           return tr(STR_HIDE);
         }
