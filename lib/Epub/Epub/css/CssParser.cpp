@@ -75,6 +75,12 @@ std::string_view stripTrailingImportant(std::string_view value) {
   return value;
 }
 
+// Checks if a normalized token is a known CSS border-style keyword.
+bool isBorderStyleKeyword(const std::string& token) {
+  return token == "none" || token == "hidden" || token == "solid" || token == "dotted" || token == "dashed" ||
+         token == "double" || token == "groove" || token == "ridge" || token == "inset" || token == "outset";
+}
+
 }  // anonymous namespace
 
 // String utilities implementation
@@ -406,6 +412,52 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       style.borderLeftStyle = values.size() >= 4 ? interpretBorderStyle(values[3]) : style.borderRightStyle;
       style.defined.borderTopStyle = style.defined.borderRightStyle = style.defined.borderBottomStyle =
           style.defined.borderLeftStyle = 1;
+    }
+  } else if (propNameBuf == "border" || propNameBuf == "border-top" || propNameBuf == "border-bottom" ||
+             propNameBuf == "border-left" || propNameBuf == "border-right") {
+    // Parse compound border shorthand: <width> <style> <color> in any order.
+    // Width keywords (thin/medium/thick) and color values are recognized but ignored beyond
+    // determining whether the width is non-zero.
+    const auto tokens = splitWhitespace(propValueBuf);
+    CssBorderStyle parsedStyle = CssBorderStyle::None;
+    bool hasStyle = false;
+    bool widthIsZero = false;
+    bool hasWidth = false;
+
+    for (const auto& token : tokens) {
+      CssLength len;
+      if (tryInterpretLength(token, len)) {
+        hasWidth = true;
+        widthIsZero = (len.value == 0.0f);
+      } else if (token == "thin" || token == "medium" || token == "thick") {
+        hasWidth = true;
+        widthIsZero = false;
+      } else if (isBorderStyleKeyword(token)) {
+        hasStyle = true;
+        parsedStyle = interpretBorderStyle(token);
+      }
+      // Any remaining tokens are colors — ignored for monochrome e-ink rendering.
+    }
+
+    if (propNameBuf == "border-top" || propNameBuf == "border") {
+      style.borderTopStyle = parsedStyle;
+      style.defined.borderTopStyle = 1;
+      if (hasWidth) style.defined.borderTopWidthZero = widthIsZero ? 1 : 0;
+    }
+    if (propNameBuf == "border-bottom" || propNameBuf == "border") {
+      style.borderBottomStyle = parsedStyle;
+      style.defined.borderBottomStyle = 1;
+      if (hasWidth) style.defined.borderBottomWidthZero = widthIsZero ? 1 : 0;
+    }
+    if (propNameBuf == "border-left" || propNameBuf == "border") {
+      style.borderLeftStyle = parsedStyle;
+      style.defined.borderLeftStyle = 1;
+      if (hasWidth) style.defined.borderLeftWidthZero = widthIsZero ? 1 : 0;
+    }
+    if (propNameBuf == "border-right" || propNameBuf == "border") {
+      style.borderRightStyle = parsedStyle;
+      style.defined.borderRightStyle = 1;
+      if (hasWidth) style.defined.borderRightWidthZero = widthIsZero ? 1 : 0;
     }
   }
 }
