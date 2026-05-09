@@ -76,14 +76,21 @@ INTERVAL_PRESETS = {
                     (0xFB00, 0xFB06)],
 }
 
+# Regex for parsing unnamed hex range intervals: (0xSTART-0xEND)
+_HEX_RANGE_PATTERN = re.compile(r'^\(0x([0-9a-fA-F]+)-0x([0-9a-fA-F]+)\)$')
 
 def parse_hex_range(s: str) -> tuple[int, int] | None:
-    regex = re.compile(r'^\(0x([0-9a-fA-F]+)-0x([0-9a-fA-F]+)\)$')
-    match = regex.fullmatch(s)
+    match = _HEX_RANGE_PATTERN.fullmatch(s)
     if not match:
         return None
+
     start_hex, end_hex = match.groups()
-    return int(start_hex, 16), int(end_hex, 16)
+    start, end = int(start_hex, 16), int(end_hex, 16)
+
+    # Validating Unicode range bounds.
+    if start > end or end > 0x10FFFF:
+        return None
+    return start, end
 
 
 def resolve_intervals(preset_str):
@@ -95,10 +102,11 @@ def resolve_intervals(preset_str):
         if name not in INTERVAL_PRESETS and unnamed_interval is None:
             print(f"Error: unknown interval preset '{name}'", file=sys.stderr)
             print(f"Available presets: {', '.join(sorted(INTERVAL_PRESETS.keys()))}", file=sys.stderr)
+            print(f"You can also specify unnamed hex ranges like (0x2100-0x214F)", file=sys.stderr)
             sys.exit(1)
 
         if unnamed_interval is not None:
-            all_intervals.extend([unnamed_interval])
+            all_intervals.append(unnamed_interval)
         else:
             all_intervals.extend(INTERVAL_PRESETS[name])
 
