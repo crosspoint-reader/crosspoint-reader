@@ -102,7 +102,7 @@ def resolve_intervals(preset_str):
         if name not in INTERVAL_PRESETS and unnamed_interval is None:
             print(f"Error: unknown interval preset '{name}'", file=sys.stderr)
             print(f"Available presets: {', '.join(sorted(INTERVAL_PRESETS.keys()))}", file=sys.stderr)
-            print(f"You can also specify unnamed hex ranges like (0x2100-0x214F)", file=sys.stderr)
+            print("You can also specify unnamed hex ranges like (0x2100-0x214F)", file=sys.stderr)
             sys.exit(1)
 
         if unnamed_interval is not None:
