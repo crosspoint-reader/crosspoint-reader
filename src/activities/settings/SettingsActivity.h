@@ -155,8 +155,11 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> systemSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
-  bool coverDisablePopupVisible = false;
-  int coverDisableSelection = 0;
+  static constexpr int kCoverOptionCount = 5;
+
+  bool coverPopupVisible = false;
+  int coverPopupSelection = 0;
+  uint8_t coverModeBeforePopup = 0;
 
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
@@ -164,9 +167,12 @@ class SettingsActivity final : public Activity {
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void rebuildSettingsLists();
+  void handleCoverPopup();
+  void applyCoverOption();
   void handleCoverDisablePopup();
   void deleteAllCoverThumbs();
-  void renderCoverDisablePopup();
+  void resetAllCoverDisabled();
+  void renderCoverPopup();
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

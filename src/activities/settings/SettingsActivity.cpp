@@ -10,6 +10,7 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -17,8 +18,8 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
-#include "SdCardFontGlobals.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontGlobals.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
@@ -105,8 +106,8 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
-  if (coverDisablePopupVisible) {
-    handleCoverDisablePopup();
+  if (coverPopupVisible) {
+    handleCoverPopup();
     return;
   }
 
@@ -192,6 +193,27 @@ void SettingsActivity::toggleCurrentSetting() {
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    if (setting.nameId == StrId::STR_HOME_COVER) {
+      coverModeBeforePopup = SETTINGS.coverMode;
+      switch (SETTINGS.coverMode) {
+        case CrossPointSettings::COVER_ENABLED:
+          coverPopupSelection = 0;
+          break;
+        case CrossPointSettings::COVER_TIMEOUT:
+          coverPopupSelection = 2;
+          break;
+        case CrossPointSettings::COVER_DISABLED:
+          coverPopupSelection = 3;
+          break;
+        default:
+          coverPopupSelection = 0;
+          break;
+      }
+      coverPopupVisible = true;
+      requestUpdate();
+      return;
+    }
+
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
@@ -322,38 +344,55 @@ void SettingsActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  if (coverDisablePopupVisible) {
-    renderCoverDisablePopup();
-    renderer.displayBuffer(HalDisplay::RefreshMode::FAST_REFRESH);
-  } else {
-    renderer.displayBuffer();
+  if (coverPopupVisible) {
+    renderCoverPopup();
   }
+  renderer.displayBuffer();
 }
 
-void SettingsActivity::handleCoverDisablePopup() {
+void SettingsActivity::handleCoverPopup() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Left) ||
       mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    if (coverDisableSelection > 0) {
-      coverDisableSelection--;
-      requestUpdate();
-    }
+    coverPopupSelection = (coverPopupSelection - 1 + kCoverOptionCount) % kCoverOptionCount;
+    requestUpdate();
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) ||
              mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    if (coverDisableSelection < 1) {
-      coverDisableSelection++;
-      requestUpdate();
-    }
+    coverPopupSelection = (coverPopupSelection + 1) % kCoverOptionCount;
+    requestUpdate();
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (coverDisableSelection == 1) {
-      deleteAllCoverThumbs();
-    }
-    coverDisablePopupVisible = false;
+    applyCoverOption();
+    coverPopupVisible = false;
     SETTINGS.saveToFile();
     requestUpdate();
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
-    coverDisablePopupVisible = false;
+    SETTINGS.coverMode = coverModeBeforePopup;
+    coverPopupVisible = false;
     requestUpdate();
+  }
+}
+
+void SettingsActivity::applyCoverOption() {
+  switch (coverPopupSelection) {
+    case 0:  // Enabled
+      SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
+      resetAllCoverDisabled();
+      break;
+    case 1:  // Regenerate All
+      SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
+      resetAllCoverDisabled();
+      APP_STATE.forceRenderCoverPath = "__regenerate_all__";
+      break;
+    case 2:  // Timeout
+      SETTINGS.coverMode = CrossPointSettings::COVER_TIMEOUT;
+      resetAllCoverDisabled();
+      break;
+    case 3:  // Disabled
+      SETTINGS.coverMode = CrossPointSettings::COVER_DISABLED;
+      break;
+    case 4:  // Delete All
+      SETTINGS.coverMode = CrossPointSettings::COVER_DISABLED;
+      deleteAllCoverThumbs();
+      break;
   }
 }
 
@@ -400,58 +439,75 @@ void SettingsActivity::deleteAllCoverThumbs() {
   }
 }
 
-void SettingsActivity::renderCoverDisablePopup() {
+void SettingsActivity::resetAllCoverDisabled() {
+  const auto& books = RECENT_BOOKS.getBooks();
+  for (const auto& book : books) {
+    RECENT_BOOKS.setCoverDisabled(book.path, false);
+  }
+}
+
+void SettingsActivity::renderCoverPopup() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto height10 = renderer.getLineHeight(UI_10_FONT_ID);
   const auto height12 = renderer.getLineHeight(UI_12_FONT_ID);
   const auto heightSmall = renderer.getLineHeight(SMALL_FONT_ID);
 
-  constexpr int padding = 20;
-  const int contentHeight = height12 + height10 + height10 + height10 + heightSmall;
-  const int dialogH = contentHeight + padding * 2;
+  static const StrId optionLabels[kCoverOptionCount] = {
+      StrId::STR_HOME_COVER_ENABLED, StrId::STR_HOME_COVER_REGENERATE_ALL, StrId::STR_HOME_COVER_TIMEOUT,
+      StrId::STR_HOME_COVER_DISABLED, StrId::STR_HOME_COVER_DELETE_ALL};
+
+  static const StrId optionDescs[kCoverOptionCount] = {
+      StrId::STR_HOME_COVER_ENABLED_DESC, StrId::STR_HOME_COVER_REGENERATE_ALL_DESC, StrId::STR_HOME_COVER_TIMEOUT_DESC,
+      StrId::STR_HOME_COVER_DISABLED_DESC, StrId::STR_HOME_COVER_DELETE_ALL_DESC};
+
+  constexpr int itemSpacing = 6;
+  constexpr int innerPadding = 16;
+
+  int maxTextWidth = 0;
+  for (int i = 0; i < kCoverOptionCount; i++) {
+    const int labelW = renderer.getTextWidth(UI_10_FONT_ID, I18N.get(optionLabels[i]), EpdFontFamily::BOLD);
+    if (labelW > maxTextWidth) maxTextWidth = labelW;
+    const int descW = renderer.getTextWidth(SMALL_FONT_ID, I18N.get(optionDescs[i]));
+    if (descW > maxTextWidth) maxTextWidth = descW;
+  }
+
+  const int listHeight = height10 * kCoverOptionCount + itemSpacing * (kCoverOptionCount - 1);
+  const int dialogW = std::min((maxTextWidth + innerPadding * 2) * 12 / 10, pageWidth - 20);
+  const int contentHeight = height12 + 10 + listHeight + 14 + heightSmall + 14 + height10;
+  const int dialogH = contentHeight + innerPadding * 2;
+  const int dialogX = (pageWidth - dialogW) / 2;
   const int dialogY = (pageHeight - dialogH) / 2;
-  const int dialogW = pageWidth - padding * 2;
-  const int dialogX = padding;
 
   GUI.drawDialogBackground(renderer, Rect{dialogX, dialogY, dialogW, dialogH});
 
-  int y = dialogY + padding;
+  int y = dialogY + innerPadding;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_COVER_DISABLE_TITLE), true, EpdFontFamily::BOLD);
-  y += height12 + 8;
+  renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_HOME_COVER), true, EpdFontFamily::BOLD);
+  y += height12 + 10;
 
-  renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_COVER_DISABLE_DESC), true);
-  y += height10 + 12;
+  constexpr int selectionHPadding = 8;
+  constexpr int selectionVPadding = 4;
+  for (int i = 0; i < kCoverOptionCount; i++) {
+    const int itemY = y + i * (height10 + itemSpacing);
+    const bool selected = (i == coverPopupSelection);
+    const char* labelText = I18N.get(optionLabels[i]);
+    const int labelWidth = renderer.getTextWidth(UI_10_FONT_ID, labelText, EpdFontFamily::BOLD);
+    const int labelX = (pageWidth - labelWidth) / 2;
 
-  constexpr int buttonSpacing = 30;
-  const int btn1Width = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_COVER_DISABLE_ONLY)) + 8;
-  const int btn2Width = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_COVER_DISABLE_AND_REMOVE)) + 8;
-  const int totalBtnWidth = btn1Width + buttonSpacing + btn2Width;
-  int startX = (pageWidth - totalBtnWidth) / 2;
-
-  if (coverDisableSelection == 0) {
-    std::string text = "[" + std::string(tr(STR_COVER_DISABLE_ONLY)) + "]";
-    renderer.drawText(UI_10_FONT_ID, startX, y, text.c_str(), true, EpdFontFamily::BOLD);
-  } else {
-    renderer.drawText(UI_10_FONT_ID, startX + 4, y, tr(STR_COVER_DISABLE_ONLY), true);
+    Rect itemRect(labelX - selectionHPadding, itemY - selectionVPadding, labelWidth + selectionHPadding * 2,
+                  height10 + selectionVPadding * 2);
+    GUI.drawPopupSelection(renderer, UI_10_FONT_ID, itemRect, labelText, selected);
   }
 
-  const int btn2X = startX + btn1Width + buttonSpacing;
-  if (coverDisableSelection == 1) {
-    std::string text = "[" + std::string(tr(STR_COVER_DISABLE_AND_REMOVE)) + "]";
-    renderer.drawText(UI_10_FONT_ID, btn2X, y, text.c_str(), true, EpdFontFamily::BOLD);
-  } else {
-    renderer.drawText(UI_10_FONT_ID, btn2X + 4, y, tr(STR_COVER_DISABLE_AND_REMOVE), true);
-  }
-  y += height10 + 8;
+  y += listHeight + 14;
+  renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(optionDescs[coverPopupSelection]), true);
 
-  if (coverDisableSelection == 0) {
-    renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_COVER_DISABLE_ONLY_DESC), true);
-  } else {
-    renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_COVER_DISABLE_AND_REMOVE_DESC), true);
-  }
-
-  const auto hintLabels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-  GUI.drawButtonHints(renderer, hintLabels.btn1, hintLabels.btn2, hintLabels.btn3, hintLabels.btn4);
+  y = dialogY + dialogH - innerPadding - height10;
+  const int backWidth = renderer.getTextWidth(UI_10_FONT_ID, "[BACK]");
+  const int selectWidth = renderer.getTextWidth(UI_10_FONT_ID, "[SELECT]");
+  const int hintsWidth = backWidth + 30 + selectWidth;
+  int hintsX = (pageWidth - hintsWidth) / 2;
+  renderer.drawText(UI_10_FONT_ID, hintsX, y, "[BACK]", true);
+  renderer.drawText(UI_10_FONT_ID, hintsX + backWidth + 30, y, "[SELECT]", true);
 }

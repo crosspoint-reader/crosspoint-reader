@@ -55,10 +55,14 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   Rect popupRect;
 
   static constexpr uint32_t COVER_RENDER_TIMEOUT_MS = 10000;
-  const bool isForcedBook = !recentBooks.empty() && (recentBooks[0].path == APP_STATE.forceRenderCoverPath);
+  const bool forceRegenerate =
+      !APP_STATE.forceRenderCoverPath.empty() && APP_STATE.forceRenderCoverPath == "__regenerate_all__";
+  const bool isForcedBook =
+      forceRegenerate || (!recentBooks.empty() && (recentBooks[0].path == APP_STATE.forceRenderCoverPath));
   LOG_DBG("HOME", "loadRecentCovers: coverMode=%d isForced=%d forcePath='%s'", SETTINGS.coverMode, isForcedBook,
           APP_STATE.forceRenderCoverPath.c_str());
-  if (SETTINGS.coverMode == CrossPointSettings::COVER_DISABLED_MODE && !isForcedBook) {
+
+  if (SETTINGS.coverMode == CrossPointSettings::COVER_DISABLED && !isForcedBook && !forceRegenerate) {
     LOG_DBG("HOME", "loadRecentCovers: skipped (globally disabled)");
     APP_STATE.forceRenderCoverPath = "";
     recentsLoaded = true;
@@ -67,18 +71,21 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   }
   const bool useTimeout = (SETTINGS.coverMode == CrossPointSettings::COVER_TIMEOUT);
   LOG_DBG("HOME", "loadRecentCovers: useTimeout=%d timeoutMs=%u", useTimeout, COVER_RENDER_TIMEOUT_MS);
-  if (!recentBooks.empty()) {
-    RecentBook& book = recentBooks[0];
-    LOG_DBG("HOME", "loadRecentCovers: book='%s' coverBmp='%s' coverDisabled=%d", book.path.c_str(),
-            book.coverBmpPath.c_str(), book.coverDisabled);
+
+  int bookCount = forceRegenerate ? static_cast<int>(recentBooks.size()) : 1;
+  for (int bi = 0; bi < bookCount && bi < static_cast<int>(recentBooks.size()); bi++) {
+    RecentBook& book = recentBooks[bi];
+    const bool isBookForced = forceRegenerate || (bi == 0 && isForcedBook);
+    LOG_DBG("HOME", "loadRecentCovers: book='%s' coverBmp='%s' coverDisabled=%d forced=%d", book.path.c_str(),
+            book.coverBmpPath.c_str(), book.coverDisabled, isBookForced);
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       bool coverExists = Storage.exists(coverPath.c_str());
       LOG_DBG("HOME", "loadRecentCovers: coverPath='%s' exists=%d isForced=%d", coverPath.c_str(), coverExists,
-              isForcedBook);
-      if ((isForcedBook || !coverExists) && (!book.coverDisabled || isForcedBook)) {
+              isBookForced);
+      if ((isBookForced || !coverExists) && (!book.coverDisabled || isBookForced)) {
         if (FsHelpers::hasEpubExtension(book.path)) {
-          if (isForcedBook) {
+          if (isBookForced) {
             Storage.remove(coverPath.c_str());
             LOG_DBG("HOME", "loadRecentCovers: force-render removed stale BMP");
           }
@@ -86,7 +93,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           epub.load(false, true);
           popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           GUI.fillPopupProgress(renderer, popupRect, 50);
-          const uint32_t deadline = (useTimeout && !isForcedBook) ? (millis() + COVER_RENDER_TIMEOUT_MS) : 0;
+          const uint32_t deadline = (useTimeout && !isBookForced) ? (millis() + COVER_RENDER_TIMEOUT_MS) : 0;
           LOG_DBG("HOME", "loadRecentCovers: generating cover (deadline=%u ms)", deadline);
           bool success = epub.generateThumbBmp(coverHeight, deadline);
           LOG_DBG("HOME", "loadRecentCovers: generateThumbBmp result=%d", success);

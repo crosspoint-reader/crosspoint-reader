@@ -168,6 +168,8 @@ class BaseTheme {
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
                                const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
                                bool inactiveSelection = false) const;
+  virtual void drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                                  bool selected) const;
   virtual bool showsFileIcons() const { return false; }
   void drawClassicalBookCover(GfxRenderer& renderer, int x, int y, int w, int h, const BookCoverParams& params,
                               bool inverted = false, int continueTextWidth = 0) const;

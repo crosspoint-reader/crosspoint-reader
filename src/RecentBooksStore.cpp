@@ -28,7 +28,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
 
   const bool existingDisabled =
-      (it != recentBooks.end()) ? it->coverDisabled : (SETTINGS.coverMode == CrossPointSettings::COVER_DISABLED_MODE);
+      (it != recentBooks.end()) ? it->coverDisabled : (SETTINGS.coverMode == CrossPointSettings::COVER_DISABLED);
 
   if (it != recentBooks.end()) {
     recentBooks.erase(it);

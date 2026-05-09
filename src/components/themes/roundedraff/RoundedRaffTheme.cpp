@@ -391,3 +391,15 @@ void RoundedRaffTheme::drawDialogBackground(const GfxRenderer& renderer, Rect re
                            kRowRadius + outline, Color::Black);
   renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, kRowRadius, Color::White);
 }
+
+void RoundedRaffTheme::drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                                          bool selected) const {
+  const int textH = renderer.getLineHeight(fontId);
+  const int textW = renderer.getTextWidth(fontId, text);
+  const int textY = rect.y + (rect.height - textH) / 2;
+  const int textX = rect.x + (rect.width - textW) / 2;
+  if (selected) {
+    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, 6, Color::Black);
+  }
+  renderer.drawText(fontId, textX, textY, text, !selected);
+}
