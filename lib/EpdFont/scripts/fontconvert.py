@@ -792,6 +792,15 @@ if compress:
     # are grouped together for efficient LRU caching on the embedded target.
     # Since glyphs are in codepoint order, glyphs in the same Unicode block
     # are contiguous in the array and form natural groups.
+    #
+    # On top of script boundaries, a hard size cap (GROUP_MAX_UNCOMPRESSED_BYTES)
+    # is applied: if adding the next glyph would push the uncompressed group
+    # size over the cap, the group is closed and a new one started with the
+    # same script ID. This bounds the embedded decompressor's transient
+    # malloc regardless of font density (CJK, Vietnamese, user-supplied
+    # fonts with large Unicode blocks). Without it, a single dense script
+    # group can balloon past what fits in a transient page-decompress
+    # allocation on the device.
     SCRIPT_GROUP_RANGES = [
         (0x0000, 0x007F),   # ASCII
         (0x0080, 0x00FF),   # Latin-1 Supplement
@@ -809,6 +818,11 @@ if compress:
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
 
+    # 64 KB cap: large enough to hold any single built-in script group with
+    # headroom, small enough to be a comfortable transient malloc on the
+    # ESP32-C3.
+    GROUP_MAX_UNCOMPRESSED_BYTES = 65536
+
     def get_script_group(code_point):
         for i, (start, end) in enumerate(SCRIPT_GROUP_RANGES):
             if start <= code_point <= end:
@@ -819,17 +833,33 @@ if compress:
     current_group_id = None
     group_start = 0
     group_count = 0
+    group_uncompressed = 0
 
-    for i, (props, packed) in enumerate(all_glyphs):
+    for i, (props, _) in enumerate(all_glyphs):
         sg = get_script_group(props.code_point)
-        if sg != current_group_id:
+        # Use the byte-aligned size (4-pixel-aligned row stride) rather than
+        # the packed length, since the decompressor consumes byte-aligned
+        # buffers. Empty glyphs contribute zero.
+        glyph_aligned_size = (((props.width + 3) // 4) * props.height
+                              if props.width > 0 and props.height > 0 else 0)
+        if glyph_aligned_size > GROUP_MAX_UNCOMPRESSED_BYTES:
+            raise ValueError(
+                f"Glyph {i} (code point U+{props.code_point:04X}) byte-aligned size "
+                f"{glyph_aligned_size} exceeds GROUP_MAX_UNCOMPRESSED_BYTES="
+                f"{GROUP_MAX_UNCOMPRESSED_BYTES}; bump the cap or split the glyph."
+            )
+        size_overflow = group_uncompressed + glyph_aligned_size > GROUP_MAX_UNCOMPRESSED_BYTES
+
+        if sg != current_group_id or size_overflow:
             if group_count > 0:
                 groups.append((group_start, group_count))
             current_group_id = sg
             group_start = i
             group_count = 1
+            group_uncompressed = glyph_aligned_size
         else:
             group_count += 1
+            group_uncompressed += glyph_aligned_size
 
     if group_count > 0:
         groups.append((group_start, group_count))
