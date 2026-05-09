@@ -819,12 +819,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const auto tGrayEnd = millis();
     fcm->logStats(useFactoryGray ? "gray_factory_quality" : "gray");
 
+    // restoreBwBuffer() copies the saved BW frame back AND rebases RED RAM
+    // via cleanupGrayscaleBuffers, which is sufficient cleanup for both
+    // differential and factory paths — no extra RED RAM write needed.
     renderer.restoreBwBuffer();
-    if (useFactoryGray) {
-      // Factory LUT leaves RED RAM in gray-encoded state; sync controller to the
-      // restored BW framebuffer so subsequent BW page turns render cleanly.
-      renderer.cleanupGrayscaleWithFrameBuffer();
-    }
     const auto tBwRestore = millis();
 
     const auto tEnd = millis();
@@ -852,14 +850,14 @@ void EpubReaderActivity::onScreenshotRequest() {
   auto p = section->loadPageFromSectionFile();
   if (!p) return;
 
-  // Preserve the BW page across the gray render so cleanupGrayscaleWithFrameBuffer
-  // syncs the controller to the actual page, not a cleared framebuffer.
+  // Preserve the BW page across the gray render so restoreBwBuffer's
+  // cleanupGrayscaleBuffers call rebases RED RAM to the actual page, not a
+  // cleared framebuffer.
   if (!renderer.storeBwBuffer()) return;
 
   PageRenderCtx grayCtx{p.get(), SETTINGS.getReaderFontId(), lastFactoryMarginLeft, lastFactoryMarginTop, this};
   renderer.renderGrayscale(GfxRenderer::GrayscaleMode::FactoryQuality, &renderPageCallback, &grayCtx);
   renderer.restoreBwBuffer();
-  renderer.cleanupGrayscaleWithFrameBuffer();
 }
 
 void EpubReaderActivity::renderStatusBar() const {

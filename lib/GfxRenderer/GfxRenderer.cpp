@@ -1496,6 +1496,10 @@ void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const Gfx
   g_differentialQuantize = false;
 
   displayGrayBuffer(lut, factoryMode);
+  // Suppress the SDK's automatic grayscaleRevert on the next BW page turn.
+  // Caller is responsible for cleanup (restoreBwBuffer rebases RED RAM and
+  // the next FAST_REFRESH drives pixels back to clean BW).
+  display.clearGrayscaleModeFlag();
   setRenderMode(BW);
 }
 
@@ -1532,6 +1536,8 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
     copyGrayscaleMsbBuffers();
     g_differentialQuantize = false;
     displayGrayBuffer(lut, factoryMode);
+    // See note in renderGrayscale().
+    display.clearGrayscaleModeFlag();
     setRenderMode(BW);
     return;
   }
@@ -1563,6 +1569,8 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
 
   g_differentialQuantize = false;
   displayGrayBuffer(lut, factoryMode);
+  // See note in renderGrayscale().
+  display.clearGrayscaleModeFlag();
   setRenderMode(BW);
 }
 
