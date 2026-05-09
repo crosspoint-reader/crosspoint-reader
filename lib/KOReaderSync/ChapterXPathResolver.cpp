@@ -49,13 +49,14 @@ struct PathSegment {
   int index;
 };
 
-std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegment>& path, const int charOffset) {
+std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegment>& path, const int textNodeIndex,
+                                const size_t charOffset) {
   std::string xpath = "/body/DocFragment[" + std::to_string(spineIndex + 1) + "]/body";
   for (const auto& segment : path) {
     xpath += "/" + segment.name + "[" + std::to_string(segment.index) + "]";
   }
-  if (charOffset > 0) {
-    xpath += "/text()." + std::to_string(charOffset);
+  if (textNodeIndex > 0 && charOffset > 0) {
+    xpath += "/text()[" + std::to_string(textNodeIndex) + "]." + std::to_string(charOffset);
   }
   return xpath;
 }
@@ -280,7 +281,7 @@ class XPathParagraphResolver final : public Print {
     if (name == "p") {
       paragraphCount++;
       if (paragraphCount == targetParagraph) {
-        xpath = buildParagraphXPath(spineIndex, path, 0);
+        xpath = buildParagraphXPath(spineIndex, path, 0, 0);
         stopped = true;
         XML_StopParser(parser, XML_FALSE);
       }
@@ -410,14 +411,14 @@ class XPathProgressResolver final : public Print {
     const int siblingIndex = parentStates.back().nextIndex(name);
     path.push_back({name, siblingIndex});
     parentStates.emplace_back();
+    textNodeIndexStack.push_back(0);
+    pendingTextNode = true;
 
     if (name == "p") {
       paragraphDepth++;
-      blockVisibleChars = 0;
     }
     if (name == "li") {
       liDepth++;
-      blockVisibleChars = 0;
     }
 
     depth++;
@@ -435,18 +436,23 @@ class XPathProgressResolver final : public Print {
       insideBody = false;
       parentStates.clear();
       path.clear();
+      textNodeIndexStack.clear();
       return;
     }
 
     if (name == "p" && paragraphDepth > 0) {
       paragraphDepth--;
-      blockVisibleChars = 0;
     }
     if (name == "li" && liDepth > 0) {
       liDepth--;
-      blockVisibleChars = 0;
     }
 
+    if (!textNodeIndexStack.empty()) {
+      textNodeIndexStack.pop_back();
+    }
+    if (paragraphDepth > 0 || liDepth > 0) {
+      pendingTextNode = true;
+    }
     if (!path.empty()) {
       path.pop_back();
     }
@@ -461,20 +467,33 @@ class XPathProgressResolver final : public Print {
     }
 
     const size_t codepointCount = countUtf8Codepoints(data, len);
+    if (codepointCount == 0) {
+      return;
+    }
+
+    // Start a new text node on first non-empty content after any element boundary.
+    // Only counting non-empty nodes matches KOReader's text()[N] indexing behavior,
+    // which skips empty text nodes created by bare <a id="anchor"/> anchors.
+    if (pendingTextNode) {
+      if (!textNodeIndexStack.empty()) {
+        textNodeIndexStack.back()++;
+      }
+      textNodeStartChars = visibleChars;
+      pendingTextNode = false;
+    }
+
     const size_t nextVisibleChars = visibleChars + codepointCount;
     if (targetVisibleChar <= nextVisibleChars) {
       const size_t delta = targetVisibleChar - visibleChars;
-      // Use element-path only (no text offset). KOReader expects text()[N].M where N is
-      // the specific text node index, which we don't track. Element-level precision is
-      // sufficient and avoids generating invalid XPaths that cause KOReader to mis-navigate.
-      xpath = buildParagraphXPath(spineIndex, path, 0);
+      const int texNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
+      const size_t charOff = visibleChars - textNodeStartChars + delta;
+      xpath = buildParagraphXPath(spineIndex, path, texNode, charOff);
       stopped = true;
       XML_StopParser(parser, XML_FALSE);
       return;
     }
 
     visibleChars = nextVisibleChars;
-    blockVisibleChars += codepointCount;
   }
 
   XML_Parser parser = nullptr;
@@ -482,12 +501,14 @@ class XPathProgressResolver final : public Print {
   bool parseOk = true;
   bool insideBody = false;
   bool stopped = false;
+  bool pendingTextNode = true;
   int depth = 0;
   int bodyDepth = -1;
   int paragraphDepth = 0;
   int liDepth = 0;
   size_t visibleChars = 0;
-  size_t blockVisibleChars = 0;
+  size_t textNodeStartChars = 0;
+  std::vector<int> textNodeIndexStack;
   std::vector<ParentState> parentStates;
   std::vector<PathSegment> path;
   std::string xpath;

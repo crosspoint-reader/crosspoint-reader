@@ -164,7 +164,8 @@ class ParagraphStreamer final : public Print {
   int capturedAnchorIdLen = 0;
   bool capturingAnchorTag = false;
   enum IdScanState { ID_SCAN, ID_I, ID_D, ID_EQ, ID_IN_VALUE_D, ID_IN_VALUE_S } idState = ID_SCAN;
-  bool inAttrQuote = false;  // true while inside a quoted attribute value (prevents '/' from being treated as self-close)
+  bool inAttrQuote =
+      false;  // true while inside a quoted attribute value (prevents '/' from being treated as self-close)
   char attrQuoteChar = 0;
 
   void onVisibleCodepoint() {
@@ -173,7 +174,7 @@ class ParagraphStreamer final : public Print {
       // Ancestry mode: count only while inside the fully-matched element and in the target text node.
       // Legacy mode: count only while still inside the matched paragraph and in the target text node.
       const bool inTargetNode = (stepCount > 0) ? (matchedDepth == stepCount && currentTextNode == targetTextNode)
-                                                 : (paragraphHtmlDepth >= 0 && currentTextNode == targetTextNode);
+                                                : (paragraphHtmlDepth >= 0 && currentTextNode == targetTextNode);
       if (inTargetNode) {
         revVisChars++;
         if (revVisChars >= revChar) {
@@ -246,8 +247,7 @@ class ParagraphStreamer final : public Print {
       if (strcasecmp(tagName, target.tag) == 0) {
         // Count only direct children of the previously matched ancestor step.
         // For step 0 any depth is valid; subsequent steps must be exactly one level deeper.
-        const bool atCorrectDepth =
-            (matchedDepth == 0) || (htmlDepth == stepEnteredAtDepth[matchedDepth - 1] + 1);
+        const bool atCorrectDepth = (matchedDepth == 0) || (htmlDepth == stepEnteredAtDepth[matchedDepth - 1] + 1);
         if (!atCorrectDepth) return;
         siblingCounters[matchedDepth]++;
         if (siblingCounters[matchedDepth] == target.siblingIndex) {
@@ -411,7 +411,10 @@ class ParagraphStreamer final : public Print {
   }
 
   ParagraphStreamer(const XPathStep* xpathSteps, int xpathStepCount, int charOff, int textNodeIdx = 1)
-      : fwdTarget(SIZE_MAX), revChar(charOff), steps(xpathSteps), stepCount(xpathStepCount),
+      : fwdTarget(SIZE_MAX),
+        revChar(charOff),
+        steps(xpathSteps),
+        stepCount(xpathStepCount),
         targetTextNode(textNodeIdx) {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
@@ -505,7 +508,8 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStr
 
 KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
   KOReaderPosition result;
-  float intra = (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
+  float intra =
+      (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
   // Progress-based XPath correctly handles both <p> and <li> positions.
   result.xpath = ChapterXPathResolver::findXPathForProgress(epub, pos.spineIndex, intra);
@@ -590,8 +594,8 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
         strncpy(result.xpathAnchorId, anchorId, sizeof(result.xpathAnchorId) - 1);
       }
       LOG_DBG("PM", "XPath ancestry(%s[%d])/text()[%d]+%d -> %.1f%% (target=%zu total=%zu p~%d li~%d anchor=%s)",
-              xpathSteps[xpathStepCount - 1].tag, xpathSteps[xpathStepCount - 1].siblingIndex, xpathTextNode,
-              xpathChar, intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
+              xpathSteps[xpathStepCount - 1].tag, xpathSteps[xpathStepCount - 1].siblingIndex, xpathTextNode, xpathChar,
+              intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
               result.hasLiIndex ? static_cast<int>(result.liIndex) : 0, anchorId ? anchorId : "none");
     }
   } else if (xpathP > 0) {
@@ -607,7 +611,8 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     intra = std::max(0.0f, std::min(1.0f, static_cast<float>(bytesIn) / static_cast<float>(spineSize)));
   }
 
-  result.pageNumber = std::max(0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
+  result.pageNumber = std::max(
+      0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
   LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
   return result;
