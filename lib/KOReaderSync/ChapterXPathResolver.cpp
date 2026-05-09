@@ -464,8 +464,10 @@ class XPathProgressResolver final : public Print {
     const size_t nextVisibleChars = visibleChars + codepointCount;
     if (targetVisibleChar <= nextVisibleChars) {
       const size_t delta = targetVisibleChar - visibleChars;
-      const int charOffset = static_cast<int>(blockVisibleChars + delta);
-      xpath = buildParagraphXPath(spineIndex, path, std::max(1, charOffset));
+      // Use element-path only (no text offset). KOReader expects text()[N].M where N is
+      // the specific text node index, which we don't track. Element-level precision is
+      // sufficient and avoids generating invalid XPaths that cause KOReader to mis-navigate.
+      xpath = buildParagraphXPath(spineIndex, path, 0);
       stopped = true;
       XML_StopParser(parser, XML_FALSE);
       return;
