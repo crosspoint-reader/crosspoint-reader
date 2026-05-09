@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "../Activity.h"
 #include "MappedInputManager.h"
@@ -19,6 +20,11 @@ class PxcViewerActivity final : public Activity {
 
  private:
   std::string filePath;
+  std::vector<std::string> siblingImages;
+  int currentImageIndex = -1;
+
+  void loadSiblingImages();
+  void doSetSleepCover();
   void renderGrayscaleImage();
   void renderPxcToFramebuffer(FsFile& file, uint16_t width, uint16_t height, uint32_t dataOffset);
 };
