@@ -23,6 +23,7 @@
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "EpubReaderUtils.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -393,7 +394,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           section.reset();
           epub->clearCache();
           epub->setupCacheDir();
-          saveProgress(backupSpine, backupPage, backupPageCount);
+          if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
+            LOG_ERR("ERS", "Failed to save progress before cache clear");
+          }
         }
       }
       onGoHome();
@@ -759,30 +762,7 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
-  if (spineIndex < 0 || spineIndex > 0xFFFF || currentPage < 0 || currentPage > 0xFFFF || pageCount < 0 ||
-      pageCount > 0xFFFF) {
-    LOG_ERR("ERS", "Progress values out of range: spine=%d page=%d count=%d", spineIndex, currentPage, pageCount);
-    return false;
-  }
-  FsFile f;
-  if (!Storage.openFileForWrite("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    LOG_ERR("ERS", "Could not open progress file for write!");
-    return false;
-  }
-  uint8_t data[6];
-  data[0] = spineIndex & 0xFF;
-  data[1] = (spineIndex >> 8) & 0xFF;
-  data[2] = currentPage & 0xFF;
-  data[3] = (currentPage >> 8) & 0xFF;
-  data[4] = pageCount & 0xFF;
-  data[5] = (pageCount >> 8) & 0xFF;
-  const size_t written = f.write(data, sizeof(data));
-  if (written != sizeof(data)) {
-    LOG_ERR("ERS", "Short write saving progress: %u/%u bytes", (unsigned)written, (unsigned)sizeof(data));
-    return false;
-  }
-  LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d", spineIndex, currentPage);
-  return true;
+  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
