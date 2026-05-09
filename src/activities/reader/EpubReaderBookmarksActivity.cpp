@@ -131,7 +131,6 @@ void EpubReaderBookmarksActivity::promptDeleteSelected() {
 }
 
 void EpubReaderBookmarksActivity::loop() {
-  const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
   if (awaitingBookmarkRemovedAck) {
