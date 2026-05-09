@@ -277,14 +277,13 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     const int itemY = rect.y + (i % pageItems) * rowHeight;
 
     int rowTextWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
-    int valueWidth = 0;
-    std::string valueText = "";
+    std::string valueText;
     if (rowValue != nullptr) {
       valueText = rowValue(i);
       if (!valueText.empty()) {
         int maxValW = std::max(0, rowTextWidth - 40 - minValueGap);
         valueText = renderer.truncatedText(UI_10_FONT_ID, valueText.c_str(), maxValW);
-        valueWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str()) + minValueGap;
+        int valueWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str()) + minValueGap;
         rowTextWidth -= valueWidth;
       }
     }
