@@ -106,7 +106,7 @@ void TableBlock::render(GfxRenderer& renderer, int fontId, int x, int y) const {
           uint8_t lc = 0;
           for (const auto& nc : rows[ri + 1].cells) {
             if (nc.rowspan == 0 && lc < 64) phantomAt[lc] = true;
-            lc++;
+            lc = static_cast<uint8_t>(lc + ((nc.rowspan == 0) ? 1 : nc.colspan));
           }
         }
         int segStart = x;
