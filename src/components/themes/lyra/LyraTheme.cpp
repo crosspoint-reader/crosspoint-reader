@@ -208,7 +208,8 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowTitle,
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
-                         const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+                         const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                         const std::function<bool(int index)>& rowDimmed) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -266,6 +267,15 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     auto itemName = rowTitle(i);
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
     renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), true);
+
+    // Apply checkerboard dither to create gray text effect for dimmed items
+    if (rowDimmed && rowDimmed(i) && i != selectedIndex) {
+      const int titleWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
+      const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+      for (int py = itemY + 7; py < itemY + 7 + lineH; py++)
+        for (int px = textX; px < textX + titleWidth; px++)
+          if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
+    }
 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);

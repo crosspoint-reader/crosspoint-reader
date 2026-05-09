@@ -247,9 +247,11 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
                                 const std::function<std::string(int index)>& rowTitle,
                                 const std::function<std::string(int index)>& rowSubtitle,
                                 const std::function<UIIcon(int index)>& rowIcon,
-                                const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+                                const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                                const std::function<bool(int index)>& rowDimmed) const {
   (void)rowIcon;
   (void)highlightValue;
+  (void)rowDimmed;
   const bool hasSubtitle = static_cast<bool>(rowSubtitle);
   const int titleLineHeight = renderer.getLineHeight(kTitleFontId);
   const int subtitleLineHeight = renderer.getLineHeight(kSubtitleFontId);
