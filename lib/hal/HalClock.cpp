@@ -105,7 +105,9 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetBiased, bo
   uint8_t h, m;
   if (!getTime(h, m)) return false;
 
-  // Apply UTC offset: convert biased value to signed half-hours
+  // Apply UTC offset: convert biased value to signed half-hours.
+  // Clamp against corrupted persisted values so display time can't drift outside ±14h from UTC.
+  if (utcOffsetBiased > 52) utcOffsetBiased = 52;
   int offsetHalfHours = static_cast<int>(utcOffsetBiased) - 24;
   int totalMinutes = static_cast<int>(h) * 60 + static_cast<int>(m) + offsetHalfHours * 30;
 

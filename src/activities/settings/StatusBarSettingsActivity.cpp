@@ -81,6 +81,14 @@ void StatusBarSettingsActivity::onEnter() {
     SETTINGS.xtcStatusBarMode = CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_HIDE;
   }
 
+  if (SETTINGS.clockUtcOffset > UTC_OFFSET_MAX) {
+    SETTINGS.clockUtcOffset = 24;  // Default to UTC+0
+  }
+
+  if (SETTINGS.clockFormat >= CLOCK_FORMAT_ITEMS) {
+    SETTINGS.clockFormat = 0;
+  }
+
   requestUpdate();
 }
 
@@ -144,10 +152,12 @@ void StatusBarSettingsActivity::handleSelection() {
     // XTC Status Bar
     SETTINGS.xtcStatusBarMode = (SETTINGS.xtcStatusBarMode + 1) % XTC_STATUS_BAR_ITEMS;
   } else if (selectedIndex == 7) {
-    // Show Clock (X3 only)
+    // Show Clock (X3 only — DS3231 RTC required)
+    if (!halClock.isAvailable()) return;
     SETTINGS.statusBarClock = (SETTINGS.statusBarClock + 1) % 2;
   } else if (selectedIndex == 8) {
     // UTC Offset (cycle in half-hour steps)
+    if (!halClock.isAvailable()) return;
     if (SETTINGS.clockUtcOffset >= UTC_OFFSET_MAX) {
       SETTINGS.clockUtcOffset = UTC_OFFSET_MIN;
     } else {
@@ -155,6 +165,7 @@ void StatusBarSettingsActivity::handleSelection() {
     }
   } else if (selectedIndex == 9) {
     // Clock Format (12h / 24h)
+    if (!halClock.isAvailable()) return;
     SETTINGS.clockFormat = (SETTINGS.clockFormat + 1) % CLOCK_FORMAT_ITEMS;
   }
   SETTINGS.saveToFile();
