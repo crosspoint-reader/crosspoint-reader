@@ -413,7 +413,11 @@ class XPathProgressResolver final : public Print {
 
     if (name == "p") {
       paragraphDepth++;
-      paragraphVisibleChars = 0;
+      blockVisibleChars = 0;
+    }
+    if (name == "li") {
+      liDepth++;
+      blockVisibleChars = 0;
     }
 
     depth++;
@@ -436,7 +440,11 @@ class XPathProgressResolver final : public Print {
 
     if (name == "p" && paragraphDepth > 0) {
       paragraphDepth--;
-      paragraphVisibleChars = 0;
+      blockVisibleChars = 0;
+    }
+    if (name == "li" && liDepth > 0) {
+      liDepth--;
+      blockVisibleChars = 0;
     }
 
     if (!path.empty()) {
@@ -448,7 +456,7 @@ class XPathProgressResolver final : public Print {
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || paragraphDepth <= 0 || len <= 0 || stopped) {
+    if (!insideBody || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
       return;
     }
 
@@ -456,7 +464,7 @@ class XPathProgressResolver final : public Print {
     const size_t nextVisibleChars = visibleChars + codepointCount;
     if (targetVisibleChar <= nextVisibleChars) {
       const size_t delta = targetVisibleChar - visibleChars;
-      const int charOffset = static_cast<int>(paragraphVisibleChars + delta);
+      const int charOffset = static_cast<int>(blockVisibleChars + delta);
       xpath = buildParagraphXPath(spineIndex, path, std::max(1, charOffset));
       stopped = true;
       XML_StopParser(parser, XML_FALSE);
@@ -464,7 +472,7 @@ class XPathProgressResolver final : public Print {
     }
 
     visibleChars = nextVisibleChars;
-    paragraphVisibleChars += codepointCount;
+    blockVisibleChars += codepointCount;
   }
 
   XML_Parser parser = nullptr;
@@ -475,8 +483,9 @@ class XPathProgressResolver final : public Print {
   int depth = 0;
   int bodyDepth = -1;
   int paragraphDepth = 0;
+  int liDepth = 0;
   size_t visibleChars = 0;
-  size_t paragraphVisibleChars = 0;
+  size_t blockVisibleChars = 0;
   std::vector<ParentState> parentStates;
   std::vector<PathSegment> path;
   std::string xpath;
