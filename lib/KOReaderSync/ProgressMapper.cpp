@@ -164,6 +164,8 @@ class ParagraphStreamer final : public Print {
   int capturedAnchorIdLen = 0;
   bool capturingAnchorTag = false;
   enum IdScanState { ID_SCAN, ID_I, ID_D, ID_EQ, ID_IN_VALUE_D, ID_IN_VALUE_S } idState = ID_SCAN;
+  bool inAttrQuote = false;  // true while inside a quoted attribute value (prevents '/' from being treated as self-close)
+  char attrQuoteChar = 0;
 
   void onVisibleCodepoint() {
     totalVisChars++;
@@ -242,6 +244,11 @@ class ParagraphStreamer final : public Print {
     if (matchedDepth < stepCount) {
       const XPathStep& target = steps[matchedDepth];
       if (strcasecmp(tagName, target.tag) == 0) {
+        // Count only direct children of the previously matched ancestor step.
+        // For step 0 any depth is valid; subsequent steps must be exactly one level deeper.
+        const bool atCorrectDepth =
+            (matchedDepth == 0) || (htmlDepth == stepEnteredAtDepth[matchedDepth - 1] + 1);
+        if (!atCorrectDepth) return;
         siblingCounters[matchedDepth]++;
         if (siblingCounters[matchedDepth] == target.siblingIndex) {
           insideStep[matchedDepth] = true;
@@ -340,6 +347,16 @@ class ParagraphStreamer final : public Print {
         }
         break;
       case TAG_ATTRS:
+        // Track quoted attribute values so '/' inside them is not mistaken for self-closing.
+        if (!inAttrQuote) {
+          if (c == '"' || c == '\'') {
+            inAttrQuote = true;
+            attrQuoteChar = c;
+          }
+        } else if (c == attrQuoteChar) {
+          inAttrQuote = false;
+          attrQuoteChar = 0;
+        }
         if (capturingAnchorTag) {
           switch (idState) {
             case ID_SCAN:
@@ -373,7 +390,8 @@ class ParagraphStreamer final : public Print {
               break;
           }
         }
-        if (c == '/') {
+        // Only treat '/' as self-closing when outside a quoted attribute value.
+        if (c == '/' && !inAttrQuote) {
           onCloseTag();
           capturingAnchorTag = false;
         }
@@ -431,8 +449,11 @@ class ParagraphStreamer final : public Print {
       tagIsClose = false;
       capturingAnchorTag = false;
       idState = ID_SCAN;
+      inAttrQuote = false;
+      attrQuoteChar = 0;
     } else if (c == '>') {
       globalInTag = false;
+      inAttrQuote = false;
       if (tagState == TAG_IN_NAME && tagNameLen > 0) {
         tagName[tagNameLen] = '\0';
         if (tagIsClose)
@@ -585,7 +606,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     intra = std::max(0.0f, std::min(1.0f, static_cast<float>(bytesIn) / static_cast<float>(spineSize)));
   }
 
-  result.pageNumber = std::max(0, std::min(static_cast<int>(intra * result.totalPages + 0.5f), result.totalPages - 1));
+  result.pageNumber = std::max(0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
   LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
   return result;
