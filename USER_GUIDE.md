@@ -378,6 +378,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 The role of the volume (side) buttons can be swapped in the **[Controls Settings](#363-controls)**.
 
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
+If it set to "lock Buttons", a short Power press locks controls instead. To unlock it click **Back** + **Power**
 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.

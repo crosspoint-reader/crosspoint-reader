@@ -7,6 +7,7 @@ This document show most common issues and possible solutions while using the dev
     - [Connection Drops or Times Out](#connection-drops-or-times-out)
     - [Upload Fails](#upload-fails)
     - [Saved Password Not Working](#saved-password-not-working)
+    - [Buttons Seem Unresponsive](`#buttons-seem-unresponsive`)
 
 ### Cannot See the Device on the Network
 
@@ -55,3 +56,15 @@ This document show most common issues and possible solutions while using the dev
 2. Select **Yes** to remove the saved password
 3. Reconnect and enter the password again
 4. Choose to save the new password
+
+### Buttons Seem Unresponsive
+
+**Problem:** Buttons do not respond after a short press of the Power button
+
+This usually means **Short Power Button Click** is set to **Lock Buttons** and button lock is active.
+
+**Solution:**
+
+1. Hold **Back + Power** together
+2. Release both buttons to unlock input
+3. Open **Settings -> Controls -> Short Power Button Click** and choose a different action if needed
