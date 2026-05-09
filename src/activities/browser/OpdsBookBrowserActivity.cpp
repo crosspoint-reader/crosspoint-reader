@@ -281,6 +281,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   if (result == HttpDownloader::OK) {
     Epub epub(filename, "/.crosspoint");
     epub.clearCache();
+    Storage.remove((epub.getCachePath() + "/.external_cover.jpg").c_str());
 
     if (!book.imageHref.empty()) {
       const std::string coverUrl = UrlUtils::buildUrl(feedUrl, book.imageHref);

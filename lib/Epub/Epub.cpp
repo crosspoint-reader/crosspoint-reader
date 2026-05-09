@@ -568,6 +568,10 @@ bool Epub::generateCoverBmp(bool cropped) const {
         Storage.remove(getCoverBmpPath(cropped).c_str());
         return false;
       }
+    } else {
+      LOG_ERR("EBP", "Failed to reopen generated cover BMP for verification");
+      Storage.remove(getCoverBmpPath(cropped).c_str());
+      return false;
     }
     LOG_DBG("EBP", "Generated BMP from external cover");
     return true;
@@ -691,6 +695,10 @@ bool Epub::generateThumbBmp(int height) const {
             Storage.remove(getThumbBmpPath(height).c_str());
             thumbOk = false;
           }
+        } else {
+          LOG_ERR("EBP", "Failed to reopen generated cover thumb for verification");
+          Storage.remove(getThumbBmpPath(height).c_str());
+          thumbOk = false;
         }
         if (thumbOk) {
           LOG_DBG("EBP", "Generated thumb from external cover");
