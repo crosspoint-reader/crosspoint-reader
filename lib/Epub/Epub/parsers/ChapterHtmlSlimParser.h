@@ -81,7 +81,8 @@ class ChapterHtmlSlimParser {
     int16_t paddingBottom = TableBlock::CELL_PADDING_Y;
     int16_t requestedWidth = 0;  // 0 = unspecified (equal distribution)
     uint8_t colspan = 1;         // number of logical columns this cell spans
-    uint8_t rowspan = 1;         // 0 = phantom (occupied by rowspan above), 1 = normal, >1 = rowspan cell
+    uint8_t rowspan =
+        1;  // 0 = phantom (occupied by rowspan above), 1 = normal, >1 = rowspan cell; HTML "0" mapped to 64
   };
   struct TableRowAccum {
     std::vector<TableCellAccum> cells;

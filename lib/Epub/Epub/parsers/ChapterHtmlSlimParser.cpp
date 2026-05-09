@@ -301,7 +301,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           if (cs > 1 && cs <= 64) cellColspan = static_cast<uint8_t>(cs);
         } else if (strcmp(atts[i], "rowspan") == 0) {
           const int rs = atoi(atts[i + 1]);
-          if (rs > 1 && rs <= 64) cellRowspan = static_cast<uint8_t>(rs);
+          if (rs == 0)
+            cellRowspan = 64;  // HTML rowspan="0" = span to end of table group
+          else if (rs > 1 && rs <= 64)
+            // Reject colspan values outside the range of [1, 64] to
+            // prevent the phantom-cell loop in layout from running out of memory or looping excessively.
+            // (64 is somewhat arbitrary but should be more than enough for any reasonable table;)
+            cellRowspan = static_cast<uint8_t>(rs);
         }
       }
     }

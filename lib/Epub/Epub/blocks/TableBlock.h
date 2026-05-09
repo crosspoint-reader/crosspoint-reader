@@ -16,7 +16,8 @@ struct TableCell {
   int16_t paddingTop = 1;  // default: TableBlock::CELL_PADDING_Y
   int16_t paddingBottom = 1;
   uint8_t colspan = 1;  // number of logical columns this cell spans
-  uint8_t rowspan = 1;  // 0 = phantom (column occupied by rowspan from above), 1 = normal, >1 = spans rows
+  uint8_t rowspan =
+      1;  // 0 = phantom (column occupied by rowspan from above), 1 = normal, >1 = spans rows; HTML "0" mapped to 64
 };
 
 // One row in a table — holds cells and aggregated height metrics.
