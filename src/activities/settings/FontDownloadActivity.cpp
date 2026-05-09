@@ -368,19 +368,22 @@ void FontDownloadActivity::render(RenderLock&&) {
             }
             return families_[familyIndexFromList(index)].name;
           },
-          nullptr, nullptr,
+          [this](int index) -> std::string {
+            if (index == 0) return "";
+            return families_[familyIndexFromList(index)].description;
+          },
+          nullptr,
           [this](int index) -> std::string {
             if (index == 0) return "";
             const auto& f = families_[familyIndexFromList(index)];
             if (f.hasUpdate) return tr(STR_UPDATE_AVAILABLE);
             if (f.installed) return tr(STR_INSTALLED);
-            return f.description;
+            return "";
           },
           true,
           [this](int index) -> bool {
             if (index == 0) return false;
             const auto& f = families_[familyIndexFromList(index)];
-            // Dim installed fonts, but not those with updates available
             return f.installed && !f.hasUpdate;
           });
 
