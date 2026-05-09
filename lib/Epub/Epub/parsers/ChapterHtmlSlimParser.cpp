@@ -1364,7 +1364,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
         // Flush if the page is already full.
         if (self->currentPageNextY >= self->viewportHeight) {
-          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex, self->xpathListItemIndex);
           self->completedPageCount++;
           self->currentPage.reset(new Page());
           self->currentPageNextY = 0;
@@ -1391,7 +1391,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
         // If no rows fit on a non-empty page, flush and retry from a fresh page.
         if (rowEnd == rowStart && self->currentPageNextY > 0) {
-          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex, self->xpathListItemIndex);
           self->completedPageCount++;
           self->currentPage.reset(new Page());
           self->currentPageNextY = 0;
@@ -1484,7 +1484,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
         // Flush the page if more rows still need to be placed.
         if (rowStart < totalRows) {
-          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+          self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex, self->xpathListItemIndex);
           self->completedPageCount++;
           self->currentPage.reset();
           self->currentPageNextY = 0;
