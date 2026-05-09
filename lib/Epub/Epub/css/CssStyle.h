@@ -88,6 +88,12 @@ struct CssPropertyFlags {
   uint32_t borderBottomWidthZero : 1;
   uint32_t borderLeftWidthZero : 1;
   uint32_t borderRightWidthZero : 1;
+  // Set when the corresponding border-*-width was explicitly parsed as non-zero.
+  // Used during cascade to clear a lower-priority WidthZero flag.
+  uint32_t borderTopWidthSet : 1;
+  uint32_t borderBottomWidthSet : 1;
+  uint32_t borderLeftWidthSet : 1;
+  uint32_t borderRightWidthSet : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -113,13 +119,18 @@ struct CssPropertyFlags {
         borderTopWidthZero(0),
         borderBottomWidthZero(0),
         borderLeftWidthZero(0),
-        borderRightWidthZero(0) {}
+        borderRightWidthZero(0),
+        borderTopWidthSet(0),
+        borderBottomWidthSet(0),
+        borderLeftWidthSet(0),
+        borderRightWidthSet(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
            imageWidth || display || borderTopStyle || borderBottomStyle || borderLeftStyle || borderRightStyle ||
-           borderTopWidthZero || borderBottomWidthZero || borderLeftWidthZero || borderRightWidthZero;
+           borderTopWidthZero || borderBottomWidthZero || borderLeftWidthZero || borderRightWidthZero ||
+           borderTopWidthSet || borderBottomWidthSet || borderLeftWidthSet || borderRightWidthSet;
   }
 
   void clearAll() {
@@ -129,6 +140,7 @@ struct CssPropertyFlags {
     imageHeight = imageWidth = display = 0;
     borderTopStyle = borderBottomStyle = borderLeftStyle = borderRightStyle = 0;
     borderTopWidthZero = borderBottomWidthZero = borderLeftWidthZero = borderRightWidthZero = 0;
+    borderTopWidthSet = borderBottomWidthSet = borderLeftWidthSet = borderRightWidthSet = 0;
   }
 };
 
@@ -243,11 +255,36 @@ struct CssStyle {
       borderRightStyle = base.borderRightStyle;
       defined.borderRightStyle = 1;
     }
-    // Width-zero flags: propagate from base (inline/overriding style) when explicitly set.
-    if (base.defined.borderTopWidthZero) defined.borderTopWidthZero = 1;
-    if (base.defined.borderBottomWidthZero) defined.borderBottomWidthZero = 1;
-    if (base.defined.borderLeftWidthZero) defined.borderLeftWidthZero = 1;
-    if (base.defined.borderRightWidthZero) defined.borderRightWidthZero = 1;
+    // Width flags: propagate from base (inline/overriding style) when explicitly set.
+    // WidthSet (non-zero) and WidthZero are mutually exclusive; the incoming style wins.
+    if (base.defined.borderTopWidthSet) {
+      defined.borderTopWidthSet = 1;
+      defined.borderTopWidthZero = 0;
+    } else if (base.defined.borderTopWidthZero) {
+      defined.borderTopWidthZero = 1;
+      defined.borderTopWidthSet = 0;
+    }
+    if (base.defined.borderBottomWidthSet) {
+      defined.borderBottomWidthSet = 1;
+      defined.borderBottomWidthZero = 0;
+    } else if (base.defined.borderBottomWidthZero) {
+      defined.borderBottomWidthZero = 1;
+      defined.borderBottomWidthSet = 0;
+    }
+    if (base.defined.borderLeftWidthSet) {
+      defined.borderLeftWidthSet = 1;
+      defined.borderLeftWidthZero = 0;
+    } else if (base.defined.borderLeftWidthZero) {
+      defined.borderLeftWidthZero = 1;
+      defined.borderLeftWidthSet = 0;
+    }
+    if (base.defined.borderRightWidthSet) {
+      defined.borderRightWidthSet = 1;
+      defined.borderRightWidthZero = 0;
+    } else if (base.defined.borderRightWidthZero) {
+      defined.borderRightWidthZero = 1;
+      defined.borderRightWidthSet = 0;
+    }
   }
 
   [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
@@ -270,6 +307,10 @@ struct CssStyle {
   [[nodiscard]] bool hasBorderBottomStyle() const { return defined.borderBottomStyle; }
   [[nodiscard]] bool hasBorderLeftStyle() const { return defined.borderLeftStyle; }
   [[nodiscard]] bool hasBorderRightStyle() const { return defined.borderRightStyle; }
+  [[nodiscard]] bool hasBorderTopWidthSet() const { return defined.borderTopWidthSet; }
+  [[nodiscard]] bool hasBorderBottomWidthSet() const { return defined.borderBottomWidthSet; }
+  [[nodiscard]] bool hasBorderLeftWidthSet() const { return defined.borderLeftWidthSet; }
+  [[nodiscard]] bool hasBorderRightWidthSet() const { return defined.borderRightWidthSet; }
   // Returns true if the border side is both styled solid AND has a non-zero width.
   [[nodiscard]] bool isBorderTopVisible() const {
     return borderTopStyle != CssBorderStyle::None && !defined.borderTopWidthZero;

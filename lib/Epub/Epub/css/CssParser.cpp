@@ -369,28 +369,53 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
     style.borderRightStyle = interpretBorderStyle(propValueBuf);
     style.defined.borderRightStyle = 1;
   } else if (propNameBuf == "border-top-width") {
-    // Track zero-width independently from style; combined at check time via isBorderTopVisible().
+    // Track zero-width vs non-zero-width independently from style;
+    // combined at check time via isBorderTopVisible().
     CssLength len;
     if (tryInterpretLength(propValueBuf, len)) {
-      style.defined.borderTopWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (len.value == 0.0f) {
+        style.defined.borderTopWidthZero = 1;
+        style.defined.borderTopWidthSet = 0;
+      } else {
+        style.defined.borderTopWidthSet = 1;
+        style.defined.borderTopWidthZero = 0;
+      }
     }
   } else if (propNameBuf == "border-bottom-width") {
     CssLength len;
     if (tryInterpretLength(propValueBuf, len)) {
-      style.defined.borderBottomWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (len.value == 0.0f) {
+        style.defined.borderBottomWidthZero = 1;
+        style.defined.borderBottomWidthSet = 0;
+      } else {
+        style.defined.borderBottomWidthSet = 1;
+        style.defined.borderBottomWidthZero = 0;
+      }
     }
   } else if (propNameBuf == "border-left-width") {
     CssLength len;
     if (tryInterpretLength(propValueBuf, len)) {
-      style.defined.borderLeftWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (len.value == 0.0f) {
+        style.defined.borderLeftWidthZero = 1;
+        style.defined.borderLeftWidthSet = 0;
+      } else {
+        style.defined.borderLeftWidthSet = 1;
+        style.defined.borderLeftWidthZero = 0;
+      }
     }
   } else if (propNameBuf == "border-right-width") {
     CssLength len;
     if (tryInterpretLength(propValueBuf, len)) {
-      style.defined.borderRightWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (len.value == 0.0f) {
+        style.defined.borderRightWidthZero = 1;
+        style.defined.borderRightWidthSet = 0;
+      } else {
+        style.defined.borderRightWidthSet = 1;
+        style.defined.borderRightWidthZero = 0;
+      }
     }
   } else if (propNameBuf == "border-width") {
-    // Shorthand: 1–4 values (top right bottom left). Track zero-width per side.
+    // Shorthand: 1–4 values (top right bottom left). Track zero vs non-zero width per side.
     const auto values = splitWhitespace(propValueBuf);
     if (!values.empty()) {
       const std::string& top = values[0];
@@ -398,10 +423,42 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
       const std::string& bottom = values.size() >= 3 ? values[2] : values[0];
       const std::string& left = values.size() >= 4 ? values[3] : right;
       CssLength len;
-      if (tryInterpretLength(top, len)) style.defined.borderTopWidthZero = (len.value == 0.0f) ? 1 : 0;
-      if (tryInterpretLength(right, len)) style.defined.borderRightWidthZero = (len.value == 0.0f) ? 1 : 0;
-      if (tryInterpretLength(bottom, len)) style.defined.borderBottomWidthZero = (len.value == 0.0f) ? 1 : 0;
-      if (tryInterpretLength(left, len)) style.defined.borderLeftWidthZero = (len.value == 0.0f) ? 1 : 0;
+      if (tryInterpretLength(top, len)) {
+        if (len.value == 0.0f) {
+          style.defined.borderTopWidthZero = 1;
+          style.defined.borderTopWidthSet = 0;
+        } else {
+          style.defined.borderTopWidthSet = 1;
+          style.defined.borderTopWidthZero = 0;
+        }
+      }
+      if (tryInterpretLength(right, len)) {
+        if (len.value == 0.0f) {
+          style.defined.borderRightWidthZero = 1;
+          style.defined.borderRightWidthSet = 0;
+        } else {
+          style.defined.borderRightWidthSet = 1;
+          style.defined.borderRightWidthZero = 0;
+        }
+      }
+      if (tryInterpretLength(bottom, len)) {
+        if (len.value == 0.0f) {
+          style.defined.borderBottomWidthZero = 1;
+          style.defined.borderBottomWidthSet = 0;
+        } else {
+          style.defined.borderBottomWidthSet = 1;
+          style.defined.borderBottomWidthZero = 0;
+        }
+      }
+      if (tryInterpretLength(left, len)) {
+        if (len.value == 0.0f) {
+          style.defined.borderLeftWidthZero = 1;
+          style.defined.borderLeftWidthSet = 0;
+        } else {
+          style.defined.borderLeftWidthSet = 1;
+          style.defined.borderLeftWidthZero = 0;
+        }
+      }
     }
   } else if (propNameBuf == "border-style") {
     const auto values = splitWhitespace(propValueBuf);
@@ -442,22 +499,67 @@ void CssParser::parseDeclarationIntoStyle(const std::string& decl, CssStyle& sty
     if (propNameBuf == "border-top" || propNameBuf == "border") {
       style.borderTopStyle = parsedStyle;
       style.defined.borderTopStyle = 1;
-      if (hasWidth) style.defined.borderTopWidthZero = widthIsZero ? 1 : 0;
+      if (hasWidth) {
+        if (widthIsZero) {
+          style.defined.borderTopWidthZero = 1;
+          style.defined.borderTopWidthSet = 0;
+        } else {
+          style.defined.borderTopWidthSet = 1;
+          style.defined.borderTopWidthZero = 0;
+        }
+      } else if (hasStyle) {
+        // CSS shorthand default width is medium (non-zero)
+        style.defined.borderTopWidthSet = 1;
+        style.defined.borderTopWidthZero = 0;
+      }
     }
     if (propNameBuf == "border-bottom" || propNameBuf == "border") {
       style.borderBottomStyle = parsedStyle;
       style.defined.borderBottomStyle = 1;
-      if (hasWidth) style.defined.borderBottomWidthZero = widthIsZero ? 1 : 0;
+      if (hasWidth) {
+        if (widthIsZero) {
+          style.defined.borderBottomWidthZero = 1;
+          style.defined.borderBottomWidthSet = 0;
+        } else {
+          style.defined.borderBottomWidthSet = 1;
+          style.defined.borderBottomWidthZero = 0;
+        }
+      } else if (hasStyle) {
+        style.defined.borderBottomWidthSet = 1;
+        style.defined.borderBottomWidthZero = 0;
+      }
     }
     if (propNameBuf == "border-left" || propNameBuf == "border") {
       style.borderLeftStyle = parsedStyle;
       style.defined.borderLeftStyle = 1;
-      if (hasWidth) style.defined.borderLeftWidthZero = widthIsZero ? 1 : 0;
+      if (hasWidth) {
+        if (widthIsZero) {
+          style.defined.borderLeftWidthZero = 1;
+          style.defined.borderLeftWidthSet = 0;
+        } else {
+          style.defined.borderLeftWidthSet = 1;
+          style.defined.borderLeftWidthZero = 0;
+        }
+      } else if (hasStyle) {
+        style.defined.borderLeftWidthSet = 1;
+        style.defined.borderLeftWidthZero = 0;
+      }
     }
     if (propNameBuf == "border-right" || propNameBuf == "border") {
       style.borderRightStyle = parsedStyle;
       style.defined.borderRightStyle = 1;
-      if (hasWidth) style.defined.borderRightWidthZero = widthIsZero ? 1 : 0;
+      if (hasWidth) {
+        if (widthIsZero) {
+          style.defined.borderRightWidthZero = 1;
+          style.defined.borderRightWidthSet = 0;
+        } else {
+          style.defined.borderRightWidthSet = 1;
+          style.defined.borderRightWidthZero = 0;
+        }
+      } else if (hasStyle) {
+        style.defined.borderRightWidthSet = 1;
+        style.defined.borderRightWidthZero = 0;
+      }
     }
   }
 }
@@ -866,6 +968,10 @@ bool CssParser::saveToCache() const {
     if (style.defined.borderBottomWidthZero) definedBits |= 1 << 21;
     if (style.defined.borderLeftWidthZero) definedBits |= 1 << 22;
     if (style.defined.borderRightWidthZero) definedBits |= 1 << 23;
+    if (style.defined.borderTopWidthSet) definedBits |= 1 << 24;
+    if (style.defined.borderBottomWidthSet) definedBits |= 1 << 25;
+    if (style.defined.borderLeftWidthSet) definedBits |= 1 << 26;
+    if (style.defined.borderRightWidthSet) definedBits |= 1 << 27;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -1062,6 +1168,10 @@ bool CssParser::loadFromCache() {
     style.defined.borderBottomWidthZero = (definedBits & 1 << 21) != 0;
     style.defined.borderLeftWidthZero = (definedBits & 1 << 22) != 0;
     style.defined.borderRightWidthZero = (definedBits & 1 << 23) != 0;
+    style.defined.borderTopWidthSet = (definedBits & 1 << 24) != 0;
+    style.defined.borderBottomWidthSet = (definedBits & 1 << 25) != 0;
+    style.defined.borderLeftWidthSet = (definedBits & 1 << 26) != 0;
+    style.defined.borderRightWidthSet = (definedBits & 1 << 27) != 0;
 
     rulesBySelector_[selector] = style;
   }
