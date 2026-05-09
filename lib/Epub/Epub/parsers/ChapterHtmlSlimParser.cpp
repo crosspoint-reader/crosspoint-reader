@@ -1330,6 +1330,27 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
           static_cast<int16_t>(numCols > 0 ? self->viewportWidth / numCols : self->viewportWidth);
       const auto lh = static_cast<int16_t>(self->renderer.getLineHeight(self->fontId) * self->lineCompression);
 
+      if (numCols > 64) {
+        LOG_ERR("EHP", "Table too wide (%u cols), rendering placeholder", numCols);
+        if (!self->currentPage) {
+          self->currentPage.reset(new Page());
+          self->currentPageNextY = 0;
+        }
+        std::vector<std::string> words = {"[Table too wide]"};
+        std::vector<int16_t> xpos = {0};
+        std::vector<EpdFontFamily::Style> styles = {EpdFontFamily::REGULAR};
+        BlockStyle placeholderStyle;
+        placeholderStyle.textAlignDefined = true;
+        placeholderStyle.alignment = CssTextAlign::Center;
+
+        auto placeholder =
+            std::make_shared<TextBlock>(std::move(words), std::move(xpos), std::move(styles), placeholderStyle);
+        self->currentPage->elements.push_back(std::make_shared<PageLine>(placeholder, 0, self->currentPageNextY));
+        self->currentPageNextY += lh;
+
+        self->tableAccumRows.clear();
+      }
+
       // Emit rows across one or more pages, splitting when the remaining rows don't fit.
       size_t rowStart = 0;
       size_t totalRows = self->tableAccumRows.size();  // non-const: may grow if a row is split

@@ -20,6 +20,10 @@ int16_t TableBlock::totalHeight() const {
 
 void TableBlock::render(GfxRenderer& renderer, int fontId, int x, int y) const {
   if (rows.empty() || numCols == 0) return;
+  if (numCols > 64) {
+    LOG_ERR("TBL", "Skipping table render: too many cols=%u", numCols);
+    return;
+  }
 
   // Build cumulative column X positions (numCols+1 values: left edge of each col + right edge of last).
   std::vector<int16_t> colX;
