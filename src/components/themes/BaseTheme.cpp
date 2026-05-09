@@ -269,10 +269,26 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     renderer.fillRect(0, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
   }
   // Draw all items
+  // Cap value column width and reserve a small gap so a long value can never overlap the title.
+  // Mirrors LyraTheme/RoundedRaffTheme: truncate the value, deduct its measured width from the title's space.
+  constexpr int maxValueWidth = 200;
+  constexpr int valueGap = 10;
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
-    int textWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2 - (rowValue != nullptr ? 60 : 0);
+
+    // Compute value first so the title's available width is the leftover space.
+    std::string valueText;
+    int valueTextWidth = 0;
+    if (rowValue != nullptr) {
+      valueText = renderer.truncatedText(UI_10_FONT_ID, rowValue(i).c_str(), maxValueWidth);
+      valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
+    }
+
+    int textWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
+    if (rowValue != nullptr) {
+      textWidth -= valueTextWidth + valueGap;
+    }
 
     // Draw name
     auto itemName = rowTitle(i);
@@ -299,9 +315,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     if (rowValue != nullptr) {
-      // Draw value
-      std::string valueText = rowValue(i);
-      const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
+      // Draw value (already truncated and measured above).
       renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth,
                         itemY, valueText.c_str(), i != selectedIndex);
     }
