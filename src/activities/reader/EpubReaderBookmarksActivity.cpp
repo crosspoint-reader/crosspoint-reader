@@ -9,9 +9,21 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 
 namespace {
 constexpr unsigned long DELETE_HOLD_MS = 1000;
+
+bool wasReleasedMoveListForward(const MappedInputManager& mappedInput) {
+  // Footer DIR_UP/DIR_DOWN mapLabels use front Left/Right (see MappedInputManager::mapLabels).
+  // Logical Up/Down are the fixed side buttons — accept both like other reader sublists.
+  return mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+         mappedInput.wasReleased(MappedInputManager::Button::Down);
+}
+bool wasReleasedMoveListBack(const MappedInputManager& mappedInput) {
+  return mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+         mappedInput.wasReleased(MappedInputManager::Button::Up);
+}
 }  // namespace
 
 EpubReaderBookmarksActivity::EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -109,7 +121,7 @@ void EpubReaderBookmarksActivity::promptDeleteSelected() {
         if (!EpubBookmarksStore::remove(*epub, b.spineIndex, b.pageNumber)) {
           return;
         }
-        pendingBookmarkRemovedPopup = true;
+        awaitingBookmarkRemovedAck = true;
         EpubBookmarksStore::load(*epub, bookmarks);
         if (selectorIndex >= static_cast<int>(bookmarks.size())) {
           selectorIndex = std::max(0, static_cast<int>(bookmarks.size()) - 1);
@@ -122,12 +134,49 @@ void EpubReaderBookmarksActivity::loop() {
   const int pageItems = getPageItems();
   const int totalItems = getTotalItems();
 
+  if (awaitingBookmarkRemovedAck) {
+    // Dismiss banner. List keys (front Left/Right per hints, optional side Up/Down)
+    if (wasReleasedMoveListForward(mappedInput) && totalItems > 0) {
+      awaitingBookmarkRemovedAck = false;
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+      requestUpdate();
+      return;
+    }
+    if (wasReleasedMoveListBack(mappedInput) && totalItems > 0) {
+      awaitingBookmarkRemovedAck = false;
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      awaitingBookmarkRemovedAck = false;
+      requestUpdate();
+      return;
+    }
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
     return;
+  }
+
+  // Direct list keys (no ButtonNavigator)
+  if (totalItems > 0) {
+    if (wasReleasedMoveListForward(mappedInput)) {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
+      requestUpdate();
+      return;
+    }
+    if (wasReleasedMoveListBack(mappedInput)) {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
+      requestUpdate();
+      return;
+    }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -149,40 +198,9 @@ void EpubReaderBookmarksActivity::loop() {
     finish();
     return;
   }
-
-  // Up/Down only — matches footer hints. Left/Right are ignored here (often page-turn in the reader).
-  buttonNavigator.onNextReleaseVerticalOnly([this, totalItems] {
-    if (totalItems <= 0) return;
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousReleaseVerticalOnly([this, totalItems] {
-    if (totalItems <= 0) return;
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuousVerticalOnly([this, totalItems, pageItems] {
-    if (totalItems <= 0) return;
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuousVerticalOnly([this, totalItems, pageItems] {
-    if (totalItems <= 0) return;
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
 }
 
 void EpubReaderBookmarksActivity::render(RenderLock&&) {
-  if (pendingBookmarkRemovedPopup) {
-    pendingBookmarkRemovedPopup = false;
-    GUI.drawPopup(renderer, tr(STR_BOOKMARK_REMOVED));
-    return;
-  }
-
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -217,7 +235,11 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, emptyX, listStartY + 40, tr(STR_NO_BOOKMARKS));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    if (awaitingBookmarkRemovedAck) {
+      GUI.drawPopup(renderer, tr(STR_BOOKMARK_REMOVED));
+    } else {
+      renderer.displayBuffer();
+    }
     return;
   }
 
@@ -235,5 +257,9 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
+  if (awaitingBookmarkRemovedAck) {
+    GUI.drawPopup(renderer, tr(STR_BOOKMARK_REMOVED));
+  } else {
+    renderer.displayBuffer();
+  }
 }

@@ -7,7 +7,6 @@
 
 #include "../Activity.h"
 #include "EpubBookmarksStore.h"
-#include "util/ButtonNavigator.h"
 
 class EpubReaderBookmarksActivity final : public Activity {
  public:
@@ -21,11 +20,11 @@ class EpubReaderBookmarksActivity final : public Activity {
 
  private:
   std::shared_ptr<Epub> epub;
-  ButtonNavigator buttonNavigator;
 
   std::vector<EpubBookmark> bookmarks;
   int selectorIndex = 0;
-  bool pendingBookmarkRemovedPopup = false;
+  /// True after a delete until user dismisses the "removed" banner (Confirm or Back).
+  bool awaitingBookmarkRemovedAck = false;
 
   int currentSpineIndex = 0;
   int currentPageNumber = 0;
