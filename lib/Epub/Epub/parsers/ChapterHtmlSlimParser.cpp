@@ -1259,6 +1259,70 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->nextWordContinues = false;
 
     if (!self->tableAccumRows.empty() && self->tableTotalCols > 0) {
+      // Distribute spanning cell lines evenly across the rows they span.
+      // Without this, all content sits in the first row, making it extremely
+      // tall while spanned rows are tiny — causing uneven heights in adjacent
+      // columns and poor page splits.
+      for (size_t ri = 0; ri < self->tableAccumRows.size(); ri++) {
+        uint8_t logCol = 0;
+        for (auto& ca : self->tableAccumRows[ri].cells) {
+          if (ca.rowspan > 1 && ca.colspan == 1) {
+            const size_t endRow = std::min(ri + static_cast<size_t>(ca.rowspan), self->tableAccumRows.size());
+            const size_t numSpanned = endRow - ri;
+            if (!ca.lines.empty() && numSpanned > 1) {
+              const uint8_t linesPerRow =
+                  std::max(uint8_t(1), static_cast<uint8_t>((ca.lines.size() + numSpanned - 1) / numSpanned));
+              const uint8_t targetLogCol = logCol;
+              std::vector<std::shared_ptr<TextBlock>> allLines = std::move(ca.lines);
+              std::vector<std::shared_ptr<TextBlock>> chunk;
+              chunk.reserve(linesPerRow);
+              size_t srcIdx = 0;
+              for (size_t i = 0; i < numSpanned && srcIdx < allLines.size(); i++) {
+                const size_t r = ri + i;
+                const uint8_t count = std::min(linesPerRow, static_cast<uint8_t>(allLines.size() - srcIdx));
+                chunk.clear();
+                for (uint8_t j = 0; j < count; j++) {
+                  chunk.push_back(std::move(allLines[srcIdx++]));
+                }
+                if (i == 0) {
+                  ca.lines = std::move(chunk);
+                } else {
+                  uint8_t plc = 0;
+                  for (auto& pca : self->tableAccumRows[r].cells) {
+                    if (plc == targetLogCol && pca.rowspan == 0) {
+                      pca.lines = std::move(chunk);
+                      pca.paddingLeft = ca.paddingLeft;
+                      pca.paddingRight = ca.paddingRight;
+                      pca.paddingTop = ca.paddingTop;
+                      pca.paddingBottom = ca.paddingBottom;
+                      break;
+                    }
+                    plc = static_cast<uint8_t>(plc + ((pca.rowspan == 0) ? 1 : pca.colspan));
+                  }
+                }
+              }
+            }
+          }
+          logCol = static_cast<uint8_t>(logCol + ((ca.rowspan == 0) ? 1 : ca.colspan));
+        }
+      }
+
+      // Recompute row metrics after distribution.
+      for (auto& row : self->tableAccumRows) {
+        uint8_t maxLines = 0;
+        int16_t maxPadTop = TableBlock::CELL_PADDING_Y;
+        int16_t maxPadBot = TableBlock::CELL_PADDING_Y;
+        for (auto& ca : row.cells) {
+          const auto lineCount = static_cast<uint8_t>(std::min(ca.lines.size(), size_t(255)));
+          if (lineCount > maxLines) maxLines = lineCount;
+          if (ca.paddingTop > maxPadTop) maxPadTop = ca.paddingTop;
+          if (ca.paddingBottom > maxPadBot) maxPadBot = ca.paddingBottom;
+        }
+        row.maxLines = maxLines;
+        row.maxPaddingTop = maxPadTop;
+        row.maxPaddingBottom = maxPadBot;
+      }
+
       const auto numCols = static_cast<uint8_t>(self->tableTotalCols);
       // Use established per-column widths, or fall back to equal distribution.
       const bool hasPerColWidths = (static_cast<int>(self->tableColWidths.size()) == numCols);
