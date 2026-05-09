@@ -7,6 +7,7 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 
+#include <algorithm>
 #include <cassert>
 
 #include "Epub/Section.h"
@@ -183,15 +184,57 @@ void KOReaderSyncActivity::performSync() {
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
-  // If XPath carried a paragraph index, refine the page using the section cache's
-  // per-page paragraph LUT instead of anchor matching.
-  if (remotePosition.hasParagraphIndex) {
+  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
+  if (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex) {
     Section tempSection(epub, remotePosition.spineIndex, renderer);
-    const auto paragraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex);
-    if (paragraphPage.has_value()) {
-      LOG_DBG("KOSync", "Paragraph %u resolved to page %d (was %d)", remotePosition.paragraphIndex, *paragraphPage,
-              remotePosition.pageNumber);
-      remotePosition.pageNumber = *paragraphPage;
+    bool refined = false;
+    if (remotePosition.hasLiIndex) {
+      const auto liPage = tempSection.getPageForListItemIndex(remotePosition.liIndex);
+      if (liPage.has_value()) {
+        LOG_DBG("KOSync", "Li index %u -> page %d (was %d)", remotePosition.liIndex, *liPage,
+                remotePosition.pageNumber);
+        remotePosition.pageNumber = *liPage;
+        refined = true;
+      } else {
+        LOG_DBG("KOSync", "Li index %u not found in section LUT", remotePosition.liIndex);
+      }
+    }
+    if (!refined && remotePosition.xpathAnchorId[0] != '\0') {
+      const auto anchorPage = tempSection.getPageForAnchor(std::string(remotePosition.xpathAnchorId));
+      if (anchorPage.has_value()) {
+        LOG_DBG("KOSync", "Anchor '%s' -> page %d (was %d)", remotePosition.xpathAnchorId, *anchorPage,
+                remotePosition.pageNumber);
+        remotePosition.pageNumber = *anchorPage;
+        refined = true;
+      } else {
+        LOG_DBG("KOSync", "Anchor '%s' not found in section cache", remotePosition.xpathAnchorId);
+      }
+    }
+    if (!refined && remotePosition.hasParagraphIndex) {
+      const auto paragraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex);
+      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex + 1);
+      if (paragraphPage.has_value()) {
+        int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
+        if (nextParagraphPage.has_value()) {
+          const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
+          // occupies different pages than at build time).
+          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+            refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+          }
+        }
+        char nextParaBuf[8];
+        if (nextParagraphPage.has_value())
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+        else
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
+        LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
+                remotePosition.paragraphIndex, *paragraphPage, nextParaBuf, remotePosition.pageNumber, refinedPage);
+        remotePosition.pageNumber = refinedPage;
+      } else {
+        LOG_DBG("KOSync", "Paragraph %u not found in section LUT", remotePosition.paragraphIndex);
+      }
     }
   }
   // localProgress was pre-computed in EpubReaderActivity before the Epub was released.

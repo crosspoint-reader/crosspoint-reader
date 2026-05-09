@@ -263,18 +263,27 @@ void FontDownloadActivity::loop() {
       return;
     }
 
-    buttonNavigator_.onNextRelease([this] {
-      if (selectedIndex_ < listItemCount() - 1) {
-        selectedIndex_++;
-        requestUpdate();
-      }
+    const int listSize = listItemCount();
+    const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
+
+    buttonNavigator_.onNextRelease([this, listSize] {
+      selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
+      requestUpdate();
     });
 
-    buttonNavigator_.onPreviousRelease([this] {
-      if (selectedIndex_ > 0) {
-        selectedIndex_--;
-        requestUpdate();
-      }
+    buttonNavigator_.onPreviousRelease([this, listSize] {
+      selectedIndex_ = ButtonNavigator::previousIndex(selectedIndex_, listSize);
+      requestUpdate();
+    });
+
+    buttonNavigator_.onNextContinuous([this, listSize, pageItems] {
+      selectedIndex_ = ButtonNavigator::nextPageIndex(selectedIndex_, listSize, pageItems);
+      requestUpdate();
+    });
+
+    buttonNavigator_.onPreviousContinuous([this, listSize, pageItems] {
+      selectedIndex_ = ButtonNavigator::previousPageIndex(selectedIndex_, listSize, pageItems);
+      requestUpdate();
     });
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
