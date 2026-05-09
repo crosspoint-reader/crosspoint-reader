@@ -21,6 +21,7 @@ import json
 import os
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 # Import canonical version constants from the shared file in lib/EpdFont/scripts/
@@ -115,6 +116,15 @@ def parse_filename(filename: str) -> tuple[str, str] | None:
     return family, size_str
 
 
+def compute_crc32(filepath: Path) -> int:
+    """Compute CRC32 of a file, matching esp_rom_crc32_le(0xFFFFFFFF, ...) ^ 0xFFFFFFFF."""
+    crc = 0
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            crc = zlib.crc32(chunk, crc)
+    return crc & 0xFFFFFFFF
+
+
 def scan_cpfont_files(input_dir: Path) -> dict[str, list[Path]]:
     """Scan input directory for .cpfont files, grouped by family name.
 
@@ -164,6 +174,7 @@ def build_manifest(
                 {
                     "name": filepath.name,
                     "size": filepath.stat().st_size,
+                    "crc32": compute_crc32(filepath),
                 }
             )
 
