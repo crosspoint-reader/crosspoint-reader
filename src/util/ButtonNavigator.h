@@ -36,6 +36,11 @@ class ButtonNavigator final {
 
   void onNextContinuous(const Callback& callback);
   void onPreviousContinuous(const Callback& callback);
+  /// List navigation using only logical Up / Down (e.g. reader sub-screens where Left/Right are page-turn).
+  void onNextReleaseVerticalOnly(const Callback& callback);
+  void onPreviousReleaseVerticalOnly(const Callback& callback);
+  void onNextContinuousVerticalOnly(const Callback& callback);
+  void onPreviousContinuousVerticalOnly(const Callback& callback);
   void onContinuous(const Buttons& buttons, const Callback& callback);
 
   [[nodiscard]] static int nextIndex(int currentIndex, int totalItems);

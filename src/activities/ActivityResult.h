@@ -27,6 +27,11 @@ struct ChapterResult {
   int spineIndex = 0;
 };
 
+struct BookmarkResult {
+  int spineIndex = 0;
+  int pageNumber = 0;
+};
+
 struct PercentResult {
   int percent = 0;
 };
@@ -54,8 +59,9 @@ struct FilePathResult {
   std::string path;
 };
 
-using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+using ResultVariant =
+    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, BookmarkResult,
+                 PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

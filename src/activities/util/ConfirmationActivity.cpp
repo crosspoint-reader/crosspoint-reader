@@ -6,8 +6,13 @@
 #include "HalDisplay.h"
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const std::string& heading, const std::string& body)
-    : Activity("Confirmation", renderer, mappedInput), heading(heading), body(body) {}
+                                           const std::string& heading, const std::string& body, const bool wrapBodyIn,
+                                           const int wrapMaxLinesIn)
+    : Activity("Confirmation", renderer, mappedInput),
+      heading(heading),
+      body(body),
+      wrapBody(wrapBodyIn),
+      wrapMaxLines(wrapMaxLinesIn > 0 ? wrapMaxLinesIn : 10) {}
 
 void ConfirmationActivity::onEnter() {
   Activity::onEnter();
@@ -18,14 +23,29 @@ void ConfirmationActivity::onEnter() {
   if (!heading.empty()) {
     safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::BOLD);
   }
+  safeBody.clear();
+  bodyWrappedLines.clear();
   if (!body.empty()) {
-    safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
+    if (wrapBody) {
+      bodyWrappedLines = renderer.wrappedText(fontId, body.c_str(), maxWidth, wrapMaxLines, EpdFontFamily::REGULAR);
+    } else {
+      safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
+    }
   }
 
   int totalHeight = 0;
-  if (!safeHeading.empty()) totalHeight += lineHeight;
-  if (!safeBody.empty()) totalHeight += lineHeight;
-  if (!safeHeading.empty() && !safeBody.empty()) totalHeight += spacing;
+  if (!safeHeading.empty()) {
+    totalHeight += lineHeight;
+  }
+  const bool hasBody = !safeBody.empty() || !bodyWrappedLines.empty();
+  if (!safeHeading.empty() && hasBody) {
+    totalHeight += spacing;
+  }
+  if (!bodyWrappedLines.empty()) {
+    totalHeight += static_cast<int>(bodyWrappedLines.size()) * lineHeight;
+  } else if (!safeBody.empty()) {
+    totalHeight += lineHeight;
+  }
 
   startY = (renderer.getScreenHeight() - totalHeight) / 2;
 
@@ -43,8 +63,13 @@ void ConfirmationActivity::render(RenderLock&& lock) {
     currentY += lineHeight + spacing;
   }
 
-  // Draw Body
-  if (!safeBody.empty()) {
+  // Draw body (single truncated line, or word-wrapped lines)
+  if (!bodyWrappedLines.empty()) {
+    for (const auto& line : bodyWrappedLines) {
+      renderer.drawCenteredText(fontId, currentY, line.c_str(), true, EpdFontFamily::REGULAR);
+      currentY += lineHeight;
+    }
+  } else if (!safeBody.empty()) {
     renderer.drawCenteredText(fontId, currentY, safeBody.c_str(), true, EpdFontFamily::REGULAR);
   }
 
