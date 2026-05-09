@@ -217,14 +217,20 @@ void KOReaderSyncActivity::performSync() {
         int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
         if (nextParagraphPage.has_value()) {
           const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
+          // occupies different pages than at build time).
           if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
             refinedPage = static_cast<int>(*nextParagraphPage) - 1;
           }
         }
+        char nextParaBuf[8];
+        if (nextParagraphPage.has_value())
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+        else
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
         LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
-                remotePosition.paragraphIndex, *paragraphPage,
-                nextParagraphPage.has_value() ? std::to_string(*nextParagraphPage).c_str() : "none",
-                remotePosition.pageNumber, refinedPage);
+                remotePosition.paragraphIndex, *paragraphPage, nextParaBuf, remotePosition.pageNumber, refinedPage);
         remotePosition.pageNumber = refinedPage;
       } else {
         LOG_DBG("KOSync", "Paragraph %u not found in section LUT", remotePosition.paragraphIndex);

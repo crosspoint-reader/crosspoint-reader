@@ -338,7 +338,8 @@ class ParagraphStreamer final : public Print {
               onCloseTag();
             else
               onOpenTag();
-            if (c == '/') onCloseTag();
+            // Self-closing open tag (<br/>). Don't double-fire for close tags (</br/>).
+            if (c == '/' && !tagIsClose) onCloseTag();
           }
           tagNameLen = 0;
           tagState = (c == '>') ? TAG_IDLE : TAG_ATTRS;
@@ -483,7 +484,6 @@ class ParagraphStreamer final : public Print {
     return size;
   }
 
- public:
   int paragraphCount() const { return fwdCaptured ? fwdResult : pCount; }
   int getParagraphAtMatch() const { return paragraphAtMatch; }
   int getListItemAtMatch() const { return liCountAtMatch; }
