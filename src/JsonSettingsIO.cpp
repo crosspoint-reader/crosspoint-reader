@@ -272,7 +272,9 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     }
     if (!doc["sleepScreenCoverFilter"].isNull()) {
       uint8_t oldFilter = doc["sleepScreenCoverFilter"] | (uint8_t)0;
-      if (s.sleepScreenFilter == CrossPointSettings::SLEEP_SCREEN_FILTER::FILTER_NONE &&
+      if ((s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT ||
+           s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP ||
+           s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM) &&
           oldFilter < CrossPointSettings::SLEEP_SCREEN_FILTER_COUNT) {
         s.sleepScreenFilter = oldFilter;
       }
