@@ -87,7 +87,18 @@ def extract_static_instance(source_path: Path, axes: dict, family_name: str, sty
     tmp_path = Path(tmp_name)
     font = TTFont(str(source_path))
     try:
-        instantiateVariableFont(font, axes)
+        # instantiateVariableFont returns a *new* TTFont with the axes pinned;
+        # without capturing the return value, font.save() below would write the
+        # original (still-variable) font and the requested axis values would be
+        # silently ignored.
+        #
+        # updateFontNames=True   — rewrite the name table so the saved font
+        #                          reports its weight/style accurately rather
+        #                          than retaining the variable-font names.
+        # optimize=False         — skip the gvar interpolation optimisation;
+        #                          fully pinning every axis drops gvar anyway,
+        #                          so the work would be wasted.
+        font = instantiateVariableFont(font, axes, updateFontNames=True, optimize=False)
         font.save(str(tmp_path))
     except Exception:
         tmp_path.unlink(missing_ok=True)
