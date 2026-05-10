@@ -587,6 +587,8 @@ int32_t SdCardFont::findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) 
 
 int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOnly) {
   if (!loaded_) return -1;
+  styleMask = resolveStyleMask(styleMask);
+  if (styleMask == 0) return 0;
 
   unsigned long startMs = millis();
 
@@ -1017,6 +1019,8 @@ uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
 
 int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
   if (!loaded_) return -1;
+  styleMask = resolveStyleMask(styleMask);
+  if (styleMask == 0) return 0;
 
   // Note: advance table is preserved across calls. We only fetch codepoints
   // not already present, then merge them in. Use clearPersistentCache() to
@@ -1189,6 +1193,33 @@ EpdFont* SdCardFont::getEpdFont(uint8_t style) {
 }
 
 bool SdCardFont::hasStyle(uint8_t style) const { return styles_[style & (MAX_STYLES - 1)].present; }
+
+uint8_t SdCardFont::resolveStyle(uint8_t style) const {
+  // Keep this fallback order aligned with EpdFontFamily::getFont() and the
+  // renderer's SD advance-table fast path.
+  static const uint8_t kFallbacks[MAX_STYLES][MAX_STYLES] = {
+      {0, 1, 2, 3},  // regular
+      {1, 3, 0, 2},  // bold
+      {2, 0, 1, 3},  // italic
+      {3, 1, 2, 0},  // bold italic
+  };
+
+  const uint8_t styleBits = style & (MAX_STYLES - 1);
+  for (uint8_t candidate : kFallbacks[styleBits]) {
+    if (styles_[candidate].present) return candidate;
+  }
+  return 0;
+}
+
+uint8_t SdCardFont::resolveStyleMask(uint8_t styleMask) const {
+  uint8_t resolvedMask = 0;
+  for (uint8_t si = 0; si < MAX_STYLES; si++) {
+    if (styleMask & (1 << si)) {
+      resolvedMask |= static_cast<uint8_t>(1u << resolveStyle(si));
+    }
+  }
+  return resolvedMask;
+}
 
 // --- On-demand glyph loading (overflow buffer) ---
 

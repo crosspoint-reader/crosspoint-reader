@@ -19,23 +19,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, int p
  * Falls back gracefully when the font lacks the requested variant.
  */
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
-  // Indexed by styleBits (0=REGULAR, 1=BOLD, 2=ITALIC, 3=BOLD_ITALIC)
-  static const uint8_t kFallbacks[4][4] = {
-      // REGULAR: REGULAR → BOLD → ITALIC → BOLD_ITALIC
-      {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::ITALIC, EpdFontFamily::BOLD_ITALIC},
-      // BOLD: BOLD → BOLD_ITALIC → REGULAR → ITALIC
-      {EpdFontFamily::BOLD, EpdFontFamily::BOLD_ITALIC, EpdFontFamily::REGULAR, EpdFontFamily::ITALIC},
-      // ITALIC: ITALIC → REGULAR → BOLD → BOLD_ITALIC  (REGULAR before BOLD!)
-      {EpdFontFamily::ITALIC, EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::BOLD_ITALIC},
-      // BOLD_ITALIC: BOLD_ITALIC → BOLD → ITALIC → REGULAR
-      {EpdFontFamily::BOLD_ITALIC, EpdFontFamily::BOLD, EpdFontFamily::ITALIC, EpdFontFamily::REGULAR},
-  };
-
-  const uint8_t styleBits = static_cast<uint8_t>(style) & 0x03;
-  for (uint8_t candidate : kFallbacks[styleBits]) {
-    if (font.hasStyle(candidate)) return candidate;
-  }
-  return EpdFontFamily::REGULAR;  // no-variant-at-all safety net
+  return font.resolveStyle(static_cast<uint8_t>(style));
 }
 }  // namespace
 
