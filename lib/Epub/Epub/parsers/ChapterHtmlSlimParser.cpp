@@ -58,6 +58,39 @@ constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+// Returns true if the trailing UTF-8 codepoint in [buf, buf+len) is a dash that allows
+// a line break opportunity after it. Inline-tag boundaries like "gone—<i>Umbriel</i>"
+// would otherwise glue the dash to the following word via nextWordContinues, making the
+// dash unbreakable; callers use this to skip setting that flag when the buffered text
+// already ends at a natural break point.
+//
+// Soft hyphen (U+00AD) and non-breaking hyphen (U+2011) are intentionally excluded:
+// soft hyphen is invisible (a hyphenation hint) and non-breaking hyphen forbids breaks
+// by definition. Minus sign (U+2212) is excluded because it's mathematical, not a word
+// separator.
+bool bufferEndsWithBreakableDash(const char* buf, const int len) {
+  if (len <= 0) return false;
+  int start = len - 1;
+  while (start > 0 && (static_cast<uint8_t>(buf[start]) & 0xC0) == 0x80) {
+    --start;
+  }
+  const auto* ptr = reinterpret_cast<const unsigned char*>(buf + start);
+  const uint32_t cp = utf8NextCodepoint(&ptr);
+  switch (cp) {
+    case '-':
+    case 0x2010:  // HYPHEN
+    case 0x2012:  // FIGURE DASH
+    case 0x2013:  // EN DASH
+    case 0x2014:  // EM DASH
+    case 0x2015:  // HORIZONTAL BAR
+    case 0x2E3A:  // TWO-EM DASH
+    case 0x2E3B:  // THREE-EM DASH
+      return true;
+    default:
+      return false;
+  }
+}
+
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
   for (int i = 0; i < possible_tag_count; i++) {
@@ -822,8 +855,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (isInternalLink) {
       // Flush buffer before style change
       if (self->partWordBufferIndex > 0) {
+        const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
         self->flushPartWordBuffer();
-        self->nextWordContinues = true;
+        if (!endsAtDashBreak) {
+          self->nextWordContinues = true;
+        }
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
@@ -937,8 +973,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
              matches(name, STRIKETHROUGH_TAGS, NUM_STRIKETHROUGH_TAGS)) {
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
+      const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
       self->flushPartWordBuffer();
-      self->nextWordContinues = true;
+      if (!endsAtDashBreak) {
+        self->nextWordContinues = true;
+      }
     }
     if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
       self->underlineUntilDepth = std::min(self->underlineUntilDepth, self->depth);
@@ -983,8 +1022,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
+      const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
       self->flushPartWordBuffer();
-      self->nextWordContinues = true;
+      if (!endsAtDashBreak) {
+        self->nextWordContinues = true;
+      }
     }
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     // Push inline style entry for bold tag
@@ -1012,8 +1054,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   } else if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
+      const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
       self->flushPartWordBuffer();
-      self->nextWordContinues = true;
+      if (!endsAtDashBreak) {
+        self->nextWordContinues = true;
+      }
     }
     self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
     // Push inline style entry for italic tag
@@ -1043,8 +1088,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
+        const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
         self->flushPartWordBuffer();
-        self->nextWordContinues = true;
+        if (!endsAtDashBreak) {
+          self->nextWordContinues = true;
+        }
       }
       StyleStackEntry entry;
       entry.depth = self->depth;  // Track depth for matching pop
@@ -1332,9 +1380,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
                              matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
 
     if (shouldFlush) {
+      const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
       self->flushPartWordBuffer();
-      // If closing an inline element, the next word fragment continues the same visual word
-      if (isInlineTag) {
+      // If closing an inline element, the next word fragment continues the same visual word —
+      // unless the buffered text ended at a dash that should allow a line break (em/en dash, etc.).
+      if (isInlineTag && !endsAtDashBreak) {
         self->nextWordContinues = true;
       }
     }
