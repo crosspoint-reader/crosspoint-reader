@@ -40,7 +40,7 @@ jobs:
           echo "metadata=$(python3 -c 'from cpfont_version import FONTS_MANIFEST_VERSION; print(FONTS_MANIFEST_VERSION)')" >> "$GITHUB_OUTPUT"
 
       - name: Build SD card fonts
-        run: python3 lib/EpdFont/scripts/build-sd-fonts.py --clean
+        run: python3 lib/EpdFont/scripts/build-sd-fonts.py --clean --verbose -j 1
 
       - name: Flatten output for release assets
         run: |
