@@ -535,14 +535,16 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             return face
         return None
 
-    # Validate intervals: remove codepoints not present in the font
+    # Validate intervals: remove codepoints not present in the font.
+    # Only check glyph existence via get_char_index — do NOT call
+    # load_glyph here, as that triggers FT_LOAD_RENDER at the target
+    # DPI and doubles total rasterization time for no benefit.
     print(f"  [{style_label}] Validating intervals against font...", file=sys.stderr)
     validated_intervals = []
     for i_start, i_end in intervals:
         start = i_start
         for code_point in range(i_start, i_end + 1):
-            f = load_glyph(code_point)
-            if f is None:
+            if face.get_char_index(code_point) == 0:
                 if start < code_point:
                     validated_intervals.append((start, code_point - 1))
                 start = code_point + 1
@@ -575,13 +577,18 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             # pitch == width and a top-down layout — that holds in the common
             # case but breaks on padded or flipped bitmaps and corrupts the
             # output. Walk by (row, col) using the real pitch instead.
+            #
+            # Cache bitmap.buffer in a local — ctypes struct field access
+            # creates a new Python wrapper object each time, so re-evaluating
+            # it per pixel is catastrophically slow.
             pixels4g = []
             px = 0
+            buf = bitmap.buffer
             abs_pitch = abs(bitmap.pitch)
             for y in range(bitmap.rows):
                 row_offset = y * abs_pitch if bitmap.pitch >= 0 else (bitmap.rows - 1 - y) * abs_pitch
                 for x in range(bitmap.width):
-                    v = bitmap.buffer[row_offset + x]
+                    v = buf[row_offset + x]
                     if x % 2 == 0:
                         px = (v >> 4)
                     else:
