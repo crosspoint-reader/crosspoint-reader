@@ -43,7 +43,24 @@ INTERVAL_PRESETS = {
     "latin-ext":   [(0x0020, 0x007E), (0x0080, 0x00FF), (0x0100, 0x024F),
                     (0x1E00, 0x1EFF), (0x2000, 0x206F), (0xFB00, 0xFB06)],
     "greek":       [(0x0370, 0x03FF), (0x1F00, 0x1FFF)],
+    # Greek monotonic letters only — drops the polytonic block (0x1F00-0x1FFF)
+    # that "greek" includes. Useful for fonts that ship modern Greek but no
+    # polytonic glyphs, where requesting "greek" would just produce empty
+    # glyph slots for everything in 0x1F00-0x1FFF.
+    "greek-letters": [(0x0370, 0x03FF)],
     "cyrillic":    [(0x0400, 0x04FF), (0x0500, 0x052F)],
+    # Latin (incl. core punctuation) + extended Cyrillic in one preset, for
+    # families that ship both scripts. The Cyrillic side picks up the three
+    # extended blocks (0x1C80-0x1C8F, 0x2DE0-0x2DFF, 0xA640-0xA69F) on top of
+    # what plain "cyrillic" covers, since fonts wide enough to bundle Latin +
+    # Cyrillic generally also cover those.
+    "latin-cyrillic": [(0x0020, 0x007E), (0x0080, 0x00FF), (0x0100, 0x024F),
+                       (0x1E00, 0x1EFF), (0x2000, 0x206F),
+                       (0x0400, 0x04FF), (0x0500, 0x052F),
+                       (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)],
+    # Music symbols (card suits + Western notation block). Small block, useful
+    # to enable globally without bloating fonts much.
+    "musical-symbols": [(0x2660, 0x266F), (0x1D100, 0x1D1FF)],
     "georgian":    [(0x10A0, 0x10FF), (0x2D00, 0x2D2F)],
     "armenian":    [(0x0530, 0x058F)],
     "ethiopic":    [(0x1200, 0x137F), (0x1380, 0x139F), (0x2D80, 0x2DDF)],

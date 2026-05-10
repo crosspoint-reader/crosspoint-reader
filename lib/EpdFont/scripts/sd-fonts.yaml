@@ -35,8 +35,8 @@ families:
 
   - name: Literata
     description: "Screen-optimized serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Bold.ttf"}
@@ -45,8 +45,8 @@ families:
 
   - name: SourceSerif4
     description: "Adobe transitional serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Bold.ttf"}
@@ -55,8 +55,8 @@ families:
 
   - name: NotoSerifExtended
     description: "Serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Bold.ttf"}
@@ -65,8 +65,8 @@ families:
 
   - name: Merriweather
     description: "Warm serif for long-form reading (Latin, Cyrillic)"
-    intervals: latin-ext,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Bold.ttf"}
@@ -75,8 +75,8 @@ families:
 
   - name: Lora
     description: "Calligraphic serif for literary reading (Latin, Cyrillic)"
-    intervals: latin-ext,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Bold.ttf"}
@@ -85,8 +85,8 @@ families:
 
   - name: GentiumBookPlus
     description: "Scholarly serif with wide Unicode coverage (Latin, Greek, Cyrillic, IPA)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Bold.ttf"}
@@ -95,8 +95,8 @@ families:
 
   - name: IBMPlexSerif
     description: "Professional serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Bold.ttf"}
@@ -105,8 +105,8 @@ families:
 
   - name: Bitter
     description: "Slab serif designed for e-ink (Latin, Cyrillic)"
-    intervals: latin-ext,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf", variable: {wght: 400}}
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf", variable: {wght: 700}}
@@ -117,8 +117,8 @@ families:
 
   - name: NotoSansExtended
     description: "Sans-serif (Latin, Greek, Cyrillic, Georgian, Armenian, Ethiopic)"
-    intervals: latin-ext,greek,cyrillic,georgian,armenian,ethiopic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,georgian,armenian,ethiopic,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {path: "builtinFonts/source/NotoSans/NotoSans-Regular.ttf"}
       bold:       {path: "builtinFonts/source/NotoSans/NotoSans-Bold.ttf"}
@@ -127,8 +127,8 @@ families:
 
   - name: Inter
     description: "Modern sans-serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf", variable: {wght: 400, opsz: 14}}
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf", variable: {wght: 700, opsz: 14}}
@@ -137,8 +137,8 @@ families:
 
   - name: SourceSans3
     description: "Adobe humanist sans-serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Bold.ttf"}
@@ -147,8 +147,8 @@ families:
 
   - name: IBMPlexSans
     description: "IBM corporate sans-serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Bold.ttf"}
@@ -157,8 +157,8 @@ families:
 
   - name: Alegreya
     description: "Calligraphic serif/display (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf", variable: {wght: 400}}
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf", variable: {wght: 700}}
@@ -169,8 +169,8 @@ families:
 
   - name: IBMPlexMono
     description: "Monospace for code and technical reading (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-cyrillic,greek-letters,musical-symbols
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Bold.ttf"}
@@ -179,8 +179,8 @@ families:
 
   - name: SourceCodePro
     description: "Adobe monospace with excellent hinting (Latin)"
-    intervals: latin-ext
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-ext
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Bold.ttf"}
@@ -191,8 +191,8 @@ families:
 
   - name: AtkinsonHyperlegibleNext
     description: "Accessibility font for low vision (Latin)"
-    intervals: latin-ext
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-ext
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Bold.ttf"}
@@ -201,8 +201,8 @@ families:
 
   - name: LexicaUltralegible
     description: "Accessibility font for low vision / dyslexia (Latin)"
-    intervals: latin-ext
-    sizes: [12, 14, 16, 18]
+    intervals: builtin,latin-ext
+    sizes: [10, 12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Regular.ttf"}
       bold:       {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Bold.ttf"}
