@@ -85,26 +85,29 @@ def extract_static_instance(source_path: Path, axes: dict, family_name: str, sty
     tmp_fd, tmp_name = tempfile.mkstemp(suffix=".ttf", dir=cached.parent)
     os.close(tmp_fd)
     tmp_path = Path(tmp_name)
-    font = TTFont(str(source_path))
+    # Keep separate handles for the source variable font and the static
+    # instance: instantiateVariableFont with default inplace=False returns a
+    # *new* TTFont, so rebinding `font` would otherwise strand the source's
+    # file handle open until GC runs.
+    #
+    # updateFontNames=True   — rewrite the name table so the saved font
+    #                          reports its weight/style accurately rather
+    #                          than retaining the variable-font names.
+    # optimize=False         — skip the gvar interpolation optimisation;
+    #                          fully pinning every axis drops gvar anyway,
+    #                          so the work would be wasted.
+    source_font = TTFont(str(source_path))
     try:
-        # instantiateVariableFont returns a *new* TTFont with the axes pinned;
-        # without capturing the return value, font.save() below would write the
-        # original (still-variable) font and the requested axis values would be
-        # silently ignored.
-        #
-        # updateFontNames=True   — rewrite the name table so the saved font
-        #                          reports its weight/style accurately rather
-        #                          than retaining the variable-font names.
-        # optimize=False         — skip the gvar interpolation optimisation;
-        #                          fully pinning every axis drops gvar anyway,
-        #                          so the work would be wasted.
-        font = instantiateVariableFont(font, axes, updateFontNames=True, optimize=False)
-        font.save(str(tmp_path))
+        font = instantiateVariableFont(source_font, axes, updateFontNames=True, optimize=False)
+        try:
+            font.save(str(tmp_path))
+        finally:
+            font.close()
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
     finally:
-        font.close()
+        source_font.close()
     tmp_path.replace(cached)
 
     return cached
