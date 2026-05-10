@@ -286,21 +286,21 @@ families:
 
   - name: NotoSansCJK
     description: "Sans-serif (Chinese, Japanese, Korean)"
-    intervals: builtin,ascii,latin1,punctuation,cjk
+    intervals: builtin,cjk
     sizes: [10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"}
 
   - name: NotoSerifCJK
     description: "Serif (Chinese, Japanese, Korean)"
-    intervals: builtin,ascii,latin1,punctuation,cjk
+    intervals: builtin,cjk
     sizes: [10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/OTF/SimplifiedChinese/NotoSerifCJKsc-Regular.otf"}
 
   - name: NotoSansHangul
     description: "Sans-serif (Korean Hangul)"
-    intervals: builtin,ascii,latin1,punctuation,hangul
+    intervals: builtin,hangul
     sizes: [10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Korean/NotoSansCJKkr-Regular.otf"}
