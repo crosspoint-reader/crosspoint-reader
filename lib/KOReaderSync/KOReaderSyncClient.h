@@ -29,7 +29,7 @@ struct KOReaderProgress {
  */
 class KOReaderSyncClient {
  public:
-  enum Error { OK = 0, NO_CREDENTIALS, NETWORK_ERROR, AUTH_FAILED, SERVER_ERROR, JSON_ERROR, NOT_FOUND };
+  enum Error { OK = 0, NO_CREDENTIALS, NETWORK_ERROR, AUTH_FAILED, SERVER_ERROR, JSON_ERROR, NOT_FOUND, LOW_MEMORY };
 
   /**
    * Authenticate with the sync server (validate credentials).
@@ -56,4 +56,7 @@ class KOReaderSyncClient {
    * Get human-readable error message.
    */
   static const char* errorString(Error error);
+
+  /** HTTP status code from the last request (for diagnostics). */
+  static int lastHttpCode;
 };

@@ -1,0 +1,106 @@
+name: Build & Publish SD Card Fonts
+
+# Fonts change rarely — run manually when font sources or the conversion
+# pipeline are updated.  Publishes .cpfont files + fonts.json manifest as
+# GitHub Release assets on the crosspoint-fonts repo so font releases don't
+# clutter the firmware releases page.
+#
+# Requires a repository secret FONTS_REPO_TOKEN — a fine-grained PAT (or
+# classic PAT) with contents:write permission on the target fonts repo.
+on:
+  workflow_dispatch:
+
+env:
+  FONTS_REPO: crosspoint-reader/crosspoint-fonts
+
+jobs:
+  build-fonts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install font tools
+        run: pip install freetype-py fonttools pyyaml
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfreetype6-dev
+
+      - name: Read version constants
+        id: versions
+        run: |
+          cd lib/EpdFont/scripts
+          echo "binary=$(python3 -c 'from cpfont_version import CPFONT_VERSION; print(CPFONT_VERSION)')" >> "$GITHUB_OUTPUT"
+          echo "metadata=$(python3 -c 'from cpfont_version import FONTS_MANIFEST_VERSION; print(FONTS_MANIFEST_VERSION)')" >> "$GITHUB_OUTPUT"
+
+      - name: Build SD card fonts
+        run: python3 lib/EpdFont/scripts/build-sd-fonts.py --clean
+
+      - name: Flatten output for release assets
+        run: |
+          mkdir -p dist
+          find lib/EpdFont/scripts/output -name '*.cpfont' -exec cp {} dist/ \;
+
+      - name: Compute release tags
+        id: tags
+        env:
+          GH_TOKEN: ${{ secrets.FONTS_REPO_TOKEN }}
+        run: |
+          BASE="sd-fonts-m${{ steps.versions.outputs.metadata }}-b${{ steps.versions.outputs.binary }}"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+
+          # Find the highest existing revision for this m/b pair
+          LAST=$(gh release list --repo "${{ env.FONTS_REPO }}" \
+            --json tagName --jq \
+            '[.[] | select(.tagName | startswith("'"${BASE}-r"'")) | .tagName | split("-r")[1] | tonumber] | max // 0')
+          NEXT=$((LAST + 1))
+          echo "revision=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "versioned=${BASE}-r${NEXT}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate manifest
+        run: |
+          python3 scripts/generate-font-manifest.py \
+            --input dist \
+            --base-url "https://github.com/${{ env.FONTS_REPO }}/releases/download/${{ steps.tags.outputs.base }}/" \
+            --output dist/fonts.json \
+            --descriptions-from lib/EpdFont/scripts/sd-fonts.yaml
+
+      - name: Publish versioned release to fonts repo
+        env:
+          GH_TOKEN: ${{ secrets.FONTS_REPO_TOKEN }}
+        run: |
+          VERSIONED="${{ steps.tags.outputs.versioned }}"
+          TITLE="SD Card Fonts (${VERSIONED#sd-fonts-})"
+
+          gh release create "$VERSIONED" dist/* \
+            --repo "${{ env.FONTS_REPO }}" \
+            --title "$TITLE" \
+            --notes "Pre-built \`.cpfont\` font files for CrossPoint Reader.
+
+          Download individual files or use **Settings > System > Download Fonts** on the device.
+
+          See [SD Card Fonts documentation](https://github.com/${{ github.repository }}/blob/main/docs/sd-card-fonts.md) for details."
+
+      - name: Update stable tag for device downloads
+        env:
+          GH_TOKEN: ${{ secrets.FONTS_REPO_TOKEN }}
+        run: |
+          BASE="${{ steps.tags.outputs.base }}"
+
+          # Delete the old stable release for this m/b pair (the versioned releases are kept)
+          gh release delete "$BASE" --repo "${{ env.FONTS_REPO }}" --yes 2>/dev/null || true
+
+          gh release create "$BASE" dist/* \
+            --repo "${{ env.FONTS_REPO }}" \
+            --title "SD Card Fonts (${BASE#sd-fonts-})" \
+            --notes "Current font build for manifest v${{ steps.versions.outputs.metadata }}, binary format v${{ steps.versions.outputs.binary }}. Devices with this firmware version download from this release.
+
+          This is revision **${{ steps.tags.outputs.revision }}** — see [\`${{ steps.tags.outputs.versioned }}\`](https://github.com/${{ env.FONTS_REPO }}/releases/tag/${{ steps.tags.outputs.versioned }}) for the immutable copy.
+
+          Download individual files or use **Settings > System > Download Fonts** on the device."
