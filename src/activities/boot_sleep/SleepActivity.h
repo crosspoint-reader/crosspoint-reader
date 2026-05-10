@@ -10,9 +10,9 @@ class SleepActivity final : public Activity {
   void onEnter() override;
 
  private:
-  void renderDefaultSleepScreen() const;
-  void renderCustomSleepScreen() const;
-  void renderCoverSleepScreen() const;
-  void renderBitmapSleepScreen(const Bitmap& bitmap) const;
+  void renderLogoSleepScreen() const;
+  bool renderCustomSleepScreen() const;
+  bool renderCoverSleepScreen(bool cropped) const;
+  void renderBitmapSleepScreen(const Bitmap& bitmap, bool allowCrop = false) const;
   void renderBlankSleepScreen() const;
 };

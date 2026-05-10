@@ -18,21 +18,15 @@ class CrossPointSettings {
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
 
   enum SLEEP_SCREEN_MODE {
-    DARK = 0,
-    LIGHT = 1,
-    CUSTOM = 2,
-    COVER = 3,
-    BLANK = 4,
-    COVER_CUSTOM = 5,
+    LOGO = 0,
+    CUSTOM = 1,
+    COVER_FIT = 2,
+    COVER_CROP = 3,
+    COVER_CUSTOM = 4,
+    BLANK = 5,
     SLEEP_SCREEN_MODE_COUNT
   };
-  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
-  enum SLEEP_SCREEN_COVER_FILTER {
-    NO_FILTER = 0,
-    BLACK_AND_WHITE = 1,
-    INVERTED_BLACK_AND_WHITE = 2,
-    SLEEP_SCREEN_COVER_FILTER_COUNT
-  };
+  enum SLEEP_SCREEN_FILTER { FILTER_NONE = 0, FILTER_CONTRAST = 1, FILTER_NEGATIVE = 2, SLEEP_SCREEN_FILTER_COUNT };
 
   // Status bar enum - legacy
   enum STATUS_BAR_MODE {
@@ -155,11 +149,9 @@ class CrossPointSettings {
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
   // Sleep screen settings
-  uint8_t sleepScreen = DARK;
-  // Sleep screen cover mode settings
-  uint8_t sleepScreenCoverMode = FIT;
-  // Sleep screen cover filter
-  uint8_t sleepScreenCoverFilter = NO_FILTER;
+  uint8_t sleepScreen = LOGO;
+  // Sleep screen filter
+  uint8_t sleepScreenFilter = FILTER_NONE;
   // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
   uint8_t statusBarChapterPageCount = 1;
