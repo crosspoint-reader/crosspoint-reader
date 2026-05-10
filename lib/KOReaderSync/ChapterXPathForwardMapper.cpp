@@ -19,7 +19,14 @@ namespace {
 // Strategy:
 // 1) Count total visible text bytes in chapter.
 // 2) Stream parse again and stop when target byte offset is reached.
-// 3) Emit either an element path or /text()[N].M when at body text-node level.
+// 3) Emit /text()[N].M relative to the deepest open element so KOReader can
+//    place the cursor at character precision regardless of nesting depth.
+//
+// Text-node counting matches KOReader/crengine: the Nth XML text node within
+// an element, including whitespace-only nodes (those are still real DOM text
+// nodes). Empty (len=0) text isn't emitted by expat at all, which mirrors
+// KOReader's behavior of skipping the empty text nodes that bare
+// <a id="anchor"/> elements would otherwise produce.
 
 struct ForwardState : StackState {
   int spineIndex;
@@ -28,20 +35,32 @@ struct ForwardState : StackState {
   bool found = false;
   XML_Parser parser = nullptr;
 
-  int bodyTextNodeCount = 0;
-  size_t codepointsInBodyTextNode = 0;
-  bool inBodyTextNode = false;
+  // Per-element text-node bookkeeping. Mirrors `stack` 1:1 — every push/pop
+  // appends/removes a counter so the top of the stack always refers to the
+  // currently open element. `pendingTextNode` is set after every element
+  // boundary so the next char data starts a fresh text node within whatever
+  // element is currently on top.
+  std::vector<int> textNodeIndexStack;
+  std::vector<size_t> codepointsInTextNodeStack;
+  bool pendingTextNode = true;
 
-  ForwardState(const int spineIndex, const size_t targetOffset) : spineIndex(spineIndex), targetOffset(targetOffset) {}
+  ForwardState(const int spineIndex, const size_t targetOffset) : spineIndex(spineIndex), targetOffset(targetOffset) {
+    textNodeIndexStack.reserve(32);
+    codepointsInTextNodeStack.reserve(32);
+  }
 
   void onStartElement(const XML_Char* rawName) {
-    inBodyTextNode = false;
     pushElement(rawName);
+    textNodeIndexStack.push_back(0);
+    codepointsInTextNodeStack.push_back(0);
+    pendingTextNode = true;
   }
 
   void onEndElement() {
-    inBodyTextNode = false;
     popElement();
+    if (!textNodeIndexStack.empty()) textNodeIndexStack.pop_back();
+    if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.pop_back();
+    pendingTextNode = true;
   }
 
   void onCharData(const XML_Char* text, const int len) {
@@ -49,29 +68,29 @@ struct ForwardState : StackState {
       return;
     }
 
-    const bool atBodyLevel = bodyIdx() + 1 == static_cast<int>(stack.size());
-    if (atBodyLevel && !inBodyTextNode) {
-      inBodyTextNode = true;
-      bodyTextNodeCount++;
-      codepointsInBodyTextNode = 0;
+    if (pendingTextNode) {
+      if (!textNodeIndexStack.empty()) textNodeIndexStack.back()++;
+      if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.back() = 0;
+      pendingTextNode = false;
     }
 
+    const size_t cpCount = countUtf8Codepoints(text, len);
+
     if (isWhitespaceOnly(text, len)) {
-      if (atBodyLevel) {
-        codepointsInBodyTextNode += countUtf8Codepoints(text, len);
-      }
+      if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.back() += cpCount;
       return;
     }
 
     const size_t visible = countVisibleBytes(text, len);
     if (totalTextBytes + visible >= targetOffset) {
-      if (atBodyLevel && bodyTextNodeCount > 0) {
-        // KOReader/crengine text-point semantics use codepoint offsets.
-        const size_t targetVisibleByteInChunk = targetOffset - totalTextBytes;
-        const size_t cpInChunk = codepointAtVisibleByte(text, len, targetVisibleByteInChunk);
-        const size_t charOff = codepointsInBodyTextNode + cpInChunk;
-        result =
-            currentXPath(spineIndex) + "/text()[" + std::to_string(bodyTextNodeCount) + "]." + std::to_string(charOff);
+      const int textNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
+      const size_t cpsInNode = codepointsInTextNodeStack.empty() ? 0 : codepointsInTextNodeStack.back();
+      // KOReader/crengine text-point semantics use codepoint offsets.
+      const size_t targetVisibleByteInChunk = targetOffset - totalTextBytes;
+      const size_t cpInChunk = codepointAtVisibleByte(text, len, targetVisibleByteInChunk);
+      const size_t charOff = cpsInNode + cpInChunk;
+      if (textNode > 0) {
+        result = currentXPath(spineIndex) + "/text()[" + std::to_string(textNode) + "]." + std::to_string(charOff);
       } else {
         result = currentXPath(spineIndex);
       }
@@ -83,9 +102,7 @@ struct ForwardState : StackState {
     }
 
     totalTextBytes += visible;
-    if (atBodyLevel) {
-      codepointsInBodyTextNode += countUtf8Codepoints(text, len);
-    }
+    if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.back() += cpCount;
   }
 };
 

@@ -925,6 +925,8 @@ void EpubReaderActivity::applyPendingSyncSession() {
   int restorePage = sync.page;
   pendingParagraphLookup = false;
   pendingParagraphIndex = 0;
+  pendingListItemLookup = false;
+  pendingListItemIndex = 0;
 
   if (restoreSpineIndex < 0 || restoreSpineIndex >= epub->getSpineItemsCount()) {
     LOG_ERR("ERS", "Invalid sync restore spine index %d, resetting to 0", restoreSpineIndex);
@@ -932,6 +934,8 @@ void EpubReaderActivity::applyPendingSyncSession() {
     restorePage = 0;
     pendingParagraphLookup = false;
     pendingParagraphIndex = 0;
+    pendingListItemLookup = false;
+    pendingListItemIndex = 0;
   }
 
   if (sync.outcome == KOReaderSyncOutcomeState::APPLIED_REMOTE) {
@@ -939,8 +943,11 @@ void EpubReaderActivity::applyPendingSyncSession() {
     restorePage = sync.resultPage;
     pendingParagraphLookup = sync.resultHasParagraphIndex;
     pendingParagraphIndex = sync.resultParagraphIndex;
-    LOG_DBG("ERS", "Applied synced remote position: spine=%d page=%d paragraph=%u hasParagraph=%s", restoreSpineIndex,
-            restorePage, pendingParagraphIndex, pendingParagraphLookup ? "yes" : "no");
+    pendingListItemLookup = sync.resultHasListItemIndex;
+    pendingListItemIndex = sync.resultListItemIndex;
+    LOG_DBG("ERS", "Applied synced remote position: spine=%d page=%d paragraph=%u hasParagraph=%s liIdx=%u hasLi=%s",
+            restoreSpineIndex, restorePage, pendingParagraphIndex, pendingParagraphLookup ? "yes" : "no",
+            pendingListItemIndex, pendingListItemLookup ? "yes" : "no");
   } else {
     LOG_DBG("ERS", "Restored local pre-sync position: spine=%d page=%d", restoreSpineIndex, restorePage);
   }
@@ -1369,16 +1376,30 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       pendingAnchor.clear();
     }
 
-    // Resolve pending KOReader sync paragraph index to accurate page via Section paragraph LUT
-    if (pendingParagraphLookup) {
+    // Resolve pending KOReader sync position via Section LUTs.
+    // <li>-anchored XPaths can't be expressed in the body-child <p> LUT, so try the
+    // li LUT first when set; fall back to the paragraph LUT (which handles direct
+    // <p> children of <body>) on miss.
+    bool resolvedFromLut = false;
+    if (pendingListItemLookup) {
+      if (const auto page = section->getPageForListItemIndex(pendingListItemIndex)) {
+        section->currentPage = *page;
+        LOG_DBG("ERS", "Resolved li[%u] to page %d (was %d)", pendingListItemIndex, *page, nextPageNumber);
+        resolvedFromLut = true;
+      } else {
+        LOG_DBG("ERS", "Li index %u not found in section LUT", pendingListItemIndex);
+      }
+      pendingListItemLookup = false;
+    }
+    if (!resolvedFromLut && pendingParagraphLookup) {
       if (const auto page = section->getPageForParagraphIndex(pendingParagraphIndex)) {
         section->currentPage = *page;
         LOG_DBG("ERS", "Resolved p[%u] to page %d (was %d)", pendingParagraphIndex, *page, nextPageNumber);
       } else {
         LOG_DBG("ERS", "Paragraph LUT not available, using estimated page %d", nextPageNumber);
       }
-      pendingParagraphLookup = false;
     }
+    pendingParagraphLookup = false;
 
     // handles changes in reader settings and reset to approximate position based on cached progress
     if (cachedChapterTotalPageCount > 0) {

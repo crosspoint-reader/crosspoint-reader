@@ -40,11 +40,22 @@ struct ReverseState : StackState {
   size_t codepointsInCurrentTextNode = 0;
   int currentTextNodeCount = 0;
 
+  // Running <li> count at any depth. Mirrors xpathListItemIndex in ChapterHtmlSlimParser
+  // so the index captured at match time can be used as a key into the section's li LUT.
+  int liCount = 0;
+  // True when the deepest element of targetNorm is /li[N]. Only then is bestLiIndex
+  // meaningful — for <p>-anchored targets we use the existing paragraph index path.
+  bool targetEndsInLi = false;
+
   MatchTier bestTier = MatchTier::NONE;
   int bestDepth = -1;
   size_t bestOffset = 0;
   bool bestExact = false;
   const char* bestTierName = nullptr;
+  // Snapshot of liCount at the moment the best match was captured. The reverse
+  // mapper surfaces this so the runtime can call Section::getPageForListItemIndex()
+  // and snap a list-item XPath to the precise page on download.
+  int bestLiIndex = 0;
 
   ReverseState(const int spineIndex, const std::string& xpath) : spineIndex(spineIndex) {
     // Parse optional text-node suffix before normalizing for element matching.
@@ -91,11 +102,27 @@ struct ReverseState : StackState {
     }
     targetNorm = normalizeXPath(xpath);
     targetNoIndex = removeIndices(targetNorm);
+
+    // Detect /li[N] as the deepest segment of targetNorm. normalizeXPath has already
+    // stripped any /text() and /text()[N].M suffix and lower-cased the tag names, so
+    // a simple tail check is enough.
+    const size_t lastSlash = targetNorm.rfind('/');
+    if (lastSlash != std::string::npos) {
+      const std::string tail = targetNorm.substr(lastSlash + 1);
+      if (tail.size() >= 2 && tail.compare(0, 2, "li") == 0 && (tail.size() == 2 || tail[2] == '[')) {
+        targetEndsInLi = true;
+      }
+    }
   }
 
   void onStartElement(const XML_Char* rawName) {
     inParentTextNode = false;
     pushElement(rawName);
+    // Increment after pushElement so stack.back().tag is already lowercased and
+    // matches the parser-side counter, which also fires on startElement.
+    if (!stack.empty() && stack.back().tag == "li") {
+      liCount++;
+    }
   }
 
   void onEndElement() {
@@ -134,6 +161,7 @@ struct ReverseState : StackState {
             bestOffset = pos;
             bestExact = true;
             bestTierName = "text-node-exact";
+            bestLiIndex = liCount;
           }
         }
         codepointsInCurrentTextNode += codepoints;
@@ -191,6 +219,7 @@ struct ReverseState : StackState {
       bestOffset = totalTextBytes;
       bestExact = isExact;
       bestTierName = tierName;
+      bestLiIndex = liCount;
     }
   }
 };
@@ -198,9 +227,12 @@ struct ReverseState : StackState {
 }  // namespace
 
 bool findProgressForXPathInternal(const std::shared_ptr<Epub>& epub, const int spineIndex, const std::string& xpath,
-                                  float& outIntraSpineProgress, bool& outExactMatch) {
+                                  float& outIntraSpineProgress, bool& outExactMatch, uint16_t* outListItemIndex) {
   outIntraSpineProgress = 0.0f;
   outExactMatch = false;
+  if (outListItemIndex) {
+    *outListItemIndex = 0;
+  }
 
   if (xpath.empty()) {
     return false;
@@ -244,13 +276,23 @@ bool findProgressForXPathInternal(const std::shared_ptr<Epub>& epub, const int s
     outIntraSpineProgress = std::max(0.0f, std::min(1.0f, outIntraSpineProgress));
   }
 
+  // Only surface the li index when the target was actually <li>-anchored AND we
+  // captured a count > 0. NO_IDX fallback tiers can match the wrong <li> sibling,
+  // so restrict to tiers that imply we were inside the target element itself.
+  if (outListItemIndex && state.targetEndsInLi && state.bestLiIndex > 0 &&
+      (state.bestTier == MatchTier::EXACT || state.bestTier == MatchTier::ANCESTOR) &&
+      state.bestLiIndex <= UINT16_MAX) {
+    *outListItemIndex = static_cast<uint16_t>(state.bestLiIndex);
+  }
+
   if (state.targetTextNodeIndex > 0) {
-    LOG_DBG("KOX", "Reverse: spine=%d %s match textNode=%d char=%d offset=%zu/%zu -> progress=%.3f for '%s'",
+    LOG_DBG("KOX", "Reverse: spine=%d %s match textNode=%d char=%d offset=%zu/%zu -> progress=%.3f li=%d for '%s'",
             spineIndex, state.bestTierName, state.targetTextNodeIndex, state.targetCharOffset, state.bestOffset,
-            state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
+            state.totalTextBytes, outIntraSpineProgress, state.bestLiIndex, xpath.c_str());
   } else {
-    LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f for '%s'", spineIndex,
-            state.bestTierName, state.bestOffset, state.totalTextBytes, outIntraSpineProgress, xpath.c_str());
+    LOG_DBG("KOX", "Reverse: spine=%d %s match offset=%zu/%zu -> progress=%.3f li=%d for '%s'", spineIndex,
+            state.bestTierName, state.bestOffset, state.totalTextBytes, outIntraSpineProgress, state.bestLiIndex,
+            xpath.c_str());
   }
   return true;
 }

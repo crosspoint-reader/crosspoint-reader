@@ -52,6 +52,11 @@ struct KOReaderSyncSessionState {
   int resultPage = 0;
   uint16_t resultParagraphIndex = 0;
   bool resultHasParagraphIndex = false;
+  // Running <li> count for the matched element, used by EpubReaderActivity to snap a
+  // KOReader-supplied list-item XPath to the precise page via Section::getPageForListItemIndex.
+  // Preferred over resultParagraphIndex when the deepest target element is /li[N].
+  uint16_t resultListItemIndex = 0;
+  bool resultHasListItemIndex = false;
   // When true (auto-push-on-close), the sync activity goes to home instead of the reader on
   // completion. Without this, AUTO_PUSH would bounce back into the reader the user just left.
   bool exitToHomeAfterSync = false;
@@ -74,6 +79,8 @@ struct KOReaderSyncSessionState {
     resultPage = 0;
     resultParagraphIndex = 0;
     resultHasParagraphIndex = false;
+    resultListItemIndex = 0;
+    resultHasListItemIndex = false;
     exitToHomeAfterSync = false;
     autoPullEpubPath.clear();
   }

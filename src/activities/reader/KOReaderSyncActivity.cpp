@@ -220,6 +220,8 @@ void KOReaderSyncActivity::performFetchAndCompare() {
   remotePosition.totalPages = 0;
   remotePosition.paragraphIndex = 0;
   remotePosition.hasParagraphIndex = false;
+  remotePosition.listItemIndex = 0;
+  remotePosition.hasListItemIndex = false;
   remoteChapterLabel.clear();
 
   if (syncIntent == KOReaderSyncIntentState::PULL_REMOTE || syncIntent == KOReaderSyncIntentState::AUTO_PULL) {
@@ -249,6 +251,8 @@ void KOReaderSyncActivity::performFetchAndCompare() {
     sync.resultPage = remotePosition.pageNumber;
     sync.resultParagraphIndex = remotePosition.paragraphIndex;
     sync.resultHasParagraphIndex = remotePosition.hasParagraphIndex;
+    sync.resultListItemIndex = remotePosition.listItemIndex;
+    sync.resultHasListItemIndex = remotePosition.hasListItemIndex;
     APP_STATE.saveToFile();
 
     if (syncIntent == KOReaderSyncIntentState::AUTO_PULL) {
@@ -503,6 +507,8 @@ void KOReaderSyncActivity::resumeReader(const KOReaderSyncOutcomeState outcome, 
     sync.resultPage = appliedResult->page;
     sync.resultParagraphIndex = appliedResult->paragraphIndex;
     sync.resultHasParagraphIndex = appliedResult->hasParagraphIndex;
+    sync.resultListItemIndex = appliedResult->listItemIndex;
+    sync.resultHasListItemIndex = appliedResult->hasListItemIndex;
   } else if (outcome != KOReaderSyncOutcomeState::APPLIED_REMOTE) {
     // Only zero the result fields when not resuming an already-applied remote
     // position. The PULL_REMOTE path pre-saves the mapped result into APP_STATE
@@ -511,6 +517,8 @@ void KOReaderSyncActivity::resumeReader(const KOReaderSyncOutcomeState outcome, 
     sync.resultPage = 0;
     sync.resultParagraphIndex = 0;
     sync.resultHasParagraphIndex = false;
+    sync.resultListItemIndex = 0;
+    sync.resultHasListItemIndex = false;
   }
   // Honor exit-to-home flag set by reader-close auto-sync — bouncing back into the reader
   // the user just left would be jarring. The session state is consumed and cleared by the
@@ -792,8 +800,9 @@ void KOReaderSyncActivity::loop() {
           return;
         }
         // Wifi will be turned off in onExit()
-        const SyncResult result = {remotePosition.spineIndex, remotePosition.pageNumber, remotePosition.paragraphIndex,
-                                   remotePosition.hasParagraphIndex};
+        const SyncResult result = {remotePosition.spineIndex,     remotePosition.pageNumber,
+                                   remotePosition.paragraphIndex, remotePosition.hasParagraphIndex,
+                                   remotePosition.listItemIndex,  remotePosition.hasListItemIndex};
         resumeReader(KOReaderSyncOutcomeState::APPLIED_REMOTE, &result);
       } else if (selectedOption == 1) {
         // Upload local progress

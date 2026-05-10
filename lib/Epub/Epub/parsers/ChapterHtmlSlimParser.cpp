@@ -250,7 +250,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 // Callers must ensure currentPage is non-null and carries content; the helper resets
 // currentPage to a fresh Page and zeroes currentPageNextY so the caller can keep building.
 void ChapterHtmlSlimParser::emitPage(uint32_t xhtmlByteOffset) {
-  paragraphLutPerPage.push_back({xhtmlByteOffset, xpathParagraphIndex});
+  paragraphLutPerPage.push_back({xhtmlByteOffset, xpathParagraphIndex, xpathListItemIndex});
   completePageFn(std::move(currentPage));
   completedPageCount++;
   currentPage.reset(new Page());
@@ -812,6 +812,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (strcmp(name, "p") == 0) {
       self->xpathParagraphIndex++;
     }
+  }
+
+  // <li> can appear nested inside <ul>/<ol> at any depth, so count it globally —
+  // not at body-child level. The running count must match what the runtime reverse
+  // mapper sees so getPageForListItemIndex can snap a KOReader li XPath to a page.
+  if (self->xpathBodyDepth >= 0 && strcmp(name, "li") == 0) {
+    self->xpathListItemIndex++;
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {

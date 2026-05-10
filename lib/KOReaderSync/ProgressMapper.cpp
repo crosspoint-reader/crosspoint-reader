@@ -48,10 +48,17 @@ bool resolveFromPercentage(const std::shared_ptr<Epub>& epub, const float percen
 KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
   KOReaderPosition result;
 
-  // Calculate page progress within current spine item
+  // Calculate page progress within current spine item.
+  // Page numbers are 0-based and totalPages is 1-based, so the last page is
+  // (totalPages - 1). Dividing by (totalPages - 1) maps page 0 to intra=0 and the
+  // last page to intra=1, which is what KOReader expects when round-tripping.
+  // Dividing by totalPages would peg the last page short of 100%, so a user who
+  // finished the chapter would only show ~94% on KOReader.
   float intraSpineProgress = 0.0f;
-  if (pos.totalPages > 0) {
-    intraSpineProgress = static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages);
+  if (pos.totalPages > 1) {
+    intraSpineProgress = static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1);
+  } else if (pos.totalPages == 1) {
+    intraSpineProgress = 0.0f;
   }
 
   // Calculate overall book progress (0.0-1.0)
@@ -98,11 +105,16 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   if (ChapterXPathIndexer::tryExtractSpineIndexFromXPath(koPos.xpath, xpathSpineIndex) && xpathSpineIndex >= 0 &&
       xpathSpineIndex < spineCount) {
     float intraFromXPath = 0.0f;
-    if (ChapterXPathIndexer::findProgressForXPath(epub, xpathSpineIndex, koPos.xpath, intraFromXPath,
-                                                  xpathExactMatch)) {
+    uint16_t liIndexFromXPath = 0;
+    if (ChapterXPathIndexer::findProgressForXPath(epub, xpathSpineIndex, koPos.xpath, intraFromXPath, xpathExactMatch,
+                                                  &liIndexFromXPath)) {
       result.spineIndex = xpathSpineIndex;
       resolvedIntraSpineProgress = intraFromXPath;
       usedXPathMapping = true;
+      if (liIndexFromXPath > 0) {
+        result.listItemIndex = liIndexFromXPath;
+        result.hasListItemIndex = true;
+      }
 
       // KOReader's text-node indexing can differ across renderers/parsers in some
       // XHTML shapes. When an XPath-resolved position disagrees materially with
@@ -177,15 +189,23 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
     if (estimatedTotalPages > 0 && resolvedIntraSpineProgress >= 0.0f) {
       const float clampedProgress = std::max(0.0f, std::min(1.0f, resolvedIntraSpineProgress));
-      result.pageNumber = static_cast<int>(clampedProgress * static_cast<float>(estimatedTotalPages));
+      // Symmetric inverse of the toKOReader formula: intra=1.0 should land on the
+      // last page (totalPages - 1), intra=0 on page 0. Round-to-nearest avoids
+      // truncating mid-page progress down to the previous page.
+      if (estimatedTotalPages > 1) {
+        result.pageNumber = static_cast<int>(clampedProgress * static_cast<float>(estimatedTotalPages - 1) + 0.5f);
+      } else {
+        result.pageNumber = 0;
+      }
       result.pageNumber = std::max(0, std::min(result.pageNumber, estimatedTotalPages - 1));
     } else if (spineSize > 0 && estimatedTotalPages > 0) {
       result.pageNumber = 0;
     }
   }
 
-  LOG_DBG("ProgressMapper", "Resolved KOReader position: spine=%d intra=%.3f hasPIdx=%s pIdx=%u", result.spineIndex,
-          resolvedIntraSpineProgress, result.hasParagraphIndex ? "yes" : "no", result.paragraphIndex);
+  LOG_DBG("ProgressMapper", "Resolved KOReader position: spine=%d intra=%.3f hasPIdx=%s pIdx=%u hasLiIdx=%s liIdx=%u",
+          result.spineIndex, resolvedIntraSpineProgress, result.hasParagraphIndex ? "yes" : "no", result.paragraphIndex,
+          result.hasListItemIndex ? "yes" : "no", result.listItemIndex);
 
   const char* mappingSource =
       usedXPathMapping ? (usedPercentageReconcile ? "xpath+percentage" : "xpath") : "percentage";

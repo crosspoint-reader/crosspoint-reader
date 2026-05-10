@@ -122,6 +122,11 @@ class EpubReaderActivity final : public Activity {
   // Pending paragraph index from KOReader sync (resolved to page via Section paragraph LUT)
   bool pendingParagraphLookup = false;
   uint16_t pendingParagraphIndex = 0;
+  // Pending list-item index for KOReader-supplied XPaths whose deepest element is /li[N].
+  // Preferred over pendingParagraphLookup when set because <li>-anchored XPaths are not
+  // representable in the body-child <p> LUT.
+  bool pendingListItemLookup = false;
+  uint16_t pendingListItemIndex = 0;
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   ReaderUtils::InputDrainGuard inputDrainGuard;

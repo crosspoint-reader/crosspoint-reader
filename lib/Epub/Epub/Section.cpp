@@ -12,7 +12,7 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 25;
+constexpr uint8_t SECTION_FILE_VERSION = 26;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) +   // SECTION_FILE_VERSION
                                  sizeof(int) +       // fontId
                                  sizeof(float) +     // lineCompression
@@ -29,8 +29,11 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) +   // SECTION_FILE_VERSION
                                  sizeof(uint32_t) +  // anchor map offset
                                  sizeof(uint32_t);   // paragraph LUT offset
 
-// On-disk paragraph LUT entry: u32 xhtmlByteOffset + u16 paragraphIndex.
-constexpr uint32_t PARAGRAPH_LUT_ENTRY_SIZE = sizeof(uint32_t) + sizeof(uint16_t);
+// On-disk paragraph LUT entry: u32 xhtmlByteOffset + u16 paragraphIndex + u16 listItemIndex.
+// listItemIndex is the running <li> count at page-break time; together with
+// paragraphIndex it lets KOReader-supplied <p>- and <li>-anchored XPaths snap to
+// the exact page on download.
+constexpr uint32_t PARAGRAPH_LUT_ENTRY_SIZE = sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t);
 inline uint32_t paragraphLutEntryOffset(uint32_t lutStart, uint16_t page) {
   return lutStart + page * PARAGRAPH_LUT_ENTRY_SIZE;
 }
@@ -471,6 +474,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   for (const auto& entry : paragraphLut) {
     serialization::writePod(file, entry.xhtmlByteOffset);
     serialization::writePod(file, entry.paragraphIndex);
+    serialization::writePod(file, entry.listItemIndex);
   }
 
   // Patch header with final pageCount, lutOffset, anchorMapOffset, and paragraphLutOffset
@@ -801,6 +805,42 @@ std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) c
 
   f.close();
   return pIdx;
+}
+
+std::optional<uint16_t> Section::getPageForListItemIndex(const uint16_t liIndex) const {
+  if (liIndex == 0) {
+    return std::nullopt;
+  }
+
+  FsFile f;
+  uint16_t count = 0;
+  uint32_t lutStart = 0;
+  if (!readParagraphLutHeader(f, count, lutStart)) {
+    return std::nullopt;
+  }
+  const uint32_t fileSize = f.size();
+
+  // Mirror getPageForParagraphIndex: each entry stores the running li count at page-break
+  // time, so the target li first appears on the smallest i where storedLiIdx[i] >= liIndex.
+  // The listItemIndex field follows xhtmlByteOffset + paragraphIndex within each entry.
+  for (uint16_t i = 0; i < count; i++) {
+    const uint32_t entryOffset = paragraphLutEntryOffset(lutStart, i) + sizeof(uint32_t) + sizeof(uint16_t);
+    const uint64_t requiredOffset = static_cast<uint64_t>(entryOffset) + sizeof(uint16_t);
+    if (requiredOffset > fileSize) {
+      f.close();
+      return std::nullopt;
+    }
+    f.seek(entryOffset);
+    uint16_t pageLiIdx;
+    serialization::readPod(f, pageLiIdx);
+    if (pageLiIdx >= liIndex) {
+      f.close();
+      return i;
+    }
+  }
+
+  f.close();
+  return static_cast<uint16_t>(count - 1);
 }
 
 std::optional<uint32_t> Section::getXhtmlByteOffsetForPage(const uint16_t page) const {

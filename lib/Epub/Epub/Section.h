@@ -90,6 +90,12 @@ class Section {
   // Returns nullopt if the paragraph LUT is not available (old cache format).
   std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;
 
+  // Look up the page number for a running <li> index (1-based, the Nth <li> at any depth
+  // in the chapter). Used to snap KOReader-supplied list-item XPaths to a precise page
+  // the same way getPageForParagraphIndex handles <p>-anchored XPaths.
+  // Returns nullopt if the LUT is not available or the index is out of range.
+  std::optional<uint16_t> getPageForListItemIndex(uint16_t liIndex) const;
+
   // Look up the paragraph index for a given page number.
   // Returns the 1-based paragraph index of the last <p> element on or before the page.
   // Returns nullopt if the paragraph LUT is not available (old cache format).

@@ -13,6 +13,8 @@ struct CrossPointPosition {
   int totalPages;                  // Total pages in the current spine item
   uint16_t paragraphIndex = 0;     // 1-based <p> index (0 if unavailable)
   bool hasParagraphIndex = false;  // True when paragraphIndex is valid
+  uint16_t listItemIndex = 0;      // 1-based running <li> count when target XPath ends in /li[N]
+  bool hasListItemIndex = false;   // True when listItemIndex is valid
   uint32_t xhtmlSeekHint = 0;      // Byte offset hint for findXPathForParagraph (0 = no hint)
 };
 

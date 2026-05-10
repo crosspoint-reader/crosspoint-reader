@@ -108,7 +108,11 @@ class ChapterHtmlSlimParser final : public Print {
   // Stored per page in the section cache so that XPath p[N] can be resolved to a page
   // without reparsing, and current page can generate an XPath without reparsing.
   uint16_t xpathParagraphIndex = 0;  // current <p> sibling index (1-based)
-  int xpathBodyDepth = -1;           // depth of the <body> element (-1 = not yet seen)
+  // Running count of <li> elements opened anywhere in the chapter (1-based, any depth).
+  // Used by the section LUT so KOReader-supplied list-item XPaths can snap to the exact
+  // page on download, the same way <p>-anchored XPaths use xpathParagraphIndex.
+  uint16_t xpathListItemIndex = 0;
+  int xpathBodyDepth = -1;  // depth of the <body> element (-1 = not yet seen)
   // Byte offset of the most recent direct-body-child element start (any tag at xpathBodyDepth+1).
   // Recorded at the same depth condition that increments xpathParagraphIndex, so the stored
   // offset is guaranteed to land on a body-child element boundary. This keeps the XPath forward
@@ -119,6 +123,7 @@ class ChapterHtmlSlimParser final : public Print {
   struct ParagraphLutEntry {
     uint32_t xhtmlByteOffset;  // byte offset of most recent body-child element start at page break
     uint16_t paragraphIndex;   // 1-based <p> index at page completion
+    uint16_t listItemIndex;    // running <li> count at page completion (any depth)
   };
   std::vector<ParagraphLutEntry> paragraphLutPerPage;  // deep LUT: one entry per page
 

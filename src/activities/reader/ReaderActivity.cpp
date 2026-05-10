@@ -149,6 +149,8 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
     sync.resultPage = 0;
     sync.resultParagraphIndex = 0;
     sync.resultHasParagraphIndex = false;
+    sync.resultListItemIndex = 0;
+    sync.resultHasListItemIndex = false;
     sync.exitToHomeAfterSync = false;
     APP_STATE.saveToFile();
     // Drop the loaded Epub before TLS — sync activity will reload it for remote-position
