@@ -317,13 +317,19 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
     # Scale design-unit kerning values to 4.4 fixed-point pixels.
     # Expand glyph aliases: if multiple codepoints share a glyph, emit kern
     # pairs for all codepoint combinations.
+    # Filter out any SMP codepoints, since the output packing format
+    # stores codepoints as uint16_t entries.
     scale = ppem / units_per_em
     result = {}  # (leftCp, rightCp) -> 4.4 fixed-point adjust
     for (lg, rg), du in raw_kern.items():
         adjust = fp4_from_design_units(du, scale)
         if adjust != 0:
             for lcp in glyph_to_cps[lg]:
+                if lcp >= 0x10000:
+                    continue
                 for rcp in glyph_to_cps[rg]:
+                    if rcp >= 0x10000:
+                        continue
                     result[(lcp, rcp)] = adjust
     return result
 
@@ -465,11 +471,16 @@ def extract_ligatures_fonttools(font_path, codepoints):
     font.close()
 
     # Filter: only keep ligatures where all input and output codepoints are
-    # in our generated glyph set
+    # in our generated glyph set.  Skip ligature rules involving SMP
+    # input codepoints, since the on-device pair encoding is BMP-only.
     codepoints_set = set(codepoints)
     filtered = {}
     for seq, lig_cp in raw_ligatures.items():
         if lig_cp not in codepoints_set:
+            continue
+        if lig_cp >= 0x10000:
+            continue
+        if any(cp >= 0x10000 for cp in seq):
             continue
         if all(cp in codepoints_set for cp in seq):
             filtered[seq] = lig_cp
