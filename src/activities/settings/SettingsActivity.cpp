@@ -375,7 +375,6 @@ void SettingsActivity::applyCoverOption() {
   switch (coverPopupSelection) {
     case 0:  // Enabled
       SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
-      resetAllCoverDisabled();
       break;
     case 1:  // Regenerate All
       SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
@@ -384,7 +383,6 @@ void SettingsActivity::applyCoverOption() {
       break;
     case 2:  // Timeout
       SETTINGS.coverMode = CrossPointSettings::COVER_TIMEOUT;
-      resetAllCoverDisabled();
       break;
     case 3:  // Disabled
       SETTINGS.coverMode = CrossPointSettings::COVER_DISABLED;

@@ -155,14 +155,7 @@ class CrossPointSettings {
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
   // Home screen cover rendering mode
-  enum COVER_MODE {
-    COVER_ENABLED = 0,
-    COVER_TIMEOUT = 1,
-    COVER_DISABLED = 2,
-    COVER_REGENERATE_ALL = 3,
-    COVER_DELETE_ALL = 4,
-    COVER_MODE_COUNT
-  };
+  enum COVER_MODE { COVER_ENABLED = 0, COVER_TIMEOUT = 1, COVER_DISABLED = 2, COVER_MODE_COUNT };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
