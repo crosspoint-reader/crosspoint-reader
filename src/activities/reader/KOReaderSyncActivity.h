@@ -78,6 +78,12 @@ class KOReaderSyncActivity final : public Activity {
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
 
+  // Tracks whether this session activated WiFi. Set in onEnter past the credentials
+  // check; checked in onExit to decide whether to silent-reboot. Can't rely on
+  // WiFi.getMode() because performUpload() calls esp_wifi_stop() on the way out,
+  // which makes WiFi.getMode() return WIFI_MODE_NULL.
+  bool wifiActivated = false;
+
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();

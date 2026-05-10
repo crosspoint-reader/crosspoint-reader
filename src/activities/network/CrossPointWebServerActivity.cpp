@@ -251,15 +251,6 @@ void CrossPointWebServerActivity::startWebServer() {
   }
 }
 
-void CrossPointWebServerActivity::stopWebServer() {
-  if (webServer && webServer->isRunning()) {
-    LOG_DBG("WEBACT", "Stopping web server...");
-    webServer->stop();
-    LOG_DBG("WEBACT", "Web server stopped");
-  }
-  webServer.reset();
-}
-
 void CrossPointWebServerActivity::loop() {
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
