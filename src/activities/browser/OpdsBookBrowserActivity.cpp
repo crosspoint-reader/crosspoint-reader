@@ -419,7 +419,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
-  parser.onEntryParsed = [&](OpdsEntry entry) {
+  parser.onEntryParsed = [&](const OpdsEntry& entry) {
     uint32_t offset = cacheFile.position();
     entryOffsets.push_back(offset);
     writeEntryToCache(cacheFile, entry);
@@ -569,7 +569,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
         std::string baseFilename = filename;
         size_t dotPos = baseFilename.find_last_of('.');
         if (dotPos != std::string::npos) {
-          baseFilename = baseFilename.substr(0, dotPos);
+          baseFilename.resize(dotPos);
         }
 
         std::string ext = ".jpg";
