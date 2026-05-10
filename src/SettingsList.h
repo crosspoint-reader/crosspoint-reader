@@ -103,15 +103,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v = {
         // --- Display ---
-        SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
-                          {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
-                           StrId::STR_COVER_CUSTOM},
-                          "sleepScreen", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
-                          {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
-                          {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
-                          "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(
+            StrId::STR_SLEEP_SCREEN_MODE, &CrossPointSettings::sleepScreen,
+            {StrId::STR_SLEEP_MODE_LOGO, StrId::STR_SLEEP_MODE_CUSTOM, StrId::STR_SLEEP_MODE_COVER_FIT,
+             StrId::STR_SLEEP_MODE_COVER_CROP, StrId::STR_SLEEP_MODE_COVER_CUSTOM, StrId::STR_SLEEP_MODE_BLANK},
+            "sleepScreenMode", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(
+            StrId::STR_SLEEP_SCREEN_FILTER, &CrossPointSettings::sleepScreenFilter,
+            {StrId::STR_SLEEP_FILTER_NONE, StrId::STR_SLEEP_FILTER_CONTRAST, StrId::STR_SLEEP_FILTER_NEGATIVE},
+            "sleepScreenFilter", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                           {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY),
