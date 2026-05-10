@@ -60,13 +60,26 @@ void FontSelectionActivity::loop() {
     return;
   }
 
-  buttonNavigator_.onNextRelease([this] {
-    selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, static_cast<int>(fonts_.size()));
+  const int listSize = static_cast<int>(fonts_.size());
+  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
+
+  buttonNavigator_.onNextRelease([this, listSize] {
+    selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
     requestUpdate();
   });
 
-  buttonNavigator_.onPreviousRelease([this] {
-    selectedIndex_ = ButtonNavigator::previousIndex(selectedIndex_, static_cast<int>(fonts_.size()));
+  buttonNavigator_.onPreviousRelease([this, listSize] {
+    selectedIndex_ = ButtonNavigator::previousIndex(selectedIndex_, listSize);
+    requestUpdate();
+  });
+
+  buttonNavigator_.onNextContinuous([this, listSize, pageItems] {
+    selectedIndex_ = ButtonNavigator::nextPageIndex(selectedIndex_, listSize, pageItems);
+    requestUpdate();
+  });
+
+  buttonNavigator_.onPreviousContinuous([this, listSize, pageItems] {
+    selectedIndex_ = ButtonNavigator::previousPageIndex(selectedIndex_, listSize, pageItems);
     requestUpdate();
   });
 }
