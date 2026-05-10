@@ -19,6 +19,7 @@
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
+constexpr uint32_t INDEXING_HEARTBEAT_MS = 2000;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
@@ -1068,9 +1069,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     return false;
   }
 
-  // Get file size to decide whether to show indexing popup.
-  if (popupFn && file.size() >= MIN_SIZE_FOR_POPUP) {
-    popupFn();
+  const size_t fileSize = file.size();
+  // Get file size to decide whether to show indexing progress.
+  if (progressFn && fileSize >= MIN_SIZE_FOR_POPUP) {
+    progressFn(0, fileSize);
   }
 
   XML_SetUserData(parser, this);
@@ -1079,6 +1081,8 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
   // Compute the time taken to parse and build pages
   const uint32_t chapterStartTime = millis();
+  uint32_t lastHeartbeat = chapterStartTime;
+  size_t bytesRead = 0;
   do {
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
@@ -1089,6 +1093,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     }
 
     const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
+    bytesRead += len;
 
     if (len == 0 && file.available() > 0) {
       LOG_ERR("EHP", "File read error");
@@ -1105,6 +1110,15 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       destroyXmlParser(parser);
       file.close();
       return false;
+    }
+
+    const uint32_t now = millis();
+    if (now - lastHeartbeat >= INDEXING_HEARTBEAT_MS) {
+      lastHeartbeat = now;
+      if (progressFn && fileSize >= MIN_SIZE_FOR_POPUP) {
+        progressFn(bytesRead, fileSize);
+      }
+      delay(1);
     }
   } while (!done);
   LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);

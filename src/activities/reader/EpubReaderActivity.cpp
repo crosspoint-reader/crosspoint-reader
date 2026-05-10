@@ -612,14 +612,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                   SETTINGS.imageRendering)) {
       LOG_DBG("ERS", "Cache not found, building...");
 
-      GUI.drawPopup(renderer, tr(STR_INDEXING));
+      Rect popupRect = GUI.drawPopup(renderer, tr(STR_INDEXING));
+      GUI.fillPopupProgress(renderer, popupRect, 0);
 
-      const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
+      const auto progressFn = [this, popupRect](const size_t bytesRead, const size_t fileSize) {
+        if (fileSize == 0) {
+          return;
+        }
+        const int progress =
+            clampPercent(static_cast<int>((static_cast<float>(bytesRead) * 100.0f) / static_cast<float>(fileSize)));
+        GUI.fillPopupProgress(renderer, popupRect, progress);
+      };
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                       viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                      SETTINGS.imageRendering, popupFn)) {
+                                      SETTINGS.imageRendering, progressFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
         showPendingSyncSaveError();

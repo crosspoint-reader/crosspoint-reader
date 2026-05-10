@@ -148,7 +148,7 @@ bool Section::clearCache() const {
 bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                 const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                                const uint8_t imageRendering, const std::function<void()>& popupFn) {
+                                const uint8_t imageRendering, const std::function<void(size_t, size_t)>& progressFn) {
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
 
@@ -223,7 +223,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
       },
-      embeddedStyle, contentBase, imageBasePath, imageRendering, popupFn, cssParser);
+      embeddedStyle, contentBase, imageBasePath, imageRendering, progressFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   success = visitor.parseAndBuildPages();
 
