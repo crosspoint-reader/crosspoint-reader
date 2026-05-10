@@ -846,7 +846,8 @@ if compress:
             raise ValueError(
                 f"Glyph {i} (code point U+{props.code_point:04X}) byte-aligned size "
                 f"{glyph_aligned_size} exceeds GROUP_MAX_UNCOMPRESSED_BYTES="
-                f"{GROUP_MAX_UNCOMPRESSED_BYTES}; bump the cap or split the glyph."
+                f"{GROUP_MAX_UNCOMPRESSED_BYTES}. Consider: (1) increasing GROUP_MAX_UNCOMPRESSED_BYTES, "
+                f"(2) reducing font size, or (3) excluding this codepoint."  
             )
         size_overflow = group_uncompressed + glyph_aligned_size > GROUP_MAX_UNCOMPRESSED_BYTES
 
