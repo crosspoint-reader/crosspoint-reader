@@ -6,6 +6,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <esp_rom_crc.h>
 
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"
@@ -123,6 +124,14 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       ManifestFile file;
       file.name = fileObj["name"] | "";
       file.size = fileObj["size"] | 0;
+
+      if (!fileObj["crc32"].is<uint32_t>()) {
+        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
+        errorMessage_ = "Invalid font manifest";
+        return false;
+      }
+      file.crc32 = fileObj["crc32"].as<uint32_t>();
+
       family.totalSize += file.size;
       family.files.push_back(std::move(file));
     }
@@ -181,6 +190,24 @@ size_t FontDownloadActivity::totalUninstalledSize() const {
   return total;
 }
 
+// Standard CRC32 matching zlib/Python zlib.crc32().
+bool FontDownloadActivity::computeFileCrc32(const char* path, uint32_t& outCrc) {
+  FsFile f;
+  if (!Storage.openFileForRead("FONT", path, f)) {
+    return false;
+  }
+  constexpr size_t BUF_SIZE = 128;
+  uint8_t buf[BUF_SIZE];
+  uint32_t crc = 0;
+  while (f.available()) {
+    const int n = f.read(buf, BUF_SIZE);
+    if (n <= 0) break;
+    crc = esp_rom_crc32_le(crc, buf, static_cast<uint32_t>(n));
+  }
+  outCrc = crc;
+  return true;
+}
+
 void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   {
     RenderLock lock(*this);
@@ -232,6 +259,29 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       errorMessage_ = "Download failed: " + file.name;
       return;
     }
+
+    uint32_t actualCrc = 0;
+    if (!computeFileCrc32(destPath, actualCrc)) {
+      LOG_ERR("FONT", "Failed to open file for CRC check: %s", destPath);
+      fontInstaller_.deleteFamily(family.name.c_str());
+      family.installed = false;
+      family.hasUpdate = false;
+      RenderLock lock(*this);
+      state_ = ERROR;
+      errorMessage_ = "Failed to compute checksum: " + file.name;
+      return;
+    }
+    if (actualCrc != file.crc32) {
+      LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name.c_str(), actualCrc, file.crc32);
+      fontInstaller_.deleteFamily(family.name.c_str());
+      family.installed = false;
+      family.hasUpdate = false;
+      RenderLock lock(*this);
+      state_ = ERROR;
+      errorMessage_ = "Checksum mismatch: " + file.name;
+      return;
+    }
+    LOG_DBG("FONT", "Downloaded %s (size=%zu crc32=%08x)", file.name.c_str(), file.size, actualCrc);
 
     if (!fontInstaller_.validateCpfontFile(destPath)) {
       LOG_ERR("FONT", "Invalid .cpfont: %s", destPath);
@@ -416,10 +466,6 @@ void FontDownloadActivity::render(RenderLock&&) {
         renderer,
         Rect{metrics.contentSidePadding, barY, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
         static_cast<int>(progress * 100), 100);
-
-    int percentY = barY + metrics.progressBarHeight + metrics.verticalSpacing;
-    renderer.drawCenteredText(UI_10_FONT_ID, percentY,
-                              (std::to_string(static_cast<int>(progress * 100)) + "%").c_str());
   } else if (state_ == COMPLETE) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_FONT_INSTALLED), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");

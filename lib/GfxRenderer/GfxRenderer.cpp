@@ -10,6 +10,35 @@
 
 #include "FontCacheManager.h"
 
+namespace {
+
+const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
+
+/**
+ * Resolves the requested style to the best available style in the given SD card font.
+ * Falls back gracefully when the font lacks the requested variant.
+ */
+uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
+  // Indexed by styleBits (0=REGULAR, 1=BOLD, 2=ITALIC, 3=BOLD_ITALIC)
+  static const uint8_t kFallbacks[4][4] = {
+      // REGULAR: REGULAR → BOLD → ITALIC → BOLD_ITALIC
+      {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::ITALIC, EpdFontFamily::BOLD_ITALIC},
+      // BOLD: BOLD → BOLD_ITALIC → REGULAR → ITALIC
+      {EpdFontFamily::BOLD, EpdFontFamily::BOLD_ITALIC, EpdFontFamily::REGULAR, EpdFontFamily::ITALIC},
+      // ITALIC: ITALIC → REGULAR → BOLD → BOLD_ITALIC  (REGULAR before BOLD!)
+      {EpdFontFamily::ITALIC, EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::BOLD_ITALIC},
+      // BOLD_ITALIC: BOLD_ITALIC → BOLD → ITALIC → REGULAR
+      {EpdFontFamily::BOLD_ITALIC, EpdFontFamily::BOLD, EpdFontFamily::ITALIC, EpdFontFamily::REGULAR},
+  };
+
+  const uint8_t styleBits = static_cast<uint8_t>(style) & 0x03;
+  for (uint8_t candidate : kFallbacks[styleBits]) {
+    if (font.hasStyle(candidate)) return candidate;
+  }
+  return EpdFontFamily::REGULAR;  // no-variant-at-all safety net
+}
+}  // namespace
+
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
   if (fontData->groups != nullptr) {
     auto* fd = fontCacheManager_ ? fontCacheManager_->getDecompressor() : nullptr;
@@ -1074,7 +1103,8 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   // Advance table fast-path for SD card fonts during layout
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    return fp4::toPixel(sdIt->second->getAdvance(' ', static_cast<uint8_t>(style)));
+    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
+    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -1094,7 +1124,8 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   // so we return just the space advance without kerning.
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    return fp4::toPixel(sdIt->second->getAdvance(' ', static_cast<uint8_t>(style)));
+    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
+    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -1124,7 +1155,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     int32_t widthFP = 0;
-    const uint8_t styleIdx = static_cast<uint8_t>(style);
+    const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
       widthFP += sdIt->second->getAdvance(cp, styleIdx);
     }
