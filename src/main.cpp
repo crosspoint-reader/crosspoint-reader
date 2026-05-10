@@ -132,6 +132,12 @@ void enterDeepSleep() {
   // powered during deep sleep for LP timer preservation.
   const bool keepLpAlive = SETTINGS.useClock && !gpio.deviceIsX3();
   HalClock::saveBeforeSleep(keepLpAlive);
+  // If sleeping from a running reader the book loaded successfully, so the boot-loop
+  // guard count is no longer needed. Reset it now because onExit() is never called
+  // on the reader activity during a sleep transition (only queued as a pending action).
+  if (APP_STATE.lastSleepFromReader) {
+    APP_STATE.readerActivityLoadCount = 0;
+  }
   APP_STATE.saveToFile();
 
   activityManager.goToSleep();
