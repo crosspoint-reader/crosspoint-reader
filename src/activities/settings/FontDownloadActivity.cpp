@@ -11,6 +11,7 @@
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
@@ -106,6 +107,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
   baseUrl_ = doc["baseUrl"] | "";
   families_.clear();
+  fontInstaller_.refreshRegistry();
 
   JsonArray familiesArr = doc["families"].as<JsonArray>();
   families_.reserve(familiesArr.size());
@@ -304,6 +306,55 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   }
 }
 
+void FontDownloadActivity::promptDeleteSelectedFamily() {
+  pendingDeleteFamilyIndex_ = familyIndexFromList(selectedIndex_);
+  if (pendingDeleteFamilyIndex_ < 0 || pendingDeleteFamilyIndex_ >= static_cast<int>(families_.size())) {
+    pendingDeleteFamilyIndex_ = -1;
+    return;
+  }
+
+  std::string heading = tr(STR_DELETE);
+  const auto& family = families_[pendingDeleteFamilyIndex_];
+  std::string body = family.name;
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, body),
+                         [this](const ActivityResult& result) { onDeleteConfirmationResult(result); });
+}
+
+void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& result) {
+  if (result.isCancelled) {
+    pendingDeleteFamilyIndex_ = -1;
+    requestUpdate();
+    return;
+  }
+
+  if (pendingDeleteFamilyIndex_ < 0 || pendingDeleteFamilyIndex_ >= static_cast<int>(families_.size())) {
+    pendingDeleteFamilyIndex_ = -1;
+    requestUpdate();
+    return;
+  }
+
+  auto& family = families_[pendingDeleteFamilyIndex_];
+  pendingDeleteFamilyIndex_ = -1;
+
+  if (fontInstaller_.deleteFamily(family.name.c_str()) != FontInstaller::Error::OK) {
+    RenderLock lock(*this);
+    state_ = ERROR;
+    errorMessage_ = "Failed to delete font";
+  } else {
+    fontInstaller_.refreshRegistry();
+    family.installed = false;
+    family.hasUpdate = false;
+  }
+
+  requestUpdate();
+}
+
+bool FontDownloadActivity::isSelectedFamilyDeletable() const {
+  if (selectedIndex_ <= 0 || selectedIndex_ >= listItemCount()) return false;
+  const auto& family = families_[familyIndexFromList(selectedIndex_)];
+  return family.installed && !family.hasUpdate;
+}
+
 // --- Input handling ---
 
 void FontDownloadActivity::loop() {
@@ -341,9 +392,12 @@ void FontDownloadActivity::loop() {
         if (isDownloadAllSelected()) {
           downloadAll();
         } else {
-          const auto& family = families_[familyIndexFromList(selectedIndex_)];
+          auto& family = families_[familyIndexFromList(selectedIndex_)];
           if (!family.installed || family.hasUpdate) {
-            downloadFamily(families_[familyIndexFromList(selectedIndex_)]);
+            downloadFamily(family);
+          } else {
+            promptDeleteSelectedFamily();
+            return;
           }
         }
         requestUpdateAndWait();
@@ -446,7 +500,9 @@ void FontDownloadActivity::render(RenderLock&&) {
             return f.installed && !f.hasUpdate;
           });
 
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DOWNLOAD), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+      const auto labels =
+          mappedInput.mapLabels(tr(STR_BACK), isSelectedFamilyDeletable() ? tr(STR_DELETE) : tr(STR_DOWNLOAD),
+                                tr(STR_DIR_UP), tr(STR_DIR_DOWN));
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else if (state_ == DOWNLOADING) {
