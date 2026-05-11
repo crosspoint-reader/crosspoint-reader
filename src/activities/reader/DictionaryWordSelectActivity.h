@@ -39,6 +39,16 @@ class DictionaryWordSelectActivity final : public Activity {
   WordSelectNavigator navigator;
   DictionaryLookupController controller;
 
+  // Differential repaint state. The first render in a session always goes through
+  // the full path (page->render + snapshot setup). After that, cursor moves use the
+  // differential path: restore previous highlight pixels, snapshot new region, draw
+  // new highlight, push only the dirty rect to the panel. State is reset to FullPage
+  // whenever the framebuffer is disturbed by something other than the highlight
+  // (controller overlay, multi-select, hyphenated wrap).
+  enum class RenderMode { FullPage, Differential };
+  RenderMode nextRenderMode_ = RenderMode::FullPage;
+  int prevHighlightIdx_ = -1;
+
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
   void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows,

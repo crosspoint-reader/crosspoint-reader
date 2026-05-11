@@ -66,6 +66,27 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
+bool HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, RefreshMode mode,
+                               bool turnOffScreen) {
+  if (w == 0 || h == 0) return true;
+
+  // If the region covers more than ~75% of the panel, full refresh is no slower
+  // and avoids the windowed-update protocol overhead. The exact threshold is a
+  // judgment call, not a measured optimum.
+  const uint32_t regionPx = static_cast<uint32_t>(w) * h;
+  const uint32_t fullPx   = static_cast<uint32_t>(getDisplayWidth()) * getDisplayHeight();
+  if (regionPx * 4 >= fullPx * 3) {
+    if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+      einkDisplay.requestResync(1);
+    }
+    einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
+    return true;
+  }
+
+  einkDisplay.displayWindow(x, y, w, h, turnOffScreen);
+  return true;
+}
+
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }

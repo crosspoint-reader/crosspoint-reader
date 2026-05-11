@@ -957,6 +957,70 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   display.displayBuffer(refreshMode, fadingFix);
 }
 
+size_t GfxRenderer::readFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                          uint8_t* dst, size_t dstCapacity) const {
+  if (dst == nullptr || w == 0 || h == 0) return 0;
+  if (x + w > panelWidth || y + h > panelHeight) return 0;
+
+  const size_t dstRowBytes = (static_cast<size_t>(w) + 7) / 8;
+  const size_t needed      = dstRowBytes * h;
+  if (needed > dstCapacity) return 0;
+
+  for (uint16_t row = 0; row < h; ++row) {
+    const uint8_t* srcRow = frameBuffer + (static_cast<uint32_t>(y + row) * panelWidthBytes);
+    uint8_t* dstRow       = dst + (static_cast<size_t>(row) * dstRowBytes);
+
+    // Copy w bits starting at source bit (x % 8) of byte (x / 8) into dst,
+    // left-aligned at dst bit 0 (MSB). Walk bit by bit; the region is small
+    // (typical word ~150 px wide) so the simpler version is preferred over
+    // a byte-aligned fast path.
+    for (uint16_t col = 0; col < w; ++col) {
+      const uint16_t srcX    = x + col;
+      const uint8_t  srcByte = srcRow[srcX / 8];
+      const uint8_t  srcBit  = (srcByte >> (7 - (srcX & 7))) & 0x1;
+      const uint8_t  dstMask = static_cast<uint8_t>(1u << (7 - (col & 7)));
+      uint8_t&       dstByte = dstRow[col / 8];
+      if (srcBit) {
+        dstByte |= dstMask;
+      } else {
+        dstByte &= static_cast<uint8_t>(~dstMask);
+      }
+    }
+  }
+  return needed;
+}
+
+void GfxRenderer::writeFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                         const uint8_t* src) {
+  if (src == nullptr || w == 0 || h == 0) return;
+  if (x + w > panelWidth || y + h > panelHeight) return;
+
+  const size_t srcRowBytes = (static_cast<size_t>(w) + 7) / 8;
+
+  for (uint16_t row = 0; row < h; ++row) {
+    const uint8_t* srcRow = src + (static_cast<size_t>(row) * srcRowBytes);
+    uint8_t* dstRow       = frameBuffer + (static_cast<uint32_t>(y + row) * panelWidthBytes);
+
+    for (uint16_t col = 0; col < w; ++col) {
+      const uint16_t dstX    = x + col;
+      const uint8_t  srcMask = static_cast<uint8_t>(1u << (7 - (col & 7)));
+      const uint8_t  srcBit  = (srcRow[col / 8] & srcMask) ? 1u : 0u;
+      const uint8_t  dstMask = static_cast<uint8_t>(1u << (7 - (dstX & 7)));
+      uint8_t&       dstByte = dstRow[dstX / 8];
+      if (srcBit) {
+        dstByte |= dstMask;
+      } else {
+        dstByte &= static_cast<uint8_t>(~dstMask);
+      }
+    }
+  }
+}
+
+bool GfxRenderer::displayBufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                      HalDisplay::RefreshMode mode) const {
+  return display.displayWindow(x, y, w, h, mode, fadingFix);
+}
+
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
   if (!text || maxWidth <= 0) return "";

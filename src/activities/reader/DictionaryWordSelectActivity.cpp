@@ -268,16 +268,56 @@ void DictionaryWordSelectActivity::loop() {
 }
 
 void DictionaryWordSelectActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-  if (controller.render()) return;
+  const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
+  const int currIdx = navigator.getCurrentFlatIndex();
 
-  // Render the page content
+  // Differential fast path. Only valid when:
+  //   - we set it up on the previous frame (RenderMode::Differential),
+  //   - the controller has nothing pending to draw,
+  //   - we have a current selection.
+  if (nextRenderMode_ == RenderMode::Differential && !controller.isActive() && currIdx >= 0) {
+    auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
+    if (dirty.has_value()) {
+      const uint16_t dx = static_cast<uint16_t>(std::max(dirty->x, 0));
+      const uint16_t dy = static_cast<uint16_t>(std::max(dirty->y, 0));
+      const uint16_t dw = static_cast<uint16_t>(std::max(dirty->width, 0));
+      const uint16_t dh = static_cast<uint16_t>(std::max(dirty->height, 0));
+      renderer.displayBufferRegion(dx, dy, dw, dh, HalDisplay::FAST_REFRESH);
+      prevHighlightIdx_ = currIdx;
+      return;
+    }
+    // Fallback (multi-select / hyphenated / oversize) — fall through to full repaint.
+  }
+
+  // Full repaint path.
+  renderer.clearScreen();
+  if (controller.render()) {
+    // Controller drew an overlay; framebuffer state is unknown.
+    nextRenderMode_ = RenderMode::FullPage;
+    prevHighlightIdx_ = -1;
+    return;
+  }
+
   page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
 
-  const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
-  navigator.renderHighlight(renderer, lineHeight);
+  // Set up snapshot AND draw the highlight via the differential entry point with
+  // prevWordIdx = -1 (no previous highlight to wipe). This both draws the highlight
+  // for this frame and primes snapshot_ so the next frame can run the fast path.
+  // If the navigator declines (multi-select, hyphenated, oversize), fall back to
+  // the multi-word renderHighlight and stay on the full path next frame.
+  bool snapshotPrimed = false;
+  if (currIdx >= 0) {
+    auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
+    snapshotPrimed = setup.has_value();
+  }
+  if (!snapshotPrimed) {
+    navigator.renderHighlight(renderer, lineHeight);
+  }
 
   const auto labels = mappedInput.mapLabels("", "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+  prevHighlightIdx_ = currIdx;
+  nextRenderMode_ = snapshotPrimed ? RenderMode::Differential : RenderMode::FullPage;
 }

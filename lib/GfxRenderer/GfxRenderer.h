@@ -106,8 +106,24 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Copy a rectangle of the 1-bpp framebuffer into 'dst', packed MSB-first with
+  // (w + 7) / 8 bytes per row, x-aligned to 0 in 'dst'. Handles sub-byte source x
+  // alignment via shift-and-mask. Returns bytes written, or 0 if dstCapacity is
+  // insufficient or any argument is invalid.
+  size_t readFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                               uint8_t* dst, size_t dstCapacity) const;
+
+  // Copy 'src' (packed MSB-first, (w + 7) / 8 bytes per row, x-aligned to 0) back
+  // into the rectangle (x,y,w,h) of the framebuffer. 'src' must have been produced
+  // by readFramebufferRegion with the same w,h.
+  void writeFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                              const uint8_t* src);
+
+  // Push only the rectangle (x,y,w,h) to the panel. Falls back to full refresh
+  // inside HalDisplay::displayWindow if the rectangle is large enough to make the
+  // windowed protocol unhelpful. Returns true on success.
+  bool displayBufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                           HalDisplay::RefreshMode mode = HalDisplay::FAST_REFRESH) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;

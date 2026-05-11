@@ -36,6 +36,18 @@ class HalDisplay {
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
+  // Refresh only the rectangle (x,y,w,h). If the rectangle covers more than ~75% of
+  // the panel, falls back to a full displayBuffer with the requested mode (the
+  // windowed path is no faster at that point and adds protocol overhead).
+  //
+  // Note: the underlying SDK windowed call does not accept a refresh mode; the mode
+  // parameter is honored only on the >75% fallback path. For region-only refreshes,
+  // the panel uses its current waveform.
+  //
+  // Returns true on success.
+  bool displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, RefreshMode mode,
+                     bool turnOffScreen = false);
+
   // Power management
   void deepSleep();
 
