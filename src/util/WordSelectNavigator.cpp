@@ -1,6 +1,7 @@
 #include "WordSelectNavigator.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include <cstdlib>
 
@@ -318,18 +319,28 @@ std::optional<WordSelectNavigator::Rect> WordSelectNavigator::renderHighlightDif
                                                                                           int lineHeight,
                                                                                           int prevWordIdx,
                                                                                           int currWordIdx) {
+  LOG_DBG("RHDF", "enter prev=%d curr=%d snapValid=%d", prevWordIdx, currWordIdx, snapshot_.valid() ? 1 : 0);
+
   // Fallback paths.
-  if (inMultiSelectMode) return std::nullopt;
+  if (inMultiSelectMode) {
+    LOG_DBG("RHDF", "fallback: multiSelect");
+    return std::nullopt;
+  }
   const auto* curr = getWordAt(currWordIdx);
-  if (!curr) return std::nullopt;
+  if (!curr) {
+    LOG_DBG("RHDF", "fallback: invalid currIdx");
+    return std::nullopt;
+  }
   if (curr->continuationIndex >= 0) {
-    // Hyphenated wrap — two-word highlight is not yet supported by the
-    // single-snapshot fast path. Caller falls back to full repaint.
+    LOG_DBG("RHDF", "fallback: hyphenated continuation");
     return std::nullopt;
   }
 
   // Step 1: restore pixels under the previous highlight (wipe it).
-  if (snapshot_.valid()) snapshot_.restore(renderer);
+  if (snapshot_.valid()) {
+    LOG_DBG("SHOT", "restore screen(%u,%u,%u,%u)", snapshot_.x(), snapshot_.y(), snapshot_.w(), snapshot_.h());
+    snapshot_.restore(renderer);
+  }
   snapshot_.clear();
 
   // Step 2: snapshot pixels under the new highlight, clamping coordinates so we
@@ -339,14 +350,18 @@ std::optional<WordSelectNavigator::Rect> WordSelectNavigator::renderHighlightDif
   const uint16_t snapY = static_cast<uint16_t>(std::max(newRect.y, 0));
   const uint16_t snapW = static_cast<uint16_t>(std::max(newRect.width, 0));
   const uint16_t snapH = static_cast<uint16_t>(std::max(newRect.height, 0));
+  LOG_DBG("SHOT", "capture screen(%u,%u,%u,%u)", snapX, snapY, snapW, snapH);
   if (!snapshot_.capture(snapX, snapY, snapW, snapH, renderer)) {
-    // Capture failed — either too big or out of bounds. Caller falls back.
+    LOG_DBG("RHDF", "fallback: capture failed (oversize/oob)");
     return std::nullopt;
   }
+  LOG_DBG("SHOT", "capture ok");
 
   // Step 3: draw the new highlight on top of the captured pixels.
   drawSingleHighlight(renderer, lineHeight, currWordIdx);
 
   // Step 4: caller pushes the union region.
-  return computeDirtyRect(prevWordIdx, currWordIdx, lineHeight);
+  const Rect dirty = computeDirtyRect(prevWordIdx, currWordIdx, lineHeight);
+  LOG_DBG("RHDF", "ok dirty screen(%d,%d,%d,%d)", dirty.x, dirty.y, dirty.width, dirty.height);
+  return dirty;
 }

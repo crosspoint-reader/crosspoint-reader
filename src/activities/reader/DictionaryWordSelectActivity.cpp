@@ -216,12 +216,14 @@ void DictionaryWordSelectActivity::loop() {
                                    setResult(ActivityResult{});
                                    finish();
                                  } else {
+                                   forceFullRepaintOnNextRender();
                                    requestUpdate();
                                  }
                                });
         break;
       }
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
+        forceFullRepaintOnNextRender();
         requestUpdate();
         break;
       case DictionaryLookupController::LookupEvent::NotFoundDismissedDone:
@@ -229,6 +231,7 @@ void DictionaryWordSelectActivity::loop() {
         finish();
         break;
       case DictionaryLookupController::LookupEvent::Cancelled:
+        forceFullRepaintOnNextRender();
         requestUpdate();
         break;
       default:
@@ -270,6 +273,9 @@ void DictionaryWordSelectActivity::loop() {
 void DictionaryWordSelectActivity::render(RenderLock&&) {
   const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
   const int currIdx = navigator.getCurrentFlatIndex();
+  LOG_DBG("WSEL", "render mode=%s prev=%d curr=%d ctrlActive=%d",
+          nextRenderMode_ == RenderMode::Differential ? "DIFF" : "FULL", prevHighlightIdx_, currIdx,
+          controller.isActive() ? 1 : 0);
 
   // Differential fast path. Only valid when:
   //   - we set it up on the previous frame (RenderMode::Differential),
@@ -278,18 +284,22 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   if (nextRenderMode_ == RenderMode::Differential && !controller.isActive() && currIdx >= 0) {
     auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
     if (dirty.has_value()) {
-      const uint16_t dx = static_cast<uint16_t>(std::max(dirty->x, 0));
-      const uint16_t dy = static_cast<uint16_t>(std::max(dirty->y, 0));
-      const uint16_t dw = static_cast<uint16_t>(std::max(dirty->width, 0));
-      const uint16_t dh = static_cast<uint16_t>(std::max(dirty->height, 0));
-      renderer.displayBufferRegion(dx, dy, dw, dh, HalDisplay::FAST_REFRESH);
+      // Differential framebuffer modifications (snapshot restore / capture / draw) are correct,
+      // but the SDK's "EXPERIMENTAL" displayWindow path produces alternating black→white
+      // transition failures on consecutive fast partial refreshes. Use the full displayBuffer
+      // here instead — we still save the expensive page->render call, which is the bulk of the
+      // pre-optimization cost.
+      LOG_DBG("SBR", "push diff via full displayBuffer (dirty was screen %d,%d,%d,%d)", dirty->x, dirty->y,
+              dirty->width, dirty->height);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
       prevHighlightIdx_ = currIdx;
       return;
     }
-    // Fallback (multi-select / hyphenated / oversize) — fall through to full repaint.
+    LOG_DBG("WSEL", "diff returned nullopt -> full repaint");
   }
 
   // Full repaint path.
+  LOG_DBG("WSEL", "full repaint path");
   renderer.clearScreen();
   if (controller.render()) {
     // Controller drew an overlay; framebuffer state is unknown.

@@ -51,6 +51,17 @@ class DictionaryWordSelectActivity final : public Activity {
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
+  // Force the next render() to take the full-repaint path. Used after the lookup controller
+  // or a sub-activity (e.g. DictionaryDefinitionActivity) has drawn directly to the
+  // framebuffer outside our render(), making the snapshot/dirty-rect state stale. Without
+  // this reset, the differential path would restore a small region of "page bg + word text"
+  // onto a framebuffer full of unrelated content, and the next push would show that
+  // unrelated content with one word's worth of correct page state overlaid.
+  void forceFullRepaintOnNextRender() {
+    nextRenderMode_ = RenderMode::FullPage;
+    prevHighlightIdx_ = -1;
+  }
+
   void extractWords(std::vector<WordSelectNavigator::WordInfo>& words, std::vector<WordSelectNavigator::Row>& rows,
                     std::string& textPool);
   void mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
