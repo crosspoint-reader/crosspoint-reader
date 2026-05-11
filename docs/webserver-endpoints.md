@@ -226,7 +226,7 @@ curl -X POST -d 'paths=["/Books/old.epub","/OldFolder"]' http://crosspoint.local
 | `paths`   | Yes, unless `path` is provided | - | JSON array of paths to delete |
 
 **Response (200 OK):**
-```
+```text
 All items deleted successfully
 ```
 
@@ -234,7 +234,7 @@ All items deleted successfully
 
 | Status | Body                                        | Cause                              |
 | ------ | ------------------------------------------- | ---------------------------------- |
-| 400    | ``Missing `path` or `paths` argument``      | Neither parameter was provided     |
+| 400    | `Missing "path" or "paths" argument`        | Neither parameter was provided     |
 | 400    | `Provide either 'path' or 'paths', not both` | Both delete parameters were sent   |
 | 400    | `Invalid paths format`                      | `paths` was not valid JSON         |
 | 400    | `No paths provided`                         | `paths` was an empty JSON array    |
