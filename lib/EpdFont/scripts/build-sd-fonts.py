@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """Build SD card fonts from a declarative YAML config.
 
 Reads sd-fonts.yaml, downloads any missing source fonts, runs
@@ -19,13 +17,22 @@ Usage:
 
     # Generate only specific families
     python3 build-sd-fonts.py --only Literata,IBMPlexMono
+
+    # Stream child process output for debugging
+    python3 build-sd-fonts.py --verbose
+
+    # Override the per-family timeout (default: 600s)
+    python3 build-sd-fonts.py --timeout 1200
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
-import urllib.parse
+import tempfile
+import threading
+import time
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -35,8 +42,7 @@ import yaml
 SCRIPT_DIR = Path(__file__).parent
 FONTCONVERT = SCRIPT_DIR / "fontconvert_sdcard.py"
 EPDFONTS_DIR = SCRIPT_DIR.parent  # lib/EpdFont
-PRIMARY_CONFIG = SCRIPT_DIR / "sd-fonts.yaml"
-DEFAULT_CONFIG = PRIMARY_CONFIG
+DEFAULT_CONFIG = SCRIPT_DIR / "sd-fonts.yaml"
 DEFAULT_OUTPUT = SCRIPT_DIR / "output"
 DOWNLOAD_DIR = SCRIPT_DIR / "downloaded_fonts"
 INSTANCE_DIR = SCRIPT_DIR / "instanced_fonts"
@@ -81,22 +87,36 @@ def extract_static_instance(source_path: Path, axes: dict, family_name: str, sty
         old.unlink()
 
     print(f"  Extracting static instance: {family_name}/{style_name} ({axis_key})")
+    # Atomic write: save to a temp file first, then rename. A crash or save()
+    # exception would otherwise leave a corrupt `cached` file that future runs
+    # would happily reuse via the `cached.exists()` check above.
+    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".ttf", dir=cached.parent)
+    os.close(tmp_fd)
+    tmp_path = Path(tmp_name)
     # Keep separate handles for the source variable font and the static
     # instance: instantiateVariableFont with default inplace=False returns a
     # *new* TTFont, so rebinding `font` would otherwise strand the source's
     # file handle open until GC runs.
     #
-    # updateFontNames=True keeps the saved name table accurate; optimize=False
-    # skips a gvar pass that's wasted when every axis is fully pinned.
+    # updateFontNames=True   — rewrite the name table so the saved font
+    #                          reports its weight/style accurately rather
+    #                          than retaining the variable-font names.
+    # optimize=False         — skip the gvar interpolation optimisation;
+    #                          fully pinning every axis drops gvar anyway,
+    #                          so the work would be wasted.
     source_font = TTFont(str(source_path))
     try:
         font = instantiateVariableFont(source_font, axes, updateFontNames=True, optimize=False)
         try:
-            font.save(str(cached))
+            font.save(str(tmp_path))
         finally:
             font.close()
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
     finally:
         source_font.close()
+    tmp_path.replace(cached)
 
     return cached
 
@@ -113,11 +133,6 @@ def resolve_font_path(style_spec: dict, family_name: str, style_name: str) -> Pa
             raise FileNotFoundError(f"{family_name}/{style_name}: {resolved} not found")
     elif "url" in style_spec:
         url = style_spec["url"]
-        parsed = urllib.parse.urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            raise ValueError(
-                f"{family_name}/{style_name}: invalid URL scheme '{parsed.scheme or '<empty>'}'"
-            )
         # Derive a stable filename from the URL
         filename = url.rsplit("/", 1)[-1]
         dest = DOWNLOAD_DIR / family_name / filename
@@ -134,36 +149,24 @@ def resolve_font_path(style_spec: dict, family_name: str, style_name: str) -> Pa
     return resolved
 
 
-def build_family(family: dict, output_base: Path, incremental: bool = False, timeout: int = 1200) -> tuple[str, bool, str]:
+def _stream_pipe(pipe, prefix: str, dest: list[str]):
+    """Read lines from a pipe, print with prefix, and accumulate into dest."""
+    for line in pipe:
+        dest.append(line)
+        print(f"  [{prefix}] {line}", end="", flush=True)
+
+
+def build_family(
+    family: dict, output_base: Path, verbose: bool = False, timeout: int = 600
+) -> tuple[str, bool, str]:
     """Build a single font family. Returns (name, success, message)."""
     name = family["name"]
     output_dir = output_base / name
-    if output_dir.exists():
-        if incremental:
-            output_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            shutil.rmtree(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     styles = family.get("styles", {})
     intervals = family["intervals"]
-    if incremental and output_dir.exists():
-        existing_sizes = set()
-        for file_path in output_dir.glob("*.cpfont"):
-            stem = file_path.stem
-            if stem.startswith(f"{name}_"):
-                try:
-                    existing_sizes.add(int(stem.split("_")[-1]))
-                except ValueError:
-                    pass
-        sizes_list = [s for s in family["sizes"] if s not in existing_sizes]
-        if not sizes_list:
-            return name, True, ""
-        sizes = ",".join(str(s) for s in sizes_list)
-    else:
-        sizes = ",".join(str(s) for s in family["sizes"])
+    sizes = ",".join(str(s) for s in family["sizes"])
 
     # Resolve all font file paths (downloads as needed)
     try:
@@ -199,25 +202,58 @@ def build_family(family: dict, output_base: Path, incremental: bool = False, tim
         cmd.append("--force-autohint")
 
     # Run fontconvert_sdcard.py
+    start = time.monotonic()
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        if result.returncode != 0:
-            return name, False, result.stderr.strip() or f"Exit code {result.returncode}"
-        return name, True, ""
-    except subprocess.TimeoutExpired:
-        return name, False, "Timed out after 1200s"
+        if verbose:
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            stdout_lines: list[str] = []
+            stderr_lines: list[str] = []
+            t_out = threading.Thread(
+                target=_stream_pipe, args=(proc.stdout, name, stdout_lines)
+            )
+            t_err = threading.Thread(
+                target=_stream_pipe, args=(proc.stderr, f"{name}/err", stderr_lines)
+            )
+            t_out.start()
+            t_err.start()
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                elapsed = time.monotonic() - start
+                return name, False, f"Timed out after {elapsed:.0f}s"
+            finally:
+                t_out.join()
+                t_err.join()
+
+            if proc.returncode != 0:
+                err = "".join(stderr_lines).strip()
+                return name, False, err or f"Exit code {proc.returncode}"
+            return name, True, ""
+        else:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout,
+            )
+            if result.returncode != 0:
+                return name, False, result.stderr.strip() or f"Exit code {result.returncode}"
+            return name, True, ""
+    except subprocess.TimeoutExpired as e:
+        elapsed = time.monotonic() - start
+        tail = ""
+        captured = getattr(e, "stderr", None) or getattr(e, "stdout", None)
+        if captured:
+            lines = captured.strip().splitlines()
+            tail = "\n    Last output:\n" + "\n".join(f"    | {l}" for l in lines[-20:])
+        return name, False, f"Timed out after {elapsed:.0f}s{tail}"
     except Exception as e:
         return name, False, str(e)
 
 
 def generate_manifest(
-    families_config: list[dict], output_base: Path, base_url: str, manifest_path: Path,
-    config_path: Path,
+    config_path: Path, output_base: Path, base_url: str, manifest_path: Path
 ):
     """Generate fonts.json manifest from config + built output.
 
@@ -256,7 +292,6 @@ def main():
     parser.add_argument(
         "--output-dir", default=str(DEFAULT_OUTPUT), help="Output directory for .cpfont files"
     )
-    parser.add_argument("--skip", action="store_true", help="Skip font generation completely (for testing manifest generation)")
     parser.add_argument("--only", help="Comma-separated family names to build (default: all)")
     parser.add_argument("--manifest", action="store_true", help="Also generate fonts.json manifest")
     parser.add_argument("--base-url", default="", help="Base URL for manifest (required with --manifest)")
@@ -265,21 +300,18 @@ def main():
     )
     parser.add_argument(
         "--jobs", "-j", type=int, default=None,
-        help="Max parallel jobs (default: 4)"
-    )
-    parser.add_argument(
-        "--timeout", type=int, default=1200,
-        help="Timeout in seconds for each fontconvert process (default: 1200)"
+        help="Max parallel jobs (default: number of families)"
     )
     parser.add_argument("--clean", action="store_true", help="Clean output directory before building")
     parser.add_argument(
-        "--incremental", action="store_true",
-        help="Create only missing files and preserve already generated outputs"
+        "--verbose", "-v", action="store_true",
+        help="Stream child process output in real time (useful for debugging timeouts)"
+    )
+    parser.add_argument(
+        "--timeout", type=int, default=600,
+        help="Per-family timeout in seconds (default: 600)"
     )
     args = parser.parse_args()
-
-    # The assets copy is expected to be a link to PRIMARY_CONFIG.
-    # This script reads PRIMARY_CONFIG directly.
 
     if args.manifest and not args.base_url:
         parser.error("--base-url is required when using --manifest")
@@ -290,7 +322,6 @@ def main():
         print(f"ERROR: Config not found: {config_path}", file=sys.stderr)
         sys.exit(1)
 
-    output_base = Path(args.output_dir)
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
@@ -299,82 +330,73 @@ def main():
         print("ERROR: No families defined in config", file=sys.stderr)
         sys.exit(1)
 
-    failed = False
-    if not args.skip:
-        # Filter if --only specified
-        if args.only:
-            only_names = {token.strip().lower() for token in args.only.split(",") if token.strip()}
-            families = [f for f in families if f["name"].lower() in only_names]
-            missing = only_names - {f["name"].lower() for f in families}
-            if missing:
-                print(f"WARNING: families not found in config: {', '.join(sorted(missing))}", file=sys.stderr)
-            if not families:
-                print("ERROR: no matching families after --only filter", file=sys.stderr)
-                sys.exit(1)
+    # Filter if --only specified
+    if args.only:
+        only_names = set(args.only.split(","))
+        families = [f for f in families if f["name"] in only_names]
+        missing = only_names - {f["name"] for f in families}
+        if missing:
+            print(f"WARNING: families not found in config: {', '.join(missing)}", file=sys.stderr)
+        if not families:
+            print("ERROR: no matching families after --only filter", file=sys.stderr)
+            sys.exit(1)
 
-        if args.clean and args.incremental:
-            parser.error("--clean cannot be used with --incremental")
+    output_base = Path(args.output_dir)
 
-        if args.clean and output_base.exists():
-            print(f"Cleaning {output_base}...")
-            shutil.rmtree(output_base)
+    if args.clean and output_base.exists():
+        print(f"Cleaning {output_base}...")
+        shutil.rmtree(output_base)
 
-        output_base.mkdir(parents=True, exist_ok=True)
+    output_base.mkdir(parents=True, exist_ok=True)
 
-        # Download phase (sequential — avoids hammering servers)
-        print(f"\n=== Resolving {len(families)} font families ===\n")
-        for family in families:
-            for style_name, style_spec in family.get("styles", {}).items():
-                if "url" in style_spec:
-                    try:
-                        resolve_font_path(style_spec, family["name"], style_name)
-                    except Exception as e:
-                        print(f"ERROR: {e}", file=sys.stderr)
-                        sys.exit(1)
-
-        # Build phase (parallel)
-        requested_workers = 4 if args.jobs is None else max(1, args.jobs)
-        max_workers = min(requested_workers, len(families))
-        print(f"\n=== Building {len(families)} families ({max_workers} parallel jobs) ===\n")
-
-        failed = []
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(build_family, family, output_base, args.incremental, args.timeout): family["name"]
-                for family in families
-            }
-            for future in as_completed(futures):
-                name = futures[future]
-                success = False
-                message = ""
+    # Download phase (sequential — avoids hammering servers)
+    print(f"\n=== Resolving {len(families)} font families ===\n")
+    for family in families:
+        for style_name, style_spec in family.get("styles", {}).items():
+            if "url" in style_spec:
                 try:
-                    name, success, message = future.result()
+                    resolve_font_path(style_spec, family["name"], style_name)
                 except Exception as e:
-                    success = False
-                    message = str(e)
-                if success:
-                    # Count output files
-                    family_dir = output_base / name
-                    count = len(list(family_dir.glob("*.cpfont")))
-                    size = sum(f.stat().st_size for f in family_dir.glob("*.cpfont"))
-                    print(f"  OK: {name} ({count} files, {size / 1024 / 1024:.1f} MB)")
-                else:
-                    print(f"  FAILED: {name}: {message}", file=sys.stderr)
-                    failed.append(name)
+                    print(f"ERROR: {e}", file=sys.stderr)
+                    sys.exit(1)
 
-        # Summary
-        print("\n=== Summary ===\n")
-        total_files = len(list(output_base.rglob("*.cpfont")))
-        total_size = sum(f.stat().st_size for f in output_base.rglob("*.cpfont"))
-        print(f"Total: {total_files} .cpfont files ({total_size / 1024 / 1024:.1f} MB)")
+    # Build phase (parallel)
+    max_workers = args.jobs or len(families)
+    verbose = args.verbose
+    timeout = args.timeout
+    print(f"\n=== Building {len(families)} families ({max_workers} parallel jobs, timeout {timeout}s) ===\n")
 
-        if failed:
-            print(f"\nFailed families: {', '.join(failed)}", file=sys.stderr)
+    failed = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(build_family, family, output_base, verbose, timeout): family["name"]
+            for family in families
+        }
+        for future in as_completed(futures):
+            name, success, message = future.result()
+            if success:
+                # Count output files
+                family_dir = output_base / name
+                count = len(list(family_dir.glob("*.cpfont")))
+                size = sum(f.stat().st_size for f in family_dir.glob("*.cpfont"))
+                print(f"  OK: {name} ({count} files, {size / 1024 / 1024:.1f} MB)")
+            else:
+                print(f"  FAILED: {name}: {message}", file=sys.stderr)
+                failed.append(name)
+
+    # Summary
+    print("\n=== Summary ===\n")
+    total_files = len(list(output_base.rglob("*.cpfont")))
+    total_size = sum(f.stat().st_size for f in output_base.rglob("*.cpfont"))
+    print(f"Total: {total_files} .cpfont files ({total_size / 1024 / 1024:.1f} MB)")
+
+    if failed:
+        print(f"\nFailed families: {', '.join(failed)}", file=sys.stderr)
 
     # Manifest
     if args.manifest:
         manifest_path = Path(args.manifest_output) if args.manifest_output else output_base / "fonts.json"
-        generate_manifest(families, output_base, args.base_url, manifest_path, config_path)
+        generate_manifest(config_path, output_base, args.base_url, manifest_path)
 
     if failed:
         sys.exit(1)
