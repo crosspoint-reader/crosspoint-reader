@@ -2931,11 +2931,20 @@
     const convertOptions = document.getElementById('convertOptions');
     fileInput.classList.toggle('has-files', files.length > 0);
 
-    // Show/hide convert options based on file selection
-    if (files.length > 0) {
+    // Show convert options only when at least one selected file is an EPUB.
+    const hasEpub = Array.from(files).some(f => f.name.toLowerCase().endsWith('.epub'));
+    if (files.length > 0 && hasEpub) {
       convertOptions.style.display = 'block';
     } else {
-      clearImagePicker();
+      convertOptions.style.display = 'none';
+      // Clear stale checkbox state so the "Optimize & Upload" button doesn't linger
+      // when the user re-picks a non-EPUB after having ticked Optimize for an EPUB.
+      const cb = document.getElementById('convertBeforeUpload');
+      if (cb && cb.checked) {
+        cb.checked = false;
+        toggleConvertOptions();
+      }
+      if (files.length === 0) clearImagePicker();
     }
 
     if (files.length > 0) {
@@ -4178,8 +4187,6 @@ async function processImage(data, imageState = 0, imagePath = '') {
 async function convertEpubFile(file, progressCallback) {
   const startTime = Date.now();
   const originalSize = file.size;
-  let totalImageSize = 0;
-  let totalNewSize = 0;
 
   // Initialize logging
   clearLog();
@@ -4262,9 +4269,6 @@ async function convertEpubFile(file, progressCallback) {
       const imgName = path.split('/').pop();
       const origFormat = path.split('.').pop();
       logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts, meta.imageState || 0);
-
-      totalImageSize += meta.origSize;
-      totalNewSize += meta.finalSize;
 
       if (parts.length === 1 && parts[0].suffix === '') {
         const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
@@ -4506,7 +4510,7 @@ async function convertEpubFile(file, progressCallback) {
 
   // Log completion
   log('Conversion complete!', 'success', 'DONE');
-  logSummary(totalImageSize > 0 ? totalImageSize : originalSize, totalNewSize > 0 ? totalNewSize : newSize, timeElapsed);
+  logSummary(originalSize, newSize, timeElapsed);
 
   // Auto-export only if NOT in batch mode (batch mode exports at the end)
   if (!isBatchMode && exportLogCheckbox && exportLogCheckbox.checked) {
