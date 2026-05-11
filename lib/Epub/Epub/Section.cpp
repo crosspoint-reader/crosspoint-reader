@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <esp_heap_caps.h>
+#include <esp_system.h>
 
 #include <algorithm>
 
@@ -45,6 +47,20 @@ inline uint32_t paragraphLutEntryOffset(uint32_t lutStart, uint16_t page) {
 namespace {
 constexpr uint32_t FNV_PRIME = 0x01000193;         // 16777619
 constexpr uint32_t FNV_OFFSET_BASIS = 0x811C9DC5;  // 2166136261
+
+// On constrained targets, loading the CSS rules map before chapter parsing can
+// consume a large share of available heap and increase parse truncation risk.
+// Allow compile-time override for tuning.
+#ifndef SCT_EMBEDDED_STYLE_MIN_FREE_HEAP_BYTES
+#define SCT_EMBEDDED_STYLE_MIN_FREE_HEAP_BYTES (96 * 1024)
+#endif
+
+#ifndef SCT_EMBEDDED_STYLE_MIN_CONTIG_HEAP_BYTES
+#define SCT_EMBEDDED_STYLE_MIN_CONTIG_HEAP_BYTES (56 * 1024)
+#endif
+
+constexpr uint32_t EMBEDDED_STYLE_MIN_FREE_HEAP_BYTES = SCT_EMBEDDED_STYLE_MIN_FREE_HEAP_BYTES;
+constexpr uint32_t EMBEDDED_STYLE_MIN_CONTIG_HEAP_BYTES = SCT_EMBEDDED_STYLE_MIN_CONTIG_HEAP_BYTES;
 
 uint32_t fnv1a(const uint8_t* data, size_t length) {
   uint32_t hash = FNV_OFFSET_BASIS;
@@ -357,6 +373,21 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
                                 const bool bionicReadingEnabled, const uint8_t imageRendering,
                                 const std::function<void(int)>& progressFn) {
+  if (embeddedStyle) {
+    const uint32_t freeHeap = esp_get_free_heap_size();
+    const uint32_t contigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
+    if (freeHeap < EMBEDDED_STYLE_MIN_FREE_HEAP_BYTES || contigHeap < EMBEDDED_STYLE_MIN_CONTIG_HEAP_BYTES) {
+      LOG_INF("SCT",
+              "Low heap for embedded CSS (free=%lu contig=%lu, need free>=%lu contig>=%lu); "
+              "building no-CSS section cache",
+              freeHeap, contigHeap, static_cast<uint32_t>(EMBEDDED_STYLE_MIN_FREE_HEAP_BYTES),
+              static_cast<uint32_t>(EMBEDDED_STYLE_MIN_CONTIG_HEAP_BYTES));
+      return createSectionFile(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                               viewportHeight, hyphenationEnabled, false, bionicReadingEnabled, imageRendering,
+                               progressFn);
+    }
+  }
+
   uint32_t propertyHash =
       calculatePropertyHash(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
                             viewportHeight, hyphenationEnabled, embeddedStyle, bionicReadingEnabled, imageRendering);
@@ -401,6 +432,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       if (!cssParser->loadFromCache()) {
         LOG_ERR("SCT", "Failed to load CSS from cache");
       }
+      cssParser->resetResolveStats();
     }
   }
 
@@ -440,6 +472,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const bool streamOk = epub->readItemContentsToStream(localPath, visitor, 1024);
   const bool finalizeOk = visitor.finalize();
   const bool parserStreamOk = visitor.streamSucceeded();
+  if (cssParser) {
+    cssParser->logResolveStats(localPath.c_str());
+  }
   const bool parseComplete = streamOk && finalizeOk && parserStreamOk;
   bool success = parseComplete;
   const bool hasParsedPages = pageCount > 0;

@@ -2,8 +2,10 @@
 
 #include <HalStorage.h>
 
+#include <list>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -30,6 +32,16 @@
  */
 class CssParser {
  public:
+  struct ResolveStats {
+    uint32_t resolveCalls = 0;
+    uint32_t lowHeapSkips = 0;
+    uint32_t mapHits = 0;
+    uint32_t hotHits = 0;
+    uint32_t diskHits = 0;
+    uint32_t misses = 0;
+    uint32_t negativeHits = 0;
+  };
+
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
   static constexpr uint8_t CSS_CACHE_VERSION = 4;
 
@@ -68,17 +80,17 @@ class CssParser {
   /**
    * Check if any rules have been loaded
    */
-  [[nodiscard]] bool empty() const { return rulesBySelector_.empty(); }
+  [[nodiscard]] bool empty() const;
 
   /**
    * Get count of loaded rule sets
    */
-  [[nodiscard]] size_t ruleCount() const { return rulesBySelector_.size(); }
+  [[nodiscard]] size_t ruleCount() const;
 
   /**
    * Clear all loaded rules
    */
-  void clear() { rulesBySelector_.clear(); }
+  void clear();
 
   /**
    * Check if CSS rules cache file exists
@@ -103,11 +115,42 @@ class CssParser {
    */
   bool loadFromCache();
 
+  // Low-memory CSS compilation pipeline:
+  // - beginCacheCompile(): starts streaming compile mode
+  // - appendCompiledFromStream(): parses one stylesheet stream into compile staging
+  // - endCacheCompile(): finalizes cache file from staged records
+  bool beginCacheCompile();
+  bool appendCompiledFromStream(FsFile& source);
+  bool endCacheCompile();
+
+  // CSS lookup telemetry helpers for tuning memory/caching behavior on-device.
+  void resetResolveStats() const;
+  [[nodiscard]] ResolveStats getResolveStats() const;
+  void logResolveStats(const char* context) const;
+
  private:
   // Storage: maps normalized selector -> style properties
   std::unordered_map<std::string, CssStyle> rulesBySelector_;
 
   std::string cachePath;
+
+  // Disk-backed CSS dictionary index: selector -> byte offset for serialized CssStyle payload.
+  // Built from cache file once, then styles are loaded on demand into hotRuleCache_.
+  mutable bool cacheIndexLoaded_ = false;
+  mutable size_t cachedRuleCount_ = 0;
+  mutable std::unordered_map<std::string, uint32_t> cacheRuleOffsets_;
+
+  // Bounded hot cache of most recently used rules.
+  mutable std::list<std::string> hotRuleLru_;
+  mutable std::unordered_map<std::string, std::pair<CssStyle, std::list<std::string>::iterator>> hotRuleCache_;
+  mutable std::unordered_set<std::string> negativeRuleCache_;
+  mutable ResolveStats resolveStats_;
+
+  bool compileModeActive_ = false;
+  bool compileModeFailed_ = false;
+  std::string compileTempPath_;
+  FsFile compileTempFile_;
+  std::unordered_map<std::string, uint32_t> compileSelectorOffsets_;
 
   // Internal parsing helpers
   void processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style);
@@ -129,4 +172,13 @@ class CssParser {
   static void normalizedInto(const std::string& s, std::string& out);
   static std::vector<std::string> splitOnChar(const std::string& s, char delimiter);
   static std::vector<std::string> splitWhitespace(const std::string& s);
+
+  // On-demand rule loading helpers
+  bool ensureCacheIndexLoaded() const;
+  bool lookupRule(const std::string& selector, CssStyle& outStyle) const;
+  bool readRuleFromDiskAtOffset(uint32_t styleOffset, CssStyle& outStyle) const;
+  static bool readCssStylePayload(FsFile& file, CssStyle& style);
+  static void writeCssStylePayload(FsFile& file, const CssStyle& style);
+  void touchHotRule(const std::string& selector) const;
+  void cacheHotRule(const std::string& selector, const CssStyle& style) const;
 };

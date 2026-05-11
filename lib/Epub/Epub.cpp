@@ -454,6 +454,11 @@ void Epub::parseCssFiles() const {
   }
 
   // No cache yet - parse CSS files
+  if (!cssParser->beginCacheCompile()) {
+    LOG_ERR("EBP", "Failed to start CSS compile pipeline");
+    return;
+  }
+
   for (const auto& cssPath : cssFiles) {
     LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
@@ -496,16 +501,17 @@ void Epub::parseCssFiles() const {
       Storage.remove(tmpCssPath.c_str());
       continue;
     }
-    cssParser->loadFromStream(tempCssFile);
+    if (!cssParser->appendCompiledFromStream(tempCssFile)) {
+      LOG_ERR("EBP", "Failed to compile CSS file: %s", cssPath.c_str());
+    }
     tempCssFile.close();
     Storage.remove(tmpCssPath.c_str());
   }
 
-  // Save to cache for next time
-  if (!cssParser->saveToCache()) {
-    LOG_ERR("EBP", "Failed to save CSS rules to cache");
+  // Finalize compact cache for next time.
+  if (!cssParser->endCacheCompile()) {
+    LOG_ERR("EBP", "Failed to finalize CSS rules cache");
   }
-  cssParser->clear();
 
   LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
 }

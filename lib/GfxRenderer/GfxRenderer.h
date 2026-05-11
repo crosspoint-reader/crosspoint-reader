@@ -55,6 +55,9 @@ class GfxRenderer {
   uint16_t panelHeight = 0;      // set in begin()
   uint16_t panelWidthBytes = 0;  // set in begin()
   uint32_t frameBufferSize = 0;  // set in begin()
+  uint16_t bwSnapshotRowStart = 0;
+  uint16_t bwSnapshotRowEnd = 0;
+  size_t bwSnapshotSizeBytes = 0;
   size_t bwBufferChunkSize = BW_BUFFER_CHUNK_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
@@ -206,8 +209,9 @@ class GfxRenderer {
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
-  bool storeBwBuffer();    // Returns true if buffer was stored successfully
-  void restoreBwBuffer();  // Restore and free the stored buffer
+  bool storeBwBuffer();                                         // Returns true if buffer was stored successfully
+  bool storeBwBufferRect(int x, int y, int width, int height);  // Store only rows intersecting logical rect
+  void restoreBwBuffer();                                       // Restore and free the stored buffer
   void cleanupGrayscaleWithFrameBuffer() const;
 
   // Font helpers

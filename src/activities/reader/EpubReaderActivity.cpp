@@ -75,11 +75,11 @@ constexpr uint32_t AA_RECOVERY_CONTIG_HEAP_BYTES = CP_AA_RECOVERY_CONTIG_HEAP_BY
 // Snapshotting BW buffer for grayscale restore can fragment heap heavily on tight
 // pages. Skip attempting snapshot altogether below this safety window.
 #ifndef CP_BW_SNAPSHOT_MIN_FREE_HEAP_BYTES
-#define CP_BW_SNAPSHOT_MIN_FREE_HEAP_BYTES (72 * 1024)
+#define CP_BW_SNAPSHOT_MIN_FREE_HEAP_BYTES (64 * 1024)
 #endif
 
 #ifndef CP_BW_SNAPSHOT_MIN_CONTIG_HEAP_BYTES
-#define CP_BW_SNAPSHOT_MIN_CONTIG_HEAP_BYTES (52 * 1024)
+#define CP_BW_SNAPSHOT_MIN_CONTIG_HEAP_BYTES (24 * 1024)
 #endif
 
 constexpr uint32_t BW_SNAPSHOT_MIN_FREE_HEAP_BYTES = CP_BW_SNAPSHOT_MIN_FREE_HEAP_BYTES;
@@ -97,6 +97,62 @@ void logReaderMemSnapshot(const char* stage) {
 #else
 inline void logReaderMemSnapshot(const char*) {}
 #endif
+
+bool computePageDynamicYBand(const Page& page, const GfxRenderer& renderer, const int fontId, const int viewportHeight,
+                             int* outTop, int* outBottom) {
+  if (viewportHeight <= 0 || !outTop || !outBottom) {
+    return false;
+  }
+
+  bool hasRange = false;
+  int minY = viewportHeight;
+  int maxY = -1;
+  const int lineHeight = std::max(1, renderer.getLineHeight(fontId));
+
+  for (const auto& el : page.elements) {
+    if (!el) continue;
+
+    int elementTop = el->yPos;
+    int elementBottom = el->yPos;
+    switch (el->getTag()) {
+      case TAG_PageLine:
+        elementBottom = el->yPos + lineHeight;
+        break;
+      case TAG_PageImage: {
+        const auto& img = static_cast<const PageImage&>(*el);
+        elementBottom = el->yPos + img.getImageBlock().getHeight();
+        break;
+      }
+      case TAG_PageTable: {
+        const auto& table = static_cast<const PageTableFragment&>(*el);
+        elementBottom = el->yPos + table.getTotalHeight();
+        break;
+      }
+      default:
+        continue;
+    }
+
+    minY = std::min(minY, elementTop);
+    maxY = std::max(maxY, elementBottom);
+    hasRange = true;
+  }
+
+  if (!hasRange) {
+    return false;
+  }
+
+  constexpr int BAND_PAD_PX = 2;
+  minY = std::max(0, minY - BAND_PAD_PX);
+  maxY = std::min(viewportHeight, maxY + BAND_PAD_PX);
+
+  if (minY >= maxY) {
+    return false;
+  }
+
+  *outTop = minY;
+  *outBottom = maxY;
+  return true;
+}
 
 // Computes the [0..100] EPUB progress percent. Returns 0 when pageCount is unknown (sync/bookmark
 // pre-render writes), in which case the next saveProgress() will overwrite progress.bin with the
@@ -1708,7 +1764,20 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   logReaderMemSnapshot("bw_store_begin");
   bool bwBufferStored = false;
   if (shouldAttemptBwSnapshot) {
-    bwBufferStored = renderer.storeBwBuffer();
+    const int contentLeft = orientedMarginLeft;
+    const int contentRight = std::max(contentLeft, renderer.getScreenWidth() - orientedMarginRight);
+    const int contentBottom = std::max(contentTop, renderer.getScreenHeight() - orientedMarginBottom);
+
+    int bandTop = 0;
+    int bandBottom = std::max(0, contentBottom - contentTop);
+    if (!computePageDynamicYBand(*page, renderer, getEffectiveReaderFontId(), bandBottom, &bandTop, &bandBottom)) {
+      bandTop = 0;
+      bandBottom = std::max(0, contentBottom - contentTop);
+    }
+
+    const int snapshotTop = contentTop + bandTop;
+    const int snapshotHeight = std::max(0, bandBottom - bandTop);
+    bwBufferStored = renderer.storeBwBufferRect(contentLeft, snapshotTop, contentRight - contentLeft, snapshotHeight);
   } else {
     LOG_INF("ERS", "Skipping BW snapshot precheck (free=%lu contig=%lu, need free>=%lu contig>=%lu)", bwStoreFreeHeap,
             bwStoreContigHeap, static_cast<uint32_t>(BW_SNAPSHOT_MIN_FREE_HEAP_BYTES),
