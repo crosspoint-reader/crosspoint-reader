@@ -588,6 +588,11 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   renderBody();
 
   // Word-select mode: overlay highlighted word(s) and prime snapshot for next frame.
+  // The -1 prevWordIdx literal is load-bearing: renderHighlightDifferential uses
+  // prevWordIdx < 0 as the signal "framebuffer was just redrawn from scratch,
+  // discard any stale snapshot rather than restoring it on top of fresh pixels."
+  // This is the only path that disturbs the framebuffer outside the differential
+  // cycle, so it's also the only call site that must pass -1.
   if (isWordSelectMode) {
     const int currIdx = navigator.getCurrentFlatIndex();
     bool snapshotPrimed = false;

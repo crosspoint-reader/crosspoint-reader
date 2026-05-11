@@ -120,8 +120,11 @@ class WordSelectNavigator {
   Rect computeDirtyRect(int prevWordIdx, int currWordIdx, int lineHeight) const;
 
   // Differential repaint: restore pixels under the previous highlight, snapshot
-  // pixels under the new highlight, then draw the new highlight. The caller pushes
-  // the returned dirty rect to the panel via GfxRenderer::displayBufferRegion.
+  // pixels under the new highlight, then draw the new highlight. The caller
+  // currently pushes via GfxRenderer::displayBuffer (full panel) because the
+  // SDK's experimental windowed-refresh path produces transition artifacts on
+  // consecutive fast partial refreshes; the returned dirty rect is computed
+  // anyway and kept for the day GfxRenderer::displayBufferRegion is reliable.
   //
   // Returns std::nullopt when the caller must fall back to a full repaint:
   //   - the new highlight is too large for HighlightSnapshot's buffer

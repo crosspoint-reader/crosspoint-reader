@@ -309,6 +309,12 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   // for this frame and primes snapshot_ so the next frame can run the fast path.
   // If the navigator declines (multi-select, hyphenated, oversize), fall back to
   // the multi-word renderHighlight and stay on the full path next frame.
+  //
+  // The -1 literal is load-bearing: renderHighlightDifferential uses prevWordIdx
+  // < 0 as the signal "framebuffer was just redrawn from scratch, discard any
+  // stale snapshot rather than restoring it on top of fresh pixels." This is the
+  // only path that disturbs the framebuffer outside the differential cycle, so
+  // it's also the only call site that must pass -1.
   bool snapshotPrimed = false;
   if (currIdx >= 0) {
     auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
