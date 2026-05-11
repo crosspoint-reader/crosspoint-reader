@@ -88,7 +88,7 @@ void HalTiltSensor::begin() {
   _i2cAddr = TILT_I2C_ADDR;
   if (!readReg(REG_WHO_AM_I, &whoami) || whoami != TILT_WHO_AM_I_VALUE) {
     _i2cAddr = TILT_I2C_ADDR_ALT;
-    if (!readReg(REG_WHO_AM_I, &whoami) || whoami != QMI8658_WHO_AM_I_VALUE) {
+    if (!readReg(REG_WHO_AM_I, &whoami) || whoami != TILT_WHO_AM_I_VALUE) {
       LOG_INF("TILT", "QMI8658 IMU not found");
       _available = false;
       return;

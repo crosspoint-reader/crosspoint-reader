@@ -140,7 +140,13 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
-  if (inputDrainGuard.shouldDrain(mappedInput)) {
+  const bool drainActive = inputDrainGuard.shouldDrain(mappedInput);
+  if (!drainActive && drainWasActive) {
+    halTiltSensor.clearPendingEvents();
+  }
+  drainWasActive = drainActive;
+
+  if (drainActive) {
     buttonEvents.drain();
     return;
   }

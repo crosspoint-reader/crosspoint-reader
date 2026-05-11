@@ -210,6 +210,7 @@ void setup() {
   if (wakeupReason == HalGPIO::WakeupReason::AfterUSBPower) {
     // If USB power caused a cold boot, go back to sleep immediately without initializing subsystems
     LOG_DBG("MAIN", "Wakeup reason: After USB Power => Deep sleep");
+    halTiltSensor.deepSleep();
     powerManager.startDeepSleep(gpio);
     return;
   }

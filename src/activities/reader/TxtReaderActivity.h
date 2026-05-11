@@ -16,6 +16,7 @@ class TxtReaderActivity final : public Activity {
   int totalPages = 1;
   int pagesUntilFullRefresh = 0;
   ReaderUtils::InputDrainGuard inputDrainGuard;
+  bool drainWasActive = false;
 
   // Bookmarks (starred pages)
   BookmarkStore bookmarkStore;

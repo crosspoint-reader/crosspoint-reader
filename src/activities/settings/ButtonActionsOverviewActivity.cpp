@@ -30,12 +30,11 @@ constexpr std::array<ButtonRow, 7> kButtonRows = {{
 }};
 
 // Find the SettingInfo for a given (button submenu, press kind) pair in the shared settings list.
-std::string cellValue(StrId submenu, StrId pressKind) {
-  const auto list = getSettingsList();
-  auto it = std::find_if(list.begin(), list.end(), [submenu, pressKind](const SettingInfo& s) {
+std::string cellValue(const std::vector<SettingInfo>& settings, StrId submenu, StrId pressKind) {
+  auto it = std::find_if(settings.begin(), settings.end(), [submenu, pressKind](const SettingInfo& s) {
     return s.submenu == submenu && s.nameId == pressKind && s.category == StrId::STR_CAT_CONTROLS;
   });
-  if (it == list.end()) return {};
+  if (it == settings.end()) return {};
   return it->getDisplayValue();
 }
 
@@ -124,15 +123,17 @@ void ButtonActionsOverviewActivity::render(RenderLock&&) {
   renderer.fillPolygon(underlineX, underlineY, 4, true);
   y += 4;
 
+  const auto settings = getSettingsList();
+
   // Data rows
   for (const auto& row : kButtonRows) {
     const std::string label = I18N.get(row.labelStrId);
     const std::string clippedLabel = renderer.truncatedText(fontId, label.c_str(), colW[0], EpdFontFamily::BOLD);
     renderer.drawText(fontId, colX[0], y, clippedLabel.c_str(), true, EpdFontFamily::BOLD);
 
-    const std::string vShort = cellValue(row.submenu, StrId::STR_BTN_SHORT_PRESS);
-    const std::string vDouble = cellValue(row.submenu, StrId::STR_BTN_DOUBLE_PRESS);
-    const std::string vLong = cellValue(row.submenu, StrId::STR_BTN_LONG_PRESS);
+    const std::string vShort = cellValue(settings, row.submenu, StrId::STR_BTN_SHORT_PRESS);
+    const std::string vDouble = cellValue(settings, row.submenu, StrId::STR_BTN_DOUBLE_PRESS);
+    const std::string vLong = cellValue(settings, row.submenu, StrId::STR_BTN_LONG_PRESS);
 
     renderer.drawText(fontId, colX[1], y, renderer.truncatedText(fontId, vShort.c_str(), colW[1]).c_str());
     renderer.drawText(fontId, colX[2], y, renderer.truncatedText(fontId, vDouble.c_str(), colW[2]).c_str());
