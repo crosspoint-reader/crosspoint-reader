@@ -2953,6 +2953,11 @@
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
       if (advancedContent.classList.contains('visible') && files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
         showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
+      } else {
+        // New selection no longer matches single-EPUB-with-advanced-expanded —
+        // tear down any picker from a previous file so the grid and picker-mode
+        // layout don't linger. clearImagePicker is idempotent.
+        clearImagePicker();
       }
 
       // If multiple files with conversion, inform user about batch mode
