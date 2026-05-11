@@ -259,6 +259,10 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
     int32_t glyphIdx = findGlyphIndex(fontData, cp);
     if (glyphIdx < 0) continue;
 
+    const EpdGlyph& glyph = fontData->glyph[glyphIdx];
+    // Whitespace/empty glyphs have no bitmap payload and do not need prewarm storage.
+    if (glyph.dataLength == 0 || glyph.width == 0 || glyph.height == 0) continue;
+
     // Deduplicate against already prewarmed slots
     bool alreadyCached = false;
     for (uint8_t s = 0; s < pageSlotCount; s++) {
@@ -375,6 +379,12 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   }
 
   stats.uniqueGroupsAccessed = groupCount;
+
+  // Safety: if the collected glyph set has no bitmap payload, skip slot allocation.
+  if (totalBytes == 0) {
+    LOG_DBG("FDC", "Prewarm skipped: %u glyphs but 0 bitmap bytes", glyphCount);
+    return 0;
+  }
 
   // Sort neededGroups by ascending group index so flash reads are sequential.
   // Uses insertion sort — groupCount is bounded at 128, typically <14 for Latin fonts.
