@@ -3,7 +3,7 @@ import io
 import sys
 
 threshold = 128
-USAGE = 'Usage: python scripts/convert_icon.py input.png output_name width height'
+USAGE = 'Usage: python scripts/convert_icon.py input.png|input.svg output_name width height'
 
 def svg_to_png_bytes(svg_path, width, height):
     import cairosvg
@@ -64,7 +64,7 @@ def main():
     if any(arg in ('-h', '--help') for arg in sys.argv[1:]):
         print(USAGE)
         sys.exit(0)
-    if len(sys.argv) < 5:
+    if len(sys.argv) != 5:
         print(USAGE)
         sys.exit(1)
     input_path, output_name, width, height = sys.argv[1:5]
