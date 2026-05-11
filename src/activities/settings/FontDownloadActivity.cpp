@@ -307,14 +307,13 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
 }
 
 void FontDownloadActivity::promptDeleteSelectedFamily() {
-  pendingDeleteFamilyIndex_ = familyIndexFromList(selectedIndex_);
-  if (pendingDeleteFamilyIndex_ < 0 || pendingDeleteFamilyIndex_ >= static_cast<int>(families_.size())) {
-    pendingDeleteFamilyIndex_ = -1;
+  const int pendingDeleteFamilyIndex = familyIndexFromList(selectedIndex_);
+  if (pendingDeleteFamilyIndex < 0 || pendingDeleteFamilyIndex >= static_cast<int>(families_.size())) {
     return;
   }
 
   std::string heading = tr(STR_DELETE);
-  const auto& family = families_[pendingDeleteFamilyIndex_];
+  const auto& family = families_[pendingDeleteFamilyIndex];
   std::string body = family.name;
   startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, body),
                          [this](const ActivityResult& result) { onDeleteConfirmationResult(result); });
@@ -322,19 +321,11 @@ void FontDownloadActivity::promptDeleteSelectedFamily() {
 
 void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& result) {
   if (result.isCancelled) {
-    pendingDeleteFamilyIndex_ = -1;
     requestUpdate();
     return;
   }
 
-  if (pendingDeleteFamilyIndex_ < 0 || pendingDeleteFamilyIndex_ >= static_cast<int>(families_.size())) {
-    pendingDeleteFamilyIndex_ = -1;
-    requestUpdate();
-    return;
-  }
-
-  auto& family = families_[pendingDeleteFamilyIndex_];
-  pendingDeleteFamilyIndex_ = -1;
+  auto& family = families_[familyIndexFromList(selectedIndex_)];
 
   if (fontInstaller_.deleteFamily(family.name.c_str()) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
