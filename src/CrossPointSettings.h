@@ -119,6 +119,7 @@ class CrossPointSettings {
     SLEEP_10_MIN = 2,
     SLEEP_15_MIN = 3,
     SLEEP_30_MIN = 4,
+    SLEEP_3_MIN = 5,
     SLEEP_TIMEOUT_COUNT
   };
 
