@@ -10,7 +10,7 @@ There are three ways to install fonts:
 ### Option 1: Download from device (recommended)
 
 1. Connect your CrossPoint reader to WiFi
-2. Go to **Settings > System > Download Fonts**
+2. Go to **Settings > System > Manage Fonts**
 3. Browse available font families and tap to download
 4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
 
