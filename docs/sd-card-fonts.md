@@ -24,7 +24,7 @@ There are three ways to install fonts:
 ### Option 3: Manual SD card copy
 
 1. Download font files from the
-   [Releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases/tag/sd-fonts)
+   [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts)
 2. Copy font family folders to one of two locations on your SD card:
 
    - `/.fonts/` — hidden directory (preferred; keeps the SD root tidy
@@ -54,11 +54,8 @@ There are three ways to install fonts:
 
 ## Available Pre-Built Fonts
 
-| Font | Best For | Languages |
-|------|----------|-----------|
-| Bookerly-SD | General reading | English, Western European |
-| NotoSansExtended | Multi-script reading | European, Greek, Cyrillic, Georgian, Armenian, Ethiopic |
-| NotoSansCJK | Chinese/Japanese/Korean | CJK + ASCII |
+The current list of pre-built fonts is maintained in the
+[crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
 
 ## Converting Custom Fonts
 
