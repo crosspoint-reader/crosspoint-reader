@@ -20,15 +20,6 @@ struct SdCardFontFamilyInfo {
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   bool hasSize(uint8_t size) const;
   std::vector<uint8_t> availableSizes() const;
-
-  // Pick the file whose pointSize is closest to targetPtSize. On ties (equal
-  // distance) prefers the smaller pointSize so behaviour is deterministic
-  // across SD card layouts. Returns nullptr when files is empty.
-  //
-  // Robust against families that don't ship the canonical {12,14,16,18} set:
-  // a family with only [10,14,18] resolves target 12 → 10 (or 14 on tie),
-  // target 16 → 14 or 18, etc., instead of mis-indexing by ordinal slot.
-  const SdCardFontFileInfo* pickClosestSize(uint8_t targetPtSize) const;
 };
 
 class SdCardFontRegistry {

@@ -28,20 +28,24 @@ int SdCardFontManager::computeFontId(uint32_t contentHash, const char* familyNam
   return id != 0 ? id : 1;  // 0 is reserved as "not found" sentinel
 }
 
-bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize) {
+bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t fontSizeEnum) {
   // Unload any previously loaded family first
   if (!loadedFamilyName_.empty()) {
     unloadAll(renderer);
   }
 
-  // Pick the single file whose size is closest to targetPtSize. Loading
-  // only one size bounds resident memory (intervals + kern/ligature tables
-  // per style) to one file's worth, vs. N_sizes × per-file overhead.
-  const SdCardFontFileInfo* selected = family.pickClosestSize(targetPtSize);
-  if (!selected) {
+  // Select by ordinal position: sort available sizes, then map the font size
+  // enum (SMALL=0 .. EXTRA_LARGE=3) to the corresponding slot. When the
+  // family has fewer sizes than 4, clamp to the last available size.
+  auto sizes = family.availableSizes();
+  if (sizes.empty()) {
     LOG_ERR("SDMGR", "Family %s has no files to load", family.name.c_str());
     return false;
   }
+
+  uint8_t idx = fontSizeEnum;
+  if (idx >= sizes.size()) idx = sizes.size() - 1;
+  const SdCardFontFileInfo* selected = family.findFile(sizes[idx]);
 
   auto* font = new (std::nothrow) SdCardFont();
   if (!font) {
@@ -66,8 +70,8 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
   renderer.registerSdCardFont(fontId, font);
   loaded_.push_back({font, fontId, selected->pointSize});
 
-  LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u (target=%u)", selected->path.c_str(), selected->pointSize, fontId,
-          font->styleCount(), targetPtSize);
+  LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u (sizeEnum=%u)", selected->path.c_str(), selected->pointSize,
+          fontId, font->styleCount(), fontSizeEnum);
 
   EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2), font->getEpdFont(3));
   renderer.insertFont(fontId, fontFamily);

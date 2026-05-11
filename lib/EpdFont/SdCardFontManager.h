@@ -15,16 +15,12 @@ class SdCardFontManager {
   SdCardFontManager(const SdCardFontManager&) = delete;
   SdCardFontManager& operator=(const SdCardFontManager&) = delete;
 
-  // Load the single size whose pointSize is closest to targetPtSize. Only one
-  // .cpfont file is loaded; other sizes remain on disk. This keeps resident
-  // interval + kern/ligature tables to one size's worth of memory.
-  //
-  // Closest-pt selection is robust against families that don't ship the
-  // canonical {12,14,16,18}: a family with only [10,14,18] still resolves
-  // any reasonable target, where ordinal slot-mapping by SMALL..EXTRA_LARGE
-  // would mis-select.
+  // Load the font file matching fontSizeEnum (SMALL=0 .. EXTRA_LARGE=3) by
+  // ordinal position in the family's sorted size list. Only one .cpfont file
+  // is loaded; other sizes remain on disk. This keeps resident interval +
+  // kern/ligature tables to one size's worth of memory.
   // Returns true on success.
-  bool loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize);
+  bool loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t fontSizeEnum);
 
   // Unload everything, unregister from renderer.
   void unloadAll(GfxRenderer& renderer);

@@ -4,8 +4,6 @@
 #include <Logging.h>
 
 #include <algorithm>
-#include <climits>
-#include <cstdlib>
 #include <cstring>
 
 // --- SdCardFontFamilyInfo helpers ---
@@ -38,21 +36,6 @@ std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
   }
   std::sort(sizes.begin(), sizes.end());
   return sizes;
-}
-
-const SdCardFontFileInfo* SdCardFontFamilyInfo::pickClosestSize(uint8_t targetPtSize) const {
-  const SdCardFontFileInfo* selected = nullptr;
-  int bestDiff = INT_MAX;
-  for (const auto& f : files) {
-    int diff = std::abs(static_cast<int>(f.pointSize) - static_cast<int>(targetPtSize));
-    // Strict < ensures the first scan wins on ties; then tie-break by smaller
-    // pointSize to make the choice independent of filesystem enumeration order.
-    if (diff < bestDiff || (diff == bestDiff && selected && f.pointSize < selected->pointSize)) {
-      bestDiff = diff;
-      selected = &f;
-    }
-  }
-  return selected;
 }
 
 // --- SdCardFontRegistry ---
