@@ -340,7 +340,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     newCell.colspan = cellColspan;
     newCell.rowspan = cellRowspan;
 
-    self->currentTextBlock.reset(new ParsedText(self->extraParagraphSpacing, self->hyphenationEnabled, cellBlockStyle));
+    self->currentTextBlock.reset(new ParsedText(self->extraParagraphSpacing, self->hyphenationEnabled,
+                                                self->focusReadingEnabled, cellBlockStyle));
     self->inTableCellMode = true;
 
     // Bold/italic from CSS or <th> default.
@@ -1098,7 +1099,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     }
     self->inTableCellMode = false;
     // Reset currentTextBlock for any content between </td> and next <td>/<tr>
-    self->currentTextBlock.reset(new ParsedText(self->extraParagraphSpacing, self->hyphenationEnabled));
+    self->currentTextBlock.reset(
+        new ParsedText(self->extraParagraphSpacing, self->hyphenationEnabled, self->focusReadingEnabled));
     self->nextWordContinues = false;
   }
 
@@ -1344,7 +1346,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         placeholderStyle.alignment = CssTextAlign::Center;
 
         auto placeholder =
-            std::make_shared<TextBlock>(std::move(words), std::move(xpos), std::move(styles), placeholderStyle);
+            std::make_shared<TextBlock>(std::move(words), std::move(xpos), std::move(styles), std::vector<uint8_t>{},
+                                        std::vector<uint16_t>{}, placeholderStyle);
         self->currentPage->elements.push_back(std::make_shared<PageLine>(placeholder, 0, self->currentPageNextY));
         self->currentPageNextY += lh;
 
