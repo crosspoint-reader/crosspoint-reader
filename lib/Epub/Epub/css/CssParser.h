@@ -35,6 +35,8 @@ class CssParser {
   struct ResolveStats {
     uint32_t resolveCalls = 0;
     uint32_t lowHeapSkips = 0;
+    uint32_t lowHeapRescuedHits = 0;
+    uint32_t lowHeapDiskBypasses = 0;
     uint32_t mapHits = 0;
     uint32_t hotHits = 0;
     uint32_t diskHits = 0;
@@ -139,6 +141,8 @@ class CssParser {
   mutable bool cacheIndexLoaded_ = false;
   mutable size_t cachedRuleCount_ = 0;
   mutable std::unordered_map<std::string, uint32_t> cacheRuleOffsets_;
+  uint32_t totalSelectorCandidates_ = 0;
+  uint32_t unsupportedSelectorSkips_ = 0;
 
   // Bounded hot cache of most recently used rules.
   mutable std::list<std::string> hotRuleLru_;
@@ -175,7 +179,7 @@ class CssParser {
 
   // On-demand rule loading helpers
   bool ensureCacheIndexLoaded() const;
-  bool lookupRule(const std::string& selector, CssStyle& outStyle) const;
+  bool lookupRule(const std::string& selector, CssStyle& outStyle, bool allowDiskLookup = true) const;
   bool readRuleFromDiskAtOffset(uint32_t styleOffset, CssStyle& outStyle) const;
   static bool readCssStylePayload(FsFile& file, CssStyle& style);
   static void writeCssStylePayload(FsFile& file, const CssStyle& style);

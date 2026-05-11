@@ -43,7 +43,11 @@ constexpr size_t MAX_RULES = 1500;
 
 // Minimum free heap required to apply CSS during rendering
 // If below this threshold, we skip CSS to avoid display artifacts.
-constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
+#ifndef CSS_MIN_FREE_HEAP_FOR_CSS
+#define CSS_MIN_FREE_HEAP_FOR_CSS (40 * 1024)
+#endif
+
+constexpr size_t MIN_FREE_HEAP_FOR_CSS = CSS_MIN_FREE_HEAP_FOR_CSS;
 
 // In-memory CSS rule cache sizing for disk-backed lookup mode.
 // Keeps memory bounded on large books while retaining hot selectors.
@@ -73,6 +77,33 @@ constexpr char compileTempRulesCache[] = "/css_rules.compile.tmp";
 
 // Check if character is CSS whitespace
 bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
+
+template <typename Fn>
+void forEachNormalizedClassToken(const std::string& classAttr, std::string& normalizedBuf, Fn&& fn) {
+  size_t i = 0;
+  while (i < classAttr.size()) {
+    while (i < classAttr.size() && isCssWhitespace(classAttr[i])) {
+      ++i;
+    }
+    if (i >= classAttr.size()) {
+      break;
+    }
+
+    const size_t start = i;
+    while (i < classAttr.size() && !isCssWhitespace(classAttr[i])) {
+      ++i;
+    }
+
+    normalizedBuf.clear();
+    normalizedBuf.reserve(i - start);
+    for (size_t j = start; j < i; ++j) {
+      normalizedBuf.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(classAttr[j]))));
+    }
+    if (!normalizedBuf.empty()) {
+      fn(normalizedBuf);
+    }
+  }
+}
 
 std::string_view stripTrailingImportant(std::string_view value) {
   constexpr std::string_view IMPORTANT = "!important";
@@ -406,9 +437,11 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
   const auto selectors = splitOnChar(selectorGroup, ',');
 
   for (const auto& sel : selectors) {
+    totalSelectorCandidates_++;
     // Validate selector length before processing
     if (sel.size() > MAX_SELECTOR_LENGTH) {
       LOG_DBG("CSS", "Selector too long (%zu > %zu), skipping", sel.size(), MAX_SELECTOR_LENGTH);
+      unsupportedSelectorSkips_++;
       continue;
     }
 
@@ -419,42 +452,49 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
     // TODO: Consider adding support for sibling css selectors in the future
     // Ensure no + in selector as we don't support adjacent CSS selectors for now
     if (key.find('+') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
     // TODO: Consider adding support for direct nested css selectors in the future
     // Ensure no > in selector as we don't support nested CSS selectors for now
     if (key.find('>') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
     // TODO: Consider adding support for attribute css selectors in the future
     // Ensure no [ in selector as we don't support attribute CSS selectors for now
     if (key.find('[') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
     // TODO: Consider adding support for pseudo selectors in the future
     // Ensure no : in selector as we don't support pseudo CSS selectors for now
     if (key.find(':') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
     // TODO: Consider adding support for ID css selectors in the future
     // Ensure no # in selector as we don't support ID CSS selectors for now
     if (key.find('#') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
     // TODO: Consider adding support for general sibling combinator selectors in the future
     // Ensure no ~ in selector as we don't support general sibling combinator CSS selectors for now
     if (key.find('~') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
     // TODO: Consider adding support for wildcard css selectors in the future
     // Ensure no * in selector as we don't support wildcard CSS selectors for now
     if (key.find('*') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
@@ -463,6 +503,7 @@ void CssParser::processRuleBlockWithStyle(const std::string& selectorGroup, cons
     // If the selector has whitespace in it, then it's either a CSS selector for a descendant element (e.g. `tag1 tag2`)
     // or some other slightly more advanced CSS selector which we don't support yet
     if (key.find(' ') != std::string_view::npos) {
+      unsupportedSelectorSkips_++;
       continue;
     }
 
@@ -785,6 +826,8 @@ void CssParser::clear() {
   compileModeActive_ = false;
   compileModeFailed_ = false;
   compileSelectorOffsets_.clear();
+  totalSelectorCandidates_ = 0;
+  unsupportedSelectorSkips_ = 0;
 }
 
 void CssParser::resetResolveStats() const { resolveStats_ = {}; }
@@ -794,10 +837,13 @@ CssParser::ResolveStats CssParser::getResolveStats() const { return resolveStats
 void CssParser::logResolveStats(const char* context) const {
   const auto s = getResolveStats();
   LOG_DBG("CSS",
-          "resolve stats[%s]: calls=%lu lowHeapSkips=%lu mapHits=%lu hotHits=%lu diskHits=%lu misses=%lu "
-          "negativeHits=%lu hotSize=%u indexSize=%u",
-          context ? context : "n/a", s.resolveCalls, s.lowHeapSkips, s.mapHits, s.hotHits, s.diskHits, s.misses,
-          s.negativeHits, static_cast<unsigned>(hotRuleCache_.size()), static_cast<unsigned>(cachedRuleCount_));
+          "resolve stats[%s]: calls=%lu lowHeapSkips=%lu lowHeapRescuedHits=%lu lowHeapDiskBypasses=%lu "
+          "mapHits=%lu hotHits=%lu diskHits=%lu misses=%lu negativeHits=%lu "
+          "unsupportedSelectorsSkipped=%lu totalSelectorCandidates=%lu hotSize=%u indexSize=%u",
+          context ? context : "n/a", s.resolveCalls, s.lowHeapSkips, s.lowHeapRescuedHits, s.lowHeapDiskBypasses,
+          s.mapHits, s.hotHits, s.diskHits, s.misses, s.negativeHits,
+          static_cast<unsigned long>(unsupportedSelectorSkips_), static_cast<unsigned long>(totalSelectorCandidates_),
+          static_cast<unsigned>(hotRuleCache_.size()), static_cast<unsigned>(cachedRuleCount_));
 }
 
 bool CssParser::readCssStylePayload(FsFile& file, CssStyle& style) {
@@ -955,7 +1001,7 @@ bool CssParser::readRuleFromDiskAtOffset(const uint32_t styleOffset, CssStyle& o
   return ok;
 }
 
-bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle) const {
+bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, const bool allowDiskLookup) const {
   auto mapIt = rulesBySelector_.find(selector);
   if (mapIt != rulesBySelector_.end()) {
     outStyle = mapIt->second;
@@ -973,6 +1019,11 @@ bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle) cons
 
   if (negativeRuleCache_.find(selector) != negativeRuleCache_.end()) {
     resolveStats_.negativeHits++;
+    return false;
+  }
+
+  if (!allowDiskLookup) {
+    resolveStats_.lowHeapDiskBypasses++;
     return false;
   }
 
@@ -1066,14 +1117,15 @@ bool CssParser::ensureCacheIndexLoaded() const {
 CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr) const {
   static bool lowHeapWarningLogged = false;
   resolveStats_.resolveCalls++;
-  if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_CSS) {
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  const bool lowHeapMode = freeHeap < MIN_FREE_HEAP_FOR_CSS;
+  if (lowHeapMode) {
     if (!lowHeapWarningLogged) {
       lowHeapWarningLogged = true;
-      LOG_DBG("CSS", "Warning: low heap (%u bytes) below MIN_FREE_HEAP_FOR_CSS (%u), returning empty style",
-              ESP.getFreeHeap(), static_cast<unsigned>(MIN_FREE_HEAP_FOR_CSS));
+      LOG_DBG("CSS", "Warning: low heap (%u bytes) below MIN_FREE_HEAP_FOR_CSS (%u), skipping disk CSS lookups",
+              freeHeap, static_cast<unsigned>(MIN_FREE_HEAP_FOR_CSS));
     }
     resolveStats_.lowHeapSkips++;
-    return CssStyle{};
   }
   CssStyle result;
   const std::string tag = normalized(tagName);
@@ -1081,7 +1133,10 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
   // 1. Apply element-level style (lowest priority)
   {
     CssStyle tagStyle;
-    if (lookupRule(tag, tagStyle)) {
+    if (lookupRule(tag, tagStyle, !lowHeapMode)) {
+      if (lowHeapMode) {
+        resolveStats_.lowHeapRescuedHits++;
+      }
       result.applyOver(tagStyle);
     }
   }
@@ -1089,27 +1144,42 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
   // TODO: Support combinations of classes (e.g. style on .class1.class2)
   // 2. Apply class styles (medium priority)
   if (!classAttr.empty()) {
-    const auto classes = splitWhitespace(classAttr);
+    std::string classToken;
+    std::string classKey;
+    classKey.reserve(32);
 
-    for (const auto& cls : classes) {
-      std::string classKey = "." + normalized(cls);
+    forEachNormalizedClassToken(classAttr, classToken, [&](const std::string& cls) {
+      classKey.clear();
+      classKey.push_back('.');
+      classKey.append(cls);
 
       CssStyle classStyle;
-      if (lookupRule(classKey, classStyle)) {
+      if (lookupRule(classKey, classStyle, !lowHeapMode)) {
+        if (lowHeapMode) {
+          resolveStats_.lowHeapRescuedHits++;
+        }
         result.applyOver(classStyle);
       }
-    }
+    });
 
     // TODO: Support combinations of classes (e.g. style on p.class1.class2)
     // 3. Apply element.class styles (higher priority)
-    for (const auto& cls : classes) {
-      std::string combinedKey = tag + "." + normalized(cls);
+    std::string combinedKey;
+    combinedKey.reserve(tag.size() + 1 + 32);
+    forEachNormalizedClassToken(classAttr, classToken, [&](const std::string& cls) {
+      combinedKey.clear();
+      combinedKey.append(tag);
+      combinedKey.push_back('.');
+      combinedKey.append(cls);
 
       CssStyle combinedStyle;
-      if (lookupRule(combinedKey, combinedStyle)) {
+      if (lookupRule(combinedKey, combinedStyle, !lowHeapMode)) {
+        if (lowHeapMode) {
+          resolveStats_.lowHeapRescuedHits++;
+        }
         result.applyOver(combinedStyle);
       }
-    }
+    });
   }
 
   if (!result.defined.anySet()) {
