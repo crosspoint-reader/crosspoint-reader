@@ -1,12 +1,10 @@
 #!python3
-import freetype
 import zlib
 import sys
 import re
 import math
 import argparse
 from collections import namedtuple
-from fontTools.ttLib import TTFont
 
 # Force UTF-8 stdout so that `python fontconvert.py … > foo.h` on Windows
 # (default cp1252) doesn't emit UTF-16 LE / replacement chars in the generated
@@ -26,6 +24,9 @@ parser.add_argument("--compress", dest="compress", action="store_true", help="Co
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
+
+import freetype
+from fontTools.ttLib import TTFont
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
 

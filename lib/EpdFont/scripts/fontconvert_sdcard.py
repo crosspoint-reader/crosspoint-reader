@@ -22,7 +22,8 @@ Usage:
 
 """
 
-import freetype
+from __future__ import annotations
+
 import struct
 import sys
 import os
@@ -30,8 +31,6 @@ import re
 import math
 import argparse
 from collections import namedtuple
-
-from fontTools.ttLib import TTFont
 
 from cpfont_version import CPFONT_VERSION
 
@@ -252,6 +251,8 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
     codepoints.  Values are scaled from font design units to integer
     pixels at ppem.
     """
+    from fontTools.ttLib import TTFont
+
     font = TTFont(font_path)
     units_per_em = font['head'].unitsPerEm
     cmap = font.getBestCmap() or {}
@@ -402,6 +403,8 @@ def extract_ligatures_fonttools(font_path, codepoints):
     Returns list of (packed_pair, ligature_codepoint) for the given codepoints.
     Multi-character ligatures are decomposed into chained pairs.
     """
+    from fontTools.ttLib import TTFont
+
     font = TTFont(font_path)
     cmap = font.getBestCmap() or {}
 
@@ -514,6 +517,8 @@ def extract_ligatures_fonttools(font_path, codepoints):
 
 def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False):
     """Rasterize all glyphs for one font style. Returns StyleRasterData."""
+    import freetype
+
     style_names = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
     style_label = style_names.get(style_id, str(style_id))
 
