@@ -9,6 +9,8 @@
 #include <cstring>
 #include <memory>
 
+#include "EpdFontFamily.h"
+
 static_assert(sizeof(EpdGlyph) == 16, "EpdGlyph must be 16 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdUnicodeInterval) == 12, "EpdUnicodeInterval must be 12 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdKernClassEntry) == 3, "EpdKernClassEntry must be 3 bytes to match .cpfont file layout");
@@ -1197,16 +1199,11 @@ bool SdCardFont::hasStyle(uint8_t style) const { return styles_[style & (MAX_STY
 uint8_t SdCardFont::resolveStyle(uint8_t style) const {
   // Keep this fallback order aligned with EpdFontFamily::getFont() and the
   // renderer's SD advance-table fast path.
-  static const uint8_t kFallbacks[4][4] = {
+  static const uint8_t kFallbacks[MAX_STYLES][MAX_STYLES] = {
       {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::ITALIC, EpdFontFamily::BOLD_ITALIC},
       {EpdFontFamily::BOLD, EpdFontFamily::BOLD_ITALIC, EpdFontFamily::REGULAR, EpdFontFamily::ITALIC},
       {EpdFontFamily::ITALIC, EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::BOLD_ITALIC},
       {EpdFontFamily::BOLD_ITALIC, EpdFontFamily::BOLD, EpdFontFamily::ITALIC, EpdFontFamily::REGULAR},
-  };
-      {0, 1, 2, 3},  // regular
-      {1, 3, 0, 2},  // bold
-      {2, 0, 1, 3},  // italic
-      {3, 1, 2, 0},  // bold italic
   };
 
   const uint8_t styleBits = style & (MAX_STYLES - 1);
