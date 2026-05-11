@@ -133,11 +133,19 @@ class WordSelectNavigator {
   std::optional<Rect> renderHighlightDifferential(GfxRenderer& renderer, int lineHeight, int prevWordIdx,
                                                   int currWordIdx);
 
-  // Pixel snapshot for one rectangular framebuffer region. Stack-resident buffer
-  // (no heap). Used by the differential-repaint path (renderHighlightDifferential,
-  // added in a follow-up task) to capture pixels under a highlight before it is
-  // drawn, so a later cursor move can restore them and wipe the highlight without
-  // re-rendering the page.
+  // Pixel snapshot for one rectangular framebuffer region. The pixel buffer is
+  // inline (a fixed-size array member), so the snapshot does no heap allocation
+  // — but it lives wherever its enclosing WordSelectNavigator lives, which in
+  // practice is on the heap inside DictionaryWordSelectActivity /
+  // DictionaryDefinitionActivity. Used by renderHighlightDifferential to
+  // capture pixels under a highlight before it is drawn, so a later cursor move
+  // can restore them and wipe the old highlight without re-rendering the page.
+  //
+  // Relationship to GfxRenderer::storeBwBuffer / restoreBwBuffer: that pair
+  // captures the *entire* framebuffer to a heap-allocated buffer for grayscale
+  // rendering. HighlightSnapshot is region-scoped (one word's bounding rect)
+  // and stays out of the heap, so it can run on every cursor move without
+  // fragmentation pressure.
   //
   // Safety: the renderer byte-aligns the captured rectangle along the
   // panel-memory x-axis, expanding the captured region by up to 7 pixels per
@@ -152,16 +160,16 @@ class WordSelectNavigator {
   // draws over those neighboring pixels (e.g. an overlay layered above this
   // one) would invalidate that assumption.
   //
-  // Sizing: 4096 bytes covers a worst-case ~800 x 40 px region (e.g., a row-spanning
-  // multi-select highlight in single-row mode). When the requested region exceeds
-  // capacity, capture() returns false and sets requiresFallback() so the caller can
-  // fall back to a full repaint instead.
+  // Sizing: 4096 bytes covers a worst-case ~800 x 40 px region (e.g., a single
+  // wide word's bounding rect in landscape). When the requested region exceeds
+  // capacity, capture() returns false and the caller falls back to a full
+  // repaint instead.
   struct HighlightSnapshot {
     static constexpr size_t MAX_SNAPSHOT_BYTES = 4096;
 
     // Capture the framebuffer rectangle into the internal buffer.
     // Returns true on success; false if the region exceeds capacity, is empty,
-    // is out of bounds, or the renderer rejects it (sets fallback_ in those cases).
+    // is out of bounds, or the renderer rejects it.
     bool capture(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const GfxRenderer& renderer);
 
     // Paste the captured pixels back into the framebuffer at the original
@@ -169,11 +177,7 @@ class WordSelectNavigator {
     void restore(GfxRenderer& renderer) const;
 
     bool valid() const { return bytes_ > 0; }
-    bool requiresFallback() const { return fallback_; }
-    void clear() {
-      bytes_ = 0;
-      fallback_ = false;
-    }
+    void clear() { bytes_ = 0; }
 
     uint16_t x() const { return x_; }
     uint16_t y() const { return y_; }
@@ -186,7 +190,6 @@ class WordSelectNavigator {
     uint16_t w_ = 0;
     uint16_t h_ = 0;
     size_t bytes_ = 0;
-    bool fallback_ = false;
     uint8_t buf_[MAX_SNAPSHOT_BYTES] = {};
   };
 

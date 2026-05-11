@@ -527,11 +527,13 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       const int lineHeight = getLineHeight();
       auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
       if (dirty.has_value()) {
-        const uint16_t dx = static_cast<uint16_t>(std::max(dirty->x, 0));
-        const uint16_t dy = static_cast<uint16_t>(std::max(dirty->y, 0));
-        const uint16_t dw = static_cast<uint16_t>(std::max(dirty->width, 0));
-        const uint16_t dh = static_cast<uint16_t>(std::max(dirty->height, 0));
-        renderer.displayBufferRegion(dx, dy, dw, dh, HalDisplay::FAST_REFRESH);
+        // Use full displayBuffer for the push (matches DictionaryWordSelectActivity):
+        // the SDK's experimental windowed-refresh path produces alternating
+        // black->white transition failures on consecutive fast partial refreshes.
+        // The savings here come from skipping page->render, not from a smaller
+        // push. The dirty rect computed by renderHighlightDifferential is kept
+        // (the .has_value() check above) for the day the windowed path is reliable.
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
         prevHighlightIdx_ = currIdx;
         return;
       }

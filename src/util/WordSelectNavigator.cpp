@@ -239,7 +239,6 @@ bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uin
                                                      const GfxRenderer& renderer) {
   if (w == 0 || h == 0) {
     bytes_ = 0;
-    fallback_ = false;  // empty rect is benign; caller decides what to do
     return false;
   }
   // The renderer translates (x, y, w, h) from screen to byte-aligned memory
@@ -250,7 +249,6 @@ bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uin
   const size_t written = renderer.readFramebufferRegion(x, y, w, h, buf_, MAX_SNAPSHOT_BYTES);
   if (written == 0) {
     bytes_ = 0;
-    fallback_ = true;  // overflow, out of bounds, or rejected by renderer
     return false;
   }
   x_ = x;
@@ -258,7 +256,6 @@ bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uin
   w_ = w;
   h_ = h;
   bytes_ = written;
-  fallback_ = false;
   return true;
 }
 
@@ -329,7 +326,14 @@ std::optional<WordSelectNavigator::Rect> WordSelectNavigator::renderHighlightDif
   }
 
   // Step 1: restore pixels under the previous highlight (wipe it).
-  if (snapshot_.valid()) snapshot_.restore(renderer);
+  // prevWordIdx < 0 is the caller's signal "no previous highlight on screen"
+  // (typically because the framebuffer was just redrawn from scratch via the
+  // full-repaint path or a sub-activity return). In that case any snapshot we
+  // still hold from a prior render cycle is stale relative to the current
+  // framebuffer — discard it rather than restoring it on top of fresh pixels.
+  if (prevWordIdx >= 0 && snapshot_.valid()) {
+    snapshot_.restore(renderer);
+  }
   snapshot_.clear();
 
   // Step 2: snapshot pixels under the new highlight, clamping coordinates so we
