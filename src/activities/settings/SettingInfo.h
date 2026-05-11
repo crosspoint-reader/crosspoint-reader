@@ -11,6 +11,8 @@
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
+enum class SettingDeviceTarget { BOTH, X3, X4 };
+
 enum class SettingAction {
   None,
   RemapFrontButtons,
@@ -56,6 +58,7 @@ struct SettingInfo {
   const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
+  SettingDeviceTarget deviceTarget = SettingDeviceTarget::BOTH;
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
@@ -231,6 +234,13 @@ struct SettingInfo {
   // All items sharing the same submenu StrId are grouped under one placeholder entry.
   SettingInfo& withSubmenu(StrId sub) {
     submenu = sub;
+    return *this;
+  }
+
+  // Restrict visibility of this setting to a specific hardware target.
+  // Default is BOTH when this method is not used.
+  SettingInfo& withDeviceTarget(SettingDeviceTarget target) {
+    deviceTarget = target;
     return *this;
   }
 

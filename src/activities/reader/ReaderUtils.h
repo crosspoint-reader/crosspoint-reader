@@ -2,6 +2,7 @@
 
 #include <CrossPointSettings.h>
 #include <GfxRenderer.h>
+#include <HalTiltSensor.h>
 #include <Logging.h>
 
 #include <cstdint>
@@ -94,18 +95,36 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   // Also suppress immediate page-turns if a double-click action is configured for the button,
   // because the button event system delays short events until the double-click window expires.
   using BA = CrossPointSettings::BUTTON_ACTION;
-  const bool prev = (SETTINGS.btnShortPageBack == BA::BTN_DEFAULT &&
-                     !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::PageBack) &&
-                     input.wasReleased(MappedInputManager::Button::PageBack)) ||
-                    (SETTINGS.btnShortLeft == BA::BTN_DEFAULT &&
-                     !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::Left) &&
-                     input.wasReleased(MappedInputManager::Button::Left));
-  const bool next = (SETTINGS.btnShortPageForward == BA::BTN_DEFAULT &&
-                     !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::PageForward) &&
-                     input.wasReleased(MappedInputManager::Button::PageForward)) ||
-                    (SETTINGS.btnShortRight == BA::BTN_DEFAULT &&
-                     !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::Right) &&
-                     input.wasReleased(MappedInputManager::Button::Right));
+  using TA = CrossPointSettings::TILT_GESTURE_ACTION;
+  const bool tiltNegative = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
+  const bool tiltPositive = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
+  bool tiltPrev = false;
+  bool tiltNext = false;
+  auto applyTiltAction = [&](uint8_t action) {
+    if (action == TA::TILT_ACT_NEXT_PAGE) {
+      tiltNext = true;
+    } else if (action == TA::TILT_ACT_PREV_PAGE) {
+      tiltPrev = true;
+    }
+  };
+  if (tiltPositive) {
+    applyTiltAction(SETTINGS.tiltPositiveAction);
+  }
+  if (tiltNegative) {
+    applyTiltAction(SETTINGS.tiltNegativeAction);
+  }
+  const bool prev = tiltPrev || ((SETTINGS.btnShortPageBack == BA::BTN_DEFAULT &&
+                                  !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::PageBack) &&
+                                  input.wasReleased(MappedInputManager::Button::PageBack)) ||
+                                 (SETTINGS.btnShortLeft == BA::BTN_DEFAULT &&
+                                  !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::Left) &&
+                                  input.wasReleased(MappedInputManager::Button::Left)));
+  const bool next = tiltNext || ((SETTINGS.btnShortPageForward == BA::BTN_DEFAULT &&
+                                  !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::PageForward) &&
+                                  input.wasReleased(MappedInputManager::Button::PageForward)) ||
+                                 (SETTINGS.btnShortRight == BA::BTN_DEFAULT &&
+                                  !globalButtonEvents().hasDoubleAction(MappedInputManager::Button::Right) &&
+                                  input.wasReleased(MappedInputManager::Button::Right)));
   return {prev, next};
 }
 

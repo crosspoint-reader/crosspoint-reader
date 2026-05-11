@@ -137,6 +137,14 @@ class CrossPointSettings {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // Action mapped to each tilt gesture direction.
+  enum TILT_GESTURE_ACTION {
+    TILT_ACT_NONE = 0,
+    TILT_ACT_NEXT_PAGE = 1,
+    TILT_ACT_PREV_PAGE = 2,
+    TILT_GESTURE_ACTION_COUNT
+  };
+
   // Text darkness for AA glyph rendering (forwarded to GfxRenderer::setTextDarkness)
   enum TEXT_DARKNESS {
     DARKNESS_NORMAL = 0,      // true 4-level AA
@@ -257,6 +265,14 @@ class CrossPointSettings {
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Dithering mode for decoded images (EPUB/JPG/PNG)
   uint8_t imageDithering = IMAGE_DITHER_BAYER;
+  // Tilt-based page turning (X3 only — requires QMI8658 IMU)
+  uint8_t tiltPageTurn = 0;
+  // Tilt input processing mode: 0 = raw accel, 1 = smoothed accel, 2 = gyro/accelerometer fusion
+  uint8_t tiltStabilization = 0;
+  // Action when the computed tilt value crosses the positive threshold.
+  uint8_t tiltPositiveAction = TILT_ACT_NEXT_PAGE;
+  // Action when the computed tilt value crosses the negative threshold.
+  uint8_t tiltNegativeAction = TILT_ACT_PREV_PAGE;
   // Enable synthetic TOC fallback for malformed/sparse TOC books (1 = enabled, 0 = disabled)
   uint8_t syntheticTocFallback = 1;
   // Default bionic reading in EPUB pages when no per-book override is set (1 = enabled, 0 = disabled)

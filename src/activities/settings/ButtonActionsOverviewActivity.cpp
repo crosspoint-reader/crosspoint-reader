@@ -30,18 +30,13 @@ constexpr std::array<ButtonRow, 7> kButtonRows = {{
 }};
 
 // Find the SettingInfo for a given (button submenu, press kind) pair in the shared settings list.
-const SettingInfo* findEntry(StrId submenu, StrId pressKind) {
-  const auto& list = getSettingsList();
+std::string cellValue(StrId submenu, StrId pressKind) {
+  const auto list = getSettingsList();
   auto it = std::find_if(list.begin(), list.end(), [submenu, pressKind](const SettingInfo& s) {
     return s.submenu == submenu && s.nameId == pressKind && s.category == StrId::STR_CAT_CONTROLS;
   });
-  return it != list.end() ? &*it : nullptr;
-}
-
-std::string cellValue(StrId submenu, StrId pressKind) {
-  const SettingInfo* s = findEntry(submenu, pressKind);
-  if (!s) return {};
-  return s->getDisplayValue();
+  if (it == list.end()) return {};
+  return it->getDisplayValue();
 }
 
 }  // namespace

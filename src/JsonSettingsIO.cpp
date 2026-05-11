@@ -180,8 +180,9 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
 
 bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path) {
   JsonDocument doc;
+  const auto settings = getSettingsList();
 
-  for (const auto& info : getSettingsList()) {
+  for (const auto& info : settings) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
     if (!info.valuePtr && !info.stringOffset) continue;
@@ -258,8 +259,9 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   migrateMissingStatusSetting("statusBarItemsPosition", s.statusBarItemsPosition, "statusBarItemsPosition",
                               CrossPointSettings::STATUS_BAR_ITEMS_BOTTOM,
                               CrossPointSettings::STATUS_BAR_ITEMS_POSITION_COUNT);
+  const auto settings = getSettingsList();
 
-  for (const auto& info : getSettingsList()) {
+  for (const auto& info : settings) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
     if (!info.valuePtr && !info.stringOffset) continue;

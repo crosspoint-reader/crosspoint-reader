@@ -54,7 +54,7 @@ void SettingsActivity::onEnter() {
     }
     vec.push_back(s);
   };
-  auto addToMoved = [](std::vector<SettingInfo>& vec, StrId& lastSub, SettingInfo&& s) {
+  auto addToMoved = [](std::vector<SettingInfo>& vec, StrId& lastSub, SettingInfo s) {
     if (s.subcategory != StrId::STR_NONE_OPT && s.subcategory != lastSub) {
       vec.push_back(SettingInfo::Separator(s.subcategory));
       lastSub = s.subcategory;

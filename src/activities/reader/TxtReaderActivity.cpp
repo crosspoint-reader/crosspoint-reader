@@ -196,6 +196,25 @@ void TxtReaderActivity::loop() {
       return;
     }
   }
+
+  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  if (!prevTriggered && !nextTriggered) {
+    return;
+  }
+
+  if (prevTriggered) {
+    if (currentPage > 0) {
+      currentPage--;
+      requestUpdate();
+    }
+  } else if (nextTriggered) {
+    if (currentPage < totalPages - 1) {
+      currentPage++;
+      requestUpdate();
+    } else {
+      finish();
+    }
+  }
 }
 
 void TxtReaderActivity::initializeReader() {

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <HalGPIO.h>
 #include <I18n.h>
 
+#include <algorithm>
+#include <cstring>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -25,6 +28,7 @@
 //                 works inside a submenu exactly as it does in the parent tab.
 //                 Add with .withSubmenu(StrId::STR_MY_SUBMENU).
 //   key         — JSON property name used by the web settings API (nullptr = device-only).
+//   deviceTarget — hardware visibility (BOTH by default; override with .withDeviceTarget()).
 //
 // ACTION-type entries and entries without a key are device-only and are added directly
 // in SettingsActivity::onEnter(), not here.
@@ -222,6 +226,24 @@ inline const std::vector<SettingInfo> list = {
     SettingInfo::Enum(StrId::STR_BTN_LONG_PRESS, &CrossPointSettings::btnLongPower, {StrId::STR_BTN_DEF_SLEEP},
                       "btnLongPower", StrId::STR_CAT_CONTROLS)
         .withSubmenu(StrId::STR_BTN_POWER),
+    SettingInfo::Toggle(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn, "tiltPageTurn",
+                        StrId::STR_CAT_CONTROLS)
+        .withSubcategory(StrId::STR_TILT_PAGE_TURN)
+        .withDeviceTarget(SettingDeviceTarget::X3),
+    SettingInfo::Enum(StrId::STR_TILT_STABILIZATION, &CrossPointSettings::tiltStabilization,
+                      {StrId::STR_TILT_MODE_RAW, StrId::STR_TILT_MODE_SMOOTH, StrId::STR_TILT_MODE_KALMAN},
+                      "tiltStabilization", StrId::STR_CAT_CONTROLS)
+        .withDeviceTarget(SettingDeviceTarget::X3),
+    SettingInfo::Enum(StrId::STR_DIR_RIGHT, &CrossPointSettings::tiltPositiveAction,
+                      {StrId::STR_NONE_OPT, StrId::STR_NEXT_PAGE, StrId::STR_PREV_PAGE}, "tiltPositiveAction",
+                      StrId::STR_CAT_CONTROLS)
+        .withSubcategory(StrId::STR_TILT_PAGE_TURN)
+        .withDeviceTarget(SettingDeviceTarget::X3),
+    SettingInfo::Enum(StrId::STR_DIR_LEFT, &CrossPointSettings::tiltNegativeAction,
+                      {StrId::STR_NONE_OPT, StrId::STR_NEXT_PAGE, StrId::STR_PREV_PAGE}, "tiltNegativeAction",
+                      StrId::STR_CAT_CONTROLS)
+        .withSubcategory(StrId::STR_TILT_PAGE_TURN)
+        .withDeviceTarget(SettingDeviceTarget::X3),
 
 #undef BTN_ACT_OPTIONS
 
@@ -322,4 +344,19 @@ inline const std::vector<SettingInfo> list = {
 };
 }  // namespace SettingsListDetail
 
-inline const std::vector<SettingInfo>& getSettingsList() { return SettingsListDetail::list; }
+inline std::vector<SettingInfo> getSettingsList() {
+  std::vector<SettingInfo> settings = SettingsListDetail::list;
+  const bool isX3 = gpio.deviceIsX3();
+  settings.erase(std::remove_if(settings.begin(), settings.end(),
+                                [isX3](const SettingInfo& setting) {
+                                  if (setting.deviceTarget == SettingDeviceTarget::BOTH) {
+                                    return false;
+                                  }
+                                  if (setting.deviceTarget == SettingDeviceTarget::X3) {
+                                    return !isX3;
+                                  }
+                                  return isX3;
+                                }),
+                 settings.end());
+  return settings;
+}
