@@ -483,8 +483,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           const int originalBookWidth = bookWidth;
           if (renderer.drawBitmap(bitmap, bookX, bookY, bookWidth, bookHeight)) {
             renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
-            coverRendered = true;
             coverBufferStored = storeCoverBuffer();
+            coverRendered = true;
 
             if (bookSelected) {
               LOG_DBG("THEME", "Drawing selection");

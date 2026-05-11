@@ -169,7 +169,6 @@ class SettingsActivity final : public Activity {
   void rebuildSettingsLists();
   void handleCoverPopup();
   void applyCoverOption();
-  void handleCoverDisablePopup();
   void deleteAllCoverThumbs();
   void resetAllCoverDisabled();
   void renderCoverPopup();

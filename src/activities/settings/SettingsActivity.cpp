@@ -389,6 +389,7 @@ void SettingsActivity::applyCoverOption() {
       break;
     case 4:  // Delete All
       SETTINGS.coverMode = CrossPointSettings::COVER_DISABLED;
+      APP_STATE.forceRenderCoverPath = "";
       deleteAllCoverThumbs();
       break;
   }
@@ -406,7 +407,7 @@ void SettingsActivity::deleteAllCoverThumbs() {
     file.getName(name, sizeof(name));
     String itemName(name);
 
-    if (file.isDirectory() && itemName.startsWith("epub_")) {
+    if (file.isDirectory() && (itemName.startsWith("epub_") || itemName.startsWith("xtc_"))) {
       file.close();
       String dirPath = "/.crosspoint/" + itemName;
       auto dir = Storage.open(dirPath.c_str());
@@ -431,9 +432,7 @@ void SettingsActivity::deleteAllCoverThumbs() {
 
   const auto& books = RECENT_BOOKS.getBooks();
   for (const auto& book : books) {
-    if (FsHelpers::hasEpubExtension(book.path)) {
-      RECENT_BOOKS.setCoverDisabled(book.path, true);
-    }
+    RECENT_BOOKS.setCoverDisabled(book.path, true);
   }
 }
 
@@ -502,10 +501,11 @@ void SettingsActivity::renderCoverPopup() {
   renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(optionDescs[coverPopupSelection]), true);
 
   y = dialogY + dialogH - innerPadding - height10;
-  const int backWidth = renderer.getTextWidth(UI_10_FONT_ID, "[BACK]");
-  const int selectWidth = renderer.getTextWidth(UI_10_FONT_ID, "[SELECT]");
-  const int hintsWidth = backWidth + 30 + selectWidth;
-  int hintsX = (pageWidth - hintsWidth) / 2;
-  renderer.drawText(UI_10_FONT_ID, hintsX, y, "[BACK]", true);
-  renderer.drawText(UI_10_FONT_ID, hintsX + backWidth + 30, y, "[SELECT]", true);
+  const auto popupLabels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
+  const int popupBackWidth = renderer.getTextWidth(UI_10_FONT_ID, popupLabels.btn1);
+  const int popupSelectWidth = renderer.getTextWidth(UI_10_FONT_ID, popupLabels.btn2);
+  const int popupHintsWidth = popupBackWidth + 30 + popupSelectWidth;
+  int hintsX = (pageWidth - popupHintsWidth) / 2;
+  renderer.drawText(UI_10_FONT_ID, hintsX, y, popupLabels.btn1, true);
+  renderer.drawText(UI_10_FONT_ID, hintsX + popupBackWidth + 30, y, popupLabels.btn2, true);
 }

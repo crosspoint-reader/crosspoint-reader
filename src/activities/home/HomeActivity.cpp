@@ -90,7 +90,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             LOG_DBG("HOME", "loadRecentCovers: force-render removed stale BMP");
           }
           Epub epub(book.path, "/.crosspoint");
-          epub.load(false, true);
+          epub.load(true, true);
           popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           GUI.fillPopupProgress(renderer, popupRect, 50);
           const uint32_t deadline = (useTimeout && !isBookForced) ? (millis() + COVER_RENDER_TIMEOUT_MS) : 0;
@@ -100,7 +100,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (success) {
             RECENT_BOOKS.setCoverDisabled(book.path, false);
             book.coverDisabled = false;
-          } else {
+          } else if (!isBookForced) {
             RECENT_BOOKS.setCoverDisabled(book.path, true);
             book.coverDisabled = true;
           }
