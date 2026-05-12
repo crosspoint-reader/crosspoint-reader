@@ -17,7 +17,7 @@ class AppsMenuActivity final : public Activity {
 
  private:
   int selectorIndex = 0;
-  static constexpr int ITEM_COUNT = 8;
+  static constexpr int ITEM_COUNT = 4;
   static constexpr int COLS = 2;
   static constexpr int ROWS = 4;
 
@@ -30,14 +30,11 @@ class AppsMenuActivity final : public Activity {
   uint8_t batteryPercent = 0;
   unsigned long uptimeSeconds = 0;
   bool wifiConnected = false;
+  int8_t wifiRssi = 0;
   unsigned long lastInfoRefresh = 0;
   static constexpr unsigned long INFO_REFRESH_MS = 30000;
   char uptimeStr[16] = "";
 
-  // Badge counts (refreshed with system info)
-  int badgeRecon = 0;       // tracker alerts count
-  int badgeSecurity = -1;   // 0 = ok, -1 = PIN not set (show "!")
-  int badgeSystem = 0;      // firmware update available
 
   void refreshSystemInfo();
 

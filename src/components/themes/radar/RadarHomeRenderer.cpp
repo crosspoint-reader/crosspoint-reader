@@ -6,13 +6,10 @@
 #include "fontIds.h"
 
 // ---------------------------------------------------------------------------
-// Node position table — 8 unit-vector pairs scaled by 1000, clockwise from top.
-// Index 0 = top, 1 = top-right, 2 = right, 3 = bottom-right,
-//       4 = bottom, 5 = bottom-left, 6 = left, 7 = top-left.
-// Values are sin/cos * 1000, integer only (no <cmath>).
-// ---------------------------------------------------------------------------
-static const int NODE_DX[8] = {    0,  707, 1000,  707,    0, -707, -1000, -707 };
-static const int NODE_DY[8] = { -1000, -707,    0,  707, 1000,  707,     0, -707 };
+// Node position table — 4 unit-vector pairs scaled by 1000, clockwise from top.
+// Square layout: 90° apart. DX=sin(a)*1000, DY=-cos(a)*1000.
+static const int NODE_DX[4] = {    0, 1000,    0, -1000 };
+static const int NODE_DY[4] = { -1000,    0, 1000,     0 };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -102,9 +99,9 @@ void RadarHomeRenderer::draw(GfxRenderer& renderer, const RadarNode* nodes, int 
   const int pageWidth = renderer.getScreenWidth();   // 480
 
   // -----------------------------------------------------------------------
-  // A. Top bar: "BISCUIT." brand left, battery right, then separator line
+  // A. Top bar: brand left, battery right, then separator line
   // -----------------------------------------------------------------------
-  renderer.drawText(UI_12_FONT_ID, 14, 8, "biscuit.", true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, 14, 8, "shortbread.", true, EpdFontFamily::BOLD);
 
   // Battery percent string at top-right
   char batStr[12];

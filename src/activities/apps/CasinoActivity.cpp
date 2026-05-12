@@ -226,7 +226,7 @@ void CasinoActivity::renderLobby() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 12, "biscuit. Casino", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, 12, "shortbread. Casino", true, EpdFontFamily::BOLD);
   renderer.drawLine(15, 42, pageWidth - 15, 42);
 
   renderCreditsBar();

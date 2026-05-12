@@ -6,21 +6,16 @@
 
 #include "activities/Activity.h"
 #include "components/themes/BaseTheme.h"
-#include "util/ButtonNavigator.h"
 
-/**
- * Generic category submenu for apps.
- * Takes a list of app names and factory functions to create them.
- */
 class AppCategoryActivity final : public Activity {
  public:
   struct AppEntry {
-    const char* nameStrId;  // will be resolved via tr() at render time
-    const char* description;  // one-line description shown as subtitle
+    const char* nameStrId;
+    const char* description;
     UIIcon icon;
     std::function<std::unique_ptr<Activity>(GfxRenderer&, MappedInputManager&)> factory;
     bool isSectionHeader = false;
-    std::function<bool()> hasActiveState = nullptr;  // returns true if app has saved state
+    std::function<bool()> hasActiveState = nullptr;
   };
 
   static AppEntry SectionHeader(const char* label) {
@@ -46,7 +41,15 @@ class AppCategoryActivity final : public Activity {
   bool disclaimerShown = false;
   int categoryIndex = -1;
 
-  ButtonNavigator buttonNavigator;
-  int selectorIndex = 0;
-  bool backPressedHere = false;  // Guard against stale Back release from child activity
+  static constexpr int TILE_COLS = 2;
+  static constexpr int TILE_ROWS_VISIBLE = 4;
+  static constexpr int TILE_GAP = 6;
+
+  std::vector<int> tileIndices;  // entries[] indices for non-header items
+  int selectorIndex = 0;         // index into tileIndices
+  int scrollRow = 0;
+  bool backPressedHere = false;
+
+  void drawAppTile(int entryIdx, int x, int y, int w, int h, bool selected) const;
+  void launchSelected();
 };

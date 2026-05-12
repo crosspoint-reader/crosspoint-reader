@@ -54,13 +54,16 @@ void SettingsActivity::onEnter() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
-  // Reset selection to first category
-  selectedCategoryIndex = 0;
+  // Start on requested category
+  selectedCategoryIndex = initialCategory;
   selectedSettingIndex = 0;
 
-  // Initialize with first category (Display)
-  currentSettings = &displaySettings;
-  settingsCount = static_cast<int>(displaySettings.size());
+  switch (selectedCategoryIndex) {
+    case 1:  currentSettings = &readerSettings;   settingsCount = static_cast<int>(readerSettings.size());   break;
+    case 2:  currentSettings = &controlsSettings; settingsCount = static_cast<int>(controlsSettings.size()); break;
+    case 3:  currentSettings = &systemSettings;   settingsCount = static_cast<int>(systemSettings.size());   break;
+    default: currentSettings = &displaySettings;  settingsCount = static_cast<int>(displaySettings.size());  break;
+  }
 
   // Trigger first update
   requestUpdate();
@@ -73,72 +76,57 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
-  bool hasChangedCategory = false;
-
-  // Handle actions with early return
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-      hasChangedCategory = true;
+  if (selectedSettingIndex == 0) {
+    // Focus on category tiles — grid navigation
+    bool catChanged = false;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+      selectedCategoryIndex ^= 1;  // toggle column
+      catChanged = true;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+      selectedCategoryIndex ^= 2;  // toggle row
+      catChanged = true;
+    }
+    if (catChanged) {
+      switch (selectedCategoryIndex) {
+        case 0: currentSettings = &displaySettings;  break;
+        case 1: currentSettings = &readerSettings;   break;
+        case 2: currentSettings = &controlsSettings; break;
+        case 3: currentSettings = &systemSettings;   break;
+      }
+      settingsCount = static_cast<int>(currentSettings->size());
       requestUpdate();
-    } else {
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      if (settingsCount > 0) { selectedSettingIndex = 1; requestUpdate(); }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      SETTINGS.saveToFile();
+      finish();
+    }
+  } else {
+    // Focus on settings list
+    if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+      if (selectedSettingIndex < settingsCount) { selectedSettingIndex++; requestUpdate(); }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+      if (selectedSettingIndex > 1) { selectedSettingIndex--; requestUpdate(); }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       toggleCurrentSetting();
       requestUpdate();
       return;
     }
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    if (selectedSettingIndex > 0) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       selectedSettingIndex = 0;
       requestUpdate();
-    } else {
-      SETTINGS.saveToFile();
-      finish();
     }
-    return;
-  }
-
-  // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
-
-  if (hasChangedCategory) {
-    selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
-    switch (selectedCategoryIndex) {
-      case 0:
-        currentSettings = &displaySettings;
-        break;
-      case 1:
-        currentSettings = &readerSettings;
-        break;
-      case 2:
-        currentSettings = &controlsSettings;
-        break;
-      case 3:
-        currentSettings = &systemSettings;
-        break;
-    }
-    settingsCount = static_cast<int>(currentSettings->size());
   }
 }
 
@@ -207,53 +195,65 @@ void SettingsActivity::toggleCurrentSetting() {
 void SettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
+  const int W = renderer.getScreenWidth();
+  const int H = renderer.getScreenHeight();
+  constexpr int pad = 14;
+  constexpr int headerH = 36;
+  constexpr int tileH = 52;
+  constexpr int tileGap = 5;
+  constexpr int tilesH = tileH * 2 + tileGap + 10;
+  constexpr int dividerY = headerH + tilesH;
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+  // Header
+  renderer.drawText(UI_12_FONT_ID, pad, 8, tr(STR_SETTINGS_TITLE), true, EpdFontFamily::BOLD);
+  renderer.drawLine(pad, headerH - 2, W - pad, headerH - 2, true);
 
-  std::vector<TabInfo> tabs;
-  tabs.reserve(categoryCount);
+  // 2×2 category tiles
+  static const char* catLabels[4] = {"DISPLAY", "READER", "CONTROLS", "SYSTEM"};
+  const int tileW = (W - pad * 2 - tileGap) / 2;
   for (int i = 0; i < categoryCount; i++) {
-    tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
+    int col = i % 2;
+    int row = i / 2;
+    int tx = pad + col * (tileW + tileGap);
+    int ty = headerH + 5 + row * (tileH + tileGap);
+    bool isSel = (i == selectedCategoryIndex);
+    if (isSel) renderer.fillRect(tx, ty, tileW, tileH, true);
+    else        renderer.drawRect(tx, ty, tileW, tileH, true);
+    int lw = renderer.getTextWidth(SMALL_FONT_ID, catLabels[i]);
+    int lh = renderer.getLineHeight(SMALL_FONT_ID);
+    renderer.drawText(SMALL_FONT_ID, tx + (tileW - lw) / 2, ty + (tileH - lh) / 2, catLabels[i], !isSel);
   }
-  GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
 
+  // Separator between tiles and settings list
+  renderer.drawLine(pad, dividerY, W - pad, dividerY, true);
+
+  // Settings list
   const auto& settings = *currentSettings;
   GUI.drawList(
       renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
+      Rect{0, dividerY + 4, W, H - dividerY - 4 - metrics.buttonHintsHeight},
       settingsCount, selectedSettingIndex - 1,
-      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
+      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); },
+      nullptr, nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];
-        std::string valueText = "";
+        std::string valueText;
         if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-          const bool value = SETTINGS.*(setting.valuePtr);
-          valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+          valueText = SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-          const uint8_t value = SETTINGS.*(setting.valuePtr);
-          valueText = I18N.get(setting.enumValues[value]);
+          valueText = I18N.get(setting.enumValues[SETTINGS.*(setting.valuePtr)]);
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           valueText = std::to_string(SETTINGS.*(setting.valuePtr));
         }
         return valueText;
       },
-      true);
+      selectedSettingIndex > 0);
 
-  // Draw help text
-  const auto confirmLabel = (selectedSettingIndex == 0)
-                                ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-                                : tr(STR_TOGGLE);
+  // Button hints
+  const char* confirmLabel = (selectedSettingIndex == 0) ? tr(STR_SELECT) : tr(STR_TOGGLE);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, "^", "v");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  // Always use standard refresh for settings screen
   renderer.displayBuffer();
 }
