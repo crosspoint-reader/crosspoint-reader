@@ -34,13 +34,6 @@ constexpr size_t SIZE_FOR_PROGRESS_FINE = 80 * 1024;
 constexpr size_t MIN_FREE_HEAP_FOR_INDEXING_POPUP = 32 * 1024;
 constexpr size_t MIN_CONTIG_HEAP_FOR_INDEXING_POPUP = 12 * 1024;
 
-// Parser progress popup/ticks trigger full-screen refreshes that can temporarily
-// collapse heap during section cache builds on constrained targets. Keep disabled
-// by default; enable only when debugging parse progress behavior.
-#ifndef EHP_ENABLE_PARSE_PROGRESS_UI
-#define EHP_ENABLE_PARSE_PROGRESS_UI 0
-#endif
-
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
 constexpr size_t IMAGE_EXTRACT_CHUNK_SIZE = 1024;
 constexpr size_t MIN_FREE_HEAP_FOR_IMAGE_EXTRACT = 48 * 1024;
@@ -1639,7 +1632,6 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
 
   const uint32_t popupFreeHeap = ESP.getFreeHeap();
   const uint32_t popupContigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
-#if EHP_ENABLE_PARSE_PROGRESS_UI
   progressUiEnabled =
       popupFreeHeap >= MIN_FREE_HEAP_FOR_INDEXING_POPUP && popupContigHeap >= MIN_CONTIG_HEAP_FOR_INDEXING_POPUP;
   if (!progressUiEnabled) {
@@ -1647,12 +1639,6 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
     // When popup is disabled, also disable mid-parse ticks.
     progressStepPercent = 0;
   }
-#else
-  progressUiEnabled = false;
-  progressStepPercent = 0;
-  LOG_DBG("EHP", "Skipping parser progress popup/ticks (EHP_ENABLE_PARSE_PROGRESS_UI=0, free=%u contig=%u)",
-          popupFreeHeap, popupContigHeap);
-#endif
 
   // Show initial progress popup for files above threshold.
   if (progressFn && progressUiEnabled && totalStreamSize >= MIN_SIZE_FOR_POPUP) {
