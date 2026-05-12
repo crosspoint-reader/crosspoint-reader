@@ -1,6 +1,6 @@
-# FORK.md — Biscuit Fork Changes
+# FORK.md — Shortbread Changes
 
-Changes made on top of the upstream biscuit firmware.
+Changes made on top of [biscuit](https://github.com/yattsu/biscuit).
 
 ---
 
@@ -99,7 +99,7 @@ Side buttons (Up/Down) have two behaviours:
 
 ---
 
-## Removed Activities (no longer reachable from UI)
+## 7b. Removed Activities (no longer reachable from UI)
 
 The following activities are still compiled but removed from all menus:
 
@@ -129,7 +129,19 @@ Totp, QrTotp, MedicalCard, Steganography, HostScanner, Ping, DnsLookup, HttpClie
 
 ---
 
-## 9. EPUB Rendering — CrossInk Ports
+## 8. In-Book Menu — Cleaned Up, Reader Options Integration
+
+**Files:** `src/activities/reader/ReaderOptionsActivity.h`, `src/activities/reader/ReaderOptionsActivity.cpp`, `src/activities/reader/EpubReaderMenuActivity.h`, `src/activities/reader/EpubReaderMenuActivity.cpp`, `src/activities/reader/EpubReaderActivity.cpp`
+
+Ported `ReaderOptionsActivity` from [CrossInk](https://github.com/uxjulia/CrossInk). Added `READER_OPTIONS` as first item in `EpubReaderMenuActivity::buildMenuItems`. Handler in `EpubReaderActivity::onReaderMenuConfirm` launches `ReaderOptionsActivity` via `startActivityForResult`; on exit, resets `section` and calls `requestUpdate()` so font/layout changes take effect immediately.
+
+`ReaderOptionsActivity` filters all `STR_CAT_READER` settings from `getSettingsList()`, renders them as a togglable list, and calls `SETTINGS.saveToFile()` on back.
+
+Refactored `EpubReaderMenuActivity::render` to use `GUI.drawHeader()` and `GUI.drawList()` — same pattern as `ReaderOptionsActivity`. Progress summary shown as header subtitle. Orientation and page-turn values rendered via `rowValue` callback. Landscape gutter preserved.
+
+---
+
+## 9. EPUB Rendering — Ported from CrossInk
 
 **Files:** `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h`, `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp`, `lib/Epub/Epub/blocks/TextBlock.cpp`, `lib/EpdFont/EpdFontFamily.h`, `lib/Epub/Epub/css/CssStyle.h`, `lib/Epub/Epub/css/CssParser.cpp`
 
@@ -256,23 +268,8 @@ All changes complete. Build passes clean.
 
 ## TODO
 
-### GitHub
-- [ ] **GitHub fork badge** — Detach `deepakvettickal/crosspoint-lean` from the crosspoint-reader fork network via GitHub Support (`support.github.com`), then re-fork crosspoint-reader into `shortbread` to get the official fork badge. Badge is cosmetic only — `shortbread` already tracks `crosspoint-reader` as `upstream` remote.
-
-
 ### Reader
 - [ ] **Dictionary on press-and-hold** — Long press on a word in the reader triggers a dictionary lookup overlay, similar to macOS. Requires: word boundary detection at tap/button position, dictionary data source on SD card, popup overlay renderer.
 - [ ] **Word selector** — Press-and-hold also activates a word highlight selector (extend selection left/right with buttons), like macOS text selection. Feeds into the dictionary lookup or copy buffer.
 
 
----
-
-## 8. In-Book Menu — Cleaned Up, Reader Options Integration
-
-**Files:** `src/activities/reader/ReaderOptionsActivity.h`, `src/activities/reader/ReaderOptionsActivity.cpp`, `src/activities/reader/EpubReaderMenuActivity.h`, `src/activities/reader/EpubReaderMenuActivity.cpp`, `src/activities/reader/EpubReaderActivity.cpp`
-
-Ported `ReaderOptionsActivity` from CrossInk (`https://github.com/uxjulia/CrossInk`). Added `READER_OPTIONS` as first item in `EpubReaderMenuActivity::buildMenuItems`. Handler in `EpubReaderActivity::onReaderMenuConfirm` launches `ReaderOptionsActivity` via `startActivityForResult`; on exit, resets `section` and calls `requestUpdate()` so font/layout changes take effect immediately.
-
-`ReaderOptionsActivity` filters all `STR_CAT_READER` settings from `getSettingsList()`, renders them as a togglable list, and calls `SETTINGS.saveToFile()` on back.
-
-Refactored `EpubReaderMenuActivity::render` to use `GUI.drawHeader()` and `GUI.drawList()` — same pattern as `ReaderOptionsActivity`. Progress summary shown as header subtitle. Orientation and page-turn values rendered via `rowValue` callback. Landscape gutter preserved.
