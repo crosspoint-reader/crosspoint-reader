@@ -97,6 +97,7 @@ void BmpViewerActivity::onEnter() {
         y = (pageHeight - bitmap.getHeight()) / 2;
       }
 
+      // 4. Prepare Rendering
       bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
       bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
