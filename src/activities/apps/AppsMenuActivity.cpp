@@ -43,61 +43,70 @@
 #include <HalStorage.h>
 
 
+void AppsMenuActivity::loadRecentBooks() {
+  recentBooks.clear();
+  for (const auto& b : RECENT_BOOKS.getBooks()) {
+    if ((int)recentBooks.size() >= MAX_RECENT) break;
+    if (Storage.exists(b.path.c_str())) recentBooks.push_back(b);
+  }
+}
+
 void AppsMenuActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
-  // Check badges once on enter (SD I/O only here, not in periodic refresh)
   refreshSystemInfo();
   loadLastUsed();
+  loadRecentBooks();
   requestUpdate();
 }
 
 void AppsMenuActivity::loop() {
-  // === 2D GRID NAVIGATION ===
-  // Left/Right (front buttons) move between columns
-  // Up/Down (side volume buttons) move between rows
+  const int recentCount = (int)recentBooks.size();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    int col = getCol();
-    int row = getRow();
-    col++;
-    if (col >= COLS) {
-      col = 0;
-      row = (row + 1) % ROWS;
+    if (!isRecentSelected()) {
+      int col = getTileCol() + 1;
+      int row = getTileRow();
+      if (col >= COLS) { col = 0; row = (row + 1) % TILE_ROWS; }
+      selectorIndex = row * COLS + col;
+      requestUpdate();
     }
-    selectorIndex = row * COLS + col;
-    if (selectorIndex >= ITEM_COUNT) selectorIndex = 0;
-    requestUpdate();
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    int col = getCol();
-    int row = getRow();
-    col--;
-    if (col < 0) {
-      col = COLS - 1;
-      row = (row - 1 + ROWS) % ROWS;
+    if (!isRecentSelected()) {
+      int col = getTileCol() - 1;
+      int row = getTileRow();
+      if (col < 0) { col = COLS - 1; row = (row - 1 + TILE_ROWS) % TILE_ROWS; }
+      selectorIndex = row * COLS + col;
+      requestUpdate();
     }
-    selectorIndex = row * COLS + col;
-    if (selectorIndex >= ITEM_COUNT) selectorIndex = ITEM_COUNT - 1;
-    requestUpdate();
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    int col = getCol();
-    int row = (getRow() + 1) % ROWS;
-    selectorIndex = row * COLS + col;
-    if (selectorIndex >= ITEM_COUNT) selectorIndex = col;
+    if (isRecentSelected()) {
+      int next = recentIdx() + 1;
+      selectorIndex = (next >= recentCount) ? 0 : ITEM_COUNT + next;
+    } else {
+      int row = getTileRow() + 1;
+      if (row >= TILE_ROWS)
+        selectorIndex = recentCount > 0 ? ITEM_COUNT : 0;
+      else
+        selectorIndex = row * COLS + getTileCol();
+    }
     requestUpdate();
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    int col = getCol();
-    int row = (getRow() - 1 + ROWS) % ROWS;
-    selectorIndex = row * COLS + col;
-    if (selectorIndex >= ITEM_COUNT) {
-      row = (row - 1 + ROWS) % ROWS;
-      selectorIndex = row * COLS + col;
+    if (isRecentSelected()) {
+      int prev = recentIdx() - 1;
+      selectorIndex = (prev < 0) ? ITEM_COUNT - 1 : ITEM_COUNT + prev;
+    } else {
+      int row = getTileRow() - 1;
+      if (row < 0)
+        selectorIndex = recentCount > 0 ? ITEM_COUNT + recentCount - 1 : ITEM_COUNT - 1;
+      else
+        selectorIndex = row * COLS + getTileCol();
     }
     requestUpdate();
   }
@@ -114,8 +123,12 @@ void AppsMenuActivity::loop() {
     }
   }
 
-  // === CONFIRM: open category ===
+  // === CONFIRM: open recent book or category ===
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (isRecentSelected() && recentIdx() < (int)recentBooks.size()) {
+      activityManager.goToReader(recentBooks[recentIdx()].path);
+      return;
+    }
     std::unique_ptr<Activity> app;
     switch (selectorIndex) {
         case 0: {
@@ -176,20 +189,20 @@ void AppsMenuActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  // === STATUS BAR (top 44px) ===
   drawStatusBar();
 
-  // === TILE GRID ===
   constexpr int statusBarH = 40;
   constexpr int buttonHintsH = 40;
   constexpr int sidePad = 14;
   constexpr int tileGap = 6;
   constexpr int gridTop = statusBarH + 8;
-  const int gridBottom = pageHeight - buttonHintsH - 2;
-  const int gridHeight = gridBottom - gridTop;
+  const int pageBottom = pageHeight - buttonHintsH - 4;
+  const int totalH = pageBottom - gridTop;
 
+  // Top 44% for tiles (2×2)
+  const int tileSectionH = totalH * 44 / 100;
   const int tileW = (pageWidth - sidePad * 2 - tileGap) / COLS;
-  const int tileH = (gridHeight - tileGap * (ROWS - 1)) / ROWS;
+  const int tileH = (tileSectionH - tileGap) / TILE_ROWS;
 
   for (int i = 0; i < ITEM_COUNT; i++) {
     int row = i / COLS;
@@ -199,12 +212,62 @@ void AppsMenuActivity::render(RenderLock&&) {
     drawTile(i, x, y, tileW, tileH, i == selectorIndex);
   }
 
-  // === BUTTON HINTS ===
+  // Divider
+  const int divY = gridTop + tileSectionH + 6;
+  renderer.drawLine(sidePad, divY, pageWidth - sidePad, divY, true);
+
+  // Bottom section — recent books
+  const int recentsTop = divY + 8;
+  const int recentsH = pageBottom - recentsTop;
+  drawRecentBooks(sidePad, recentsTop, pageWidth - sidePad * 2, recentsH);
+
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "^", "v");
 
   renderer.displayBuffer();
+}
+
+void AppsMenuActivity::drawRecentBooks(int x, int y, int w, int h) const {
+  // Section header
+  renderer.drawText(SMALL_FONT_ID, x, y, "RECENT", true, EpdFontFamily::BOLD);
+  const int headerH = renderer.getLineHeight(SMALL_FONT_ID) + 4;
+
+  if (recentBooks.empty()) {
+    renderer.drawText(SMALL_FONT_ID, x, y + headerH + 4, "No recent books");
+    return;
+  }
+
+  const int booksH = h - headerH;
+  const int bookH = booksH / (int)recentBooks.size();
+  const int titleLineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int authorLineH = renderer.getLineHeight(SMALL_FONT_ID);
+  constexpr int pad = 8;
+
+  for (int i = 0; i < (int)recentBooks.size(); i++) {
+    const bool sel = isRecentSelected() && recentIdx() == i;
+    const int by = y + headerH + i * bookH;
+
+    if (sel) renderer.fillRect(x, by, w, bookH - 2, true);
+    else renderer.drawRect(x, by, w, bookH - 2, true);
+
+    const auto& book = recentBooks[i];
+    const std::string& title = book.title.empty() ? book.path : book.title;
+
+    // Truncate title to fit
+    std::string displayTitle = title;
+    const int maxW = w - pad * 2;
+    while (displayTitle.size() > 4 && renderer.getTextWidth(UI_10_FONT_ID, displayTitle.c_str()) > maxW)
+      displayTitle.resize(displayTitle.size() - 4);
+    if (displayTitle.size() < title.size()) displayTitle += "...";
+
+    const int titleY = by + (bookH - 2 - titleLineH - authorLineH - 2) / 2;
+    renderer.drawText(UI_10_FONT_ID, x + pad, titleY, displayTitle.c_str(), !sel, EpdFontFamily::BOLD);
+
+    if (!book.author.empty()) {
+      renderer.drawText(SMALL_FONT_ID, x + pad, titleY + titleLineH + 2, book.author.c_str(), !sel);
+    }
+  }
 }
 
 void AppsMenuActivity::refreshSystemInfo() {
