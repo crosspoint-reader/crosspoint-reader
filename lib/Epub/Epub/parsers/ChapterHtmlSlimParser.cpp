@@ -252,7 +252,13 @@ bool ChapterHtmlSlimParser::ensureHeapForTextLayout(const char* phase) {
 }
 
 // flush the contents of partWordBuffer to currentTextBlock
-void ChapterHtmlSlimParser::flushPartWordBuffer() {
+bool ChapterHtmlSlimParser::flushPartWordBuffer() {
+  if (streamFailed) {
+    partWordBufferIndex = 0;
+    nextWordContinues = false;
+    return false;
+  }
+
   // Determine font style from depth-based tracking and CSS effective style
   const bool isBold = boldUntilDepth < depth || effectiveBold;
   const bool isItalic = italicUntilDepth < depth || effectiveItalic;
@@ -302,6 +308,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   }
   partWordBufferIndex = 0;
   nextWordContinues = false;
+  return true;
 }
 
 // Emit the current page, keeping paragraphLutPerPage and completedPageCount in lockstep.
@@ -375,6 +382,10 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
+  if (self->streamFailed) {
+    return;
+  }
+
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
     self->depth += 1;
@@ -447,7 +458,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     // Flush any pending text before starting the table
     if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
     }
     if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
       self->makePages();
@@ -469,7 +480,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   if (self->currentTable && self->currentTable->depth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
     if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
     }
     if (self->currentTable->rows.empty()) {
       self->currentTable->rows.emplace_back();
@@ -753,7 +764,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
                 // Flush any pending text block so it appears before the image
                 if (self->partWordBufferIndex > 0) {
-                  self->flushPartWordBuffer();
+                  if (!self->flushPartWordBuffer()) return;
                 }
                 if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
                   const BlockStyle parentBlockStyle = self->currentTextBlock->getBlockStyle();
@@ -921,7 +932,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Flush buffer before style change
       if (self->partWordBufferIndex > 0) {
         const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
         if (!endsAtDashBreak) {
           self->nextWordContinues = true;
         }
@@ -960,7 +971,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Otherwise tags like ..."item?"<p ...> can carry the final word into the next paragraph.
   if (self->partWordBufferIndex > 0 && ((matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) ||
                                         (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) && strcmp(name, "br") != 0))) {
-    self->flushPartWordBuffer();
+    if (!self->flushPartWordBuffer()) return;
   }
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
@@ -993,7 +1004,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (strcmp(name, "br") == 0) {
       if (self->partWordBufferIndex > 0) {
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
       }
       // Tag the new block so startNewTextBlock can inject a full line-height gap if
       // the block remains empty (i.e. <br> is a section separator between paragraphs).
@@ -1039,7 +1050,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
       const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
       if (!endsAtDashBreak) {
         self->nextWordContinues = true;
       }
@@ -1088,7 +1099,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
       const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
       if (!endsAtDashBreak) {
         self->nextWordContinues = true;
       }
@@ -1120,7 +1131,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
       const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
       if (!endsAtDashBreak) {
         self->nextWordContinues = true;
       }
@@ -1154,7 +1165,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
         if (!endsAtDashBreak) {
           self->nextWordContinues = true;
         }
@@ -1198,6 +1209,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+
+  if (self->streamFailed) {
+    return;
+  }
 
   // Skip content of nested tables (depth > 1 means we're inside a nested table)
   if (self->currentTable && self->currentTable->depth > 1) {
@@ -1261,7 +1276,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
         // Buffer is full — flush before appending. Pure ASCII means no
         // partial multi-byte sequence can be at the boundary.
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
       }
       self->partWordBuffer[self->partWordBufferIndex++] = s[i];
       continue;
@@ -1271,7 +1286,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       // Inside <pre>: treat \n as a hard line break.
       if (s[i] == '\n' && self->preUntilDepth < self->depth) {
         if (self->partWordBufferIndex > 0) {
-          self->flushPartWordBuffer();
+          if (!self->flushPartWordBuffer()) return;
         }
         // Blank line: the current block is empty, but we still need to emit a visible
         // empty line.  Add a single space so the block is non-empty and makePages()
@@ -1285,7 +1300,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
       }
       // Whitespace is a real word boundary — reset continuation state
       self->nextWordContinues = false;
@@ -1313,14 +1328,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
     if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
       if (self->partWordBufferIndex > 0) {
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
       }
 
       self->partWordBuffer[0] = ' ';
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
       self->nextWordContinues = true;  // Attach space to previous word (no break).
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
 
       self->nextWordContinues = true;  // Next real word attaches to this space (no break).
 
@@ -1332,14 +1347,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     if (static_cast<uint8_t>(s[i]) == 0xE2 && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0x80 &&
         static_cast<uint8_t>(s[i + 2]) == 0xAF) {
       if (self->partWordBufferIndex > 0) {
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
       }
 
       self->partWordBuffer[0] = ' ';
       self->partWordBuffer[1] = '\0';
       self->partWordBufferIndex = 1;
       self->nextWordContinues = true;
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
 
       self->nextWordContinues = true;
 
@@ -1377,13 +1392,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
           saved[j] = self->partWordBuffer[safeLen + j];
         }
         self->partWordBufferIndex = safeLen;
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
         for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
         }
         self->partWordBufferIndex = overflow;
       } else {
-        self->flushPartWordBuffer();
+        if (!self->flushPartWordBuffer()) return;
       }
     }
 
@@ -1409,6 +1424,10 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+
+  if (self->streamFailed) {
+    return;
+  }
 
   // Check if any style state will change after we decrement depth
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
@@ -1446,7 +1465,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     if (shouldFlush) {
       const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
       // If closing an inline element, the next word fragment continues the same visual word —
       // unless the buffered text ended at a dash that should allow a line break (em/en dash, etc.).
       if (isInlineTag && !endsAtDashBreak) {
@@ -1489,7 +1508,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   if (self->currentTable && self->currentTable->depth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
     if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
     }
     // Determine if the whole row consists of header cells
     if (!self->currentTable->rows.empty()) {
@@ -1513,7 +1532,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   if (self->currentTable && self->currentTable->depth == 1 && strcmp(name, "table") == 0) {
     if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+      if (!self->flushPartWordBuffer()) return;
     }
     self->currentTableCell = nullptr;
     self->emitBufferedTable();

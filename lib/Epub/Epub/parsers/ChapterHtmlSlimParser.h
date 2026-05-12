@@ -158,7 +158,7 @@ class ChapterHtmlSlimParser final : public Print {
   void updateEffectiveInlineStyle();
   bool ensureHeapForTextLayout(const char* phase);
   void startNewTextBlock(const BlockStyle& blockStyle);
-  void flushPartWordBuffer();
+  bool flushPartWordBuffer();
   void makePages();
   void emitBufferedTable();
   void emitTableAsFragments(BufferedTable& table);
