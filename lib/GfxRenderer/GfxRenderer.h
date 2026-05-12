@@ -159,7 +159,9 @@ class GfxRenderer {
   // avoids the per-pixel rotateCoordinates/bounds-check/bit-RMW path.
   // Handles all four orientations via rotateCoordinates on the rect's
   // two opposite corners. Clamps to panel bounds; out-of-bounds rects
-  // are silently dropped.
+  // are silently dropped (unlike drawPixel, which logs each
+  // out-of-bounds pixel — callers may legitimately pass slightly
+  // margin-overlapping rects).
   void clearRect(int x, int y, int width, int height) const;
   void fillRectDither(int x, int y, int width, int height, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, Color color) const;
