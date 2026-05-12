@@ -6,6 +6,8 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "Md.h"
+#include "MdReaderActivity.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -15,10 +17,9 @@
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
-bool ReaderActivity::isTxtFile(const std::string& path) {
-  return FsHelpers::hasTxtExtension(path) ||
-         FsHelpers::hasMarkdownExtension(path);  // Treat .md as txt files (until we have a markdown reader)
-}
+bool ReaderActivity::isTxtFile(const std::string& path) { return FsHelpers::hasTxtExtension(path); }
+
+bool ReaderActivity::isMdFile(const std::string& path) { return FsHelpers::hasMarkdownExtension(path); }
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
 
@@ -89,10 +90,31 @@ void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   activityManager.replaceActivity(std::make_unique<XtcReaderActivity>(renderer, mappedInput, std::move(xtc)));
 }
 
+std::unique_ptr<Md> ReaderActivity::loadMd(const std::string& path) {
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
+    return nullptr;
+  }
+
+  auto md = std::unique_ptr<Md>(new Md(path, "/.crosspoint"));
+  if (md->load()) {
+    return md;
+  }
+
+  LOG_ERR("READER", "Failed to load MD");
+  return nullptr;
+}
+
 void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
   const auto txtPath = txt->getPath();
   currentBookPath = txtPath;
   activityManager.replaceActivity(std::make_unique<TxtReaderActivity>(renderer, mappedInput, std::move(txt)));
+}
+
+void ReaderActivity::onGoToMdReader(std::unique_ptr<Md> md) {
+  const auto mdPath = md->getPath();
+  currentBookPath = mdPath;
+  activityManager.replaceActivity(std::make_unique<MdReaderActivity>(renderer, mappedInput, std::move(md)));
 }
 
 void ReaderActivity::onEnter() {
@@ -113,6 +135,13 @@ void ReaderActivity::onEnter() {
       return;
     }
     onGoToXtcReader(std::move(xtc));
+  } else if (isMdFile(initialBookPath)) {
+    auto md = loadMd(initialBookPath);
+    if (!md) {
+      onGoBack();
+      return;
+    }
+    onGoToMdReader(std::move(md));
   } else if (isTxtFile(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
     if (!txt) {
