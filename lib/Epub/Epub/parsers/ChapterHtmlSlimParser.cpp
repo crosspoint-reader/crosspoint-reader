@@ -245,6 +245,7 @@ bool ChapterHtmlSlimParser::ensureHeapForTextLayout(const char* phase) {
 
   LOG_ERR("EHP", "Low heap (%u free, %u max alloc), aborting parse before %s", freeHeap, maxAllocHeap, phase);
   streamFailed = true;
+  layoutFailed = true;
   if (activeParser) {
     XML_StopParser(activeParser, XML_FALSE);
   }
@@ -1637,6 +1638,7 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
   bytesStreamed = 0;
   lastReportedProgress = -1;
   streamFailed = false;
+  layoutFailed = false;
   streamStartTimeMs = millis();
 
   // Choose progress granularity by chapter size. Each callback drives a full-screen
@@ -1741,11 +1743,13 @@ bool ChapterHtmlSlimParser::finalize() {
   // success scenario still flushes whatever pages were produced.
   if (currentTextBlock) {
     makePages();
-    if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-      pendingAnchorId.clear();
+    if (!layoutFailed) {
+      if (!pendingAnchorId.empty()) {
+        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+        pendingAnchorId.clear();
+      }
+      emitPage(0u);  // post-parse: no byte offset available
     }
-    emitPage(0u);  // post-parse: no byte offset available
     currentPage.reset();
     currentTextBlock.reset();
   }
@@ -1793,6 +1797,11 @@ ParsedText::LineProcessResult ChapterHtmlSlimParser::addLineToPage(std::shared_p
 }
 
 void ChapterHtmlSlimParser::makePages() {
+  if (layoutFailed) {
+    currentTextBlock.reset();
+    return;
+  }
+
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
@@ -1824,6 +1833,8 @@ void ChapterHtmlSlimParser::makePages() {
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
   if (!ensureHeapForTextLayout("paragraph layout")) {
+    layoutFailed = true;
+    currentTextBlock.reset();
     return;
   }
 
