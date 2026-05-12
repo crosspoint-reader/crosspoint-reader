@@ -234,6 +234,9 @@ def main():
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} <font_headers_directory>", file=sys.stderr)
         sys.exit(1)
+    if sys.argv[1] in ("-h", "--help"):
+        print(f"Usage: {sys.argv[0]} <font_headers_directory>")
+        sys.exit(0)
 
     font_dir = sys.argv[1]
     if not os.path.isdir(font_dir):
