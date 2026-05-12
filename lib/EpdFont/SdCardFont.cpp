@@ -1212,7 +1212,7 @@ uint8_t SdCardFont::resolveStyle(uint8_t style) const {
   for (uint8_t candidate : kFallbacks[styleBits]) {
     if (styles_[candidate].present) return candidate;
   }
-  return 0;
+  return EpdFontFamily::REGULAR;
 }
 
 uint8_t SdCardFont::resolveStyleMask(uint8_t styleMask) const {
