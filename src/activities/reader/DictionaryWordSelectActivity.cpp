@@ -46,6 +46,42 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
   rows.clear();
   rows.reserve(16);
 
+  // Pre-build the SD-card font's persistent advance table for this page's
+  // text. Without this, getTextAdvanceX falls through to a slow fontMap
+  // path that triggers SD reads for every measurement (~50ms each); with
+  // this, all subsequent advance-X calls take the in-RAM binary-search
+  // fast path. One batched SD operation here replaces ~30 individual
+  // cold-cache lookups in the per-block first-word / last-word fallback
+  // measurements below.
+  //
+  // The advance table persists across clearCache() (per SdCardFont.h:201)
+  // so this only pays the SD cost the first time the page is opened in
+  // word-select; subsequent re-entries amortize it.
+  //
+  // Memory: pageText reservation is ~2KB transient (same pattern as
+  // FontCacheManager::PrewarmScope's scanText_), freed when extractWords
+  // returns.
+  std::string pageText;
+  pageText.reserve(2048);
+  uint8_t pageStyleMask = 0;
+  for (const auto& element : page->elements) {
+    if (element->getTag() != TAG_PageLine) continue;
+    const auto* line = static_cast<const PageLine*>(element.get());
+    const auto& block = line->getBlock();
+    if (!block) continue;
+    const auto& words = block->getWords();
+    const auto& styles = block->getWordStyles();
+    for (size_t i = 0; i < words.size(); i++) {
+      pageText.append(words[i]);
+      pageText.push_back(' ');
+      if (i < styles.size()) {
+        pageStyleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(styles[i]) & 0x03));
+      }
+    }
+  }
+  if (pageStyleMask == 0) pageStyleMask = 1u << EpdFontFamily::REGULAR;
+  renderer.ensureSdCardFontReady(SETTINGS.getReaderFontId(), pageText.c_str(), pageStyleMask);
+
   // Natural inter-word space at the regular style — fallback for blocks
   // where we can't derive a per-line gap (single-word blocks, degenerate
   // first-word measurements).
@@ -66,13 +102,18 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
     // width and subtracting from xPos[1] - xPos[0]. Justified blocks
     // stretch the natural space (ParsedText.cpp:514-553 adds justifyExtra
     // per gap), so a single global space width leaves residual trailing
-    // gap on justified lines. One getTextWidth per block (~10-20 per page)
-    // gives the line-specific gap that yields tight highlights everywhere.
+    // gap on justified lines. One advance-X lookup per block — backed by
+    // the persistent advance table, not SD glyph loads — yields per-line
+    // gaps cheaply.
     int16_t lineGapWidth = naturalSpaceWidth;
     if (wordList.size() >= 2 && xPosList.size() >= 2 && !wordList[0].empty()) {
       const EpdFontFamily::Style firstStyle = (!styleList.empty()) ? styleList[0] : EpdFontFamily::REGULAR;
+      // Use advance-X (persistent advance table, survives clearCache()) rather
+      // than getTextWidth, which loads glyph bitmaps from SD per cold codepoint
+      // and thrashes the 8-slot overflow ring. Layout itself uses advance-X
+      // (ParsedText.cpp:64,74) so the derived gap is exact, not approximate.
       const int16_t firstWidth =
-          static_cast<int16_t>(renderer.getTextWidth(SETTINGS.getReaderFontId(), wordList[0].c_str(), firstStyle));
+          static_cast<int16_t>(renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), wordList[0].c_str(), firstStyle));
       const int16_t derivedGap = static_cast<int16_t>(xPosList[1] - xPosList[0] - firstWidth);
       if (derivedGap > 0) lineGapWidth = derivedGap;
     }
@@ -137,15 +178,17 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
         // positive floor so downstream consumers (highlight fillRect,
         // findClosestWord centerX) stay well-formed.
         //
-        // Last word per block has no next xpos — fall back to getTextWidth.
-        // That's ~1 SD measurement per text line, manageable for the ring.
+        // Last word per block has no next xpos — fall back to advance-X
+        // (also cheap, backed by the persistent advance table).
         int16_t wordWidth;
         const auto nextXIt = xIt + 1;
         if (nextXIt != xPosList.end()) {
           const int16_t raw = static_cast<int16_t>(*nextXIt - *xIt);
           wordWidth = std::max(static_cast<int16_t>(1), static_cast<int16_t>(raw - lineGapWidth));
         } else {
-          wordWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), wordText.c_str(), wordStyle);
+          // Advance-X (persistent advance table) instead of getTextWidth to
+          // avoid SD glyph-bitmap loads. Matches layout's own measurement.
+          wordWidth = renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), wordText.c_str(), wordStyle);
         }
         {
           uint16_t off = WordSelectNavigator::poolAppend(textPool, wordText.c_str(), wordText.size());
@@ -180,9 +223,10 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           if (part.empty()) continue;
 
           std::string prefix = wordText.substr(0, start);
+          // Advance-X consistent with the rest of extractWords and with layout.
           int16_t offsetX =
-              prefix.empty() ? 0 : renderer.getTextWidth(SETTINGS.getReaderFontId(), prefix.c_str(), wordStyle);
-          int16_t partWidth = renderer.getTextWidth(SETTINGS.getReaderFontId(), part.c_str(), wordStyle);
+              prefix.empty() ? 0 : renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), prefix.c_str(), wordStyle);
+          int16_t partWidth = renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), part.c_str(), wordStyle);
           {
             uint16_t off = WordSelectNavigator::poolAppend(textPool, part.c_str(), part.size());
             WordSelectNavigator::WordInfo wi;
@@ -334,6 +378,17 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   //   - the controller has nothing pending to draw,
   //   - we have a current selection.
   if (nextRenderMode_ == RenderMode::Differential && !controller.isActive() && currIdx >= 0) {
+    // Prewarm bitmap glyphs for the word about to be highlighted: one
+    // batched SD operation instead of N cold-miss loads serialized through
+    // drawText. Saves ~25-90ms for typical word lengths; words with >8
+    // unique chars partly thrash the 8-slot overflow ring (no benefit but
+    // also no regression vs. uncached drawText).
+    if (const auto* w = navigator.getWordAt(currIdx)) {
+      if (auto* fcm = renderer.getFontCacheManager()) {
+        fcm->prewarmCache(SETTINGS.getReaderFontId(), navigator.getDisplay(*w),
+                          static_cast<uint8_t>(1u << (static_cast<uint8_t>(w->style) & 0x03)));
+      }
+    }
     auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
     if (dirty.has_value()) {
       // Differential framebuffer modifications (snapshot restore / capture / draw) are correct,
@@ -376,6 +431,16 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
       const int clearY = renderer.getScreenHeight() - bezelBottom - reservedHeight;
       const int clearW = renderer.getScreenWidth() - bezelLeft - bezelRight;
       renderer.clearRect(bezelLeft, clearY, clearW, reservedHeight);
+
+      // See the matching block in the differential fast path above — batched
+      // glyph prewarm avoids per-character cold-miss SD reads during the
+      // upcoming drawText for the selected word.
+      if (const auto* w = navigator.getWordAt(currIdx)) {
+        if (auto* fcm = renderer.getFontCacheManager()) {
+          fcm->prewarmCache(SETTINGS.getReaderFontId(), navigator.getDisplay(*w),
+                            static_cast<uint8_t>(1u << (static_cast<uint8_t>(w->style) & 0x03)));
+        }
+      }
 
       auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
       bool snapshotPrimed = setup.has_value();
