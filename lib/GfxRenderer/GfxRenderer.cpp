@@ -1575,7 +1575,8 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
 }
 
 void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, const uint16_t pageWidth,
-                                    const uint16_t pageHeight, RenderHook overlayFn, const void* overlayCtx) {
+                                    const uint16_t pageHeight, RenderHook overlayFn, const void* overlayCtx,
+                                    GrayscaleMode mode) {
   const size_t colBytes = (pageHeight + 7) / 8;
   const uint16_t fbStride = panelWidthBytes;
 
@@ -1626,7 +1627,8 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
     screenshotHookCtx = nullptr;
   }
 
-  displayGrayBuffer(lut_factory_quality, true);
+  const unsigned char* lut = (mode == GrayscaleMode::FactoryQuality) ? lut_factory_quality : lut_factory_fast;
+  displayGrayBuffer(lut, true);
   setRenderMode(BW);
 }
 

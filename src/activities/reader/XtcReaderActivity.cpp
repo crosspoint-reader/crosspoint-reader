@@ -268,8 +268,11 @@ void XtcReaderActivity::renderPage() {
       renderer.displayBuffer(HalDisplay::FULL_REFRESH);
     }
 
+    const auto xtcGrayMode = SETTINGS.xtcRenderQuality == CrossPointSettings::XTC_RENDER_QUALITY_HIGH
+                                 ? GfxRenderer::GrayscaleMode::FactoryQuality
+                                 : GfxRenderer::GrayscaleMode::FactoryFast;
     renderer.displayXtchPlanes(plane1, plane2, pageWidth, pageHeight,
-                               &XtcReaderActivity::renderStatusBarOverlayCallback, this);
+                               &XtcReaderActivity::renderStatusBarOverlayCallback, this, xtcGrayMode);
     free(plane1);
     free(plane2);
 
