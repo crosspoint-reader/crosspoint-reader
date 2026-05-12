@@ -8,12 +8,8 @@
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
-#include "components/themes/BaseTheme.h"
-#include "components/themes/MilitaryTheme.h"
-#include "components/themes/lyra/Lyra3CoversTheme.h"
+#include "components/themes/lyra/ClassicButtonsTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
-#include "components/themes/noir/NoirTheme.h"
-#include "components/themes/radar/RadarTheme.h"
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
@@ -33,35 +29,16 @@ void UITheme::reload() {
 
 void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   switch (type) {
-    case CrossPointSettings::UI_THEME::CLASSIC:
-      LOG_DBG("UI", "Using Classic theme");
-      currentTheme = std::make_unique<BaseTheme>();
-      currentMetrics = &BaseMetrics::values;
+    case CrossPointSettings::UI_THEME::CLASSIC_BUTTONS:
+      LOG_DBG("UI", "Using Classic Buttons theme");
+      currentTheme = std::make_unique<ClassicButtonsTheme>();
+      currentMetrics = &ClassicButtonsMetrics::values;
       break;
-    case CrossPointSettings::UI_THEME::LYRA:
-      LOG_DBG("UI", "Using Lyra theme");
+    case CrossPointSettings::UI_THEME::CLASSIC:
+    default:
+      LOG_DBG("UI", "Using Classic theme");
       currentTheme = std::make_unique<LyraTheme>();
       currentMetrics = &LyraMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
-      LOG_DBG("UI", "Using Lyra 3 Covers theme");
-      currentTheme = std::make_unique<Lyra3CoversTheme>();
-      currentMetrics = &Lyra3CoversMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::MILITARY:
-      LOG_DBG("UI", "Using Military theme");
-      currentTheme = std::make_unique<MilitaryTheme>();
-      currentMetrics = &MilitaryMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::NOIR:
-      LOG_DBG("UI", "Using Noir theme");
-      currentTheme = std::make_unique<NoirTheme>();
-      currentMetrics = &NoirMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::RADAR:
-      LOG_DBG("UI", "Using Radar theme");
-      currentTheme = std::make_unique<RadarTheme>();
-      currentMetrics = &RadarMetrics::values;
       break;
   }
 }

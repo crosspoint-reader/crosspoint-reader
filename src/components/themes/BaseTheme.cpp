@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 #include "I18n.h"
@@ -160,6 +161,15 @@ void BaseTheme::drawSpinner(const GfxRenderer& renderer, int centerX, int center
   }
 }
 
+const char* BaseTheme::substituteHintLabel(const char* label) {
+  if (label == nullptr) return nullptr;
+  if (label[0] != '\0' && label[1] == '\0') return nullptr;  // single-char nav arrows (^, v, <, >)
+  if (std::strcmp(label, tr(STR_BACK)) == 0) return nullptr;
+  if (std::strcmp(label, tr(STR_SELECT)) == 0) return nullptr;
+  if (std::strcmp(label, tr(STR_TOGGLE)) == 0) return nullptr;
+  return label;
+}
+
 bool BaseTheme::drawArrowIfNeeded(const GfxRenderer& renderer, const char* label, int cx, int cy, int size, bool black) {
   if (!label || label[0] == '\0' || label[1] != '\0') return false;
   switch (label[0]) {
@@ -193,7 +203,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
   constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
-  constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
+  constexpr int textYOffset = 5;
   // X3 has wider screen in portrait (528 vs 480), use more spacing
   constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
   constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
@@ -201,16 +211,14 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
-    // Only draw if the label is non-empty
-    if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      if (!drawArrowIfNeeded(renderer, labels[i], x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, 6, true)) {
-        const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-        const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-        renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
-      }
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    const char* displayLabel = substituteHintLabel(labels[i]);
+    if (displayLabel == nullptr || displayLabel[0] == '\0') continue;
+    const int x = buttonPositions[i];
+    if (!drawArrowIfNeeded(renderer, displayLabel, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, 6, true)) {
+      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, displayLabel);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, displayLabel);
     }
   }
 

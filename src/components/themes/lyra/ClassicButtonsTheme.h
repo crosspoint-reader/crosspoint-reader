@@ -1,13 +1,8 @@
-
-
 #pragma once
 
-#include "components/themes/lyra/LyraTheme.h"
+#include "LyraTheme.h"
 
-class GfxRenderer;
-
-// Lyra theme metrics (zero runtime cost)
-namespace Lyra3CoversMetrics {
+namespace ClassicButtonsMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .batteryHeight = 12,
                                  .topPadding = 5,
@@ -25,9 +20,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 56,
                                  .homeCoverHeight = 226,
-                                 .homeCoverTileHeight = 300,
-                                 .homeRecentBooksCount = 3,
-                                 .buttonHintsHeight = 28,
+                                 .homeCoverTileHeight = 242,
+                                 .homeRecentBooksCount = 1,
+                                 .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .progressBarMarginTop = 1,
@@ -40,9 +35,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .keyboardCenteredText = true};
 }
 
-class Lyra3CoversTheme : public LyraTheme {
+class ClassicButtonsTheme : public LyraTheme {
  public:
-  void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
-                           const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
-                           std::function<bool()> storeCoverBuffer) const override;
+  void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                       const char* btn4) const override;
 };

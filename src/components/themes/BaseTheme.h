@@ -89,7 +89,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
                                  .homeRecentBooksCount = 1,
-                                 .buttonHintsHeight = 40,
+                                 .buttonHintsHeight = 28,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .progressBarMarginTop = 1,
@@ -152,4 +152,5 @@ class BaseTheme {
                            const char* label, int frame) const;
 
   static bool drawArrowIfNeeded(const GfxRenderer& renderer, const char* label, int cx, int cy, int size = 5, bool black = true);
+  static const char* substituteHintLabel(const char* label);
 };

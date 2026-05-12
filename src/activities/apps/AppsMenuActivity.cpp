@@ -28,12 +28,11 @@
 #include "DeviceInfoActivity.h"
 #include "BackgroundManagerActivity.h"
 #include "ReadingStatsActivity.h"
-#include "components/themes/radar/RadarHomeRenderer.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/settings/SettingsActivity.h"
-#include "activities/network/NetworkModeSelectionActivity.h"
+#include "activities/network/CrossPointWebServerActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include <esp_heap_caps.h>
@@ -43,13 +42,6 @@
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 
-// Radar home node table — kept in flash (.rodata) as constexpr.
-static constexpr RadarNode kRadarNodes[4] = {
-  {"APPS",     9},
-  {"GAMES",   11},
-  {"READER",   5},
-  {"SETTINGS", 4},
-};
 
 void AppsMenuActivity::onEnter() {
   Activity::onEnter();
@@ -61,84 +53,6 @@ void AppsMenuActivity::onEnter() {
 }
 
 void AppsMenuActivity::loop() {
-  // === RADAR MODE: circular navigation ===
-  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::RADAR) {
-    // Right/Down advances clockwise; Left/Up goes counter-clockwise.
-    if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-      selectorIndex = (selectorIndex + 1) % ITEM_COUNT;
-      requestUpdate();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-      selectorIndex = (selectorIndex - 1 + ITEM_COUNT) % ITEM_COUNT;
-      requestUpdate();
-    }
-    // Periodic info refresh in radar mode
-    if (millis() - lastInfoRefresh > INFO_REFRESH_MS) {
-      uint32_t oldHeap = freeHeap;
-      bool oldWifi = wifiConnected;
-      refreshSystemInfo();
-      bool heapChanged = (freeHeap / 1024) != (oldHeap / 1024);
-      if (heapChanged || (wifiConnected != oldWifi)) {
-        requestUpdate();
-      }
-    }
-    // Confirm and Back use the same switch as the grid — fall through to shared confirm block below.
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      std::unique_ptr<Activity> app;
-      switch (selectorIndex) {
-          case 0: {
-            std::vector<AppCategoryActivity::AppEntry> e = {
-                {tr(STR_WIFI_CONNECT), "Scan, connect, saved networks", UIIcon::Wifi, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<WifiConnectActivity>(r, m); }},
-                {"Bluetooth", "Scan nearby BLE devices", UIIcon::Hotspot, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<BleScannerActivity>(r, m); }},
-                {tr(STR_WIFI_SCANNER), "APs, signal, channels", UIIcon::Wifi, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<WifiScannerActivity>(r, m); }},
-                {"Calculator", "Basic calculator", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<CalculatorActivity>(r, m); }},
-                {"Clock", "NTP clock / stopwatch / pomodoro", UIIcon::Recent, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<ClockActivity>(r, m); }},
-                {tr(STR_UNIT_CONVERTER), "Convert between units", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<UnitConverterActivity>(r, m); }},
-                {"File Browser", "Browse files on SD card", UIIcon::Folder, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<SdFileBrowserActivity>(r, m); }},
-                {"WiFi Transfer", "Upload/download via WiFi", UIIcon::Transfer, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<NetworkModeSelectionActivity>(r, m); }},
-            };
-            app = std::make_unique<AppCategoryActivity>(renderer, mappedInput, "Apps", std::move(e), false, 0);
-            break;
-          }
-          case 1: {
-            std::vector<AppCategoryActivity::AppEntry> e = {
-                {"Casino", "Slots, blackjack, roulette + lootbox", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<CasinoActivity>(r, m); }, false, []() -> bool { return Storage.exists("/biscuit/casino.dat"); }},
-                {tr(STR_MINESWEEPER), "Classic minesweeper", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<MinesweeperActivity>(r, m); }},
-                {tr(STR_SUDOKU), "Number puzzle", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<SudokuActivity>(r, m); }},
-                {tr(STR_CHESS), "Play against the device", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<ChessActivity>(r, m); }},
-                {tr(STR_SNAKE), "Classic snake game", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<SnakeActivity>(r, m); }},
-                {tr(STR_TETRIS), "Block stacking", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<TetrisActivity>(r, m); }},
-                {"Maze", "Navigate random mazes", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<MazeActivity>(r, m); }},
-                {tr(STR_DICE_ROLLER), "Roll dice with animation", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<DiceRollerActivity>(r, m); }},
-                {tr(STR_GAME_OF_LIFE), "Conway's cellular automaton", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<GameOfLifeActivity>(r, m); }},
-                {tr(STR_VORONOI), "Generate Voronoi patterns", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<VoronoiActivity>(r, m); }},
-                {"Matrix Rain", "The Matrix digital rain effect", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<MatrixRainActivity>(r, m); }},
-            };
-            app = std::make_unique<AppCategoryActivity>(renderer, mappedInput, tr(STR_GAMES), std::move(e), false, 1);
-            break;
-          }
-          case 2: {
-            std::vector<AppCategoryActivity::AppEntry> e = {
-                {"Open Book", "Browse and open an ebook", UIIcon::Book, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<FileBrowserActivity>(r, m); }},
-                {"Recent Books", "Continue where you left off", UIIcon::Recent, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<RecentBooksActivity>(r, m); }},
-                {"OPDS Browser", "Download books from OPDS servers", UIIcon::Library, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<OpdsBookBrowserActivity>(r, m); }},
-                {"Reading Stats", "Pages read, streaks, progress", UIIcon::Book, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<ReadingStatsActivity>(r, m); }},
-            };
-            app = std::make_unique<AppCategoryActivity>(renderer, mappedInput, "Reader", std::move(e), false, 2);
-            break;
-          }
-          case 3: {
-            app = std::make_unique<SettingsActivity>(renderer, mappedInput);
-            break;
-          }
-        }
-      if (app) activityManager.pushActivity(std::move(app));
-    }
-    // Back button ignored on main screen — use Power button to sleep
-    return;
-  }
-
   // === 2D GRID NAVIGATION ===
   // Left/Right (front buttons) move between columns
   // Up/Down (side volume buttons) move between rows
@@ -213,7 +127,7 @@ void AppsMenuActivity::loop() {
               {"Clock", "NTP clock / stopwatch / pomodoro", UIIcon::Recent, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<ClockActivity>(r, m); }},
               {tr(STR_UNIT_CONVERTER), "Convert between units", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<UnitConverterActivity>(r, m); }},
               {"File Browser", "Browse files on SD card", UIIcon::Folder, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<SdFileBrowserActivity>(r, m); }},
-              {"WiFi Transfer", "Upload/download via WiFi", UIIcon::Transfer, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<NetworkModeSelectionActivity>(r, m); }},
+              {"WiFi Transfer", "Upload/download via WiFi", UIIcon::Transfer, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<CrossPointWebServerActivity>(r, m); }},
           };
           app = std::make_unique<AppCategoryActivity>(renderer, mappedInput, "Apps", std::move(e), false, 0);
           break;
@@ -258,21 +172,6 @@ void AppsMenuActivity::loop() {
 
 void AppsMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
-
-  // === RADAR MODE ===
-  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::RADAR) {
-    char radioBuf[48];
-    char sysBuf[32];
-    snprintf(radioBuf, sizeof(radioBuf), "wifi:%s  ble:OFF",
-             wifiConnected ? "ON " : "OFF");
-    snprintf(sysBuf, sizeof(sysBuf), "heap:%luK", (unsigned long)(freeHeap / 1024));
-    RadarHomeStatus status { radioBuf, sysBuf, static_cast<int>(batteryPercent) };
-    RadarHomeRenderer::draw(renderer, kRadarNodes, selectorIndex, status);
-    const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), "<", ">");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

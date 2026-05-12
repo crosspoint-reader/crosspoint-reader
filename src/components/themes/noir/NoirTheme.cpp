@@ -321,26 +321,21 @@ void NoirTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
 
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 80;
-  constexpr int smallButtonHeight = 15;
   constexpr int buttonHeight = NoirMetrics::values.buttonHintsHeight;
   constexpr int buttonY = NoirMetrics::values.buttonHintsHeight;
-  constexpr int textYOffset = 7;
+  constexpr int textYOffset = 5;
   constexpr int buttonPositions[] = {58, 146, 254, 342};
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    const char* displayLabel = BaseTheme::substituteHintLabel(labels[i]);
+    if (displayLabel == nullptr || displayLabel[0] == '\0') continue;
     const int x = buttonPositions[i];
-    if (labels[i] != nullptr && labels[i][0] != '\0') {
-      // Black filled rounded button with white text
-      renderer.fillRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, cornerRadius, Color::Black);
-      if (!BaseTheme::drawArrowIfNeeded(renderer, labels[i], x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, 5, false)) {
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-        renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i], false);  // white text
-      }
-    } else {
-      // Empty button: just a thin outline
-      renderer.drawRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, 1, cornerRadius, true);
+    if (!BaseTheme::drawArrowIfNeeded(renderer, displayLabel, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, 5, true)) {
+      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, displayLabel);
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, displayLabel);
     }
   }
 

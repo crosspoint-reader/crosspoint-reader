@@ -275,32 +275,24 @@ void MilitaryTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, con
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = MilitaryMetrics::values.buttonHintsHeight;
   constexpr int buttonY = MilitaryMetrics::values.buttonHintsHeight;
-  constexpr int textYOffset = 7;
+  constexpr int textYOffset = 5;
   constexpr int buttonPositions[] = {25, 130, 245, 350};
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {
-    if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
-      const int y = pageHeight - buttonY;
-
-      // Clear area
-      renderer.fillRect(x, y, buttonWidth, buttonHeight, false);
-      // Sharp rect border (no rounding)
-      renderer.drawRect(x, y, buttonWidth, buttonHeight);
-
-      if (!BaseTheme::drawArrowIfNeeded(renderer, labels[i], x + buttonWidth / 2, y + buttonHeight / 2, 6, true)) {
-        // Format as [LABEL]
-        std::string bracketLabel = std::string("[") + labels[i] + "]";
-        // Uppercase
-        for (size_t j = 1; j < bracketLabel.size() - 1; j++) {
-          bracketLabel[j] = static_cast<char>(toupper(static_cast<unsigned char>(bracketLabel[j])));
-        }
-
-        const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, bracketLabel.c_str());
-        const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-        renderer.drawText(UI_10_FONT_ID, textX, y + textYOffset, bracketLabel.c_str());
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    const char* substituted = BaseTheme::substituteHintLabel(labels[i]);
+    if (substituted == nullptr || substituted[0] == '\0') continue;
+    const int x = buttonPositions[i];
+    const int y = pageHeight - buttonY;
+    if (!BaseTheme::drawArrowIfNeeded(renderer, substituted, x + buttonWidth / 2, y + buttonHeight / 2, 6, true)) {
+      std::string bracketLabel = std::string("[") + substituted + "]";
+      for (size_t j = 1; j < bracketLabel.size() - 1; j++) {
+        bracketLabel[j] = static_cast<char>(toupper(static_cast<unsigned char>(bracketLabel[j])));
       }
+      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, bracketLabel.c_str());
+      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+      renderer.drawText(UI_10_FONT_ID, textX, y + textYOffset, bracketLabel.c_str());
     }
   }
 

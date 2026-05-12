@@ -34,6 +34,9 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                           StrId::STR_CAT_DISPLAY),
       SettingInfo::Toggle(StrId::STR_DISPLAY_INVERT, &CrossPointSettings::displayInvert, "displayInvert",
                           StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
+                        {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_CLASSIC_BUTTONS},
+                        "uiTheme", StrId::STR_CAT_DISPLAY),
 
       // --- Reader ---
       SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
