@@ -100,7 +100,7 @@ void BmpViewerActivity::onEnter() {
       bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
       bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
-        
+
       const auto labels =
           mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
