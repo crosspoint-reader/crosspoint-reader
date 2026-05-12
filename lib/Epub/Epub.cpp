@@ -740,11 +740,6 @@ bool Epub::generateThumbBmp(int height, uint32_t deadline) const {
     LOG_ERR("EBP", "Cover image is not a supported format, skipping thumbnail");
   }
 
-  // Write an empty marker file to avoid generation attempts in the future
-  FsFile thumbBmp;
-  if (Storage.openFileForWrite("EBP", thumbPath, thumbBmp)) {
-    thumbBmp.close();
-  }
   return false;
 }
 
