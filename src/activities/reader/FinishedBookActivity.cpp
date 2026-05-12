@@ -600,11 +600,12 @@ void FinishedBookActivity::render(RenderLock&&) {
   const int previewWidth = nextBookAvailable_ ? std::min(contentWidth / 2, kFinishedBookCoverMaxWidth) : 0;
   const int previewX = contentRect.x + metrics.contentSidePadding;
   const int previewY = y;
-  int actualCoverWidth = 0;
-  int actualCoverHeight = 0;
-  int previewTextX = previewX;
 
   if (nextBookAvailable_) {
+    int actualCoverWidth = 0;
+    int actualCoverHeight = 0;
+    int previewTextX = previewX;
+
     if (!nextBookCoverPath_.empty()) {
       const std::string coverPath = UITheme::getCoverThumbPath(nextBookCoverPath_, previewWidth, previewHeight);
       HalFile coverFile = Storage.open(coverPath.c_str());
@@ -625,8 +626,6 @@ void FinishedBookActivity::render(RenderLock&&) {
 
     if (actualCoverWidth > 0) {
       previewTextX = previewX + actualCoverWidth + metrics.contentSidePadding;
-    } else {
-      previewTextX = previewX;
     }
 
     const int previewTextWidth = contentRect.x + contentRect.width - metrics.contentSidePadding - previewTextX;
