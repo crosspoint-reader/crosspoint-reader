@@ -171,6 +171,18 @@ class SdCardFont {
     EpdFont epdFont{&stubData};
 
     bool present = false;
+
+    // Bounded ring of codepoints already logged as missing for this style
+    // since the last cache clear. prewarmStyle()/buildAdvanceTable() count
+    // every miss but only LOG_DBG the first MAX_REPORTED_MISSES distinct
+    // codepoints — without this, a document containing a non-supported
+    // script (e.g. a Greek quotation in a Latin-only font) spams the log
+    // at every layout pass with the same dozen codepoints. Reset by
+    // freeStyleAll() and clearCache(); cps that fall off the ring still
+    // resolve correctly via the replacement glyph.
+    static constexpr uint8_t MAX_REPORTED_MISSES = 32;
+    uint32_t reportedMisses[MAX_REPORTED_MISSES] = {};
+    uint8_t reportedMissCount = 0;
   };
 
   PerStyle styles_[MAX_STYLES] = {};
@@ -230,6 +242,8 @@ class SdCardFont {
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
   int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
+  // Bounded per-style miss reporter (see PerStyle::MAX_REPORTED_MISSES).
+  static bool reportMissOnce(PerStyle& s, uint32_t codepoint, uint8_t styleIdx, const char* origin);
 
   // Global helpers
   void freeAll();

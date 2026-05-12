@@ -84,7 +84,25 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
   delete[] s.fullIntervals;
   s.fullIntervals = nullptr;
   freeStyleKernLigatureData(s);
+  s.reportedMissCount = 0;
   s.present = false;
+}
+
+// Log a missing codepoint at LOG_DBG once per style since the last cache
+// clear. Returns true if the cp was newly seen (and either logged or
+// recorded as overflow), false if it was already on the ring. Bounded to
+// PerStyle::MAX_REPORTED_MISSES distinct entries; once full, further misses
+// silently increment the count without re-logging — the cps still fall back
+// to the replacement glyph cleanly in EpdFont::getGlyph().
+bool SdCardFont::reportMissOnce(PerStyle& s, uint32_t codepoint, uint8_t styleIdx, const char* origin) {
+  for (uint8_t r = 0; r < s.reportedMissCount; r++) {
+    if (s.reportedMisses[r] == codepoint) return false;
+  }
+  if (s.reportedMissCount < PerStyle::MAX_REPORTED_MISSES) {
+    s.reportedMisses[s.reportedMissCount++] = codepoint;
+    LOG_DBG("SDCF", "%s: missing glyph U+%04X style %u", origin, codepoint, styleIdx);
+  }
+  return true;
 }
 
 // --- Global free/cleanup ---
@@ -708,6 +726,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       mappings[validCount].codepoint = codepoints[i];
       mappings[validCount].globalIndex = idx;
       validCount++;
+    } else {
+      reportMissOnce(s, codepoints[i], styleIdx, "prewarm");
     }
   }
   int missed = static_cast<int>(cpCount - validCount);
@@ -920,6 +940,10 @@ void SdCardFont::clearCache() {
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;
     freeStyleMiniData(styles_[i]);
+    // Forget which cps we've already logged as missing. clearCache() marks a
+    // section / chapter boundary, so a missing-glyph diagnostic from the
+    // *next* section is genuinely new information worth re-logging.
+    styles_[i].reportedMissCount = 0;
     applyGlyphMissCallback(i);
   }
 }
@@ -1102,6 +1126,7 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
       if (advanceTableLookup(si, cp, nullptr)) continue;  // already cached
       int32_t idx = findGlobalGlyphIndex(s, cp);
       if (idx < 0) {
+        reportMissOnce(styles_[si], cp, si, "advance");
         missedThisStyle++;
         continue;
       }
