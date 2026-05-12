@@ -135,6 +135,9 @@ class CrossPointSettings {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, CLASSIC_BUTTONS = 1 };
 
+  // Recent book cover opacity
+  enum COVER_OPACITY { COVER_OFF = 0, COVER_LIGHT = 1, COVER_MEDIUM = 2, COVER_FULL = 3, COVER_OPACITY_COUNT };
+
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
@@ -196,6 +199,8 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Invert the entire display framebuffer before pushing to e-ink (0 = normal, 1 = inverted)
   uint8_t displayInvert = 0;
+  // Recent book cover opacity on home screen
+  uint8_t coverOpacity = COVER_LIGHT;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)

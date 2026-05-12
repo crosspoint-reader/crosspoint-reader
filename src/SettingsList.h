@@ -37,6 +37,10 @@ inline const std::vector<SettingInfo>& getSettingsList() {
       SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
                         {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_CLASSIC_BUTTONS},
                         "uiTheme", StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_COVER_OPACITY, &CrossPointSettings::coverOpacity,
+                        {StrId::STR_COVER_OPACITY_OFF, StrId::STR_COVER_OPACITY_LIGHT,
+                         StrId::STR_COVER_OPACITY_MEDIUM, StrId::STR_COVER_OPACITY_FULL},
+                        "coverOpacity", StrId::STR_CAT_DISPLAY),
 
       // --- Reader ---
       SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,

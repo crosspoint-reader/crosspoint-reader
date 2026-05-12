@@ -229,8 +229,12 @@ void HalGPIO::startDeepSleep() {
     delay(50);
     inputMgr.update();
   }
-  // Arm the wakeup trigger *after* the button is released
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+  // Arm wakeup on power button and nav ADC pins (Left/Right/Down pull LOW; Up/Confirm/Back stay above threshold)
+  esp_deep_sleep_enable_gpio_wakeup(
+      (1ULL << InputManager::POWER_BUTTON_PIN) |
+          (1ULL << InputManager::BUTTON_ADC_PIN_1) |
+          (1ULL << InputManager::BUTTON_ADC_PIN_2),
+      ESP_GPIO_WAKEUP_GPIO_LOW);
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
@@ -290,8 +294,11 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
   const bool usbConnected = isUsbConnected();
 
+  const bool gpioWakeup = (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP);
+  const bool powerPinTriggered =
+      gpioWakeup && (esp_sleep_get_gpio_wakeup_status() & (1ULL << InputManager::POWER_BUTTON_PIN));
   if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
-      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
+      (powerPinTriggered && usbConnected)) {
     return WakeupReason::PowerButton;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {

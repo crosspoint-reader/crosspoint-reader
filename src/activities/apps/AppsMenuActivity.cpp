@@ -2,6 +2,10 @@
 
 #include <I18n.h>
 
+#include <Bitmap.h>
+#include <Epub.h>
+#include <FsHelpers.h>
+#include <Xtc.h>
 #include "AppCategoryActivity.h"
 #include "BleScannerActivity.h"
 #include "CasinoActivity.h"
@@ -45,15 +49,73 @@
 
 void AppsMenuActivity::loadRecentBooks() {
   recentBooks.clear();
+  memset(progressStr, 0, sizeof(progressStr));
   for (const auto& b : RECENT_BOOKS.getBooks()) {
     if ((int)recentBooks.size() >= MAX_RECENT) break;
-    if (Storage.exists(b.path.c_str())) recentBooks.push_back(b);
+    if (!Storage.exists(b.path.c_str())) continue;
+
+    int idx = (int)recentBooks.size();
+    recentBooks.push_back(b);
+
+    // Read progress.bin cheaply without loading the epub
+    std::string cachePath;
+    if (FsHelpers::hasEpubExtension(b.path)) {
+      cachePath = Epub(b.path, "/.crosspoint").getCachePath();
+    } else if (FsHelpers::hasXtcExtension(b.path)) {
+      cachePath = Xtc(b.path, "/.crosspoint").getCachePath();
+    }
+    if (cachePath.empty()) continue;
+
+    std::string progressPath = cachePath + "/progress.bin";
+    FsFile f;
+    if (Storage.openFileForRead("APM", progressPath, f)) {
+      uint8_t data[6] = {};
+      int n = f.read(data, 6);
+      f.close();
+      if (n >= 4) {
+        int spineIndex = data[0] + (data[1] << 8);
+        int curPage    = data[2] + (data[3] << 8);
+        int pageCount  = (n >= 6) ? data[4] + (data[5] << 8) : 0;
+        if (pageCount > 0) {
+          snprintf(progressStr[idx], sizeof(progressStr[idx]),
+                   "Ch.%d p.%d/%d", spineIndex + 1, curPage + 1, pageCount);
+        } else {
+          snprintf(progressStr[idx], sizeof(progressStr[idx]),
+                   "Ch.%d p.%d", spineIndex + 1, curPage + 1);
+        }
+      }
+    }
   }
+}
+
+void AppsMenuActivity::loadCovers() {
+  for (RecentBook& book : recentBooks) {
+    if (book.coverBmpPath.empty()) continue;
+    std::string thumbPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverThumbH);
+    if (Storage.exists(thumbPath.c_str())) continue;
+
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      Epub epub(book.path, "/.crosspoint");
+      epub.load(false, true);
+      if (!epub.generateThumbBmp(coverThumbH)) book.coverBmpPath = "";
+    } else if (FsHelpers::hasXtcExtension(book.path)) {
+      Xtc xtc(book.path, "/.crosspoint");
+      if (xtc.load()) {
+        if (!xtc.generateThumbBmp(coverThumbH)) book.coverBmpPath = "";
+      }
+    }
+  }
+  coversLoaded = true;
+  coversLoading = false;
+  requestUpdate();
 }
 
 void AppsMenuActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
+  coversLoaded = false;
+  coversLoading = false;
+  firstRenderDone = false;
   refreshSystemInfo();
   loadLastUsed();
   loadRecentBooks();
@@ -219,6 +281,13 @@ void AppsMenuActivity::render(RenderLock&&) {
   // Bottom section — recent books
   const int recentsTop = divY + 8;
   const int recentsH = pageBottom - recentsTop;
+  const int headerH = renderer.getLineHeight(SMALL_FONT_ID) + 4;
+  const int booksH = recentsH - headerH;
+  const int bookH = (recentBooks.empty()) ? booksH : booksH / (int)recentBooks.size();
+  // Generate tall enough that cover width > tile width (drawBitmap only downscales).
+  // tileW = pageWidth - sidePad*2. For a 2:3 portrait cover: coverW = thumbH * 2/3.
+  // Need coverW > tileW → thumbH > tileW * 3/2.
+  coverThumbH = ((pageWidth - sidePad * 2) * 3) / 2 + 50;
   drawRecentBooks(sidePad, recentsTop, pageWidth - sidePad * 2, recentsH);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "<", ">");
@@ -226,6 +295,14 @@ void AppsMenuActivity::render(RenderLock&&) {
   GUI.drawSideButtonHints(renderer, "^", "v");
 
   renderer.displayBuffer();
+
+  if (!firstRenderDone) {
+    firstRenderDone = true;
+    requestUpdate();
+  } else if (!coversLoaded && !coversLoading && !recentBooks.empty()) {
+    coversLoading = true;
+    loadCovers();
+  }
 }
 
 void AppsMenuActivity::drawRecentBooks(int x, int y, int w, int h) const {
@@ -238,36 +315,85 @@ void AppsMenuActivity::drawRecentBooks(int x, int y, int w, int h) const {
     return;
   }
 
+  const int booksTop = y + headerH;
   const int booksH = h - headerH;
-  const int bookH = booksH / (int)recentBooks.size();
   const int titleLineH = renderer.getLineHeight(UI_10_FONT_ID);
   const int authorLineH = renderer.getLineHeight(SMALL_FONT_ID);
   constexpr int pad = 8;
 
-  for (int i = 0; i < (int)recentBooks.size(); i++) {
-    const bool sel = isRecentSelected() && recentIdx() == i;
-    const int by = y + headerH + i * bookH;
+  // Which book to display — selected recent when navigating recents, else book 0
+  const int showIdx = (isRecentSelected() && recentIdx() < (int)recentBooks.size())
+                      ? recentIdx() : 0;
+  const RecentBook& shown = recentBooks[showIdx];
 
-    if (sel) renderer.fillRect(x, by, w, bookH - 2, true);
-    else renderer.drawRect(x, by, w, bookH - 2, true);
+  // Full-section border (selected = inverted, otherwise plain rect)
+  const bool recSel = isRecentSelected();
+  if (recSel) renderer.fillRect(x, booksTop, w, booksH, true);
+  else        renderer.drawRect(x, booksTop, w, booksH, true);
 
-    const auto& book = recentBooks[i];
-    const std::string& title = book.title.empty() ? book.path : book.title;
-
-    // Truncate title to fit
-    std::string displayTitle = title;
-    const int maxW = w - pad * 2;
-    while (displayTitle.size() > 4 && renderer.getTextWidth(UI_10_FONT_ID, displayTitle.c_str()) > maxW)
-      displayTitle.resize(displayTitle.size() - 4);
-    if (displayTitle.size() < title.size()) displayTitle += "...";
-
-    const int titleY = by + (bookH - 2 - titleLineH - authorLineH - 2) / 2;
-    renderer.drawText(UI_10_FONT_ID, x + pad, titleY, displayTitle.c_str(), !sel, EpdFontFamily::BOLD);
-
-    if (!book.author.empty()) {
-      renderer.drawText(SMALL_FONT_ID, x + pad, titleY + titleLineH + 2, book.author.c_str(), !sel);
+  // Cover fills the entire section
+  const uint8_t opacity = SETTINGS.coverOpacity;
+  if (coversLoaded && opacity != CrossPointSettings::COVER_OFF &&
+      !shown.coverBmpPath.empty() && coverThumbH > 0 && !recSel) {
+    std::string thumbPath = UITheme::getCoverThumbPath(shown.coverBmpPath, coverThumbH);
+    FsFile coverFile;
+    if (Storage.openFileForRead("APM", thumbPath, coverFile)) {
+      Bitmap bitmap(coverFile);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        int bmpW = bitmap.getWidth();
+        int bmpH = bitmap.getHeight();
+        float cropY = 0.0f;
+        if (bmpW > 0 && bmpH > 0) {
+          float widthScale = (float)(w - 2) / (float)bmpW;
+          float scaledH = bmpH * widthScale;
+          if (scaledH > booksH - 2) cropY = 1.0f - ((float)(booksH - 2) / scaledH);
+        }
+        renderer.drawBitmap(bitmap, x + 1, booksTop + 1, w - 2, booksH - 2, 0.0f, cropY);
+        if (opacity == CrossPointSettings::COVER_LIGHT) {
+          for (int fy = booksTop + 1; fy < booksTop + booksH - 1; fy++)
+            for (int fx = x + 1; fx < x + w - 1; fx++)
+              if (!(fx % 2 == 0 && fy % 2 == 0))
+                renderer.drawPixel(fx, fy, false);
+        } else if (opacity == CrossPointSettings::COVER_MEDIUM) {
+          for (int fy = booksTop + 1; fy < booksTop + booksH - 1; fy++)
+            for (int fx = x + 1; fx < x + w - 1; fx++)
+              if ((fx + fy) % 2 != 0)
+                renderer.drawPixel(fx, fy, false);
+        }
+      }
+      coverFile.close();
     }
   }
+
+  // Book info — pinned to bottom of section
+  const int infoH = titleLineH + authorLineH + 6;
+  const int infoY = booksTop + booksH - infoH - pad;
+  const std::string& title = shown.title.empty() ? shown.path : shown.title;
+  std::string displayTitle = title;
+  const int maxW = w - pad * 2;
+  while (displayTitle.size() > 4 && renderer.getTextWidth(UI_10_FONT_ID, displayTitle.c_str()) > maxW)
+    displayTitle.resize(displayTitle.size() - 4);
+  if (displayTitle.size() < title.size()) displayTitle += "...";
+
+  renderer.drawText(UI_10_FONT_ID, x + pad, infoY, displayTitle.c_str(), !recSel, EpdFontFamily::BOLD);
+
+  if (!shown.author.empty())
+    renderer.drawText(SMALL_FONT_ID, x + pad, infoY + titleLineH + 2, shown.author.c_str(), !recSel);
+
+  if (progressStr[showIdx][0] != '\0') {
+    int pW = renderer.getTextWidth(SMALL_FONT_ID, progressStr[showIdx]);
+    renderer.drawText(SMALL_FONT_ID, x + w - pad - pW, infoY + titleLineH + 2,
+                      progressStr[showIdx], !recSel);
+  }
+
+  // Book index indicator (e.g. "2 / 3") top-right
+  if ((int)recentBooks.size() > 1) {
+    char idxStr[8];
+    snprintf(idxStr, sizeof(idxStr), "%d / %d", showIdx + 1, (int)recentBooks.size());
+    int idxW = renderer.getTextWidth(SMALL_FONT_ID, idxStr);
+    renderer.drawText(SMALL_FONT_ID, x + w - pad - idxW, booksTop + pad, idxStr, !recSel);
+  }
+
 }
 
 void AppsMenuActivity::refreshSystemInfo() {

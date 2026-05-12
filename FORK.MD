@@ -168,77 +168,83 @@ Replaced Bookerly / Noto Sans / Open Dyslexic with the CrossInk font set (noemoj
 
 ---
 
-## 11. Home Screen — Recent Books with Cover Art (TODO)
+## 11. Home Screen — Recent Books with Cover Art
 
-**Files:** `src/activities/apps/AppsMenuActivity.h`, `src/activities/apps/AppsMenuActivity.cpp`
+**Files:** `src/activities/apps/AppsMenuActivity.h`, `src/activities/apps/AppsMenuActivity.cpp`, `src/CrossPointSettings.h`, `src/SettingsList.h`, `lib/I18n/translations/english.yaml`
 
-### Current state (as of last commit)
-Bottom half already shows 3 recent books as a **vertical text list** — title + author, rectangular selector, navigation wired up, `goToReader()` on confirm. This is the baseline to replace.
+### What's implemented
 
-### Goal
-Replace vertical text list with **3 horizontal book cards**, each showing:
-- Cover image (scaled to fill card width, cropped to fit height)
-- Title below cover (truncated, `SMALL_FONT_ID`, bold)
-- Read progress % below title (if available)
-- Rectangular border selector on active card (our existing style — `drawRect`, not rounded)
+The bottom recents section shows **one large book card** filling the full area. The most-recently-read book is displayed by default; pressing Down/Up cycles through up to 3 recent books (each fills the section). The card shows:
 
-Layout sketch (bottom ~56% of screen, below divider line):
-```
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│          │ │  COVER   │ │          │
-│  COVER   │ │ (selected│ │  COVER   │
-│          │ │ outlined)│ │          │
-│──────────│ │──────────│ │──────────│
-│  Title.. │ │  Title.. │ │  Title.. │
-│  42%     │ │  42%     │ │  42%     │
-└──────────┘ └──────────┘ └──────────┘
-```
+- **Cover art** as background — faded per the `Cover Opacity` setting
+- **Title** (bold, `UI_10_FONT_ID`, truncated) pinned to bottom of card
+- **Author** (`SMALL_FONT_ID`) below title
+- **Reading progress** (`Ch.N p.X/Y`, right-aligned) — read from `progress.bin` without loading the EPUB
+- **Book index indicator** (`1 / 3` etc.) top-right corner
+- **Selection state**: inverted fill when recents zone is active
 
-Navigation change: Left/Right (currently column nav in tiles) must **also** move between book cards when `isRecentSelected()`. Up/Down still cross between tile grid and recents row.
+### Navigation
 
-### What already exists in the codebase
-- `Epub::generateThumbBmp(int height)` — generates a BMP thumbnail at given height, saves to SD
-- `Epub::getThumbBmpPath(int height)` — returns the thumb path for a given height
-- `UITheme::getCoverThumbPath(coverBmpPath, int height)` — maps stored `coverBmpPath` → thumb path
-- `RecentBook::coverBmpPath` — populated when a book is opened (may be empty for never-opened books)
-- `renderer.drawBitmap(bitmap, x, y, w, h, cropX, cropY)` — draws a `Bitmap` object scaled/cropped
-- `Bitmap` class — constructed from an `FsFile` (see `SleepActivity.cpp:74`)
-- `Storage.exists(path)` — check thumb exists before trying to load
+| Input | Action |
+|-------|--------|
+| Down (from tiles) | Enter recents zone, show book 0 |
+| Down (in recents) | Cycle to next book; if at last → back to tiles |
+| Up (in recents) | Cycle to prev book; if at first → back to tiles |
+| Confirm (in recents) | Open selected book in reader |
 
-### Read progress
-`RecentBook` has no `progress` field. Progress is stored per-book in `/.crosspoint/state/` JSON files (same place the reader resumes from). To show %, either:
-- **(Recommended)** Add `float progress` (0.0–1.0) to `RecentBook` struct and populate it in `RecentBooksStore::addBook()` / `updateBook()` when the reader saves state. Check how `EpubReaderActivity` calls `RECENT_BOOKS.addBook`.
-- **(Simpler fallback)** Skip progress display for now; show only cover + title.
+### Cover loading (async, two-pass)
 
-### Cover loading strategy
-Cover generation is slow (parses EPUB). Do it async, same pattern as cpr-vcodex `HomeActivity`:
-1. `onEnter()` — call `loadRecentBooks()`, check if thumbs exist on SD already
-2. First `render()` pass — draw cards with placeholder rects where covers will go, set `coversLoaded = false`
-3. After first render — if any thumb is missing, call `loadCovers()`: open Epub, call `generateThumbBmp(coverH)`, store result, call `requestUpdate()`
-4. Subsequent renders — load existing BMP from SD via `Bitmap(file)`, call `renderer.drawBitmap()`
+1. `onEnter()` → `loadRecentBooks()` (reads `progress.bin` per book, no EPUB load)
+2. First `render()` → draws placeholder border, sets `firstRenderDone = true`, calls `requestUpdate()`
+3. Second `render()` → `loadCovers()` runs: generates BMP thumbs via `epub.generateThumbBmp(coverThumbH)` / `xtc.generateThumbBmp(coverThumbH)` for any missing thumbs; calls `requestUpdate()`
+4. Third `render()` → loads BMP from SD, draws faded cover
 
-**Cover height** — use bottom section height minus title/progress lines (~3 lines × `SMALL_FONT_ID` lineHeight). Cover width = card width (each card = `(pageWidth - 2*sidePad - 2*gap) / 3`).
+**Thumb height** — computed in `render()` as `((pageWidth - sidePad*2) * 3) / 2 + 50`. This ensures the portrait cover's width exceeds tile width so `drawBitmap` downscales to fill width (the renderer only downscales; upscaling is not supported).
 
-### New fields needed in `AppsMenuActivity.h`
+**Fill + top-crop** — `cropY` is computed so the image fills tile width and height exactly:
 ```cpp
-bool coversLoaded = false;
-bool coversLoading = false;
+float widthScale = (float)(w - 2) / bmpW;
+float scaledH = bmpH * widthScale;
+if (scaledH > booksH - 2) cropY = 1.0f - ((float)(booksH - 2) / scaledH);
+renderer.drawBitmap(bitmap, x+1, booksTop+1, w-2, booksH-2, 0.0f, cropY);
 ```
 
-### Key render geometry
-```cpp
-const int recentsTop  = divY + 8;           // below divider (already computed)
-const int recentsH    = pageBottom - recentsTop;
-const int cardW       = (w - 2 * tileGap) / 3;
-const int footerH     = lineH * 2 + 6;      // title + progress
-const int coverH      = recentsH - footerH - 8;
-```
+### Cover Opacity setting
 
-### UI style rules (match existing fork style)
-- Selected card: `renderer.drawRect(x, y, cardW, recentsH, true)` — same 1px rect as tiles
-- Unselected: no border (or faint — `drawRect` with fill=false)
-- No rounded corners, no shadows
-- Cover placeholder (while loading): filled grey rect (`fillRect` with ~30% fill pattern or just outline)
+Added to **Settings → Display** as `Cover Opacity` (key `coverOpacity`):
+
+| Value | Label | Effect |
+|-------|-------|--------|
+| 0 | Off | No cover drawn |
+| 1 | Light (25%) | Keep pixels at `x%2==0 && y%2==0` |
+| 2 | Medium (50%) | Keep pixels at `(x+y)%2==0` |
+| 3 | Full | No fade overlay |
+
+Default: **Light (25%)**. Maps exactly to the renderer's native dither densities.
+
+---
+
+## 12. Boot Animation — Removed
+
+**Files:** `src/activities/boot_sleep/BootActivity.cpp`
+
+Stripped all rendering from `BootActivity::onEnter()`. Logo, app name, and "Booting…" text no longer drawn on startup. Device boots straight to the home screen with no splash delay.
+
+Removed includes: `GfxRenderer.h`, `I18n.h`, `fontIds.h`, `images/Logo120.h`.
+
+---
+
+## 13. Sleep Wake — Nav Buttons (USB only)
+
+**Files:** `lib/hal/HalGPIO.cpp`, `lib/hal/HalPowerManager.cpp`
+
+GPIO1 and GPIO2 (nav ADC pins) added to the deep-sleep GPIO wakeup mask alongside the power button (GPIO3). Pressing a nav button while on USB power wakes the device and boots normally.
+
+**Which buttons wake:** Left, Right, Down — their resistor-divider voltage drops below the 1.65 V logic LOW threshold. Up, Confirm, and Back stay above it and cannot trigger wakeup.
+
+**Battery limitation:** On battery the MOSFET latch (GPIO13) cuts all power including RTC. The chip is completely off; only the hardware power button (which physically restores power) can wake it. This is a hardware constraint, not software.
+
+`getWakeupReason()` updated to use `esp_sleep_get_gpio_wakeup_status()` to distinguish power-button vs nav-button wakeup on USB. Nav-button wakeup returns `Other` → boots normally without triggering `verifyPowerButtonWakeup`.
 
 ---
 
@@ -253,17 +259,11 @@ All changes complete. Build passes clean.
 ### GitHub
 - [ ] **GitHub fork badge** — Detach `deepakvettickal/crosspoint-lean` from the crosspoint-reader fork network via GitHub Support (`support.github.com`), then re-fork crosspoint-reader into `shortbread` to get the official fork badge. Badge is cosmetic only — `shortbread` already tracks `crosspoint-reader` as `upstream` remote.
 
-### UI / Navigation
-- [ ] **Remove boxes around navigation indicators** — Bottom button hints currently render each label inside a drawn rectangle. Remove the box outlines, show labels as plain text only.
-- [ ] **Smaller BACK / SELECT with icons** — Replace text labels with compact icons. Candidate: `<<` for BACK, `>>` for SELECT. Affects `drawButtonHints` in `BaseTheme.cpp` (and `NoirTheme.cpp`, `MilitaryTheme.cpp` overrides). Apply consistently across all themes.
-- [ ] **Move navigation indicators closer to border** — Reduce bottom padding so hints sit closer to the screen edge. Adjust `buttonHintsHeight` metric and hint Y position in `BaseTheme.cpp`.
 
 ### Reader
 - [ ] **Dictionary on press-and-hold** — Long press on a word in the reader triggers a dictionary lookup overlay, similar to macOS. Requires: word boundary detection at tap/button position, dictionary data source on SD card, popup overlay renderer.
 - [ ] **Word selector** — Press-and-hold also activates a word highlight selector (extend selection left/right with buttons), like macOS text selection. Feeds into the dictionary lookup or copy buffer.
 
-### Settings
-- [ ] **Dark theme inside SETTINGS** — Settings screens render with inverted colours (dark background, light text) regardless of the global UI theme. Scoped to `SettingsActivity` and its child screens only.
 
 ---
 

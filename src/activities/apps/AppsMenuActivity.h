@@ -32,7 +32,15 @@ class AppsMenuActivity final : public Activity {
 
   // Recent books (loaded on enter, up to MAX_RECENT)
   std::vector<RecentBook> recentBooks;
+  char progressStr[MAX_RECENT][20] = {};
   void loadRecentBooks();
+
+  // Cover thumbnail loading (async, after first render)
+  bool coversLoaded = false;
+  bool coversLoading = false;
+  bool firstRenderDone = false;
+  int coverThumbH = 0;
+  void loadCovers();
 
   // Cached system info (refreshed on enter + periodically)
   uint32_t freeHeap = 0;
