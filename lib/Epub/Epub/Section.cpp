@@ -572,13 +572,29 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   // Patch header with final parseComplete/pageCount and offsets.
-  file.seek(HEADER_TAIL_PARSE_COMPLETE_OFFSET);
+  const size_t headerPatchStart = HEADER_TAIL_PARSE_COMPLETE_OFFSET;
+  if (!file.seek(headerPatchStart)) {
+    LOG_ERR("SCT", "Failed to seek to section header patch offset %u", HEADER_TAIL_PARSE_COMPLETE_OFFSET);
+    file.close();
+    Storage.remove(filePath.c_str());
+    return false;
+  }
   serialization::writePod(file, parseComplete);
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   serialization::writePod(file, anchorMapOffset);
   serialization::writePod(file, paragraphLutOffset);
   file.flush();
+
+  const size_t expectedHeaderPatchEnd = headerPatchStart + sizeof(parseComplete) + sizeof(pageCount) +
+                                        sizeof(lutOffset) + sizeof(anchorMapOffset) + sizeof(paragraphLutOffset);
+  if (file.position() != expectedHeaderPatchEnd) {
+    LOG_ERR("SCT", "Section header patch write failed: wrote %u bytes at offset %u",
+            static_cast<unsigned>(file.position() - headerPatchStart), static_cast<unsigned>(headerPatchStart));
+    file.close();
+    Storage.remove(filePath.c_str());
+    return false;
+  }
 
   if (cssParser) {
     cssParser->clear();
