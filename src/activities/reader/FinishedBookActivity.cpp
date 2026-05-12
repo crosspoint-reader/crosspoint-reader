@@ -603,7 +603,6 @@ void FinishedBookActivity::render(RenderLock&&) {
 
   if (nextBookAvailable_) {
     int actualCoverWidth = 0;
-    int actualCoverHeight = 0;
     int previewTextX = previewX;
 
     if (!nextBookCoverPath_.empty()) {
@@ -612,7 +611,7 @@ void FinishedBookActivity::render(RenderLock&&) {
       if (coverFile) {
         Bitmap bmp(coverFile);
         if (bmp.parseHeaders() == BmpReaderError::Ok && bmp.getWidth() > 0 && bmp.getHeight() > 0) {
-          actualCoverHeight = previewHeight;
+          int actualCoverHeight = previewHeight;
           actualCoverWidth = bmp.getWidth() * actualCoverHeight / bmp.getHeight();
           if (actualCoverWidth > previewWidth) {
             actualCoverWidth = previewWidth;
