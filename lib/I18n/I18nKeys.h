@@ -199,6 +199,8 @@ enum class StrId : uint16_t {
   STR_CHAREINK,
   STR_LEXENDDECA,
   STR_BITTER,
+  STR_TEENSY,
+  STR_TINY,
   STR_SMALL,
   STR_MEDIUM,
   STR_LARGE,

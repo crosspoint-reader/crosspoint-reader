@@ -240,12 +240,6 @@ float CrossPointSettings::getReaderLineCompression() const {
         case NORMAL: default: return 0.95f;
         case WIDE: return 1.0f;
       }
-    case BITTER:
-      switch (lineSpacing) {
-        case TIGHT: return 0.90f;
-        case NORMAL: default: return 0.95f;
-        case WIDE: return 1.0f;
-      }
   }
 }
 
@@ -286,6 +280,8 @@ int CrossPointSettings::getReaderFontId() const {
     case CHAREINK:
     default:
       switch (fontSize) {
+        case TEENSY: return CHAREINK_8_FONT_ID;
+        case TINY: return CHAREINK_10_FONT_ID;
         case SMALL: return CHAREINK_12_FONT_ID;
         case MEDIUM: default: return CHAREINK_14_FONT_ID;
         case LARGE: return CHAREINK_16_FONT_ID;
@@ -294,19 +290,13 @@ int CrossPointSettings::getReaderFontId() const {
       }
     case LEXENDDECA:
       switch (fontSize) {
+        case TEENSY: return LEXENDDECA_8_FONT_ID;
+        case TINY: return LEXENDDECA_10_FONT_ID;
         case SMALL: return LEXENDDECA_12_FONT_ID;
         case MEDIUM: default: return LEXENDDECA_14_FONT_ID;
         case LARGE: return LEXENDDECA_16_FONT_ID;
         case EXTRA_LARGE: return LEXENDDECA_18_FONT_ID;
         case HUGE: return LEXENDDECA_20_FONT_ID;
-      }
-    case BITTER:
-      switch (fontSize) {
-        case SMALL: return BITTER_12_FONT_ID;
-        case MEDIUM: default: return BITTER_14_FONT_ID;
-        case LARGE: return BITTER_16_FONT_ID;
-        case EXTRA_LARGE: return BITTER_18_FONT_ID;
-        case HUGE: return BITTER_20_FONT_ID;
       }
   }
 }

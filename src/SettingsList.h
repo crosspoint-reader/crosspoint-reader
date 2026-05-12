@@ -40,11 +40,11 @@ inline const std::vector<SettingInfo>& getSettingsList() {
 
       // --- Reader ---
       SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                        {StrId::STR_CHAREINK, StrId::STR_LEXENDDECA, StrId::STR_BITTER}, "fontFamily",
+                        {StrId::STR_CHAREINK, StrId::STR_LEXENDDECA}, "fontFamily",
                         StrId::STR_CAT_READER),
       SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                         {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE,
-                         StrId::STR_HUGE}, "fontSize",
+                         StrId::STR_HUGE, StrId::STR_TEENSY, StrId::STR_TINY}, "fontSize",
                         StrId::STR_CAT_READER),
       SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
                         {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE}, "lineSpacing", StrId::STR_CAT_READER),
