@@ -75,6 +75,11 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   config.buffer_size_tx = HTTP_BUF_SIZE;
   config.crt_bundle_attach = esp_crt_bundle_attach;
 
+  // HTTP Basic Auth for Calibre-Web-Automated compatibility
+  config.username = KOREADER_STORE.getUsername().c_str();
+  config.password = KOREADER_STORE.getPassword().c_str();
+  config.auth_type = HTTP_AUTH_TYPE_BASIC;
+
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) return nullptr;
 
@@ -83,16 +88,6 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
       esp_http_client_set_header(client, "x-auth-user", KOREADER_STORE.getUsername().c_str()) != ESP_OK ||
       esp_http_client_set_header(client, "x-auth-key", KOREADER_STORE.getMd5Password().c_str()) != ESP_OK) {
     LOG_ERR("KOSync", "Failed to set auth headers");
-    esp_http_client_cleanup(client);
-    return nullptr;
-  }
-
-  // HTTP Basic Auth for Calibre-Web-Automated compatibility
-  std::string credentials = KOREADER_STORE.getUsername() + ":" + KOREADER_STORE.getPassword();
-  String encoded = base64::encode(reinterpret_cast<const uint8_t*>(credentials.data()), credentials.size());
-  std::string authHeader = "Basic " + std::string(encoded.c_str());
-  if (esp_http_client_set_header(client, "Authorization", authHeader.c_str()) != ESP_OK) {
-    LOG_ERR("KOSync", "Failed to set Authorization header");
     esp_http_client_cleanup(client);
     return nullptr;
   }
