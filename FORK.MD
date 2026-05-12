@@ -159,11 +159,13 @@ Replaced Bookerly / Noto Sans / Open Dyslexic with the CrossInk font set (noemoj
 
 Enum values preserved (CHAREINK=0, LEXENDDECA=1, BITTER=2) — existing saved settings migrate automatically. Flash usage dropped from ~95% to **87.4%** (CrossInk fonts are more efficiently encoded).
 
-`scripts/download_crossink_fonts.py` — downloads all 48 font headers from CrossInk's repo if they need to be regenerated.
+Added HUGE (20pt) size: `FONT_SIZE` enum extended with `HUGE = 4`. Flash: 87.4% → **99.5%** (20pt files consume ~805k bytes; 8pt and 10pt were downloaded but excluded — adding either would exceed the 6.4MB flash limit).
+
+`scripts/download_crossink_fonts.py` — downloads all 84 font headers (sizes 8–20pt) from CrossInk's repo. Only sizes 12–20pt are included in the build.
 
 ### TODO — Remaining CrossInk Features
 
-- [ ] **Font sizes: Teensy (8pt) / Tiny (10pt) / Huge (20pt)** — `FONT_SIZE` enum has SMALL–EXTRA_LARGE (4 sizes). Add TEENSY, TINY, HUGE. Run `scripts/download_crossink_fonts.py` extended for sizes 8, 10, 20 and update `getReaderFontId()`.
+- [ ] **Font sizes: Teensy (8pt) / Tiny (10pt)** — Files downloaded (`charein/lexenddeca/bitter_8/10_*.h`). Excluded due to flash budget (~422k and ~481k bytes each). Would require dropping Bitter or LexendDeca entirely to make room.
 - [ ] **Unicode emoji / symbols** — Requires Noto Emoji fallback font data. Flash budget concern: CrossInk uses separate build variants (tiny/xlarge/no_emoji) to manage size.
 - [ ] **Redaction style** — Black-rect background on words with CSS `background-color: black`. Needs `wordBackgroundBlack` vector in `TextBlock`, CSS background parsing in `CssStyle`/`CssParser`, and `fillRect` in `TextBlock::render`.
 - [ ] **Improved table rendering** — CrossInk uses a `BufferedTable` struct (max 8 cols, 64 cells) for proper column-width layout. Current code renders cell content left-aligned with no column tracking.

@@ -9,7 +9,7 @@ BASE_URL = "https://raw.githubusercontent.com/uxjulia/CrossInk/main/lib/EpdFont/
 DEST_DIR = os.path.join(os.path.dirname(__file__), "..", "lib", "EpdFont", "builtinFonts")
 
 FONTS  = ["charein", "lexenddeca", "bitter"]
-SIZES  = ["12", "14", "16", "18"]
+SIZES  = ["8", "10", "12", "14", "16", "18", "20"]
 STYLES = ["regular", "bold", "italic", "bolditalic"]
 
 def main():

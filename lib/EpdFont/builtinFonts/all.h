@@ -16,6 +16,10 @@
 #include <builtinFonts/charein_18_bolditalic.h>
 #include <builtinFonts/charein_18_italic.h>
 #include <builtinFonts/charein_18_regular.h>
+#include <builtinFonts/charein_20_bold.h>
+#include <builtinFonts/charein_20_bolditalic.h>
+#include <builtinFonts/charein_20_italic.h>
+#include <builtinFonts/charein_20_regular.h>
 #include <builtinFonts/lexenddeca_12_bold.h>
 #include <builtinFonts/lexenddeca_12_bolditalic.h>
 #include <builtinFonts/lexenddeca_12_italic.h>
@@ -32,6 +36,10 @@
 #include <builtinFonts/lexenddeca_18_bolditalic.h>
 #include <builtinFonts/lexenddeca_18_italic.h>
 #include <builtinFonts/lexenddeca_18_regular.h>
+#include <builtinFonts/lexenddeca_20_bold.h>
+#include <builtinFonts/lexenddeca_20_bolditalic.h>
+#include <builtinFonts/lexenddeca_20_italic.h>
+#include <builtinFonts/lexenddeca_20_regular.h>
 #include <builtinFonts/bitter_12_bold.h>
 #include <builtinFonts/bitter_12_bolditalic.h>
 #include <builtinFonts/bitter_12_italic.h>
@@ -48,6 +56,10 @@
 #include <builtinFonts/bitter_18_bolditalic.h>
 #include <builtinFonts/bitter_18_italic.h>
 #include <builtinFonts/bitter_18_regular.h>
+#include <builtinFonts/bitter_20_bold.h>
+#include <builtinFonts/bitter_20_bolditalic.h>
+#include <builtinFonts/bitter_20_italic.h>
+#include <builtinFonts/bitter_20_regular.h>
 #include <builtinFonts/notosans_8_regular.h>
 #include <builtinFonts/ubuntu_10_bold.h>
 #include <builtinFonts/ubuntu_10_regular.h>
