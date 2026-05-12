@@ -168,6 +168,80 @@ Replaced Bookerly / Noto Sans / Open Dyslexic with the CrossInk font set (noemoj
 
 ---
 
+## 11. Home Screen — Recent Books with Cover Art (TODO)
+
+**Files:** `src/activities/apps/AppsMenuActivity.h`, `src/activities/apps/AppsMenuActivity.cpp`
+
+### Current state (as of last commit)
+Bottom half already shows 3 recent books as a **vertical text list** — title + author, rectangular selector, navigation wired up, `goToReader()` on confirm. This is the baseline to replace.
+
+### Goal
+Replace vertical text list with **3 horizontal book cards**, each showing:
+- Cover image (scaled to fill card width, cropped to fit height)
+- Title below cover (truncated, `SMALL_FONT_ID`, bold)
+- Read progress % below title (if available)
+- Rectangular border selector on active card (our existing style — `drawRect`, not rounded)
+
+Layout sketch (bottom ~56% of screen, below divider line):
+```
+┌──────────┐ ┌──────────┐ ┌──────────┐
+│          │ │  COVER   │ │          │
+│  COVER   │ │ (selected│ │  COVER   │
+│          │ │ outlined)│ │          │
+│──────────│ │──────────│ │──────────│
+│  Title.. │ │  Title.. │ │  Title.. │
+│  42%     │ │  42%     │ │  42%     │
+└──────────┘ └──────────┘ └──────────┘
+```
+
+Navigation change: Left/Right (currently column nav in tiles) must **also** move between book cards when `isRecentSelected()`. Up/Down still cross between tile grid and recents row.
+
+### What already exists in the codebase
+- `Epub::generateThumbBmp(int height)` — generates a BMP thumbnail at given height, saves to SD
+- `Epub::getThumbBmpPath(int height)` — returns the thumb path for a given height
+- `UITheme::getCoverThumbPath(coverBmpPath, int height)` — maps stored `coverBmpPath` → thumb path
+- `RecentBook::coverBmpPath` — populated when a book is opened (may be empty for never-opened books)
+- `renderer.drawBitmap(bitmap, x, y, w, h, cropX, cropY)` — draws a `Bitmap` object scaled/cropped
+- `Bitmap` class — constructed from an `FsFile` (see `SleepActivity.cpp:74`)
+- `Storage.exists(path)` — check thumb exists before trying to load
+
+### Read progress
+`RecentBook` has no `progress` field. Progress is stored per-book in `/.crosspoint/state/` JSON files (same place the reader resumes from). To show %, either:
+- **(Recommended)** Add `float progress` (0.0–1.0) to `RecentBook` struct and populate it in `RecentBooksStore::addBook()` / `updateBook()` when the reader saves state. Check how `EpubReaderActivity` calls `RECENT_BOOKS.addBook`.
+- **(Simpler fallback)** Skip progress display for now; show only cover + title.
+
+### Cover loading strategy
+Cover generation is slow (parses EPUB). Do it async, same pattern as cpr-vcodex `HomeActivity`:
+1. `onEnter()` — call `loadRecentBooks()`, check if thumbs exist on SD already
+2. First `render()` pass — draw cards with placeholder rects where covers will go, set `coversLoaded = false`
+3. After first render — if any thumb is missing, call `loadCovers()`: open Epub, call `generateThumbBmp(coverH)`, store result, call `requestUpdate()`
+4. Subsequent renders — load existing BMP from SD via `Bitmap(file)`, call `renderer.drawBitmap()`
+
+**Cover height** — use bottom section height minus title/progress lines (~3 lines × `SMALL_FONT_ID` lineHeight). Cover width = card width (each card = `(pageWidth - 2*sidePad - 2*gap) / 3`).
+
+### New fields needed in `AppsMenuActivity.h`
+```cpp
+bool coversLoaded = false;
+bool coversLoading = false;
+```
+
+### Key render geometry
+```cpp
+const int recentsTop  = divY + 8;           // below divider (already computed)
+const int recentsH    = pageBottom - recentsTop;
+const int cardW       = (w - 2 * tileGap) / 3;
+const int footerH     = lineH * 2 + 6;      // title + progress
+const int coverH      = recentsH - footerH - 8;
+```
+
+### UI style rules (match existing fork style)
+- Selected card: `renderer.drawRect(x, y, cardW, recentsH, true)` — same 1px rect as tiles
+- Unselected: no border (or faint — `drawRect` with fill=false)
+- No rounded corners, no shadows
+- Cover placeholder (while loading): filled grey rect (`fillRect` with ~30% fill pattern or just outline)
+
+---
+
 ## ✅ Build Status
 
 All changes complete. Build passes clean.
