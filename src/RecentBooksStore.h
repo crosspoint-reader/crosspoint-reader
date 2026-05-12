@@ -37,6 +37,10 @@ class RecentBooksStore {
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
 
+  // Remove entries whose backing file is no longer on the SD card.
+  // Returns true if any entry was removed. Does not persist — caller decides.
+  bool pruneMissing();
+
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
 
