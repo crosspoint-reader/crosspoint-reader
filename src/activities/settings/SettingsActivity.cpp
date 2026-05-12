@@ -501,11 +501,10 @@ void SettingsActivity::renderCoverPopup() {
   renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(optionDescs[coverPopupSelection]), true);
 
   y = dialogY + dialogH - innerPadding - height10;
-  const auto popupLabels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  const int popupBackWidth = renderer.getTextWidth(UI_10_FONT_ID, popupLabels.btn1);
-  const int popupSelectWidth = renderer.getTextWidth(UI_10_FONT_ID, popupLabels.btn2);
-  const int popupHintsWidth = popupBackWidth + 30 + popupSelectWidth;
-  int hintsX = (pageWidth - popupHintsWidth) / 2;
-  renderer.drawText(UI_10_FONT_ID, hintsX, y, popupLabels.btn1, true);
-  renderer.drawText(UI_10_FONT_ID, hintsX + popupBackWidth + 30, y, popupLabels.btn2, true);
+  const int backWidth = renderer.getTextWidth(UI_10_FONT_ID, "[BACK]");
+  const int selectWidth = renderer.getTextWidth(UI_10_FONT_ID, "[SELECT]");
+  const int hintsWidth = backWidth + 30 + selectWidth;
+  int hintsX = (pageWidth - hintsWidth) / 2;
+  renderer.drawText(UI_10_FONT_ID, hintsX, y, "[BACK]", true);
+  renderer.drawText(UI_10_FONT_ID, hintsX + backWidth + 30, y, "[SELECT]", true);
 }
