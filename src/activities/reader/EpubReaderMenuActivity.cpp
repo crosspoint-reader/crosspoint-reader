@@ -22,6 +22,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
   items.reserve(10);
+  items.push_back({MenuAction::READER_OPTIONS, StrId::STR_READER_OPTIONS});
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -87,69 +88,52 @@ void EpubReaderMenuActivity::loop() {
 void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
-  // Landscape orientation: button hints are drawn along a vertical edge, so we
-  // reserve a horizontal gutter to prevent overlap with menu content.
+
+  // Landscape orientation: hints sit on a vertical edge — reserve a horizontal gutter.
   const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
   const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  // Inverted portrait: button hints appear near the logical top, so we reserve
-  // vertical space to keep the header and list clear.
   const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  // Landscape CW places hints on the left edge; CCW keeps them on the right.
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
   const int contentWidth = pageWidth - hintGutterWidth;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int contentY = hintGutterHeight;
+  const int contentY = isPortraitInverted ? 50 : 0;
 
-  // Title
-  const std::string truncTitle =
-      renderer.truncatedText(UI_12_FONT_ID, title.c_str(), contentWidth - 40, EpdFontFamily::BOLD);
-  // Manual centering so we can respect the content gutter.
-  const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, truncTitle.c_str(), EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
-
-  // Progress summary
+  // Build progress subtitle
   std::string progressLine;
   if (totalPages > 0) {
     progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" +
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  renderer.drawCenteredText(UI_10_FONT_ID, 45, progressLine.c_str());
 
-  // Menu Items
-  const int startY = 75 + contentY;
-  constexpr int lineHeight = 30;
+  GUI.drawHeader(renderer,
+                 Rect{contentX, contentY + metrics.topPadding, contentWidth, metrics.headerHeight},
+                 title.c_str(), progressLine.c_str());
 
-  for (size_t i = 0; i < menuItems.size(); ++i) {
-    const int displayY = startY + (i * lineHeight);
-    const bool isSelected = (static_cast<int>(i) == selectedIndex);
+  GUI.drawList(
+      renderer,
+      Rect{contentX,
+           contentY + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing,
+           contentWidth,
+           pageHeight - contentY -
+               (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
+      static_cast<int>(menuItems.size()), selectedIndex,
+      [this](int i) { return std::string(I18N.get(menuItems[i].labelId)); },
+      nullptr, nullptr,
+      [this](int i) -> std::string {
+        if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
+          return I18N.get(orientationLabels[pendingOrientation]);
+        }
+        if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
+          return pageTurnLabels[selectedPageTurnOption];
+        }
+        return "";
+      },
+      true);
 
-    if (isSelected) {
-      // Highlight only the content area so we don't paint over hint gutters.
-      renderer.fillRect(contentX, displayY, contentWidth - 1, lineHeight, true);
-    }
-
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY, I18N.get(menuItems[i].labelId), !isSelected);
-
-    if (menuItems[i].action == MenuAction::ROTATE_SCREEN) {
-      // Render current orientation value on the right edge of the content area.
-      const char* value = I18N.get(orientationLabels[pendingOrientation]);
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
-    }
-
-    if (menuItems[i].action == MenuAction::AUTO_PAGE_TURN) {
-      // Render current page turn value on the right edge of the content area.
-      const auto value = pageTurnLabels[selectedPageTurnOption];
-      const auto width = renderer.getTextWidth(UI_10_FONT_ID, value);
-      renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - width, displayY, value, !isSelected);
-    }
-  }
-
-  // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "^", "v");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

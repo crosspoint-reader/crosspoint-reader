@@ -129,6 +129,47 @@ Totp, QrTotp, MedicalCard, Steganography, HostScanner, Ping, DnsLookup, HttpClie
 
 ---
 
+## 9. EPUB Rendering — CrossInk Ports
+
+**Files:** `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h`, `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp`, `lib/Epub/Epub/blocks/TextBlock.cpp`, `lib/EpdFont/EpdFontFamily.h`, `lib/Epub/Epub/css/CssStyle.h`, `lib/Epub/Epub/css/CssParser.cpp`
+
+Ported from [CrossInk](https://github.com/uxjulia/CrossInk):
+
+| Feature | How |
+|---------|-----|
+| **Strikethrough** (`<s>`, `<strike>`, `<del>`) | `STRIKETHROUGH = 8` added to `EpdFontFamily::Style`. Parser tracks `strikethroughUntilDepth` + `effectiveStrikethrough`. `TextBlock::render` draws a mid-ascender horizontal line. |
+| **Thicker underlines** | `TextBlock::render` draws two lines (underlineY and underlineY+1) instead of one. |
+| **`<hr>` section breaks** | Parser emits a centered em-dash paragraph (`—————`) with 8px top/bottom margin. |
+| **Table label cleanup** | Removed "Tab Row X, Cell Y:" italic prefix from table cells. Cells now render content directly. |
+| **CSS `line-through`** | `CssTextDecoration::LineThrough = 2` added; `CssParser::interpretDecoration` matches `line-through`. |
+
+---
+
+## 10. Reader Fonts — ChareInk, Lexend Deca, Bitter
+
+**Files:** `lib/EpdFont/builtinFonts/all.h`, `lib/EpdFont/builtinFonts/charein_*.h`, `lib/EpdFont/builtinFonts/lexenddeca_*.h`, `lib/EpdFont/builtinFonts/bitter_*.h`, `src/fontIds.h`, `src/main.cpp`, `src/CrossPointSettings.h`, `src/CrossPointSettings.cpp`, `src/SettingsList.h`, `lib/I18n/I18nKeys.h`, `lib/I18n/translations/*.yaml`
+
+Replaced Bookerly / Noto Sans / Open Dyslexic with the CrossInk font set (noemoji variant). Font headers fetched via `scripts/download_crossink_fonts.py`.
+
+| Old | New | Sizes |
+|-----|-----|-------|
+| Bookerly | **ChareInk** (serif, ink-optimised) | 12, 14, 16, 18pt |
+| Noto Sans | **Lexend Deca** (sans-serif, readability) | 12, 14, 16, 18pt |
+| Open Dyslexic | **Bitter** (slab serif) | 12, 14, 16, 18pt |
+
+Enum values preserved (CHAREINK=0, LEXENDDECA=1, BITTER=2) — existing saved settings migrate automatically. Flash usage dropped from ~95% to **87.4%** (CrossInk fonts are more efficiently encoded).
+
+`scripts/download_crossink_fonts.py` — downloads all 48 font headers from CrossInk's repo if they need to be regenerated.
+
+### TODO — Remaining CrossInk Features
+
+- [ ] **Font sizes: Teensy (8pt) / Tiny (10pt) / Huge (20pt)** — `FONT_SIZE` enum has SMALL–EXTRA_LARGE (4 sizes). Add TEENSY, TINY, HUGE. Run `scripts/download_crossink_fonts.py` extended for sizes 8, 10, 20 and update `getReaderFontId()`.
+- [ ] **Unicode emoji / symbols** — Requires Noto Emoji fallback font data. Flash budget concern: CrossInk uses separate build variants (tiny/xlarge/no_emoji) to manage size.
+- [ ] **Redaction style** — Black-rect background on words with CSS `background-color: black`. Needs `wordBackgroundBlack` vector in `TextBlock`, CSS background parsing in `CssStyle`/`CssParser`, and `fillRect` in `TextBlock::render`.
+- [ ] **Improved table rendering** — CrossInk uses a `BufferedTable` struct (max 8 cols, 64 cells) for proper column-width layout. Current code renders cell content left-aligned with no column tracking.
+
+---
+
 ## ✅ Build Status
 
 All changes complete. Build passes clean.
@@ -151,3 +192,15 @@ All changes complete. Build passes clean.
 
 ### Settings
 - [ ] **Dark theme inside SETTINGS** — Settings screens render with inverted colours (dark background, light text) regardless of the global UI theme. Scoped to `SettingsActivity` and its child screens only.
+
+---
+
+## 8. In-Book Menu — Cleaned Up, Reader Options Integration
+
+**Files:** `src/activities/reader/ReaderOptionsActivity.h`, `src/activities/reader/ReaderOptionsActivity.cpp`, `src/activities/reader/EpubReaderMenuActivity.h`, `src/activities/reader/EpubReaderMenuActivity.cpp`, `src/activities/reader/EpubReaderActivity.cpp`
+
+Ported `ReaderOptionsActivity` from CrossInk (`https://github.com/uxjulia/CrossInk`). Added `READER_OPTIONS` as first item in `EpubReaderMenuActivity::buildMenuItems`. Handler in `EpubReaderActivity::onReaderMenuConfirm` launches `ReaderOptionsActivity` via `startActivityForResult`; on exit, resets `section` and calls `requestUpdate()` so font/layout changes take effect immediately.
+
+`ReaderOptionsActivity` filters all `STR_CAT_READER` settings from `getSettingsList()`, renders them as a togglable list, and calls `SETTINGS.saveToFile()` on back.
+
+Refactored `EpubReaderMenuActivity::render` to use `GUI.drawHeader()` and `GUI.drawList()` — same pattern as `ReaderOptionsActivity`. Progress summary shown as header subtitle. Orientation and page-turn values rendered via `rowValue` callback. Landscape gutter preserved.

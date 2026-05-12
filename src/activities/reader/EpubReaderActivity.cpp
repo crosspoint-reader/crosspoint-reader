@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "ReaderOptionsActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "KOReaderCredentialStore.h"
@@ -282,6 +283,15 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
+    case EpubReaderMenuActivity::MenuAction::READER_OPTIONS: {
+      startActivityForResult(
+          std::make_unique<ReaderOptionsActivity>(renderer, mappedInput),
+          [this](const ActivityResult&) {
+            section.reset();
+            requestUpdate();
+          });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();

@@ -37,6 +37,14 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       }
 
       renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
+      renderer.drawLine(startX, underlineY + 1, startX + underlineWidth, underlineY + 1, true);
+    }
+
+    if ((currentStyle & EpdFontFamily::STRIKETHROUGH) != 0) {
+      const std::string& w = words[i];
+      const int wordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
+      const int strikeY = y + renderer.getFontAscenderSize(fontId) / 2;
+      renderer.drawLine(wordX, strikeY, wordX + wordWidth, strikeY, true);
     }
   }
 }

@@ -32,6 +32,9 @@ constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr int NUM_UNDERLINE_TAGS = sizeof(UNDERLINE_TAGS) / sizeof(UNDERLINE_TAGS[0]);
 
+const char* STRIKETHROUGH_TAGS[] = {"s", "strike", "del"};
+constexpr int NUM_STRIKETHROUGH_TAGS = sizeof(STRIKETHROUGH_TAGS) / sizeof(STRIKETHROUGH_TAGS[0]);
+
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
@@ -83,6 +86,10 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
   effectiveUnderline =
       currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
+  effectiveStrikethrough =
+      currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::LineThrough;
+  // Strikethrough tag (s/strike/del) also sets this via depth tracking
+  if (strikethroughUntilDepth < depth) effectiveStrikethrough = true;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -94,6 +101,9 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     }
     if (entry.hasUnderline) {
       effectiveUnderline = entry.underline;
+    }
+    if (entry.hasStrikethrough) {
+      effectiveStrikethrough = entry.strikethrough;
     }
   }
 }
@@ -115,6 +125,9 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   }
   if (isUnderline) {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::UNDERLINE);
+  }
+  if (effectiveStrikethrough) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::STRIKETHROUGH);
   }
 
   // flush the buffer
@@ -238,26 +251,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                            : static_cast<CssTextAlign>(self->paragraphAlignment);
     tableCellBlockStyle.alignment = align;
     self->startNewTextBlock(tableCellBlockStyle);
-
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
-    StyleStackEntry headerStyle;
-    headerStyle.depth = self->depth;
-    headerStyle.hasBold = true;
-    headerStyle.bold = false;
-    headerStyle.hasItalic = true;
-    headerStyle.italic = true;
-    headerStyle.hasUnderline = true;
-    headerStyle.underline = false;
-    self->inlineStyleStack.push_back(headerStyle);
-    self->updateEffectiveInlineStyle();
-    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
-    }
-    self->nextWordContinues = false;
-    self->inlineStyleStack.pop_back();
-    self->updateEffectiveInlineStyle();
 
     self->depth += 1;
     return;
@@ -489,6 +482,42 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->depth += 1;
       return;
     }
+  }
+
+  if (strcmp(name, "hr") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    BlockStyle hrStyle;
+    hrStyle.textAlignDefined = true;
+    hrStyle.alignment = CssTextAlign::Center;
+    hrStyle.marginTop = 8;
+    hrStyle.marginBottom = 8;
+    self->startNewTextBlock(hrStyle);
+    const char hrText[] = "\xe2\x80\x94\xe2\x80\x94\xe2\x80\x94\xe2\x80\x94\xe2\x80\x94";
+    self->characterData(userData, hrText, sizeof(hrText) - 1);
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->depth += 1;
+    self->skipUntilDepth = self->depth - 1;
+    return;
+  }
+
+  if (matches(name, STRIKETHROUGH_TAGS, NUM_STRIKETHROUGH_TAGS)) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
+    self->strikethroughUntilDepth = std::min(self->strikethroughUntilDepth, self->depth);
+    StyleStackEntry entry;
+    entry.depth = self->depth;
+    entry.hasStrikethrough = true;
+    entry.strikethrough = true;
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+    self->depth += 1;
+    return;
   }
 
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
@@ -859,8 +888,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   const bool willClearBold = self->boldUntilDepth == self->depth - 1;
   const bool willClearItalic = self->italicUntilDepth == self->depth - 1;
   const bool willClearUnderline = self->underlineUntilDepth == self->depth - 1;
+  const bool willClearStrikethrough = self->strikethroughUntilDepth == self->depth - 1;
 
-  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic || willClearUnderline;
+  const bool styleWillChange =
+      willPopStyleStack || willClearBold || willClearItalic || willClearUnderline || willClearStrikethrough;
   const bool headerOrBlockTag = isHeaderOrBlock(name);
   const bool tableStructuralTag = isTableStructuralTag(name);
 
@@ -879,7 +910,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         !headerOrBlockTag && !tableStructuralTag && !matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) && self->depth != 1;
     const bool shouldFlush = styleWillChange || headerOrBlockTag || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
                              matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) ||
-                             matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) || tableStructuralTag ||
+                             matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS) ||
+                             matches(name, STRIKETHROUGH_TAGS, NUM_STRIKETHROUGH_TAGS) || tableStructuralTag ||
                              matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS) || self->depth == 1;
 
     if (shouldFlush) {
@@ -941,6 +973,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving underline tag
   if (self->underlineUntilDepth == self->depth) {
     self->underlineUntilDepth = INT_MAX;
+  }
+
+  // Leaving strikethrough tag
+  if (self->strikethroughUntilDepth == self->depth) {
+    self->strikethroughUntilDepth = INT_MAX;
   }
 
   // Pop from inline style stack if we pushed an entry at this depth
