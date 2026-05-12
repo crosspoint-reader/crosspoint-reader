@@ -16,6 +16,8 @@ The input directory may be flat (all .cpfont files in one dir) or nested
 convention <FamilyName>_<size>.cpfont.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
