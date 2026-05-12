@@ -8,7 +8,7 @@ Custom firmware for the **Xteink X4** e-paper device. A lean, focused build — 
 
 There were a few forks of the Xteink firmware I really liked — each had something the others didn't. [biscuit](https://github.com/yattsu/biscuit) had a great UI and games. [CrossInk](https://github.com/uxjulia/CrossInk) had the best reading experience. I wanted all of it in one place, stripped of the parts I didn't need. So I built shortbread.
 
-If you want a feature added, changed, or removed — reach out. I'm very open to modifications and happy to work on this with people who are actually using it. Open an issue or find me on GitHub — always happy to chat.
+If you want a feature added, changed, or removed — reach out. I'm open to modifications and happy to work on this with people who are actually using it. Open an issue or find me on GitHub — always happy to chat.
 
 ## Hardware
 
