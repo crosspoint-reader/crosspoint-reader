@@ -547,9 +547,11 @@ void FontDownloadActivity::render(RenderLock&&) {
             return f.installed && !f.hasUpdate;
           });
 
-      const auto labels =
-          mappedInput.mapLabels(tr(STR_BACK), isSelectedFamilyDeletable() ? tr(STR_DELETE) : tr(STR_DOWNLOAD),
-                                tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK),
+                                                isSelectedFamilyDeletable()      ? tr(STR_DELETE)
+                                                : isUpdateAllRow(selectedIndex_) ? tr(STR_UPDATE)
+                                                                                 : tr(STR_DOWNLOAD),
+                                                tr(STR_DIR_UP), tr(STR_DIR_DOWN));
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else if (state_ == DOWNLOADING) {
