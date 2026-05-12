@@ -69,5 +69,5 @@ Data is stored under `/biscuit/` on the MicroSD card (FAT32).
 Built on top of:
 
 - **[crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader)** — core EPUB engine, rendering, KOReader sync, Calibre transfer. The foundation everything runs on.
-- **[biscuit](https://github.com/yattsu/biscuit)** — UI design, games, and overall architecture this fork is based on.
+- **[biscuit](https://github.com/yattsu/biscuit)** — UI design, games, and overall architecture this fork is based on. Sorry [@yattsu](https://github.com/yattsu) — I borrowed heavily from your work and even stole the naming idea (biscuit → shortbread). Your build is what made this possible.
 - **[CrossInk](https://github.com/uxjulia/CrossInk)** — reader settings menu and fonts (ChareInk, Lexend Deca).
