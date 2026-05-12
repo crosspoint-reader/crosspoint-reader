@@ -26,5 +26,6 @@ class PxcViewerActivity final : public Activity {
   void loadSiblingImages();
   void doSetSleepCover();
   void renderGrayscaleImage();
-  void renderPxcToFramebuffer(FsFile& file, uint16_t width, uint16_t height, uint32_t dataOffset);
+  void renderPxcToFramebuffer(FsFile& file, uint16_t width, uint16_t height, uint32_t dataOffset, bool hasPrevious,
+                              bool hasNext);
 };

@@ -104,8 +104,10 @@ void PxcViewerActivity::loadSiblingImages() {
   }
 }
 
-void PxcViewerActivity::renderPxcToFramebuffer(FsFile& file, uint16_t width, uint16_t height, uint32_t dataOffset) {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), "", "");
+void PxcViewerActivity::renderPxcToFramebuffer(FsFile& file, uint16_t width, uint16_t height, uint32_t dataOffset,
+                                               bool hasPrevious, bool hasNext) {
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
   PxcCtx ctx{&file, dataOffset, width, height, labels};
   renderer.renderGrayscaleSinglePass(GfxRenderer::GrayscaleMode::FactoryQuality, &pxcRenderCallback, &ctx,
                                      &pxcLoadingOverlay, nullptr);
@@ -154,7 +156,10 @@ void PxcViewerActivity::onEnter() {
   }
 
   const uint32_t dataOffset = file.position();
-  renderPxcToFramebuffer(file, pxcWidth, pxcHeight, dataOffset);
+  const bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
+  const bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
+                        currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
+  renderPxcToFramebuffer(file, pxcWidth, pxcHeight, dataOffset, hasPrevious, hasNext);
 
   file.close();
 
@@ -182,7 +187,7 @@ void PxcViewerActivity::renderGrayscaleImage() {
   }
 
   const uint32_t dataOffset = file.position();
-  renderPxcToFramebuffer(file, pxcWidth, pxcHeight, dataOffset);
+  renderPxcToFramebuffer(file, pxcWidth, pxcHeight, dataOffset, false, false);
 
   file.close();
 }
@@ -245,7 +250,8 @@ void PxcViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     if (siblingImages.size() > 1 && currentImageIndex > 0) {
       currentImageIndex--;
       std::string dirPath = FsHelpers::extractFolderPath(filePath);
@@ -256,7 +262,8 @@ void PxcViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     if (siblingImages.size() > 1 && currentImageIndex != -1 &&
         currentImageIndex < static_cast<int>(siblingImages.size()) - 1) {
       currentImageIndex++;
