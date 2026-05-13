@@ -15,10 +15,7 @@ namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
-void RecentBooksActivity::loadRecentBooks() {
-  const auto& books = RECENT_BOOKS.getBooks();
-  recentBooks = books;
-}
+void RecentBooksActivity::loadRecentBooks() { recentBooks = RECENT_BOOKS.getBooks(); }
 
 void RecentBooksActivity::onEnter() {
   Activity::onEnter();

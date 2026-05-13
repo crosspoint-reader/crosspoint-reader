@@ -37,6 +37,9 @@ class RecentBooksStore {
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
 
+  // True if the book's backing file is no longer present on the SD card.
+  static bool isMissing(const RecentBook& book);
+
   // Remove entries whose backing file is no longer on the SD card.
   // Returns true if any entry was removed. Does not persist — caller decides.
   bool pruneMissing();
