@@ -69,15 +69,25 @@ class FontDownloadActivity : public Activity {
   int downloadingFamilyIndex_ = 0;
   PendingFontAction pendingErrorAction_ = PendingFontAction::None;
   std::string errorMessage_;
+  bool cancelRequested_ = false;
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
   void downloadFamily(ManifestFamily& family);
   void downloadAll();
-  bool isDownloadAllSelected() const { return selectedIndex_ == 0 && !families_.empty(); }
-  int familyIndexFromList(int listIndex) const { return listIndex - 1; }
-  int listItemCount() const { return families_.empty() ? 0 : static_cast<int>(families_.size()) + 1; }
+  void updateAll();
+  bool isDownloadAllSelected() const { return hasDownloadCandidates() && selectedIndex_ == 0; }
+  bool isUpdateAllSelected() const {
+    if (!hasUpdateCandidates()) return false;
+    return selectedIndex_ == (hasDownloadCandidates() ? 1 : 0);
+  }
+  bool hasDownloadCandidates() const;
+  bool hasUpdateCandidates() const;
+  int actionCount() const { return (hasDownloadCandidates() ? 1 : 0) + (hasUpdateCandidates() ? 1 : 0); }
+  int familyIndexFromList(int listIndex) const { return listIndex - actionCount(); }
+  int listItemCount() const { return families_.empty() ? 0 : static_cast<int>(families_.size()) + actionCount(); }
   size_t totalUninstalledSize() const;
+  size_t totalUpdateSize() const;
 
   std::string confirmButtonLabel() const;
   void promptDeleteFamily(int familyIndex);

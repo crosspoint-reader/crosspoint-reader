@@ -42,7 +42,8 @@ class OpdsBookBrowserActivity final : public Activity {
   std::string currentPath;
   std::string searchTemplate;
   bool consumeConfirm = false;
-  bool consumeBack = false;  // Added missing member
+  bool consumeBack = false;
+  bool cancelDownloadRequested = false;
   int selectorIndex = 0;
   int selectedBookIndex = -1;
   int formatSelectorIndex = 0;

@@ -17,7 +17,7 @@ namespace {
 class FileWriteStream final : public Stream {
  public:
   FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress)
-      : file_(file), total_(total), progress_(std::move(progress)) {}
+      : file_(file), total_(total), progress_(std::move(progress)), abortRequested_(false) {}
 
   size_t write(uint8_t byte) override { return write(&byte, 1); }
 
@@ -28,8 +28,11 @@ class FileWriteStream final : public Stream {
       writeOk_ = false;
     }
     downloaded_ += written;
-    if (progress_ && total_ > 0) {
-      progress_(downloaded_, total_);
+    if (progress_) {
+      if (!progress_(downloaded_, total_)) {
+        abortRequested_ = true;
+        return 0;
+      }
     }
     return written;
   }
@@ -41,12 +44,14 @@ class FileWriteStream final : public Stream {
 
   size_t downloaded() const { return downloaded_; }
   bool ok() const { return writeOk_; }
+  bool aborted() const { return abortRequested_; }
 
  private:
   FsFile& file_;
   size_t total_;
   size_t downloaded_ = 0;
   bool writeOk_ = true;
+  bool abortRequested_ = false;
   HttpDownloader::ProgressCallback progress_;
 };
 }  // namespace
@@ -126,7 +131,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   http.begin(*client, url.c_str());
   http.setReuse(false);
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  http.setTimeout(65535);  // max uint16_t (~65s) — HTTPClient::setTimeout takes uint16_t ms
+  http.setTimeout(30000);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
   http.addHeader("Connection", "close");
 
@@ -160,23 +165,26 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Open file for writing
   FsFile file;
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
-    LOG_ERR("HTTP", "Failed to open file for writing");
+    LOG_ERR("HTTP", "Failed to open file for writing: %s", destPath.c_str());
     http.end();
     return FILE_ERROR;
   }
+
+  LOG_DBG("HTTP", "Opened destination file for writing: %s", destPath.c_str());
 
   int writeResult = -1;
   size_t downloaded = 0;
   bool writeOk = true;
 
-  // Let HTTPClient handle chunked decoding and stream body bytes into the file.
-  // For known sizes (Content-Length), we can stream it manually to save RAM!
-  // HTTPClient::writeToStream allocates a 4096-byte chunk on the heap which can
-  // fail (-8 / HTTPC_ERROR_TOO_LESS_RAM) if the heap is fragmented or depleted.
   if (contentLength > 0) {
     NetworkClient& stream = http.getStream();
     uint8_t buffer[1024];
     writeResult = 1;
+    bool aborted = false;
+    unsigned long lastAvailLog = millis();
+    unsigned long startMs = millis();
+    unsigned long lastProgressPoll = millis();
+
     while (http.connected() && downloaded < contentLength) {
       size_t available = stream.available();
       if (available > 0) {
@@ -184,31 +192,69 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
         if (downloaded + toRead > contentLength) {
           toRead = contentLength - downloaded;
         }
-        int readSize = stream.readBytes(buffer, toRead);
+        int readSize = stream.readBytes(reinterpret_cast<char*>(buffer), toRead);
         if (readSize > 0) {
           if (file.write(buffer, readSize) != static_cast<size_t>(readSize)) {
+            LOG_ERR("HTTP", "File write failed: wrote %d/%zu bytes to %s", readSize, toRead, destPath.c_str());
             writeOk = false;
             writeResult = -1;
             break;
           }
           downloaded += readSize;
-          if (progress) progress(downloaded, contentLength);
+          if (progress && !progress(downloaded, contentLength)) {
+            LOG_DBG("HTTP", "Download aborted by callback at %zu/%zu", downloaded, contentLength);
+            aborted = true;
+            break;
+          }
         } else {
+          LOG_ERR("HTTP", "Stream readBytes returned %d after %zu bytes", readSize, downloaded);
           break;
         }
       } else {
+        if (millis() - lastProgressPoll > 100) {
+          if (progress && !progress(downloaded, contentLength)) {
+            LOG_DBG("HTTP", "Download aborted by callback while waiting for data at %zu/%zu", downloaded,
+                    contentLength);
+            aborted = true;
+            break;
+          }
+          lastProgressPoll = millis();
+        }
+        if (millis() - lastAvailLog > 2000) {
+          LOG_DBG("HTTP", "Waiting for available data: downloaded=%zu connected=%d elapsed=%lums", downloaded,
+                  http.connected(), millis() - startMs);
+          lastAvailLog = millis();
+        }
         delay(1);
       }
     }
+
+    if (aborted) {
+      file.flush();
+      file.close();
+      http.end();
+      client->stop();
+      Storage.remove(destPath.c_str());
+      return ABORTED;
+    }
+
     if (downloaded != contentLength) {
+      LOG_ERR("HTTP", "Download size mismatch after loop: got %zu expected %zu", downloaded, contentLength);
       writeResult = -1;
     }
   } else {
-    // Chunked or unknown length fallback
     FileWriteStream fileStream(file, contentLength, progress);
     writeResult = http.writeToStream(&fileStream);
     downloaded = fileStream.downloaded();
     writeOk = fileStream.ok();
+    if (fileStream.aborted()) {
+      file.flush();
+      file.close();
+      http.end();
+      client->stop();
+      Storage.remove(destPath.c_str());
+      return ABORTED;
+    }
   }
 
   // Flush before closing to ensure data is written to the SD card.
@@ -220,7 +266,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   client->stop();
 
   if (writeResult < 0) {
-    LOG_ERR("HTTP", "writeToStream error: %d", writeResult);
+    LOG_ERR("HTTP", "writeToStream error: %d (downloaded %zu)", writeResult, downloaded);
     Storage.remove(destPath.c_str());
     return HTTP_ERROR;
   }
@@ -229,7 +275,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   // Guard against partial writes even if HTTPClient completes.
   if (!writeOk) {
-    LOG_ERR("HTTP", "Write failed during download");
+    LOG_ERR("HTTP", "Write failed during download (downloaded %zu)", downloaded);
     Storage.remove(destPath.c_str());
     return FILE_ERROR;
   }

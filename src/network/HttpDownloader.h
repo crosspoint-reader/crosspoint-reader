@@ -10,7 +10,7 @@
  */
 class HttpDownloader {
  public:
-  using ProgressCallback = std::function<void(size_t downloaded, size_t total)>;
+  using ProgressCallback = std::function<bool(unsigned int downloaded, unsigned int total)>;
 
   enum DownloadError {
     OK = 0,

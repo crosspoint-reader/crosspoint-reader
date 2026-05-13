@@ -322,6 +322,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       const int barY = midY + 20;
       GUI.drawProgressBar(renderer, Rect{barX, barY, barWidth, barHeight}, downloadProgress, downloadTotal);
     }
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -535,10 +537,12 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
 
   const auto result = HttpDownloader::downloadToFile(
       downloadUrl, filename,
-      [this](const size_t downloaded, const size_t total) {
+      [this](const unsigned int downloaded, const unsigned int total) {
+        mappedInput.update();
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);
+        return !mappedInput.wasPressed(MappedInputManager::Button::Back);
       },
       server.username, server.password);
 
@@ -583,8 +587,13 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
         std::string sidecarPath = baseFilename + ext;
 
         const auto coverDlResult = HttpDownloader::downloadToFile(
-            coverUrl, sidecarPath, [this](const size_t, const size_t) { requestUpdate(true); }, server.username,
-            server.password);
+            coverUrl, sidecarPath,
+            [this](const unsigned int, const unsigned int) {
+              mappedInput.update();
+              requestUpdate(true);
+              return !mappedInput.wasPressed(MappedInputManager::Button::Back);
+            },
+            server.username, server.password);
         if (coverDlResult != HttpDownloader::OK) {
           LOG_ERR("OPDS", "Failed to download cover from %s (err %d)", coverUrl.c_str(), (int)coverDlResult);
           Storage.remove(sidecarPath.c_str());
@@ -596,6 +605,11 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
     } else if (acquisition.formatKey == "xtc" || acquisition.formatKey == "xtch") {
       Xtc(filename, "/.crosspoint").clearCache();
     }
+    selectedBookIndex = -1;
+    formatSelectionLabels.clear();
+    state = BrowserState::BROWSING;
+    requestUpdate();
+  } else if (result == HttpDownloader::ABORTED) {
     selectedBookIndex = -1;
     formatSelectionLabels.clear();
     state = BrowserState::BROWSING;
