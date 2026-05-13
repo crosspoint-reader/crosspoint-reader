@@ -8,59 +8,24 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+constexpr int MENU_ITEMS = 3;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_CLIP_NAV_MODE, StrId::STR_ANNOT_SHOW, StrId::STR_CLIPPING_STORAGE};
+}  // namespace
+
 void ClippingsMenuActivity::onEnter() {
   Activity::onEnter();
+  selectedIndex = 0;
   requestUpdate();
 }
 
 void ClippingsMenuActivity::onExit() { Activity::onExit(); }
 
-// Item 0: Navigation       (clipNavMode)
-// Item 1: Show Annotations (annotationVisibility)
-// Item 2: Storage          (clippingStorage)
-
-void ClippingsMenuActivity::toggleSetting(int idx) {
-  switch (idx) {
-    case 0:
-      SETTINGS.clipNavMode = (SETTINGS.clipNavMode + 1) % CrossPointSettings::CLIP_NAV_MODE_COUNT;
-      break;
-    case 1:
-      SETTINGS.annotationVisibility = (SETTINGS.annotationVisibility + 1) % 2;
-      break;
-    case 2:
-      SETTINGS.clippingStorage = (SETTINGS.clippingStorage + 1) % CrossPointSettings::CLIPPING_STORAGE_COUNT;
-      break;
-    default:
-      break;
-  }
-  SETTINGS.saveToFile();
-}
-
-const char* ClippingsMenuActivity::settingValue(int idx) const {
-  switch (idx) {
-    case 0:
-      return SETTINGS.clipNavMode == CrossPointSettings::NAV_MIRROR ? tr(STR_CLIP_NAV_MIRROR)
-                                                                    : tr(STR_CLIP_NAV_VERTICAL);
-    case 1:
-      return SETTINGS.annotationVisibility == CrossPointSettings::ANNOT_VISIBLE ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    case 2:
-      return SETTINGS.clippingStorage == CrossPointSettings::SINGLE_FILE ? tr(STR_CLIPPING_SINGLE_FILE)
-                                                                         : tr(STR_CLIPPING_PER_BOOK);
-    default:
-      return "";
-  }
-}
-
 void ClippingsMenuActivity::loop() {
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, ITEM_COUNT);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, ITEM_COUNT);
-    requestUpdate();
-  });
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    finish();
+    return;
+  }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleSetting(selectedIndex);
@@ -68,52 +33,68 @@ void ClippingsMenuActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
+  buttonNavigator.onNextRelease([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousRelease([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+
+  buttonNavigator.onNextContinuous([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousContinuous([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEMS);
+    requestUpdate();
+  });
+}
+
+void ClippingsMenuActivity::toggleSetting(int idx) {
+  if (idx == 0) {
+    SETTINGS.clipNavMode = (SETTINGS.clipNavMode + 1) % CrossPointSettings::CLIP_NAV_MODE_COUNT;
+  } else if (idx == 1) {
+    SETTINGS.annotationVisibility = (SETTINGS.annotationVisibility + 1) % 2;
+  } else if (idx == 2) {
+    SETTINGS.clippingStorage = (SETTINGS.clippingStorage + 1) % CrossPointSettings::CLIPPING_STORAGE_COUNT;
   }
+  SETTINGS.saveToFile();
 }
 
 void ClippingsMenuActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
+  auto metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
-  const auto orientation = renderer.getOrientation();
-  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int contentWidth = pageWidth - hintGutterWidth;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int contentY = hintGutterHeight;
+  const auto pageHeight = renderer.getScreenHeight();
 
-  const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_CAT_CLIPPINGS), EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_CAT_CLIPPINGS), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CAT_CLIPPINGS));
 
-  static const StrId labels[ITEM_COUNT] = {StrId::STR_CLIP_NAV_MODE, StrId::STR_ANNOT_SHOW,
-                                           StrId::STR_CLIPPING_STORAGE};
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  GUI.drawList(
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, MENU_ITEMS, selectedIndex,
+      [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr, nullptr,
+      [this](int index) {
+        if (index == 0) {
+          return std::string(SETTINGS.clipNavMode == CrossPointSettings::CLIP_NAV_DIRECTIONAL ? tr(STR_CLIP_NAV_LINE)
+                                                                                              : tr(STR_CLIP_NAV_WORD));
+        } else if (index == 1) {
+          return std::string(SETTINGS.annotationVisibility ? tr(STR_STATE_OFF) : tr(STR_STATE_ON));
+        } else if (index == 2) {
+          return std::string(SETTINGS.clippingStorage == CrossPointSettings::SINGLE_FILE ? tr(STR_CLIPPING_SINGLE_FILE)
+                                                                                         : tr(STR_CLIPPING_PER_BOOK));
+        }
+        return std::string("");
+      },
+      true);
 
-  const int startY = 60 + contentY;
-  constexpr int lineHeight = 32;
-
-  for (int i = 0; i < ITEM_COUNT; ++i) {
-    const int displayY = startY + i * lineHeight;
-    const bool isSelected = (i == selectedIndex);
-
-    if (isSelected) {
-      renderer.fillRect(contentX, displayY, contentWidth - 1, lineHeight, true);
-    }
-
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, displayY + 6, I18N.get(labels[i]), !isSelected);
-
-    const char* val = settingValue(i);
-    const int valW = renderer.getTextWidth(UI_10_FONT_ID, val);
-    renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - 20 - valW, displayY + 6, val, !isSelected);
-  }
-
-  const auto hints = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

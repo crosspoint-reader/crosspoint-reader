@@ -25,18 +25,20 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 
 // For the rest of the methods, we acquire the mutex to ensure thread safety
 
+static uint32_t lockLogCount = 0;
+
 class HalStorage::StorageLock {
  public:
   StorageLock() {
-#if LOG_LEVEL >= 2
-    LOG_DBG("LOCK", "SL take from %s", pcTaskGetName(nullptr));
-#endif
+    if (lockLogCount++ % 10000 == 0) {
+      LOG_DBG("LOCK", "SL take from %s (#%u)", pcTaskGetName(nullptr), lockLogCount);
+    }
     xSemaphoreTake(HalStorage::getInstance().storageMutex, portMAX_DELAY);
   }
   ~StorageLock() {
-#if LOG_LEVEL >= 2
-    LOG_DBG("LOCK", "SL give from %s", pcTaskGetName(nullptr));
-#endif
+    if (lockLogCount++ % 10000 == 0) {
+      LOG_DBG("LOCK", "SL give from %s (#%u)", pcTaskGetName(nullptr), lockLogCount);
+    }
     xSemaphoreGive(HalStorage::getInstance().storageMutex);
   }
 };
@@ -146,9 +148,11 @@ bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDi
 
 void HalFile::flush() { HAL_FILE_WRAPPED_CALL(flush, ); }
 size_t HalFile::getName(char* name, size_t len) { HAL_FILE_WRAPPED_CALL(getName, name, len); }
-size_t HalFile::size() { HAL_FILE_FORWARD_CALL(size, ); }          // already thread-safe, no need to wrap
-size_t HalFile::fileSize() { HAL_FILE_FORWARD_CALL(fileSize, ); }  // already thread-safe, no need to wrap
+size_t HalFile::size() { HAL_FILE_FORWARD_CALL(size, ); }              // already thread-safe, no need to wrap
+size_t HalFile::fileSize() { HAL_FILE_FORWARD_CALL(fileSize, ); }      // already thread-safe, no need to wrap
+uint64_t HalFile::fileSize64() { HAL_FILE_FORWARD_CALL(fileSize, ); }  // already thread-safe, no need to wrap
 bool HalFile::seek(size_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
+bool HalFile::seek64(uint64_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
 bool HalFile::seekCur(int64_t offset) { HAL_FILE_WRAPPED_CALL(seekCur, offset); }
 bool HalFile::seekSet(size_t offset) { HAL_FILE_WRAPPED_CALL(seekSet, offset); }
 int HalFile::available() const { HAL_FILE_WRAPPED_CALL(available, ); }

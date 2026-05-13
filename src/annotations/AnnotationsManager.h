@@ -6,19 +6,19 @@
 
 class AnnotationsManager {
  public:
-  struct Rect {
-    int16_t x, y, w, h;
-    uint16_t sectionPage;  // absolute page index within section
-  };
-
   struct AnnotationRecord {
-    uint16_t sectionIdx;
-    std::vector<Rect> rects;
+    uint16_t sectionIdx = 0;
+    uint16_t sectionPage = 0;
+    uint16_t endSectionPage = 0;
+    uint16_t wordCount = 0;
+    std::string startText;
+    std::string endText;
+    std::string beforeStartText;
+    std::string afterEndText;
+    std::string midText;
   };
 
-  // Load annotations from .crosspoint/epub_<hash>/annotations.bin
   bool load(const char* bookCachePath);
-  // Save current annotations to disk
   bool save(const char* bookCachePath) const;
 
   void add(AnnotationRecord record);
@@ -29,7 +29,7 @@ class AnnotationsManager {
   size_t size() const { return records.size(); }
 
  private:
-  static constexpr uint8_t FILE_VERSION = 3;
+  static constexpr uint8_t FILE_VERSION = 7;
 
   std::vector<AnnotationRecord> records;
 

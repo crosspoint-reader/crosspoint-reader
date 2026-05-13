@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <numeric>
 
 #include "../ActivityResult.h"
 #include "MappedInputManager.h"
@@ -69,27 +68,80 @@ void ClipSelectionActivity::onExit() {
 void ClipSelectionActivity::loop() {
   const int total = static_cast<int>(words.size());
 
-  auto moveNext = [this, total] {
-    if (cursorIdx + 1 >= total) return;
-    const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx++;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  };
+  if (SETTINGS.clipNavMode == CrossPointSettings::CLIP_NAV_DIRECTIONAL) {
+    using Btn = MappedInputManager::Button;
 
-  auto movePrev = [this] {
-    if (cursorIdx == 0) return;
-    const int prevPage = words[cursorIdx].pageIdx;
-    cursorIdx--;
-    if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-    requestUpdate();
-  };
+    buttonNavigator.onRelease({Btn::Left}, [this] {
+      if (cursorIdx == 0) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Left}, [this] {
+      if (cursorIdx == 0) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
 
-  if (SETTINGS.clipNavMode == CrossPointSettings::NAV_MIRROR) {
-    // All 4 directions move word-by-word; hold jumps to line end/start.
-    buttonNavigator.onNextRelease(moveNext);
-    buttonNavigator.onPreviousRelease(movePrev);
+    buttonNavigator.onRelease({Btn::Right}, [this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Right}, [this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
 
+    buttonNavigator.onRelease({Btn::Down}, [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int next = lineEndForward(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Down}, [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int next = lineEndForward(cursorIdx);
+      if (next == cursorIdx) return;
+      cursorIdx = next;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+
+    buttonNavigator.onRelease({Btn::Up}, [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int prev = lineEndBackward(cursorIdx);
+      if (prev == cursorIdx) return;
+      cursorIdx = prev;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+    buttonNavigator.onContinuous({Btn::Up}, [this] {
+      const int prevPage = words[cursorIdx].pageIdx;
+      const int prev = lineEndBackward(cursorIdx);
+      if (prev == cursorIdx) return;
+      cursorIdx = prev;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
+  } else {
+    buttonNavigator.onNextRelease([this, total] {
+      if (cursorIdx + 1 >= total) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx + 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
     buttonNavigator.onNextContinuous([this] {
       const int prevPage = words[cursorIdx].pageIdx;
       const int next = lineEndForward(cursorIdx);
@@ -99,6 +151,13 @@ void ClipSelectionActivity::loop() {
       requestUpdate();
     });
 
+    buttonNavigator.onPreviousRelease([this] {
+      if (cursorIdx == 0) return;
+      const int prevPage = words[cursorIdx].pageIdx;
+      cursorIdx = cursorIdx - 1;
+      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
+      requestUpdate();
+    });
     buttonNavigator.onPreviousContinuous([this] {
       const int prevPage = words[cursorIdx].pageIdx;
       const int prev = lineEndBackward(cursorIdx);
@@ -107,34 +166,6 @@ void ClipSelectionActivity::loop() {
       if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
       requestUpdate();
     });
-  } else {
-    // NAV_VERTICAL: Left/Right = word-by-word (hold = continuous), Up/Down = line above/below (hold = continuous).
-    buttonNavigator.onRelease({MappedInputManager::Button::Right}, moveNext);
-    buttonNavigator.onContinuous({MappedInputManager::Button::Right}, moveNext);
-    buttonNavigator.onRelease({MappedInputManager::Button::Left}, movePrev);
-    buttonNavigator.onContinuous({MappedInputManager::Button::Left}, movePrev);
-
-    auto moveUp = [this] {
-      const int prevPage = words[cursorIdx].pageIdx;
-      const int next = findWordAbove(cursorIdx);
-      if (next == cursorIdx) return;
-      cursorIdx = next;
-      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-      requestUpdate();
-    };
-    auto moveDown = [this] {
-      const int prevPage = words[cursorIdx].pageIdx;
-      const int next = findWordBelow(cursorIdx);
-      if (next == cursorIdx) return;
-      cursorIdx = next;
-      if (words[cursorIdx].pageIdx != prevPage) needsPageSwitch = true;
-      requestUpdate();
-    };
-
-    buttonNavigator.onRelease({MappedInputManager::Button::Up}, moveUp);
-    buttonNavigator.onContinuous({MappedInputManager::Button::Up}, moveUp);
-    buttonNavigator.onRelease({MappedInputManager::Button::Down}, moveDown);
-    buttonNavigator.onContinuous({MappedInputManager::Button::Down}, moveDown);
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -145,12 +176,126 @@ void ClipSelectionActivity::loop() {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
       std::string text;
+      auto stripEmSpace = [](const std::string& w) -> std::string {
+        if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+            static_cast<unsigned char>(w[2]) == 0x83) {
+          return w.substr(3);
+        }
+        return w;
+      };
+      auto hasEmSpace = [](const std::string& w) -> bool {
+        return w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+               static_cast<unsigned char>(w[2]) == 0x83;
+      };
+      auto stripTrailingHyphen = [](std::string w) -> std::string {
+        while (!w.empty() && w.back() == '-') w.pop_back();
+        return w;
+      };
+
+      constexpr int ANCHOR_WORDS = 4;
+      std::string startAnchor;
+      int anchorCount = 0;
+
       for (int i = from; i <= to; ++i) {
-        if (!text.empty()) text += ' ';
-        text += words[i].text;
+        const auto& wtext = stripEmSpace(words[i].text);
+        const bool yGap =
+            i > from && words[i].pageIdx == words[i - 1].pageIdx && words[i].y > words[i - 1].y + words[i - 1].h;
+        const bool paragraphStart = (i > from) && (hasEmSpace(words[i].text) || words[i].paragraphStart || yGap);
+        if (paragraphStart) {
+          LOG_DBG("CLIP", "NL w[%d] em=%d ps=%d yGap=%d text=%.30s", i, hasEmSpace(words[i].text),
+                  words[i].paragraphStart, yGap, wtext.c_str());
+        }
+        if (i > from && !text.empty() && !paragraphStart) {
+          const auto& prev = words[i - 1].text;
+          const auto& prevStripped = stripEmSpace(prev);
+          if (prevStripped.size() >= 1 && prevStripped.back() == '-' && !wtext.empty() &&
+              !std::isspace(static_cast<unsigned char>(wtext[0])) &&
+              !std::ispunct(static_cast<unsigned char>(wtext[0])) &&
+              prevStripped.find('-') == prevStripped.size() - 1) {
+            LOG_DBG("CLIP", "MERGE w[%d] \"%.15s\"+\"%.15s\"", i - 1, prevStripped.c_str(), wtext.c_str());
+            text.pop_back();
+            text += wtext;
+            continue;
+          }
+        }
+        if (paragraphStart) {
+          text += '\n';
+        } else if (!text.empty()) {
+          const bool attached = (words[i].y == words[i - 1].y) && (words[i].x <= words[i - 1].x + words[i - 1].w + 2);
+          LOG_DBG("CLIP", "%s w[%d] gap=%d text=%.30s", attached ? "ATTACH" : "SEP", i,
+                  words[i].x - (words[i - 1].x + words[i - 1].w), words[i].text.c_str());
+          if (!attached) {
+            text += ' ';
+          }
+        }
+        text += wtext;
+
+        if (anchorCount < ANCHOR_WORDS) {
+          if (!startAnchor.empty()) startAnchor += ' ';
+          startAnchor += stripTrailingHyphen(wtext);
+          anchorCount++;
+        }
       }
+
+      std::string endAnchorFull;
+      anchorCount = 0;
+      for (int i = to; i >= from && anchorCount < ANCHOR_WORDS; --i) {
+        const auto wtext = stripTrailingHyphen(stripEmSpace(words[i].text));
+        if (!endAnchorFull.empty())
+          endAnchorFull = wtext + ' ' + endAnchorFull;
+        else
+          endAnchorFull = wtext;
+        anchorCount++;
+      }
+
+      constexpr int CONTEXT_WORDS = 3;
+      std::string beforeStart;
+      for (int i = from - 1; i >= 0 && (from - i) <= CONTEXT_WORDS; --i) {
+        const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
+        if (stripped.find_first_not_of(' ') == std::string::npos) continue;
+        if (!beforeStart.empty())
+          beforeStart = stripped + ' ' + beforeStart;
+        else
+          beforeStart = stripped;
+      }
+      std::string afterEnd;
+      for (int i = to + 1; i < total && (i - to) <= CONTEXT_WORDS; ++i) {
+        const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
+        if (stripped.find_first_not_of(' ') == std::string::npos) continue;
+        if (!afterEnd.empty())
+          afterEnd += ' ' + stripped;
+        else
+          afterEnd = stripped;
+      }
+      std::string midText;
+      {
+        constexpr int MID_WORDS = 4;
+        int midStart = (from + to) / 2 - (MID_WORDS / 2);
+        int midEnd = midStart + MID_WORDS - 1;
+        if (midStart < from) midStart = from;
+        if (midEnd > to) midEnd = to;
+        for (int i = midStart; i <= midEnd; ++i) {
+          const auto wtext = stripTrailingHyphen(stripEmSpace(words[i].text));
+          if (!midText.empty()) midText += ' ';
+          midText += wtext;
+        }
+      }
+
+      LOG_DBG("CLIP", "Anchors: start=\"%.40s\" end=\"%.40s\" ctx=[\"%.20s\"] [\"%.20s\"] wc=%d", startAnchor.c_str(),
+              endAnchorFull.c_str(), beforeStart.c_str(), afterEnd.c_str(), to - from + 1);
+
       ActivityResult result;
-      result.data = ClippingResult{std::move(text), from, to};
+      result.data = ClippingResult{std::move(text),
+                                   from,
+                                   to,
+                                   static_cast<uint16_t>(startPageInSection + words[from].pageIdx),
+                                   static_cast<uint16_t>(startPageInSection + words[to].pageIdx),
+                                   std::move(startAnchor),
+                                   std::move(endAnchorFull),
+                                   std::move(beforeStart),
+                                   std::move(afterEnd),
+                                   std::move(midText),
+                                   static_cast<uint16_t>(to - from + 1)};
       setResult(std::move(result));
       finish();
     }
@@ -208,125 +353,102 @@ void ClipSelectionActivity::switchToPage(int pageIdx) {
 }
 
 void ClipSelectionActivity::drawHighlights() {
-  // Draw selection range (words on the currently displayed page only)
+  auto hasEmSpace = [](const std::string& t) {
+    return t.size() >= 3 && static_cast<unsigned char>(t[0]) == 0xE2 && static_cast<unsigned char>(t[1]) == 0x80 &&
+           static_cast<unsigned char>(t[2]) == 0x83;
+  };
+
+  auto emSpaceSkip = [this, &hasEmSpace](const std::string& t, EpdFontFamily::Style s) -> int {
+    if (hasEmSpace(t)) return renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s);
+    return 0;
+  };
+
+  auto drawContinuousHighlight = [this, &emSpaceSkip, &hasEmSpace](int first, int last) {
+    const auto& fw = words[first];
+    const auto& lw = words[last];
+    const auto fs = static_cast<EpdFontFamily::Style>(fw.style & ~EpdFontFamily::UNDERLINE);
+    const int skip = emSpaceSkip(fw.text, fs);
+    const int startX = fw.x + skip;
+    const int spanW = (lw.x + lw.w) - startX;
+    renderer.fillRectDither(startX, fw.y, spanW, fw.h, Color::LightGray);
+    for (int i = first; i <= last; ++i) {
+      if (words[i].text.find_first_not_of(" \t") != std::string::npos) {
+        const auto s = static_cast<EpdFontFamily::Style>(words[i].style & ~EpdFontFamily::UNDERLINE);
+        if (i == first && hasEmSpace(words[i].text)) {
+          renderer.drawText(fontId, startX, words[i].y, words[i].text.c_str() + 3, true, s);
+        } else {
+          renderer.drawText(fontId, words[i].x, words[i].y, words[i].text.c_str(), true, s);
+        }
+      }
+    }
+  };
+
   if (startMarkIdx != -1) {
     const int from = std::min(startMarkIdx, cursorIdx);
     const int to = std::max(startMarkIdx, cursorIdx);
+    int runStart = -1;
     for (int i = from; i <= to; ++i) {
-      if (i == cursorIdx) continue;
-      if (words[i].pageIdx != currentDisplayPage) continue;
-      const auto r = alignedRect(words[i].x, words[i].y, words[i].w, words[i].h);
-      renderer.fillRectDither(r.x, r.y, r.w, r.h, Color::LightGray);
-      if (words[i].text.find_first_not_of(" \t") != std::string::npos) {
-        renderer.drawText(fontId, words[i].x, words[i].y, words[i].text.c_str(), true);
+      bool skipWord = (words[i].pageIdx != currentDisplayPage);
+      if (skipWord) {
+        if (runStart >= 0) {
+          drawContinuousHighlight(runStart, i - 1);
+          runStart = -1;
+        }
+      } else if (runStart < 0 || words[i].y != words[runStart].y) {
+        if (runStart >= 0) {
+          drawContinuousHighlight(runStart, i - 1);
+        }
+        runStart = i;
+      }
+    }
+    if (runStart >= 0) {
+      drawContinuousHighlight(runStart, to);
+    }
+  }
+
+  const auto& cw = words[cursorIdx];
+  if (cw.pageIdx == currentDisplayPage) {
+    const auto cs = static_cast<EpdFontFamily::Style>(cw.style & ~EpdFontFamily::UNDERLINE);
+    const int skip = emSpaceSkip(cw.text, cs);
+    const int cx = cw.x + skip;
+    const int cWidth = cw.w - skip;
+    if (cWidth > 0) {
+      renderer.fillRectDither(cx, cw.y, cWidth, cw.h, Color::LightGray);
+      if (cw.text.find_first_not_of(" \t") != std::string::npos) {
+        if (hasEmSpace(cw.text)) {
+          renderer.drawText(fontId, cx, cw.y, cw.text.c_str() + 3, true, cs);
+        } else {
+          renderer.drawText(fontId, cw.x, cw.y, cw.text.c_str(), true, cs);
+        }
       }
     }
   }
-
-  // Draw cursor highlight (always on top)
-  const auto& cw = words[cursorIdx];
-  if (cw.pageIdx == currentDisplayPage) {
-    const auto r = alignedRect(cw.x, cw.y, cw.w, cw.h);
-    renderer.fillRectDither(r.x, r.y, r.w, r.h, Color::LightGray);
-    if (cw.text.find_first_not_of(" \t") != std::string::npos) {
-      renderer.drawText(fontId, cw.x, cw.y, cw.text.c_str(), true);
-    }
-  }
-}
-
-ClipSelectionActivity::Rect ClipSelectionActivity::alignedRect(int x, int y, int w, int h) const {
-  const int alignedX = (x / 8) * 8;
-  const int alignedW = ((x + w + 7) / 8) * 8 - alignedX;
-  return {alignedX, y, alignedW, h};
 }
 
 int ClipSelectionActivity::lineEndForward(int idx) const {
   const int total = static_cast<int>(words.size());
   const int lineY = words[idx].y;
   const int page = words[idx].pageIdx;
-
-  // Find last word on the same line
-  int last = idx;
   for (int i = idx + 1; i < total; ++i) {
-    if (words[i].pageIdx != page || words[i].y != lineY) break;
-    last = i;
+    if (words[i].pageIdx != page || words[i].y != lineY) return i;
   }
-
-  // Already at line end — jump to first word of next line
-  if (last == idx && idx + 1 < total) {
-    return idx + 1;
-  }
-
-  return last;
+  return idx;
 }
 
 int ClipSelectionActivity::lineEndBackward(int idx) const {
   const int lineY = words[idx].y;
   const int page = words[idx].pageIdx;
-
-  // Find first word on the same line
-  int first = idx;
-  for (int i = idx - 1; i >= 0; --i) {
+  int i;
+  for (i = idx - 1; i >= 0; --i) {
     if (words[i].pageIdx != page || words[i].y != lineY) break;
+  }
+  if (i < 0) return idx;
+  const int prevY = words[i].y;
+  const int prevPage = words[i].pageIdx;
+  int first = i;
+  for (; i >= 0; --i) {
+    if (words[i].pageIdx != prevPage || words[i].y != prevY) break;
     first = i;
   }
-
-  // Already at line start — jump to last word of previous line
-  if (first == idx && idx - 1 >= 0) {
-    return idx - 1;
-  }
-
   return first;
-}
-
-int ClipSelectionActivity::findWordAbove(int idx) const {
-  const int curY = words[idx].y;
-  const int curX = words[idx].x;
-  const int curPage = words[idx].pageIdx;
-
-  // Find the highest Y value that is still below curY on the same page.
-  const int prevY = std::accumulate(words.begin(), words.end(), -1, [&](int acc, const auto& w) {
-    return (w.pageIdx == curPage && w.y < curY) ? std::max(acc, w.y) : acc;
-  });
-  if (prevY == -1) return idx;
-
-  // Among words on prevY, pick the one with closest X to the current cursor.
-  int best = idx;
-  int bestDist = INT_MAX;
-  for (int i = 0; i < static_cast<int>(words.size()); ++i) {
-    if (words[i].pageIdx == curPage && words[i].y == prevY) {
-      const int dist = std::abs(words[i].x - curX);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
-      }
-    }
-  }
-  return best;
-}
-
-int ClipSelectionActivity::findWordBelow(int idx) const {
-  const int curY = words[idx].y;
-  const int curX = words[idx].x;
-  const int curPage = words[idx].pageIdx;
-
-  // Find the lowest Y value that is still above curY on the same page.
-  const int nextY = std::accumulate(words.begin(), words.end(), INT_MAX, [&](int acc, const auto& w) {
-    return (w.pageIdx == curPage && w.y > curY) ? std::min(acc, w.y) : acc;
-  });
-  if (nextY == INT_MAX) return idx;
-
-  // Among words on nextY, pick the one with closest X to the current cursor.
-  int best = idx;
-  int bestDist = INT_MAX;
-  for (int i = 0; i < static_cast<int>(words.size()); ++i) {
-    if (words[i].pageIdx == curPage && words[i].y == nextY) {
-      const int dist = std::abs(words[i].x - curX);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
-      }
-    }
-  }
-  return best;
 }

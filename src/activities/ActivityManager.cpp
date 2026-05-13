@@ -2,6 +2,8 @@
 
 #include <HalPowerManager.h>
 
+#include <algorithm>
+
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
@@ -230,7 +232,11 @@ void ActivityManager::popActivity() {
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
 
-bool ActivityManager::isReaderActivity() const { return currentActivity && currentActivity->isReaderActivity(); }
+bool ActivityManager::isReaderActivity() const {
+  return std::any_of(stackActivities.begin(), stackActivities.end(),
+                     [](const auto& activity) { return activity->isReaderActivity(); }) ||
+         (currentActivity && currentActivity->isReaderActivity());
+}
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
@@ -284,9 +290,13 @@ void ActivityManager::requestUpdateAndWait() {
 
 // RenderLock
 
+static uint32_t rlLockLogCount = 0;
+
 RenderLock::RenderLock() {
 #if LOG_LEVEL >= 2
-  LOG_DBG("LOCK", "RL take from %s", pcTaskGetName(nullptr));
+  if (rlLockLogCount++ % 10000 == 0) {
+    LOG_DBG("LOCK", "RL take from %s (#%u)", pcTaskGetName(nullptr), rlLockLogCount);
+  }
 #endif
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
@@ -294,7 +304,9 @@ RenderLock::RenderLock() {
 
 RenderLock::RenderLock([[maybe_unused]] Activity&) {
 #if LOG_LEVEL >= 2
-  LOG_DBG("LOCK", "RL take from %s", pcTaskGetName(nullptr));
+  if (rlLockLogCount++ % 10000 == 0) {
+    LOG_DBG("LOCK", "RL take from %s (#%u)", pcTaskGetName(nullptr), rlLockLogCount);
+  }
 #endif
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
@@ -303,7 +315,9 @@ RenderLock::RenderLock([[maybe_unused]] Activity&) {
 RenderLock::~RenderLock() {
   if (isLocked) {
 #if LOG_LEVEL >= 2
-    LOG_DBG("LOCK", "RL give from %s", pcTaskGetName(nullptr));
+    if (rlLockLogCount++ % 10000 == 0) {
+      LOG_DBG("LOCK", "RL give from %s (#%u)", pcTaskGetName(nullptr), rlLockLogCount);
+    }
 #endif
     xSemaphoreGive(activityManager.renderingMutex);
     isLocked = false;
@@ -313,7 +327,9 @@ RenderLock::~RenderLock() {
 void RenderLock::unlock() {
   if (isLocked) {
 #if LOG_LEVEL >= 2
-    LOG_DBG("LOCK", "RL unlock from %s", pcTaskGetName(nullptr));
+    if (rlLockLogCount++ % 10000 == 0) {
+      LOG_DBG("LOCK", "RL unlock from %s (#%u)", pcTaskGetName(nullptr), rlLockLogCount);
+    }
 #endif
     xSemaphoreGive(activityManager.renderingMutex);
     isLocked = false;

@@ -7,8 +7,8 @@
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   // Validate iterator bounds before rendering
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", (uint32_t)words.size(),
-            (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size());
+    LOG_ERR("TXB", "Render skipped: size mismatch (words=%zu, xpos=%zu, styles=%zu)\n", words.size(), wordXpos.size(),
+            wordStyles.size());
     return;
   }
 
@@ -43,7 +43,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
 bool TextBlock::serialize(FsFile& file) const {
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", words.size(),
+    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%zu, xpos=%zu, styles=%zu)\n", words.size(),
             wordXpos.size(), wordStyles.size());
     return false;
   }
@@ -68,6 +68,8 @@ bool TextBlock::serialize(FsFile& file) const {
   serialization::writePod(file, blockStyle.textIndent);
   serialization::writePod(file, blockStyle.textIndentDefined);
 
+  serialization::writePod(file, paragraphStart);
+
   return true;
 }
 
@@ -77,6 +79,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
+  bool paragraphStart = false;
 
   // Word count
   serialization::readPod(file, wc);
@@ -108,7 +111,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   serialization::readPod(file, blockStyle.paddingRight);
   serialization::readPod(file, blockStyle.textIndent);
   serialization::readPod(file, blockStyle.textIndentDefined);
+  serialization::readPod(file, paragraphStart);
 
   return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
+      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle, paragraphStart));
 }
