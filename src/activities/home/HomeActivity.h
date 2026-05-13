@@ -2,8 +2,8 @@
 #include <functional>
 #include <vector>
 
-#include "activities/Activity.h"
 #include "./FileBrowserActivity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 struct RecentBook;

@@ -1,10 +1,11 @@
 #include "KOReaderJsonIO.h"
-#include "KOReaderCredentialStore.h"
 
 #include <ArduinoJson.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
+
+#include "KOReaderCredentialStore.h"
 
 namespace KOReaderJsonIO {
 
