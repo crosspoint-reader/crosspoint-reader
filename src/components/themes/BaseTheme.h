@@ -88,7 +88,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .verticalSpacing = 10,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
-                                 .listWithSubtitleRowHeight = 65,
+                                 .listWithSubtitleRowHeight = 50,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,
                                  .tabSpacing = 10,
@@ -138,8 +138,8 @@ class BaseTheme {
                         const std::function<std::string(int index)>& rowTitle,
                         const std::function<std::string(int index)>& rowSubtitle = nullptr,
                         const std::function<UIIcon(int index)>& rowIcon = nullptr,
-                        const std::function<std::string(int index)>& rowValue = nullptr,
-                        bool highlightValue = false) const;
+                        const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
+                        const std::function<bool(int index)>& rowDimmed = nullptr) const;
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,

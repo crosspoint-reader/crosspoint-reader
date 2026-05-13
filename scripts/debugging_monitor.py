@@ -35,6 +35,43 @@ import threading
 from collections import deque
 from datetime import datetime
 
+DEFAULT_BAUDRATE = 115200
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="ESP32 Serial Monitor with Memory Graph - Real-time monitoring, graphing, and command interface"
+    )
+    parser.add_argument(
+        "port",
+        nargs="?",
+        default=None,
+        help="Serial port (leave empty for autodetection)",
+    )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=DEFAULT_BAUDRATE,
+        help=f"Baud rate (default: {DEFAULT_BAUDRATE})",
+    )
+    parser.add_argument(
+        "--filter",
+        type=str,
+        default="",
+        help="Only display lines containing this keyword (case-insensitive)",
+    )
+    parser.add_argument(
+        "--suppress",
+        type=str,
+        default="",
+        help="Suppress lines containing this keyword (case-insensitive)",
+    )
+    return parser
+
+
+if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+    build_arg_parser().parse_args()
+
 # Try to import potentially missing packages
 PACKAGE_MAPPING: dict[str, str] = {
     "serial": "pyserial",
@@ -401,34 +438,7 @@ def main() -> None:
     - Screenshot capture capability
     - Graceful shutdown on Ctrl-C or window close
     """
-    parser = argparse.ArgumentParser(
-        description="ESP32 Serial Monitor with Memory Graph - Real-time monitoring, graphing, and command interface"
-    )
-    default_baudrate = 115200
-    parser.add_argument(
-        "port",
-        nargs="?",
-        default=None,
-        help="Serial port (leave empty for autodetection)",
-    )
-    parser.add_argument(
-        "--baud",
-        type=int,
-        default=default_baudrate,
-        help=f"Baud rate (default: {default_baudrate})",
-    )
-    parser.add_argument(
-        "--filter",
-        type=str,
-        default="",
-        help="Only display lines containing this keyword (case-insensitive)",
-    )
-    parser.add_argument(
-        "--suppress",
-        type=str,
-        default="",
-        help="Suppress lines containing this keyword (case-insensitive)",
-    )
+    parser = build_arg_parser()
     args = parser.parse_args()
     port = args.port
     if port is None:

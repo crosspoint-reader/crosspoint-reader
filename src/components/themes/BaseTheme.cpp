@@ -231,7 +231,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowTitle,
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
-                         const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+                         const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                         const std::function<bool(int index)>& rowDimmed) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -267,32 +268,58 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   if (selectedIndex >= 0) {
     renderer.fillRect(0, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
   }
+  constexpr int maxValueWidth = 200;
+  constexpr int minValueGap = 10;
+
   // Draw all items
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
-    int textWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2 - (rowValue != nullptr ? 60 : 0);
 
-    // Draw name
-    auto itemName = rowTitle(i);
-    auto font = (rowSubtitle != nullptr) ? UI_12_FONT_ID : UI_10_FONT_ID;
-    auto item = renderer.truncatedText(font, itemName.c_str(), textWidth);
-    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
-
-    if (rowSubtitle != nullptr) {
-      // Draw subtitle
-      std::string subtitleText = rowSubtitle(i);
-      auto subtitle = renderer.truncatedText(UI_10_FONT_ID, subtitleText.c_str(), textWidth);
-      renderer.drawText(UI_10_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 30, subtitle.c_str(),
-                        i != selectedIndex);
+    int rowTextWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
+    std::string valueText;
+    if (rowValue != nullptr) {
+      valueText = rowValue(i);
+      if (!valueText.empty()) {
+        int maxValW = std::max(0, rowTextWidth - 40 - minValueGap);
+        valueText = renderer.truncatedText(UI_10_FONT_ID, valueText.c_str(), maxValW);
+        int valueWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str()) + minValueGap;
+        rowTextWidth -= valueWidth;
+      }
     }
 
-    if (rowValue != nullptr) {
-      // Draw value
-      std::string valueText = rowValue(i);
+    auto itemName = rowTitle(i);
+    auto font = UI_10_FONT_ID;
+    auto item = renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
+    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
+
+    // Apply checkerboard dither to create gray text effect for dimmed items
+    if (rowDimmed && rowDimmed(i) && i != selectedIndex) {
+      const int titleWidth = renderer.getTextWidth(font, item.c_str());
+      const int lineH = renderer.getLineHeight(font);
+      const int tx = rect.x + BaseMetrics::values.contentSidePadding;
+      for (int py = itemY; py < itemY + lineH; py++)
+        for (int px = tx; px < tx + titleWidth; px++)
+          if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
+    }
+
+    if (rowSubtitle != nullptr) {
+      std::string subtitleText = rowSubtitle(i);
+      if (!subtitleText.empty()) {
+        auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
+        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 22, subtitle.c_str(),
+                          i != selectedIndex);
+      }
+    }
+
+    if (!valueText.empty()) {
       const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
+      int valueY = itemY;
+      if (rowSubtitle != nullptr) {
+        valueY = itemY + 10;
+      }
       renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth,
-                        itemY, valueText.c_str(), i != selectedIndex);
+                        valueY, valueText.c_str(), i != selectedIndex);
     }
   }
 }
