@@ -209,10 +209,10 @@ void OpdsBookBrowserActivity::loop() {
       return;
     }
 
-    buttonNavigator.onNextList(formatSelectorIndex, static_cast<int>(entry.acquisitionLinks.size()),
-                               [this] { requestUpdate(); });
-    buttonNavigator.onPreviousList(formatSelectorIndex, static_cast<int>(entry.acquisitionLinks.size()),
-                                   [this] { requestUpdate(); });
+    buttonNavigator.onNextList({MappedInputManager::Button::Down}, formatSelectorIndex,
+                               static_cast<int>(entry.acquisitionLinks.size()), [this] { requestUpdate(); });
+    buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, formatSelectorIndex,
+                                   static_cast<int>(entry.acquisitionLinks.size()), [this] { requestUpdate(); });
     return;
   }
 

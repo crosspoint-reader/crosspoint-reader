@@ -287,7 +287,8 @@ void ButtonNavigator::onListNav(const Buttons& buttons, const bool forward, int&
 
   if (isDouble) {
     // Restore to position before the first press so the total movement is exactly listJumpCount.
-    selectedIndex = indexBeforePress;
+    // Guard against a stale indexBeforePress if totalItems shrank since the single press stored it.
+    selectedIndex = (indexBeforePress >= 0 && indexBeforePress < totalItems) ? indexBeforePress : selectedIndex;
     for (int i = 0; i < listJumpCount; ++i) {
       const int next =
           forward ? (selectablePredicate ? nextIndex(selectedIndex) : nextIndex(selectedIndex, totalItems))
