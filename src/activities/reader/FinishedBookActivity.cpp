@@ -65,9 +65,8 @@ std::string findUniquePathWithSuffix(const std::string& basePath) {
 
 std::string findUniqueCompletedSidecarPath(const std::string& basePath) { return findUniquePathWithSuffix(basePath); }
 
-std::string convertSidecarToBmp(const std::string& bookPath, const std::string& sidecarPath, int width, int height,
+std::string convertSidecarToBmp(const std::string& cacheDir, const std::string& sidecarPath, int width, int height,
                                 const std::string& fileName) {
-  const std::string cacheDir = "/.crosspoint/sidecar_" + std::to_string(std::hash<std::string>{}(bookPath));
   if (!Storage.exists(cacheDir.c_str())) {
     Storage.mkdir(cacheDir.c_str());
   }
@@ -120,7 +119,7 @@ std::string getSidecarCoverBmpPath(const std::string& bookPath, int width, int h
   }
 
   const std::string fileName = "thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
-  return convertSidecarToBmp(bookPath, sidecarPath, width, height, fileName);
+  return convertSidecarToBmp(ReaderActivity::bookCacheDir(bookPath), sidecarPath, width, height, fileName);
 }
 
 bool moveSidecarFilesToCompleted(const std::string& currentBookPath, const std::string& targetBookPath) {

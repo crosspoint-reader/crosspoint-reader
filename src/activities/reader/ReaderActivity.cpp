@@ -71,6 +71,12 @@ std::string ReaderActivity::sidecarCoverPath(const std::string& bookPath) {
   return "";
 }
 
+std::string ReaderActivity::bookCacheDir(const std::string& bookPath) {
+  if (FsHelpers::hasEpubExtension(bookPath)) return Epub(bookPath, "/.crosspoint").getCachePath();
+  if (FsHelpers::hasXtcExtension(bookPath)) return Xtc(bookPath, "/.crosspoint").getCachePath();
+  return Txt(bookPath, "/.crosspoint").getCachePath();
+}
+
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());

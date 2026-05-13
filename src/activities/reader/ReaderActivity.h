@@ -31,6 +31,7 @@ class ReaderActivity final : public Activity {
 
  public:
   static std::string sidecarCoverPath(const std::string& bookPath);
+  static std::string bookCacheDir(const std::string& bookPath);
 
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath)
       : Activity("Reader", renderer, mappedInput), initialBookPath(std::move(initialBookPath)) {}
