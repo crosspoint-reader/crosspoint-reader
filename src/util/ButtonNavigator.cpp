@@ -224,3 +224,85 @@ int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalIt
 
   return lastPageIndex * itemsPerPage;
 }
+
+void ButtonNavigator::onNextList(int& selectedIndex, const int totalItems, const Callback& onChange) {
+  onListNav(getNextButtons(), true, selectedIndex, totalItems, lastNextPressMs, longPressNextFired, onChange);
+}
+
+void ButtonNavigator::onNextList(const Buttons& buttons, int& selectedIndex, const int totalItems,
+                                 const Callback& onChange) {
+  onListNav(buttons, true, selectedIndex, totalItems, lastNextPressMs, longPressNextFired, onChange);
+}
+
+void ButtonNavigator::onPreviousList(int& selectedIndex, const int totalItems, const Callback& onChange) {
+  onListNav(getPreviousButtons(), false, selectedIndex, totalItems, lastPreviousPressMs, longPressPreviousFired,
+            onChange);
+}
+
+void ButtonNavigator::onPreviousList(const Buttons& buttons, int& selectedIndex, const int totalItems,
+                                     const Callback& onChange) {
+  onListNav(buttons, false, selectedIndex, totalItems, lastPreviousPressMs, longPressPreviousFired, onChange);
+}
+
+void ButtonNavigator::onListNav(const Buttons& buttons, const bool forward, int& selectedIndex, const int totalItems,
+                                uint32_t& lastPressMs, bool& longPressFired, const Callback& onChange) {
+  if (!mappedInput || totalItems <= 0) return;
+
+  const bool anyHeld = std::any_of(buttons.begin(), buttons.end(),
+                                   [](const MappedInputManager::Button b) { return mappedInput->isPressed(b); });
+
+  if (anyHeld && mappedInput->getHeldTime() > listLongPressMs) {
+    if (!longPressFired) {
+      longPressFired = true;
+      if (forward) {
+        selectedIndex = totalItems - 1;
+        if (selectablePredicate) {
+          while (selectedIndex > 0 && !selectablePredicate(selectedIndex)) --selectedIndex;
+        }
+      } else {
+        selectedIndex = 0;
+        if (selectablePredicate) {
+          while (selectedIndex < totalItems - 1 && !selectablePredicate(selectedIndex)) ++selectedIndex;
+        }
+      }
+      onChange();
+    }
+    return;
+  }
+
+  const bool wasReleased = std::any_of(buttons.begin(), buttons.end(),
+                                       [](const MappedInputManager::Button b) { return mappedInput->wasReleased(b); });
+  if (wasReleased) {
+    longPressFired = false;
+    return;
+  }
+
+  const bool wasPressed = std::any_of(buttons.begin(), buttons.end(),
+                                      [](const MappedInputManager::Button b) { return mappedInput->wasPressed(b); });
+  if (!wasPressed) return;
+
+  const uint32_t now = millis();
+  const bool isDouble = (now - lastPressMs) < listDoubleClickMs;
+  lastPressMs = now;
+
+  if (isDouble) {
+    // Restore to position before the first press so the total movement is exactly listJumpCount.
+    // Guard against a stale indexBeforePress if totalItems shrank since the single press stored it.
+    selectedIndex = (indexBeforePress >= 0 && indexBeforePress < totalItems) ? indexBeforePress : selectedIndex;
+    for (int i = 0; i < listJumpCount; ++i) {
+      const int next =
+          forward ? (selectablePredicate ? nextIndex(selectedIndex) : nextIndex(selectedIndex, totalItems))
+                  : (selectablePredicate ? previousIndex(selectedIndex) : previousIndex(selectedIndex, totalItems));
+      // Stop before wrapping: forward movement decreases index only on wrap; backward vice versa.
+      if (forward && next <= selectedIndex) break;
+      if (!forward && next >= selectedIndex) break;
+      selectedIndex = next;
+    }
+  } else {
+    indexBeforePress = selectedIndex;
+    selectedIndex =
+        forward ? (selectablePredicate ? nextIndex(selectedIndex) : nextIndex(selectedIndex, totalItems))
+                : (selectablePredicate ? previousIndex(selectedIndex) : previousIndex(selectedIndex, totalItems));
+  }
+  onChange();
+}

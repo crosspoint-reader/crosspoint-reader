@@ -250,39 +250,10 @@ void GlobalBookmarksActivity::loop() {
     return;
   }
 
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
-
   // Navigator is restricted to Up/Down so the Left (rename) and Right (delete)
-  // handlers above cannot race default cursor movement on the same release tick.
-  buttonNavigator.onRelease({MappedInputManager::Button::Down}, [this] {
-    selectorIndex = buttonNavigator.nextIndex(selectorIndex);
-    requestUpdate();
-  });
-
-  buttonNavigator.onRelease({MappedInputManager::Button::Up}, [this] {
-    selectorIndex = buttonNavigator.previousIndex(selectorIndex);
-    requestUpdate();
-  });
-
-  buttonNavigator.onContinuous({MappedInputManager::Button::Down}, [this, total, pageItems] {
-    int next = ButtonNavigator::nextPageIndex(selectorIndex, total, pageItems);
-    if (isSeparatorRow(next)) {
-      const int adj = ButtonNavigator::nextIndex(next, total, [this](int i) { return !isSeparatorRow(i); });
-      if (adj >= 0) next = adj;
-    }
-    selectorIndex = next;
-    requestUpdate();
-  });
-
-  buttonNavigator.onContinuous({MappedInputManager::Button::Up}, [this, total, pageItems] {
-    int prev = ButtonNavigator::previousPageIndex(selectorIndex, total, pageItems);
-    if (isSeparatorRow(prev)) {
-      const int adj = ButtonNavigator::previousIndex(prev, total, [this](int i) { return !isSeparatorRow(i); });
-      if (adj >= 0) prev = adj;
-    }
-    selectorIndex = prev;
-    requestUpdate();
-  });
+  // handlers above cannot race default cursor movement on the same press tick.
+  buttonNavigator.onNextList({MappedInputManager::Button::Down}, selectorIndex, total, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, selectorIndex, total, [this] { requestUpdate(); });
 }
 
 void GlobalBookmarksActivity::render(RenderLock&&) {

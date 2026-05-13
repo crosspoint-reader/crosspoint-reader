@@ -197,29 +197,9 @@ void StatusBarSettingsActivity::loop() {
   }
 
   // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    const int menuCount = SETTINGS.useClock ? MENU_ITEMS_WITH_CLOCK : MENU_ITEMS_NO_CLOCK;
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, menuCount);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    const int menuCount = SETTINGS.useClock ? MENU_ITEMS_WITH_CLOCK : MENU_ITEMS_NO_CLOCK;
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, menuCount);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this] {
-    const int menuCount = SETTINGS.useClock ? MENU_ITEMS_WITH_CLOCK : MENU_ITEMS_NO_CLOCK;
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, menuCount);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this] {
-    const int menuCount = SETTINGS.useClock ? MENU_ITEMS_WITH_CLOCK : MENU_ITEMS_NO_CLOCK;
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, menuCount);
-    requestUpdate();
-  });
+  const int menuCount = SETTINGS.useClock ? MENU_ITEMS_WITH_CLOCK : MENU_ITEMS_NO_CLOCK;
+  buttonNavigator.onNextList(selectedIndex, menuCount, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectedIndex, menuCount, [this] { requestUpdate(); });
 }
 
 void StatusBarSettingsActivity::handleSelection() {

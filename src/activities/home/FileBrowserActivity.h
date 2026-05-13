@@ -19,7 +19,7 @@ class FileBrowserActivity final : public Activity {
 
   ButtonNavigator buttonNavigator;
 
-  size_t selectorIndex = 0;
+  int selectorIndex = 0;
 
   Mode mode = Mode::Books;
 

@@ -48,7 +48,7 @@ class WifiSelectionActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   WifiSelectionState state = WifiSelectionState::SCANNING;
-  size_t selectedNetworkIndex = 0;
+  int selectedNetworkIndex = 0;
   std::vector<WifiNetworkInfo> networks;
 
   // Selected network for connection

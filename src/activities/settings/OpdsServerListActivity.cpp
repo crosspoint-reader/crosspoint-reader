@@ -49,17 +49,8 @@ void OpdsServerListActivity::loop() {
   }
 
   const int itemCount = getItemCount();
-  if (itemCount > 0) {
-    buttonNavigator.onNext([this, itemCount] {
-      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);
-      requestUpdate();
-    });
-
-    buttonNavigator.onPrevious([this, itemCount] {
-      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, itemCount);
-      requestUpdate();
-    });
-  }
+  buttonNavigator.onNextList(selectedIndex, itemCount, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectedIndex, itemCount, [this] { requestUpdate(); });
 }
 
 void OpdsServerListActivity::handleSelection() {

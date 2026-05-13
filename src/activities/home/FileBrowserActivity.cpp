@@ -119,7 +119,7 @@ void FileBrowserActivity::onEnter() {
   if (!focusName.empty()) {
     const size_t idx = findEntry(focusName);
     if (idx < files.size()) {
-      selectorIndex = idx;
+      selectorIndex = static_cast<int>(idx);
     }
     focusName.clear();
   }
@@ -141,8 +141,6 @@ void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::loop() {
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
-
   ButtonEventManager::ButtonEvent ev;
   while (buttonEvents.consumeEvent(ev)) {
     if (ev.button == MappedInputManager::Button::Back) {
@@ -162,7 +160,7 @@ void FileBrowserActivity::loop() {
           const auto pos = oldPath.find_last_of('/');
           const std::string dirName = oldPath.substr(pos + 1) + "/";
           const size_t idx = findEntry(dirName);
-          selectorIndex = (idx < files.size()) ? idx : 0;
+          selectorIndex = (idx < files.size()) ? static_cast<int>(idx) : 0;
           requestUpdate();
         } else if (mode == Mode::PickFirmware) {
           // At root in PickFirmware: cancel back to caller.
@@ -249,8 +247,8 @@ void FileBrowserActivity::loop() {
             loadFiles();
             if (files.empty()) {
               selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
-              selectorIndex = files.size() - 1;
+            } else if (selectorIndex >= static_cast<int>(files.size())) {
+              selectorIndex = static_cast<int>(files.size()) - 1;
             }
             requestUpdate(true);
           } else {
@@ -280,27 +278,11 @@ void FileBrowserActivity::loop() {
     }
   }
 
-  // Up/Down side buttons navigate the list
+  // Up/Down side buttons navigate the list (Left/Right are reserved for Back/Info actions)
   const int listSize = static_cast<int>(files.size());
-  buttonNavigator.onRelease({MappedInputManager::Button::Down}, [this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
-  buttonNavigator.onRelease({MappedInputManager::Button::Up}, [this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
-  buttonNavigator.onContinuous({MappedInputManager::Button::Down}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onContinuous({MappedInputManager::Button::Up}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
+  buttonNavigator.onNextList({MappedInputManager::Button::Down}, selectorIndex, listSize, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, selectorIndex, listSize,
+                                 [this] { requestUpdate(); });
 }
 
 std::string getFileName(std::string filename) {

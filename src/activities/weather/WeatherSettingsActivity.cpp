@@ -55,18 +55,8 @@ void WeatherSettingsActivity::loop() {
       return;
     }
 
-    buttonNavigator.onNext([this] {
-      if (searchResults.empty()) return;
-      selectedIndex = (selectedIndex + 1) % static_cast<int>(searchResults.size());
-      requestUpdate();
-    });
-
-    buttonNavigator.onPrevious([this] {
-      if (searchResults.empty()) return;
-      const int size = static_cast<int>(searchResults.size());
-      selectedIndex = (selectedIndex + size - 1) % size;
-      requestUpdate();
-    });
+    buttonNavigator.onNextList(selectedIndex, static_cast<int>(searchResults.size()), [this] { requestUpdate(); });
+    buttonNavigator.onPreviousList(selectedIndex, static_cast<int>(searchResults.size()), [this] { requestUpdate(); });
     return;
   }
 

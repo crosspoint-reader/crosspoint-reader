@@ -38,8 +38,8 @@ void RecentBooksActivity::onEnter() {
   loadRecentBooks();
 
   selectorIndex = 0;
-  if (initialFocusIndex >= 0 && static_cast<size_t>(initialFocusIndex) < recentBooks.size()) {
-    selectorIndex = static_cast<size_t>(initialFocusIndex);
+  if (initialFocusIndex >= 0 && initialFocusIndex < static_cast<int>(recentBooks.size())) {
+    selectorIndex = initialFocusIndex;
   }
   initialFocusIndex = -1;
   requestUpdate();
@@ -51,13 +51,11 @@ void RecentBooksActivity::onExit() {
 }
 
 void RecentBooksActivity::loop() {
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
-
   ButtonEventManager::ButtonEvent ev;
   while (buttonEvents.consumeEvent(ev)) {
     if (ev.button == MappedInputManager::Button::Confirm &&
         (ev.type == ButtonEventManager::PressType::Short || ev.type == ButtonEventManager::PressType::Long)) {
-      if (recentBooks.empty() || selectorIndex >= recentBooks.size()) {
+      if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) {
         return;
       }
       // Long-press Confirm signals "open with KOReader sync" only for EPUBs.
@@ -75,7 +73,7 @@ void RecentBooksActivity::loop() {
       }
       ReturnHint hint;
       hint.target = ReturnTo::RecentBooks;
-      hint.selectIndex = static_cast<int>(selectorIndex);
+      hint.selectIndex = selectorIndex;
       activityManager.replaceWithReader(recentBooks[selectorIndex].path, std::move(hint));
       return;
     }
@@ -86,7 +84,7 @@ void RecentBooksActivity::loop() {
     }
 
     if (ev.button == MappedInputManager::Button::Left && ev.type == ButtonEventManager::PressType::Short) {
-      if (recentBooks.empty() || selectorIndex >= recentBooks.size()) return;
+      if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
       const std::string bookPath = recentBooks[selectorIndex].path;
       const std::string bookTitle = recentBooks[selectorIndex].title;
 
@@ -97,8 +95,8 @@ void RecentBooksActivity::loop() {
           loadRecentBooks();
           if (recentBooks.empty()) {
             selectorIndex = 0;
-          } else if (selectorIndex >= recentBooks.size()) {
-            selectorIndex = recentBooks.size() - 1;
+          } else if (selectorIndex >= static_cast<int>(recentBooks.size())) {
+            selectorIndex = static_cast<int>(recentBooks.size()) - 1;
           }
           requestUpdate(true);
         } else {
@@ -113,7 +111,7 @@ void RecentBooksActivity::loop() {
     }
 
     if (ev.button == MappedInputManager::Button::Right && ev.type == ButtonEventManager::PressType::Short) {
-      if (recentBooks.empty() || selectorIndex >= recentBooks.size()) return;
+      if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
       const std::string& path = recentBooks[selectorIndex].path;
       if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
         startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
@@ -123,31 +121,12 @@ void RecentBooksActivity::loop() {
     }
   }
 
-  int listSize = static_cast<int>(recentBooks.size());
-
   // Navigator is restricted to Up/Down so it cannot race the Left/Right Short
-  // handlers above: with a double-click action configured, Short events are
-  // deferred 300ms while wasReleased() is immediate, which would otherwise let
-  // the cursor move before the custom action runs on the wrong entry.
-  buttonNavigator.onRelease({MappedInputManager::Button::Down}, [this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
-  buttonNavigator.onRelease({MappedInputManager::Button::Up}, [this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-
-  buttonNavigator.onContinuous({MappedInputManager::Button::Down}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onContinuous({MappedInputManager::Button::Up}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
+  // handlers above (Left/Right actions are not in the onNextList/onPreviousList button sets).
+  const int listSize = static_cast<int>(recentBooks.size());
+  buttonNavigator.onNextList({MappedInputManager::Button::Down}, selectorIndex, listSize, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, selectorIndex, listSize,
+                                 [this] { requestUpdate(); });
 }
 
 void RecentBooksActivity::render(RenderLock&&) {

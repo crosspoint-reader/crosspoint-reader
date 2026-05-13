@@ -16,7 +16,19 @@ class ButtonNavigator final {
   std::function<bool(int)> selectablePredicate;
   int selectableTotalItems = 0;
 
+  uint32_t lastNextPressMs = 0;
+  uint32_t lastPreviousPressMs = 0;
+  bool longPressNextFired = false;
+  bool longPressPreviousFired = false;
+  int indexBeforePress = 0;
+
+  static constexpr uint16_t listDoubleClickMs = 350;
+  static constexpr uint32_t listLongPressMs = 1500;
+  static constexpr int listJumpCount = 10;
+
   [[nodiscard]] bool shouldNavigateContinuously() const;
+  void onListNav(const Buttons& buttons, bool forward, int& selectedIndex, int totalItems, uint32_t& lastPressMs,
+                 bool& longPressFired, const Callback& onChange);
 
  public:
   explicit ButtonNavigator(const uint16_t continuousIntervalMs = 500, const uint16_t continuousStartMs = 500)
@@ -56,6 +68,13 @@ class ButtonNavigator final {
 
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
+
+  // List navigation with double-click (skip 10) and long-press (jump to edge).
+  // Replaces the typical onNext/onPrevious + onContinuous pattern for drawList consumers.
+  void onNextList(int& selectedIndex, int totalItems, const Callback& onChange);
+  void onNextList(const Buttons& buttons, int& selectedIndex, int totalItems, const Callback& onChange);
+  void onPreviousList(int& selectedIndex, int totalItems, const Callback& onChange);
+  void onPreviousList(const Buttons& buttons, int& selectedIndex, int totalItems, const Callback& onChange);
 
   [[nodiscard]] static Buttons getNextButtons() {
     return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};

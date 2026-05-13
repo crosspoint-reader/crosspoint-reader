@@ -15,7 +15,6 @@
 #include <cstdio>
 #include <memory>
 
-#include "ButtonEventManager.h"
 #include "MappedInputManager.h"
 #include "OpdsFormatLabel.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -113,9 +112,6 @@ OpdsEntry OpdsBookBrowserActivity::getEntry(size_t index) const {
 void OpdsBookBrowserActivity::onEnter() {
   Activity::onEnter();
 
-  globalButtonEvents().forceDoubleAction(ButtonEventManager::Button::Up, true);
-  globalButtonEvents().forceDoubleAction(ButtonEventManager::Button::Down, true);
-
   state = BrowserState::CHECK_WIFI;
   entryOffsets.clear();
   navigationHistory.clear();
@@ -136,9 +132,6 @@ void OpdsBookBrowserActivity::onEnter() {
 
 void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
-
-  globalButtonEvents().forceDoubleAction(ButtonEventManager::Button::Up, false);
-  globalButtonEvents().forceDoubleAction(ButtonEventManager::Button::Down, false);
 
   HalClock::wifiOff();
 
@@ -216,14 +209,10 @@ void OpdsBookBrowserActivity::loop() {
       return;
     }
 
-    buttonNavigator.onNextRelease([this, entry] {
-      formatSelectorIndex = ButtonNavigator::nextIndex(formatSelectorIndex, entry.acquisitionLinks.size());
-      requestUpdate();
-    });
-    buttonNavigator.onPreviousRelease([this, entry] {
-      formatSelectorIndex = ButtonNavigator::previousIndex(formatSelectorIndex, entry.acquisitionLinks.size());
-      requestUpdate();
-    });
+    buttonNavigator.onNextList({MappedInputManager::Button::Down}, formatSelectorIndex,
+                               static_cast<int>(entry.acquisitionLinks.size()), [this] { requestUpdate(); });
+    buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, formatSelectorIndex,
+                                   static_cast<int>(entry.acquisitionLinks.size()), [this] { requestUpdate(); });
     return;
   }
 
@@ -240,37 +229,11 @@ void OpdsBookBrowserActivity::loop() {
     }
 
     if (!entryOffsets.empty()) {
-      ButtonEventManager::ButtonEvent extEvent;
-      while (globalButtonEvents().consumeEvent(extEvent)) {
-        if (extEvent.type == ButtonEventManager::PressType::Double) {
-          if (extEvent.button == ButtonEventManager::Button::Down) {
-            selectorIndex = (selectorIndex + 9) % entryOffsets.size();
-            requestUpdate();
-          } else if (extEvent.button == ButtonEventManager::Button::Up) {
-            int size = entryOffsets.size();
-            selectorIndex = (selectorIndex - 9 + size) % size;
-            requestUpdate();
-          }
-        } else if (extEvent.type == ButtonEventManager::PressType::Short ||
-                   extEvent.type == ButtonEventManager::PressType::Long) {
-          if (extEvent.button == ButtonEventManager::Button::Down) {
-            selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entryOffsets.size());
-            requestUpdate();
-          } else if (extEvent.button == ButtonEventManager::Button::Up) {
-            selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entryOffsets.size());
-            requestUpdate();
-          }
-        }
-      }
-
-      buttonNavigator.onContinuous({MappedInputManager::Button::Down}, [this] {
-        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entryOffsets.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
-      buttonNavigator.onContinuous({MappedInputManager::Button::Up}, [this] {
-        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entryOffsets.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
+      // Left/Right are reserved for Back and Search, so restrict to Up/Down only.
+      buttonNavigator.onNextList({MappedInputManager::Button::Down}, selectorIndex,
+                                 static_cast<int>(entryOffsets.size()), [this] { requestUpdate(); });
+      buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, selectorIndex,
+                                     static_cast<int>(entryOffsets.size()), [this] { requestUpdate(); });
     }
   }
 }

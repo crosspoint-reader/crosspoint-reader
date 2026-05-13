@@ -61,15 +61,8 @@ void OpdsSettingsActivity::loop() {
   }
 
   const int menuItems = getMenuItemCount();
-  buttonNavigator.onNext([this, menuItems] {
-    selectedIndex = (selectedIndex + 1) % menuItems;
-    requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this, menuItems] {
-    selectedIndex = (selectedIndex + menuItems - 1) % menuItems;
-    requestUpdate();
-  });
+  buttonNavigator.onNextList(selectedIndex, menuItems, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectedIndex, menuItems, [this] { requestUpdate(); });
 }
 
 bool OpdsSettingsActivity::saveServer() {
@@ -206,7 +199,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
                               StrId::STR_PASSWORD};
 
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, selectedIndex,
       [this, &fieldNames](int index) {
         if (index < BASE_ITEMS) {
           return std::string(I18N.get(fieldNames[index]));

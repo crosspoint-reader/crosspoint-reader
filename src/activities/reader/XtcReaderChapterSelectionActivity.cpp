@@ -85,25 +85,8 @@ void XtcReaderChapterSelectionActivity::loop() {
     }
   }
 
-  buttonNavigator.onNextRelease([this, totalItems] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this, totalItems] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
+  buttonNavigator.onNextList(selectorIndex, totalItems, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectorIndex, totalItems, [this] { requestUpdate(); });
 }
 
 void XtcReaderChapterSelectionActivity::render(RenderLock&&) {

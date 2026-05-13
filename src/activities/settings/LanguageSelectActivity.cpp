@@ -37,15 +37,8 @@ void LanguageSelectActivity::loop() {
   }
 
   // Handle navigation
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
+  buttonNavigator.onNextList(selectedIndex, totalItems, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectedIndex, totalItems, [this] { requestUpdate(); });
 }
 
 void LanguageSelectActivity::handleSelection() {

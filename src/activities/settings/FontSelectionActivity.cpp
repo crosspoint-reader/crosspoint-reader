@@ -45,15 +45,8 @@ void FontSelectionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, fontCount);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, fontCount);
-    requestUpdate();
-  });
+  buttonNavigator.onNextList(selectedIndex, fontCount, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectedIndex, fontCount, [this] { requestUpdate(); });
 }
 
 void FontSelectionActivity::handleSelection() {

@@ -13,7 +13,7 @@ class RecentBooksActivity final : public Activity {
  private:
   ButtonNavigator buttonNavigator;
 
-  size_t selectorIndex = 0;
+  int selectorIndex = 0;
   int initialFocusIndex = -1;  // applied once in onEnter(), then cleared
 
   // Recent tab state

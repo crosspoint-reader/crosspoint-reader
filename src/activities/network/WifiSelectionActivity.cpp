@@ -636,15 +636,9 @@ void WifiSelectionActivity::loop() {
     }
 
     // Handle navigation
-    buttonNavigator.onNext([this] {
-      selectedNetworkIndex = ButtonNavigator::nextIndex(selectedNetworkIndex, networks.size());
-      requestUpdate();
-    });
-
-    buttonNavigator.onPrevious([this] {
-      selectedNetworkIndex = ButtonNavigator::previousIndex(selectedNetworkIndex, networks.size());
-      requestUpdate();
-    });
+    buttonNavigator.onNextList(selectedNetworkIndex, static_cast<int>(networks.size()), [this] { requestUpdate(); });
+    buttonNavigator.onPreviousList(selectedNetworkIndex, static_cast<int>(networks.size()),
+                                   [this] { requestUpdate(); });
   }
 }
 

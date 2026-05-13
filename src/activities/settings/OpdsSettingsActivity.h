@@ -25,7 +25,7 @@ class OpdsSettingsActivity final : public Activity {
  private:
   ButtonNavigator buttonNavigator;
 
-  size_t selectedIndex = 0;
+  int selectedIndex = 0;
   int serverIndex;
   OpdsServer editServer;
   bool isNewServer = false;

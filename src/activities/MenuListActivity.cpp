@@ -27,14 +27,9 @@ void MenuListActivity::onEnter() {
 }
 
 void MenuListActivity::handleNavigation() {
-  buttonNavigator.onNext([this] {
-    selectedIndex = buttonNavigator.nextIndex(selectedIndex);
-    requestUpdate();
-  });
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = buttonNavigator.previousIndex(selectedIndex);
-    requestUpdate();
-  });
+  const int count = static_cast<int>(menuItems.size());
+  buttonNavigator.onNextList(selectedIndex, count, [this] { requestUpdate(); });
+  buttonNavigator.onPreviousList(selectedIndex, count, [this] { requestUpdate(); });
 }
 
 void MenuListActivity::toggleCurrentItem() {

@@ -481,19 +481,8 @@ void FontDownloadActivity::loop() {
       return;
     }
 
-    buttonNavigator_.onNextRelease([this] {
-      if (selectedIndex_ < listItemCount() - 1) {
-        selectedIndex_++;
-        requestUpdate();
-      }
-    });
-
-    buttonNavigator_.onPreviousRelease([this] {
-      if (selectedIndex_ > 0) {
-        selectedIndex_--;
-        requestUpdate();
-      }
-    });
+    buttonNavigator_.onNextList(selectedIndex_, listItemCount(), [this] { requestUpdate(); });
+    buttonNavigator_.onPreviousList(selectedIndex_, listItemCount(), [this] { requestUpdate(); });
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (!families_.empty()) {
