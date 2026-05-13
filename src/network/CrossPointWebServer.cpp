@@ -858,7 +858,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCacheIfNeeded(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1001,9 +1001,9 @@ void CrossPointWebServer::handleRename() const {
   }
 
   if (isDir) {
-    clearEpubCachesInDirectory(itemPath);
+    clearBookCachesInDirectory(itemPath);
   } else {
-    clearEpubCacheIfNeeded(itemPath);
+    clearBookCacheIfNeeded(itemPath);
   }
   const bool success = file.rename(newPath.c_str());
   file.close();
@@ -1099,9 +1099,9 @@ void CrossPointWebServer::handleMove() const {
   }
 
   if (isDir) {
-    clearEpubCachesInDirectory(itemPath);
+    clearBookCachesInDirectory(itemPath);
   } else {
-    clearEpubCacheIfNeeded(itemPath);
+    clearBookCacheIfNeeded(itemPath);
   }
   const bool success = file.rename(newPath.c_str());
   file.close();
@@ -2408,7 +2408,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
-            clearEpubCacheIfNeeded(filePath);
+            clearBookCacheIfNeeded(filePath);
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2476,7 +2476,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCacheIfNeeded(filePath);
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
