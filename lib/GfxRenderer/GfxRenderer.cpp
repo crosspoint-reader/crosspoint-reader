@@ -1136,11 +1136,13 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  // After a factory LUT render the display already powered down (0xC7 sequence).
-  // Requesting turnOffScreen=true here would immediately power on then off again,
-  // adding a full power cycle. Skip the power-down for this one transition.
-  const bool turnOff = (displayState == DisplayState::FactoryLut) ? false : fadingFix;
-  display.displayBuffer(refreshMode, turnOff);
+  // After a factory LUT render, RED RAM still contains the grayscale MSB plane.
+  // Promote the first normal FAST refresh to HALF so both RAM banks are rebased
+  // before differential updates resume.
+  const bool afterFactoryLut = displayState == DisplayState::FactoryLut;
+  const auto effectiveRefreshMode =
+      afterFactoryLut && refreshMode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : refreshMode;
+  display.displayBuffer(effectiveRefreshMode, fadingFix);
   displayState = DisplayState::BW;
 }
 
@@ -1512,8 +1514,8 @@ void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const Gfx
 
   displayGrayBuffer(lut, factoryMode);
   // Suppress the SDK's automatic grayscaleRevert on the next BW page turn.
-  // Caller is responsible for cleanup (restoreBwBuffer rebases RED RAM and
-  // the next FAST_REFRESH drives pixels back to clean BW).
+  // Caller is responsible for cleanup: restoreBwBuffer rebases RED RAM, and
+  // displayBuffer promotes the first post-factory FAST refresh to HALF.
   display.clearGrayscaleModeFlag();
   setRenderMode(BW);
 }

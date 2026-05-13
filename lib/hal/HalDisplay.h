@@ -37,7 +37,7 @@ class HalDisplay {
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Power management
-  void deepSleep();
+  void deepSleep(bool powerDownDisplay = true);
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
