@@ -357,6 +357,10 @@ void SleepActivity::onEnter() {
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY) {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
+  // X3 panels need extra settle passes to fully clear ghosting from the previous reader page
+  // before showing the static sleep image. No-op on other panels. Placed after the popup so
+  // its own displayBuffer doesn't consume the request.
+  display.requestResync(2);
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):

@@ -36,6 +36,10 @@ class HalDisplay {
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
+  // Request extra X3 ghost-clearing on the next display refresh.
+  // No-op on non-X3 panels. Consumed by the next displayBuffer/refreshDisplay call.
+  void requestResync(uint8_t settlePasses = 0);
+
   // Power management
   void deepSleep();
 
@@ -57,6 +61,7 @@ class HalDisplay {
 
  private:
   EInkDisplay einkDisplay;
+  uint8_t pendingX3SettlePasses = 0;
 };
 
 extern HalDisplay display;

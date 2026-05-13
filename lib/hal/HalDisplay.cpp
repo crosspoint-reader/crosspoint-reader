@@ -50,18 +50,30 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
+void HalDisplay::requestResync(uint8_t settlePasses) {
+  if (gpio.deviceIsX3() && settlePasses > pendingX3SettlePasses) {
+    pendingX3SettlePasses = settlePasses;
+  }
+}
+
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
+    einkDisplay.requestResync(pendingX3SettlePasses > 1 ? pendingX3SettlePasses : 1);
+  } else if (pendingX3SettlePasses > 0) {
+    einkDisplay.requestResync(pendingX3SettlePasses);
   }
+  pendingX3SettlePasses = 0;
 
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
+    einkDisplay.requestResync(pendingX3SettlePasses > 1 ? pendingX3SettlePasses : 1);
+  } else if (pendingX3SettlePasses > 0) {
+    einkDisplay.requestResync(pendingX3SettlePasses);
   }
+  pendingX3SettlePasses = 0;
 
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
