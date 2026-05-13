@@ -2,7 +2,7 @@
 #include <functional>
 #include <vector>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "./FileBrowserActivity.h"
 #include "util/ButtonNavigator.h"
 

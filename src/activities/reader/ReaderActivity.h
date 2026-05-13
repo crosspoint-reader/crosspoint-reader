@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "activities/home/FileBrowserActivity.h"
 
 class Epub;

@@ -10,11 +10,11 @@
 
 #include <iterator>
 
-#include "../../Epub.h"
-#include "../Page.h"
-#include "../converters/ImageDecoderFactory.h"
-#include "../converters/ImageToFramebufferDecoder.h"
-#include "../htmlEntities.h"
+#include "Epub.h"
+#include "Epub/Page.h"
+#include "Epub/converters/ImageDecoderFactory.h"
+#include "Epub/converters/ImageToFramebufferDecoder.h"
+#include "Epub/htmlEntities.h"
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB

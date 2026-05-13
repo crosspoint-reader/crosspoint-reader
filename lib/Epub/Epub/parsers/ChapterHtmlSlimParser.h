@@ -8,12 +8,12 @@
 #include <string>
 #include <vector>
 
-#include "../FootnoteEntry.h"
-#include "../ParsedText.h"
-#include "../blocks/ImageBlock.h"
-#include "../blocks/TextBlock.h"
-#include "../css/CssParser.h"
-#include "../css/CssStyle.h"
+#include "Epub/FootnoteEntry.h"
+#include "Epub/ParsedText.h"
+#include "Epub/blocks/ImageBlock.h"
+#include "Epub/blocks/TextBlock.h"
+#include "Epub/css/CssParser.h"
+#include "Epub/css/CssStyle.h"
 
 class Page;
 class GfxRenderer;

@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-#include "../util/ConfirmationActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"

@@ -2,7 +2,7 @@
 
 #include <I18n.h>
 
-#include "../../components/UITheme.h"
+#include "components/UITheme.h"
 #include "HalDisplay.h"
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

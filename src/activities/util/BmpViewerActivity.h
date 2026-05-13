@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "MappedInputManager.h"
 
 class BmpViewerActivity final : public Activity {

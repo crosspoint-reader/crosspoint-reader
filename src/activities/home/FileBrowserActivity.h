@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "RecentBooksStore.h"
 #include "util/ButtonNavigator.h"
 

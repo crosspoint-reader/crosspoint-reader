@@ -2,8 +2,8 @@
 #include <functional>
 #include <string>
 
-#include "../../fontIds.h"
-#include "../Activity.h"
+#include "fontIds.h"
+#include "activities/Activity.h"
 
 class ConfirmationActivity : public Activity {
  private:

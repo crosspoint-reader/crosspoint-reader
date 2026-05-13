@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "OpdsServerStore.h"
 #include "util/ButtonNavigator.h"
 
