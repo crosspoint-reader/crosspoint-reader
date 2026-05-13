@@ -499,12 +499,4 @@ void SettingsActivity::renderCoverPopup() {
 
   y += listHeight + 14;
   renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(optionDescs[coverPopupSelection]), true);
-
-  y = dialogY + dialogH - innerPadding - height10;
-  const int backWidth = renderer.getTextWidth(UI_10_FONT_ID, "[BACK]");
-  const int selectWidth = renderer.getTextWidth(UI_10_FONT_ID, "[SELECT]");
-  const int hintsWidth = backWidth + 30 + selectWidth;
-  int hintsX = (pageWidth - hintsWidth) / 2;
-  renderer.drawText(UI_10_FONT_ID, hintsX, y, "[BACK]", true);
-  renderer.drawText(UI_10_FONT_ID, hintsX + backWidth + 30, y, "[SELECT]", true);
 }
