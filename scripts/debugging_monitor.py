@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import os
 import platform
 import re
 import signal
@@ -34,6 +35,31 @@ import sys
 import threading
 from collections import deque
 from datetime import datetime
+
+import matplotlib
+
+
+def select_matplotlib_backend() -> None:
+    """Ensure an interactive backend is selected before showing the plot."""
+    backend = matplotlib.get_backend()
+    if backend.lower() in ("agg", "svg", "pdf", "ps"):
+        if os.name == "nt" or os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+            for candidate in ("Qt5Agg", "QtAgg", "TkAgg", "GTK3Agg", "GTK4Agg"):
+                if candidate in matplotlib.rcsetup.interactive_bk:
+                    try:
+                        matplotlib.use(candidate, force=True)
+                        print(
+                            f"\n{Fore.CYAN}--- Switched Matplotlib backend to: {candidate} ---{Style.RESET_ALL}"
+                        )
+                        return
+                    except Exception:
+                        continue
+    backend = matplotlib.get_backend()
+    if backend.lower() in ("agg", "svg", "pdf", "ps"):
+        print(
+            f"\n{Fore.RED}Warning: No interactive Matplotlib backend available. "
+            f"Graph window may not open correctly on this system.{Style.RESET_ALL}"
+        )
 
 # Try to import potentially missing packages
 PACKAGE_MAPPING: dict[str, str] = {
@@ -44,15 +70,17 @@ PACKAGE_MAPPING: dict[str, str] = {
 }
 
 try:
-    import matplotlib.pyplot as plt
     import serial
     from colorama import Fore, Style, init
-    from matplotlib import animation
 
     try:
         from PIL import Image
     except ImportError:
         Image = None
+
+    select_matplotlib_backend()
+    import matplotlib.pyplot as plt
+    from matplotlib import animation
 except ImportError as e:
     ERROR_MSG = str(e).lower()
     missing_packages = [pkg for mod, pkg in PACKAGE_MAPPING.items() if mod in ERROR_MSG]
@@ -504,10 +532,12 @@ def main() -> None:
     except (AttributeError, ValueError):
         pass
 
+    select_matplotlib_backend()
+
     fig = plt.figure(figsize=(10, 6))
 
     # Update graph every 1000ms
-    _ = animation.FuncAnimation(
+    anim = animation.FuncAnimation(
         fig, update_graph, interval=1000, cache_frame_data=False
     )
 
