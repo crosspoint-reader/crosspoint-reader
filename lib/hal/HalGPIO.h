@@ -77,7 +77,7 @@ class HalGPIO {
   // Verify power button was held long enough after wakeup.
   // If verification fails, enters deep sleep and does not return.
   // Should only be called when wakeup reason is PowerButton.
-  void verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
+  void verifyPowerButtonWakeup(uint16_t requiredDurationMs);
 
   // Check if USB is connected
   bool isUsbConnected() const;

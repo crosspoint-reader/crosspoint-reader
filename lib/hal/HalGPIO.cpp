@@ -235,11 +235,7 @@ void HalGPIO::startDeepSleep() {
   esp_deep_sleep_start();
 }
 
-void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
-  if (shortPressAllowed) {
-    // Fast path - no duration check needed
-    return;
-  }
+void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs) {
   // TODO: Intermittent edge case remains: a single tap followed by another single tap
   // can still power on the device. Tighten wake debounce/state handling here.
 
