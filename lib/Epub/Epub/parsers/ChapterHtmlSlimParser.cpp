@@ -10,11 +10,11 @@
 
 #include <iterator>
 
-#include "../../Epub.h"
-#include "../Page.h"
-#include "../converters/ImageDecoderFactory.h"
-#include "../converters/ImageToFramebufferDecoder.h"
-#include "../htmlEntities.h"
+#include "Epub.h"
+#include "Epub/Page.h"
+#include "Epub/converters/ImageDecoderFactory.h"
+#include "Epub/converters/ImageToFramebufferDecoder.h"
+#include "Epub/htmlEntities.h"
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
@@ -141,7 +141,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
     pendingAnchorId.clear();
   }
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, blockStyle));
+  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
 
@@ -156,6 +156,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   if (strcmp(name, "p") == 0) {
     self->xpathParagraphIndex++;
+  }
+  if (strcmp(name, "li") == 0) {
+    self->xpathListItemIndex++;
   }
 
   // Extract class, style, and id attributes
@@ -449,7 +452,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
                      self->viewportHeight)) {
-                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex);
+                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
+                                       self->xpathListItemIndex);
                   self->completedPageCount++;
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
@@ -1115,7 +1119,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
     }
-    completePageFn(std::move(currentPage), xpathParagraphIndex);
+    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
@@ -1133,7 +1137,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex);
+    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
