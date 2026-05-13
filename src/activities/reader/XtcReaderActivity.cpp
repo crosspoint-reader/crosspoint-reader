@@ -65,6 +65,7 @@ void XtcReaderActivity::loop() {
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               currentPage = std::get<PageResult>(result.data).page;
+              halfRefreshBeforeNextPage = xtc && xtc->getBitDepth() == 2;
             }
           });
     }
@@ -261,8 +262,13 @@ void XtcReaderActivity::renderPage() {
       return;
     }
 
-    // Periodic FULL_REFRESH resets DC balance; every 32 pages.
-    if (++pagesSinceClean >= 32) {
+    if (halfRefreshBeforeNextPage) {
+      halfRefreshBeforeNextPage = false;
+      pagesSinceClean = 0;
+      renderer.clearScreen();
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    } else if (++pagesSinceClean >= 32) {
+      // Periodic FULL_REFRESH resets DC balance; every 32 pages.
       pagesSinceClean = 0;
       renderer.clearScreen();
       renderer.displayBuffer(HalDisplay::FULL_REFRESH);

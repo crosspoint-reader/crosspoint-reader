@@ -13,28 +13,11 @@
 #include "CrossPointState.h"
 #include "Epub/converters/DirectPixelWriter.h"
 #include "activities/reader/ReaderUtils.h"
-#include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 
-namespace {
-void drawEnteringSleepOverlay(const GfxRenderer& r, const void*) {
-  constexpr int margin = 15;
-  const char* msg = tr(STR_ENTERING_SLEEP);
-  const int y = static_cast<int>(r.getScreenHeight() * 0.075f);
-  const int textWidth = r.getTextWidth(UI_12_FONT_ID, msg, EpdFontFamily::BOLD);
-  const int w = textWidth + margin * 2;
-  const int h = r.getLineHeight(UI_12_FONT_ID) + margin * 2;
-  const int x = (r.getScreenWidth() - w) / 2;
-  r.fillRect(x - 2, y - 2, w + 4, h + 4, true);
-  r.fillRect(x, y, w, h, false);
-  r.drawText(UI_12_FONT_ID, x + margin, y + margin - 2, msg, true, EpdFontFamily::BOLD);
-}
-}  // namespace
-
 void SleepActivity::onEnter() {
   Activity::onEnter();
-  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
 
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
@@ -279,7 +262,7 @@ bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
         }
         free(rowBuf);
       },
-      &ctx, &drawEnteringSleepOverlay, nullptr);
+      &ctx);
 
   file.close();
   return true;
@@ -343,7 +326,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
           const auto* c = static_cast<const BitmapGrayCtx*>(raw);
           r.drawBitmap(*c->bitmap, c->x, c->y, c->maxWidth, c->maxHeight, c->cropX, c->cropY);
         },
-        &grayCtx, &drawEnteringSleepOverlay, nullptr);
+        &grayCtx);
   } else {
     renderer.clearScreen();
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);

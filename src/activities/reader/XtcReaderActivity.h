@@ -20,6 +20,7 @@ class XtcReaderActivity final : public Activity {
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
   uint32_t pagesSinceClean = 0;
+  bool halfRefreshBeforeNextPage = false;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
