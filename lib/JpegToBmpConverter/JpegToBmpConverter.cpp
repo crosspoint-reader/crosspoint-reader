@@ -245,14 +245,13 @@ static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) 
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = adjustPixel(srcRow[x]);
       uint8_t twoBit;
       if (ctx->atkinsonDitherer) {
-        twoBit = ctx->atkinsonDitherer->processPixel(gray, x);
+        twoBit = ctx->atkinsonDitherer->processPixel(srcRow[x], x);
       } else if (ctx->fsDitherer) {
-        twoBit = ctx->fsDitherer->processPixel(gray, x);
+        twoBit = ctx->fsDitherer->processPixel(srcRow[x], x);
       } else {
-        twoBit = quantize(gray, x, outY);
+        twoBit = quantize(srcRow[x], x, outY);
       }
       ctx->bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
     }
@@ -284,7 +283,7 @@ static void flushScaledRow(BmpConvertCtx* ctx) {
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = adjustPixel((ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0);
+      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
       uint8_t twoBit;
       if (ctx->atkinsonDitherer) {
         twoBit = ctx->atkinsonDitherer->processPixel(gray, x);

@@ -6,16 +6,26 @@
 
 // Direct framebuffer writer that eliminates per-pixel overhead from the image
 // rendering hot path.  Pre-computes orientation transform as linear coefficients
-// and caches render-mode state so the inner loop is: one multiply, one add,
-// one shift, and one AND per pixel — no branches, no method calls.
+// and caches render-mode state so the inner loop is: two increments, one shift,
+// one AND, and one or two bit-writes per pixel — no multiplies, no branches on
+// mode or orientation, no method calls.
 //
-// Caller is responsible for ensuring (outX, outY) are within screen bounds.
-// ImageBlock::render() already validates this before entering the pixel loop,
-// and the JPEG/PNG callbacks pre-clamp destination ranges to screen bounds.
+// Usage:
+//   pw.init(renderer);
+//   for each row: pw.beginRow(logicalY);   // resets running X/Y state to col 0
+//   for each col: pw.writePixel(value);    // advances running state, writes bit
+//
+// Caller must call writePixel() for every column in order (0, 1, 2, …) because
+// the running state is advanced unconditionally on each call.  Caller is also
+// responsible for ensuring columns are within screen bounds before entering the
+// loop; no bounds checking is performed here.
 struct DirectPixelWriter {
   uint8_t* fb;
-  GfxRenderer::RenderMode mode;
-  uint16_t displayWidthBytes;  // Runtime framebuffer stride (X4: 100, X3: 99)
+  uint8_t* fb2;                // Secondary framebuffer for MSB plane (null = two-pass / not active)
+  uint8_t writeFbMask;         // Bit i set → write to fb when pixelValue==i (pre-computed from render mode)
+  uint8_t writeFb2Mask;        // Bit i set → write to fb2 when pixelValue==i
+  bool fbClearBit;             // true = clear bit (BW black); false = set bit (all gray modes)
+  uint16_t displayWidthBytes;  // Runtime framebuffer stride
 
   // Orientation is collapsed into a linear transform:
   //   phyX = phyXBase + x * phyXStepX + y * phyXStepY
@@ -24,13 +34,43 @@ struct DirectPixelWriter {
   int phyXStepX, phyYStepX;  // per logical-X step
   int phyXStepY, phyYStepY;  // per logical-Y step
 
-  // Row-precomputed: the Y-dependent portion of the physical coords
-  int rowPhyXBase, rowPhyYBase;
+  // Pre-computed once in init(): physical-Y advance per logical-X step (in byte-index units).
+  int32_t byteIdxYStep;
 
-  void init(GfxRenderer& renderer) {
+  // Running state — reset by beginRow(), advanced by writePixel().
+  int curPhyX;
+  int32_t curByteIdx;
+
+  void init(const GfxRenderer& renderer) {
     fb = renderer.getFrameBuffer();
-    mode = renderer.getRenderMode();
+    fb2 = renderer.getSecondaryFrameBuffer();
     displayWidthBytes = renderer.getDisplayWidthBytes();
+
+    // Pre-compute write masks once so the inner loop has zero mode branches.
+    writeFbMask = 0;
+    writeFb2Mask = 0;
+    fbClearBit = false;
+    switch (renderer.getRenderMode()) {
+      case GfxRenderer::BW:
+        writeFbMask = 0x3;
+        fbClearBit = true;
+        break;
+      case GfxRenderer::GRAYSCALE_MSB:
+        writeFbMask = 0x6;
+        break;
+      case GfxRenderer::GRAYSCALE_LSB:
+        writeFbMask = 0x2;
+        break;
+      case GfxRenderer::GRAY2_LSB:
+        writeFbMask = 0x5;
+        if (fb2) writeFb2Mask = 0x3;
+        break;
+      case GfxRenderer::GRAY2_MSB:
+        writeFbMask = 0x3;
+        break;
+      default:
+        break;
+    }
 
     const int phyW = renderer.getDisplayWidth();
     const int phyH = renderer.getDisplayHeight();
@@ -82,52 +122,47 @@ struct DirectPixelWriter {
         phyYStepY = 1;
         break;
     }
+
+    // Per-column advance in physical-Y expressed as a byte-index delta.
+    byteIdxYStep = static_cast<int32_t>(phyYStepX) * static_cast<int32_t>(displayWidthBytes);
   }
 
   // Call once per row before the column loop.
-  // Pre-computes the Y-dependent portion so writePixel() only needs the X part.
-  inline void beginRow(int logicalY) {
-    rowPhyXBase = phyXBase + logicalY * phyXStepY;
-    rowPhyYBase = phyYBase + logicalY * phyYStepY;
+  // startLogicalX is the X coordinate of the first writePixel() call for this row (default 0).
+  // Running state is initialised at startLogicalX so every subsequent writePixel() call
+  // advances to startLogicalX+1, startLogicalX+2, … with zero per-pixel multiplies.
+  inline void beginRow(int logicalY, int startLogicalX = 0) {
+    const int rowPhyXBase = phyXBase + logicalY * phyXStepY;
+    const int rowPhyYBase = phyYBase + logicalY * phyYStepY;
+    curPhyX = rowPhyXBase + startLogicalX * phyXStepX;
+    curByteIdx =
+        static_cast<int32_t>(rowPhyYBase + startLogicalX * phyYStepX) * static_cast<int32_t>(displayWidthBytes);
   }
 
-  // Write a single 2-bit dithered pixel value to the framebuffer.
-  // Must be called after beginRow() for the current row.
+  // Write a single 2-bit pixel value to the framebuffer and advance to the next column.
+  // Must be called after beginRow() for the current row, for every column in order.
   // No bounds checking — caller guarantees coordinates are valid.
-  inline void writePixel(int logicalX, uint8_t pixelValue) const {
-    // Determine whether to draw based on render mode
-    bool draw;
-    bool state;
-    switch (mode) {
-      case GfxRenderer::BW:
-        draw = (pixelValue < 3);
-        state = true;
-        break;
-      case GfxRenderer::GRAYSCALE_MSB:
-        draw = (pixelValue == 1 || pixelValue == 2);
-        state = false;
-        break;
-      case GfxRenderer::GRAYSCALE_LSB:
-        draw = (pixelValue == 1);
-        state = false;
-        break;
-      default:
-        return;
-    }
+  // No mode switch — write masks are pre-computed in init() and stored as members.
+  inline void writePixel(uint8_t pixelValue) {
+    const int phyX = curPhyX;
+    const int32_t byteIdx = curByteIdx;
+    curPhyX += phyXStepX;
+    curByteIdx += byteIdxYStep;
 
-    if (!draw) return;
+    const bool doFb = (writeFbMask >> pixelValue) & 1;
+    const bool doFb2 = (writeFb2Mask >> pixelValue) & 1;
+    if (!doFb && !doFb2) return;
 
-    const int phyX = rowPhyXBase + logicalX * phyXStepX;
-    const int phyY = rowPhyYBase + logicalX * phyYStepX;
-
-    const uint16_t byteIndex = phyY * displayWidthBytes + (phyX >> 3);
+    const uint32_t bi = static_cast<uint32_t>(byteIdx) + static_cast<uint32_t>(phyX >> 3);
     const uint8_t bitMask = 1 << (7 - (phyX & 7));
 
-    if (state) {
-      fb[byteIndex] &= ~bitMask;  // Clear bit (draw black)
-    } else {
-      fb[byteIndex] |= bitMask;  // Set bit (draw white)
+    if (doFb) {
+      if (fbClearBit)
+        fb[bi] &= ~bitMask;
+      else
+        fb[bi] |= bitMask;
     }
+    if (doFb2) fb2[bi] |= bitMask;
   }
 };
 

@@ -19,6 +19,8 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  uint32_t pagesSinceClean = 0;
+  bool halfRefreshBeforeNextPage = false;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
@@ -27,8 +29,10 @@ class XtcReaderActivity final : public Activity {
     std::string title;
   };
 
+  static void renderStatusBarOverlayCallback(const GfxRenderer& renderer, const void* raw);
   void renderPage();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
+  void renderConfiguredStatusBarOverlay() const;
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;
   void loadProgress();
@@ -40,6 +44,7 @@ class XtcReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onScreenshotRequest() override;
   bool isReaderActivity() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
 };

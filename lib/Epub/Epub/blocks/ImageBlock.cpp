@@ -74,13 +74,13 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     }
 
     const int destY = y + row;
-    pw.beginRow(destY);
+    pw.beginRow(destY, x);
     for (int col = 0; col < cachedWidth; col++) {
       const int byteIdx = col >> 2;            // col / 4
       const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
       uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
 
-      pw.writePixel(x + col, pixelValue);
+      pw.writePixel(pixelValue);
     }
   }
 

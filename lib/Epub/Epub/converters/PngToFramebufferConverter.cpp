@@ -197,7 +197,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   // Pre-compute orientation and render-mode state once per row
   DirectPixelWriter pw;
   pw.init(*ctx->renderer);
-  pw.beginRow(outY);
+  pw.beginRow(outY, outXBase);
 
   DirectCacheWriter cw;
   if (caching) {
@@ -220,7 +220,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
         ditheredGray = gray / 85;
         if (ditheredGray > 3) ditheredGray = 3;
       }
-      pw.writePixel(outX, ditheredGray);
+      pw.writePixel(ditheredGray);
       if (caching) cw.writePixel(outX, ditheredGray);
     }
 

@@ -82,6 +82,8 @@ class Xtc {
    * @return Number of bytes read
    */
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) const;
+  size_t loadPageMsb(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) const;
+  size_t loadPageLsb(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) const;
 
   /**
    * Load page with streaming callback

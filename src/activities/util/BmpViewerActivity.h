@@ -13,10 +13,12 @@ class BmpViewerActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void onScreenshotRequest() override;
 
  private:
   void loadSiblingImages();
   void doSetSleepCover();
+  void renderGrayscaleImage();
 
   std::string filePath;
   std::vector<std::string> siblingImages;

@@ -81,6 +81,10 @@ class Bitmap {
   static uint16_t readLE16(FsFile& f);
   static uint32_t readLE32(FsFile& f);
 
+  // Reads exactly n bytes from the internal chunk buffer, refilling from SD as needed.
+  // Returns bytes actually read (< n on EOF/error).
+  int bufferedRead(uint8_t* dst, int n) const;
+
   FsFile& file;
   bool dithering = false;
   int width = 0;
@@ -100,4 +104,10 @@ class Bitmap {
 
   mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
   mutable FloydSteinbergDitherer* fsDitherer = nullptr;
+
+  // SD read-ahead buffer: rows are served from here; refilled from SD in READ_CHUNK_SIZE chunks.
+  static constexpr int READ_CHUNK_SIZE = 4096;  // 8 SD sectors per fill — enables CMD18 multi-block
+  mutable uint8_t* readChunkBuf = nullptr;
+  mutable int readChunkPos = 0;
+  mutable int readChunkFill = 0;
 };

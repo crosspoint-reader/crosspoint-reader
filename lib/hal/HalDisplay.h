@@ -47,7 +47,12 @@ class HalDisplay {
   void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 
-  void displayGrayBuffer(bool turnOffScreen = false);
+  void displayGrayBuffer(bool turnOffScreen = false, const unsigned char* lut = nullptr, bool factoryMode = false);
+
+  // Tell the SDK that grayscale state has been cleaned up by the consumer
+  // (RAM banks rebased + a follow-up FAST_REFRESH will handle pixel cleanup),
+  // so the next displayBuffer() should not run grayscaleRevert().
+  void clearGrayscaleModeFlag() { einkDisplay.clearGrayscaleModeFlag(); }
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;

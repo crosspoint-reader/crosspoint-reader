@@ -176,7 +176,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (fineScaleFPX == FP_ONE && fineScaleFPY == FP_ONE) {
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
-      pw.beginRow(outY);
+      pw.beginRow(outY, cfgX + dstXStart);
       if (caching) cw.beginRow(outY, ctx->config->y);
       const uint8_t* row = &pixels[(dstY - blockY) * stride];
       for (int dstX = dstXStart; dstX < dstXEnd; dstX++) {
@@ -189,7 +189,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        pw.writePixel(outX, dithered);
+        pw.writePixel(dithered);
         if (caching) cw.writePixel(outX, dithered);
       }
     }
@@ -210,7 +210,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
-      pw.beginRow(outY);
+      pw.beginRow(outY, cfgX + dstXStart);
       if (caching) cw.beginRow(outY, ctx->config->y);
       const int32_t srcFyFP = dstY * invScaleFPY;
       const int32_t fy = srcFyFP & FP_MASK;
@@ -248,7 +248,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        pw.writePixel(outX, dithered);
+        pw.writePixel(dithered);
         if (caching) cw.writePixel(outX, dithered);
       }
 
@@ -271,7 +271,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        pw.writePixel(outX, dithered);
+        pw.writePixel(dithered);
         if (caching) cw.writePixel(outX, dithered);
       }
 
@@ -297,7 +297,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
         }
-        pw.writePixel(outX, dithered);
+        pw.writePixel(dithered);
         if (caching) cw.writePixel(outX, dithered);
       }
     }
@@ -307,7 +307,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   // === Nearest-neighbor (downscale: fineScale < 1.0) ===
   for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
     const int outY = cfgY + dstY;
-    pw.beginRow(outY);
+    pw.beginRow(outY, cfgX + dstXStart);
     if (caching) cw.beginRow(outY, ctx->config->y);
     const int32_t srcFyFP = dstY * invScaleFPY;
     int ly = (srcFyFP >> FP_SHIFT) - blockY;
@@ -330,7 +330,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         dithered = gray / 85;
         if (dithered > 3) dithered = 3;
       }
-      pw.writePixel(outX, dithered);
+      pw.writePixel(dithered);
       if (caching) cw.writePixel(outX, dithered);
     }
   }
