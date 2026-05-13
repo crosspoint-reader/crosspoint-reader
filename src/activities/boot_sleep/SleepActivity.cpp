@@ -262,7 +262,7 @@ bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
         }
         free(rowBuf);
       },
-      &ctx);
+      &ctx, nullptr, nullptr, HalDisplay::FULL_REFRESH);
 
   file.close();
   return true;
@@ -326,7 +326,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
           const auto* c = static_cast<const BitmapGrayCtx*>(raw);
           r.drawBitmap(*c->bitmap, c->x, c->y, c->maxWidth, c->maxHeight, c->cropX, c->cropY);
         },
-        &grayCtx);
+        &grayCtx, nullptr, nullptr, HalDisplay::FULL_REFRESH);
   } else {
     renderer.clearScreen();
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
@@ -393,11 +393,8 @@ void SleepActivity::renderCoverSleepScreen() const {
       }
 
       LOG_DBG("SLP", "Direct XTCH plane render: %ux%u", lastXtc.getPageWidth(), lastXtc.getPageHeight());
-      if (!APP_STATE.lastSleepFromReader) {
-        renderer.clearScreen();
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-      }
-      renderer.displayXtchPlanes(plane1, plane2, lastXtc.getPageWidth(), lastXtc.getPageHeight());
+      renderer.displayXtchPlanes(plane1, plane2, lastXtc.getPageWidth(), lastXtc.getPageHeight(), nullptr, nullptr,
+                                 GfxRenderer::GrayscaleMode::FactoryQuality, true, HalDisplay::FULL_REFRESH);
       free(plane1);
       free(plane2);
       return;

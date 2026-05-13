@@ -1522,11 +1522,12 @@ void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const Gfx
 
 void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)(const GfxRenderer&, const void*),
                                             const void* ctx, void (*preFlashOverlayFn)(const GfxRenderer&, const void*),
-                                            const void* preFlashCtx) {
+                                            const void* preFlashCtx,
+                                            const HalDisplay::RefreshMode preFlashRefreshMode) {
   if (mode == GrayscaleMode::FactoryFast || mode == GrayscaleMode::FactoryQuality) {
     clearScreen();
     if (preFlashOverlayFn) preFlashOverlayFn(*this, preFlashCtx);
-    displayBuffer(HalDisplay::HALF_REFRESH);
+    displayBuffer(preFlashRefreshMode);
   }
 
   const RenderMode lsbMode = (mode == GrayscaleMode::Differential) ? GRAYSCALE_LSB : GRAY2_LSB;
@@ -1593,7 +1594,8 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
 
 void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, const uint16_t pageWidth,
                                     const uint16_t pageHeight, RenderHook overlayFn, const void* overlayCtx,
-                                    GrayscaleMode mode) {
+                                    GrayscaleMode mode, const bool preFlash,
+                                    const HalDisplay::RefreshMode preFlashRefreshMode) {
   const size_t colBytes = (pageHeight + 7) / 8;
   const uint16_t fbStride = panelWidthBytes;
 
@@ -1607,6 +1609,11 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
       screenshotHookCtx = nullptr;
     }
     return;
+  }
+
+  if (preFlash) {
+    clearScreen();
+    displayBuffer(preFlashRefreshMode);
   }
 
   // Pass 1: plane1 (MSB) → BW RAM via copyGrayscaleLsbBuffers.
