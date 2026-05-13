@@ -267,8 +267,6 @@ class CrossPointSettings {
   uint8_t imageDithering = IMAGE_DITHER_BAYER;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = 0;
-  // Tilt input processing mode: 0 = raw accel, 1 = smoothed accel, 2 = gyro/accelerometer fusion
-  uint8_t tiltStabilization = 0;
   // Action when the computed tilt value crosses the positive threshold.
   uint8_t tiltPositiveAction = TILT_ACT_NEXT_PAGE;
   // Action when the computed tilt value crosses the negative threshold.
