@@ -471,7 +471,7 @@ void SettingsActivity::renderCoverPopup() {
 
   const int listHeight = height10 * kCoverOptionCount + itemSpacing * (kCoverOptionCount - 1);
   const int dialogW = std::min((maxTextWidth + innerPadding * 2) * 12 / 10, pageWidth - 20);
-  const int contentHeight = height12 + 10 + listHeight + 14 + heightSmall + 14 + height10;
+  const int contentHeight = height12 + 10 + listHeight + 14 + heightSmall;
   const int dialogH = contentHeight + innerPadding * 2;
   const int dialogX = (pageWidth - dialogW) / 2;
   const int dialogY = (pageHeight - dialogH) / 2;
