@@ -50,3 +50,6 @@ class SdCardFontSystem {
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
 };
+
+// Global SD card font system instance (defined in main.cpp).
+extern SdCardFontSystem sdFontSystem;

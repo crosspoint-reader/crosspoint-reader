@@ -9,7 +9,7 @@
 #include <esp_rom_crc.h>
 
 #include "MappedInputManager.h"
-#include "SdCardFontGlobals.h"
+#include "SdCardFontSystem.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
