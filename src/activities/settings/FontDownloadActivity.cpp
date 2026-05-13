@@ -264,8 +264,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     RenderLock lock(*this);
     state_ = DOWNLOADING;
     downloadingFamilyIndex_ = static_cast<int>(&family - families_.data());
-    currentFileIndex_ = 0;
-    currentFileTotal_ = family.files.size();
     fileProgress_ = 0;
     fileTotal_ = 0;
   }
@@ -283,7 +281,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
 
     {
       RenderLock lock(*this);
-      currentFileIndex_ = i;
       fileProgress_ = 0;
       fileTotal_ = file.size;
     }
@@ -344,6 +341,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       errorMessage_ = "Invalid font file: " + file.name;
       return;
     }
+    currentFileIndex_++;
   }
 
   fontInstaller_.refreshRegistry();
@@ -432,12 +430,25 @@ void FontDownloadActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (!families_.empty()) {
         if (isDownloadAllRow(selectedIndex_)) {
+          currentFileIndex_ = 0;
+          currentFileTotal_ = 0;
+          for (const auto& f : families_) {
+            if (!f.installed) currentFileTotal_ += f.files.size();
+          }
+
           downloadAll();
         } else if (isUpdateAllRow(selectedIndex_)) {
+          currentFileIndex_ = 0;
+          currentFileTotal_ = 0;
+          for (const auto& f : families_) {
+            if (f.hasUpdate) currentFileTotal_ += f.files.size();
+          }
           updateAll();
         } else {
           auto& family = families_[familyIndexFromList(selectedIndex_)];
           if (!family.installed || family.hasUpdate) {
+            currentFileIndex_ = 0;
+            currentFileTotal_ = family.files.size();
             downloadFamily(family);
           } else {
             promptDeleteSelectedFamily();
