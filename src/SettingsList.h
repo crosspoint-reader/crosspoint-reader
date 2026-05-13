@@ -230,11 +230,6 @@ inline const std::vector<SettingInfo> list = {
                         StrId::STR_CAT_CONTROLS)
         .withSubmenu(StrId::STR_TILT_PAGE_TURN)
         .withDeviceTarget(SettingDeviceTarget::X3),
-    SettingInfo::Enum(StrId::STR_TILT_STABILIZATION, &CrossPointSettings::tiltStabilization,
-                      {StrId::STR_TILT_MODE_RAW, StrId::STR_TILT_MODE_SMOOTH, StrId::STR_TILT_MODE_KALMAN},
-                      "tiltStabilization", StrId::STR_CAT_CONTROLS)
-        .withSubmenu(StrId::STR_TILT_PAGE_TURN)
-        .withDeviceTarget(SettingDeviceTarget::X3),
     SettingInfo::Enum(StrId::STR_DIR_RIGHT, &CrossPointSettings::tiltPositiveAction,
                       {StrId::STR_NONE_OPT, StrId::STR_NEXT_PAGE, StrId::STR_PREV_PAGE}, "tiltPositiveAction",
                       StrId::STR_CAT_CONTROLS)
