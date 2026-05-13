@@ -45,7 +45,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
 
 See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, including the
-[KOReader Sync quick setup](./USER_GUIDE.md#365-koreader-sync-quick-setup).
+[KOReader Sync quick setup](./USER_GUIDE.md#367-koreader-sync-quick-setup).
 
 For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
 

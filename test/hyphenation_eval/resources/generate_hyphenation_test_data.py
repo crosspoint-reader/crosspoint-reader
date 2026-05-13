@@ -16,7 +16,6 @@ Requirements:
 import argparse
 import re
 from collections import Counter
-import pyphen
 from pathlib import Path
 import zipfile
 
@@ -75,6 +74,8 @@ def generate_hyphenation_data(
         min_prefix: Minimum characters allowed before the first hyphen (default: 2)
         min_suffix: Minimum characters allowed after the last hyphen (default: 2)
     """
+    import pyphen
+
     print(f"Reading from: {input_file}")
 
     # Read the input file

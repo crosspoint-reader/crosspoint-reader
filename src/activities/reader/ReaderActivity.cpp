@@ -7,6 +7,7 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -104,6 +105,8 @@ void ReaderActivity::onEnter() {
     goToLibrary();  // Start from root when entering via Browse
     return;
   }
+
+  sdFontSystem.ensureLoaded(renderer);
 
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {

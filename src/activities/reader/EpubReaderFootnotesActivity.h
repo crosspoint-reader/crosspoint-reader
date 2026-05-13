@@ -6,7 +6,7 @@
 #include <functional>
 #include <vector>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderFootnotesActivity final : public Activity {
