@@ -85,6 +85,7 @@ class FontDownloadActivity : public Activity {
   size_t fileTotal_ = 0;
   int downloadingFamilyIndex_ = 0;
   std::string errorMessage_;
+  bool cancelRequested_ = false;
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
