@@ -19,7 +19,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -71,7 +71,7 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -223,8 +223,14 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     // Track position within this source line (in bytes from pos)
     size_t lineBytePos = 0;
 
-    // Word wrap if needed
-    while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
+    // Emit at least one visual line for each source line (including blank lines),
+    // then continue with wrapping when needed.
+    do {
+      if (line.empty()) {
+        outLines.emplace_back();
+        break;
+      }
+
       int lineWidth = renderer.getTextWidth(cachedFontId, line.c_str());
 
       if (lineWidth <= viewportWidth) {
@@ -264,7 +270,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       }
       lineBytePos += skipChars;
       line = line.substr(skipChars);
-    }
+    } while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage);
 
     // Determine how much of the source buffer we consumed
     if (line.empty()) {
@@ -405,7 +411,6 @@ void TxtReaderActivity::saveProgress() const {
     data[2] = 0;
     data[3] = 0;
     f.write(data, 4);
-    f.close();
   }
 }
 
@@ -423,7 +428,6 @@ void TxtReaderActivity::loadProgress() {
       }
       LOG_DBG("TRS", "Loaded progress: page %d/%d", currentPage, totalPages);
     }
-    f.close();
   }
 }
 
@@ -452,7 +456,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, magic);
   if (magic != CACHE_MAGIC) {
     LOG_DBG("TRS", "Cache magic mismatch, rebuilding");
-    f.close();
     return false;
   }
 
@@ -460,7 +463,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, version);
   if (version != CACHE_VERSION) {
     LOG_DBG("TRS", "Cache version mismatch (%d != %d), rebuilding", version, CACHE_VERSION);
-    f.close();
     return false;
   }
 
@@ -468,7 +470,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, fileSize);
   if (fileSize != txt->getFileSize()) {
     LOG_DBG("TRS", "Cache file size mismatch, rebuilding");
-    f.close();
     return false;
   }
 
@@ -476,7 +477,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, cachedWidth);
   if (cachedWidth != viewportWidth) {
     LOG_DBG("TRS", "Cache viewport width mismatch, rebuilding");
-    f.close();
     return false;
   }
 
@@ -484,7 +484,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, cachedLines);
   if (cachedLines != linesPerPage) {
     LOG_DBG("TRS", "Cache lines per page mismatch, rebuilding");
-    f.close();
     return false;
   }
 
@@ -492,7 +491,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, fontId);
   if (fontId != cachedFontId) {
     LOG_DBG("TRS", "Cache font ID mismatch (%d != %d), rebuilding", fontId, cachedFontId);
-    f.close();
     return false;
   }
 
@@ -500,7 +498,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, margin);
   if (margin != cachedScreenMargin) {
     LOG_DBG("TRS", "Cache screen margin mismatch, rebuilding");
-    f.close();
     return false;
   }
 
@@ -508,7 +505,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   serialization::readPod(f, alignment);
   if (alignment != cachedParagraphAlignment) {
     LOG_DBG("TRS", "Cache paragraph alignment mismatch, rebuilding");
-    f.close();
     return false;
   }
 
@@ -525,7 +521,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
     pageOffsets.push_back(offset);
   }
 
-  f.close();
   totalPages = pageOffsets.size();
   LOG_DBG("TRS", "Loaded page index cache: %d pages", totalPages);
   return true;
@@ -555,6 +550,19 @@ void TxtReaderActivity::savePageIndexCache() const {
     serialization::writePod(f, static_cast<uint32_t>(offset));
   }
 
-  f.close();
   LOG_DBG("TRS", "Saved page index cache: %d pages", totalPages);
+}
+
+ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
+  ScreenshotInfo info;
+  info.readerType = ScreenshotInfo::ReaderType::Txt;
+  if (txt) {
+    const std::string t = txt->getTitle();
+    snprintf(info.title, sizeof(info.title), "%s", t.c_str());
+  }
+  info.currentPage = currentPage + 1;
+  info.totalPages = totalPages;
+  info.progressPercent = totalPages > 0 ? static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
+  if (info.progressPercent > 100) info.progressPercent = 100;
+  return info;
 }

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iterator>
 
+#include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
@@ -36,6 +37,8 @@ void LanguageSelectActivity::loop() {
     return;
   }
 
+  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
+
   // Handle navigation
   buttonNavigator.onNextRelease([this] {
     selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
@@ -46,13 +49,28 @@ void LanguageSelectActivity::loop() {
     selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
     requestUpdate();
   });
+
+  buttonNavigator.onNextContinuous([this, pageItems] {
+    selectedIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousContinuous([this, pageItems] {
+    selectedIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
+    requestUpdate();
+  });
 }
 
 void LanguageSelectActivity::handleSelection() {
+  const uint8_t langIndex = SORTED_LANGUAGE_INDICES[selectedIndex];
+
   {
     RenderLock lock(*this);
-    I18N.setLanguage(static_cast<Language>(SORTED_LANGUAGE_INDICES[selectedIndex]));
+    I18N.setLanguage(static_cast<Language>(langIndex));
   }
+
+  SETTINGS.language = langIndex;
+  SETTINGS.saveToFile();
 
   // Return to previous page
   onBack();

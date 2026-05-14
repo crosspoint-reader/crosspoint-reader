@@ -49,5 +49,5 @@ A convenient script `update_hyphenation.sh` is used to update all languages.
 To use it, run:
 
 ```sh
-./scripts/update_hypenation.sh
+./scripts/update_hyphenation.sh
 ```

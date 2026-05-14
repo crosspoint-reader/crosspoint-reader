@@ -113,8 +113,14 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
     return _batteryCachedPercent;
   }
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  _batteryCachedPercent = battery.readPercentage();
-  return _batteryCachedPercent;
+
+  // smooth the battery %.
+  if (_batteryCachedPercent == 0) {
+    _batteryCachedPercent = 10 * battery.readPercentage();
+  } else {
+    _batteryCachedPercent = (_batteryCachedPercent * 9 + battery.readPercentage() * 10) / 10;
+  }
+  return _batteryCachedPercent / 10;
 }
 
 HalPowerManager::Lock::Lock() {

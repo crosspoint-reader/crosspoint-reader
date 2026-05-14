@@ -116,8 +116,8 @@ void OtaUpdateActivity::render(RenderLock&&) {
         static_cast<int>(updaterProgress * 100), 100);
 
     y += metrics.progressBarHeight + metrics.verticalSpacing;
-    renderer.drawCenteredText(UI_10_FONT_ID, y,
-                              (std::to_string(static_cast<int>(updaterProgress * 100)) + "%").c_str());
+    // Percent label is drawn by BaseTheme::drawProgressBar; this slot is left intentionally empty
+    // so the bytes line below stays at the same Y it was at when the activity drew its own percent.
     y += height + metrics.verticalSpacing;
     renderer.drawCenteredText(
         UI_10_FONT_ID, y,
@@ -139,11 +139,6 @@ void OtaUpdateActivity::render(RenderLock&&) {
 }
 
 void OtaUpdateActivity::loop() {
-  // TODO @ngxson : refactor this logic later
-  if (updater.getRender()) {
-    requestUpdate();
-  }
-
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       LOG_DBG("OTA", "New update available, starting download...");
@@ -152,7 +147,14 @@ void OtaUpdateActivity::loop() {
         state = UPDATE_IN_PROGRESS;
       }
       requestUpdateAndWait();
-      const auto res = updater.installUpdate();
+      const auto res = updater.installUpdate(
+          [](void* ctx) {
+            // immediate=true notifies the render task directly. The default deferred path only
+            // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
+            // installUpdate() blocks this task.
+            static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
+          },
+          this);
 
       if (res != OtaUpdater::OK) {
         LOG_DBG("OTA", "Update failed: %d", res);
@@ -168,7 +170,13 @@ void OtaUpdateActivity::loop() {
         RenderLock lock(*this);
         state = FINISHED;
       }
-      requestUpdate();
+      requestUpdateAndWait();
+      // Hold the completion screen briefly so the user sees it, then restart.
+      delay(3000);
+      {
+        RenderLock lock(*this);
+        state = SHUTTING_DOWN;
+      }
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
