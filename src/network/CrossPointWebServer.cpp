@@ -11,10 +11,14 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "FontInstaller.h"
 #include "OpdsServerStore.h"
+#include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
+#include "WifiCredentialStore.h"
 #include "html/FilesPageHtml.generated.h"
+#include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
@@ -22,8 +26,7 @@
 namespace {
 // Folders/files to hide from the web interface file browser
 // Note: Items starting with "." are automatically hidden
-const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -75,8 +78,8 @@ bool isProtectedItemName(const String& name) {
   if (name.startsWith(".")) {
     return true;
   }
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (name.equals(HIDDEN_ITEMS[i])) {
+  for (const auto* item : HIDDEN_ITEMS) {
+    if (name.equals(item)) {
       return true;
     }
   }
@@ -120,6 +123,9 @@ void CrossPointWebServer::begin() {
   // Disable WiFi sleep to improve responsiveness and prevent 'unreachable' errors.
   // This is critical for reliable web server operation on ESP32.
   WiFi.setSleep(false);
+  // Default varies by ESP32 core version. The activity's loss-recovery loop
+  // relies on driver retries during transient disconnects.
+  WiFi.setAutoReconnect(true);
 
   // Note: WebServer class doesn't have setNoDelay() in the standard ESP32 library.
   // We rely on disabling WiFi sleep for responsiveness.
@@ -161,10 +167,21 @@ void CrossPointWebServer::begin() {
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
 
+  // Font management endpoints
+  server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
+  server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
+  server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
+  server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
+
   // OPDS server endpoints
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
   server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
   server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
+
+  // Wi-Fi credential endpoints
+  server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
+  server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
+  server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -389,8 +406,8 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
-      for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-        if (fileName.equals(HIDDEN_ITEMS[i])) {
+      for (const auto* item : HIDDEN_ITEMS) {
+        if (fileName.equals(item)) {
           shouldHide = true;
           break;
         }
@@ -497,8 +514,8 @@ void CrossPointWebServer::handleDownload() const {
     server->send(403, "text/plain", "Cannot access system files");
     return;
   }
-  for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-    if (itemName.equals(HIDDEN_ITEMS[i])) {
+  for (const auto* item : HIDDEN_ITEMS) {
+    if (itemName.equals(item)) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
     }
@@ -1033,8 +1050,8 @@ void CrossPointWebServer::handleDelete() const {
 
     // Check against explicitly protected items
     bool isProtected = false;
-    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-      if (itemName.equals(HIDDEN_ITEMS[i])) {
+    for (const auto* item : HIDDEN_ITEMS) {
+      if (itemName.equals(item)) {
         isProtected = true;
         break;
       }
@@ -1093,7 +1110,10 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  const auto& settings = getSettingsList();
+  // Pass the SD font registry so the fontFamily setting's enumStringValues
+  // includes SD-resident families — otherwise the web API only exposes the
+  // three built-in fonts.
+  const auto& settings = getSettingsList(&sdFontSystem.registry());
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1128,8 +1148,14 @@ void CrossPointWebServer::handleGetSettings() const {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
         JsonArray options = doc["options"].to<JsonArray>();
-        for (const auto& opt : s.enumValues) {
-          options.add(I18N.get(opt));
+        if (!s.enumStringValues.empty()) {
+          for (const auto& opt : s.enumStringValues) {
+            options.add(opt);
+          }
+        } else {
+          for (const auto& opt : s.enumValues) {
+            options.add(I18N.get(opt));
+          }
         }
         break;
       }
@@ -1189,7 +1215,7 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList();
+  const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
 
   for (const auto& s : settings) {
@@ -1207,7 +1233,9 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        if (val >= 0 && val < static_cast<int>(s.enumValues.size())) {
+        const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
+                                                      : static_cast<int>(s.enumStringValues.size());
+        if (val >= 0 && val < maxVal) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
           } else if (s.valueSetter) {
@@ -1363,6 +1391,140 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
 
   OPDS_STORE.removeServer(static_cast<size_t>(idx));
   LOG_DBG("WEB", "Deleted OPDS server at index %d", idx);
+  server->send(200, "text/plain", "OK");
+}
+
+// ---- Wi-Fi Credentials API ----
+
+void CrossPointWebServer::handleGetWifiNetworks() const {
+  const auto& credentials = WIFI_STORE.getCredentials();
+  const std::string& lastConnectedSsid = WIFI_STORE.getLastConnectedSsid();
+
+  // Stream JSON array incrementally to avoid allocating the full response in memory
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("[");
+
+  char output[320];
+  constexpr size_t outputSize = sizeof(output);
+  JsonDocument doc;
+
+  for (size_t i = 0; i < credentials.size(); i++) {
+    doc.clear();
+    doc["index"] = i;
+    doc["ssid"] = credentials[i].ssid;
+    // Never expose Wi-Fi passwords over the API — only indicate whether one is set
+    doc["hasPassword"] = !credentials[i].password.empty();
+    doc["isLastConnected"] = credentials[i].ssid == lastConnectedSsid;
+
+    const size_t written = serializeJson(doc, output, outputSize);
+    if (written >= outputSize) continue;
+
+    if (i > 0) server->sendContent(",");
+    server->sendContent(output);
+  }
+
+  server->sendContent("]");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served Wi-Fi credentials API (%zu network(s))", credentials.size());
+}
+
+void CrossPointWebServer::handlePostWifiNetwork() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  std::string ssid = doc["ssid"] | std::string("");
+  if (ssid.empty()) {
+    server->send(400, "text/plain", "SSID is required");
+    return;
+  }
+
+  // The password field is optional in the JSON payload. When absent (vs. present but empty),
+  // preserve the existing password for updates. Empty passwords are valid for open networks.
+  bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
+  std::string password = doc["password"] | std::string("");
+
+  if (doc["index"].is<int>()) {
+    int idx = doc["index"].as<int>();
+    const auto& credentials = WIFI_STORE.getCredentials();
+    if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+      server->send(400, "text/plain", "Invalid network index");
+      return;
+    }
+
+    const std::string oldSsid = credentials[static_cast<size_t>(idx)].ssid;
+    if (!hasPasswordField) {
+      password = credentials[static_cast<size_t>(idx)].password;
+    }
+
+    bool ok = true;
+    if (oldSsid != ssid) {
+      ok = WIFI_STORE.removeCredential(oldSsid) && WIFI_STORE.addCredential(ssid, password);
+    } else {
+      ok = WIFI_STORE.addCredential(ssid, password);
+    }
+
+    if (!ok) {
+      server->send(400, "text/plain", "Failed to update Wi-Fi network");
+      return;
+    }
+
+    LOG_DBG("WEB", "Updated Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
+  } else {
+    if (!WIFI_STORE.addCredential(ssid, password)) {
+      server->send(400, "text/plain", "Cannot add network (limit reached)");
+      return;
+    }
+    LOG_DBG("WEB", "Added Wi-Fi network: %s", ssid.c_str());
+  }
+
+  server->send(200, "text/plain", "OK");
+}
+
+// Uses POST (not HTTP DELETE) because ESP32 WebServer doesn't support DELETE with body.
+void CrossPointWebServer::handleDeleteWifiNetwork() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  if (!doc["index"].is<int>()) {
+    server->send(400, "text/plain", "Missing index");
+    return;
+  }
+
+  int idx = doc["index"].as<int>();
+  const auto& credentials = WIFI_STORE.getCredentials();
+  if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+    server->send(400, "text/plain", "Invalid network index");
+    return;
+  }
+
+  const std::string ssid = credentials[static_cast<size_t>(idx)].ssid;
+  if (!WIFI_STORE.removeCredential(ssid)) {
+    server->send(400, "text/plain", "Failed to delete Wi-Fi network");
+    return;
+  }
+
+  LOG_DBG("WEB", "Deleted Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
   server->send(200, "text/plain", "OK");
 }
 
@@ -1550,5 +1712,201 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
     default:
       break;
+  }
+}
+
+// --- Font management handlers ---
+
+void CrossPointWebServer::handleFontsPage() const {
+  sendHtmlContent(server.get(), FontsPageHtml, sizeof(FontsPageHtml));
+  LOG_DBG("WEB", "Served fonts page");
+}
+
+void CrossPointWebServer::handleFontList() const {
+  // Pick up any uploads/deletes that happened since the last reader load.
+  const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
+  const auto& families = sdFontSystem.registry().getFamilies();
+
+  JsonDocument doc;
+  JsonArray arr = doc["families"].to<JsonArray>();
+  doc["maxFamilies"] = SdCardFontRegistry::MAX_SD_FAMILIES;
+
+  for (const auto& family : families) {
+    JsonObject fObj = arr.add<JsonObject>();
+    fObj["name"] = family.name;
+
+    JsonArray sizes = fObj["sizes"].to<JsonArray>();
+    for (uint8_t s : family.availableSizes()) {
+      sizes.add(s);
+    }
+
+    JsonArray files = fObj["files"].to<JsonArray>();
+    for (const auto& file : family.files) {
+      JsonObject fileObj = files.add<JsonObject>();
+      // Extract filename from full path
+      const char* name = strrchr(file.path.c_str(), '/');
+      fileObj["name"] = name ? name + 1 : file.path.c_str();
+
+      // Stat the file for size
+      FsFile f;
+      if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
+        fileObj["size"] = static_cast<unsigned long>(f.size());
+        f.close();
+      } else {
+        fileObj["size"] = 0;
+      }
+    }
+  }
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleFontUploadData() {
+  HTTPUpload& upload = server->upload();
+
+  switch (upload.status) {
+    case UPLOAD_FILE_START: {
+      esp_task_wdt_reset();
+      String family = server->arg("family");
+      fontUpload.valid = false;
+      fontUpload.magicChecked = false;
+      fontUpload.bytesWritten = 0;
+      fontUpload.bufferPos = 0;
+
+      if (!FontInstaller::isValidFamilyName(family.c_str())) {
+        LOG_ERR("WEB", "Invalid font family name: %s", family.c_str());
+        break;
+      }
+
+      String filename = upload.filename;
+      // Validate filename: rejects path traversal (../, /, \) and enforces
+      // a .cpfont basename of alphanumeric + hyphen + underscore. Without
+      // this an attacker could supply "../../.crosspoint/settings.json" as
+      // a "filename" and have it written outside the fonts directory.
+      if (!FontInstaller::isValidCpfontFilename(filename.c_str())) {
+        LOG_ERR("WEB", "Invalid font filename: %s", filename.c_str());
+        break;
+      }
+
+      fontUpload.familyName = family.c_str();
+
+      // Create a temporary FontInstaller for directory creation
+      FontInstaller installer(sdFontSystem.registry());
+      if (!installer.ensureFamilyDir(family.c_str())) {
+        LOG_ERR("WEB", "Failed to create font family dir");
+        break;
+      }
+
+      char path[128];
+      FontInstaller::buildFontPath(family.c_str(), filename.c_str(), path, sizeof(path));
+      fontUpload.filePath = path;
+
+      if (!Storage.openFileForWrite("WEB", path, fontUpload.file)) {
+        LOG_ERR("WEB", "Failed to open font file for write: %s", path);
+        break;
+      }
+
+      fontUpload.valid = true;
+      LOG_DBG("WEB", "Font upload started: %s -> %s", filename.c_str(), path);
+      break;
+    }
+
+    case UPLOAD_FILE_WRITE: {
+      if (!fontUpload.valid) break;
+      esp_task_wdt_reset();
+
+      // Validate magic bytes on first chunk only
+      if (!fontUpload.magicChecked && upload.currentSize >= 8) {
+        if (memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
+          LOG_ERR("WEB", "Invalid .cpfont magic bytes");
+          fontUpload.valid = false;
+          break;
+        }
+        fontUpload.magicChecked = true;
+      }
+
+      // Buffer writes for efficiency
+      size_t remaining = upload.currentSize;
+      const uint8_t* src = upload.buf;
+      while (remaining > 0) {
+        size_t space = FontUploadState::BUFFER_SIZE - fontUpload.bufferPos;
+        size_t chunk = (remaining < space) ? remaining : space;
+        memcpy(fontUpload.buffer.data() + fontUpload.bufferPos, src, chunk);
+        fontUpload.bufferPos += chunk;
+        src += chunk;
+        remaining -= chunk;
+
+        if (fontUpload.bufferPos >= FontUploadState::BUFFER_SIZE) {
+          fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
+          fontUpload.bytesWritten += fontUpload.bufferPos;
+          fontUpload.bufferPos = 0;
+          esp_task_wdt_reset();
+        }
+      }
+      break;
+    }
+
+    case UPLOAD_FILE_END: {
+      // Flush remaining buffer
+      if (fontUpload.valid && fontUpload.bufferPos > 0) {
+        fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
+        fontUpload.bytesWritten += fontUpload.bufferPos;
+        fontUpload.bufferPos = 0;
+      }
+      fontUpload.file.close();
+
+      if (!fontUpload.valid && !fontUpload.filePath.empty()) {
+        Storage.remove(fontUpload.filePath.c_str());
+      }
+
+      LOG_DBG("WEB", "Font upload end: valid=%d, %zu bytes", fontUpload.valid, fontUpload.bytesWritten);
+      break;
+    }
+
+    case UPLOAD_FILE_ABORTED: {
+      fontUpload.file.close();
+      if (!fontUpload.filePath.empty()) {
+        Storage.remove(fontUpload.filePath.c_str());
+      }
+      fontUpload.valid = false;
+      LOG_DBG("WEB", "Font upload aborted");
+      break;
+    }
+  }
+}
+
+void CrossPointWebServer::handleFontUpload() {
+  if (fontUpload.valid) {
+    sdFontSystem.markRegistryDirty();
+    server->send(200, "application/json", "{\"ok\":true}");
+    LOG_DBG("WEB", "Font upload complete: %s", fontUpload.filePath.c_str());
+  } else {
+    server->send(400, "application/json", "{\"error\":\"Invalid .cpfont file\"}");
+  }
+}
+
+void CrossPointWebServer::handleFontDelete() {
+  String body = server->arg("plain");
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, body);
+
+  if (err || !doc["family"].is<const char*>()) {
+    server->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+    return;
+  }
+
+  const char* familyName = doc["family"];
+  FontInstaller installer(sdFontSystem.registry());
+  auto result = installer.deleteFamily(familyName);
+
+  if (result == FontInstaller::Error::OK) {
+    sdFontSystem.markRegistryDirty();
+    server->send(200, "application/json", "{\"ok\":true}");
+    LOG_DBG("WEB", "Deleted font family: %s", familyName);
+  } else {
+    server->send(500, "application/json", "{\"error\":\"Delete failed\"}");
+    LOG_ERR("WEB", "Failed to delete font family: %s", familyName);
   }
 }

@@ -3,10 +3,13 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace FsHelpers {
 
 std::string normalisePath(const std::string& path);
+
+void sortFileList(std::vector<std::string>& strs);
 
 /**
  * Check if the given filename ends with the specified extension (case-insensitive).
