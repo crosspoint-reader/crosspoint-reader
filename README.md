@@ -6,7 +6,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
-## What CrossPoint can do?
+## What can CrossPoint do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style toggle, image handling, hyphenation, kerning, chapter navigation, footnotes, go-to-percent, auto page turn, orientation control, focus reading, and KOReader progress sync. 
 
@@ -16,14 +16,14 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 - **Custom fonts**: install your favorite fonts on the SD card.
 
-- **Tilt page turn (X3 only)**
+- **Tilt page turn (X3 only)**.
 
 - **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, SD-cache management.
 
 - **Wireless workflows**:
   
   - File transfer web UI
-  - Epub Optimizer
+  - EPUB Optimizer
   - Web settings UI/API (edit many device settings from browser)
   - WebSocket fast uploads
   - WebDAV handler
@@ -108,7 +108,7 @@ See [Development quick start](#development-quick-start) below.
 
 ### Prerequisites
 
-- pioarduino or VS Code + pioarduino plugin
+- [pioarduino](https://github.com/pioarduino/pioarduino) or VS Code + pioarduino plugin
 - Python 3.8+
 - `clang-format` 21
 - USB-C cable supporting data transfer
