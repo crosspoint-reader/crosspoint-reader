@@ -346,7 +346,6 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   // Reset state so render() reloads and repositions on the target spine.
   {
     RenderLock lock(*this);
-
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     pendingPercentJump = true;
@@ -447,7 +446,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           uint16_t backupSpine = currentSpineIndex;
           uint16_t backupPage = section->currentPage;
           uint16_t backupPageCount = section->pageCount;
-
           section.reset();
           epub->clearCache();
           epub->setupCacheDir();
@@ -544,7 +542,6 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
     // Reset section to force re-layout in the new orientation.
-
     section.reset();
   }
 }
@@ -930,12 +927,16 @@ void EpubReaderActivity::renderStatusBar() const {
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
   std::string title;
+
   int textYOffset = 0;
 
   if (automaticPageTurnActive) {
     title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
 
+    // calculates textYOffset when rendering title in status bar
     const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+
+    // offsets text if no status bar or progress bar only
     if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
       textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
     }
@@ -949,6 +950,7 @@ void EpubReaderActivity::renderStatusBar() const {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
     }
+
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = epub->getTitle();
   }

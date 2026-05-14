@@ -231,7 +231,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-
     self->tableDepth += 1;
     self->tableRowIndex = 0;
     self->tableColIndex = 0;

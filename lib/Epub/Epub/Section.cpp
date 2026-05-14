@@ -130,6 +130,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   // Build TOC boundaries by scanning anchor data from the still-open file,
   // matching only the TOC anchors we need (avoids loading all anchors into memory).
   buildTocBoundariesFromFile(file);
+
   // Explicit close() required: member variable persists beyond function scope
   file.close();
   LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
