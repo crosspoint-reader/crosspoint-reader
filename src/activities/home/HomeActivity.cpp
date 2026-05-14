@@ -28,11 +28,8 @@
 #include "fontIds.h"
 
 namespace {
-// Convert a sidecar JPG/PNG cover to a 1-bit BMP in the cache and return the BMP path, or "" on failure.
-// fileName is the basename of the output file (without directory), e.g. "340x540.bmp" or "400.bmp".
-std::string convertSidecarToBmp(const std::string& bookPath, const std::string& sidecarPath, int width, int height,
+std::string convertSidecarToBmp(const std::string& cacheDir, const std::string& sidecarPath, int width, int height,
                                 const std::string& fileName) {
-  const std::string cacheDir = "/.crosspoint/sidecar_" + std::to_string(std::hash<std::string>{}(bookPath));
   Storage.mkdir(cacheDir.c_str());
   const std::string bmpPath = cacheDir + "/" + fileName;
   if (Storage.exists(bmpPath.c_str())) return bmpPath;
@@ -180,8 +177,7 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     // Also catches books registered before sidecar support (empty coverBmpPath).
     const std::string sidecar = ReaderActivity::sidecarCoverPath(book.path);
     if (!sidecar.empty()) {
-      const bool sidecarAlreadyStored =
-          book.coverBmpPath == sidecar || book.coverBmpPath.find("sidecar_") != std::string::npos;
+      const bool sidecarAlreadyStored = book.coverBmpPath == sidecar;
       LOG_DBG("HOME", "Sidecar for %s: stored=%s alreadyStored=%d", book.path.c_str(), book.coverBmpPath.c_str(),
               sidecarAlreadyStored ? 1 : 0);
       if (!sidecarAlreadyStored) {
@@ -222,13 +218,13 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           // The cache will be rebuilt on the next render.
           UITheme::getInstance().getMutableTheme().invalidateFrameCache();
 
-          const std::string cacheBase = "/.crosspoint/sidecar_" + std::to_string(std::hash<std::string>{}(book.path));
+          const std::string cacheBase = ReaderActivity::bookCacheDir(book.path);
           const std::string placeholder = cacheBase + "/[HEIGHT].bmp";
           bool success = true;
           if (!thumbSizes.empty()) {
             for (const auto& sz : thumbSizes) {
               const std::string name = std::to_string(sz.first) + "x" + std::to_string(sz.second) + ".bmp";
-              if (convertSidecarToBmp(book.path, book.coverBmpPath, sz.first, sz.second, name).empty()) {
+              if (convertSidecarToBmp(cacheBase, book.coverBmpPath, sz.first, sz.second, name).empty()) {
                 success = false;
                 break;
               }
@@ -236,7 +232,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           } else {
             const int w = coverHeight * 6 / 10;
             const std::string name = std::to_string(coverHeight) + ".bmp";
-            if (convertSidecarToBmp(book.path, book.coverBmpPath, w, coverHeight, name).empty()) success = false;
+            if (convertSidecarToBmp(cacheBase, book.coverBmpPath, w, coverHeight, name).empty()) success = false;
           }
           if (success) {
             LOG_DBG("HOME", "Sidecar converted, placeholder: %s", placeholder.c_str());

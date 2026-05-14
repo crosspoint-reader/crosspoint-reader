@@ -4,6 +4,8 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Txt.h>
+#include <Xtc.h>
 #include <esp_task_wdt.h>
 
 namespace {
@@ -802,6 +804,16 @@ void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
   if (FsHelpers::hasEpubExtension(path)) {
     Epub(path.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("DAV", "Cleared epub cache for: %s", path.c_str());
+  } else if (FsHelpers::hasXtcExtension(path)) {
+    Xtc(path.c_str(), "/.crosspoint").clearCache();
+    LOG_DBG("DAV", "Cleared xtc cache for: %s", path.c_str());
+  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
+    const Txt txt(path.c_str(), "/.crosspoint");
+    const String cachePath = txt.getCachePath().c_str();
+    if (Storage.exists(cachePath.c_str())) {
+      Storage.removeDir(cachePath.c_str());
+      LOG_DBG("DAV", "Cleared txt cache for: %s", path.c_str());
+    }
   }
 }
 

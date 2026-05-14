@@ -5,7 +5,9 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Txt.h>
 #include <WiFi.h>
+#include <Xtc.h>
 #include <esp_task_wdt.h>
 
 #include <algorithm>
@@ -58,16 +60,25 @@ String wsLastCompleteName;
 size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
 
-// Helper function to clear epub cache after upload
-void clearEpubCacheIfNeeded(const String& filePath) {
+void clearBookCacheIfNeeded(const String& filePath) {
   if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
+  } else if (FsHelpers::hasXtcExtension(filePath)) {
+    Xtc(filePath.c_str(), "/.crosspoint").clearCache();
+    LOG_DBG("WEB", "Cleared xtc cache for: %s", filePath.c_str());
+  } else if (FsHelpers::hasTxtExtension(filePath) || FsHelpers::hasMarkdownExtension(filePath)) {
+    const Txt txt(filePath.c_str(), "/.crosspoint");
+    const String cachePath = txt.getCachePath().c_str();
+    if (Storage.exists(cachePath.c_str())) {
+      Storage.removeDir(cachePath.c_str());
+      LOG_DBG("WEB", "Cleared txt cache for: %s", filePath.c_str());
+    }
   }
 }
 
-// Recursively clear epub caches for all EPUBs inside a directory
-void clearEpubCachesInDirectory(const String& dirPath) {
+// Recursively clear book caches for all ebooks inside a directory
+void clearBookCachesInDirectory(const String& dirPath) {
   esp_task_wdt_reset();
   yield();
   FsFile dir = Storage.open(dirPath.c_str());
@@ -86,10 +97,10 @@ void clearEpubCachesInDirectory(const String& dirPath) {
     childPath += name;
     if (entry.isDirectory()) {
       entry.close();
-      clearEpubCachesInDirectory(childPath);
+      clearBookCachesInDirectory(childPath);
     } else {
       entry.close();
-      clearEpubCacheIfNeeded(childPath);
+      clearBookCacheIfNeeded(childPath);
     }
     entry = dir.openNextFile();
   }
@@ -847,7 +858,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCacheIfNeeded(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -990,9 +1001,9 @@ void CrossPointWebServer::handleRename() const {
   }
 
   if (isDir) {
-    clearEpubCachesInDirectory(itemPath);
+    clearBookCachesInDirectory(itemPath);
   } else {
-    clearEpubCacheIfNeeded(itemPath);
+    clearBookCacheIfNeeded(itemPath);
   }
   const bool success = file.rename(newPath.c_str());
   file.close();
@@ -1088,9 +1099,9 @@ void CrossPointWebServer::handleMove() const {
   }
 
   if (isDir) {
-    clearEpubCachesInDirectory(itemPath);
+    clearBookCachesInDirectory(itemPath);
   } else {
-    clearEpubCacheIfNeeded(itemPath);
+    clearBookCacheIfNeeded(itemPath);
   }
   const bool success = file.rename(newPath.c_str());
   file.close();
@@ -1210,7 +1221,7 @@ void CrossPointWebServer::handleDelete() const {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
       success = Storage.remove(itemPath.c_str());
-      clearEpubCacheIfNeeded(itemPath);
+      clearBookCacheIfNeeded(itemPath);
     }
 
     if (!success) {
@@ -2397,7 +2408,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
-            clearEpubCacheIfNeeded(filePath);
+            clearBookCacheIfNeeded(filePath);
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2465,7 +2476,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCacheIfNeeded(filePath);
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
