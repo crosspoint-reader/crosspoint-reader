@@ -1,11 +1,11 @@
 #include "Section.h"
 
 #include <HalStorage.h>
+#include <Hyphenator.h>
 #include <Logging.h>
 #include <Typesetter/Page.h>
 
 #include "Epub/css/CssParser.h"
-#include <Hyphenator.h>
 #include "parsers/ChapterHtmlSlimParser.h"
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
