@@ -613,6 +613,12 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
         }
       }
 
+      if (renderer.isSdCardFont(cachedFontId)) {
+        std::string flatText;
+        for (const auto& span : flatLine.spans) flatText += span.text;
+        if (!flatText.empty()) renderer.ensureSdCardFontReady(cachedFontId, flatText.c_str());
+      }
+
       size_t linesBefore = outLines.size();
       int remainingLines = linesPerPage - static_cast<int>(outLines.size());
       bool fullyConsumed = wordWrapParsedLine(flatLine, 0, outLines, remainingLines);

@@ -45,6 +45,10 @@ size_t parseAndWrapLines(const uint8_t* buffer, size_t chunkSize, size_t fileOff
     std::string line(reinterpret_cast<const char*>(buffer + pos), displayLen);
     size_t lineBytePos = 0;
 
+    if (renderer.isSdCardFont(fontId) && !line.empty()) {
+      renderer.ensureSdCardFontReady(fontId, line.c_str());
+    }
+
     while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
       if (renderer.getTextWidth(fontId, line.c_str()) <= vw) {
         outLines.push_back(line);
