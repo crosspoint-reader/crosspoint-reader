@@ -96,8 +96,8 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   // because the button event system delays short events until the double-click window expires.
   using BA = CrossPointSettings::BUTTON_ACTION;
   using TA = CrossPointSettings::TILT_GESTURE_ACTION;
-  const bool tiltNegative = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
-  const bool tiltPositive = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
+  const bool tiltNegative = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
+  const bool tiltPositive = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
   bool tiltPrev = false;
   bool tiltNext = false;
   auto applyTiltAction = [&](uint8_t action) {
