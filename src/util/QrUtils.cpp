@@ -3,12 +3,24 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cstring>
 #include <memory>
 
 #include "Logging.h"
 #include "Memory.h"
 #include "fontIds.h"
 #include "qrcodegen.h"
+
+static bool hasNonAscii(const char* str) {
+  for (; *str != '\0'; ++str) {
+    if (static_cast<uint8_t>(*str) >= 0x80) {
+      LOG_DBG("QR", "Payload contains non-ASCII characters");
+      return true;
+    }
+  }
+  LOG_DBG("QR", "Payload is ASCII");
+  return false;
+}
 
 void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const std::string& textPayload) {
   constexpr uint8_t qrcode_VERSION_MIN = 1;
@@ -23,8 +35,37 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
   }
 
   const char* payload = textPayload.c_str();
-  const bool res = qrcodegen_encodeText(payload, tempBuffer.get(), qrcode.get(), qrcodegen_Ecc_LOW, qrcode_VERSION_MIN,
-                                        qrcode_VERSION_MAX, qrcodegen_Mask_AUTO, true);
+  const size_t textLen = textPayload.length();
+  bool res;
+
+  if (hasNonAscii(payload)) {
+    // Non-ASCII path: ECI 26 + BYTE mode for spec-compliant UTF-8 encoding.
+    // Even though modern scanners often default to UTF-8, ISO/IEC 18004 specifies
+    // that BYTE mode without an ECI segment defaults to ISO 8859-1 (Latin-1), not UTF-8.
+    // A strictly spec-compliant scanner will misinterpret UTF-8 multi-byte sequences
+    // as individual Latin-1 characters.
+    uint8_t eciBuf[3] = {0};
+    struct qrcodegen_Segment eciSeg = qrcodegen_makeEci(26, eciBuf);
+
+    if (textLen <= qrBufLen) {
+      memcpy(tempBuffer.get(), payload, textLen);
+      struct qrcodegen_Segment byteSeg;
+      byteSeg.mode = qrcodegen_Mode_BYTE;
+      byteSeg.numChars = static_cast<int>(textLen);
+      byteSeg.data = tempBuffer.get();
+      byteSeg.bitLength = static_cast<int>(textLen) * 8;
+
+      struct qrcodegen_Segment segs[2] = {eciSeg, byteSeg};
+      res = qrcodegen_encodeSegmentsAdvanced(segs, 2, qrcodegen_Ecc_LOW, qrcode_VERSION_MIN, qrcode_VERSION_MAX,
+                                             qrcodegen_Mask_AUTO, true, tempBuffer.get(), qrcode.get());
+    } else {
+      res = false;
+    }
+  } else {
+    // ASCII path: standard encoding (may use numeric/alphanumeric/byte mode optimally)
+    res = qrcodegen_encodeText(payload, tempBuffer.get(), qrcode.get(), qrcodegen_Ecc_LOW, qrcode_VERSION_MIN,
+                               qrcode_VERSION_MAX, qrcodegen_Mask_AUTO, true);
+  }
 
   tempBuffer.reset();
 
