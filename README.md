@@ -8,11 +8,13 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 ## What CrossPoint can do?
 
-- **Reader engine**: EPUB 2/3 rendering with embedded-style toggle, image handling, hyphenation, kerning, chapter navigation, footnotes, go-to-percent, auto page turn, orientation control, and KOReader progress sync. 
+- **Reader engine**: EPUB 2/3 rendering with embedded-style toggle, image handling, hyphenation, kerning, chapter navigation, footnotes, go-to-percent, auto page turn, orientation control, focus reading, and KOReader progress sync. 
 
-- **More formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
+- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
 
 - **Screenshots.**
+
+- **Custom fonts**: install your favorite fonts on the SD card.
 
 - **Tilt page turn (X3 only)**
 
@@ -35,8 +37,6 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 - **Localization**: 22 UI languages and counting.
 
 ### Coming soon:
-
-- Custom fonts — install your favorite fonts on the SD card.
 
 - RTL support — Arabic, Hebrew, and Farsi.
 
@@ -201,11 +201,11 @@ Everyone here is a volunteer, so please be respectful and patient. For governanc
 
 One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossPoint's scope, check out the community forks:
 
-- [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes & fonts via SD card.
+- [CrossInk](https://github.com/uxjulia/CrossInk) — Typography and reading tracking: Bionic Reading (bolds word stems to create fixation points), guide dots between words, improved paragraph indents, and replaces the default fonts with ChareInk/Lexend/Bitter.
+
+- [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes via SD card.
 
 - [crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.
-
-- [CrossInk](https://github.com/uxjulia/CrossInk) — Typography and reading tracking: Bionic Reading (bolds word stems to create fixation points), guide dots between words, improved paragraph indents, and replaces the default fonts with ChareInk/Lexend/Bitter.
 
 - [crosspoint-reader (jpirnay)](https://github.com/jpirnay/crosspoint-reader) — Faster integration of functionality. Tracks upstream PRs and integrates the good ones ahead of the official merge.
 
