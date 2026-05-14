@@ -6,28 +6,12 @@
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
-
-namespace {
-
-uint8_t currentFontIndex() {
-  if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    const auto& families = sdFontSystem.registry().getFamilies();
-    for (int i = 0; i < static_cast<int>(families.size()); i++) {
-      if (families[i].name == SETTINGS.sdFontFamilyName) {
-        return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + i);
-      }
-    }
-  }
-  return SETTINGS.fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? SETTINGS.fontFamily : 0;
-}
-
-}  // namespace
 
 void FontSelectionActivity::onEnter() {
   Activity::onEnter();
   fontCount = fontFamilyOptionCount();
-  selectedIndex = currentFontIndex();
+  selectedIndex =
+      static_cast<int>(target == Target::TXT ? txtFontFamilyDynamicGetter(nullptr) : fontFamilyDynamicGetter(nullptr));
   if (selectedIndex >= fontCount) selectedIndex = 0;
   requestUpdate();
 }
@@ -50,7 +34,11 @@ void FontSelectionActivity::loop() {
 }
 
 void FontSelectionActivity::handleSelection() {
-  fontFamilyDynamicSetter(nullptr, static_cast<uint8_t>(selectedIndex));
+  if (target == Target::TXT) {
+    txtFontFamilyDynamicSetter(nullptr, static_cast<uint8_t>(selectedIndex));
+  } else {
+    fontFamilyDynamicSetter(nullptr, static_cast<uint8_t>(selectedIndex));
+  }
   finish();
 }
 
@@ -60,13 +48,15 @@ void FontSelectionActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
+  const StrId headerStr = target == Target::TXT ? StrId::STR_TXT_FONT_FAMILY : StrId::STR_FONT_FAMILY;
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
-                 tr(STR_FONT_FAMILY));
+                 I18N.get(headerStr));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = contentRect.height - contentTop - metrics.verticalSpacing;
 
-  const uint8_t activeIndex = currentFontIndex();
+  const uint8_t activeIndex = static_cast<uint8_t>(target == Target::TXT ? txtFontFamilyDynamicGetter(nullptr)
+                                                                         : fontFamilyDynamicGetter(nullptr));
   GUI.drawList(
       renderer, Rect{contentRect.x, contentTop, contentRect.width, contentHeight}, fontCount, selectedIndex,
       [](int index) { return fontFamilyOptionLabel(static_cast<uint8_t>(index)); }, nullptr, nullptr,
