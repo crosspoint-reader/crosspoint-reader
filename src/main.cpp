@@ -2,6 +2,7 @@
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
@@ -196,12 +197,7 @@ void ensureSdFontLoadedForPath(const char* path) {
     ensureSdFontLoaded();
     return;
   }
-  const size_t len = strlen(path);
-  auto endsWith = [&](const char* suffix) {
-    const size_t sl = strlen(suffix);
-    return len >= sl && strcasecmp(path + len - sl, suffix) == 0;
-  };
-  const bool isTxtMd = endsWith(".txt") || endsWith(".md");
+  const bool isTxtMd = FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path);
   if (isTxtMd) {
     sdFontSystem.ensureLoaded(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontSize);
   } else {
