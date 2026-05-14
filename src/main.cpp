@@ -191,9 +191,7 @@ void enterDeepSleep() {
   activityManager.goToSleep();
 
   halTiltSensor.deepSleep();
-  const bool preserveFactoryLutSleepScreen =
-      !gpio.deviceIsX3() && renderer.getDisplayState() == GfxRenderer::DisplayState::FactoryLut;
-  display.deepSleep(!preserveFactoryLutSleepScreen);
+  display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
