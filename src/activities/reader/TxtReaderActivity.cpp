@@ -200,8 +200,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   // corrupts FreeRTOS state. The advance table persists across calls per
   // font, so the cost amortizes to ~ASCII-size after the first chunk.
   if (renderer.isSdCardFont(cachedFontId)) {
-    std::vector<std::string> chunkWords{std::string(reinterpret_cast<char*>(buffer), chunkSize)};
-    renderer.ensureSdCardFontReady(cachedFontId, chunkWords, /*includeHyphen=*/false, /*styleMask=*/0x01);
+    renderer.ensureSdCardFontReady(cachedFontId, reinterpret_cast<const char*>(buffer), /*styleMask=*/0x01);
   }
 
   // Parse lines from buffer
