@@ -979,7 +979,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->currentCssStyle = cssStyle;
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     headerBlockStyle.textAlignDefined = true;
-    if (self->embeddedStyle && cssStyle.hasTextAlign()) {
+    if (self->embeddedStyle && cssStyle.hasTextAlign() &&
+        self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
       headerBlockStyle.alignment = cssStyle.textAlign;
     }
     self->startNewTextBlock(headerBlockStyle);
@@ -990,7 +991,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Preserve paragraph break semantics for this <p>, but skip its inner text payload.
       self->currentCssStyle = cssStyle;
       auto blockStyle = userAlignmentBlockStyle;
-      if (self->embeddedStyle && cssStyle.hasTextAlign()) {
+      if (self->embeddedStyle && cssStyle.hasTextAlign() &&
+          self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
         blockStyle.alignment = cssStyle.textAlign;
         blockStyle.textAlignDefined = true;
       }
@@ -1024,7 +1026,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     } else {
       self->currentCssStyle = cssStyle;
       auto blockStyle = userAlignmentBlockStyle;
-      if (self->embeddedStyle && cssStyle.hasTextAlign()) {
+      if (self->embeddedStyle && cssStyle.hasTextAlign() &&
+          self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
         blockStyle.alignment = cssStyle.textAlign;
         blockStyle.textAlignDefined = true;
       }
