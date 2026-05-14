@@ -40,7 +40,8 @@ class EpubReaderMenuActivity final : public MenuListActivity {
                                   const int8_t initialFontFamilyOverride,
                                   const std::string& initialSdFontFamilyOverride, const int8_t initialFontSizeOverride,
                                   const uint8_t initialTextDarkness, const bool initialBionicReadingOverride,
-                                  const bool hasStarredPages, const bool isCurrentPageStarred);
+                                  const int8_t initialParagraphAlignmentOverride, const bool hasStarredPages,
+                                  const bool isCurrentPageStarred);
 
   void onEnter() override;
   void render(RenderLock&&) override;
@@ -73,6 +74,7 @@ class EpubReaderMenuActivity final : public MenuListActivity {
   int8_t pendingFontSizeOverride = -1;
   uint8_t pendingTextDarkness = 1;
   bool pendingBionicReading = false;
+  int8_t pendingParagraphAlignmentOverride = -1;
 
   static constexpr const char* pageTurnLabels[] = {"", "1", "3", "6", "12"};
 

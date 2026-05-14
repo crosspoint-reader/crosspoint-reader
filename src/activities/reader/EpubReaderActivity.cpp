@@ -321,6 +321,7 @@ void EpubReaderActivity::onEnter() {
   bookBionicReadingOverride = (currentBook.bionicReadingOverride >= 0)
                                   ? static_cast<bool>(currentBook.bionicReadingOverride)
                                   : static_cast<bool>(SETTINGS.bionicReading);
+  bookParagraphAlignmentOverride = currentBook.paragraphAlignmentOverride;
   logReaderMemSnapshot("onEnter_after_recent_books");
 
   // Trigger first update
@@ -1291,7 +1292,8 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 void EpubReaderActivity::applyBookReaderOverrides(const int8_t embeddedStyleOverride,
                                                   const int8_t imageRenderingOverride, const int8_t fontFamilyOverride,
                                                   const std::string& sdFontFamilyOverride,
-                                                  const int8_t fontSizeOverride, const bool bionicReadingOverride) {
+                                                  const int8_t fontSizeOverride, const bool bionicReadingOverride,
+                                                  const int8_t paragraphAlignmentOverride) {
   if (!epub) {
     return;
   }
@@ -1308,7 +1310,8 @@ void EpubReaderActivity::applyBookReaderOverrides(const int8_t embeddedStyleOver
   if (bookEmbeddedStyleOverride == embeddedStyleOverride && bookImageRenderingOverride == imageRenderingOverride &&
       bookFontFamilyOverride == normalizedFontFamilyOverride &&
       bookSdFontFamilyOverride == normalizedSdFontFamilyOverride && bookFontSizeOverride == fontSizeOverride &&
-      bookBionicReadingOverride == bionicReadingOverride) {
+      bookBionicReadingOverride == bionicReadingOverride &&
+      bookParagraphAlignmentOverride == paragraphAlignmentOverride) {
     return;
   }
 
@@ -1318,9 +1321,10 @@ void EpubReaderActivity::applyBookReaderOverrides(const int8_t embeddedStyleOver
   bookSdFontFamilyOverride = normalizedSdFontFamilyOverride;
   bookFontSizeOverride = fontSizeOverride;
   bookBionicReadingOverride = bionicReadingOverride;
+  bookParagraphAlignmentOverride = paragraphAlignmentOverride;
   RECENT_BOOKS.setReaderOverrides(epub->getPath(), bookEmbeddedStyleOverride, bookImageRenderingOverride,
                                   bookFontFamilyOverride, bookSdFontFamilyOverride, bookFontSizeOverride,
-                                  bookBionicReadingOverride);
+                                  bookBionicReadingOverride, bookParagraphAlignmentOverride);
 
   RenderLock lock(*this);
   if (section) {
@@ -1343,6 +1347,13 @@ uint8_t EpubReaderActivity::getEffectiveImageRendering() const {
     return static_cast<uint8_t>(bookImageRenderingOverride);
   }
   return SETTINGS.imageRendering;
+}
+
+uint8_t EpubReaderActivity::getEffectiveParagraphAlignment() const {
+  if (bookParagraphAlignmentOverride >= 0) {
+    return static_cast<uint8_t>(bookParagraphAlignmentOverride);
+  }
+  return SETTINGS.paragraphAlignment;
 }
 
 float EpubReaderActivity::getEffectiveReaderLineCompression() const {
@@ -1564,7 +1575,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const unsigned long sectionStart = millis();
 
     if (!section->loadSectionFile(getEffectiveReaderFontId(), getEffectiveReaderLineCompression(),
-                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                  SETTINGS.extraParagraphSpacing, getEffectiveParagraphAlignment(), viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, embeddedStyle, bookBionicReadingOverride,
                                   imageRendering)) {
       LOG_DBG("ERS", "Cache not found, building...");
@@ -1586,7 +1597,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // by MAX_PAGE_GLYPHS per style.
       renderer.clearSdCardFontAccumulation();
       if (!section->createSectionFile(getEffectiveReaderFontId(), getEffectiveReaderLineCompression(),
-                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                      SETTINGS.extraParagraphSpacing, getEffectiveParagraphAlignment(), viewportWidth,
                                       viewportHeight, SETTINGS.hyphenationEnabled, embeddedStyle,
                                       bookBionicReadingOverride, imageRendering, progressFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
@@ -2249,7 +2260,7 @@ void EpubReaderActivity::openReaderMenu() {
           renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
           !currentPageFootnotes.empty(), bookEmbeddedStyleOverride, bookImageRenderingOverride, bookFontFamilyOverride,
           bookSdFontFamilyOverride, bookFontSizeOverride, SETTINGS.textDarkness, bookBionicReadingOverride,
-          !bookmarkStore.isEmpty(), isCurrentPageStarred),
+          bookParagraphAlignmentOverride, !bookmarkStore.isEmpty(), isCurrentPageStarred),
       [this](const ActivityResult& result) {
         const auto& menu = std::get<MenuResult>(result.data);
         applyOrientation(menu.orientation);
@@ -2257,7 +2268,7 @@ void EpubReaderActivity::openReaderMenu() {
         toggleAutoPageTurn(menu.pageTurnOption);
         applyBookReaderOverrides(menu.embeddedStyleOverride, menu.imageRenderingOverride, menu.fontFamilyOverride,
                                  menu.sdFontFamilyOverride, menu.fontSizeOverride,
-                                 static_cast<bool>(menu.bionicReadingOverride));
+                                 static_cast<bool>(menu.bionicReadingOverride), menu.paragraphAlignmentOverride);
         if (!result.isCancelled) {
           onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
         }
@@ -2389,7 +2400,8 @@ void EpubReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION 
     case BA::BTN_TOGGLE_BIONIC_READING:
       if (epub) {
         applyBookReaderOverrides(bookEmbeddedStyleOverride, bookImageRenderingOverride, bookFontFamilyOverride,
-                                 bookSdFontFamilyOverride, bookFontSizeOverride, !bookBionicReadingOverride);
+                                 bookSdFontFamilyOverride, bookFontSizeOverride, !bookBionicReadingOverride,
+                                 bookParagraphAlignmentOverride);
         requestUpdate();
       }
       break;
@@ -2399,7 +2411,8 @@ void EpubReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION 
             (bookFontSizeOverride >= 0) ? static_cast<uint8_t>(bookFontSizeOverride) : SETTINGS.fontSize;
         const int8_t next = static_cast<int8_t>((current + 1) % CrossPointSettings::FONT_SIZE_COUNT);
         applyBookReaderOverrides(bookEmbeddedStyleOverride, bookImageRenderingOverride, bookFontFamilyOverride,
-                                 bookSdFontFamilyOverride, next, bookBionicReadingOverride);
+                                 bookSdFontFamilyOverride, next, bookBionicReadingOverride,
+                                 bookParagraphAlignmentOverride);
         requestUpdate();
       }
       break;

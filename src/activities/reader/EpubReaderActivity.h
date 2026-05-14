@@ -149,6 +149,7 @@ class EpubReaderActivity final : public Activity {
   std::string bookSdFontFamilyOverride;
   int8_t bookFontSizeOverride = -1;
   bool bookBionicReadingOverride = false;
+  int8_t bookParagraphAlignmentOverride = -1;
 
   // Bookmarks (starred pages)
   BookmarkStore bookmarkStore;
@@ -192,10 +193,11 @@ class EpubReaderActivity final : public Activity {
   void stopAutomaticPageTurn();
   void applyBookReaderOverrides(int8_t embeddedStyleOverride, int8_t imageRenderingOverride, int8_t fontFamilyOverride,
                                 const std::string& sdFontFamilyOverride, int8_t fontSizeOverride,
-                                bool bionicReadingOverride);
+                                bool bionicReadingOverride, int8_t paragraphAlignmentOverride);
   void openReaderMenu();
   bool getEffectiveEmbeddedStyle() const;
   uint8_t getEffectiveImageRendering() const;
+  uint8_t getEffectiveParagraphAlignment() const;
   int getEffectiveReaderFontId() const;
   float getEffectiveReaderLineCompression() const;
   bool stepPageState(bool isForwardTurn);

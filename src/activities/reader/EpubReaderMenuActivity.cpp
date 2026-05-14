@@ -40,7 +40,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const int8_t initialEmbeddedStyleOverride, const int8_t initialImageRenderingOverride,
     const int8_t initialFontFamilyOverride, const std::string& initialSdFontFamilyOverride,
     const int8_t initialFontSizeOverride, const uint8_t initialTextDarkness, const bool initialBionicReadingOverride,
-    const bool hasStarredPages, const bool isCurrentPageStarred)
+    const int8_t initialParagraphAlignmentOverride, const bool hasStarredPages, const bool isCurrentPageStarred)
     : MenuListActivity("EpubReaderMenu", renderer, mappedInput),
       currentPageStarred(isCurrentPageStarred),
       pendingOrientation(currentOrientation),
@@ -51,6 +51,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       pendingFontSizeOverride(initialFontSizeOverride),
       pendingTextDarkness(initialTextDarkness),
       pendingBionicReading(initialBionicReadingOverride),
+      pendingParagraphAlignmentOverride(initialParagraphAlignmentOverride),
       title(title),
       currentPage(currentPage),
       totalPages(totalPages),
@@ -219,6 +220,24 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
           [](void* ctx, uint8_t v) { static_cast<EpubReaderMenuActivity*>(ctx)->pendingBionicReading = (v != 0); })
           .withSubmenu(StrId::STR_READER_OVERRIDES));
 
+  // Paragraph alignment: default(-1) + the 5 global options
+  menuItems.push_back(SettingInfo::DynamicEnumCtx(
+                          StrId::STR_PARA_ALIGNMENT,
+                          {StrId::STR_DEFAULT_VALUE, StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER,
+                           StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE},
+                          self,
+                          [](const void* ctx) -> uint8_t {
+                            const auto* s = static_cast<const EpubReaderMenuActivity*>(ctx);
+                            return (s->pendingParagraphAlignmentOverride < 0)
+                                       ? 0
+                                       : static_cast<uint8_t>(s->pendingParagraphAlignmentOverride + 1);
+                          },
+                          [](void* ctx, uint8_t v) {
+                            auto* s = static_cast<EpubReaderMenuActivity*>(ctx);
+                            s->pendingParagraphAlignmentOverride = (v == 0) ? -1 : static_cast<int8_t>(v - 1);
+                          })
+                          .withSubmenu(StrId::STR_READER_OVERRIDES));
+
   // Helper functions, reading ruler, auto page turn, orientation
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_UTILS));
   // Auto page turn: ACTION type with custom cycling in onActionSelected
@@ -303,7 +322,7 @@ void EpubReaderMenuActivity::finishWithAction(MenuAction action) {
   setResult(MenuResult{static_cast<int>(action), -1, pendingOrientation, selectedPageTurnOption,
                        pendingEmbeddedStyleOverride, pendingImageRenderingOverride, pendingFontFamilyOverride,
                        pendingSdFontFamilyOverride, pendingFontSizeOverride, pendingTextDarkness,
-                       static_cast<uint8_t>(pendingBionicReading)});
+                       static_cast<uint8_t>(pendingBionicReading), pendingParagraphAlignmentOverride});
   finish();
 }
 
@@ -338,7 +357,8 @@ void EpubReaderMenuActivity::onBackPressed() {
                            pendingSdFontFamilyOverride,
                            pendingFontSizeOverride,
                            pendingTextDarkness,
-                           static_cast<uint8_t>(pendingBionicReading)};
+                           static_cast<uint8_t>(pendingBionicReading),
+                           pendingParagraphAlignmentOverride};
   setResult(std::move(result));
   finish();
 }
@@ -387,6 +407,12 @@ std::string EpubReaderMenuActivity::getItemValueString(int index) const {
         return std::string(tr(STR_DEFAULT_VALUE)) + " (" + I18N.get(item.enumValues[defaultIndex]) + ")";
       }
     }
+    if (item.nameId == StrId::STR_PARA_ALIGNMENT && pendingParagraphAlignmentOverride < 0) {
+      const auto defaultIndex = static_cast<size_t>(SETTINGS.paragraphAlignment + 1);
+      if (defaultIndex < item.enumValues.size()) {
+        return std::string(tr(STR_DEFAULT_VALUE)) + " (" + I18N.get(item.enumValues[defaultIndex]) + ")";
+      }
+    }
   }
 
   // DynamicEnum items use the standard display
@@ -417,6 +443,12 @@ void EpubReaderMenuActivity::openSubmenu(const SettingInfo& submenuEntry) {
     }
     if (item.nameId == StrId::STR_FONT_SIZE && pendingFontSizeOverride < 0) {
       const auto valueIndex = static_cast<size_t>(SETTINGS.fontSize + 1);
+      if (valueIndex < item.enumValues.size()) {
+        return std::string(tr(STR_DEFAULT_VALUE)) + " (" + I18N.get(item.enumValues[valueIndex]) + ")";
+      }
+    }
+    if (item.nameId == StrId::STR_PARA_ALIGNMENT && pendingParagraphAlignmentOverride < 0) {
+      const auto valueIndex = static_cast<size_t>(SETTINGS.paragraphAlignment + 1);
       if (valueIndex < item.enumValues.size()) {
         return std::string(tr(STR_DEFAULT_VALUE)) + " (" + I18N.get(item.enumValues[valueIndex]) + ")";
       }
