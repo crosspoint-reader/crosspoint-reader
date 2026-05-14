@@ -646,3 +646,6 @@ STR_KB_HINT_CLEAR_TEXT: "Tüm metni temizlemek için DEL basılı tutun"
 STR_KB_HINT_SECONDARY_CHAR: "İkincil karakter için SELECT tutun"
 STR_KB_HINT_UPPER_SECONDARY: "BÜYÜK HARF veya ikincil karakter için SELECT tutun"
 STR_KB_HINT_LOWER_SECONDARY: "Küçük harf veya ikincil karakter için SELECT tutun"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

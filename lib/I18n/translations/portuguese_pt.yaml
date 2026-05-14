@@ -646,3 +646,6 @@ STR_BTN_ACT_TOGGLE_BIONIC_READING: "Alternar leitura biónica"
 STR_BTN_ACT_CYCLE_FONT_SIZE: "Alterar tamanho da fonte"
 STR_BTN_ACT_CYCLE_ORIENTATION: "Alterar orientação"
 STR_RESTART_DEVICE: "Reiniciar dispositivo"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

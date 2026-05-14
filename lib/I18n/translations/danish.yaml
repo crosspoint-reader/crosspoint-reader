@@ -283,3 +283,6 @@ STR_LINK: "[link]"
 STR_SCREENSHOT_BUTTON: "Tag skærmbillede"
 STR_AUTO_TURN_ENABLED: "Automatisk sidevendning aktiveret: "
 STR_AUTO_TURN_PAGES_PER_MIN: "Automatisk vending (sider per minut)"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

@@ -646,3 +646,6 @@ STR_KB_HINT_CLEAR_TEXT: "Houd DEL ingedrukt om alle tekst te wissen"
 STR_KB_HINT_SECONDARY_CHAR: "Houd SELECT ingedrukt voor secundair teken"
 STR_KB_HINT_UPPER_SECONDARY: "Houd SELECT ingedrukt voor HOOFDLETTERS of secundair teken"
 STR_KB_HINT_LOWER_SECONDARY: "Houd SELECT ingedrukt voor kleine letters of secundair teken"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

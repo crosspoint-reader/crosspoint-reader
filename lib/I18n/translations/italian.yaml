@@ -648,3 +648,6 @@ STR_BTN_ACT_TOGGLE_BIONIC_READING: "Attiva/disattiva lettura bionica"
 STR_BTN_ACT_CYCLE_FONT_SIZE: "Modificare dimensione carattere"
 STR_BTN_ACT_CYCLE_ORIENTATION: "Cambia orientamento"
 STR_RESTART_DEVICE: "Riavvia dispositivo"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

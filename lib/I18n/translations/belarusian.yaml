@@ -437,3 +437,6 @@ STR_NO_FOOTNOTES: "На гэтай старонцы няма зносак"
 STR_LINK: "[спасылка]"
 STR_AUTO_TURN_ENABLED: "Аўтаперагортванне: "
 STR_AUTO_TURN_PAGES_PER_MIN: "Аўтаперагортванне (старонак за хвіліну)"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

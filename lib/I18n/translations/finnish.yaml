@@ -253,3 +253,6 @@ STR_BOOK_S_STYLE: "Kirjan tyyli"
 STR_EMBEDDED_STYLE: "Upotettu tyyli"
 STR_OPDS_SERVER_URL: "OPDS-palvelimen osoite"
 STR_SCREENSHOT_BUTTON: "Ota kuvakaappaus"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

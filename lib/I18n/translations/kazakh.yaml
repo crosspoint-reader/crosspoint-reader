@@ -282,3 +282,6 @@ STR_LINK: "[сілтеме]"
 STR_SCREENSHOT_BUTTON: "Скриншот түсіру"
 STR_AUTO_TURN_ENABLED: "Автоматты бет аудару қосулы: "
 STR_AUTO_TURN_PAGES_PER_MIN: "Автоматты бет аудару (минутына бет саны)"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

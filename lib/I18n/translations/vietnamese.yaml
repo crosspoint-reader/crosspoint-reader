@@ -646,3 +646,6 @@ STR_KB_HINT_CLEAR_TEXT: "Giữ DEL để xóa tất cả văn bản"
 STR_KB_HINT_SECONDARY_CHAR: "Giữ SELECT để nhập ký tự phụ"
 STR_KB_HINT_UPPER_SECONDARY: "Giữ SELECT để nhập CHỮ HOA hoặc ký tự phụ"
 STR_KB_HINT_LOWER_SECONDARY: "Giữ SELECT để nhập chữ thường hoặc ký tự phụ"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

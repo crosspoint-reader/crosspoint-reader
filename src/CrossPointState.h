@@ -95,6 +95,7 @@ class CrossPointState {
   size_t lastSleepImage = SIZE_MAX;  // SIZE_MAX = unset sentinel
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
+  bool recentBooksGridView = false;  // true = grid/thumbnail view, false = list view
   KOReaderSyncSessionState koReaderSyncSession;
   PendingBookmarkJumpState pendingBookmarkJump;
   ~CrossPointState() = default;

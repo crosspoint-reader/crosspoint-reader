@@ -283,3 +283,6 @@ STR_LINK: "[nuoroda]"
 STR_SCREENSHOT_BUTTON: "Ekrano nuotrauka"
 STR_AUTO_TURN_ENABLED: "Automatinis puslapių vartymas: "
 STR_AUTO_TURN_PAGES_PER_MIN: "Automatinis puslapių vartymas (psl./min.)"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

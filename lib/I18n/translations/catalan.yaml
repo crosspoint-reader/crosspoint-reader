@@ -283,3 +283,6 @@ STR_LINK: "[enllaç]"
 STR_SCREENSHOT_BUTTON: "Fes una captura de pantalla"
 STR_AUTO_TURN_ENABLED: "Passar automàtic activat: "
 STR_AUTO_TURN_PAGES_PER_MIN: "Passar automàtic (pàgines per minut)"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

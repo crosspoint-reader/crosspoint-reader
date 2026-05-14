@@ -646,3 +646,6 @@ STR_KB_HINT_CLEAR_TEXT: "Håll DEL för att rensa all text"
 STR_KB_HINT_SECONDARY_CHAR: "Håll VÄLJ för sekundärt tecken"
 STR_KB_HINT_UPPER_SECONDARY: "Håll VÄLJ för VERSALER eller sekundärt tecken"
 STR_KB_HINT_LOWER_SECONDARY: "Håll VÄLJ för gemener eller sekundärt tecken"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

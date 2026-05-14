@@ -646,3 +646,6 @@ STR_KB_HINT_CLEAR_TEXT: "Drži DEL za izbris celotnega besedila"
 STR_KB_HINT_SECONDARY_CHAR: "Drži SELECT za sekundarni znak"
 STR_KB_HINT_UPPER_SECONDARY: "Drži SELECT za VELIKE ČRKE ali sek. znak"
 STR_KB_HINT_LOWER_SECONDARY: "Drži SELECT za male črke ali sek. znak"
+
+STR_VIEW_LIST: "List"
+STR_VIEW_GRID: "Grid"

@@ -85,6 +85,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastSleepImage"] = s.lastSleepImage;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
+  doc["recentBooksGridView"] = s.recentBooksGridView;
   // Information about a pending KOReader sync session
   JsonObject sync = doc["koReaderSyncSession"].to<JsonObject>();
   sync["active"] = s.koReaderSyncSession.active;
@@ -143,6 +144,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastSleepImage = doc["lastSleepImage"] | SIZE_MAX;
   s.readerActivityLoadCount = doc["readerActivityLoadCount"] | (uint8_t)0;
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
+  s.recentBooksGridView = doc["recentBooksGridView"] | false;
   JsonObject sync = doc["koReaderSyncSession"].as<JsonObject>();
   s.koReaderSyncSession.active = sync["active"] | false;
   s.koReaderSyncSession.epubPath = sync["epubPath"] | std::string("");
