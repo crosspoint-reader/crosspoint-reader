@@ -45,7 +45,11 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
   auto qrcode = makeUniqueNoThrow<uint8_t[]>(qrBufLen);
   auto tempBuffer = makeUniqueNoThrow<uint8_t[]>(qrBufLen);
   if (!qrcode || !tempBuffer) {
-    LOG_ERR("QR", "OOM: %d bytes", (int)qrBufLen);
+    const std::string errMsg = "Failed to allocate QR Code buffer: " + std::to_string(qrBufLen) + " bytes";
+    LOG_ERR("QR", "%s", errMsg.c_str());
+
+    constexpr int fontId = UI_12_FONT_ID;
+    drawCenteredWrappedText(renderer, bounds, fontId, errMsg.c_str(), 2);
     return;
   }
 
@@ -87,7 +91,7 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
   if (!res) {
     const size_t len = textPayload.length();
     // If it fails (e.g. text too large), log an error
-    std::string errMsg = "Failed to generate a QR Code for payload of length " + std::to_string(len);
+    const std::string errMsg = "Failed to generate a QR Code for payload of length " + std::to_string(len);
     LOG_ERR("QR", "%s", errMsg.c_str());
 
     constexpr int fontId = UI_12_FONT_ID;
@@ -103,8 +107,9 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
   int px = maxDim / qrSize;
   if (px < 1) {
     const size_t len = textPayload.length();
-    std::string errMsg = "Invalid QR Code size for payload of length " + std::to_string(len) + ": requires at least " +
-                         std::to_string(qrSize) + " pixels, but only " + std::to_string(maxDim) + " available";
+    const std::string errMsg = "Invalid QR Code size for payload of length " + std::to_string(len) +
+                               ": requires at least " + std::to_string(qrSize) + " pixels, but only " +
+                               std::to_string(maxDim) + " available";
     LOG_ERR("QR", "%s", errMsg.c_str());
 
     constexpr int fontId = UI_12_FONT_ID;
