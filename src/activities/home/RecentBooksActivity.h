@@ -13,7 +13,7 @@
 class RecentBooksActivity final : public Activity {
  public:
   static constexpr int GRID_COLS = 3;
-  static constexpr int GRID_THUMB_HEIGHT = 180;
+  static constexpr int GRID_THUMB_HEIGHT = 160;
   static constexpr int GRID_THUMB_MARGIN = 10;
   static constexpr int GRID_LABEL_HEIGHT = 36;  // two small-font lines below each thumbnail
 
@@ -31,9 +31,20 @@ class RecentBooksActivity final : public Activity {
   bool firstRenderDone = false;
   size_t nextCoverIndex = 0;
 
+  // Partial selection repaint: track previous index so we only redraw two cells
+  int prevSelectorIndex = -1;
+  bool fullRedrawNeeded = true;
+
   void loadRecentBooks();
   // Generates the next missing grid thumbnail (one per call). Returns true when all done.
   bool loadNextCover();
+
+  void switchViewMode(bool grid);
+  void removeSelectedBook();
+  void showSelectedBookInfo();
+
+  // Draws a single grid cell (used for both full render and partial selection update).
+  void renderGridCell(int index, bool selected, int cellX, int cellY, int tw, int th, int labelW);
 
   void renderListView(RenderLock&&);
   void renderGridView(RenderLock&&);

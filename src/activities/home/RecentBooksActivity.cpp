@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <JpegToBmpConverter.h>
@@ -25,8 +26,6 @@
 #include "fontIds.h"
 
 namespace {
-// Mirror of HomeActivity::convertSidecarToBmp — converts a JPG/PNG sidecar cover to a
-// 1-bit BMP at the requested WxH size and caches it under /.crosspoint/sidecar_<hash>/.
 std::string convertSidecarToBmp(const std::string& bookPath, const std::string& sidecarPath, int width, int height,
                                 const std::string& fileName) {
   const std::string cacheDir = "/.crosspoint/sidecar_" + std::to_string(std::hash<std::string>{}(bookPath));
@@ -57,14 +56,12 @@ std::string convertSidecarToBmp(const std::string& bookPath, const std::string& 
   return bmpPath;
 }
 
-// Compute the grid thumbnail width from the available content width.
 int gridThumbWidth(int contentWidth) {
   const int margin = RecentBooksActivity::GRID_THUMB_MARGIN;
   const int cols = RecentBooksActivity::GRID_COLS;
   return (contentWidth - (cols + 1) * margin) / cols;
 }
 
-// Resolve the [HEIGHT] placeholder in a cover BMP path to the WxH thumbnail path.
 std::string gridThumbPath(const std::string& coverBmpPath, int tw, int th) {
   return UITheme::getCoverThumbPath(coverBmpPath, tw, th);
 }
@@ -98,8 +95,7 @@ bool RecentBooksActivity::loadNextCover() {
         book.coverBmpPath = "";
         continue;
       }
-      const std::string cacheBase =
-          "/.crosspoint/sidecar_" + std::to_string(std::hash<std::string>{}(book.path));
+      const std::string cacheBase = "/.crosspoint/sidecar_" + std::to_string(std::hash<std::string>{}(book.path));
       const std::string placeholder = cacheBase + "/[HEIGHT].bmp";
       const std::string name = std::to_string(tw) + "x" + std::to_string(th) + ".bmp";
       const std::string result = convertSidecarToBmp(book.path, book.coverBmpPath, tw, th, name);
@@ -108,7 +104,7 @@ bool RecentBooksActivity::loadNextCover() {
         book.coverBmpPath = placeholder;
       }
       nextCoverIndex++;
-      return false;  // yield — one conversion per loop tick
+      return false;
     }
 
     const std::string thumbPath = gridThumbPath(book.coverBmpPath, tw, th);
@@ -127,11 +123,11 @@ bool RecentBooksActivity::loadNextCover() {
         book.coverBmpPath = "";
       }
       nextCoverIndex++;
-      return false;  // yield — one generation per loop tick
+      return false;
     }
   }
 
-  return true;  // all thumbnails are ready
+  return true;
 }
 
 void RecentBooksActivity::onEnter() {
@@ -149,6 +145,8 @@ void RecentBooksActivity::onEnter() {
   coversLoading = false;
   firstRenderDone = false;
   nextCoverIndex = 0;
+  prevSelectorIndex = -1;
+  fullRedrawNeeded = true;
 
   requestUpdate();
 }
@@ -158,13 +156,57 @@ void RecentBooksActivity::onExit() {
   recentBooks.clear();
 }
 
+void RecentBooksActivity::switchViewMode(bool grid) {
+  APP_STATE.recentBooksGridView = grid;
+  APP_STATE.saveToFile();
+  coversLoaded = false;
+  coversLoading = false;
+  firstRenderDone = false;
+  nextCoverIndex = 0;
+  prevSelectorIndex = -1;
+  fullRedrawNeeded = true;
+  requestUpdate(true);
+}
+
+void RecentBooksActivity::removeSelectedBook() {
+  if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
+  const std::string bookPath = recentBooks[selectorIndex].path;
+  const std::string bookTitle = recentBooks[selectorIndex].title;
+  auto handler = [this, bookPath](const ActivityResult& res) {
+    if (!res.isCancelled) {
+      LOG_DBG("RBA", "Removing from recent books: %s", bookPath.c_str());
+      RECENT_BOOKS.removeBook(bookPath);
+      loadRecentBooks();
+      if (recentBooks.empty()) {
+        selectorIndex = 0;
+      } else if (selectorIndex >= static_cast<int>(recentBooks.size())) {
+        selectorIndex = static_cast<int>(recentBooks.size()) - 1;
+      }
+      prevSelectorIndex = -1;
+      fullRedrawNeeded = true;
+      requestUpdate(true);
+    }
+  };
+  std::string heading = tr(STR_REMOVE) + std::string("? ");
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, bookTitle), handler);
+}
+
+void RecentBooksActivity::showSelectedBookInfo() {
+  if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
+  const std::string& path = recentBooks[selectorIndex].path;
+  if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
+    startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
+                           [this](const ActivityResult&) { requestUpdate(); });
+  }
+}
+
 void RecentBooksActivity::loop() {
   const bool gridView = APP_STATE.recentBooksGridView;
+  const int listSize = static_cast<int>(recentBooks.size());
 
-  // --- Consume named button events first ---
   ButtonEventManager::ButtonEvent ev;
   while (buttonEvents.consumeEvent(ev)) {
-    // Open book (Confirm short/long)
+    // Confirm short/long: open book (long = KOReader sync for EPUBs)
     if (ev.button == MappedInputManager::Button::Confirm &&
         (ev.type == ButtonEventManager::PressType::Short || ev.type == ButtonEventManager::PressType::Long)) {
       if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
@@ -186,113 +228,69 @@ void RecentBooksActivity::loop() {
       return;
     }
 
-    // Back → home
+    // Back short: go home
     if (ev.button == MappedInputManager::Button::Back && ev.type == ButtonEventManager::PressType::Short) {
       onGoHome();
       return;
     }
 
-    // Left short: switch view or (in list view) remove book
-    if (ev.button == MappedInputManager::Button::Left && ev.type == ButtonEventManager::PressType::Short) {
-      if (!gridView) {
-        // List view → switch to grid view
-        APP_STATE.recentBooksGridView = true;
-        APP_STATE.saveToFile();
-        coversLoaded = false;
-        coversLoading = false;
-        firstRenderDone = false;
-        nextCoverIndex = 0;
-        requestUpdate(true);
-        return;
+    // Up short: navigate (row up in grid, previous in list)
+    if (ev.button == MappedInputManager::Button::Up && ev.type == ButtonEventManager::PressType::Short) {
+      if (!recentBooks.empty()) {
+        if (gridView) {
+          selectorIndex = std::max(0, selectorIndex - GRID_COLS);
+        } else {
+          selectorIndex = ButtonNavigator::previousIndex(selectorIndex, listSize);
+        }
+        requestUpdate();
       }
-      // Grid view: Left navigates to the previous item (column nav). The event is already
-      // consumed from the queue, so handle it directly here.
-      if (recentBooks.empty()) return;
-      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, static_cast<int>(recentBooks.size()));
-      requestUpdate();
+      continue;
+    }
+
+    // Down short: navigate (row down in grid, next in list)
+    if (ev.button == MappedInputManager::Button::Down && ev.type == ButtonEventManager::PressType::Short) {
+      if (!recentBooks.empty()) {
+        if (gridView) {
+          selectorIndex = std::min(listSize - 1, selectorIndex + GRID_COLS);
+        } else {
+          selectorIndex = ButtonNavigator::nextIndex(selectorIndex, listSize);
+        }
+        requestUpdate();
+      }
+      continue;
+    }
+
+    // Up long: toggle between list and grid view
+    if (ev.button == MappedInputManager::Button::Up && ev.type == ButtonEventManager::PressType::Long) {
+      switchViewMode(!gridView);
       return;
     }
 
-    // Right short (list view only): show book info
-    if (ev.button == MappedInputManager::Button::Right && ev.type == ButtonEventManager::PressType::Short) {
-      if (!gridView) {
-        if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
-        const std::string& path = recentBooks[selectorIndex].path;
-        if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path)) {
-          startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, path),
-                                 [this](const ActivityResult&) { requestUpdate(); });
-          return;
-        }
-      } else {
-        // Grid view: Right → move to next item (column navigation)
-        if (recentBooks.empty()) return;
-        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, static_cast<int>(recentBooks.size()));
-        requestUpdate();
-        return;
-      }
+    // Left long: remove selected book (both views)
+    if (ev.button == MappedInputManager::Button::Left && ev.type == ButtonEventManager::PressType::Long) {
+      removeSelectedBook();
+      return;
     }
 
-    // Left long (list view only): remove book
-    if (ev.button == MappedInputManager::Button::Left && ev.type == ButtonEventManager::PressType::Long) {
-      if (!gridView) {
-        if (recentBooks.empty() || selectorIndex >= static_cast<int>(recentBooks.size())) return;
-        const std::string bookPath = recentBooks[selectorIndex].path;
-        const std::string bookTitle = recentBooks[selectorIndex].title;
-
-        auto handler = [this, bookPath](const ActivityResult& res) {
-          if (!res.isCancelled) {
-            LOG_DBG("RBA", "Removing from recent books: %s", bookPath.c_str());
-            RECENT_BOOKS.removeBook(bookPath);
-            loadRecentBooks();
-            if (recentBooks.empty()) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= static_cast<int>(recentBooks.size())) {
-              selectorIndex = static_cast<int>(recentBooks.size()) - 1;
-            }
-            requestUpdate(true);
-          }
-        };
-        std::string heading = tr(STR_REMOVE) + std::string("? ");
-        startActivityForResult(
-            std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, bookTitle), handler);
-        return;
-      }
+    // Right long: show book info (both views)
+    if (ev.button == MappedInputManager::Button::Right && ev.type == ButtonEventManager::PressType::Long) {
+      showSelectedBookInfo();
+      return;
     }
   }
 
-  // --- ButtonNavigator for Up/Down (both views), and list-view Remove shortcut ---
-  const int listSize = static_cast<int>(recentBooks.size());
-
   if (gridView) {
-    // Up/Down navigate by full row (GRID_COLS items at a time)
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-      if (!recentBooks.empty()) {
-        selectorIndex = std::max(0, selectorIndex - GRID_COLS);
-        requestUpdate();
-      }
-    }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      if (!recentBooks.empty()) {
-        selectorIndex = std::min(listSize - 1, selectorIndex + GRID_COLS);
-        requestUpdate();
-      }
-    }
-
-    // Lazy cover loading after first render
-    if (firstRenderDone && !coversLoaded && !coversLoading) {
-      coversLoading = true;
-      if (loadNextCover()) {
-        coversLoaded = true;
-      } else {
-        requestUpdate();
-      }
-      coversLoading = false;
-    }
-  } else {
-    // List view: Up/Down with double-click and long-press special behaviour
-    buttonNavigator.onNextList({MappedInputManager::Button::Down}, selectorIndex, listSize,
+    // Left/Right short: column navigation (no long-press conflict on these buttons)
+    buttonNavigator.onNextList({MappedInputManager::Button::Right}, selectorIndex, listSize,
                                [this] { requestUpdate(); });
-    buttonNavigator.onPreviousList({MappedInputManager::Button::Up}, selectorIndex, listSize,
+    buttonNavigator.onPreviousList({MappedInputManager::Button::Left}, selectorIndex, listSize,
+                                   [this] { requestUpdate(); });
+    // (Up/Down handled via buttonEvents Short above)
+  } else {
+    // Left/Right short: consumed cleanly (no-op in list view but prevents phantom events)
+    buttonNavigator.onNextList({MappedInputManager::Button::Right}, selectorIndex, listSize,
+                               [this] { requestUpdate(); });
+    buttonNavigator.onPreviousList({MappedInputManager::Button::Left}, selectorIndex, listSize,
                                    [this] { requestUpdate(); });
   }
 }
@@ -303,6 +301,15 @@ void RecentBooksActivity::render(RenderLock&& lock) {
     if (!firstRenderDone) {
       firstRenderDone = true;
       requestUpdate();
+    } else if (!coversLoaded && !coversLoading) {
+      coversLoading = true;
+      if (loadNextCover()) {
+        coversLoaded = true;
+      } else {
+        fullRedrawNeeded = true;
+        requestUpdate();
+      }
+      coversLoading = false;
     }
   } else {
     renderListView(std::move(lock));
@@ -327,8 +334,7 @@ void RecentBooksActivity::renderListView(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{contentRect.x, contentTop, contentRect.width, contentHeight},
-        static_cast<int>(recentBooks.size()), selectorIndex,
-        [this](int index) { return recentBooks[index].title; },
+        static_cast<int>(recentBooks.size()), selectorIndex, [this](int index) { return recentBooks[index].title; },
         [this](int index) {
           const auto& book = recentBooks[index];
           if (!book.author.empty() && !book.series.empty()) return book.author + "\n" + book.series;
@@ -338,113 +344,134 @@ void RecentBooksActivity::renderListView(RenderLock&&) {
         [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
   }
 
-  const bool hasInfo = !recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size()) &&
-                       (FsHelpers::hasEpubExtension(recentBooks[selectorIndex].path) ||
-                        FsHelpers::hasXtcExtension(recentBooks[selectorIndex].path));
   const bool hasBooks = !recentBooks.empty();
-  // Left short switches to grid view; label it accordingly. Long Left = remove.
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_HOME), hasBooks ? tr(STR_OPEN) : "", tr(STR_VIEW_GRID),
-                            hasInfo ? tr(STR_INFO) : "");
-
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), hasBooks ? tr(STR_OPEN) : "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
   renderer.displayBuffer();
 }
 
-void RecentBooksActivity::renderGridView(RenderLock&&) {
-  renderer.clearScreen();
+void RecentBooksActivity::renderGridCell(int index, bool selected, int cellX, int cellY, int tw, int th, int labelW) {
+  const auto& book = recentBooks[index];
+  const int labelY = cellY + th + 3;
+  const int cellFillHeight = th + GRID_LABEL_HEIGHT + 3;
 
+  if (selected) {
+    renderer.fillRect(cellX, cellY, tw, cellFillHeight);
+    renderer.drawRect(cellX, cellY, tw, th, false);
+  } else {
+    // Clear to white before redrawing (needed when deselecting)
+    renderer.fillRect(cellX, cellY, tw, cellFillHeight, false);
+    renderer.drawRect(cellX, cellY, tw, th);
+  }
+
+  // White prefill inside thumbnail frame so 1-bit BMP transparent pixels show white
+  renderer.fillRect(cellX + 1, cellY + 1, tw - 2, th - 2, false);
+
+  if (!book.coverBmpPath.empty()) {
+    const std::string thumbPath = gridThumbPath(book.coverBmpPath, tw, th);
+    FsFile file;
+    if (Storage.openFileForRead("RBA", thumbPath, file)) {
+      Bitmap bmp(file);
+      if (bmp.parseHeaders() == BmpReaderError::Ok) {
+        const int imgW = bmp.getWidth();
+        const int imgH = bmp.getHeight();
+        const int innerW = tw - 2;
+        const int innerH = th - 2;
+        if (imgW > 0 && imgH > 0) {
+          // Mirror drawBitmap1Bit scale = min(maxW/imgW, maxH/imgH) to get rendered size,
+          // then center the image within the frame.
+          const float scaleX = static_cast<float>(innerW) / imgW;
+          const float scaleY = static_cast<float>(innerH) / imgH;
+          const float scale = std::min(scaleX, scaleY);
+          const int rendW = static_cast<int>(imgW * scale);
+          const int rendH = static_cast<int>(imgH * scale);
+          const int offsetX = std::max(1, (tw - rendW) / 2);
+          const int offsetY = std::max(1, (th - rendH) / 2);
+          renderer.drawBitmap1Bit(bmp, cellX + offsetX, cellY + offsetY, innerW, innerH);
+        }
+      }
+      file.close();
+    }
+  }
+
+  // Label: title line 1, author line 2; white text on black for selected, black on white otherwise
+  const bool black = !selected;
+  std::string titleStr = renderer.truncatedText(SMALL_FONT_ID, book.title.c_str(), labelW);
+  renderer.drawText(SMALL_FONT_ID, cellX + 2, labelY, titleStr.c_str(), black);
+  if (!book.author.empty()) {
+    std::string authorStr = renderer.truncatedText(SMALL_FONT_ID, book.author.c_str(), labelW);
+    renderer.drawText(SMALL_FONT_ID, cellX + 2, labelY + 17, authorStr.c_str(), black);
+  }
+}
+
+void RecentBooksActivity::renderGridView(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect contentRect = UITheme::getContentRect(renderer, true, true);
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight = contentRect.height - contentTop - metrics.verticalSpacing;
+  const int margin = GRID_THUMB_MARGIN;
+  const int tw = gridThumbWidth(contentRect.width);
+  const int th = GRID_THUMB_HEIGHT;
+  const int cellHeight = th + GRID_LABEL_HEIGHT + margin;
+  const int visibleRows = std::max(1, contentHeight / cellHeight);
+  const int totalRows = (static_cast<int>(recentBooks.size()) + GRID_COLS - 1) / GRID_COLS;
+  const int selectedRow = selectorIndex / GRID_COLS;
+  const int pageStartRow = (selectedRow / visibleRows) * visibleRows;
+  const int startIndex = pageStartRow * GRID_COLS;
+  const int labelW = tw - 4;
+
+  auto cellPos = [&](int i, int& cx, int& cy) {
+    const int row = (i / GRID_COLS) - pageStartRow;
+    const int col = i % GRID_COLS;
+    cx = contentRect.x + margin + col * (tw + margin);
+    cy = contentTop + row * cellHeight;
+  };
+
+  // Partial fast path: only the selection changed within the same page
+  const int prevPage = prevSelectorIndex >= 0 ? (prevSelectorIndex / GRID_COLS / visibleRows) : -1;
+  const int curPage = selectedRow / visibleRows;
+  if (!fullRedrawNeeded && prevSelectorIndex >= 0 && prevSelectorIndex != selectorIndex && prevPage == curPage) {
+    int cx, cy;
+    cellPos(prevSelectorIndex, cx, cy);
+    renderGridCell(prevSelectorIndex, false, cx, cy, tw, th, labelW);
+    cellPos(selectorIndex, cx, cy);
+    renderGridCell(selectorIndex, true, cx, cy, tw, th, labelW);
+    prevSelectorIndex = selectorIndex;
+    renderer.displayBuffer();
+    return;
+  }
+
+  // Full redraw
+  fullRedrawNeeded = false;
+  prevSelectorIndex = selectorIndex;
+
+  renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
                  tr(STR_MENU_RECENT_BOOKS));
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = contentRect.height - contentTop - metrics.verticalSpacing;
-
   if (recentBooks.empty()) {
     renderer.drawText(UI_10_FONT_ID, contentRect.x + metrics.contentSidePadding, contentTop + 20,
                       tr(STR_NO_RECENT_BOOKS));
-    const auto labels = mappedInput.mapLabels(tr(STR_HOME), "", tr(STR_VIEW_LIST), "");
+    const auto labels = mappedInput.mapLabels(tr(STR_HOME), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
-  const int margin = GRID_THUMB_MARGIN;
-  const int tw = gridThumbWidth(contentRect.width);
-  const int th = GRID_THUMB_HEIGHT;
-  const int cellHeight = th + GRID_LABEL_HEIGHT + margin;
-
-  const int visibleRows = std::max(1, contentHeight / cellHeight);
-  const int totalRows = (static_cast<int>(recentBooks.size()) + GRID_COLS - 1) / GRID_COLS;
-
-  const int selectedRow = selectorIndex / GRID_COLS;
-  const int pageStartRow = (selectedRow / visibleRows) * visibleRows;
-
-  const int startIndex = pageStartRow * GRID_COLS;
   const int endIndex = std::min(startIndex + visibleRows * GRID_COLS, static_cast<int>(recentBooks.size()));
-
   for (int i = startIndex; i < endIndex; i++) {
-    const int row = (i / GRID_COLS) - pageStartRow;
-    const int col = i % GRID_COLS;
-
-    const int cellX = contentRect.x + margin + col * (tw + margin);
-    const int cellY = contentTop + row * cellHeight;
-
-    const bool selected = (i == selectorIndex);
-
-    // Draw thumbnail border (double rect when selected)
-    if (selected) {
-      renderer.drawRect(cellX - 2, cellY - 2, tw + 4, th + 4);
-      renderer.drawRect(cellX - 1, cellY - 1, tw + 2, th + 2);
-    } else {
-      renderer.drawRect(cellX, cellY, tw, th);
-    }
-
-    // Draw cover BMP thumbnail
-    const auto& book = recentBooks[i];
-    bool coverDrawn = false;
-    if (!book.coverBmpPath.empty()) {
-      const std::string thumbPath = gridThumbPath(book.coverBmpPath, tw, th);
-      FsFile file;
-      if (Storage.openFileForRead("RBA", thumbPath, file)) {
-        Bitmap bmp(file);
-        if (bmp.parseHeaders() == BmpReaderError::Ok) {
-          renderer.drawBitmap1Bit(bmp, cellX, cellY, tw, th);
-          coverDrawn = true;
-        }
-        file.close();
-      }
-    }
-
-    if (!coverDrawn) {
-      // Empty placeholder — just a white box inside the border
-      renderer.fillRect(cellX + 1, cellY + 1, tw - 2, th - 2, false);
-    }
-
-    // Label: title on line 1, author on line 2
-    const int labelY = cellY + th + 3;
-    const int labelW = tw - 4;
-    const bool invert = !selected;
-
-    std::string titleStr = renderer.truncatedText(SMALL_FONT_ID, book.title.c_str(), labelW);
-    renderer.drawText(SMALL_FONT_ID, cellX + 2, labelY, titleStr.c_str(), invert);
-
-    if (!book.author.empty()) {
-      std::string authorStr = renderer.truncatedText(SMALL_FONT_ID, book.author.c_str(), labelW);
-      renderer.drawText(SMALL_FONT_ID, cellX + 2, labelY + 17, authorStr.c_str(), invert);
-    }
+    int cx, cy;
+    cellPos(i, cx, cy);
+    renderGridCell(i, i == selectorIndex, cx, cy, tw, th, labelW);
   }
 
   // Scroll arrows when content spans multiple pages
   if (totalRows > visibleRows) {
     constexpr int arrowSize = 6;
     const int centerX = contentRect.x + contentRect.width / 2;
-
     if (pageStartRow > 0) {
       const int arrowY = contentTop + 2;
       for (int j = 0; j < arrowSize; ++j) {
@@ -460,7 +487,16 @@ void RecentBooksActivity::renderGridView(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_VIEW_LIST), "");
+  // On X4 (taller screen) there is room for a one-line gesture hint below the grid.
+  if (!gpio.deviceIsX3()) {
+    const int hintY = contentRect.y + contentRect.height - metrics.verticalSpacing - 14;
+    const std::string hint = std::string(tr(STR_DIR_UP)) + "+L: " + tr(STR_VIEW_GRID) + "/" + tr(STR_VIEW_LIST) +
+                             "   " + tr(STR_DIR_LEFT) + "+L: " + tr(STR_REMOVE) + "   " + tr(STR_DIR_RIGHT) +
+                             "+L: " + tr(STR_INFO);
+    renderer.drawText(SMALL_FONT_ID, contentRect.x + metrics.contentSidePadding, hintY, hint.c_str());
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
