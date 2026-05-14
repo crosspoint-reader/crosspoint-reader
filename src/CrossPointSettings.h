@@ -209,8 +209,7 @@ class CrossPointSettings {
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
-  // Auto-sleep timeout setting (default 10 minutes)
-  uint8_t sleepTimeout = SLEEP_10_MIN;  // legacy enum retained for binary/JSON migration
+  // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;

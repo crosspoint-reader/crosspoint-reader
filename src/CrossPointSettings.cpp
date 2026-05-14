@@ -202,8 +202,9 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, paragraphAlignment, PARAGRAPH_ALIGNMENT_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, sleepTimeout, SLEEP_TIMEOUT_COUNT);
-    sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(sleepTimeout);
+    uint8_t legacySleepTimeout = SLEEP_10_MIN;
+    readAndValidate(inputFile, legacySleepTimeout, SLEEP_TIMEOUT_COUNT);
+    sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacySleepTimeout);
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, refreshFrequency, REFRESH_FREQUENCY_COUNT);
     if (++settingsRead >= fileSettingsCount) break;

@@ -228,7 +228,6 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)CrossPointSettings::SLEEP_10_MIN, CrossPointSettings::SLEEP_TIMEOUT_COUNT,
               (uint8_t)CrossPointSettings::SLEEP_10_MIN);
-    s.sleepTimeout = legacyValue;
     s.sleepTimeoutMinutes = CrossPointSettings::sleepTimeoutEnumToMinutes(legacyValue);
     if (needsResave) *needsResave = true;
   }
