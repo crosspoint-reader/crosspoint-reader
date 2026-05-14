@@ -72,15 +72,17 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
   if (res) {
     // Determine the optimal pixel size.
     const int maxDim = std::min(bounds.width, bounds.height);
-    const int qrSize = qrcodegen_getSize(qrcode.get());
+    // QR codes require a minimum quiet zone of 4 modules on every side by spec.
+    const int qrSize = qrcodegen_getSize(qrcode.get()) + 8;
 
     int px = maxDim / qrSize;
+    // bounds is the available drawing area, not necessarily the full screen.
+    // If the area is too small, still draw with 1px modules.
     if (px < 1) px = 1;
-
     // Calculate centering X and Y
     const int qrDisplaySize = qrSize * px;
-    const int xOff = bounds.x + (bounds.width - qrDisplaySize) / 2;
-    const int yOff = bounds.y + (bounds.height - qrDisplaySize) / 2;
+    const int xOff = bounds.x + (bounds.width - qrDisplaySize) / 2 + 4 * px;
+    const int yOff = bounds.y + (bounds.height - qrDisplaySize) / 2 + 4 * px;
 
     // Draw the QR Code
     for (uint8_t cy = 0; cy < qrSize; cy++) {
