@@ -122,8 +122,9 @@ void Typesetter::partialFlush(ParsedText& block) {
   const int horizontalInset = block.getBlockStyle().totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
-  block.layoutAndExtractLines(renderer, fontId, effectiveWidth,
-                              [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false);
+  block.layoutAndExtractLines(
+      renderer, fontId, effectiveWidth,
+      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false);
 }
 
 void Typesetter::finish() {
