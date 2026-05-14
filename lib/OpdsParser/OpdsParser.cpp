@@ -112,10 +112,6 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
             strcmp(type, "application/epub+zip") == 0) {
           self->currentEntry.type = OpdsEntryType::BOOK;
           self->currentEntry.href = href;
-        } else if (rel && type && strstr(rel, "opds-spec.org/image") != nullptr &&
-                   strstr(rel, "thumbnail") == nullptr && strstr(type, "image/jpeg") != nullptr &&
-                   self->currentEntry.imageHref.empty()) {
-          self->currentEntry.imageHref = href;
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
             self->currentEntry.type = OpdsEntryType::NAVIGATION;

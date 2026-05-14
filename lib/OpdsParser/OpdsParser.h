@@ -22,7 +22,6 @@ struct OpdsEntry {
   std::string author;  // Only for books
   std::string href;    // Navigation URL or epub download URL
   std::string id;
-  std::string imageHref;  // Cover image URL (rel="http://opds-spec.org/image"), books only
 };
 
 // Legacy alias for backward compatibility
