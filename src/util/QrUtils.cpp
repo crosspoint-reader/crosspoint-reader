@@ -24,9 +24,9 @@ static bool hasNonAscii(const char* str) {
 
 void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const std::string& textPayload) {
   constexpr uint8_t qrcode_VERSION_MIN = 1;
-  constexpr uint8_t qrcode_VERSION_MAX = 20;  // Alphanumeric: 1249 chars, Kanji: 528 chars, Numeric: 2061 chars
+  constexpr uint8_t qrcode_VERSION_MAX = 40;
 
-  const size_t qrBufLen = qrcodegen_BUFFER_LEN_FOR_VERSION(qrcode_VERSION_MAX);  // 1178 bytes
+  const size_t qrBufLen = qrcodegen_BUFFER_LEN_FOR_VERSION(qrcode_VERSION_MAX);  // 3918 bytes
   auto qrcode = makeUniqueNoThrow<uint8_t[]>(qrBufLen);
   auto tempBuffer = makeUniqueNoThrow<uint8_t[]>(qrBufLen);
   if (!qrcode || !tempBuffer) {
