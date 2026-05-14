@@ -252,20 +252,6 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  // Advance-table fast-path for SD card fonts. Without this, every call falls
-  // through to getGlyph() and triggers the 8-slot overflow ring buffer, which
-  // thrashes during long indexing runs (e.g. TXT page-index build) and
-  // eventually fragments the heap badly enough to corrupt FreeRTOS structures.
-  auto sdIt = sdCardFonts_.find(fontId);
-  if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    int32_t widthFP = 0;
-    const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
-    while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      widthFP += sdIt->second->getAdvance(cp, styleIdx);
-    }
-    return fp4::toPixel(widthFP);
-  }
-
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
