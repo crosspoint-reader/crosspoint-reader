@@ -362,10 +362,9 @@ void SleepActivity::onEnter() {
   // page is fully cleared. The full sync triggered by requestResync drives the panel to a
   // clean white state; the sleep screen is then drawn on top without residual ghost content.
   // Skipped for OVERLAY (frame buffer must stay intact) and BLANK (already renders white).
-  const bool needsX3PreFlash =
-      gpio.deviceIsX3() &&
-      SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY &&
-      SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK;
+  const bool needsX3PreFlash = gpio.deviceIsX3() &&
+                               SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::OVERLAY &&
+                               SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK;
   if (needsX3PreFlash) {
     renderer.clearScreen();
     display.requestResync(1);
