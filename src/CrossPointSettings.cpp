@@ -387,3 +387,11 @@ int CrossPointSettings::getReaderFontId() const {
   }
   return getBuiltinReaderFontId(fontFamily, fontSize);
 }
+
+int CrossPointSettings::getTxtReaderFontId() const {
+  if (txtSdFontFamilyName[0] != '\0') {
+    int id = resolveSdCardFontId(txtSdFontFamilyName, txtFontSize);
+    if (id != 0) return id;
+  }
+  return getBuiltinReaderFontId(txtFontFamily, txtFontSize);
+}

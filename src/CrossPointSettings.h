@@ -228,11 +228,15 @@ class CrossPointSettings {
   uint8_t frontButtonConfirm = FRONT_HW_CONFIRM;
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
-  // Reader font settings
+  // Reader font settings (EPUB)
   uint8_t fontFamily = BOOKERLY;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   uint8_t fontSize = MEDIUM;
+  // Reader font settings (TXT / MD) — defaults to EPUB settings when not explicitly set
+  uint8_t txtFontFamily = NOTOSANS;
+  char txtSdFontFamilyName[32] = "";
+  uint8_t txtFontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes)
@@ -358,6 +362,7 @@ class CrossPointSettings {
 
   static constexpr uint16_t getPowerButtonDuration() { return 400; }
   int getReaderFontId() const;
+  int getTxtReaderFontId() const;
   // Pure built-in lookup (size enum + family enum -> font ID). Independent of
   // SD-card font selection. Used by the per-book fontFamilyOverride path so
   // an override forces back to a known built-in even when an SD font is the

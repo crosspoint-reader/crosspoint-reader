@@ -54,6 +54,33 @@ void fontFamilyDynamicSetter(void* /*ctx*/, uint8_t value) {
   }
 }
 
+uint8_t txtFontFamilyDynamicGetter(const void* /*ctx*/) {
+  if (SETTINGS.txtSdFontFamilyName[0] != '\0') {
+    const auto& families = sdFontSystem.registry().getFamilies();
+    for (size_t i = 0; i < families.size(); i++) {
+      if (families[i].name == SETTINGS.txtSdFontFamilyName) {
+        return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + i);
+      }
+    }
+  }
+  return SETTINGS.txtFontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? SETTINGS.txtFontFamily
+                                                                         : CrossPointSettings::NOTOSANS;
+}
+
+void txtFontFamilyDynamicSetter(void* /*ctx*/, uint8_t value) {
+  if (value < CrossPointSettings::BUILTIN_FONT_COUNT) {
+    SETTINGS.txtFontFamily = value;
+    SETTINGS.txtSdFontFamilyName[0] = '\0';
+    return;
+  }
+  const auto& families = sdFontSystem.registry().getFamilies();
+  uint8_t sdIdx = value - CrossPointSettings::BUILTIN_FONT_COUNT;
+  if (sdIdx < families.size()) {
+    strncpy(SETTINGS.txtSdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.txtSdFontFamilyName) - 1);
+    SETTINGS.txtSdFontFamilyName[sizeof(SETTINGS.txtSdFontFamilyName) - 1] = '\0';
+  }
+}
+
 uint8_t fontFamilyOptionCount() {
   return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + sdFontSystem.registry().getFamilies().size());
 }

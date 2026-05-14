@@ -26,6 +26,10 @@ int resolveSdCardFontId(const char* familyName, uint8_t fontSizeEnum);
 uint8_t fontFamilyDynamicGetter(const void* ctx);
 void fontFamilyDynamicSetter(void* ctx, uint8_t value);
 
+// Same as above but for the TXT/MD reader font family setting.
+uint8_t txtFontFamilyDynamicGetter(const void* ctx);
+void txtFontFamilyDynamicSetter(void* ctx, uint8_t value);
+
 // Returns the total number of font-family options currently available
 // (BUILTIN_FONT_COUNT + number of discovered SD families). Used by the
 // settings UI / web layer to enrich enumLabels and to bound cycling.

@@ -325,7 +325,7 @@ void MdReaderActivity::initializeReader() {
     return;
   }
 
-  cachedFontId = SETTINGS.getReaderFontId();
+  cachedFontId = SETTINGS.getTxtReaderFontId();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 

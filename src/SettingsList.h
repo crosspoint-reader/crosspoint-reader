@@ -92,7 +92,7 @@ inline const std::vector<SettingInfo> list = {
     SettingInfo::Enum(StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
                       {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED, StrId::STR_LANDSCAPE_CCW},
                       "orientation", StrId::STR_CAT_READER),
-    // Font — DynamicEnum so SD card font families can be appended at the consumer
+    // EPUB font — DynamicEnum so SD card font families can be appended at the consumer
     // side (SettingsActivity / CrossPointWebServer enrich enumLabels before
     // iterating). The built-in StrIds are kept as a fallback for code paths that
     // don't enrich enumLabels.
@@ -103,6 +103,15 @@ inline const std::vector<SettingInfo> list = {
                       {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE, StrId::STR_TINY},
                       "fontSize", StrId::STR_CAT_READER)
         .withSubmenu(StrId::STR_MENU_READER_FONT_SETTINGS),
+    // TXT/MD font — same dynamic structure as the EPUB font entry above.
+    SettingInfo::DynamicEnum(StrId::STR_TXT_FONT_FAMILY, {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS},
+                             txtFontFamilyDynamicGetter, txtFontFamilyDynamicSetter, "txtFontFamily",
+                             StrId::STR_CAT_READER)
+        .withSubcategory(StrId::STR_MENU_TXT_FONT),
+    SettingInfo::Enum(StrId::STR_TXT_FONT_SIZE, &CrossPointSettings::txtFontSize,
+                      {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE, StrId::STR_TINY},
+                      "txtFontSize", StrId::STR_CAT_READER)
+        .withSubcategory(StrId::STR_MENU_TXT_FONT),
     SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                         StrId::STR_CAT_READER)
         .withSubmenu(StrId::STR_MENU_READER_FONT_SETTINGS),
