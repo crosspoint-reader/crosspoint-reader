@@ -647,7 +647,7 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
     switch (parsed.blockType) {
       case MdParser::BlockType::UnorderedList:
       case MdParser::BlockType::OrderedList:
-        indent = LIST_INDENT + parsed.indentLevel * LIST_INDENT;
+        indent = LIST_INDENT + std::min((int)parsed.indentLevel, 2) * LIST_INDENT;
         break;
       case MdParser::BlockType::Blockquote:
         indent = BLOCKQUOTE_INDENT;
