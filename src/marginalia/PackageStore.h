@@ -12,6 +12,20 @@ constexpr const char* PACKAGE_STATE_ROOT = "/.marginalia/package-state";
 constexpr size_t MAX_MANIFEST_BYTES = 16384;
 constexpr int PACKAGE_API_LEVEL = 1;
 
+enum class PackageSettingType {
+  Boolean,
+  Enum,
+};
+
+struct PackageSettingDefinition {
+  std::string id;
+  std::string label;
+  PackageSettingType type = PackageSettingType::Boolean;
+  bool defaultBool = false;
+  std::string defaultString;
+  std::vector<std::string> options;
+};
+
 struct PackageManifest {
   std::string id;
   std::string directoryName;
@@ -23,7 +37,7 @@ struct PackageManifest {
   std::string author;
   std::string manifestPath;
   std::vector<std::string> permissions;
-  bool hasSettings = false;
+  std::vector<PackageSettingDefinition> settings;
   bool enabled = true;
   bool compatible = true;
   std::string compatibilityError;
@@ -51,6 +65,11 @@ bool isSafePackageRelativePath(const std::string& value);
 bool ensurePackageBaseDirectories();
 bool readPackageEnabled(const std::string& packageId);
 bool setPackageEnabled(const std::string& packageId, bool enabled);
+bool readPackageSettingBool(const std::string& packageId, const std::string& settingId, bool defaultValue);
+std::string readPackageSettingString(const std::string& packageId, const std::string& settingId,
+                                     const std::string& defaultValue);
+bool writePackageSettingBool(const std::string& packageId, const std::string& settingId, bool value);
+bool writePackageSettingString(const std::string& packageId, const std::string& settingId, const std::string& value);
 bool uninstallPackage(const std::string& packageId);
 
 }  // namespace Marginalia

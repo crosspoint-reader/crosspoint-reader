@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstdlib>
 
 #include "PackageThemeHost.h"
@@ -18,8 +19,64 @@ bool hasRequiredString(JsonDocument& doc, const char* key) {
   return doc[key].is<const char*>() && doc[key].as<const char*>()[0] != '\0';
 }
 
+bool isSafeSettingId(const std::string& value) {
+  if (value.empty() || value.length() > 48 || !isAlphaNum(value[0])) {
+    return false;
+  }
+
+  for (const char c : value) {
+    if (isAlphaNum(c) || c == '.' || c == '_' || c == '-') {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
 std::string packageStatePath(const std::string& packageId) {
   return std::string(PACKAGE_STATE_ROOT) + "/" + packageId + ".json";
+}
+
+bool loadPackageState(const std::string& packageId, JsonDocument& doc) {
+  if (!isSafePackageId(packageId)) return false;
+
+  const std::string path = packageStatePath(packageId);
+  if (Storage.exists(path.c_str())) {
+    const String json = Storage.readFile(path.c_str());
+    const DeserializationError error = deserializeJson(doc, json);
+    if (error) {
+      LOG_ERR("MPKG", "Package state read failed for %s: %s", packageId.c_str(), error.c_str());
+      doc.clear();
+    }
+  }
+
+  doc["schemaVersion"] = 1;
+  doc["id"] = packageId;
+  if (!doc["enabled"].is<bool>()) {
+    doc["enabled"] = true;
+  }
+  if (!doc["settings"].is<JsonObject>()) {
+    doc["settings"].to<JsonObject>();
+  }
+  return true;
+}
+
+bool savePackageState(const std::string& packageId, JsonDocument& doc) {
+  if (!isSafePackageId(packageId) || !ensurePackageBaseDirectories()) return false;
+
+  const std::string packagePath = std::string(PACKAGE_ROOT) + "/" + packageId;
+  if (!Storage.exists(packagePath.c_str())) return false;
+
+  doc["schemaVersion"] = 1;
+  doc["id"] = packageId;
+
+  String json;
+  serializeJson(doc, json);
+  const bool saved = Storage.writeFile(packageStatePath(packageId).c_str(), json);
+  if (saved) {
+    markPackageThemeHostDirty();
+  }
+  return saved;
 }
 
 bool arrayContains(JsonVariantConst value, const char* expected) {
@@ -34,6 +91,54 @@ bool arrayContains(JsonVariantConst value, const char* expected) {
 
 bool arrayContainsAny(JsonVariantConst value, const char* first, const char* second) {
   return arrayContains(value, first) || arrayContains(value, second);
+}
+
+std::vector<PackageSettingDefinition> parsePackageSettings(JsonDocument& doc) {
+  std::vector<PackageSettingDefinition> settings;
+  JsonVariant settingsValue = doc["settings"];
+  if (!settingsValue.is<JsonArray>()) return settings;
+
+  for (JsonVariant settingValue : settingsValue.as<JsonArray>()) {
+    if (!settingValue.is<JsonObject>()) continue;
+    JsonObject settingObject = settingValue.as<JsonObject>();
+    if (!settingObject["id"].is<const char*>() || !settingObject["label"].is<const char*>() ||
+        !settingObject["type"].is<const char*>()) {
+      continue;
+    }
+
+    PackageSettingDefinition setting;
+    setting.id = settingObject["id"].as<const char*>();
+    setting.label = settingObject["label"].as<const char*>();
+    const std::string type = settingObject["type"].as<const char*>();
+    if (!isSafeSettingId(setting.id) || setting.label.empty()) continue;
+
+    if (type == "boolean") {
+      setting.type = PackageSettingType::Boolean;
+      setting.defaultBool = settingObject["default"] | false;
+      settings.push_back(std::move(setting));
+      continue;
+    }
+
+    if (type == "enum") {
+      setting.type = PackageSettingType::Enum;
+      JsonVariant options = settingObject["options"];
+      if (!options.is<JsonArray>()) continue;
+      for (JsonVariant option : options.as<JsonArray>()) {
+        if (option.is<const char*>()) {
+          setting.options.push_back(option.as<const char*>());
+        }
+      }
+      if (setting.options.empty()) continue;
+      setting.defaultString =
+          settingObject["default"].is<const char*>() ? settingObject["default"].as<const char*>() : setting.options[0];
+      if (std::find(setting.options.begin(), setting.options.end(), setting.defaultString) == setting.options.end()) {
+        setting.defaultString = setting.options[0];
+      }
+      settings.push_back(std::move(setting));
+    }
+  }
+
+  return settings;
 }
 
 bool parseVersionTriplet(const char* value, int (&parts)[3]) {
@@ -207,7 +312,7 @@ PackageManifest PackageStore::readManifest(const std::string& packageDir, const 
       manifest.permissions.push_back(permission.as<const char*>());
     }
   }
-  manifest.hasSettings = doc["settings"].is<JsonArray>() && doc["settings"].size() > 0;
+  manifest.settings = parsePackageSettings(doc);
   manifest.enabled = readPackageEnabled(manifest.id);
   manifest.compatibilityError = compatibilityError(doc);
   manifest.compatible = manifest.compatibilityError.empty();
@@ -260,46 +365,53 @@ bool ensurePackageBaseDirectories() {
 }
 
 bool readPackageEnabled(const std::string& packageId) {
-  if (!isSafePackageId(packageId)) return false;
-
-  const std::string path = packageStatePath(packageId);
-  if (!Storage.exists(path.c_str())) {
-    return true;
-  }
-
-  const String json = Storage.readFile(path.c_str());
   JsonDocument doc;
-  const DeserializationError error = deserializeJson(doc, json);
-  if (error) {
-    LOG_ERR("MPKG", "Package state read failed for %s: %s", packageId.c_str(), error.c_str());
-    return true;
-  }
-
+  if (!loadPackageState(packageId, doc)) return false;
   return doc["enabled"] | true;
 }
 
 bool setPackageEnabled(const std::string& packageId, const bool enabled) {
-  if (!isSafePackageId(packageId) || !ensurePackageBaseDirectories()) {
-    return false;
-  }
+  JsonDocument doc;
+  if (!loadPackageState(packageId, doc)) return false;
+  doc["enabled"] = enabled;
+  return savePackageState(packageId, doc);
+}
 
-  const std::string packagePath = std::string(PACKAGE_ROOT) + "/" + packageId;
-  if (!Storage.exists(packagePath.c_str())) {
-    return false;
-  }
+bool readPackageSettingBool(const std::string& packageId, const std::string& settingId, const bool defaultValue) {
+  if (!isSafeSettingId(settingId)) return defaultValue;
 
   JsonDocument doc;
-  doc["schemaVersion"] = 1;
-  doc["id"] = packageId;
-  doc["enabled"] = enabled;
+  if (!loadPackageState(packageId, doc)) return defaultValue;
+  JsonVariant value = doc["settings"][settingId.c_str()];
+  return value.is<bool>() ? value.as<bool>() : defaultValue;
+}
 
-  String json;
-  serializeJson(doc, json);
-  const bool saved = Storage.writeFile(packageStatePath(packageId).c_str(), json);
-  if (saved) {
-    markPackageThemeHostDirty();
-  }
-  return saved;
+std::string readPackageSettingString(const std::string& packageId, const std::string& settingId,
+                                     const std::string& defaultValue) {
+  if (!isSafeSettingId(settingId)) return defaultValue;
+
+  JsonDocument doc;
+  if (!loadPackageState(packageId, doc)) return defaultValue;
+  JsonVariant value = doc["settings"][settingId.c_str()];
+  return value.is<const char*>() ? value.as<const char*>() : defaultValue;
+}
+
+bool writePackageSettingBool(const std::string& packageId, const std::string& settingId, const bool value) {
+  if (!isSafeSettingId(settingId)) return false;
+
+  JsonDocument doc;
+  if (!loadPackageState(packageId, doc)) return false;
+  doc["settings"][settingId.c_str()] = value;
+  return savePackageState(packageId, doc);
+}
+
+bool writePackageSettingString(const std::string& packageId, const std::string& settingId, const std::string& value) {
+  if (!isSafeSettingId(settingId)) return false;
+
+  JsonDocument doc;
+  if (!loadPackageState(packageId, doc)) return false;
+  doc["settings"][settingId.c_str()] = value;
+  return savePackageState(packageId, doc);
 }
 
 bool uninstallPackage(const std::string& packageId) {

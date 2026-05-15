@@ -1,172 +1,183 @@
 # Marginalia Firmware
 
-Firmware for the **Xteink X3/X4** e-paper reader platform (unaffiliated with Xteink).
-Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
+Firmware for ESP32-C3-based Xteink X3/X4 e-paper reader devices. Marginalia is a community fork of CrossPoint Reader
+that keeps the reader base and adds a package ecosystem for modules, themes, sleep-screen experiences, integrations,
+and standalone apps.
 
-Marginalia is a fork of CrossPoint Reader that keeps the reader base and adds a package ecosystem for modules,
-themes, sleep-screen experiences, integrations, and standalone apps.
+Marginalia is not affiliated with Xteink or any device manufacturer.
 
-![](./docs/images/cover.jpg)
+![Marginalia firmware running on Xteink device](./docs/images/cover.jpg)
 
-## Motivation
+## What Marginalia Does
 
-E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited
-customisation. Marginalia keeps the reader experience fast and local while opening the device to a package ecosystem
-that community members can extend without touching the core firmware every time.
+- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter
+  navigation, footnotes, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync, and
+  more.
+- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
+- **Screenshots**.
+- **Custom fonts**: install your favorite fonts on the SD card.
+- **Tilt page turn** on X3.
+- **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, and SD-cache management.
+- **Wireless workflows**: file transfer web UI, EPUB optimizer, web settings UI/API, WebSocket fast uploads, WebDAV,
+  AP/STA Wi-Fi modes with QR helpers, Calibre wireless connect flow, OPDS browsing, and OTA updates.
+- **Customization**: themes, sleep screen modes, front/side button remapping, status bar controls, power-button
+  behavior, refresh cadence, and more.
+- **Extensions**: side-loaded package folders and SDK-built `.mpkg.zip` archives with a manifest, compatibility model,
+  hub catalog path, lifecycle state, and extension settings.
+- **Localization**: 22 UI languages and counting.
 
-Marginalia aims to:
-* Provide a **reader-first firmware base** for Xteink hardware.
-* Support **side-loaded packages** with a clear manifest and compatibility model.
-* Keep the core stable while allowing themes, sleep screens, integrations, and apps to evolve independently.
-* Stay portable enough that future boards can be added without redesigning the ecosystem.
+Coming soon:
 
-This project is **not affiliated with Xteink**; it's a community fork of CrossPoint.
-
-## Features & Usage
-
-- [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
-- [x] Image support within EPUB
-- [x] Saved reading position
-- [x] File explorer with file picker
-  - [x] Basic EPUB picker from root directory
-  - [x] Support nested folders
-  - [ ] EPUB picker with cover art
-- [x] Custom sleep screen
-  - [x] Cover sleep screen
-- [x] Wifi book upload
-- [x] Wifi OTA updates
-- [x] KOReader Sync integration for cross-device reading progress
-- [x] Configurable font, layout, and display options
-  - [ ] User provided fonts
-  - [ ] Full UTF support
-- [x] Screen rotation
-
-Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
+- RTL support for Arabic, Hebrew, and Farsi.
+- Bookmarks.
+- Dictionary lookup.
+- More themes.
 
 See [the user guide](./USER_GUIDE.md) for instructions on operating Marginalia, including the
 [KOReader Sync quick setup](./USER_GUIDE.md#367-koreader-sync-quick-setup).
 
-For more details about Marginalia's reader-first package direction, see [SCOPE.md](SCOPE.md). Ecosystem notes live
-under `docs/marginalia/`.
+For more details about Marginalia's reader-first package direction, see [SCOPE.md](SCOPE.md). Ecosystem notes live under
+`docs/marginalia/`.
 
-## Installing
+## USB-Locked Devices
 
-### Web (latest firmware)
+Some Xteink units purchased from third-party stores, including some AliExpress units, ship with USB flashing locked from
+the factory. If your device is locked, you may need the **Xteink Unlocker** tool at
+https://crosspointreader.com/#unlock-tool before USB flashing works.
 
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
-2. Go to https://xteink.dve.al/ and click "Flash Marginalia firmware"
+You do not need this tool if you bought your device directly from xteink.com. Those units are not locked.
 
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
+Not sure if your device is locked? Power it on, connect the USB-C cable, and try flashing via the web flasher first. If
+the browser's serial device picker does not show your device, try a different USB port or browser before assuming the
+device is locked.
 
-### Web (specific firmware version)
+The unlocker is maintained by the CrossPoint project and its officially supported firmware choices may differ from this
+fork. Do not flash firmware without a working OTA or recovery path on a USB-locked device.
 
-1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/marginalia-os/marginalia-firmware/releases)
-3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
+## Install Firmware
 
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
+### Web Installer
 
-### Command line (specific firmware version)
+1. Connect your device to your computer via USB-C and wake/unlock the device.
+2. Download the `firmware.bin` file from the release or build artifact you want to install.
+3. Go to https://xteink.dve.al/ and flash the firmware file using the OTA fast flash controls.
 
-1. Install [`esptool`](https://github.com/espressif/esptool) :
+### Command Line
+
+1. Install [`esptool`](https://github.com/espressif/esptool):
+
 ```bash
 pip install esptool
 ```
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/marginalia-os/marginalia-firmware/releases)
-3. Connect your Xteink X4 to your computer via USB-C.
-4. Note the device location. On Linux, run `dmesg` after connecting. On MacOS, run :
+
+2. Download the `firmware.bin` file from the release or build artifact you want to install.
+3. Connect your device via USB-C.
+4. Find the device port. On Linux, run `dmesg` after connecting. On macOS:
+
 ```bash
 log stream --predicate 'subsystem == "com.apple.iokit"' --info
 ```
-5. Flash the firmware :
+
+5. Flash:
+
 ```bash
 esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 /path/to/firmware.bin
 ```
-Change `/dev/ttyACM0` to the device for your system.
 
-### Manual
+Adjust `/dev/ttyACM0` to match your system.
 
-See [Development](#development) below.
+### Revert to Official Firmware
 
-## Development
+To revert to the official firmware, flash the latest official firmware from https://xteink.dve.al/, or swap back to the
+other partition using the "Swap boot partition" button at https://xteink.dve.al/debug.
+
+## Documentation
+
+- [User Guide](./USER_GUIDE.md)
+- [Web server usage](./docs/webserver.md)
+- [Web server endpoints](./docs/webserver-endpoints.md)
+- [Project scope](./SCOPE.md)
+- [Contributing docs](./docs/contributing/README.md)
+
+## Development Quick Start
 
 ### Prerequisites
 
-* **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Python 3.8+
-* USB-C cable for flashing the ESP32-C3
-* Xteink X4
+- [pioarduino](https://github.com/pioarduino/pioarduino) or VS Code + pioarduino plugin
+- Python 3.8+
+- `clang-format` 21
+- USB-C cable supporting data transfer
 
-### Checking out the code
+### Setup
 
-Marginalia uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
-
-```
+```bash
 git clone --recursive https://github.com/marginalia-os/marginalia-firmware
+cd marginalia-firmware
 
-# Or, if you've already cloned without --recursive:
+# if cloned without --recursive:
 git submodule update --init --recursive
 ```
 
-### Flashing your device
+### Build / Flash / Monitor
 
-Connect your Xteink X4 to your computer via USB-C and run the following command.
-
-```sh
+```bash
 pio run --target upload
 ```
+
+### Contributor Pre-PR Checks
+
+```bash
+./bin/clang-format-fix
+pio check -e default
+pio run -e default
+```
+
 ### Debugging
 
-After flashing the new features, it’s recommended to capture detailed logs from the serial port.
+After flashing new features, it is useful to capture detailed logs from the serial port.
 
-First, make sure all required Python packages are installed:
+First, install the required Python packages:
 
-```python
+```bash
 python3 -m pip install pyserial colorama matplotlib
 ```
-after that run the script:
+
+Then run the script:
+
 ```sh
-# For Linux
-# This was tested on Debian and should work on most Linux systems.
+# Linux
 python3 scripts/debugging_monitor.py
 
-# For macOS
+# macOS
 python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
 ```
+
 Minor adjustments may be required for Windows.
 
 ## Internals
 
-Marginalia is still aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only
-has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware are
-still based on this constraint.
+Marginalia is aggressive about caching data to the SD card to minimize RAM usage. The ESP32-C3 only has roughly 380KB of
+usable RAM, so firmware design still needs to respect that constraint.
 
-### Data caching
+### Data Caching
 
-The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the 
-cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
+The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the cache.
+This cache directory exists at `.crosspoint` on the SD card:
 
-
-```
+```text
 .crosspoint/
-├── epub_12471232/       # Each EPUB is cached to a subdirectory named `epub_<hash>`
-│   ├── progress.bin     # Stores reading progress (chapter, page, etc.)
-│   ├── cover.bmp        # Book cover image (once generated)
-│   ├── book.bin         # Book metadata (title, author, spine, table of contents, etc.)
-│   └── sections/        # All chapter data is stored in the sections subdirectory
-│       ├── 0.bin        # Chapter data (screen count, all text layout info, etc.)
-│       ├── 1.bin        #     files are named by their index in the spine
+├── epub_<hash>/         # one directory per book, named by content hash
+│   ├── progress.bin     # reading position: chapter, page, etc.
+│   ├── cover.bmp        # generated cover image
+│   ├── book.bin         # metadata: title, author, spine, TOC
+│   └── sections/        # per-chapter layout cache
+│       ├── 0.bin
+│       ├── 1.bin
 │       └── ...
-│
-└── epub_189013891/
 ```
 
-Deleting the `.crosspoint` directory will clear the entire cache. 
-
-Due the way it's currently implemented, the cache is not automatically cleared when a book is deleted and moving a book
-file will use a new cache directory, resetting the reading progress.
+Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. The cache is not cleared
+automatically when you delete a book, and moving a file to a new path resets its reading progress.
 
 ### Packages
 
@@ -179,28 +190,15 @@ For more details on the internal file structures, see the [file formats document
 
 ## Contributing
 
-Contributions are very welcome!
-
-If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
-
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/marginalia-os/marginalia-firmware/discussions/categories/ideas).
-If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
+Contributions are welcome. If you are new to the codebase, start with the
+[contributing docs](./docs/contributing/README.md). For things to work on, check the
+[ideas discussion board](https://github.com/marginalia-os/marginalia-firmware/discussions/categories/ideas) and leave a
+comment before starting so work is not duplicated.
 
 For the ecosystem direction, start with [docs/marginalia/architecture.md](./docs/marginalia/architecture.md).
 
-Everyone here is a volunteer, so please be respectful and patient. For more details on our governance and community 
-principles, please see [GOVERNANCE.md](GOVERNANCE.md).
+Everyone here is a volunteer, so please be respectful and patient. For governance and community expectations, see
+[GOVERNANCE.md](./GOVERNANCE.md).
 
-### To submit a contribution:
-
-1. Fork the repo
-2. Create a branch (`feature/dithering-improvement`)
-3. Make changes
-4. Submit a PR
-
----
-
-Marginalia is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
-
-Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
-was making CrossPoint and now Marginalia.
+Huge shoutout to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader), which inspired CrossPoint
+and therefore this fork.

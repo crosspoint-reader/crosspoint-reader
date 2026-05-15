@@ -57,7 +57,7 @@ void reloadThemeState() {
     }
 
     const std::string path = packageThemePath(package);
-    if (themeDescriptorEnablesInvert(path)) {
+    if (themeDescriptorEnablesInvert(path) && readPackageSettingBool(package.id, "invertScreen", true)) {
       invertDisplay = true;
       LOG_DBG("MPKG", "Enabled OS invert theme from package: %s", package.id.c_str());
       break;

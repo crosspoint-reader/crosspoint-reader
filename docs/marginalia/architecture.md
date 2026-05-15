@@ -124,6 +124,44 @@ package is enabled, lives in `package-state/` so package upgrades can replace fi
 Runtime loading, app launching, and permission enforcement should build on top of this store instead of introducing a
 second package location.
 
+## Package Settings
+
+Package settings are declared by the package manifest and stored by firmware as user state. This keeps extension
+configuration in the same place as the rest of the extension lifecycle: the user opens **Extensions**, selects a package,
+and configures package-owned settings from the package detail screen.
+
+Manifest-declared settings are small typed values:
+
+```json
+{
+  "settings": [
+    {
+      "id": "invertScreen",
+      "label": "Invert screen",
+      "type": "boolean",
+      "default": true
+    }
+  ]
+}
+```
+
+Firmware persists values in `/.marginalia/package-state/<package-id>.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "org.marginalia.examples.dark-mode",
+  "enabled": true,
+  "settings": {
+    "invertScreen": true
+  }
+}
+```
+
+The state file is not part of the package archive. Package upgrades must preserve existing state, including unknown
+future settings, while new installs fall back to manifest defaults. Runtime hosts should read settings through
+`PackageStore` helpers rather than parsing state files directly.
+
 ## Compatibility Gate
 
 Manifest `target` metadata is optional for early local packages. When present, firmware evaluates it before install and

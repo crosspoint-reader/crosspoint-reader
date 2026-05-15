@@ -3,9 +3,11 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <memory>
 #include <utility>
 
 #include "MappedInputManager.h"
+#include "PackageSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "marginalia/PackageThemeHost.h"
@@ -78,8 +80,9 @@ void PackageDetailActivity::rebuildRows() {
   rows_.clear();
   rows_.push_back(
       {StrId::STR_ENABLED, package_.enabled ? tr(STR_ENABLED) : tr(STR_DISABLED), RowAction::ToggleEnabled});
-  rows_.push_back({StrId::STR_SETTINGS_TITLE, package_.hasSettings ? tr(STR_CONFIGURE) : tr(STR_NO_EXTENSION_SETTINGS),
-                   RowAction::Settings});
+  rows_.push_back({StrId::STR_SETTINGS_TITLE,
+                   package_.settings.empty() ? tr(STR_NO_EXTENSION_SETTINGS) : tr(STR_CONFIGURE),
+                   package_.settings.empty() ? RowAction::None : RowAction::Settings});
   rows_.push_back(
       {StrId::STR_PERMISSIONS,
        package_.permissions.empty() ? std::string(tr(STR_NO_PERMISSIONS)) : joinValues(package_.permissions),
@@ -101,6 +104,9 @@ void PackageDetailActivity::handleSelection() {
       rebuildRows();
       requestUpdate();
     }
+  } else if (row.action == RowAction::Settings) {
+    auto resultHandler = [this](const ActivityResult&) { requestUpdate(); };
+    startActivityForResult(std::make_unique<PackageSettingsActivity>(renderer, mappedInput, package_), resultHandler);
   }
 }
 
