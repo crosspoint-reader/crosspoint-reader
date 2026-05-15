@@ -77,6 +77,21 @@ Package kinds:
 - `integration`
 - `app`
 
+## Local Package Store
+
+The firmware scans packages from the SD card:
+
+```text
+/.marginalia/
+└── packages/
+    └── <package-id>/
+        └── manifest.json
+```
+
+The first firmware implementation only discovers and displays valid manifests in Settings. Runtime loading, install
+transactions, app launching, and permission enforcement should build on top of this store instead of introducing a
+second package location.
+
 ## Manifest v1
 
 ```json
