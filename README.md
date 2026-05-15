@@ -46,8 +46,8 @@ Multi-language support: Read EPUBs in various languages, including English, Span
 See [the user guide](./USER_GUIDE.md) for instructions on operating Marginalia, including the
 [KOReader Sync quick setup](./USER_GUIDE.md#367-koreader-sync-quick-setup).
 
-For more details about the legacy CrossPoint base, see the [SCOPE.md](SCOPE.md) document. Marginalia-specific
-ecosystem notes live under `docs/marginalia/`.
+For more details about Marginalia's reader-first package direction, see [SCOPE.md](SCOPE.md). Ecosystem notes live
+under `docs/marginalia/`.
 
 ## Installing
 
@@ -167,6 +167,12 @@ Deleting the `.crosspoint` directory will clear the entire cache.
 
 Due the way it's currently implemented, the cache is not automatically cleared when a book is deleted and moving a book
 file will use a new cache directory, resetting the reading progress.
+
+### Packages
+
+Marginalia scans side-loaded packages from `/.marginalia/packages/*/manifest.json` on the SD card. The current firmware
+shows valid manifests in **Settings → System → Packages** as a read-only package list. Runtime hooks and app launching
+will be added on top of this store instead of being mixed into the first manifest scanner.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 

@@ -16,7 +16,7 @@ This document show most common issues and possible solutions while using the dev
 
 1. Verify both devices are on the **same WiFi network**
    - Check your computer/phone WiFi settings
-   - Confirm the CrossPoint Reader shows "Connected" status
+   - Confirm Marginalia shows "Connected" status
 2. Double-check the IP address
    - Make sure you typed it correctly
    - Include `http://` at the beginning
