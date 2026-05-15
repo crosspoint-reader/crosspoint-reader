@@ -197,7 +197,9 @@ void ensureSdFontLoadedForPath(const char* path) {
     ensureSdFontLoaded();
     return;
   }
-  const bool isTxtMd = FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path);
+  const std::string_view filePath(path);
+  const bool isTxtMd = static_cast<bool (*)(std::string_view)>(FsHelpers::hasTxtExtension)(filePath) ||
+                       static_cast<bool (*)(std::string_view)>(FsHelpers::hasMarkdownExtension)(filePath);
   if (isTxtMd) {
     sdFontSystem.ensureLoaded(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontSize);
   } else {
