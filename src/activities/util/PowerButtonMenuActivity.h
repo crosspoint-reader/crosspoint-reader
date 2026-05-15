@@ -15,7 +15,7 @@ class PowerButtonMenuActivity final : public Activity {
   explicit PowerButtonMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("PowerButtonMenu", renderer, mappedInput) {}
 
-  static bool isActive() { return s_isActive; }
+  static bool isActive();
 
   void onEnter() override;
   void onExit() override;

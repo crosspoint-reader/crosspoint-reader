@@ -10,6 +10,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+bool PowerButtonMenuActivity::isActive() { return s_isActive; }
+
 void PowerButtonMenuActivity::onEnter() {
   Activity::onEnter();
   s_isActive = true;
