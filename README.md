@@ -1,27 +1,26 @@
-# CrossPoint Reader
+# Marginalia Firmware
 
-Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
+Firmware for the **Xteink X3/X4** e-paper reader platform (unaffiliated with Xteink).
 Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
 
-CrossPoint Reader is a purpose-built firmware designed to be a drop-in, fully open-source replacement for the official 
-Xteink firmware. It aims to match or improve upon the standard EPUB reading experience.
+Marginalia is a fork of CrossPoint Reader that keeps the reader base and adds a package ecosystem for modules,
+themes, sleep-screen experiences, integrations, and standalone apps.
 
 ![](./docs/images/cover.jpg)
 
 ## Motivation
 
-E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited 
-customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
-CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truly unlock the device's
-potential.
+E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited
+customisation. Marginalia keeps the reader experience fast and local while opening the device to a package ecosystem
+that community members can extend without touching the core firmware every time.
 
-CrossPoint Reader aims to:
-* Provide a **fully open-source alternative** to the official firmware.
-* Offer a **document reader** capable of handling EPUB content on constrained hardware.
-* Support **customisable font, layout, and display** options.
-* Run purely on the **Xteink X4 hardware**.
+Marginalia aims to:
+* Provide a **reader-first firmware base** for Xteink hardware.
+* Support **side-loaded packages** with a clear manifest and compatibility model.
+* Keep the core stable while allowing themes, sleep screens, integrations, and apps to evolve independently.
+* Stay portable enough that future boards can be added without redesigning the ecosystem.
 
-This project is **not affiliated with Xteink**; it's built as a community project.
+This project is **not affiliated with Xteink**; it's a community fork of CrossPoint.
 
 ## Features & Usage
 
@@ -44,17 +43,18 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 
 Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
 
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, including the
+See [the user guide](./USER_GUIDE.md) for instructions on operating Marginalia, including the
 [KOReader Sync quick setup](./USER_GUIDE.md#367-koreader-sync-quick-setup).
 
-For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
+For more details about the legacy CrossPoint base, see the [SCOPE.md](SCOPE.md) document. Marginalia-specific
+ecosystem notes live under `docs/marginalia/`.
 
 ## Installing
 
 ### Web (latest firmware)
 
 1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
-2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
+2. Go to https://xteink.dve.al/ and click "Flash Marginalia firmware"
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
 back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
@@ -62,7 +62,7 @@ back to the other partition using the "Swap boot partition" button here https://
 ### Web (specific firmware version)
 
 1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
+2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/marginalia-os/marginalia-firmware/releases)
 3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
@@ -74,7 +74,7 @@ back to the other partition using the "Swap boot partition" button here https://
 ```bash
 pip install esptool
 ```
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
+2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/marginalia-os/marginalia-firmware/releases)
 3. Connect your Xteink X4 to your computer via USB-C.
 4. Note the device location. On Linux, run `dmesg` after connecting. On MacOS, run :
 ```bash
@@ -101,10 +101,10 @@ See [Development](#development) below.
 
 ### Checking out the code
 
-CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
+Marginalia uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
 
 ```
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
+git clone --recursive https://github.com/marginalia-os/marginalia-firmware
 
 # Or, if you've already cloned without --recursive:
 git submodule update --init --recursive
@@ -139,9 +139,9 @@ Minor adjustments may be required for Windows.
 
 ## Internals
 
-CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only
-has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based
-on this constraint.
+Marginalia is still aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only
+has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware are
+still based on this constraint.
 
 ### Data caching
 
@@ -176,8 +176,10 @@ Contributions are very welcome!
 
 If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
 
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
+If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/marginalia-os/marginalia-firmware/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
+
+For the ecosystem direction, start with [docs/marginalia/architecture.md](./docs/marginalia/architecture.md).
 
 Everyone here is a volunteer, so please be respectful and patient. For more details on our governance and community 
 principles, please see [GOVERNANCE.md](GOVERNANCE.md).
@@ -191,7 +193,7 @@ principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
+Marginalia is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
 
 Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
-was making CrossPoint.
+was making CrossPoint and now Marginalia.
