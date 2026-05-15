@@ -14,30 +14,27 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 27;
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) +   // SECTION_FILE_VERSION
-                                 sizeof(int) +       // fontId
-                                 sizeof(float) +     // lineCompression
-                                 sizeof(bool) +      // extraParagraphSpacing
-                                 sizeof(uint8_t) +   // paragraphAlignment
-                                 sizeof(uint16_t) +  // viewportWidth
-                                 sizeof(uint16_t) +  // viewportHeight
-                                 sizeof(bool) +      // parseComplete
-                                 sizeof(uint16_t) +  // pageCount (stored as 16-bit in header)
-                                 sizeof(bool) +      // hyphenationEnabled
-                                 sizeof(bool) +      // embeddedStyle
-                                 sizeof(bool) +      // bionicReadingEnabled
-                                 sizeof(uint8_t) +   // imageRendering
-                                 sizeof(uint32_t) +  // page LUT offset
-                                 sizeof(uint32_t) +  // anchor map offset
-                                 sizeof(uint32_t);   // paragraph LUT offset
+constexpr uint8_t SECTION_FILE_VERSION = 28;
 
-constexpr uint32_t HEADER_TAIL_PARSE_COMPLETE_OFFSET =
-    HEADER_SIZE - sizeof(uint32_t) * 3 - sizeof(uint16_t) - sizeof(bool);
-constexpr uint32_t HEADER_TAIL_PAGE_COUNT_OFFSET = HEADER_SIZE - sizeof(uint32_t) * 3 - sizeof(uint16_t);
-constexpr uint32_t HEADER_TAIL_PAGE_LUT_OFFSET = HEADER_SIZE - sizeof(uint32_t) * 3;
-constexpr uint32_t HEADER_TAIL_ANCHOR_OFFSET = HEADER_SIZE - sizeof(uint32_t) * 2;
-constexpr uint32_t HEADER_TAIL_PARAGRAPH_LUT_OFFSET = HEADER_SIZE - sizeof(uint32_t);
+namespace header {
+constexpr uint32_t kVersion = 0;
+constexpr uint32_t kFontId = kVersion + sizeof(uint8_t);
+constexpr uint32_t kLineCompression = kFontId + sizeof(int);
+constexpr uint32_t kExtraParagraphSpacing = kLineCompression + sizeof(float);
+constexpr uint32_t kParagraphAlignment = kExtraParagraphSpacing + sizeof(bool);
+constexpr uint32_t kViewportWidth = kParagraphAlignment + sizeof(uint8_t);
+constexpr uint32_t kViewportHeight = kViewportWidth + sizeof(uint16_t);
+constexpr uint32_t kHyphenationEnabled = kViewportHeight + sizeof(uint16_t);
+constexpr uint32_t kEmbeddedStyle = kHyphenationEnabled + sizeof(bool);
+constexpr uint32_t kBionicReadingEnabled = kEmbeddedStyle + sizeof(bool);
+constexpr uint32_t kImageRendering = kBionicReadingEnabled + sizeof(bool);
+constexpr uint32_t kParseComplete = kImageRendering + sizeof(uint8_t);
+constexpr uint32_t kPageCount = kParseComplete + sizeof(bool);
+constexpr uint32_t kPageLut = kPageCount + sizeof(uint16_t);
+constexpr uint32_t kAnchorMap = kPageLut + sizeof(uint32_t);
+constexpr uint32_t kParagraphLut = kAnchorMap + sizeof(uint32_t);
+constexpr uint32_t kSize = kParagraphLut + sizeof(uint32_t);
+}  // namespace header
 
 // On-disk paragraph LUT entry: u32 xhtmlByteOffset + u16 paragraphIndex + u16 listItemIndex.
 // listItemIndex is the running <li> count at page-break time; together with
@@ -217,11 +214,12 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
     LOG_DBG("SCT", "File not open for writing header");
     return;
   }
-  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
-                                   sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
-                                   sizeof(viewportHeight) + sizeof(bool) + sizeof(pageCount) +
-                                   sizeof(hyphenationEnabled) + sizeof(embeddedStyle) + sizeof(bionicReadingEnabled) +
-                                   sizeof(imageRendering) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+  static_assert(header::kSize == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
+                                     sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) +
+                                     sizeof(viewportWidth) + sizeof(viewportHeight) + sizeof(hyphenationEnabled) +
+                                     sizeof(embeddedStyle) + sizeof(bionicReadingEnabled) + sizeof(imageRendering) +
+                                     sizeof(bool) + sizeof(pageCount) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                     sizeof(uint32_t),
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
@@ -338,8 +336,8 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
   for (uint32_t& pos : lut) {
     serialization::readPod(file, pos);
-    if (pos < HEADER_SIZE || pos >= lutOffset) {
-      LOG_ERR("SCT", "Deserialization failed: LUT entry %u out of range [%u, %u)", pos, HEADER_SIZE, lutOffset);
+    if (pos < header::kSize || pos >= lutOffset) {
+      LOG_ERR("SCT", "Deserialization failed: LUT entry %u out of range [%u, %u)", pos, header::kSize, lutOffset);
       clearCache();
       return false;
     }
@@ -572,9 +570,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   // Patch header with final parseComplete/pageCount and offsets.
-  const size_t headerPatchStart = HEADER_TAIL_PARSE_COMPLETE_OFFSET;
+  const size_t headerPatchStart = header::kParseComplete;
   if (!file.seek(headerPatchStart)) {
-    LOG_ERR("SCT", "Failed to seek to section header patch offset %u", HEADER_TAIL_PARSE_COMPLETE_OFFSET);
+    LOG_ERR("SCT", "Failed to seek to section header patch offset %u", header::kParseComplete);
     file.close();
     Storage.remove(filePath.c_str());
     return false;
@@ -730,8 +728,7 @@ void Section::buildTocBoundariesFromFile(FsFile& f) {
 
   // Single pass through on-disk anchors, matching against cached TOC anchors.
   // Stop early once all TOC anchors are resolved.
-  // Header layout: ... | lutOffset (u32) | anchorMapOffset (u32) | paragraphLutOffset (u32) |
-  f.seek(HEADER_TAIL_ANCHOR_OFFSET);
+  f.seek(header::kAnchorMap);
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
 
@@ -801,7 +798,7 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   }
 
   const uint32_t fileSize = f.size();
-  f.seek(HEADER_TAIL_ANCHOR_OFFSET);
+  f.seek(header::kAnchorMap);
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
   if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
@@ -834,7 +831,7 @@ bool Section::readParagraphLutHeader(FsFile& outFile, uint16_t& outCount, uint32
 
   const uint32_t fileSize = outFile.size();
 
-  outFile.seek(HEADER_TAIL_PARAGRAPH_LUT_OFFSET);
+  outFile.seek(header::kParagraphLut);
   uint32_t paragraphLutOffset;
   serialization::readPod(outFile, paragraphLutOffset);
   if (fileSize < sizeof(uint16_t) || paragraphLutOffset == 0 || paragraphLutOffset > fileSize - sizeof(uint16_t)) {

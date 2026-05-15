@@ -68,15 +68,7 @@ std::string gridThumbPath(const std::string& coverBmpPath, int tw, int th) {
 }
 }  // namespace
 
-void RecentBooksActivity::loadRecentBooks() {
-  recentBooks.clear();
-  const auto& books = RECENT_BOOKS.getBooks();
-  recentBooks.reserve(books.size());
-  for (const auto& book : books) {
-    if (!Storage.exists(book.path.c_str())) continue;
-    recentBooks.push_back(book);
-  }
-}
+void RecentBooksActivity::loadRecentBooks() { recentBooks = RECENT_BOOKS.getBooks(); }
 
 bool RecentBooksActivity::loadNextCover() {
   const Rect contentRect = UITheme::getContentRect(renderer, true, true);
@@ -133,6 +125,10 @@ bool RecentBooksActivity::loadNextCover() {
 
 void RecentBooksActivity::onEnter() {
   Activity::onEnter();
+
+  if (RECENT_BOOKS.pruneMissing()) {
+    RECENT_BOOKS.saveToFile();
+  }
 
   loadRecentBooks();
 

@@ -15,6 +15,7 @@
 
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
+#include "HttpFileStreamer.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontGlobals.h"
 #include "SdCardFontRegistry.h"
@@ -681,27 +682,12 @@ void CrossPointWebServer::handleDownload() const {
   server->send(200, contentType.c_str(), "");
 
   NetworkClient client = server->client();
-  const size_t chunkSize = 4096;
-  uint8_t buffer[chunkSize];
-
-  bool downloadOk = true;
-  while (downloadOk && file.available()) {
-    int result = file.read(buffer, chunkSize);
-    if (result <= 0) break;
-    size_t bytesRead = static_cast<size_t>(result);
-    size_t totalWritten = 0;
-    while (totalWritten < bytesRead) {
-      esp_task_wdt_reset();
-      size_t wrote = client.write(buffer + totalWritten, bytesRead - totalWritten);
-      if (wrote == 0) {
-        downloadOk = false;
-        break;
-      }
-      totalWritten += wrote;
-    }
-  }
+  bool downloadOk = HttpFileStreamer::streamFileToClient(file, client);
   client.clear();
-  file.close();
+
+  if (!downloadOk) {
+    LOG_DBG("WEB", "Download interrupted while streaming: %s", itemPath.c_str());
+  }
 }
 
 // Diagnostic counters for upload performance analysis
