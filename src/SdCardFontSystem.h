@@ -19,6 +19,10 @@ class SdCardFontSystem {
   /// Call before entering the reader or after settings change.
   void ensureLoaded(GfxRenderer& renderer);
 
+  /// Ensure the correct SD font family is loaded for an explicit family + size.
+  /// Used when the reader type determines which settings field to consult.
+  void ensureLoaded(GfxRenderer& renderer, const char* familyName, uint8_t fontSizeEnum);
+
   /// Resolve an SD card font ID from family name + fontSize enum.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t fontSizeEnum) const;

@@ -273,7 +273,7 @@ void TxtReaderActivity::initializeReader() {
   }
 
   // Store current settings for cache validation
-  cachedFontId = SETTINGS.getReaderFontId();
+  cachedFontId = SETTINGS.getTxtReaderFontId();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
@@ -710,7 +710,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   }
 
   // Compute layout values that match what initializeReader() produces
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = SETTINGS.getTxtReaderFontId();
   const uint8_t screenMargin = SETTINGS.screenMargin;
   const uint8_t paragraphAlignment = SETTINGS.paragraphAlignment;
 

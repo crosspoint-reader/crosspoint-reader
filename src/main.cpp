@@ -2,6 +2,7 @@
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
@@ -190,6 +191,21 @@ void setupDisplayAndFonts() {
 // Defined here to satisfy SdCardFontGlobals.h's extern declaration. Keeps
 // activity-side callers out of SdCardFontSystem internals.
 void ensureSdFontLoaded() { sdFontSystem.ensureLoaded(renderer); }
+
+void ensureSdFontLoadedForPath(const char* path) {
+  if (!path) {
+    ensureSdFontLoaded();
+    return;
+  }
+  const std::string_view filePath(path);
+  const bool isTxtMd = static_cast<bool (*)(std::string_view)>(FsHelpers::hasTxtExtension)(filePath) ||
+                       static_cast<bool (*)(std::string_view)>(FsHelpers::hasMarkdownExtension)(filePath);
+  if (isTxtMd) {
+    sdFontSystem.ensureLoaded(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontSize);
+  } else {
+    sdFontSystem.ensureLoaded(renderer, SETTINGS.sdFontFamilyName, SETTINGS.fontSize);
+  }
+}
 
 void setup() {
   {

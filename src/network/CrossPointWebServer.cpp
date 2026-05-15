@@ -1257,10 +1257,10 @@ void CrossPointWebServer::handleGetSettings() const {
   for (const auto& sBase : settings) {
     if (!sBase.key) continue;  // Skip ACTION-only entries
 
-    // Enrich the font-family entry with current SD card families.
+    // Enrich font-family entries with current SD card families.
     SettingInfo sLocal;
     const SettingInfo* sPtr = &sBase;
-    if (std::strcmp(sBase.key, "fontFamily") == 0) {
+    if (sBase.key && (std::strcmp(sBase.key, "fontFamily") == 0 || std::strcmp(sBase.key, "txtFontFamily") == 0)) {
       sLocal = sBase;
       const uint8_t n = fontFamilyOptionCount();
       sLocal.enumLabels.clear();
@@ -1380,9 +1380,11 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        // For fontFamily the enumLabels in the static list are empty by design
+        // For font-family keys the enumLabels in the static list are empty by design
         // (built lazily by handleGetSettings); use the dynamic option count instead.
-        const int count = (std::strcmp(s.key, "fontFamily") == 0)
+        const bool isFontFamilyKey =
+            s.key && (std::strcmp(s.key, "fontFamily") == 0 || std::strcmp(s.key, "txtFontFamily") == 0);
+        const int count = isFontFamilyKey
                               ? static_cast<int>(fontFamilyOptionCount())
                               : static_cast<int>(s.enumLabels.empty() ? s.enumValues.size() : s.enumLabels.size());
         if (val >= 0 && val < count) {

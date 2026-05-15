@@ -16,6 +16,7 @@ class SettingsSubmenuActivity final : public MenuListActivity {
 
   // MenuListActivity overrides
   void onEnter() override;
+  void toggleCurrentItem() override;
   void onActionSelected(int index) override;
   void onSettingToggled(int index) override;
   std::string getItemValueString(int index) const override;

@@ -54,6 +54,33 @@ void fontFamilyDynamicSetter(void* /*ctx*/, uint8_t value) {
   }
 }
 
+uint8_t txtFontFamilyDynamicGetter(const void* /*ctx*/) {
+  if (SETTINGS.txtSdFontFamilyName[0] != '\0') {
+    const auto& families = sdFontSystem.registry().getFamilies();
+    for (size_t i = 0; i < families.size(); i++) {
+      if (families[i].name == SETTINGS.txtSdFontFamilyName) {
+        return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + i);
+      }
+    }
+  }
+  return SETTINGS.txtFontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? SETTINGS.txtFontFamily
+                                                                         : CrossPointSettings::NOTOSANS;
+}
+
+void txtFontFamilyDynamicSetter(void* /*ctx*/, uint8_t value) {
+  if (value < CrossPointSettings::BUILTIN_FONT_COUNT) {
+    SETTINGS.txtFontFamily = value;
+    SETTINGS.txtSdFontFamilyName[0] = '\0';
+    return;
+  }
+  const auto& families = sdFontSystem.registry().getFamilies();
+  uint8_t sdIdx = value - CrossPointSettings::BUILTIN_FONT_COUNT;
+  if (sdIdx < families.size()) {
+    strncpy(SETTINGS.txtSdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.txtSdFontFamilyName) - 1);
+    SETTINGS.txtSdFontFamilyName[sizeof(SETTINGS.txtSdFontFamilyName) - 1] = '\0';
+  }
+}
+
 uint8_t fontFamilyOptionCount() {
   return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + sdFontSystem.registry().getFamilies().size());
 }
@@ -150,6 +177,36 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
 static uint8_t targetPtSizeFromEnum(uint8_t fontSizeEnum) {
   if (fontSizeEnum >= sizeof(FONT_SIZE_TO_PT)) fontSizeEnum = 1;  // default to MEDIUM
   return FONT_SIZE_TO_PT[fontSizeEnum];
+}
+
+void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFamily, uint8_t fontSizeEnum) {
+  const std::string& currentFamily = manager_.currentFamilyName();
+  const uint8_t targetPt = targetPtSizeFromEnum(fontSizeEnum);
+
+  if (!wantedFamily || wantedFamily[0] == '\0') {
+    if (!currentFamily.empty()) manager_.unloadAll(renderer);
+    return;
+  }
+
+  bool familyMatches = (currentFamily == wantedFamily);
+  if (familyMatches) {
+    const auto* family = registry_.findFamily(wantedFamily);
+    if (!family) {
+      manager_.unloadAll(renderer);
+      return;
+    }
+    const auto* best = family->pickClosestSize(targetPt);
+    if (best && best->pointSize == manager_.currentPointSize()) return;
+  }
+
+  if (!currentFamily.empty()) manager_.unloadAll(renderer);
+
+  const auto* family = registry_.findFamily(wantedFamily);
+  if (family) {
+    if (!manager_.loadFamily(*family, renderer, targetPt)) {
+      LOG_ERR("SDFS", "Failed to load SD font family: %s", wantedFamily);
+    }
+  }
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t fontSizeEnum) const {

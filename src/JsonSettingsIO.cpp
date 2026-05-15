@@ -213,6 +213,11 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
   }
+  // TXT/MD font family also uses DynamicEnumCtx (no valuePtr); save manually.
+  doc["txtFontFamily"] = s.txtFontFamily;
+  if (s.txtSdFontFamilyName[0] != '\0') {
+    doc["txtSdFontFamilyName"] = s.txtSdFontFamilyName;
+  }
   doc["moveFinishedBooksToCompleted"] = s.moveFinishedBooksToCompleted;
   doc["removeFinishedBooksFromRecents"] = s.removeFinishedBooksFromRecents;
 
@@ -329,6 +334,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
+  // TXT/MD font family is dynamic too; load manually.
+  s.txtFontFamily = clamp(doc["txtFontFamily"] | (uint8_t)CrossPointSettings::NOTOSANS,
+                          CrossPointSettings::BUILTIN_FONT_COUNT, CrossPointSettings::NOTOSANS);
+  const char* txtSfn = doc["txtSdFontFamilyName"] | "";
+  strncpy(s.txtSdFontFamilyName, txtSfn, sizeof(s.txtSdFontFamilyName) - 1);
+  s.txtSdFontFamilyName[sizeof(s.txtSdFontFamilyName) - 1] = '\0';
   s.moveFinishedBooksToCompleted = doc["moveFinishedBooksToCompleted"] | (uint8_t)0;
   s.removeFinishedBooksFromRecents = doc["removeFinishedBooksFromRecents"] | (uint8_t)0;
 

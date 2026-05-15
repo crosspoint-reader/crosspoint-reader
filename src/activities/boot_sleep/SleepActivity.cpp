@@ -494,7 +494,7 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
         f.close();
       }
     }
-  } else if (FsHelpers::checkFileExtension(bookPath, ".txt")) {
+  } else if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
     Txt txt(bookPath, "/.crosspoint");
     if (txt.load()) {
       info.title = txt.getTitle();
@@ -834,7 +834,7 @@ void SleepActivity::renderOverlaySleepScreen() const {
 
     if (FsHelpers::checkFileExtension(path, ".xtc") || FsHelpers::checkFileExtension(path, ".xtch")) {
       rendered = XtcReaderActivity::drawCurrentPageToBuffer(path, renderer);
-    } else if (FsHelpers::checkFileExtension(path, ".txt")) {
+    } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
       rendered = TxtReaderActivity::drawCurrentPageToBuffer(path, renderer);
     } else if (FsHelpers::checkFileExtension(path, ".epub")) {
       rendered = EpubReaderActivity::drawCurrentPageToBuffer(path, renderer);
