@@ -6,6 +6,8 @@
 
 #include <cstdlib>
 
+#include "PackageThemeHost.h"
+
 namespace Marginalia {
 
 namespace {
@@ -286,7 +288,11 @@ bool setPackageEnabled(const std::string& packageId, const bool enabled) {
 
   String json;
   serializeJson(doc, json);
-  return Storage.writeFile(packageStatePath(packageId).c_str(), json);
+  const bool saved = Storage.writeFile(packageStatePath(packageId).c_str(), json);
+  if (saved) {
+    markPackageThemeHostDirty();
+  }
+  return saved;
 }
 
 bool uninstallPackage(const std::string& packageId) {
@@ -307,6 +313,7 @@ bool uninstallPackage(const std::string& packageId) {
   if (Storage.exists(statePath.c_str())) {
     Storage.remove(statePath.c_str());
   }
+  markPackageThemeHostDirty();
   return true;
 }
 

@@ -6,6 +6,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "marginalia/PackageThemeHost.h"
 
 void PackageListActivity::onEnter() {
   Activity::onEnter();
@@ -28,6 +29,7 @@ void PackageListActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     const auto& package = packageStore_.packages()[selectedIndex_];
     if (package.compatible && Marginalia::setPackageEnabled(package.id, !package.enabled)) {
+      Marginalia::markPackageThemeHostDirty();
       packageStore_.scan();
       requestUpdate();
     }

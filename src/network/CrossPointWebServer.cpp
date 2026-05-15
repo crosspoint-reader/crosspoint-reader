@@ -26,6 +26,7 @@
 #include "marginalia/PackageArchiveInstaller.h"
 #include "marginalia/PackageDownloadInstaller.h"
 #include "marginalia/PackageStore.h"
+#include "marginalia/PackageThemeHost.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -2279,6 +2280,7 @@ void CrossPointWebServer::handlePackageInstall() {
   response["name"] = manifest.name;
   String json;
   serializeJson(response, json);
+  Marginalia::markPackageThemeHostDirty();
   server->send(200, "application/json", json);
   LOG_DBG("WEB", "Installed package: %s", manifest.id.c_str());
 }

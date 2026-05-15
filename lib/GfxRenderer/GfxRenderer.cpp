@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "../../src/marginalia/PackageThemeHost.h"
 #include "FontCacheManager.h"
 
 namespace {
@@ -967,7 +968,14 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
+  const bool invertDisplay = Marginalia::packageThemeInvertsDisplay();
+  if (invertDisplay) {
+    invertScreen();
+  }
   display.displayBuffer(refreshMode, fadingFix);
+  if (invertDisplay) {
+    invertScreen();
+  }
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
