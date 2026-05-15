@@ -135,6 +135,7 @@ class CrossPointWebServer {
   void handlePackageList() const;
   void handlePackageUpload();
   void handlePackageUploadData();
+  void handlePackageDownload();
   void handlePackageInstall();
   void handlePackageEnable();
   void handlePackageUninstall();

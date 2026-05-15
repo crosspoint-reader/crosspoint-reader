@@ -130,6 +130,20 @@
         flex: 1;
         min-width: 220px;
       }
+      .catalog-controls {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+      }
+      .catalog-controls input {
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--card-bg);
+        color: var(--font-color);
+      }
       #status {
         margin-top: 10px;
         padding: 8px;
@@ -139,6 +153,11 @@
       .status-ok { background: #d4edda; color: #155724; display: block !important; }
       .status-err { background: #f8d7da; color: #721c24; display: block !important; }
       .empty { color: var(--label-color); text-align: center; padding: 20px; }
+      @media (max-width: 640px) {
+        .catalog-controls { grid-template-columns: 1fr; }
+        .package { align-items: flex-start; flex-direction: column; }
+        .package-actions { justify-content: flex-start; }
+      }
     </style>
   </head>
   <body>
@@ -160,6 +179,16 @@
     <div class="card">
       <h2>Package Inbox</h2>
       <div id="inboxPackages"><p class="empty">Loading...</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Marginalia Hub</h2>
+      <div class="catalog-controls">
+        <input type="url" id="catalogUrl" value="https://raw.githubusercontent.com/marginalia-os/marginalia-hub/main/public/v1/catalog.json" />
+        <button type="button" class="btn btn-primary" id="loadCatalogButton">Load Catalog</button>
+      </div>
+      <p id="catalogInfo" class="meta" style="margin: 8px 0 0;"></p>
+      <div id="catalogPackages"><p class="empty">Load the catalog to browse packages</p></div>
     </div>
 
     <div class="card">
@@ -263,6 +292,61 @@
         }
       }
 
+      function renderCatalog(entries) {
+        const el = document.getElementById('catalogPackages');
+        el.replaceChildren();
+        if (!entries || entries.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'empty';
+          empty.textContent = 'No compatible packages found';
+          el.appendChild(empty);
+          return;
+        }
+
+        for (const entry of entries) {
+          const row = document.createElement('div');
+          row.className = 'package';
+          const info = document.createElement('div');
+          info.className = 'package-info';
+          const title = document.createElement('h3');
+          title.textContent = entry.name || entry.id;
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          const target = entry.target || {};
+          const artifact = entry.artifact || {};
+          const parts = [
+            entry.kind,
+            entry.execution,
+            entry.channel,
+            artifact.format,
+            artifact.size ? Math.ceil(artifact.size / 1024) + ' KB' : '',
+            entry.version
+          ].filter(Boolean);
+          meta.textContent = parts.join(' · ');
+          const summary = document.createElement('p');
+          summary.className = 'summary';
+          summary.textContent = entry.summary || entry.id;
+          info.appendChild(title);
+          info.appendChild(meta);
+          info.appendChild(summary);
+          row.appendChild(info);
+
+          const actions = document.createElement('div');
+          actions.className = 'package-actions';
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-primary';
+          btn.textContent = 'Download';
+          const compatible = (target.devices || []).some(device => device === 'xteink-x3' || device === 'xteink-x4') &&
+            (target.chipFamilies || []).includes('esp32-c3') &&
+            artifact.format === 'mpkg.zip' && Boolean(artifact.url);
+          btn.disabled = !compatible;
+          btn.addEventListener('click', () => downloadPackage(entry));
+          actions.appendChild(btn);
+          row.appendChild(actions);
+          el.appendChild(row);
+        }
+      }
+
       async function loadPackages() {
         try {
           const res = await fetch('/api/packages');
@@ -273,6 +357,55 @@
           document.getElementById('activePackages').textContent = 'Failed to load packages';
           document.getElementById('inboxPackages').textContent = '';
         }
+      }
+
+      async function loadCatalog() {
+        const info = document.getElementById('catalogInfo');
+        const url = document.getElementById('catalogUrl').value;
+        info.textContent = 'Loading catalog...';
+        try {
+          const res = await fetch(url, { cache: 'no-store' });
+          const catalog = await res.json();
+          if (!res.ok || !Array.isArray(catalog.entries)) throw new Error('Catalog request failed');
+          const entries = catalog.entries.filter(entry => {
+            const target = entry.target || {};
+            return (target.devices || []).some(device => device === 'xteink-x3' || device === 'xteink-x4') &&
+              (target.chipFamilies || []).includes('esp32-c3');
+          });
+          info.textContent = 'Catalog generated ' + (catalog.generatedAt || 'unknown') + ' · ' + entries.length + ' compatible package' + (entries.length === 1 ? '' : 's');
+          renderCatalog(entries);
+        } catch (err) {
+          info.textContent = err.message;
+          renderCatalog([]);
+        }
+      }
+
+      async function downloadPackage(entry) {
+        const status = document.getElementById('status');
+        const artifact = entry.artifact || {};
+        const integrity = entry.integrity || {};
+        status.className = '';
+        status.style.display = 'block';
+        status.textContent = 'Downloading ' + (entry.name || entry.id) + '...';
+        try {
+          const res = await fetch('/api/packages/download', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              url: artifact.url,
+              sha256: integrity.sha256 || '',
+              size: artifact.size || 0
+            })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'Package download failed');
+          status.className = 'status-ok';
+          status.textContent = 'Downloaded archive for ' + (data.name || data.id) + '. Install it from the inbox.';
+        } catch (err) {
+          status.className = 'status-err';
+          status.textContent = err.message;
+        }
+        await loadPackages();
       }
 
       async function installPackage(id) {
@@ -440,6 +573,7 @@
         await loadPackages();
       });
 
+      document.getElementById('loadCatalogButton').addEventListener('click', loadCatalog);
       loadPackages();
     </script>
   </body>

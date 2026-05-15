@@ -24,6 +24,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "marginalia/PackageArchiveInstaller.h"
+#include "marginalia/PackageDownloadInstaller.h"
 #include "marginalia/PackageStore.h"
 
 namespace {
@@ -225,6 +226,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/packages", HTTP_GET, [this] { handlePackageList(); });
   server->on(
       "/api/packages/upload", HTTP_POST, [this] { handlePackageUpload(); }, [this] { handlePackageUploadData(); });
+  server->on("/api/packages/download", HTTP_POST, [this] { handlePackageDownload(); });
   server->on("/api/packages/install", HTTP_POST, [this] { handlePackageInstall(); });
   server->on("/api/packages/enable", HTTP_POST, [this] { handlePackageEnable(); });
   server->on("/api/packages/uninstall", HTTP_POST, [this] { handlePackageUninstall(); });
@@ -2147,6 +2149,42 @@ void CrossPointWebServer::handlePackageUpload() {
   packageUpload.valid = false;
   packageUpload.archive = false;
 
+  if (!result.ok) {
+    JsonDocument doc;
+    doc["error"] = result.error;
+    String json;
+    serializeJson(doc, json);
+    server->send(400, "application/json", json);
+    return;
+  }
+
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["id"] = result.packageId;
+  doc["name"] = result.packageName;
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handlePackageDownload() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "application/json", "{\"error\":\"Missing JSON body\"}");
+    return;
+  }
+
+  JsonDocument request;
+  const DeserializationError err = deserializeJson(request, server->arg("plain"));
+  if (err || !request["url"].is<const char*>()) {
+    server->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+    return;
+  }
+
+  const std::string url = request["url"].as<const char*>();
+  const std::string sha256 = request["sha256"] | "";
+  const size_t size = request["size"] | 0;
+
+  const auto result = Marginalia::downloadPackageArchiveToInbox(url, sha256, size);
   if (!result.ok) {
     JsonDocument doc;
     doc["error"] = result.error;
