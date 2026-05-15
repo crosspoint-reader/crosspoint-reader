@@ -4,18 +4,44 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <cstring>
+
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
-  // Validate iterator bounds before rendering
-  if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u)\n", (uint32_t)words.size(),
-            (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size());
+  // Focus annotations are optional: empty vectors mean no word in this block has a split.
+  // When present, they must be sized in lockstep with words[].
+  const bool hasFocus = !wordFocusBoundary.empty();
+  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
+      (hasFocus && (words.size() != wordFocusBoundary.size() || words.size() != wordFocusSuffixX.size()))) {
+    LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)\n",
+            (uint32_t)words.size(), (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size(),
+            (uint32_t)wordFocusBoundary.size(), (uint32_t)wordFocusSuffixX.size());
     return;
   }
 
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
-    renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
+    const uint8_t boundary = hasFocus ? wordFocusBoundary[i] : 0;
+
+    if (boundary > 0) {
+      // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
+      // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
+      // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.
+      // suffixX is computed at cache-creation time to avoid font metric lookups at render time.
+      static constexpr size_t MAX_FOCUS_PREFIX_BYTES = 9 * 4 + 1;
+      char boldBuf[40];
+      static_assert(sizeof(boldBuf) >= MAX_FOCUS_PREFIX_BYTES,
+                    "boldBuf too small for max focus prefix (9 codepoints * 4 UTF-8 bytes + null)");
+      const auto boldStyle = static_cast<EpdFontFamily::Style>(currentStyle | EpdFontFamily::BOLD);
+      const size_t boldLen = std::min<size_t>({static_cast<size_t>(boundary), words[i].size(), sizeof(boldBuf) - 1});
+      memcpy(boldBuf, words[i].c_str(), boldLen);
+      boldBuf[boldLen] = '\0';
+      renderer.drawText(fontId, wordX, y, boldBuf, true, boldStyle);
+      const int suffixX = wordX + wordFocusSuffixX[i];
+      renderer.drawText(fontId, suffixX, y, words[i].c_str() + boldLen, true, currentStyle);
+    } else {
+      renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
+    }
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = words[i];
@@ -42,9 +68,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 }
 
 bool TextBlock::serialize(FsFile& file) const {
-  if (words.size() != wordXpos.size() || words.size() != wordStyles.size()) {
-    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u)\n", words.size(),
-            wordXpos.size(), wordStyles.size());
+  // Focus annotations are optional; vectors are either empty (no splits in this block)
+  // or sized in lockstep with words[].
+  const bool hasFocus = !wordFocusBoundary.empty();
+  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
+      (hasFocus && (words.size() != wordFocusBoundary.size() || words.size() != wordFocusSuffixX.size()))) {
+    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)\n",
+            static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
+            static_cast<uint32_t>(wordStyles.size()), static_cast<uint32_t>(wordFocusBoundary.size()),
+            static_cast<uint32_t>(wordFocusSuffixX.size()));
     return false;
   }
 
@@ -53,6 +85,13 @@ bool TextBlock::serialize(FsFile& file) const {
   for (const auto& w : words) serialization::writeString(file, w);
   for (auto x : wordXpos) serialization::writePod(file, x);
   for (auto s : wordStyles) serialization::writePod(file, s);
+  // Focus block: 1-byte presence flag, followed by per-word vectors only when present.
+  // Saves 3 bytes/word when focus reading is disabled or no word on this line was split.
+  serialization::writePod(file, static_cast<uint8_t>(hasFocus ? 1 : 0));
+  if (hasFocus) {
+    for (auto b : wordFocusBoundary) serialization::writePod(file, b);
+    for (auto sx : wordFocusSuffixX) serialization::writePod(file, sx);
+  }
 
   // Style (alignment + margins/padding/indent)
   serialization::writePod(file, blockStyle.alignment);
@@ -76,6 +115,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   std::vector<std::string> words;
   std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
+  std::vector<uint8_t> wordFocusBoundary;
+  std::vector<uint16_t> wordFocusSuffixX;
   BlockStyle blockStyle;
 
   // Word count
@@ -94,6 +135,16 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   for (auto& w : words) serialization::readString(file, w);
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
+  // Focus block: presence flag, then vectors only if present. Empty vectors when absent
+  // signal "no splits in this block" to render() (zero per-word RAM cost).
+  uint8_t hasFocus;
+  serialization::readPod(file, hasFocus);
+  if (hasFocus) {
+    wordFocusBoundary.resize(wc);
+    wordFocusSuffixX.resize(wc);
+    for (auto& b : wordFocusBoundary) serialization::readPod(file, b);
+    for (auto& sx : wordFocusSuffixX) serialization::readPod(file, sx);
+  }
 
   // Style (alignment + margins/padding/indent)
   serialization::readPod(file, blockStyle.alignment);
@@ -109,6 +160,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   serialization::readPod(file, blockStyle.textIndent);
   serialization::readPod(file, blockStyle.textIndentDefined);
 
-  return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle));
+  return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
+                                                  std::move(wordFocusBoundary), std::move(wordFocusSuffixX),
+                                                  blockStyle));
 }

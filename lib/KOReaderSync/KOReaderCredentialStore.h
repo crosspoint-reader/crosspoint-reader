@@ -8,12 +8,6 @@ enum class DocumentMatchMethod : uint8_t {
   BINARY = 1,    // Match by partial MD5 of file content (more accurate, but files must be identical)
 };
 
-class KOReaderCredentialStore;
-namespace JsonSettingsIO {
-bool saveKOReader(const KOReaderCredentialStore& store, const char* path);
-bool loadKOReader(KOReaderCredentialStore& store, const char* json, bool* needsResave);
-}  // namespace JsonSettingsIO
-
 /**
  * Singleton class for storing KOReader sync credentials on the SD card.
  * Passwords are XOR-obfuscated with the device's unique hardware MAC address
@@ -32,9 +26,6 @@ class KOReaderCredentialStore {
   KOReaderCredentialStore() = default;
 
   bool loadFromBinaryFile();
-
-  friend bool JsonSettingsIO::saveKOReader(const KOReaderCredentialStore&, const char*);
-  friend bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore&, const char*, bool*);
 
  public:
   // Delete copy constructor and assignment
