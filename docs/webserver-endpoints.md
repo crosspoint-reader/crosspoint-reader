@@ -11,7 +11,8 @@ This document describes all HTTP and WebSocket endpoints available on the Margin
     - [GET `/api/status` - Device Status](#get-apistatus---device-status)
     - [GET `/api/files` - List Files](#get-apifiles---list-files)
     - [GET `/api/packages` - List Packages](#get-apipackages---list-packages)
-    - [POST `/api/packages/upload` - Upload Package File](#post-apipackagesupload---upload-package-file)
+    - [POST `/api/packages/upload` - Upload Package Folder File or Archive](#post-apipackagesupload---upload-package-folder-file-or-archive)
+    - [POST `/api/packages/download` - Download Package Archive](#post-apipackagesdownload---download-package-archive)
     - [POST `/api/packages/install` - Install Inbox Package](#post-apipackagesinstall---install-inbox-package)
     - [POST `/api/packages/enable` - Enable or Disable Package](#post-apipackagesenable---enable-or-disable-package)
     - [POST `/api/packages/uninstall` - Uninstall Package](#post-apipackagesuninstall---uninstall-package)
@@ -97,7 +98,8 @@ curl http://crosspoint.local/api/status
 
 ### GET `/packages` - Package Manager Page
 
-Serves the package manager page for uploading package folders, viewing the package inbox, and installing packages.
+Serves the package manager page for installed packages, the package inbox, hub catalog downloads, `.mpkg.zip` archive
+uploads, and legacy package folder uploads.
 
 **Request:**
 ```bash
@@ -187,29 +189,83 @@ curl http://crosspoint.local/api/packages
 
 ---
 
-### POST `/api/packages/upload` - Upload Package File
+### POST `/api/packages/upload` - Upload Package Folder File or Archive
 
-Uploads one file into the package inbox. The web UI sends one request per file when a package folder is selected.
+Uploads either one file into the package inbox or one complete `.mpkg.zip` archive. Folder upload mode is kept for local
+development. Archive upload mode is the package format used by the SDK, registry, and hub.
 
-**Request:**
+**Folder upload request:**
 ```bash
 curl -X POST \
   -F "file=@manifest.json" \
   "http://crosspoint.local/api/packages/upload?package=org.example.theme&path=manifest.json"
 ```
 
+**Archive upload request:**
+```bash
+curl -X POST \
+  -F "file=@org.example.theme-0.1.0.mpkg.zip" \
+  "http://crosspoint.local/api/packages/upload?archive=1"
+```
+
 **Query Parameters:**
 
 | Parameter | Required | Description |
 | --------- | -------- | ----------- |
-| `package` | Yes | Inbox folder name. Must be a safe package id. |
-| `path` | Yes | Relative path inside the package folder. Must not contain `..`, hidden components, or unsafe path characters. |
-| `reset` | No | Set to `1` on the first file of a folder upload to replace any previous inbox copy. |
+| `archive` | No | Set to `1` to upload and extract a `.mpkg.zip` archive. |
+| `package` | Folder mode only | Inbox folder name. Must be a safe package id. |
+| `path` | Folder mode only | Relative path inside the package folder. Must not contain `..`, hidden components, or unsafe path characters. |
+| `reset` | Folder mode only | Set to `1` on the first file of a folder upload to replace any previous inbox copy. |
 
-**Response (200 OK):**
+**Folder upload response (200 OK):**
 ```json
 {"ok": true}
 ```
+
+**Archive upload response (200 OK):**
+```json
+{"ok": true, "id": "org.example.theme", "name": "Example Theme"}
+```
+
+**Archive constraints:**
+- The archive must contain `manifest.json` at the root.
+- Entries are extracted into `/.marginalia/inbox/<manifest id>/`.
+- Unsafe paths, hidden path components, `..`, absolute paths, unsupported compression methods, too many entries, and
+  oversized entries are rejected before install.
+- Uploading an archive only stages it in the inbox. Use `/api/packages/install` to activate it.
+
+---
+
+### POST `/api/packages/download` - Download Package Archive
+
+Downloads a `.mpkg.zip` archive from a registry or hub URL, verifies optional size and SHA-256 metadata, extracts it into
+the inbox, and returns the staged package identity.
+
+**Request:**
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://marginalia-hub.vercel.app/packages/org.example.theme-0.1.0.mpkg.zip","sha256":"...","size":1234}' \
+  http://crosspoint.local/api/packages/download
+```
+
+**JSON Body:**
+
+| Field | Required | Description |
+| ----- | -------- | ----------- |
+| `url` | Yes | HTTP or HTTPS URL ending in `.mpkg.zip`. |
+| `sha256` | No | Expected archive SHA-256 hex digest. If present, the downloaded archive must match. |
+| `size` | No | Expected archive byte size. If present, the downloaded archive must match. |
+
+**Response (200 OK):**
+```json
+{"ok": true, "id": "org.example.theme", "name": "Example Theme"}
+```
+
+**Notes:**
+- The package page uses this endpoint for hub catalog installs.
+- Downloaded archives are staged in the inbox, then installed through `/api/packages/install`.
+- Catalog signatures are not enforced yet; archive hash verification is the current trust check.
 
 ---
 
