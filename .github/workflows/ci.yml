@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   clang-format:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v6
         with:
@@ -34,7 +34,7 @@ jobs:
           git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
 
   cppcheck:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v6
         with:
@@ -57,7 +57,7 @@ jobs:
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v6
         with:
@@ -111,7 +111,7 @@ jobs:
       - clang-format
       - cppcheck
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Fail because needed jobs failed
         # Fail if any job failed or was cancelled (skipped jobs are ok)
