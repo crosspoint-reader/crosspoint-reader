@@ -127,6 +127,8 @@ bool parseOverlayBmpHeader(FsFile& file, OverlayBmpInfo& info, const bool logErr
   const uint16_t bpp = readLE16(file);
   const uint32_t compression = readLE32(file);
 
+  // Match Bitmap::parseHeaders(): accept BI_RGB (0) and 32bpp BI_BITFIELDS (3), but keep the same
+  // byte-layout assumption as custom sleep BMPs. The renderer below treats pixels as BGRA and does not parse masks.
   if (planes != 1 || bpp != 32 || !(compression == 0 || compression == 3)) {
     if (logErrors) {
       LOG_ERR("SLP", "Transparent overlay must be 32-bit BGRA BMP (planes=%u bpp=%u comp=%u)", planes, bpp,
