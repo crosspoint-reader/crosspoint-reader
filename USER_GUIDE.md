@@ -142,6 +142,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
+  - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#37-sleep-screen) below for more information
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
   - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
@@ -382,6 +383,7 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 | **Custom** | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found. |
 | **Cover** | The cover of the currently open book. Falls back to **Dark** if no book is open. |
 | **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
+| **Transparent** | A 32-bit alpha BMP overlay drawn over the current screen. Transparent pixels leave the page visible; opaque white pixels erase text behind them. Falls back to **Dark** if no valid overlay image is found. |
 | **None** | A blank screen. |
 
 #### Cover settings
@@ -396,7 +398,16 @@ When using **Cover** or **Cover + Custom**, two additional settings apply:
 To use custom sleep images, set the sleep screen mode to **Custom** or **Cover + Custom**, then place images on the SD card:
 
 - **Multiple Images (recommended):** Create a `.sleep` directory in the root of the SD card and place any number of `.bmp` images inside. One will be randomly selected each time the device sleeps. (A directory named `sleep` is also accepted as a fallback.)
-- **Single Image:** Place a file named `sleep.bmp` in the root directory. This is used as a fallback if no valid images are found in the `.sleep`/`sleep` directory.
+- **Single Image:** Place a file named `sleep.bmp` in the root directory. This takes priority over the `.sleep`/`sleep` directories.
+
+#### Transparent overlay images
+
+To use transparent sleep overlays, set the sleep screen mode to **Transparent**, then place 32-bit BGRA BMP files with an alpha channel on the SD card:
+
+- **Multiple Images (recommended):** Create a `.sleep-overlay` directory in the root of the SD card and place any number of valid overlay `.bmp` images inside. One will be randomly selected each time the device sleeps. A directory named `sleep-overlay` is also accepted as a fallback.
+- **Single Image:** Place a file named `sleep-overlay.bmp` in the root directory. This takes priority over the `.sleep-overlay`/`sleep-overlay` directories.
+
+Transparent overlay files are intentionally separate from normal sleep images. Use the overlay BMP export from the CrossPoint PXC converter; normal 4-bit sleep-screen BMP files are not valid transparent overlays.
 
 > [!TIP]
 > For best results:

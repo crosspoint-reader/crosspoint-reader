@@ -29,7 +29,7 @@ namespace {
 constexpr char TRANSPARENT_SLEEP_ROOT[] = "/sleep-overlay.bmp";
 constexpr char TRANSPARENT_SLEEP_DIR[] = "/.sleep-overlay";
 constexpr char TRANSPARENT_SLEEP_LEGACY_DIR[] = "/sleep-overlay";
-constexpr size_t MAX_SLEEP_OVERLAY_NAME_LEN = 256;
+constexpr size_t MAX_SLEEP_FILE_NAME_LEN = 256;
 constexpr uint8_t MIN_VISIBLE_ALPHA = 8;
 
 struct BitmapPlacement {
@@ -271,27 +271,63 @@ bool renderTransparentOverlayBmp(FsFile& file, GfxRenderer& renderer, const char
   return true;
 }
 
-bool selectRandomTransparentOverlay(const char* dirPath, std::string& selectedPath) {
+using SleepFileValidator = bool (*)(FsFile& file, const char* name);
+
+enum class SleepRecentKind : uint8_t { Standard, Overlay };
+
+bool validateCustomSleepBmp(FsFile& file, const char* name) {
+  Bitmap bitmap(file);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+    LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
+    return false;
+  }
+  return true;
+}
+
+bool validateTransparentSleepBmp(FsFile& file, const char* name) {
+  OverlayBmpInfo info;
+  if (!parseOverlayBmpHeader(file, info, false)) {
+    LOG_DBG("SLP", "Skipping invalid transparent overlay BMP: %s", name);
+    return false;
+  }
+  return true;
+}
+
+bool isRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx, const uint8_t window) {
+  return recentKind == SleepRecentKind::Overlay ? APP_STATE.isRecentOverlaySleep(idx, window)
+                                                : APP_STATE.isRecentSleep(idx, window);
+}
+
+void pushRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx) {
+  if (recentKind == SleepRecentKind::Overlay) {
+    APP_STATE.pushRecentOverlaySleep(idx);
+  } else {
+    APP_STATE.pushRecentSleep(idx);
+  }
+}
+
+bool selectRandomSleepFile(const char* dirPath, const SleepFileValidator validator, const SleepRecentKind recentKind,
+                           std::string& selectedPath) {
   auto dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return false;
 
-  auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_OVERLAY_NAME_LEN);
+  auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_FILE_NAME_LEN);
   if (!name) {
-    LOG_ERR("SLP", "OOM: transparent overlay filename buffer");
+    LOG_ERR("SLP", "OOM: sleep filename buffer");
     return false;
   }
 
   std::vector<std::string> files;
   files.reserve(CrossPointState::SLEEP_RECENT_COUNT);
 
-  // Collect all valid 32-bit alpha BMP overlay files first, matching the existing custom sleep image selection flow.
+  // Collect all valid files first, matching the existing custom sleep image selection flow.
   for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
     if (dirFile.isDirectory()) {
       dirFile.close();
       continue;
     }
 
-    dirFile.getName(name.get(), MAX_SLEEP_OVERLAY_NAME_LEN);
+    dirFile.getName(name.get(), MAX_SLEEP_FILE_NAME_LEN);
     const auto filename = std::string(name.get());
     if (filename.empty() || filename[0] == '.') {
       dirFile.close();
@@ -299,14 +335,12 @@ bool selectRandomTransparentOverlay(const char* dirPath, std::string& selectedPa
     }
 
     if (!FsHelpers::hasBmpExtension(filename)) {
-      LOG_DBG("SLP", "Skipping non-.bmp transparent overlay: %s", name.get());
+      LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name.get());
       dirFile.close();
       continue;
     }
 
-    OverlayBmpInfo info;
-    if (!parseOverlayBmpHeader(dirFile, info, false)) {
-      LOG_DBG("SLP", "Skipping invalid transparent overlay BMP: %s", name.get());
+    if (!validator(dirFile, name.get())) {
       dirFile.close();
       continue;
     }
@@ -318,15 +352,18 @@ bool selectRandomTransparentOverlay(const char* dirPath, std::string& selectedPa
   const auto numFiles = files.size();
   if (numFiles == 0) return false;
 
-  // Pick a random overlay, excluding recently shown indices just like the existing custom sleep mode.
+  // Pick a random wallpaper, excluding recently shown ones.
+  // Window: up to SLEEP_RECENT_COUNT entries, capped at numFiles-1.
   const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
-  const uint8_t window = static_cast<uint8_t>(std::min(static_cast<size_t>(APP_STATE.recentSleepFill), numFiles - 1));
+  const uint8_t recentFill =
+      recentKind == SleepRecentKind::Overlay ? APP_STATE.recentOverlaySleepFill : APP_STATE.recentSleepFill;
+  const uint8_t window = static_cast<uint8_t>(std::min(static_cast<size_t>(recentFill), numFiles - 1));
   auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
-  for (uint8_t attempt = 0; attempt < 20 && APP_STATE.isRecentSleep(randomFileIndex, window); attempt++) {
+  for (uint8_t attempt = 0; attempt < 20 && isRecentSleepIndex(recentKind, randomFileIndex, window); attempt++) {
     randomFileIndex = static_cast<uint16_t>(random(fileCount));
   }
 
-  APP_STATE.pushRecentSleep(randomFileIndex);
+  pushRecentSleepIndex(recentKind, randomFileIndex);
   APP_STATE.saveToFile();
   selectedPath = std::string(dirPath) + "/" + files[randomFileIndex];
   return true;
@@ -383,10 +420,6 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // Check if we have a /.sleep (preferred) or /sleep directory
-  const char* sleepDir = nullptr;
-  auto dir = Storage.open("/.sleep");
-
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
@@ -397,81 +430,30 @@ void SleepActivity::renderCustomSleepScreen() const {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
       file.close();
-      if (dir) dir.close();
       return;
     }
     file.close();
   }
 
-  if (dir && dir.isDirectory()) {
-    sleepDir = "/.sleep";
-  } else {
-    dir = Storage.open("/sleep");
-    if (dir && dir.isDirectory()) {
-      sleepDir = "/sleep";
-    }
+  std::string selectedPath;
+  if (!selectRandomSleepFile("/.sleep", validateCustomSleepBmp, SleepRecentKind::Standard, selectedPath)) {
+    selectRandomSleepFile("/sleep", validateCustomSleepBmp, SleepRecentKind::Standard, selectedPath);
   }
 
-  if (sleepDir) {
-    std::vector<std::string> files;
-    char name[500];
-    // collect all valid BMP files
-    for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
-      if (dirFile.isDirectory()) {
-        dirFile.close();
-        continue;
-      }
-      dirFile.getName(name, sizeof(name));
-      auto filename = std::string(name);
-      if (filename[0] == '.') {
-        dirFile.close();
-        continue;
-      }
-
-      if (!FsHelpers::hasBmpExtension(filename)) {
-        LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name);
-        dirFile.close();
-        continue;
-      }
-      Bitmap bitmap(dirFile);
-      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-        dirFile.close();
-        continue;
-      }
-      files.emplace_back(filename);
-      dirFile.close();
-    }
-    const auto numFiles = files.size();
-    if (numFiles > 0) {
-      // Pick a random wallpaper, excluding recently shown ones.
-      // Window: up to SLEEP_RECENT_COUNT entries, capped at numFiles-1.
-      const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
-      const uint8_t window =
-          static_cast<uint8_t>(std::min(static_cast<size_t>(APP_STATE.recentSleepFill), numFiles - 1));
-      auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
-      for (uint8_t attempt = 0; attempt < 20 && APP_STATE.isRecentSleep(randomFileIndex, window); attempt++) {
-        randomFileIndex = static_cast<uint16_t>(random(fileCount));
-      }
-      APP_STATE.pushRecentSleep(randomFileIndex);
-      APP_STATE.saveToFile();
-      const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
-      HalFile randFile;
-      if (Storage.openFileForRead("SLP", filename, randFile)) {
-        LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
-        delay(100);
-        Bitmap bitmap(randFile, true);
-        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
-          randFile.close();
-          dir.close();
-          return;
-        }
+  if (!selectedPath.empty()) {
+    FsFile randFile;
+    if (Storage.openFileForRead("SLP", selectedPath, randFile)) {
+      LOG_DBG("SLP", "Randomly loading: %s", selectedPath.c_str());
+      delay(100);
+      Bitmap bitmap(randFile, true);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        renderBitmapSleepScreen(bitmap);
         randFile.close();
+        return;
       }
+      randFile.close();
     }
   }
-  if (dir) dir.close();
 
   renderDefaultSleepScreen();
 }
@@ -494,45 +476,15 @@ void SleepActivity::renderDefaultSleepScreen() const {
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
-  int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  float cropX = 0, cropY = 0;
+  const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
+  const int x = placement.x;
+  const int y = placement.y;
+  const float cropX = placement.cropX;
+  const float cropY = placement.cropY;
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
-  if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
-    // image will scale, make sure placement is right
-    float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-    const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
-
-    LOG_DBG("SLP", "bitmap ratio: %f, screen ratio: %f", ratio, screenRatio);
-    if (ratio > screenRatio) {
-      // image wider than viewport ratio, scaled down image needs to be centered vertically
-      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
-        cropX = 1.0f - (screenRatio / ratio);
-        LOG_DBG("SLP", "Cropping bitmap x: %f", cropX);
-        ratio = (1.0f - cropX) * static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-      }
-      x = 0;
-      y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
-      LOG_DBG("SLP", "Centering with ratio %f to y=%d", ratio, y);
-    } else {
-      // image taller than viewport ratio, scaled down image needs to be centered horizontally
-      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
-        cropY = 1.0f - (ratio / screenRatio);
-        LOG_DBG("SLP", "Cropping bitmap y: %f", cropY);
-        ratio = static_cast<float>(bitmap.getWidth()) / ((1.0f - cropY) * static_cast<float>(bitmap.getHeight()));
-      }
-      x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
-      y = 0;
-      LOG_DBG("SLP", "Centering with ratio %f to x=%d", ratio, x);
-    }
-  } else {
-    // center the image
-    x = (pageWidth - bitmap.getWidth()) / 2;
-    y = (pageHeight - bitmap.getHeight()) / 2;
-  }
-
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
   renderer.clearScreen();
 
@@ -574,8 +526,10 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   }
 
   std::string selectedPath;
-  if (!selectRandomTransparentOverlay(TRANSPARENT_SLEEP_DIR, selectedPath)) {
-    selectRandomTransparentOverlay(TRANSPARENT_SLEEP_LEGACY_DIR, selectedPath);
+  if (!selectRandomSleepFile(TRANSPARENT_SLEEP_DIR, validateTransparentSleepBmp, SleepRecentKind::Overlay,
+                             selectedPath)) {
+    selectRandomSleepFile(TRANSPARENT_SLEEP_LEGACY_DIR, validateTransparentSleepBmp, SleepRecentKind::Overlay,
+                          selectedPath);
   }
 
   if (!selectedPath.empty()) {

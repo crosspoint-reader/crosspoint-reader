@@ -74,6 +74,10 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   for (int i = 0; i < CrossPointState::SLEEP_RECENT_COUNT; i++) recentArr.add(s.recentSleepImages[i]);
   doc["recentSleepPos"] = s.recentSleepPos;
   doc["recentSleepFill"] = s.recentSleepFill;
+  JsonArray recentOverlayArr = doc["recentOverlaySleepImages"].to<JsonArray>();
+  for (int i = 0; i < CrossPointState::SLEEP_RECENT_COUNT; i++) recentOverlayArr.add(s.recentOverlaySleepImages[i]);
+  doc["recentOverlaySleepPos"] = s.recentOverlaySleepPos;
+  doc["recentOverlaySleepFill"] = s.recentOverlaySleepFill;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
   doc["showBootScreen"] = s.showBootScreen;
@@ -103,6 +107,25 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
     s.recentSleepPos = actualCount > 0 ? s.recentSleepPos % CrossPointState::SLEEP_RECENT_COUNT : 0;
   s.recentSleepFill = doc["recentSleepFill"] | static_cast<uint8_t>(0);
   s.recentSleepFill = static_cast<uint8_t>(std::min(static_cast<int>(s.recentSleepFill), actualCount));
+
+  memset(s.recentOverlaySleepImages, 0, sizeof(s.recentOverlaySleepImages));
+  JsonArrayConst recentOverlayArr = doc["recentOverlaySleepImages"];
+  const int actualOverlayCount =
+      recentOverlayArr.isNull()
+          ? 0
+          : std::min(static_cast<int>(recentOverlayArr.size()), static_cast<int>(CrossPointState::SLEEP_RECENT_COUNT));
+  for (int i = 0; i < actualOverlayCount; i++) {
+    s.recentOverlaySleepImages[i] = recentOverlayArr[i] | static_cast<uint16_t>(0);
+  }
+  s.recentOverlaySleepPos = doc["recentOverlaySleepPos"] | static_cast<uint8_t>(0);
+  if (s.recentOverlaySleepPos >= CrossPointState::SLEEP_RECENT_COUNT) {
+    s.recentOverlaySleepPos =
+        actualOverlayCount > 0 ? s.recentOverlaySleepPos % CrossPointState::SLEEP_RECENT_COUNT : 0;
+  }
+  s.recentOverlaySleepFill = doc["recentOverlaySleepFill"] | static_cast<uint8_t>(0);
+  s.recentOverlaySleepFill =
+      static_cast<uint8_t>(std::min(static_cast<int>(s.recentOverlaySleepFill), actualOverlayCount));
+
   // Migrate legacy single-image field from old state.json (pre-recency-buffer).
   // Only seeds the buffer if the new buffer is empty (fresh migration, not a resave).
   if (s.recentSleepFill == 0 && !doc["lastSleepImage"].isNull()) {

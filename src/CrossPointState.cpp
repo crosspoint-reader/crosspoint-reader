@@ -16,19 +16,41 @@ constexpr char STATE_FILE_BAK[] = "/.crosspoint/state.bin.bak";
 
 CrossPointState CrossPointState::instance;
 
-bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
-  const uint8_t effectiveCount = std::min(checkCount, recentSleepFill);
+namespace {
+
+bool isRecentIndex(const uint16_t* recentImages, uint8_t recentPos, uint8_t recentFill, uint16_t idx,
+                   uint8_t checkCount) {
+  const uint8_t effectiveCount = std::min(checkCount, recentFill);
   for (uint8_t i = 0; i < effectiveCount; i++) {
-    const uint8_t slot = (recentSleepPos + SLEEP_RECENT_COUNT - 1 - i) % SLEEP_RECENT_COUNT;
-    if (recentSleepImages[slot] == idx) return true;
+    const uint8_t slot =
+        (recentPos + CrossPointState::SLEEP_RECENT_COUNT - 1 - i) % CrossPointState::SLEEP_RECENT_COUNT;
+    if (recentImages[slot] == idx) return true;
   }
   return false;
 }
 
+void pushRecentIndex(uint16_t* recentImages, uint8_t& recentPos, uint8_t& recentFill, uint16_t idx) {
+  recentImages[recentPos] = idx;
+  recentPos = (recentPos + 1) % CrossPointState::SLEEP_RECENT_COUNT;
+  if (recentFill < CrossPointState::SLEEP_RECENT_COUNT) recentFill++;
+}
+
+}  // namespace
+
+bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
+  return isRecentIndex(recentSleepImages, recentSleepPos, recentSleepFill, idx, checkCount);
+}
+
+bool CrossPointState::isRecentOverlaySleep(uint16_t idx, uint8_t checkCount) const {
+  return isRecentIndex(recentOverlaySleepImages, recentOverlaySleepPos, recentOverlaySleepFill, idx, checkCount);
+}
+
 void CrossPointState::pushRecentSleep(uint16_t idx) {
-  recentSleepImages[recentSleepPos] = idx;
-  recentSleepPos = (recentSleepPos + 1) % SLEEP_RECENT_COUNT;
-  if (recentSleepFill < SLEEP_RECENT_COUNT) recentSleepFill++;
+  pushRecentIndex(recentSleepImages, recentSleepPos, recentSleepFill, idx);
+}
+
+void CrossPointState::pushRecentOverlaySleep(uint16_t idx) {
+  pushRecentIndex(recentOverlaySleepImages, recentOverlaySleepPos, recentOverlaySleepFill, idx);
 }
 
 bool CrossPointState::saveToFile() const {
@@ -67,6 +89,15 @@ bool CrossPointState::loadFromBinaryFile() {
   if (!Storage.openFileForRead("CPS", STATE_FILE_BIN, inputFile)) {
     return false;
   }
+
+  for (uint8_t i = 0; i < SLEEP_RECENT_COUNT; i++) {
+    recentSleepImages[i] = 0;
+    recentOverlaySleepImages[i] = 0;
+  }
+  recentSleepPos = 0;
+  recentSleepFill = 0;
+  recentOverlaySleepPos = 0;
+  recentOverlaySleepFill = 0;
 
   uint8_t version;
   serialization::readPod(inputFile, version);
