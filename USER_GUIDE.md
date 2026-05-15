@@ -407,11 +407,12 @@ To use transparent sleep overlays, set the sleep screen mode to **Transparent**,
 - **Multiple Images (recommended):** Create a `.sleep-overlay` directory in the root of the SD card and place any number of valid overlay `.bmp` images inside. One will be randomly selected each time the device sleeps. A directory named `sleep-overlay` is also accepted as a fallback.
 - **Single Image:** Place a file named `sleep-overlay.bmp` in the root directory. This takes priority over the `.sleep-overlay`/`sleep-overlay` directories.
 
-Transparent overlay files are intentionally separate from normal sleep images. Use the overlay BMP export from the CrossPoint PXC converter; normal 4-bit sleep-screen BMP files are not valid transparent overlays.
+Transparent overlay files are intentionally separate from normal sleep images. Normal 4-bit sleep-screen BMP files are not valid transparent overlays.
 
 > [!TIP]
 > For best results:
-> - Use uncompressed BMP files with 24-bit color depth
+> - For non-transparent **Custom** mode, use uncompressed BMP files with 24-bit color depth.
+> - For **Transparent** mode, use uncompressed 32-bit BGRA BMP files with an alpha channel.
 > - X4: Use a resolution of 480x800 pixels to match the device's screen resolution.
 > - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
 

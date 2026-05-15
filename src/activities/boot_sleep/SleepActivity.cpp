@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -120,6 +121,10 @@ bool parseOverlayBmpHeader(FsFile& file, OverlayBmpInfo& info, const bool logErr
 
   info.width = static_cast<int32_t>(readLE32(file));
   const auto rawHeight = static_cast<int32_t>(readLE32(file));
+  if (rawHeight == std::numeric_limits<int32_t>::min()) {
+    if (logErrors) LOG_ERR("SLP", "Bad transparent overlay dimensions: %dx%d", info.width, rawHeight);
+    return false;
+  }
   info.topDown = rawHeight < 0;
   info.height = info.topDown ? -rawHeight : rawHeight;
 
