@@ -1015,6 +1015,7 @@ def main():
 <li>pre element: leading/trailing blank lines</li>
 <li>pre with inline code element</li>
 <li>horizontal rules between paragraphs</li>
+<li>superscript and subscript rendering</li>
 </ul>
 """,
                 ),
@@ -1085,6 +1086,42 @@ greet("World");</code></pre>
 <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
 <hr/>
 <p>End of horizontal rule tests.</p>
+""",
+                ),
+                [],
+            ),
+            (
+                "5. Superscript and Subscript",
+                make_chapter(
+                    "Superscript and Subscript",
+                    """
+<h2>Basic superscript</h2>
+<p>E = mc<sup>2</sup> is Einstein's mass-energy equivalence.</p>
+<p>The area of a circle is &#960;r<sup>2</sup>.</p>
+<p>2<sup>10</sup> = 1024.</p>
+<p>x<sup>n</sup> + y<sup>n</sup> = z<sup>n</sup></p>
+
+<h2>Basic subscript</h2>
+<p>Water is H<sub>2</sub>O.</p>
+<p>Carbon dioxide is CO<sub>2</sub>.</p>
+<p>The sequence a<sub>1</sub>, a<sub>2</sub>, a<sub>3</sub>, ..., a<sub>n</sub>.</p>
+<p>Glucose: C<sub>6</sub>H<sub>12</sub>O<sub>6</sub>.</p>
+
+<h2>Mixed sup and sub</h2>
+<p>The pH of water is 7, meaning [H<sub>3</sub>O<sup>+</sup>] = 10<sup>-7</sup> mol/L.</p>
+<p>Footnote reference<sup>1</sup> and another<sup>2</sup> in the same sentence.</p>
+
+<h2>Ordinals</h2>
+<p>On the 1<sup>st</sup> of January, the 2<sup>nd</sup> quarter begins on the 3<sup>rd</sup> month.</p>
+
+<h2>Nested with bold and italic</h2>
+<p>Speed of light: c = 2.998 &#215; 10<sup>8</sup> m/s.</p>
+<p>Avogadro: 6.022 &#215; 10<sup>23</sup> mol<sup>-1</sup>.</p>
+<p>Bold superscript: x<sup><b>2</b></sup> and italic subscript: H<sub><i>n</i></sub>.</p>
+
+<h2>Long runs</h2>
+<p>This word<sup>has a rather long superscript attached to it</sup> continuing normally.</p>
+<p>This word<sub>has a rather long subscript attached to it</sub> continuing normally.</p>
 """,
                 ),
                 [],

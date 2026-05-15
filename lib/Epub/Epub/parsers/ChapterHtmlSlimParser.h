@@ -66,6 +66,8 @@ class ChapterHtmlSlimParser final : public Print {
     bool hasItalic = false, italic = false;
     bool hasUnderline = false, underline = false;
     bool hasStrikethrough = false, strikethrough = false;
+    bool hasSup = false, sup = false;
+    bool hasSub = false, sub = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   CssStyle currentCssStyle;
@@ -73,6 +75,8 @@ class ChapterHtmlSlimParser final : public Print {
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
   bool effectiveStrikethrough = false;
+  bool effectiveSup = false;
+  bool effectiveSub = false;
   // Buffered table model — populated while inside <table>, emitted on </table>
   struct BufferedTableCell {
     std::unique_ptr<ParsedText> text;

@@ -12,10 +12,21 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     return;
   }
 
+  const int ascender = renderer.getFontAscenderSize(fontId);
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
-    renderer.drawText(fontId, wordX, y, words[i].c_str(), true, currentStyle);
+    // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
+    // drawText, so these offsets are chosen relative to the full-size ascender:
+    //   SUP: raise by 40% of ascender — sits clearly above the cap-height
+    //   SUB: lower by 25% of ascender — descends below baseline without clashing with ascenders below
+    int wordY = y;
+    if ((currentStyle & EpdFontFamily::SUP) != 0) {
+      wordY -= ascender * 2 / 5;
+    } else if ((currentStyle & EpdFontFamily::SUB) != 0) {
+      wordY += ascender / 4;
+    }
+    renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle);
 
     const std::string& w = words[i];
     const bool hasEmSpacePrefix = w.size() >= 3 && static_cast<uint8_t>(w[0]) == 0xE2 &&
