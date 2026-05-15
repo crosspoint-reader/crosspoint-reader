@@ -36,8 +36,8 @@ void PowerButtonMenuActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    APP_STATE.pendingPwrBtnAction = 10 + static_cast<uint8_t>(items[selectedIndex].action);
-    LOG_DBG("PWRMENU", "Selected action: %d", APP_STATE.pendingPwrBtnAction);
+    APP_STATE.pendingMenuAction = static_cast<uint8_t>(items[selectedIndex].action);
+    LOG_DBG("PWRMENU", "Selected action: %d", APP_STATE.pendingMenuAction);
     finish();
     return;
   }
@@ -74,7 +74,7 @@ void PowerButtonMenuActivity::render(RenderLock&&) {
   const int dialogWidth = std::min((maxTextWidth + innerPadding * 2) * 12 / 10, screenWidth - 20);
 
   const int dialogX = (screenWidth - dialogWidth) / 2;
-  const int dialogY = (screenHeight - dialogHeight) / 2;
+  const int dialogY = screenHeight * 2 / 5 - dialogHeight / 2;
 
   GUI.drawDialogBackground(renderer, Rect{dialogX, dialogY, dialogWidth, dialogHeight});
 

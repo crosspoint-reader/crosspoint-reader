@@ -10,7 +10,7 @@
 
 class PowerButtonMenuActivity final : public Activity {
  public:
-  enum class MenuAction { SLEEP, REFRESH_SCREEN, SCREENSHOT };
+  enum class MenuAction : uint8_t { SLEEP, REFRESH_SCREEN, SCREENSHOT, NONE = 0xFF };
 
   explicit PowerButtonMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("PowerButtonMenu", renderer, mappedInput) {}
