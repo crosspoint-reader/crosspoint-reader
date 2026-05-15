@@ -1163,6 +1163,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      if (!self->flushPartWordBuffer()) return;
+      self->nextWordContinues = true;
+    }
+    const char* prefix = (strcmp(name, "sup") == 0) ? "^" : "_";
+    self->currentTextBlock->addWord(prefix, EpdFontFamily::REGULAR, false, true);
+    self->nextWordContinues = true;
+    StyleStackEntry entry;
+    entry.depth = self->depth;
+    self->inlineStyleStack.push_back(entry);
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
