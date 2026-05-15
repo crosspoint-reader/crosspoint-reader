@@ -96,6 +96,7 @@
         font-size: 0.9em;
         flex-shrink: 0;
       }
+      a.btn { text-decoration: none; }
       .btn-primary {
         background: var(--accent-color);
         color: white;
@@ -314,6 +315,7 @@
           meta.className = 'meta';
           const target = entry.target || {};
           const artifact = entry.artifact || {};
+          const source = entry.source || {};
           const parts = [
             entry.kind,
             entry.execution,
@@ -326,13 +328,30 @@
           const summary = document.createElement('p');
           summary.className = 'summary';
           summary.textContent = entry.summary || entry.id;
+          const sourceMeta = document.createElement('div');
+          sourceMeta.className = 'meta';
+          const sourceParts = [
+            source.path || '',
+            source.ref ? '@ ' + source.ref : ''
+          ].filter(Boolean);
+          sourceMeta.textContent = sourceParts.length ? 'Source ' + sourceParts.join(' ') : '';
           info.appendChild(title);
           info.appendChild(meta);
           info.appendChild(summary);
+          if (sourceMeta.textContent) info.appendChild(sourceMeta);
           row.appendChild(info);
 
           const actions = document.createElement('div');
           actions.className = 'package-actions';
+          if (entry.homepage || source.url) {
+            const sourceLink = document.createElement('a');
+            sourceLink.className = 'btn btn-secondary';
+            sourceLink.href = entry.homepage || source.url;
+            sourceLink.target = '_blank';
+            sourceLink.rel = 'noopener noreferrer';
+            sourceLink.textContent = 'Source';
+            actions.appendChild(sourceLink);
+          }
           const btn = document.createElement('button');
           btn.className = 'btn btn-primary';
           btn.textContent = 'Download';
