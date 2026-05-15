@@ -2,7 +2,7 @@
 
 CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
 
-**Now running on:** ESP32C3-based Xteink X4 and X3.
+**Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
