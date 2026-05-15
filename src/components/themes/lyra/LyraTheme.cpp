@@ -562,17 +562,20 @@ Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
 void LyraTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
   constexpr int outline = 2;
   renderer.fillRoundedRect(rect.x - outline, rect.y - outline, rect.width + outline * 2, rect.height + outline * 2,
-                           cornerRadius + outline, Color::White);
-  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::Black);
+                           cornerRadius + outline, Color::Black);
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::White);
 }
 
-void LyraTheme::drawPopupSelection(const GfxRenderer& renderer, Rect rect, const char* text) const {
-  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::LightGray);
-  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, text);
-  const int textX = rect.x + (rect.width - textWidth) / 2;
-  const int textLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int textY = rect.y + (rect.height - textLineHeight) / 2;
-  renderer.drawText(UI_10_FONT_ID, textX, textY, text, true);
+void LyraTheme::drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                                   bool selected) const {
+  const int textH = renderer.getLineHeight(fontId);
+  const int textW = renderer.getTextWidth(fontId, text);
+  const int textY = rect.y + (rect.height - textH) / 2;
+  const int textX = rect.x + (rect.width - textW) / 2;
+  if (selected) {
+    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::LightGray);
+  }
+  renderer.drawText(fontId, textX, textY, text, true);
 }
 
 void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {

@@ -16,7 +16,6 @@ class CrossPointState {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   uint8_t pendingPwrBtnAction = 0xFF;
-  bool pendingPageTurnFromMenu = false;
 
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.

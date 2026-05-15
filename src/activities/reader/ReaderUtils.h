@@ -1,7 +1,6 @@
 #pragma once
 
 #include <CrossPointSettings.h>
-#include <CrossPointState.h>
 #include <GfxRenderer.h>
 #include <HalTiltSensor.h>
 #include <Logging.h>
@@ -46,12 +45,8 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
                                              input.wasPressed(MappedInputManager::Button::Left))
                                           : (input.wasReleased(MappedInputManager::Button::PageBack) ||
                                              input.wasReleased(MappedInputManager::Button::Left)));
-  const bool powerTurn = (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                          input.wasReleased(MappedInputManager::Button::Power)) ||
-                         APP_STATE.pendingPageTurnFromMenu;
-  if (APP_STATE.pendingPageTurnFromMenu) {
-    APP_STATE.pendingPageTurnFromMenu = false;
-  }
+  const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                         input.wasReleased(MappedInputManager::Button::Power);
   const bool next = tiltNext || (usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn ||
                                              input.wasPressed(MappedInputManager::Button::Right))
                                           : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||

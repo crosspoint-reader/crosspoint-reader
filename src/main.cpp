@@ -484,31 +484,47 @@ void loop() {
   if (APP_STATE.pendingPwrBtnAction != 0xFF) {
     const uint8_t action = APP_STATE.pendingPwrBtnAction;
     APP_STATE.pendingPwrBtnAction = 0xFF;
-    switch (action) {
-      case CrossPointSettings::SHORT_PWRBTN::SLEEP:
-        LOG_DBG("MAIN", "Power button menu: sleep");
-        enterDeepSleep();
-        return;
-      case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH:
-        LOG_DBG("MAIN", "Power button menu: refresh screen");
-        {
+    if (action >= 10) {
+      // Actions from the power button menu (offset by 10)
+      switch (action - 10) {
+        case 0:  // SLEEP
+          LOG_DBG("MAIN", "Power button menu: sleep");
+          enterDeepSleep();
+          return;
+        case 1:  // REFRESH_SCREEN
+          LOG_DBG("MAIN", "Power button menu: refresh screen");
+          {
+            RenderLock lock;
+            renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+          }
+          break;
+        case 2:  // SCREENSHOT
+          LOG_DBG("MAIN", "Power button menu: screenshot");
+          {
+            RenderLock lock;
+            ScreenshotUtil::takeScreenshot(renderer);
+          }
+          break;
+      }
+    } else {
+      // Direct SHORT_PWRBTN actions (not from menu)
+      switch (action) {
+        case CrossPointSettings::SHORT_PWRBTN::SLEEP:
+          enterDeepSleep();
+          return;
+        case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH: {
           RenderLock lock;
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        }
-        break;
-      case CrossPointSettings::SHORT_PWRBTN::PAGE_TURN:
-        LOG_DBG("MAIN", "Power button menu: page turn");
-        APP_STATE.pendingPageTurnFromMenu = true;
-        break;
-      default:
-        break;
+        } break;
+        default:
+          break;
+      }
     }
   }
 
   // Show power button action menu on short press when set to MENU mode.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::MENU &&
-      mappedInputManager.wasReleased(MappedInputManager::Button::Power) &&
-      !PowerButtonMenuActivity::isActive()) {
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power) && !PowerButtonMenuActivity::isActive()) {
     activityManager.pushActivity(std::make_unique<PowerButtonMenuActivity>(renderer, mappedInputManager));
   }
 

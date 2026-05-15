@@ -10,6 +10,8 @@
 
 class PowerButtonMenuActivity final : public Activity {
  public:
+  enum class MenuAction { SLEEP, REFRESH_SCREEN, SCREENSHOT };
+
   explicit PowerButtonMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("PowerButtonMenu", renderer, mappedInput) {}
 
@@ -24,14 +26,14 @@ class PowerButtonMenuActivity final : public Activity {
   static inline bool s_isActive = false;
 
   struct MenuItem {
-    CrossPointSettings::SHORT_PWRBTN action;
+    MenuAction action;
     StrId labelId;
   };
 
   const std::vector<MenuItem> items = {
-      {CrossPointSettings::SHORT_PWRBTN::SLEEP, StrId::STR_SLEEP},
-      {CrossPointSettings::SHORT_PWRBTN::PAGE_TURN, StrId::STR_PAGE_TURN},
-      {CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH, StrId::STR_FORCE_REFRESH},
+      {MenuAction::SLEEP, StrId::STR_SLEEP},
+      {MenuAction::REFRESH_SCREEN, StrId::STR_FORCE_REFRESH},
+      {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
   };
 
   int selectedIndex = 0;
