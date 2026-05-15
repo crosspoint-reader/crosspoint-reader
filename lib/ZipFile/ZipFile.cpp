@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <utility>
 
 struct ZipInflateCtx {
   InflateReader reader;  // Must be first — callback casts uzlib_uncomp* to ZipInflateCtx*
@@ -104,6 +105,65 @@ bool ZipFile::loadAllFileStatSlims() {
   lastCentralDirPos = zipDetails.centralDirOffset;
   lastCentralDirPosValid = true;
 
+  return true;
+}
+
+bool ZipFile::listEntries(std::vector<Entry>& entries, const size_t maxEntries) {
+  const ScopedOpenClose zip{*this};
+  if (!zip) return false;
+
+  if (!loadZipDetails()) return false;
+
+  if (zipDetails.totalEntries > maxEntries) {
+    LOG_ERR("ZIP", "Too many zip entries: %u > %zu", zipDetails.totalEntries, maxEntries);
+    return false;
+  }
+
+  file.seek(zipDetails.centralDirOffset);
+  entries.clear();
+  entries.reserve(zipDetails.totalEntries);
+
+  uint32_t sig;
+  char itemName[256];
+
+  while (file.available()) {
+    if (file.read(&sig, 4) != 4 || sig != 0x02014b50) break;
+
+    FileStatSlim fileStat = {};
+
+    file.seekCur(6);
+    file.read(&fileStat.method, 2);
+    file.seekCur(8);
+    file.read(&fileStat.compressedSize, 4);
+    file.read(&fileStat.uncompressedSize, 4);
+    uint16_t nameLen, m, k;
+    file.read(&nameLen, 2);
+    file.read(&m, 2);
+    file.read(&k, 2);
+    file.seekCur(8);
+    file.read(&fileStat.localHeaderOffset, 4);
+
+    if (nameLen == 0 || nameLen >= sizeof(itemName)) {
+      LOG_ERR("ZIP", "Invalid zip entry name length: %u", nameLen);
+      return false;
+    }
+
+    file.read(itemName, nameLen);
+    itemName[nameLen] = '\0';
+
+    Entry entry;
+    entry.name = itemName;
+    entry.stat = fileStat;
+    entry.isDirectory = entry.name.length() > 0 && entry.name.back() == '/';
+    entries.push_back(std::move(entry));
+
+    file.seekCur(m + k);
+  }
+
+  if (entries.size() != zipDetails.totalEntries) {
+    LOG_ERR("ZIP", "Zip entry count mismatch: expected %u, got %zu", zipDetails.totalEntries, entries.size());
+    return false;
+  }
   return true;
 }
 

@@ -23,6 +23,7 @@
 #include "html/PackagesPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "marginalia/PackageArchiveInstaller.h"
 #include "marginalia/PackageStore.h"
 
 namespace {
@@ -2015,44 +2016,61 @@ void CrossPointWebServer::handlePackageUploadData() {
       packageUpload.packageDir.clear();
       packageUpload.relativePath.clear();
       packageUpload.filePath.clear();
+      packageUpload.archive = server->arg("archive") == "1";
 
       if (!Marginalia::ensurePackageBaseDirectories()) {
         LOG_ERR("WEB", "Failed to create package base directories");
         break;
       }
 
-      const std::string packageId = server->arg("package").c_str();
-      const std::string relativePath = server->arg("path").c_str();
-      if (!Marginalia::isSafePackageId(packageId) || !Marginalia::isSafePackageRelativePath(relativePath)) {
-        LOG_ERR("WEB", "Invalid package upload path: package=%s path=%s", packageId.c_str(), relativePath.c_str());
+      if (packageUpload.archive) {
+        packageUpload.filePath = std::string(Marginalia::PACKAGE_STAGING_ROOT) + "/upload.mpkg.zip";
+        if (Storage.exists(packageUpload.filePath.c_str())) {
+          Storage.remove(packageUpload.filePath.c_str());
+        }
+
+        if (!Storage.openFileForWrite("MPKG", packageUpload.filePath.c_str(), packageUpload.file)) {
+          LOG_ERR("WEB", "Failed to open package archive upload file: %s", packageUpload.filePath.c_str());
+          break;
+        }
+
+        packageUpload.valid = true;
+        LOG_DBG("WEB", "Package archive upload started: %s", packageUpload.filePath.c_str());
         break;
+      } else {
+        const std::string packageId = server->arg("package").c_str();
+        const std::string relativePath = server->arg("path").c_str();
+        if (!Marginalia::isSafePackageId(packageId) || !Marginalia::isSafePackageRelativePath(relativePath)) {
+          LOG_ERR("WEB", "Invalid package upload path: package=%s path=%s", packageId.c_str(), relativePath.c_str());
+          break;
+        }
+
+        packageUpload.packageDir = std::string(Marginalia::PACKAGE_INBOX_ROOT) + "/" + packageId;
+        packageUpload.relativePath = relativePath;
+        packageUpload.filePath = packageUpload.packageDir + "/" + relativePath;
+
+        if (server->arg("reset") == "1" && Storage.exists(packageUpload.packageDir.c_str())) {
+          Storage.removeDir(packageUpload.packageDir.c_str());
+        }
+
+        if (!Storage.ensureDirectoryExists(packageUpload.packageDir.c_str()) ||
+            !ensurePackageParentDirs(packageUpload.packageDir, relativePath)) {
+          LOG_ERR("WEB", "Failed to create package upload directories");
+          break;
+        }
+
+        if (Storage.exists(packageUpload.filePath.c_str())) {
+          Storage.remove(packageUpload.filePath.c_str());
+        }
+
+        if (!Storage.openFileForWrite("MPKG", packageUpload.filePath.c_str(), packageUpload.file)) {
+          LOG_ERR("WEB", "Failed to open package upload file: %s", packageUpload.filePath.c_str());
+          break;
+        }
+
+        packageUpload.valid = true;
+        LOG_DBG("WEB", "Package upload started: %s", packageUpload.filePath.c_str());
       }
-
-      packageUpload.packageDir = std::string(Marginalia::PACKAGE_INBOX_ROOT) + "/" + packageId;
-      packageUpload.relativePath = relativePath;
-      packageUpload.filePath = packageUpload.packageDir + "/" + relativePath;
-
-      if (server->arg("reset") == "1" && Storage.exists(packageUpload.packageDir.c_str())) {
-        Storage.removeDir(packageUpload.packageDir.c_str());
-      }
-
-      if (!Storage.ensureDirectoryExists(packageUpload.packageDir.c_str()) ||
-          !ensurePackageParentDirs(packageUpload.packageDir, relativePath)) {
-        LOG_ERR("WEB", "Failed to create package upload directories");
-        break;
-      }
-
-      if (Storage.exists(packageUpload.filePath.c_str())) {
-        Storage.remove(packageUpload.filePath.c_str());
-      }
-
-      if (!Storage.openFileForWrite("MPKG", packageUpload.filePath.c_str(), packageUpload.file)) {
-        LOG_ERR("WEB", "Failed to open package upload file: %s", packageUpload.filePath.c_str());
-        break;
-      }
-
-      packageUpload.valid = true;
-      LOG_DBG("WEB", "Package upload started: %s", packageUpload.filePath.c_str());
       break;
     }
 
@@ -2114,11 +2132,37 @@ void CrossPointWebServer::handlePackageUploadData() {
 }
 
 void CrossPointWebServer::handlePackageUpload() {
-  if (packageUpload.valid) {
-    server->send(200, "application/json", "{\"ok\":true}");
-  } else {
+  if (!packageUpload.valid) {
     server->send(400, "application/json", "{\"error\":\"Invalid package upload\"}");
+    return;
   }
+
+  if (!packageUpload.archive) {
+    server->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+
+  const auto result = Marginalia::extractPackageArchiveToInbox(packageUpload.filePath);
+  Storage.remove(packageUpload.filePath.c_str());
+  packageUpload.valid = false;
+  packageUpload.archive = false;
+
+  if (!result.ok) {
+    JsonDocument doc;
+    doc["error"] = result.error;
+    String json;
+    serializeJson(doc, json);
+    server->send(400, "application/json", json);
+    return;
+  }
+
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["id"] = result.packageId;
+  doc["name"] = result.packageName;
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
 }
 
 void CrossPointWebServer::handlePackageInstall() {

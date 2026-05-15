@@ -170,9 +170,10 @@ file will use a new cache directory, resetting the reading progress.
 
 ### Packages
 
-Marginalia scans side-loaded packages from `/.marginalia/packages/*/manifest.json` on the SD card. The current firmware
-shows valid manifests in **Settings → System → Packages** as a read-only package list. Runtime hooks and app launching
-will be added on top of this store instead of being mixed into the first manifest scanner.
+Marginalia scans side-loaded packages from `/.marginalia/packages/*/manifest.json` on the SD card. Package folders and
+SDK-built `.mpkg.zip` archives can be uploaded from the local web package manager; archives are unpacked into the package
+inbox before install. Runtime hooks and app launching will be added on top of this store instead of being mixed into the
+package installer.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 

@@ -53,6 +53,7 @@ class CrossPointWebServer {
     std::string packageDir;
     std::string relativePath;
     std::string filePath;
+    bool archive = false;
     bool valid = false;
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;

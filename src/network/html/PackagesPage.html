@@ -163,10 +163,19 @@
     </div>
 
     <div class="card">
+      <h2>Upload Package Archive</h2>
+      <form class="upload-form" id="archiveUploadForm">
+        <input type="file" id="packageArchive" accept=".mpkg.zip,.zip" required />
+        <button type="submit" class="btn btn-primary">Upload Archive</button>
+      </form>
+      <p id="archivePickedInfo" class="meta" style="margin: 8px 0 0;"></p>
+    </div>
+
+    <div class="card">
       <h2>Upload Package Folder</h2>
       <form class="upload-form" id="uploadForm">
         <input type="file" id="packageFiles" webkitdirectory directory multiple required />
-        <button type="submit" class="btn btn-primary">Upload</button>
+        <button type="submit" class="btn btn-primary">Upload Folder</button>
       </form>
       <p id="pickedInfo" class="meta" style="margin: 8px 0 0;"></p>
       <div id="status"></div>
@@ -342,6 +351,45 @@
         }
         const root = packageRoot(files);
         info.textContent = files.length + ' file' + (files.length === 1 ? '' : 's') + ' from folder "' + root + '"';
+      });
+
+      document.getElementById('packageArchive').addEventListener('change', function() {
+        const info = document.getElementById('archivePickedInfo');
+        if (!this.files || this.files.length === 0) {
+          info.textContent = '';
+          return;
+        }
+        const file = this.files[0];
+        info.textContent = file.name + ' · ' + Math.ceil(file.size / 1024) + ' KB';
+      });
+
+      document.getElementById('archiveUploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const status = document.getElementById('status');
+        const fileInput = document.getElementById('packageArchive');
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+
+        status.className = '';
+        status.style.display = 'block';
+        status.textContent = 'Uploading archive ' + file.name + '...';
+
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        const url = '/api/packages/upload?archive=1';
+        try {
+          const res = await fetch(url, { method: 'POST', body: formData });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'Archive upload failed');
+          status.className = 'status-ok';
+          status.textContent = 'Uploaded archive for ' + (data.name || data.id) + '.';
+          fileInput.value = '';
+          document.getElementById('archivePickedInfo').textContent = '';
+        } catch (err) {
+          status.className = 'status-err';
+          status.textContent = err.message;
+        }
+        await loadPackages();
       });
 
       document.getElementById('uploadForm').addEventListener('submit', async function(e) {

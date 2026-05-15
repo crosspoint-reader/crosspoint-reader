@@ -4,6 +4,7 @@
 #include <deque>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class ZipFile {
  public:
@@ -25,6 +26,12 @@ class ZipFile {
     uint64_t hash;   // FNV-1a 64-bit hash of normalized path
     uint16_t len;    // Length of path for collision reduction
     uint16_t index;  // Caller's index (e.g. spine index)
+  };
+
+  struct Entry {
+    std::string name;
+    FileStatSlim stat;
+    bool isDirectory = false;
   };
 
   // FNV-1a 64-bit hash computed from char buffer (no std::string allocation)
@@ -60,6 +67,7 @@ class ZipFile {
   bool open();
   bool close();
   bool loadAllFileStatSlims();
+  bool listEntries(std::vector<Entry>& entries, size_t maxEntries);
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
