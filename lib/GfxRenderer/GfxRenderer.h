@@ -222,12 +222,13 @@ class GfxRenderer {
   // Single-pass variant: calls renderFn once in GRAY2_LSB mode while simultaneously writing
   // the MSB plane to a secondary buffer. Cuts SD card reads from 2 to 1 for file-backed renders.
   // Falls back to two-pass on secondary buffer allocation failure. Factory modes pre-flash to
-  // white with HALF_REFRESH by default; sleep screens can request FULL_REFRESH for a stronger
-  // temperature-aware conditioning pass before the final static image.
+  // white with HALF_REFRESH by default. preFlashPasses=0 skips the internal pre-flash so
+  // callers can run a custom conditioning sequence first.
   void renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)(const GfxRenderer&, const void*), const void* ctx,
                                  void (*preFlashOverlayFn)(const GfxRenderer&, const void*) = nullptr,
                                  const void* preFlashCtx = nullptr,
-                                 HalDisplay::RefreshMode preFlashRefreshMode = HalDisplay::HALF_REFRESH);
+                                 HalDisplay::RefreshMode preFlashRefreshMode = HalDisplay::HALF_REFRESH,
+                                 uint8_t preFlashPasses = 1);
 
   // Direct 2-bit XTCH plane blit using factory LUT. Caller supplies the two decoded bit planes
   // (plane1 = BW RAM / LSB, plane2 = RED RAM / MSB) in column-major order matching XTCH encoding.
@@ -236,7 +237,8 @@ class GfxRenderer {
   void displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, uint16_t pageWidth, uint16_t pageHeight,
                          RenderHook overlayFn = nullptr, const void* overlayCtx = nullptr,
                          GrayscaleMode mode = GrayscaleMode::FactoryFast, bool preFlash = false,
-                         HalDisplay::RefreshMode preFlashRefreshMode = HalDisplay::HALF_REFRESH);
+                         HalDisplay::RefreshMode preFlashRefreshMode = HalDisplay::HALF_REFRESH,
+                         uint8_t preFlashPasses = 1);
 
   // 1-bit XTC page via the same grayscale LUT pipeline. Row-major pageBuffer (XTC: 0=black, 1=white).
   // BW and RED RAM receive identical data since there are no intermediate gray levels.

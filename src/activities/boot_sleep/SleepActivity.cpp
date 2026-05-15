@@ -16,6 +16,27 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 
+namespace {
+constexpr uint8_t SLEEP_FACTORY_INTERNAL_PREFLASH_PASSES = 0;
+
+struct FactorySleepPreconditionPass {
+  uint8_t color;
+  HalDisplay::RefreshMode refreshMode;
+};
+
+constexpr FactorySleepPreconditionPass FACTORY_SLEEP_PRECONDITION[] = {
+    {0x00, HalDisplay::FULL_REFRESH},
+    {0xFF, HalDisplay::FULL_REFRESH},
+};
+
+void runFactorySleepPrecondition(const GfxRenderer& renderer) {
+  for (const auto& pass : FACTORY_SLEEP_PRECONDITION) {
+    renderer.clearScreen(pass.color);
+    renderer.displayBuffer(pass.refreshMode);
+  }
+}
+}
+
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
@@ -236,6 +257,7 @@ bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
   };
   PxcCtx ctx{&file, dataOffset, pxcWidth, pxcHeight};
 
+  runFactorySleepPrecondition(renderer);
   renderer.renderGrayscaleSinglePass(
       GfxRenderer::GrayscaleMode::FactoryQuality,
       [](const GfxRenderer& r, const void* raw) {
@@ -262,7 +284,7 @@ bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
         }
         free(rowBuf);
       },
-      &ctx, nullptr, nullptr, HalDisplay::FULL_REFRESH);
+      &ctx, nullptr, nullptr, HalDisplay::FULL_REFRESH, SLEEP_FACTORY_INTERNAL_PREFLASH_PASSES);
 
   file.close();
   return true;
@@ -320,13 +342,14 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
       float cropX, cropY;
     };
     BitmapGrayCtx grayCtx{&bitmap, x, y, pageWidth, pageHeight, cropX, cropY};
+    runFactorySleepPrecondition(renderer);
     renderer.renderGrayscaleSinglePass(
         GfxRenderer::GrayscaleMode::FactoryQuality,
         [](const GfxRenderer& r, const void* raw) {
           const auto* c = static_cast<const BitmapGrayCtx*>(raw);
           r.drawBitmap(*c->bitmap, c->x, c->y, c->maxWidth, c->maxHeight, c->cropX, c->cropY);
         },
-        &grayCtx, nullptr, nullptr, HalDisplay::FULL_REFRESH);
+        &grayCtx, nullptr, nullptr, HalDisplay::FULL_REFRESH, SLEEP_FACTORY_INTERNAL_PREFLASH_PASSES);
   } else {
     renderer.clearScreen();
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
@@ -393,8 +416,10 @@ void SleepActivity::renderCoverSleepScreen() const {
       }
 
       LOG_DBG("SLP", "Direct XTCH plane render: %ux%u", lastXtc.getPageWidth(), lastXtc.getPageHeight());
+      runFactorySleepPrecondition(renderer);
       renderer.displayXtchPlanes(plane1, plane2, lastXtc.getPageWidth(), lastXtc.getPageHeight(), nullptr, nullptr,
-                                 GfxRenderer::GrayscaleMode::FactoryQuality, true, HalDisplay::FULL_REFRESH);
+                                 GfxRenderer::GrayscaleMode::FactoryQuality, false, HalDisplay::FULL_REFRESH,
+                                 SLEEP_FACTORY_INTERNAL_PREFLASH_PASSES);
       free(plane1);
       free(plane2);
       return;
