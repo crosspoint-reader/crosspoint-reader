@@ -28,6 +28,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   std::string sdFontFamilyOverride;
   int8_t fontSizeOverride = -1;
   int8_t bionicReadingOverride = -1;
+  int8_t paragraphAlignmentOverride = -1;
 
   // Remove existing entry if present
   auto it =
@@ -39,13 +40,14 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
     sdFontFamilyOverride = it->sdFontFamilyOverride;
     fontSizeOverride = it->fontSizeOverride;
     bionicReadingOverride = it->bionicReadingOverride;
+    paragraphAlignmentOverride = it->paragraphAlignmentOverride;
     recentBooks.erase(it);
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(),
-                     {path, title, author, series, coverBmpPath, embeddedStyleOverride, imageRenderingOverride,
-                      fontFamilyOverride, sdFontFamilyOverride, fontSizeOverride, bionicReadingOverride});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, series, coverBmpPath, embeddedStyleOverride,
+                                           imageRenderingOverride, fontFamilyOverride, sdFontFamilyOverride,
+                                           fontSizeOverride, bionicReadingOverride, paragraphAlignmentOverride});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -95,7 +97,8 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
     return false;
   }
   return setReaderOverrides(path, embeddedStyleOverride, imageRenderingOverride, it->fontFamilyOverride,
-                            it->sdFontFamilyOverride, it->fontSizeOverride, it->bionicReadingOverride);
+                            it->sdFontFamilyOverride, it->fontSizeOverride, it->bionicReadingOverride,
+                            it->paragraphAlignmentOverride);
 }
 
 bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
@@ -108,7 +111,7 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
   }
   const std::string sdOverride = (fontFamilyOverride >= 0) ? std::string() : it->sdFontFamilyOverride;
   return setReaderOverrides(path, embeddedStyleOverride, imageRenderingOverride, fontFamilyOverride, sdOverride,
-                            fontSizeOverride, it->bionicReadingOverride);
+                            fontSizeOverride, it->bionicReadingOverride, it->paragraphAlignmentOverride);
 }
 
 bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
@@ -120,7 +123,8 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
     return false;
   }
   return setReaderOverrides(path, embeddedStyleOverride, imageRenderingOverride, fontFamilyOverride,
-                            sdFontFamilyOverride, fontSizeOverride, it->bionicReadingOverride);
+                            sdFontFamilyOverride, fontSizeOverride, it->bionicReadingOverride,
+                            it->paragraphAlignmentOverride);
 }
 
 bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
@@ -131,7 +135,8 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
     return false;
   }
   return setReaderOverrides(path, embeddedStyleOverride, imageRenderingOverride, it->fontFamilyOverride,
-                            it->sdFontFamilyOverride, it->fontSizeOverride, bionicReadingOverride);
+                            it->sdFontFamilyOverride, it->fontSizeOverride, bionicReadingOverride,
+                            it->paragraphAlignmentOverride);
 }
 
 bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
@@ -144,13 +149,27 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
   }
   const std::string sdOverride = (fontFamilyOverride >= 0) ? std::string() : it->sdFontFamilyOverride;
   return setReaderOverrides(path, embeddedStyleOverride, imageRenderingOverride, fontFamilyOverride, sdOverride,
-                            fontSizeOverride, bionicReadingOverride);
+                            fontSizeOverride, bionicReadingOverride, it->paragraphAlignmentOverride);
 }
 
 bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
                                           const int8_t imageRenderingOverride, const int8_t fontFamilyOverride,
                                           const std::string& sdFontFamilyOverride, const int8_t fontSizeOverride,
                                           const bool bionicReadingOverride) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return false;
+  }
+  return setReaderOverrides(path, embeddedStyleOverride, imageRenderingOverride, fontFamilyOverride,
+                            sdFontFamilyOverride, fontSizeOverride, bionicReadingOverride,
+                            it->paragraphAlignmentOverride);
+}
+
+bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t embeddedStyleOverride,
+                                          const int8_t imageRenderingOverride, const int8_t fontFamilyOverride,
+                                          const std::string& sdFontFamilyOverride, const int8_t fontSizeOverride,
+                                          const bool bionicReadingOverride, const int8_t paragraphAlignmentOverride) {
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it == recentBooks.end()) {
@@ -163,6 +182,7 @@ bool RecentBooksStore::setReaderOverrides(const std::string& path, const int8_t 
   it->sdFontFamilyOverride = sdFontFamilyOverride;
   it->fontSizeOverride = fontSizeOverride;
   it->bionicReadingOverride = bionicReadingOverride;
+  it->paragraphAlignmentOverride = paragraphAlignmentOverride;
   return saveToFile();
 }
 
