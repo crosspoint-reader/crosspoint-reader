@@ -30,6 +30,8 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   int8_t bionicReadingOverride = -1;
   int8_t paragraphAlignmentOverride = -1;
 
+  pruneMissing();
+
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
@@ -64,6 +66,14 @@ void RecentBooksStore::removeBook(const std::string& path) {
     recentBooks.erase(it);
     saveToFile();
   }
+}
+
+bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
+
+bool RecentBooksStore::pruneMissing() {
+  const size_t before = recentBooks.size();
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
+  return recentBooks.size() != before;
 }
 
 void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,

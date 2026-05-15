@@ -62,6 +62,13 @@ class RecentBooksStore {
   // Get the count of recent books
   int getCount() const { return static_cast<int>(recentBooks.size()); }
 
+  // Returns true if the book's file is missing from storage
+  static bool isMissing(const RecentBook& book);
+
+  // Remove entries whose backing file is no longer on the SD card.
+  // Returns true if any entry was removed. Does not persist — caller decides.
+  bool pruneMissing();
+
   bool saveToFile() const;
 
   bool loadFromFile();
