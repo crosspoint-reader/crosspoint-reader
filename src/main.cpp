@@ -481,44 +481,30 @@ void loop() {
   }
 
   // Dispatch pending action selected from power button action menu.
-  if (APP_STATE.pendingPwrBtnAction != 0xFF) {
-    const uint8_t action = APP_STATE.pendingPwrBtnAction;
-    APP_STATE.pendingPwrBtnAction = 0xFF;
-    if (action >= 10) {
-      // Actions from the power button menu (offset by 10)
-      switch (action - 10) {
-        case 0:  // SLEEP
-          LOG_DBG("MAIN", "Power button menu: sleep");
-          enterDeepSleep();
-          return;
-        case 1:  // REFRESH_SCREEN
-          LOG_DBG("MAIN", "Power button menu: refresh screen");
-          {
-            RenderLock lock;
-            renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-          }
-          break;
-        case 2:  // SCREENSHOT
-          LOG_DBG("MAIN", "Power button menu: screenshot");
-          {
-            RenderLock lock;
-            ScreenshotUtil::takeScreenshot(renderer);
-          }
-          break;
-      }
-    } else {
-      // Direct SHORT_PWRBTN actions (not from menu)
-      switch (action) {
-        case CrossPointSettings::SHORT_PWRBTN::SLEEP:
-          enterDeepSleep();
-          return;
-        case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH: {
+  if (APP_STATE.pendingMenuAction != static_cast<uint8_t>(PowerButtonMenuActivity::MenuAction::NONE)) {
+    const auto action = static_cast<PowerButtonMenuActivity::MenuAction>(APP_STATE.pendingMenuAction);
+    APP_STATE.pendingMenuAction = static_cast<uint8_t>(PowerButtonMenuActivity::MenuAction::NONE);
+    switch (action) {
+      case PowerButtonMenuActivity::MenuAction::SLEEP:
+        LOG_DBG("MAIN", "Power button menu: sleep");
+        enterDeepSleep();
+        return;
+      case PowerButtonMenuActivity::MenuAction::REFRESH_SCREEN:
+        LOG_DBG("MAIN", "Power button menu: refresh screen");
+        {
           RenderLock lock;
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        } break;
-        default:
-          break;
-      }
+        }
+        break;
+      case PowerButtonMenuActivity::MenuAction::SCREENSHOT:
+        LOG_DBG("MAIN", "Power button menu: screenshot");
+        {
+          RenderLock lock;
+          ScreenshotUtil::takeScreenshot(renderer);
+        }
+        break;
+      default:
+        break;
     }
   }
 
