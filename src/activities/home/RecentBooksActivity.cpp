@@ -344,6 +344,14 @@ void RecentBooksActivity::renderListView(RenderLock&&) {
         [this](int index) { return UITheme::getFileIcon(recentBooks[index].path); });
   }
 
+  if (!gpio.deviceIsX3()) {
+    const int hintY = contentRect.y + contentRect.height - metrics.verticalSpacing - 14;
+    const std::string hint = std::string(tr(STR_DIR_UP)) + "+L: " + tr(STR_VIEW_GRID) + "/" + tr(STR_VIEW_LIST) +
+                             "   " + tr(STR_DIR_LEFT) + "+L: " + tr(STR_REMOVE) + "   " + tr(STR_DIR_RIGHT) +
+                             "+L: " + tr(STR_INFO);
+    renderer.drawText(SMALL_FONT_ID, contentRect.x + metrics.contentSidePadding, hintY, hint.c_str());
+  }
+
   const bool hasBooks = !recentBooks.empty();
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), hasBooks ? tr(STR_OPEN) : "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
