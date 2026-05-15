@@ -16,11 +16,13 @@ static_assert(sizeof(EpdUnicodeInterval) == 12, "EpdUnicodeInterval must be 12 b
 static_assert(sizeof(EpdKernClassEntry) == 3, "EpdKernClassEntry must be 3 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdLigaturePair) == 8, "EpdLigaturePair must be 8 bytes to match .cpfont file layout");
 
-// FNV-1a hash for content-based font ID generation
-static constexpr uint32_t FNV_OFFSET = 2166136261u;
-static constexpr uint32_t FNV_PRIME = 16777619u;
+namespace {
 
-static uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSET) {
+// FNV-1a hash for content-based font ID generation
+constexpr uint32_t FNV_OFFSET = 2166136261u;
+constexpr uint32_t FNV_PRIME = 16777619u;
+
+uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSET) {
   for (size_t i = 0; i < len; i++) {
     hash ^= data[i];
     hash *= FNV_PRIME;
@@ -29,16 +31,44 @@ static uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSE
 }
 
 // .cpfont magic bytes
-static constexpr char CPFONT_MAGIC[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
+constexpr char CPFONT_MAGIC[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
 // CPFONT_VERSION is defined as a #define in SdCardFont.h so it can be
 // stringified into FONT_MANIFEST_URL.
-static constexpr uint32_t HEADER_SIZE = 32;
-static constexpr uint32_t STYLE_TOC_ENTRY_SIZE = 32;
+constexpr uint32_t HEADER_SIZE = 32;
+constexpr uint32_t STYLE_TOC_ENTRY_SIZE = 32;
 
 // Helper to read little-endian values from byte buffer
-static inline uint16_t readU16(const uint8_t* p) { return p[0] | (p[1] << 8); }
-static inline int16_t readI16(const uint8_t* p) { return static_cast<int16_t>(p[0] | (p[1] << 8)); }
-static inline uint32_t readU32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24); }
+inline uint16_t readU16(const uint8_t* p) { return p[0] | (p[1] << 8); }
+inline int16_t readI16(const uint8_t* p) { return static_cast<int16_t>(p[0] | (p[1] << 8)); }
+inline uint32_t readU32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24); }
+
+// Walks a null-terminated UTF-8 string and appends each unique codepoint to
+// codepoints[0..cpCount-1] via O(n²) dedup.  Returns true if the buffer
+// reached maxCount (cap hit), false if all codepoints fit.
+bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& cpCount, uint32_t maxCount) {
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
+  while (*p) {
+    uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0) break;
+    bool found = false;
+    for (uint32_t i = 0; i < cpCount; i++) {
+      if (codepoints[i] == cp) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      if (cpCount >= maxCount) return true;
+      codepoints[cpCount++] = cp;
+    }
+  }
+  return false;
+}
+
+const char* asCStr(const std::string& s) { return s.c_str(); }
+const char* asCStr(const char* s) { return s; }
+
+}  // namespace
 
 SdCardFont::~SdCardFont() { freeAll(); }
 
@@ -1123,34 +1153,6 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
 
   return totalMissed;
 }
-
-// Walks a null-terminated UTF-8 string and appends each unique codepoint to
-// codepoints[0..cpCount-1] via O(n²) dedup.  Returns true if the buffer
-// reached maxCount (cap hit), false if all codepoints fit.
-static bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& cpCount, uint32_t maxCount) {
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-  while (*p) {
-    uint32_t cp = utf8NextCodepoint(&p);
-    if (cp == 0) break;
-    bool found = false;
-    for (uint32_t i = 0; i < cpCount; i++) {
-      if (codepoints[i] == cp) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      if (cpCount >= maxCount) return true;
-      codepoints[cpCount++] = cp;
-    }
-  }
-  return false;
-}
-
-namespace {
-const char* asCStr(const std::string& s) { return s.c_str(); }
-const char* asCStr(const char* s) { return s; }
-}  // namespace
 
 template <typename Iter>
 int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask) {
