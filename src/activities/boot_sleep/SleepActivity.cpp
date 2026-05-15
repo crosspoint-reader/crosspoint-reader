@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -155,14 +156,22 @@ uint8_t bayerThreshold4x4(const int x, const int y) {
   return BAYER_4X4[((y & 0x03) << 2) | (x & 0x03)];
 }
 
-bool renderTransparentOverlayBmp(FsFile& file, const GfxRenderer& renderer, const char* pathForLog) {
-  OverlayBmpInfo info;
-  if (!parseOverlayBmpHeader(file, info, true)) return false;
+enum class TransparentOverlayPass : uint8_t { BW, GrayscaleLsb, GrayscaleMsb };
 
-  const auto placement = calculateBitmapPlacement(info.width, info.height, renderer);
+uint8_t quantizeOverlayLum(const uint8_t lum) {
+  // Match Bitmap's native-palette path: 0, 85, 170, 255 map directly to levels 0..3.
+  return lum >> 6;
+}
+
+bool renderTransparentOverlayPass(FsFile& file, const OverlayBmpInfo& info, const BitmapPlacement& placement,
+                                  const GfxRenderer& renderer, uint8_t* row, const TransparentOverlayPass pass) {
+  if (!file.seek(info.dataOffset)) {
+    LOG_ERR("SLP", "Failed to seek transparent overlay pixel data");
+    return false;
+  }
+
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-
   const int cropPixX = std::floor(info.width * placement.cropX / 2.0f);
   const int cropPixY = std::floor(info.height * placement.cropY / 2.0f);
   const float croppedWidth = (1.0f - placement.cropX) * static_cast<float>(info.width);
@@ -177,16 +186,8 @@ bool renderTransparentOverlayBmp(FsFile& file, const GfxRenderer& renderer, cons
   }
   const bool isScaled = scale < 1.0f;
 
-  auto row = makeUniqueNoThrow<uint8_t[]>(info.rowBytes);
-  if (!row) {
-    LOG_ERR("SLP", "OOM: transparent overlay row (%u bytes)", static_cast<unsigned>(info.rowBytes));
-    return false;
-  }
-
-  LOG_DBG("SLP", "Rendering transparent overlay: %s (%dx%d)", pathForLog, info.width, info.height);
-
   for (int bmpY = 0; bmpY < info.height; bmpY++) {
-    if (file.read(row.get(), info.rowBytes) != static_cast<int>(info.rowBytes)) {
+    if (file.read(row, info.rowBytes) != static_cast<int>(info.rowBytes)) {
       LOG_ERR("SLP", "Short read in transparent overlay row %d", bmpY);
       return false;
     }
@@ -206,17 +207,67 @@ bool renderTransparentOverlayBmp(FsFile& file, const GfxRenderer& renderer, cons
       if (screenX >= renderer.getScreenWidth()) break;
       if (screenX < 0) continue;
 
-      const uint8_t* pixel = row.get() + (static_cast<size_t>(bmpX) * 4u);
+      const uint8_t* pixel = row + (static_cast<size_t>(bmpX) * 4u);
       const uint8_t alpha = pixel[3];
       if (alpha < MIN_VISIBLE_ALPHA || alpha <= bayerThreshold4x4(screenX, screenY)) continue;
 
       const uint8_t lum = (77u * pixel[2] + 150u * pixel[1] + 29u * pixel[0]) >> 8;
-      const bool drawBlack = lum <= bayerThreshold4x4(screenX, screenY);
-      renderer.drawPixel(screenX, screenY, drawBlack);
+      const uint8_t level = quantizeOverlayLum(lum);
+
+      switch (pass) {
+        case TransparentOverlayPass::BW:
+          // Same first pass as custom bitmap sleep: all non-white levels are painted black.
+          // Transparent overlay's only difference is that opaque white explicitly erases underlying text.
+          renderer.drawPixel(screenX, screenY, level < 3);
+          break;
+        case TransparentOverlayPass::GrayscaleLsb:
+          if (level == 1) renderer.drawPixel(screenX, screenY, false);
+          break;
+        case TransparentOverlayPass::GrayscaleMsb:
+          if (level == 1 || level == 2) renderer.drawPixel(screenX, screenY, false);
+          break;
+      }
     }
   }
 
+  return true;
+}
+
+bool renderTransparentOverlayBmp(FsFile& file, GfxRenderer& renderer, const char* pathForLog) {
+  OverlayBmpInfo info;
+  if (!parseOverlayBmpHeader(file, info, true)) return false;
+
+  const auto placement = calculateBitmapPlacement(info.width, info.height, renderer);
+  auto row = makeUniqueNoThrow<uint8_t[]>(info.rowBytes);
+  if (!row) {
+    LOG_ERR("SLP", "OOM: transparent overlay row (%u bytes)", static_cast<unsigned>(info.rowBytes));
+    return false;
+  }
+
+  LOG_DBG("SLP", "Rendering transparent overlay: %s (%dx%d)", pathForLog, info.width, info.height);
+
+  if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
+    return false;
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+  renderer.copyGrayscaleLsbBuffers();
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleMsb)) {
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+  renderer.copyGrayscaleMsbBuffers();
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
   return true;
 }
 
@@ -230,24 +281,54 @@ bool selectRandomTransparentOverlay(const char* dirPath, std::string& selectedPa
     return false;
   }
 
-  uint16_t validCount = 0;
-  std::string selectedName;
+  std::vector<std::string> files;
+  files.reserve(CrossPointState::SLEEP_RECENT_COUNT);
 
+  // Collect all valid 32-bit alpha BMP overlay files first, matching the existing custom sleep image selection flow.
   for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
-    if (dirFile.isDirectory()) continue;
+    if (dirFile.isDirectory()) {
+      dirFile.close();
+      continue;
+    }
 
     dirFile.getName(name.get(), MAX_SLEEP_OVERLAY_NAME_LEN);
-    if (name[0] == '.' || !FsHelpers::hasBmpExtension(name.get())) continue;
+    const auto filename = std::string(name.get());
+    if (filename.empty() || filename[0] == '.') {
+      dirFile.close();
+      continue;
+    }
+
+    if (!FsHelpers::hasBmpExtension(filename)) {
+      LOG_DBG("SLP", "Skipping non-.bmp transparent overlay: %s", name.get());
+      dirFile.close();
+      continue;
+    }
 
     OverlayBmpInfo info;
-    if (!parseOverlayBmpHeader(dirFile, info, false)) continue;
+    if (!parseOverlayBmpHeader(dirFile, info, false)) {
+      LOG_DBG("SLP", "Skipping invalid transparent overlay BMP: %s", name.get());
+      dirFile.close();
+      continue;
+    }
 
-    if (validCount < UINT16_MAX) validCount++;
-    if (random(validCount) == 0) selectedName = name.get();
+    files.emplace_back(filename);
+    dirFile.close();
   }
 
-  if (selectedName.empty()) return false;
-  selectedPath = std::string(dirPath) + "/" + selectedName;
+  const auto numFiles = files.size();
+  if (numFiles == 0) return false;
+
+  // Pick a random overlay, excluding recently shown indices just like the existing custom sleep mode.
+  const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
+  const uint8_t window = static_cast<uint8_t>(std::min(static_cast<size_t>(APP_STATE.recentSleepFill), numFiles - 1));
+  auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
+  for (uint8_t attempt = 0; attempt < 20 && APP_STATE.isRecentSleep(randomFileIndex, window); attempt++) {
+    randomFileIndex = static_cast<uint16_t>(random(fileCount));
+  }
+
+  APP_STATE.pushRecentSleep(randomFileIndex);
+  APP_STATE.saveToFile();
+  selectedPath = std::string(dirPath) + "/" + files[randomFileIndex];
   return true;
 }
 
