@@ -5,8 +5,14 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Txt.h>
 #include <Xtc.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <string>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -15,6 +21,237 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+
+namespace {
+
+// Kept separate from /sleep.bmp and /.sleep so alpha-overlay art does not mix with full-screen wallpapers.
+constexpr char TRANSPARENT_SLEEP_ROOT[] = "/sleep-overlay.bmp";
+constexpr char TRANSPARENT_SLEEP_DIR[] = "/.sleep-overlay";
+constexpr char TRANSPARENT_SLEEP_LEGACY_DIR[] = "/sleep-overlay";
+constexpr size_t MAX_SLEEP_OVERLAY_NAME_LEN = 256;
+constexpr uint8_t MIN_VISIBLE_ALPHA = 8;
+
+struct BitmapPlacement {
+  int x = 0;
+  int y = 0;
+  float cropX = 0.0f;
+  float cropY = 0.0f;
+};
+
+struct OverlayBmpInfo {
+  int width = 0;
+  int height = 0;
+  bool topDown = false;
+  uint32_t dataOffset = 0;
+  uint32_t rowBytes = 0;
+};
+
+uint16_t readLE16(FsFile& file) {
+  const int c0 = file.read();
+  const int c1 = file.read();
+  const auto b0 = static_cast<uint8_t>(c0 < 0 ? 0 : c0);
+  const auto b1 = static_cast<uint8_t>(c1 < 0 ? 0 : c1);
+  return static_cast<uint16_t>(b0) | (static_cast<uint16_t>(b1) << 8);
+}
+
+uint32_t readLE32(FsFile& file) {
+  const int c0 = file.read();
+  const int c1 = file.read();
+  const int c2 = file.read();
+  const int c3 = file.read();
+  const auto b0 = static_cast<uint8_t>(c0 < 0 ? 0 : c0);
+  const auto b1 = static_cast<uint8_t>(c1 < 0 ? 0 : c1);
+  const auto b2 = static_cast<uint8_t>(c2 < 0 ? 0 : c2);
+  const auto b3 = static_cast<uint8_t>(c3 < 0 ? 0 : c3);
+  return static_cast<uint32_t>(b0) | (static_cast<uint32_t>(b1) << 8) | (static_cast<uint32_t>(b2) << 16) |
+         (static_cast<uint32_t>(b3) << 24);
+}
+
+BitmapPlacement calculateBitmapPlacement(const int bitmapWidth, const int bitmapHeight, const GfxRenderer& renderer) {
+  BitmapPlacement placement;
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  if (bitmapWidth > pageWidth || bitmapHeight > pageHeight) {
+    float ratio = static_cast<float>(bitmapWidth) / static_cast<float>(bitmapHeight);
+    const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
+
+    if (ratio > screenRatio) {
+      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
+        placement.cropX = 1.0f - (screenRatio / ratio);
+        ratio = (1.0f - placement.cropX) * static_cast<float>(bitmapWidth) / static_cast<float>(bitmapHeight);
+      }
+      placement.x = 0;
+      placement.y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+    } else {
+      if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP) {
+        placement.cropY = 1.0f - (ratio / screenRatio);
+        ratio = static_cast<float>(bitmapWidth) / ((1.0f - placement.cropY) * static_cast<float>(bitmapHeight));
+      }
+      placement.x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
+      placement.y = 0;
+    }
+  } else {
+    placement.x = (pageWidth - bitmapWidth) / 2;
+    placement.y = (pageHeight - bitmapHeight) / 2;
+  }
+
+  return placement;
+}
+
+bool parseOverlayBmpHeader(FsFile& file, OverlayBmpInfo& info, const bool logErrors) {
+  if (!file) return false;
+  if (!file.seek(0)) return false;
+
+  if (readLE16(file) != 0x4D42) {
+    if (logErrors) LOG_ERR("SLP", "Transparent overlay is not a BMP");
+    return false;
+  }
+
+  file.seekCur(8);
+  info.dataOffset = readLE32(file);
+
+  const uint32_t dibSize = readLE32(file);
+  if (dibSize < 40) {
+    if (logErrors) LOG_ERR("SLP", "Unsupported BMP DIB header: %u", static_cast<unsigned>(dibSize));
+    return false;
+  }
+
+  info.width = static_cast<int32_t>(readLE32(file));
+  const auto rawHeight = static_cast<int32_t>(readLE32(file));
+  info.topDown = rawHeight < 0;
+  info.height = info.topDown ? -rawHeight : rawHeight;
+
+  const uint16_t planes = readLE16(file);
+  const uint16_t bpp = readLE16(file);
+  const uint32_t compression = readLE32(file);
+
+  if (planes != 1 || bpp != 32 || !(compression == 0 || compression == 3)) {
+    if (logErrors) {
+      LOG_ERR("SLP", "Transparent overlay must be 32-bit BGRA BMP (planes=%u bpp=%u comp=%u)", planes, bpp,
+              static_cast<unsigned>(compression));
+    }
+    return false;
+  }
+
+  constexpr int MAX_IMAGE_WIDTH = 2048;
+  constexpr int MAX_IMAGE_HEIGHT = 3072;
+  if (info.width <= 0 || info.height <= 0 || info.width > MAX_IMAGE_WIDTH || info.height > MAX_IMAGE_HEIGHT) {
+    if (logErrors) LOG_ERR("SLP", "Bad transparent overlay dimensions: %dx%d", info.width, info.height);
+    return false;
+  }
+
+  info.rowBytes = static_cast<uint32_t>(info.width) * 4u;
+  if (!file.seek(info.dataOffset)) {
+    if (logErrors) LOG_ERR("SLP", "Failed to seek transparent overlay pixel data");
+    return false;
+  }
+
+  return true;
+}
+
+uint8_t bayerThreshold4x4(const int x, const int y) {
+  static constexpr uint8_t BAYER_4X4[16] = {0, 128, 32, 160, 192, 64, 224, 96, 48, 176, 16, 144, 240, 112, 208, 80};
+  return BAYER_4X4[((y & 0x03) << 2) | (x & 0x03)];
+}
+
+bool renderTransparentOverlayBmp(FsFile& file, const GfxRenderer& renderer, const char* pathForLog) {
+  OverlayBmpInfo info;
+  if (!parseOverlayBmpHeader(file, info, true)) return false;
+
+  const auto placement = calculateBitmapPlacement(info.width, info.height, renderer);
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  const int cropPixX = std::floor(info.width * placement.cropX / 2.0f);
+  const int cropPixY = std::floor(info.height * placement.cropY / 2.0f);
+  const float croppedWidth = (1.0f - placement.cropX) * static_cast<float>(info.width);
+  const float croppedHeight = (1.0f - placement.cropY) * static_cast<float>(info.height);
+
+  float scale = 1.0f;
+  if (croppedWidth > 0.0f && croppedHeight > 0.0f) {
+    const float widthScale = static_cast<float>(pageWidth) / croppedWidth;
+    const float heightScale = static_cast<float>(pageHeight) / croppedHeight;
+    scale = std::min(widthScale, heightScale);
+    if (scale > 1.0f) scale = 1.0f;
+  }
+  const bool isScaled = scale < 1.0f;
+
+  auto row = makeUniqueNoThrow<uint8_t[]>(info.rowBytes);
+  if (!row) {
+    LOG_ERR("SLP", "OOM: transparent overlay row (%u bytes)", static_cast<unsigned>(info.rowBytes));
+    return false;
+  }
+
+  LOG_DBG("SLP", "Rendering transparent overlay: %s (%dx%d)", pathForLog, info.width, info.height);
+
+  for (int bmpY = 0; bmpY < info.height; bmpY++) {
+    if (file.read(row.get(), info.rowBytes) != static_cast<int>(info.rowBytes)) {
+      LOG_ERR("SLP", "Short read in transparent overlay row %d", bmpY);
+      return false;
+    }
+
+    int screenY = -cropPixY + (info.topDown ? bmpY : info.height - 1 - bmpY);
+    if (isScaled) screenY = std::floor(screenY * scale);
+    screenY += placement.y;
+
+    if (screenY >= renderer.getScreenHeight()) break;
+    if (screenY < 0 || bmpY < cropPixY) continue;
+
+    for (int bmpX = cropPixX; bmpX < info.width - cropPixX; bmpX++) {
+      int screenX = bmpX - cropPixX;
+      if (isScaled) screenX = std::floor(screenX * scale);
+      screenX += placement.x;
+
+      if (screenX >= renderer.getScreenWidth()) break;
+      if (screenX < 0) continue;
+
+      const uint8_t* pixel = row.get() + (static_cast<size_t>(bmpX) * 4u);
+      const uint8_t alpha = pixel[3];
+      if (alpha < MIN_VISIBLE_ALPHA || alpha <= bayerThreshold4x4(screenX, screenY)) continue;
+
+      const uint8_t lum = (77u * pixel[2] + 150u * pixel[1] + 29u * pixel[0]) >> 8;
+      const bool drawBlack = lum <= bayerThreshold4x4(screenX, screenY);
+      renderer.drawPixel(screenX, screenY, drawBlack);
+    }
+  }
+
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  return true;
+}
+
+bool selectRandomTransparentOverlay(const char* dirPath, std::string& selectedPath) {
+  auto dir = Storage.open(dirPath);
+  if (!dir || !dir.isDirectory()) return false;
+
+  auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_OVERLAY_NAME_LEN);
+  if (!name) {
+    LOG_ERR("SLP", "OOM: transparent overlay filename buffer");
+    return false;
+  }
+
+  uint16_t validCount = 0;
+  std::string selectedName;
+
+  for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+    if (dirFile.isDirectory()) continue;
+
+    dirFile.getName(name.get(), MAX_SLEEP_OVERLAY_NAME_LEN);
+    if (name[0] == '.' || !FsHelpers::hasBmpExtension(name.get())) continue;
+
+    OverlayBmpInfo info;
+    if (!parseOverlayBmpHeader(dirFile, info, false)) continue;
+
+    if (validCount < UINT16_MAX) validCount++;
+    if (random(validCount) == 0) selectedName = name.get();
+  }
+
+  if (selectedName.empty()) return false;
+  selectedPath = std::string(dirPath) + "/" + selectedName;
+  return true;
+}
+
+}  // namespace
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -26,6 +263,13 @@ void SleepActivity::onEnter() {
 
   if (renderQuickResume) {
     return renderLastScreenSleepScreen();
+  }
+
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    }
+    return renderTransparentCustomSleepScreen();
   }
 
   // Show popup with reader orientation only when going to sleep from reader
@@ -50,6 +294,8 @@ void SleepActivity::onEnter() {
       } else {
         return renderCustomSleepScreen();
       }
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM):
+      return renderTransparentCustomSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -236,6 +482,32 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
   }
+}
+
+void SleepActivity::renderTransparentCustomSleepScreen() const {
+  {
+    FsFile rootFile;
+    if (Storage.openFileForRead("SLP", TRANSPARENT_SLEEP_ROOT, rootFile)) {
+      if (renderTransparentOverlayBmp(rootFile, renderer, TRANSPARENT_SLEEP_ROOT)) return;
+    }
+  }
+
+  std::string selectedPath;
+  if (!selectRandomTransparentOverlay(TRANSPARENT_SLEEP_DIR, selectedPath)) {
+    selectRandomTransparentOverlay(TRANSPARENT_SLEEP_LEGACY_DIR, selectedPath);
+  }
+
+  if (!selectedPath.empty()) {
+    FsFile overlayFile;
+    if (Storage.openFileForRead("SLP", selectedPath, overlayFile) &&
+        renderTransparentOverlayBmp(overlayFile, renderer, selectedPath.c_str())) {
+      return;
+    }
+  }
+
+  LOG_ERR("SLP", "No valid transparent sleep overlay found");
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  renderDefaultSleepScreen();
 }
 
 void SleepActivity::renderCoverSleepScreen() const {
