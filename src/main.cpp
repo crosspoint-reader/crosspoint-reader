@@ -26,6 +26,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#include "activities/util/PowerButtonMenuActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -436,6 +437,38 @@ void loop() {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
     RenderLock lock;
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
+
+  // Dispatch pending action selected from power button action menu.
+  if (APP_STATE.pendingPwrBtnAction != 0xFF) {
+    const uint8_t action = APP_STATE.pendingPwrBtnAction;
+    APP_STATE.pendingPwrBtnAction = 0xFF;
+    switch (action) {
+      case CrossPointSettings::SHORT_PWRBTN::SLEEP:
+        LOG_DBG("MAIN", "Power button menu: sleep");
+        enterDeepSleep();
+        return;
+      case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH:
+        LOG_DBG("MAIN", "Power button menu: refresh screen");
+        {
+          RenderLock lock;
+          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        }
+        break;
+      case CrossPointSettings::SHORT_PWRBTN::PAGE_TURN:
+        LOG_DBG("MAIN", "Power button menu: page turn");
+        APP_STATE.pendingPageTurnFromMenu = true;
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Show power button action menu on short press when set to MENU mode.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::MENU &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power) &&
+      !PowerButtonMenuActivity::isActive()) {
+    activityManager.pushActivity(std::make_unique<PowerButtonMenuActivity>(renderer, mappedInputManager));
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.

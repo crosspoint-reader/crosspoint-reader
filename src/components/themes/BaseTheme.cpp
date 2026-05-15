@@ -686,6 +686,21 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   return Rect{x, y, w, h};
 }
 
+void BaseTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
+  constexpr int outline = 2;
+  renderer.fillRect(rect.x - outline, rect.y - outline, rect.width + outline * 2, rect.height + outline * 2, true);
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+}
+
+void BaseTheme::drawPopupSelection(const GfxRenderer& renderer, Rect rect, const char* text) const {
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, text);
+  const int textX = rect.x + (rect.width - textWidth) / 2;
+  const int textLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int textY = rect.y + (rect.height - textLineHeight) / 2;
+  renderer.drawText(UI_10_FONT_ID, textX, textY, text, false);
+}
+
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
   constexpr int barHeight = 4;
   const int barWidth = layout.width - 30;  // twice the margin in drawPopup to match text width
