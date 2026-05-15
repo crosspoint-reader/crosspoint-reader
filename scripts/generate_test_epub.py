@@ -1016,6 +1016,7 @@ def main():
 <li>pre with inline code element</li>
 <li>horizontal rules between paragraphs</li>
 <li>superscript and subscript rendering</li>
+<li>list rendering: ul, ol, nested, start/value attributes, bare li</li>
 </ul>
 """,
                 ),
@@ -1086,6 +1087,88 @@ greet("World");</code></pre>
 <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
 <hr/>
 <p>End of horizontal rule tests.</p>
+""",
+                ),
+                [],
+            ),
+            (
+                "6. Lists",
+                make_chapter(
+                    "List Rendering Tests",
+                    """
+<h2>Unordered list (bullets)</h2>
+<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>
+
+<h2>Ordered list (numbers 1, 2, 3)</h2>
+<ol>
+<li>One</li>
+<li>Two</li>
+<li>Three</li>
+</ol>
+
+<h2>Ordered list with start="5" (should begin at 5)</h2>
+<ol start="5">
+<li>Five</li>
+<li>Six</li>
+<li>Seven</li>
+</ol>
+
+<h2>Ordered list with li value override (should show 1, 2, 5, 6)</h2>
+<ol>
+<li>One</li>
+<li>Two</li>
+<li value="5">Five</li>
+<li>Six</li>
+</ol>
+
+<h2>Nested lists</h2>
+<ul>
+<li>Fruit
+  <ul>
+  <li>Apple</li>
+  <li>Banana</li>
+  </ul>
+</li>
+<li>Vegetables
+  <ul>
+  <li>Carrot</li>
+  <li>Pea</li>
+  </ul>
+</li>
+</ul>
+
+<h2>Nested ordered lists (outer 1,2 / inner 1,2,3)</h2>
+<ol>
+<li>Chapter one
+  <ol>
+  <li>Section A</li>
+  <li>Section B</li>
+  <li>Section C</li>
+  </ol>
+</li>
+<li>Chapter two
+  <ol>
+  <li>Section A</li>
+  <li>Section B</li>
+  </ol>
+</li>
+</ol>
+
+<h2>Bare li outside any list (no bullet should appear)</h2>
+<p>The line below is a bare &lt;li&gt; with no enclosing &lt;ul&gt; or &lt;ol&gt;. No bullet or number should appear before it.</p>
+<li>This bare li should have no marker</li>
+<p>Normal paragraph resumed.</p>
+
+<h2>List with inline formatting</h2>
+<ul>
+<li><b>Bold</b> item text</li>
+<li><i>Italic</i> item text</li>
+<li>Item with <b>bold</b> and <i>italic</i> mixed</li>
+</ul>
 """,
                 ),
                 [],

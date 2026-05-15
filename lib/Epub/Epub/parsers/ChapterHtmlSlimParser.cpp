@@ -976,7 +976,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
-    self->listStack.push_back({self->depth, name[0] == 'o', 0});
+    int startCounter = 0;
+    if (name[0] == 'o') {
+      const char* startAttr = getAttribute(atts, "start");
+      if (startAttr) {
+        int v = atoi(startAttr);
+        if (v > 0) startCounter = v - 1;  // counter is pre-incremented on each <li>
+      }
+    }
+    self->listStack.push_back({self->depth, name[0] == 'o', startCounter});
   }
 
   const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
@@ -1050,14 +1058,21 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        char marker[12];
-        if (!self->listStack.empty() && self->listStack.back().isOrdered) {
-          self->listStack.back().counter += 1;
-          snprintf(marker, sizeof(marker), "%d.", self->listStack.back().counter);
-        } else {
-          strcpy(marker, "\xe2\x80\xa2");
+        if (!self->listStack.empty()) {
+          char marker[12];
+          if (self->listStack.back().isOrdered) {
+            const char* valueAttr = getAttribute(atts, "value");
+            if (valueAttr) {
+              int v = atoi(valueAttr);
+              if (v > 0) self->listStack.back().counter = v - 1;
+            }
+            self->listStack.back().counter += 1;
+            snprintf(marker, sizeof(marker), "%d.", self->listStack.back().counter);
+          } else {
+            strcpy(marker, "\xe2\x80\xa2");
+          }
+          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR);
         }
-        self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR);
       } else if (strcmp(name, "pre") == 0) {
         // Record depth so characterData can treat \n as a hard line break inside <pre>.
         // depth has not been incremented yet here; it will be after startElement returns.
