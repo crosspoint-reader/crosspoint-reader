@@ -23,7 +23,7 @@ Therefore this branch focuses on real fixes and real improvements while trying t
 - Book information screen
 - Markdown-support
 - WiFi captive portal support
-- Supporting ~~strikethrough~~ (*) and tables
+- Supporting ~~strikethrough~~, superscript / subscript (*) and tables
 - Support for used defined actions on double-click / long-click per button (*)
 - User defined fonts
 - ...
@@ -33,17 +33,17 @@ Therefore this branch focuses on real fixes and real improvements while trying t
 
 Your usecase might be completely different from mine, so I try to give an overview of the different reader flavors to my best knowledge. If you know of more variants / have more information, then let me know
 
-Last update: April, 12th, 2026
+Last update: May, 15th, 2026
 
 | Reader                               | Visual appeal | Functionality | Formats | Pros | Cons | Custom fonts | CJK | Bluetooth |
 | ------------------------------------ | ------------- | ------------- | ------- | ---- | ---- | ------------ | --- | --- |
 | [Stock](https://www.xteink.com)       | Okay          | Reader        | XTC, EPUB, TXT | Frequent official updates | Lot of rendering issues | Yes | Yes | Yes |
 | [THIS FORK: CrossPoint ++](https://github.com/jpirnay/crosspoint-reader) | Okay | Calibre Wireless support; Proper KOReader progress sync; Wi-Fi transfer; Book Info; Clock, Weather Info | EPUB, XTC, TXT, MD | Faster integration of functionality | Small team | Yes | Limited | No |
-| [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) | Okay | Calibre Wireless support; KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | Biggest community | Least common denominator approach | No | No | No |
+| [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) | Okay | Calibre Wireless support; KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | Biggest community | Least common denominator approach | Yes | No | No |
 | [CrossPet](https://github.com/trilwu/crosspet) | Excellent, Playful | Virtual pet motivator; mini-games | EPUB, TXT | A lot of additional apps | Higher battery drain, Small team, bloaty | Yes | Yes | Yes |
 | [Papyrix](https://github.com/bigbag/papyrix-reader) | Minimalist | Calibre Wireless support; exFAT support | EPUB, FB2, MD, TXT | A lot of good ideas | Small team | Yes | Yes | No |
 | [Inx](https://github.com/obijuankenobiii/inx) | Nice | mainly crosspoint functionality plus reading statistics | EPUB, XTC, TXT | Good reading stats | Small team | No | No | No |
 | [vCodex](https://github.com/franssjz/cpr-vcodex) | Nice | mainly crosspoint functionality plus reading statistics | EPUB, XTC, TXT | Good reading stats | Small team | No | No | No |
 | [PlusPoint](https://github.com/ngxson/pluspoint-reader) | Okay | Experimental | EPUB, TXT, JS Apps | Support for custom JS apps; better RTC | Based on older code, small team | Yes | Yes | No |
 | [SUMI](https://github.com/psychoplath9450/SUMI) | Nice | Lua custom apps; Bluetooth keyboard support for notes; Game Boy emulator; Bluetooth Transfer | EPUB, TXT, XTC, MD | Many apps, customizable, Papyrix fork | Single Contributor, **No Wi-Fi** | Yes | Yes | Yes |
-| [CrossInk](https://github.com/uxjulia/CrossInk) | Okay | Calibre Wireless support; KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | One of the best alternatives | Small team | No | No | No |
+| [CrossInk](https://github.com/uxjulia/CrossInk) | Okay | Calibre Wireless support; KOReader progress sync; Wi-Fi transfer | EPUB, XTC, TXT | One of the best alternatives | Small team | Yes | No | No |
