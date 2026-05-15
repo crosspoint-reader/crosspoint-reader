@@ -1,6 +1,6 @@
 # CrossPoint Reader
 
-Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
+Firmware for **Xteink** e-paper display readers (X3 and X4) (unaffiliated with Xteink).
 Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
 
 CrossPoint Reader is a purpose-built firmware designed to be a drop-in, fully open-source replacement for the official 
@@ -11,7 +11,7 @@ Xteink firmware. It aims to match or improve upon the standard EPUB reading expe
 ## Motivation
 
 E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited 
-customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
+customisation. **Xteink** devices (such as the X3 and X4) are affordable e-paper readers, however the official firmware remains closed.
 CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truly unlock the device's
 potential.
 
@@ -19,7 +19,7 @@ CrossPoint Reader aims to:
 * Provide a **fully open-source alternative** to the official firmware.
 * Offer a **document reader** capable of handling EPUB content on constrained hardware.
 * Support **customisable font, layout, and display** options.
-* Run purely on the **Xteink X4 hardware**.
+* Run purely on **Xteink hardware**.
 
 This project is **not affiliated with Xteink**; it's built as a community project.
 
@@ -49,11 +49,35 @@ See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, 
 
 For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
 
+## USB-locked devices (Xteink Unlocker)
+
+Some Xteink units purchased from third-party stores (e.g. AliExpress) ship with USB flashing locked from the factory.
+If your device is locked, you will need to use the **Xteink Unlocker** tool available at
+https://crosspointreader.com/#unlock-tool before you can flash CrossPoint.
+
+**You do not need this tool if you bought your device directly from xteink.com.** Those units are not locked.
+
+**Not sure if your device is locked?** Power it on, connect the USB-C cable, and try flashing via the web flasher first
+(see [Installing](#installing) below). If the browser's serial device picker does not show your device, try a different
+USB port or browser before assuming the device is locked. Only reach for the unlocker if the device still doesn't appear.
+
+> ### ⚠️ WARNING: READ THIS BEFORE USING THE UNLOCKER ⚠️
+>
+> **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
+>
+> Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
+> stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
+> the firmware you flashed doesn't support OTA, **there is no way out**.
+>
+> **The Papyrix fork has removed OTA update support from its code.** If you flash Papyrix onto a
+> USB-locked unit, you will have **zero update or recovery path** and will be stuck on it forever. **Do not flash
+> Papyrix (or any other unsupported firmware) on a locked device.**
+
 ## Installing
 
 ### Web (latest firmware)
 
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
+1. Connect your Xteink device to your computer via USB-C and wake/unlock the device
 2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
@@ -61,7 +85,7 @@ back to the other partition using the "Swap boot partition" button here https://
 
 ### Web (specific firmware version)
 
-1. Connect your Xteink X4 to your computer via USB-C
+1. Connect your Xteink device to your computer via USB-C
 2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
 3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
 
@@ -75,7 +99,7 @@ back to the other partition using the "Swap boot partition" button here https://
 pip install esptool
 ```
 2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
-3. Connect your Xteink X4 to your computer via USB-C.
+3. Connect your Xteink device to your computer via USB-C.
 4. Note the device location. On Linux, run `dmesg` after connecting. On MacOS, run :
 ```bash
 log stream --predicate 'subsystem == "com.apple.iokit"' --info
@@ -97,7 +121,7 @@ See [Development](#development) below.
 * **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
 * Python 3.8+
 * USB-C cable for flashing the ESP32-C3
-* Xteink X4
+* Xteink device (X3 or X4)
 
 ### Checking out the code
 
@@ -112,7 +136,7 @@ git submodule update --init --recursive
 
 ### Flashing your device
 
-Connect your Xteink X4 to your computer via USB-C and run the following command.
+Connect your Xteink device to your computer via USB-C and run the following command.
 
 ```sh
 pio run --target upload
@@ -191,7 +215,7 @@ principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
+CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the hardware**.
 
 Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
 was making CrossPoint.
