@@ -1014,6 +1014,7 @@ def main():
 <li>pre element: intrinsic line breaks preserved</li>
 <li>pre element: leading/trailing blank lines</li>
 <li>pre with inline code element</li>
+<li>horizontal rules between paragraphs</li>
 </ul>
 """,
                 ),
@@ -1061,6 +1062,29 @@ Fifth line (blank line above)</pre>
 
 greet("World");</code></pre>
 <p>Normal paragraph after pre/code block.</p>
+""",
+                ),
+                [],
+            ),
+            (
+                "4. Horizontal Rules",
+                make_chapter(
+                    "Horizontal Rule Tests",
+                    """
+<p>A plain &lt;hr&gt; between two paragraphs. A thin line should appear between the two blocks of text.</p>
+<p>Paragraph before the first rule. Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+<hr/>
+<p>Paragraph after the first rule. The rule above should be a full-width horizontal line.</p>
+<hr/>
+<p>Second rule above. Two rules in a row with no text between them:</p>
+<hr/>
+<hr/>
+<p>Two rules appeared above. Now a rule at the very start of a section (right after the heading):</p>
+<hr/>
+<p>Rule appeared right after the heading. Finally, a rule near the end of the page to verify it does not cause a spurious page break when there is still room:</p>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<hr/>
+<p>End of horizontal rule tests.</p>
 """,
                 ),
                 [],

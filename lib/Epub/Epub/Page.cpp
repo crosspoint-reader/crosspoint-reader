@@ -49,6 +49,25 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
   return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
 }
 
+void PageHR::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  renderer.drawLine(xPos + xOffset, yPos + yOffset, xPos + xOffset + width - 1, yPos + yOffset);
+}
+
+bool PageHR::serialize(FsFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, width);
+  return true;
+}
+
+std::unique_ptr<PageHR> PageHR::deserialize(FsFile& file) {
+  int16_t xPos, yPos, width;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, width);
+  return std::unique_ptr<PageHR>(new PageHR(xPos, yPos, width));
+}
+
 void PageTableFragment::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   const int drawX = xPos + xOffset;
   const int drawY = yPos + yOffset;
@@ -237,6 +256,10 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
       auto pt = PageTableFragment::deserialize(file);
       if (!pt) return nullptr;
       page->elements.push_back(std::move(pt));
+    } else if (tag == TAG_PageHR) {
+      auto hr = PageHR::deserialize(file);
+      if (!hr) return nullptr;
+      page->elements.push_back(std::move(hr));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;

@@ -21,6 +21,7 @@ enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
   TAG_PageImage = 2,
   TAG_PageTable = 3,
+  TAG_PageHR = 4,
 };
 
 // represents something that has been added to a page
@@ -61,6 +62,17 @@ class PageImage final : public PageElement {
   PageElementTag getTag() const override { return TAG_PageImage; }
   static std::unique_ptr<PageImage> deserialize(FsFile& file);
   const ImageBlock& getImageBlock() const { return *imageBlock; }
+};
+
+class PageHR final : public PageElement {
+  int16_t width;
+
+ public:
+  PageHR(const int16_t xPos, const int16_t yPos, const int16_t width) : PageElement(xPos, yPos), width(width) {}
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(FsFile& file) override;
+  PageElementTag getTag() const override { return TAG_PageHR; }
+  static std::unique_ptr<PageHR> deserialize(FsFile& file);
 };
 
 struct TableCell {
