@@ -1054,6 +1054,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         blockStyle.alignment = cssStyle.textAlign;
         blockStyle.textAlignDefined = true;
       }
+      // For <li> with no CSS margin, apply depth-based indent so nested lists are visually
+      // distinguishable. listStack.size() == 1 for top-level, 2 for first nested, etc.
+      if (strcmp(name, "li") == 0 && !cssStyle.hasMarginLeft() && !self->listStack.empty()) {
+        const int depth = static_cast<int>(std::min(self->listStack.size(), size_t(3)));
+        blockStyle.marginLeft = static_cast<int16_t>(emSize * 1.5f * depth);
+      }
       self->startNewTextBlock(blockStyle);
       self->updateEffectiveInlineStyle();
 
