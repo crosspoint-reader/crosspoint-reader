@@ -435,15 +435,18 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
 void RoundedRaffTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
   constexpr int outline = 2;
   renderer.fillRoundedRect(rect.x - outline, rect.y - outline, rect.width + outline * 2, rect.height + outline * 2,
-                           kMenuRadius + outline, Color::White);
-  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, kMenuRadius, Color::Black);
+                           kRowRadius + outline, Color::Black);
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, kRowRadius, Color::White);
 }
 
-void RoundedRaffTheme::drawPopupSelection(const GfxRenderer& renderer, Rect rect, const char* text) const {
-  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, kMenuRadius, Color::Black);
-  const int textWidth = renderer.getTextWidth(kTitleFontId, text, EpdFontFamily::BOLD);
-  const int textX = rect.x + (rect.width - textWidth) / 2;
-  const int textLineHeight = renderer.getLineHeight(kTitleFontId);
-  const int textY = rect.y + (rect.height - textLineHeight) / 2;
-  renderer.drawText(kTitleFontId, textX, textY, text, false, EpdFontFamily::BOLD);
+void RoundedRaffTheme::drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                                          bool selected) const {
+  const int textH = renderer.getLineHeight(fontId);
+  const int textW = renderer.getTextWidth(fontId, text);
+  const int textY = rect.y + (rect.height - textH) / 2;
+  const int textX = rect.x + (rect.width - textW) / 2;
+  if (selected) {
+    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, 6, Color::Black);
+  }
+  renderer.drawText(fontId, textX, textY, text, !selected);
 }
