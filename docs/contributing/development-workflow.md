@@ -28,6 +28,37 @@ CI enforces formatting, static analysis, and build checks.
 Use clang-format 21+ locally to match CI.
 If `clang-format` is missing or too old locally, see [Getting Started](./getting-started.md).
 
+### Web UI development
+
+The web UI can be developed locally without a device. Install Bun, then run:
+
+```sh
+bun install
+bun run web:dev
+```
+
+The dev server serves the same HTML/CSS files used by the ESP32 web server and simulates the API, WebDAV, and WebSocket upload paths against a local SD-card directory at `.crosspoint-web-dev-sd`.
+It binds to `127.0.0.1` by default because the simulator exposes file upload, WebDAV write/delete, and settings routes without authentication.
+
+Useful commands:
+
+```sh
+bun run web:check
+bun run web:test
+```
+
+`web:check` typechecks the local dev tooling. `web:test` starts an isolated simulator and verifies page loading, file operations, settings, Wi-Fi, OPDS, WebDAV, and WebSocket upload flows.
+
+To test the UI against a real reader while still using local HTML/CSS with live reload:
+
+```sh
+CROSSPOINT_DEVICE=http://<device-ip> bun run web:dev
+```
+
+Use `WEB_PORT=<port>` if the default port is already in use.
+Use `WEB_HOST=0.0.0.0` only when you intentionally need LAN access to the simulator.
+When `CROSSPOINT_DEVICE` is set, the dev server proxies API and WebSocket traffic to that reader while continuing to serve local HTML/CSS, so treat the server as a local development tool rather than a public service.
+
 ## 4) Open the PR
 
 - Use a semantic title (example: `fix: avoid crash when opening malformed epub`)

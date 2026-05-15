@@ -19,3 +19,11 @@ build
 lib/EpdFont/scripts/downloaded_fonts/
 lib/EpdFont/scripts/instanced_fonts/
 lib/EpdFont/scripts/output/
+node_modules/
+.crosspoint-web-dev-sd/
+.superpowers/
+.playwright-mcp/
+/files-*.png
+/home-*.png
+/settings-*.png
+/upload-*.png

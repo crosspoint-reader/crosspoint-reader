@@ -102,6 +102,24 @@ jobs:
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 
+  web-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check web UI dev tooling
+        run: bun run web:check
+
+      - name: Test web UI dev flow
+        run: bun run web:test
+
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
   test-status:
@@ -110,6 +128,7 @@ jobs:
       - build
       - clang-format
       - cppcheck
+      - web-ui
     if: always()
     runs-on: ubuntu-latest
     steps:

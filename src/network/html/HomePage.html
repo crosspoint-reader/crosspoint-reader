@@ -3,155 +3,138 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('crosspoint-theme') || 'dark';
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    </script>
     <title>CrossPoint Reader</title>
     <style>
-      :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
+      .panel {
+        margin-top: 18px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        overflow: hidden;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 {
-        color: var(--title-color);
-        margin-top: 0;
-      }
-      .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-      .info-row {
+      .row {
+        min-height: var(--ui-control-h);
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        padding: 8px 0;
-        border-bottom: 1px solid var(--border-color);
+        gap: 14px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
       }
-      .info-row:last-child {
-        border-bottom: none;
+      .row:last-child {
+        border-bottom: 0;
       }
       .label {
-        font-weight: 600;
-        color: var(--label-color);
+        color: var(--muted);
+        font-size: 16px;
+        font-weight: 550;
       }
       .value {
-        color: var(--title-color);
+        color: var(--foreground);
+        font-size: 16px;
+        font-weight: 650;
+        text-align: right;
+        overflow-wrap: anywhere;
       }
       .status {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 12px;
-        background-color: #27ae60;
-        color: white;
-        font-size: 0.9em;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
       }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: currentcolor;
       }
     </style>
+    <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <h1>📚 CrossPoint Reader</h1>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="brand-logo" viewBox="0 0 162 180" aria-hidden="true"><path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z"></path></svg>
+          </span>
+          <span class="brand-title">CrossPoint</span>
+        </div>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="/" class="active"><svg viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>Home</a>
+          <a href="/files"><svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Files</a>
+          <a href="/settings"><svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</a>
+          <a href="/fonts"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path></svg>Fonts</a>
+        </nav>
+        <button class="theme-toggle" type="button" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle theme">
+          <svg class="theme-icon-dark" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+          <svg class="theme-icon-light" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+        </button>
+      </header>
 
-    <div class="nav-links">
-      <a href="/" class="active">Home</a>
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
-      <a href="/fonts">Fonts</a>
-    </div>
-
-    <div class="card">
-      <h2>Device Status</h2>
-      <div class="info-row">
-        <span class="label">Version</span>
-        <span class="value" id="version"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">WiFi Status</span>
-        <span class="status">Connected</span>
-      </div>
-      <div class="info-row">
-        <span class="label">IP Address</span>
-        <span class="value" id="ip-address"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">Free Memory</span>
-        <span class="value" id="free-heap"></span>
-      </div>
-    </div>
-
-    <div class="card">
-      <p style="text-align: center; color: #95a5a6; margin: 0">
-        CrossPoint E-Reader • Open Source
-      </p>
-    </div>
-  <script>
-    async function fetchStatus() {
-      try {
-        const response = await fetch('/api/status');
-        if (!response.ok) {
-          throw new Error('Failed to fetch status: ' + response.status + ' ' + response.statusText);
-        }
-        const data = await response.json();
-        document.getElementById('version').textContent = data.version || 'N/A';
-        document.getElementById('ip-address').textContent = data.ip || 'N/A';
-        document.getElementById('free-heap').textContent = data.freeHeap
-          ? data.freeHeap.toLocaleString() + ' bytes'
-          : 'N/A';
-      } catch (error) {
-        console.error('Error fetching status:', error);
+      <section class="panel" aria-label="Status">
+        <div class="row">
+          <span class="label">Version</span>
+          <span class="value" id="version">Loading</span>
+        </div>
+        <div class="row">
+          <span class="label">Wi-Fi</span>
+          <span class="value status"><span class="status-dot"></span>Connected</span>
+        </div>
+        <div class="row">
+          <span class="label">IP address</span>
+          <span class="value" id="ip-address">Loading</span>
+        </div>
+        <div class="row">
+          <span class="label">Free memory</span>
+          <span class="value" id="free-heap">Loading</span>
+        </div>
+      </section>
+      <p class="footer">CrossPoint E-Reader • <a href="https://github.com/crosspoint-reader/crosspoint-reader" rel="noopener noreferrer" target="_blank">Open Source</a></p>
+    </main>
+    <script>
+      function applyTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        try { localStorage.setItem('crosspoint-theme', theme); } catch (e) {}
+        document.querySelectorAll('.theme-icon-dark').forEach(function(icon) {
+          icon.style.display = theme === 'dark' ? '' : 'none';
+        });
+        document.querySelectorAll('.theme-icon-light').forEach(function(icon) {
+          icon.style.display = theme === 'light' ? '' : 'none';
+        });
       }
-    }
+      function toggleTheme() {
+        applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+      }
+      function readStoredTheme() {
+        try { return localStorage.getItem('crosspoint-theme') || 'dark'; } catch (e) { return 'dark'; }
+      }
+      applyTheme(readStoredTheme());
 
-    // Fetch status on page load
-    window.onload = fetchStatus;
-  </script>
+      async function fetchStatus() {
+        try {
+          const response = await fetch('/api/status');
+          if (!response.ok) {
+            throw new Error('Failed to fetch status: ' + response.status + ' ' + response.statusText);
+          }
+          const data = await response.json();
+          document.getElementById('version').textContent = data.version || 'N/A';
+          document.getElementById('ip-address').textContent = data.ip || 'N/A';
+          document.getElementById('free-heap').textContent = data.freeHeap
+            ? data.freeHeap.toLocaleString() + ' bytes'
+            : 'N/A';
+        } catch (error) {
+          console.error('Error fetching status:', error);
+        }
+      }
+
+      window.onload = fetchStatus;
+    </script>
   </body>
 </html>

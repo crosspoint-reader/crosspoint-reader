@@ -3,134 +3,158 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('crosspoint-theme') || 'dark';
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    </script>
     <title>CrossPoint Reader - Fonts</title>
     <style>
-      :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-        --danger-color: #e74c3c;
-        --danger-hover: #c0392b;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 { color: var(--title-color); margin-top: 0; }
+      h2 { margin: 0 0 18px; }
       h3 { margin: 0 0 8px 0; }
       .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
+        margin: 28px 0 0;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
       }
       .family {
         border-bottom: 1px solid var(--border-color);
-        padding: 12px 0;
+        padding: 16px 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 16px;
       }
       .family:last-child { border-bottom: none; }
-      .family-info { flex: 1; }
-      .family-meta { color: var(--label-color); font-size: 0.9em; }
+      .family-info { min-width: 0; flex: 1; }
+      .family-meta { color: var(--label-color); font-size: 14px; }
       .btn {
-        padding: 6px 16px;
-        border: none;
-        border-radius: 4px;
+        min-height: var(--ui-control-h);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--foreground);
         cursor: pointer;
-        font-size: 0.9em;
+        font-size: 16px;
+        font-weight: 550;
       }
       .btn-danger {
-        background: var(--danger-color);
-        color: white;
+        background: var(--destructive-bg);
+        color: var(--destructive);
+        border-color: var(--destructive);
       }
-      .btn-danger:hover { background: var(--danger-hover); }
+      .btn-danger:hover { background: var(--destructive-hover); }
       .btn-primary {
-        background: var(--accent-color);
-        color: white;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
       }
-      .btn-primary:hover { background: var(--accent-hover-color); }
       .upload-form {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
+        display: grid;
+        gap: 0;
       }
-      .upload-form input[type="text"] {
-        padding: 6px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
+      .upload-drop {
+        min-height: 132px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 18px;
+        border: 1px dashed var(--border-color);
+        border-radius: 16px 16px 0 0;
         background: var(--bg);
         color: var(--font-color);
+        cursor: pointer;
+        text-align: center;
       }
-      .upload-form input[type="file"] { flex: 1; min-width: 200px; }
+      .upload-drop:hover {
+        border-color: var(--border-strong);
+        background: var(--surface-elevated);
+      }
+      .upload-drop-icon {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+      }
+      .upload-drop-title {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .upload-drop-meta {
+        max-width: 30ch;
+        color: var(--label-color);
+        font-size: 14px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+      .sr-file-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+      .font-upload-btn {
+        width: 100%;
+        border-radius: 0 0 16px 16px;
+        border-top: 0;
+      }
       #status {
         margin-top: 10px;
-        padding: 8px;
-        border-radius: 4px;
+        padding: 12px 14px;
+        border-radius: var(--radius);
         display: none;
       }
-      .status-ok { background: #d4edda; color: #155724; display: block !important; }
-      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
+      .status-ok { border: 1px solid var(--border); background: var(--surface); color: var(--foreground); display: block !important; }
+      .status-err { border: 1px solid var(--destructive); background: var(--destructive-bg); color: var(--destructive); display: block !important; }
       .empty { color: var(--label-color); text-align: center; padding: 20px; }
+      .font-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
     </style>
+    <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <h1>📚 CrossPoint Reader</h1>
-
-    <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
-      <a href="/fonts" class="active">Fonts</a>
-    </div>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg class="brand-logo" viewBox="0 0 162 180" aria-hidden="true"><path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z"></path></svg>
+        </span>
+        <div>
+          <h1>CrossPoint</h1>
+        </div>
+      </div>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="/"><svg viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>Home</a>
+        <a href="/files"><svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Files</a>
+        <a href="/settings"><svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</a>
+        <a href="/fonts" class="active"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path></svg>Fonts</a>
+      </nav>
+      <button class="theme-toggle" type="button" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle theme">
+        <svg class="theme-icon-dark" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+        <svg class="theme-icon-light" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+      </button>
+    </header>
 
     <div class="card">
       <h2>Installed Fonts</h2>
@@ -140,18 +164,81 @@
     <div class="card">
       <h2>Upload Font</h2>
       <form class="upload-form" id="uploadForm">
-        <input type="file" id="fontFiles" webkitdirectory directory multiple required />
-        <button type="submit" class="btn btn-primary">Upload</button>
+        <label class="upload-drop" for="fontFiles">
+          <span class="upload-drop-icon">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5"></path><path d="M12 3v12"></path></svg>
+          </span>
+          <span class="upload-drop-title">Choose files</span>
+          <span class="upload-drop-meta" id="pickedInfo">No files selected</span>
+        </label>
+        <input class="sr-file-input" type="file" id="fontFiles" webkitdirectory directory multiple required />
+        <button type="submit" class="btn btn-primary font-upload-btn">Upload</button>
       </form>
-      <p id="pickedInfo" class="family-meta" style="margin: 8px 0 0;"></p>
       <div id="status"></div>
     </div>
 
   <script>
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      try { localStorage.setItem('crosspoint-theme', theme); } catch (e) {}
+      document.querySelectorAll('.theme-icon-dark').forEach(function(icon) {
+        icon.style.display = theme === 'dark' ? '' : 'none';
+      });
+      document.querySelectorAll('.theme-icon-light').forEach(function(icon) {
+        icon.style.display = theme === 'light' ? '' : 'none';
+      });
+    }
+    function toggleTheme() {
+      applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+    }
+    function readStoredTheme() {
+      try { return localStorage.getItem('crosspoint-theme') || 'dark'; } catch (e) { return 'dark'; }
+    }
+    applyTheme(readStoredTheme());
+
     function formatSize(bytes) {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
       if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
       return bytes + ' B';
+    }
+
+    function askConfirmation(message) {
+      return new Promise(function(resolve) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay open';
+        overlay.innerHTML =
+          '<div class="modal" role="dialog" aria-modal="true" tabindex="-1">' +
+            '<h3>Confirm action</h3>' +
+            '<p class="file-info">' + message.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;') + '</p>' +
+            '<div class="font-actions">' +
+              '<button class="btn btn-danger" data-action="confirm">Delete</button>' +
+              '<button class="btn" data-action="cancel">Cancel</button>' +
+            '</div>' +
+          '</div>';
+        const previousFocus = document.activeElement;
+        document.body.appendChild(overlay);
+        const modal = overlay.querySelector('.modal');
+        modal.focus();
+
+        function close(value) {
+          document.removeEventListener('keydown', onKeyDown);
+          overlay.remove();
+          if (previousFocus && previousFocus.focus) previousFocus.focus();
+          resolve(value);
+        }
+
+        function onKeyDown(event) {
+          if (event.key === 'Escape') close(false);
+        }
+
+        overlay.addEventListener('click', function(event) {
+          if (event.target === overlay) close(false);
+          const action = event.target && event.target.getAttribute && event.target.getAttribute('data-action');
+          if (action === 'confirm') close(true);
+          if (action === 'cancel') close(false);
+        });
+        document.addEventListener('keydown', onKeyDown);
+      });
     }
 
     async function loadFonts() {
@@ -207,7 +294,7 @@
     }
 
     async function deleteFamily(name) {
-      if (!confirm('Delete font family "' + name + '"?')) return;
+      if (!(await askConfirmation('Delete font family "' + name + '"?'))) return;
       const status = document.getElementById('status');
       status.className = '';
       status.style.display = 'block';

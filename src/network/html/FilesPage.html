@@ -3,183 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
   <title>Files - CrossPoint Reader</title>
   <script src="/js/jszip.min.js"></script>
   <style>
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-color-10: rgba(110, 154, 130, 0.1);
-      --accent-hover-color: #5a8c73;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        color-scheme: dark;
-      }
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
-    }
-    h2 {
-      color: var(--title-color);
-      margin: 0;
-    }
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    .page-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 20px;
-    }
-    .page-header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .breadcrumb-inline {
-      color: var(--label-color);
-      font-size: 1.1em;
-    }
-    .breadcrumb-inline a {
-      color: var(--accent-color);
-      text-decoration: none;
-    }
-    .breadcrumb-inline a:hover {
-      text-decoration: underline;
-    }
-    .breadcrumb-inline .sep {
-      margin: 0 6px;
-      color: var(--border-color);
-    }
-    .breadcrumb-inline .current {
-      color: var(--title-color);
-      font-weight: 500;
-    }
-    .nav-links {
-      margin: 20px 0;
-      display: flex;
-      gap: 10px;
-    }
-    .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
-      text-decoration: none;
-      border-radius: 4px;
-    }
-    .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
-    }
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
-      color: white;
-    }
-    /* Action buttons */
-    .action-buttons {
-      display: flex;
-      gap: 10px;
-    }
-    .action-btn {
-      color: white;
-      padding: 10px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .upload-action-btn {
-      background-color: #27ae60;
-    }
-    .upload-action-btn:hover {
-      background-color: #219a52;
-    }
-    .folder-action-btn {
-      background-color: #f39c12;
-    }
-    .folder-action-btn:hover {
-      background-color: #d68910;
-    }
-    .delete-action-btn {
-      background-color: #e74c3c;
-    }
-    .delete-action-btn:hover {
-      background-color: #c0392b;
-    }
-    /* Upload modal */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 200;
-      justify-content: center;
-      align-items: center;
-    }
-    .modal-overlay.open {
-      display: flex;
-    }
-    .modal {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 25px;
-      max-width: 450px;
-      width: 90%;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    }
-    .modal.picker-mode {
-      max-width: 920px;
-    }
-    .picker-columns.picker-active {
-      display: flex;
-      flex-direction: row;
-      gap: 16px;
-      align-items: flex-start;
-    }
-    .picker-columns.picker-active > .convert-options {
-      flex: 0 0 340px;
-      width: 340px;
-      margin-bottom: 0;
-    }
     .picker-columns.picker-active > .image-picker-section {
       flex: 1;
       margin-top: 0;
@@ -375,9 +202,6 @@
       justify-content: space-between;
       flex-wrap: wrap;
     }
-    .convert-separator {
-      display: none; /* Hidden, using space-between instead */
-    }
     .advanced-options-toggle {
       display: flex;
       align-items: center;
@@ -391,9 +215,7 @@
     .advanced-options-toggle:hover {
       color: var(--accent-color);
     }
-    /* Disable hover when disabled (opacity < 1) */
-    .advanced-options-toggle[style*="opacity: 0.3"]:hover,
-    .advanced-options-toggle[style*="opacity: 0.5"]:hover {
+    .advanced-options-toggle.is-disabled:hover {
       color: var(--label-color);
     }
     .advanced-options-text {
@@ -564,48 +386,6 @@
       background: var(--accent-color);
       color: white;
       box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-    /* Toggle Switch */
-    .setting-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .toggle-switch {
-      position: relative;
-      width: 44px;
-      height: 24px;
-      flex-shrink: 0;
-    }
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .toggle-slider {
-      position: absolute;
-      cursor: pointer;
-      inset: 0;
-      background: var(--border-color);
-      border-radius: 24px;
-      transition: 0.2s;
-    }
-    .toggle-slider:before {
-      position: absolute;
-      content: "";
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background: white;
-      border-radius: 50%;
-      transition: 0.2s;
-    }
-    .toggle-switch input:checked + .toggle-slider {
-      background: var(--accent-color);
-    }
-    .toggle-switch input:checked + .toggle-slider:before {
-      transform: translateX(20px);
     }
     .setting-desc {
       font-size: 0.75em;
@@ -996,37 +776,6 @@
       background-color: #bdc3c7;
       cursor: not-allowed;
     }
-    /* Action button styles */
-    .delete-btn,
-    .rename-btn,
-    .move-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 1.1em;
-      padding: 4px 8px;
-      border-radius: 4px;
-      transition: all 0.15s;
-    }
-    .delete-btn {
-      color: #95a5a6;
-    }
-    .delete-btn:hover {
-      background-color: #fee;
-      color: #e74c3c;
-    }
-    .rename-btn {
-      color: #2980b9;
-    }
-    .rename-btn:hover {
-      background-color: #e8f4fd;
-    }
-    .move-btn {
-      color: #16a085;
-    }
-    .move-btn:hover {
-      background-color: #e6f7f4;
-    }
     .actions-col {
       width: 140px;
       text-align: center;
@@ -1209,109 +958,6 @@
         transform: rotate(360deg);
       }
     }
-    /* Mobile responsive styles */
-    @media (max-width: 600px) {
-      body {
-        padding: 10px;
-        font-size: 14px;
-      }
-      .card {
-        padding: 12px;
-        margin: 10px 0;
-      }
-      .page-header {
-        gap: 10px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
-      }
-      .page-header-left {
-        gap: 8px;
-      }
-      h1 {
-        font-size: 1.3em;
-      }
-      .breadcrumb-inline {
-        font-size: 0.95em;
-      }
-      .nav-links a {
-        padding: 8px 12px;
-        margin-right: 6px;
-        font-size: 0.9em;
-      }
-      .action-buttons {
-        gap: 6px;
-      }
-      .action-btn {
-        padding: 8px 10px;
-        font-size: 0.85em;
-      }
-      .file-table th,
-      .file-table td {
-        padding: 8px 6px;
-        font-size: 0.9em;
-      }
-      .file-table th {
-        font-size: 0.85em;
-      }
-      .file-icon {
-        margin-right: 4px;
-      }
-      .epub-badge,
-      .folder-badge {
-        padding: 2px 5px;
-        font-size: 0.65em;
-      }
-      .contents-header {
-        margin-bottom: 8px;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
-      .contents-title {
-        font-size: 1em;
-      }
-      .summary-inline {
-        font-size: 0.8em;
-      }
-      .modal {
-        padding: 15px;
-      }
-      .modal h3 {
-        font-size: 1.1em;
-      }
-      .actions-col {
-        width: 120px;
-      }
-      .delete-btn,
-      .rename-btn,
-      .move-btn {
-        font-size: 1em;
-        padding: 2px 4px;
-      }
-      .action-icon-group {
-        gap: 4px;
-      }
-      .no-files {
-        padding: 20px;
-        font-size: 0.9em;
-      }
-      .handedness-btn {
-        padding: 6px 10px;
-      }
-      .handedness-buttons {
-        width: 100%;
-        justify-content: center;
-      }
-      .quality-slider-container-inline {
-        max-width: 215px;
-        gap: 4px;
-      }
-      .quality-slider-container-inline .quality-slider {
-        min-width: 40px;
-      }
-      .quality-slider-container-inline .quality-input {
-        width: 28px;
-      }
-    }
     /* Enhanced Logging System Styles */
     .log-section {
       margin-top: 15px;
@@ -1456,35 +1102,860 @@
     .log-summary-table .increased {
       color: #f39c12;
     }
+    .action-buttons {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--ui-gap);
+    }
+    .action-btn {
+      width: 100%;
+    }
+    .upload-action-btn {
+      grid-column: 1 / -1;
+    }
+    .page-header {
+      padding: 0;
+      gap: var(--ui-gap);
+    }
+    .page-header-left {
+      align-items: baseline;
+    }
+    .breadcrumb-inline {
+      color: var(--label-color);
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      line-height: 1.2;
+    }
+    .breadcrumb-inline a,
+    .breadcrumb-inline .current {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.2;
+    }
+    .breadcrumb-inline a {
+      color: var(--font-color);
+    }
+    .breadcrumb-inline .sep {
+      color: var(--muted);
+      line-height: 1;
+    }
+    .breadcrumb-inline .current {
+      color: var(--font-color);
+      font-weight: 600;
+    }
+    .card,
+    .modal,
+    .failed-uploads-banner {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: none;
+    }
+    .card {
+      margin: 12px 0;
+      padding: 0;
+      overflow-x: auto;
+      background: transparent;
+      border: 0;
+    }
+    .modal-overlay {
+      background: rgba(0, 0, 0, 0.74);
+      backdrop-filter: blur(6px);
+    }
+    .modal {
+      color: var(--font-color);
+    }
+    #uploadModal .modal {
+      max-width: min(512px, calc(100% - 24px));
+    }
+    .modal-close {
+      color: var(--label-color);
+    }
+    .file-table {
+      margin-top: 10px;
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+    }
+    .file-table th,
+    .file-table td {
+      border-bottom: 1px solid var(--border-color);
+      color: var(--font-color);
+      vertical-align: middle;
+    }
+    .file-table th {
+      background: var(--bg);
+      color: var(--label-color);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .contents-header {
+      padding: 0 0 4px;
+    }
+    .file-table tr:hover {
+      background: var(--accent-color-10);
+    }
+    .file-table tr:last-child td {
+      border-bottom: 0;
+    }
+    .file-link,
+    .folder-link,
+    .breadcrumb-inline a {
+      color: var(--font-color);
+      text-decoration: none;
+    }
+    .file-name-cell {
+      min-width: 0;
+      max-width: 100%;
+      width: 100%;
+    }
+    .file-name-row {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .file-name-row .file-link,
+    .file-name-row .folder-link {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-link:hover,
+    .folder-link:hover,
+    .breadcrumb-inline a:hover {
+      text-decoration: underline;
+    }
+    .epub-badge,
+    .folder-badge {
+      border: 1px solid var(--border-color);
+      background: var(--bg);
+      color: var(--font-color);
+      border-radius: 999px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+    .file-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--label-color);
+      flex: 0 0 18px;
+    }
+    .action-icon-group {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .select-col {
+      width: 38px;
+    }
+    .type-col {
+      width: 72px;
+    }
+    .size-col {
+      width: 82px;
+    }
+    .actions-col {
+      width: 116px;
+      text-align: right;
+    }
+    .delete-btn,
+    .rename-btn,
+    .move-btn {
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--font-color);
+      box-shadow: none;
+    }
+    .delete-btn:hover,
+    .rename-btn:hover,
+    .move-btn:hover {
+      background: var(--surface-elevated);
+      border-color: var(--border-strong);
+      color: var(--font-color);
+    }
+    .upload-drop {
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 18px;
+      border: 1px dashed var(--border-color);
+      border-radius: 16px;
+      background: var(--bg);
+      color: var(--font-color);
+      cursor: pointer;
+      text-align: center;
+    }
+    .upload-drop:hover {
+      border-color: var(--border-strong);
+      background: var(--surface-elevated);
+    }
+    .folder-btn,
+    .upload-btn,
+    #startConversionBtn,
+    #uploadBtn,
+    .delete-btn-confirm,
+    .delete-btn-cancel,
+    .rename-btn-confirm,
+    .move-btn-confirm,
+    .retry-all-btn {
+      width: 100%;
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: none;
+    }
+    .quality-preset,
+    .rotation-btn,
+    .overlap-btn,
+    .legend-btn {
+      min-height: 32px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      box-shadow: none;
+    }
+    .delete-btn-cancel:hover,
+    .folder-btn:hover,
+    .upload-btn:hover,
+    .rename-btn-confirm:hover,
+    .move-btn-confirm:hover,
+    .retry-all-btn:hover {
+      border-color: var(--border-strong);
+    }
+    html[data-theme="light"] .progress-bar,
+    html[data-theme="light"] #progress-bar {
+      background: #ededed;
+    }
+    html[data-theme="light"] .action-btn:disabled,
+    html[data-theme="light"] .folder-btn:disabled,
+    html[data-theme="light"] .upload-btn:disabled,
+    html[data-theme="light"] #startConversionBtn:disabled,
+    html[data-theme="light"] #uploadBtn:disabled,
+    html[data-theme="light"] .retry-all-btn:disabled {
+      background: var(--surface-elevated);
+      border-color: var(--border-color);
+      color: var(--muted);
+    }
+    .action-btn:disabled,
+    .folder-btn:disabled,
+    .upload-btn:disabled,
+    #startConversionBtn:disabled,
+    #uploadBtn:disabled,
+    .retry-all-btn:disabled {
+      background: var(--surface-elevated);
+      border-color: var(--border-color);
+      color: var(--muted);
+      cursor: not-allowed;
+    }
+    .delete-action-btn,
+    .delete-btn,
+    .delete-btn-confirm {
+      color: var(--destructive);
+      border-color: var(--destructive);
+    }
+    .delete-action-btn,
+    .delete-btn-confirm {
+      background: var(--destructive-bg);
+    }
+    .delete-action-btn:hover,
+    .delete-btn:hover,
+    .delete-btn-confirm:hover {
+      background: var(--destructive-hover);
+      border-color: var(--destructive);
+      color: var(--destructive);
+    }
+    .upload-drop-icon {
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+    .upload-drop-title {
+      font-weight: 650;
+    }
+    .upload-drop-meta {
+      max-width: 28ch;
+      color: var(--label-color);
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    #uploadModal .modal.picker-mode {
+      max-width: min(512px, calc(100% - 24px));
+    }
+    .picker-columns,
+    .picker-columns.picker-active {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .picker-columns.picker-active > .convert-options,
+    .picker-columns.picker-active > .image-picker-section {
+      width: 100%;
+      flex: none;
+    }
+    .convert-options {
+      padding: 14px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      background: transparent;
+    }
+    .convert-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--ui-gap);
+      align-items: stretch;
+    }
+    .convert-checkbox {
+      width: 100%;
+      min-height: var(--ui-control-h);
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 14px;
+    }
+    .convert-checkbox .toggle-switch,
+    .advanced-options-toggle .toggle-switch {
+      width: 56px;
+      height: 32px;
+    }
+    .convert-checkbox .toggle-switch input,
+    .advanced-options-toggle .toggle-switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      min-height: 0;
+      margin: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .advanced-options-toggle {
+      width: 100%;
+      min-height: var(--ui-control-h);
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--font-color);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .advanced-options-toggle input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      min-height: 0;
+      margin: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .advanced-switch-track {
+      position: relative;
+      width: 48px;
+      height: 30px;
+      flex: 0 0 auto;
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      background: var(--surface-elevated);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .advanced-switch-track::before {
+      content: "";
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      left: 2px;
+      top: 2px;
+      border-radius: 999px;
+      background: var(--font-color);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .advanced-options-toggle input:checked + .advanced-switch-track {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+    }
+    .advanced-options-toggle input:checked + .advanced-switch-track::before {
+      background: #050505;
+      transform: translateX(18px);
+    }
+    html[data-theme="light"] .advanced-options-toggle input:checked + .advanced-switch-track::before {
+      background: #fafafa;
+    }
+    .advanced-options-toggle.is-disabled {
+      color: var(--muted);
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+    .advanced-options-toggle.is-disabled .advanced-switch-track::before {
+      background: var(--muted);
+    }
+    .convert-settings {
+      padding-left: 0;
+      margin-top: 12px;
+      gap: 6px 12px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .advanced-settings-content {
+      padding-left: 0;
+      margin-top: 16px;
+    }
+    .advanced-setting-row {
+      display: grid;
+      grid-template-columns: minmax(118px, 38%) minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+      margin-top: 14px;
+    }
+    .advanced-setting-row.toggle-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .advanced-setting-row.toggle-row .setting-label {
+      min-width: 0;
+      width: auto;
+      flex: 1 1 auto;
+    }
+    .advanced-setting-row.toggle-row .setting-controls {
+      width: auto;
+      flex: 0 0 auto;
+    }
+    .advanced-setting-row.stack-row {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+    .setting-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .setting-label,
+    .setting-controls {
+      width: 100%;
+      align-items: stretch;
+    }
+    .quality-presets,
+    .rotation-buttons,
+    .overlap-selector {
+      width: 100%;
+      display: grid;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      background: var(--surface-elevated);
+    }
+    .quality-presets {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .rotation-buttons,
+    .overlap-selector {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .overlap-selector {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .quality-preset,
+    .rotation-btn,
+    .overlap-btn {
+      width: 100%;
+      justify-content: center;
+      color: var(--label-color);
+    }
+    .quality-preset.active,
+    .rotation-btn.active,
+    .overlap-btn.active {
+      background: var(--accent-color);
+      color: #050505;
+    }
+    html[data-theme="light"] .quality-preset.active,
+    html[data-theme="light"] .rotation-btn.active,
+    html[data-theme="light"] .overlap-btn.active {
+      color: #fafafa;
+    }
+    .image-picker-section {
+      max-height: none;
+      margin-top: 0;
+      padding: 14px;
+      border-radius: var(--radius);
+      overflow: visible;
+    }
+    .image-picker-header {
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .image-picker-title {
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .state-legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0;
+      background: transparent;
+    }
+    .legend-item,
+    .legend-btn {
+      min-height: 36px;
+      justify-content: center;
+      border-radius: var(--radius);
+      font-size: 13px;
+    }
+    .legend-item {
+      border: 1px solid var(--border-color);
+      color: var(--label-color);
+    }
+    .image-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .image-item:hover {
+      transform: none;
+    }
+    .convert-warning {
+      color: var(--label-color);
+      background: transparent;
+      border-color: var(--border-color);
+      border-radius: var(--radius);
+      font-size: 14px;
+      margin: 12px 0;
+    }
+    .upload-btn.optimize,
+    #startConversionBtn.optimize {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .sr-file-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .progress-bar,
+    #progress-bar {
+      background: #171717;
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+    }
+    .progress-fill,
+    #progress-fill {
+      background: var(--font-color) !important;
+      border-radius: 999px;
+    }
+    .loader {
+      width: 28px;
+      height: 28px;
+      border-width: 3px;
+      border-color: #fafafa;
+      border-bottom-color: transparent;
+    }
+    .no-files {
+      color: var(--label-color);
+      border: 1px dashed var(--border-color);
+      border-radius: var(--radius);
+      padding: 28px;
+      text-align: center;
+    }
+    .footer-note {
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+    }
+    .footer-note a {
+      color: var(--font-color);
+      text-decoration: none;
+    }
+    .footer-note a:hover {
+      text-decoration: underline;
+    }
+    svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+      stroke: currentcolor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      flex: 0 0 auto;
+    }
+    .nav-links svg {
+      width: 15px;
+      height: 15px;
+    }
+    @media (max-width: 560px) {
+      body {
+        width: min(512px, calc(100% - 20px));
+        padding: 10px 0 76px;
+      }
+      .page-heading,
+      .page-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .nav-links {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: min(512px, calc(100% - 20px));
+      }
+      .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .file-table {
+        font-size: 13px;
+        min-width: 520px;
+      }
+    }
+    .page-header {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ui-gap);
+    }
+    .breadcrumb-inline {
+      font-size: 16px;
+      gap: 8px;
+    }
+    .action-buttons {
+      gap: var(--ui-gap);
+    }
+    .action-btn,
+    .folder-btn,
+    .upload-btn,
+    #startConversionBtn,
+    #uploadBtn,
+    .delete-btn-confirm,
+    .delete-btn-cancel,
+    .rename-btn-confirm,
+    .move-btn-confirm,
+    .retry-all-btn {
+      min-height: var(--ui-control-h);
+      padding: 0 16px;
+      font-size: 16px;
+      border-radius: 12px;
+    }
+    .modal {
+      padding: 20px;
+      border-radius: 12px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    .modal h3 {
+      font-size: 20px;
+    }
+    .upload-drop {
+      min-height: 132px;
+      border-radius: 12px;
+    }
+    .upload-drop.connected {
+      border-bottom-right-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    .upload-drop.connected ~ .picker-columns {
+      margin-top: calc(-1 * var(--ui-gap));
+    }
+    .upload-drop.connected ~ .picker-columns .convert-options {
+      border-top: 0;
+      border-top-right-radius: 0;
+      border-top-left-radius: 0;
+    }
+    .upload-form,
+    .folder-form {
+      display: grid;
+      gap: var(--ui-gap);
+    }
+    .upload-form > .file-info,
+    .folder-form > .file-info,
+    .folder-form > .delete-warning {
+      margin: 0;
+    }
+    .upload-form > button,
+    .folder-form > button {
+      margin-top: 0;
+    }
+    #progress-container,
+    .log-section {
+      margin-top: 0;
+    }
+    .upload-drop-title,
+    .contents-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .upload-drop-meta,
+    .file-info,
+    .summary-inline {
+      font-size: 14px;
+    }
+    .convert-checkbox,
+    .setting-title,
+    .convert-warning,
+    .image-picker-title {
+      font-size: 16px;
+    }
+    .convert-settings,
+    .image-picker-count,
+    .legend-item,
+    .legend-btn {
+      font-size: 14px;
+    }
+    .quality-preset,
+    .rotation-btn,
+    .overlap-btn,
+    .legend-item,
+    .legend-btn {
+      min-height: 44px;
+      border-radius: 12px;
+    }
+    .file-table {
+      font-size: 14px;
+    }
+    .file-table th,
+    .file-table td {
+      padding: 12px 8px;
+    }
+    .delete-btn,
+    .rename-btn,
+    .move-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+    }
+    .actions-col {
+      width: 168px;
+    }
+    .select-col {
+      width: 44px;
+    }
+    .type-col {
+      width: 76px;
+    }
+    .size-col {
+      width: 86px;
+    }
+    @media (max-width: 560px) {
+      body {
+        width: min(512px, calc(100% - 20px));
+        padding: 12px 0 92px;
+      }
+      .file-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+      }
+      .file-table .type-col,
+      .file-table th:nth-child(3),
+      .file-table td:nth-child(3) {
+        display: none;
+      }
+      .select-col {
+        width: 36px;
+      }
+      .size-col {
+        width: 64px;
+      }
+      .actions-col {
+        width: 156px;
+        padding-right: 4px;
+        padding-left: 4px;
+      }
+      .action-icon-group {
+        gap: 4px;
+      }
+    }
   </style>
+  <link rel="stylesheet" href="/app.css" />
+  <script>
+    try {
+      document.documentElement.dataset.theme = localStorage.getItem('crosspoint-theme') || 'dark';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'dark';
+    }
+  </script>
 </head>
 <body>
-<h1>📚 CrossPoint Reader</h1>
-
-<div class="nav-links">
-  <a href="/">Home</a>
-  <a href="/files" class="active">File Manager</a>
-  <a href="/settings">Settings</a>
-  <a href="/fonts">Fonts</a>
-</div>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg class="brand-logo" viewBox="0 0 162 180" aria-hidden="true"><path d="M141.133 1.93774C150.102 -3.44192 161.517 3.01665 161.521 13.4749V166.526C161.517 176.984 150.102 183.442 141.133 178.063L80.7588 141.837L20.3867 178.063C11.4176 183.442 0.00328866 176.984 0 166.526V13.4749C0.00337257 3.01685 11.4176 -3.44137 20.3867 1.93774L80.7598 38.1614L141.133 1.93774ZM121.275 117.524L92.3848 134.864L147.281 167.811C148.277 168.408 149.542 167.685 149.545 166.526V100.567L121.275 117.524ZM14.2393 12.1897C13.2438 11.5924 11.979 12.3152 11.9756 13.4749V86.6125L74.7725 124.29V48.51L14.2393 12.1897Z"></path></svg>
+    </span>
+    <div>
+      <h1>CrossPoint</h1>
+    </div>
+  </div>
+  <nav class="nav-links" aria-label="Primary navigation">
+    <a href="/"><svg viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>Home</a>
+    <a href="/files" class="active"><svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Files</a>
+    <a href="/settings"><svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</a>
+    <a href="/fonts"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path></svg>Fonts</a>
+  </nav>
+  <button class="theme-toggle" type="button" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle theme">
+    <svg class="theme-icon-dark" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+    <svg class="theme-icon-light" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+  </button>
+</header>
 
 <div class="page-header">
   <div class="page-header-left">
-    <h2>📁 File Manager</h2>
+    <h2>File Manager</h2>
     <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
   </div>
 
   <div class="action-buttons">
-    <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
-    <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
-    <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
+    <button class="action-btn upload-action-btn" onclick="openUploadModal()"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5"></path><path d="M12 3v12"></path></svg>Upload</button>
+    <button class="action-btn folder-action-btn" onclick="openFolderModal()"><svg viewBox="0 0 24 24"><path d="M12 10v6"></path><path d="M9 13h6"></path><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>New Folder</button>
+    <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>Delete Selected</button>
   </div>
 </div>
 
 <!-- Failed Uploads Banner -->
 <div class="failed-uploads-banner" id="failedUploadsBanner">
   <div class="failed-uploads-header">
-    <h3 class="failed-uploads-title">⚠️ Some files failed to upload</h3>
+    <h3 class="failed-uploads-title">Some files failed to upload</h3>
     <button class="dismiss-btn" onclick="dismissFailedUploads()" title="Dismiss">&times;</button>
   </div>
   <div id="failedFilesList"></div>
@@ -1504,48 +1975,56 @@
   </div>
 </div>
 
-<div class="card">
-  <p style="text-align: center; color: #95a5a6; margin: 0;">
-    CrossPoint E-Reader • Open Source
-  </p>
-</div>
+<p class="footer-note">CrossPoint E-Reader • <a href="https://github.com/crosspoint-reader/crosspoint-reader" rel="noopener noreferrer" target="_blank">Open Source</a></p>
 
 <!-- Upload Modal -->
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
     <button class="modal-close" id="uploadModalClose" onclick="closeUploadModal()">&times;</button>
-    <h3>📤 Upload file</h3>
+    <h3>Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
+      <label class="upload-drop" for="fileInput">
+        <span class="upload-drop-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5"></path><path d="M12 3v12"></path></svg>
+        </span>
+        <span class="upload-drop-title">Choose files</span>
+        <span class="upload-drop-meta" id="fileSelectionText">No files selected</span>
+      </label>
+      <input class="sr-file-input" type="file" id="fileInput" onchange="validateFile()" multiple>
       <div class="picker-columns" id="pickerColumns">
         <div class="convert-options" id="convertOptions" style="display:none;">
           <div class="convert-row">
             <label class="convert-checkbox">
-              <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
               <span>Optimize EPUB</span>
+              <span class="toggle-switch">
+                <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
+                <span class="toggle-slider"></span>
+              </span>
             </label>
-            <span class="convert-separator">—</span>
-            <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
-              <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
+            <label class="advanced-options-toggle is-disabled" id="advancedOptionsToggle">
               <span class="advanced-options-text">Advanced Mode</span>
-            </span>
+              <span class="toggle-switch">
+                <input type="checkbox" id="advancedModeSwitch" onchange="toggleAdvancedOptions()" disabled>
+                <span class="toggle-slider"></span>
+              </span>
+            </label>
           </div>
 
           <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
           </div>
 
           <div class="convert-settings" id="convertSettings" style="display:block;">
-            <span>⚫ True-Grayscale</span>
-          <span>📏 Max 480×800px</span>
-          <span>📦 85% JPEG</span>
-          <span>🔧 Fix SVG</span>
+            <span>True-Grayscale</span>
+          <span>Max 480 x 800px</span>
+          <span>85% JPEG</span>
+          <span>Fix SVG</span>
         </div>
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
           <!-- JPEG Quality -->
-          <div class="advanced-setting-row quality-row">
-            <div class="setting-title">📦 JPEG Quality</div>
+          <div class="advanced-setting-row stack-row quality-row">
+            <div class="setting-title">JPEG Quality</div>
             <div class="quality-presets">
               <button class="quality-preset" data-value="30" onclick="setQualityPreset(30)" title="Minimum quality">30%</button>
               <button class="quality-preset" data-value="45" onclick="setQualityPreset(45)" title="Low quality">45%</button>
@@ -1562,7 +2041,7 @@
           <div class="advanced-setting-row" style="display:none;">
             <div class="setting-toggle">
               <div>
-                <div class="setting-title">⚫ True-Grayscale</div>
+                <div class="setting-title">True-Grayscale</div>
                 <div class="setting-desc">BT.601 luminance formula (recommended for e-ink)</div>
               </div>
               <label class="toggle-switch">
@@ -1574,21 +2053,21 @@
           -->
           <!-- Rotation Direction -->
           <div class="advanced-setting-row" id="rotationSettingRow">
-            <div class="setting-title">↻ Rotation Direction</div>
+            <div class="setting-title">Rotation Direction</div>
             <div class="setting-controls">
               <div class="rotation-buttons">
                 <button class="rotation-btn" id="rotationCCW" onclick="setHandedness('left')">
-                  <span class="rot-icon">↺</span> CCW
+                  CCW
                 </button>
                 <button class="rotation-btn active" id="rotationCW" onclick="setHandedness('right')">
-                  <span class="rot-icon">↻</span> CW
+                  CW
                 </button>
               </div>
             </div>
           </div>
           <!-- Overlap Settings -->
           <div class="advanced-setting-row" id="overlapSettingRow">
-            <div class="setting-title">📐 Min Overlap</div>
+            <div class="setting-title">Min Overlap</div>
             <div class="setting-controls">
               <div class="overlap-selector">
                 <button class="overlap-btn active" data-value="5" onclick="setOverlap(5)">5%</button>
@@ -1598,9 +2077,9 @@
             </div>
           </div>
           <!-- Conversion Log Export -->
-          <div class="advanced-setting-row">
+          <div class="advanced-setting-row toggle-row">
             <div class="setting-label">
-              <div class="setting-title">📥 Auto-download Log</div>
+              <div class="setting-title">Auto-download Log</div>
               <div class="setting-desc">Export detailed log with statistics</div>
             </div>
             <div class="setting-controls">
@@ -1615,16 +2094,14 @@
       <!-- Image Picker Section - in picker-columns for two-column layout -->
       <div class="image-picker-section" id="imagePickerSection" style="display:none;">
         <div class="image-picker-header">
-          <span class="image-picker-title">🖼️ Image Processing Options</span>
+          <span class="image-picker-title">Image Processing Options</span>
           <span class="image-picker-count" id="imagePickerCount">0 images</span>
         </div>
         <div class="state-legend">
           <div class="legend-item locked">
-            <span>🔒</span>
             <span>Cover</span>
           </div>
           <div class="legend-item locked">
-            <span style="color:#1abc9c">✦</span>
             <span>Separator</span>
           </div>
           <button class="legend-btn" style="--btn-color:var(--label-color)" onclick="applyStateToAll(0)">
@@ -1649,7 +2126,7 @@
       </div><!-- end picker-columns -->
       <!-- Sync compatibility warning - outside picker-columns -->
       <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
-        ⚠️ Converting will modify files and can break hash‑based sync. ⚠️<br>
+        Converting will modify files and can break hash-based sync.<br>
         Please back up or disable sync before proceeding.
       </div>
       <!-- Optimize & Upload button - shown when picker is visible, replaces Upload -->
@@ -1662,7 +2139,7 @@
       </div>
       <div class="log-section" id="log-section">
         <div class="log-header">
-          <div class="log-title">📋 Conversion Log</div>
+          <div class="log-title">Conversion Log</div>
         </div>
         <div class="log-container" id="log-container"></div>
       </div>
@@ -1674,7 +2151,7 @@
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
     <button class="modal-close" onclick="closeFolderModal()">&times;</button>
-    <h3>📁 New Folder</h3>
+    <h3>New Folder</h3>
     <div class="folder-form">
       <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
       <input type="text" id="folderName" class="folder-input" placeholder="Folder name..." oninput="document.getElementById('createFolderBtn').disabled = !this.value.trim();">
@@ -1688,9 +2165,9 @@
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
     <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-    <h3>🗑️ Delete Item(s)</h3>
+    <h3>Delete Item(s)</h3>
     <div class="folder-form">
-      <p class="delete-warning">⚠️ This action cannot be undone!</p>
+      <p class="delete-warning">This action cannot be undone.</p>
       <p class="file-info">Are you sure you want to delete the following item(s)?</p>
       <div id="deleteItemList" style="max-height:240px; overflow:auto; margin-bottom:10px;"></div>
       <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
@@ -1703,7 +2180,7 @@
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
     <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <h3>Rename File</h3>
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
@@ -1718,7 +2195,7 @@
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
     <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <h3>Move File</h3>
     <div class="folder-form">
       <p class="file-info">Moving <strong id="moveItemName"></strong></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
@@ -1731,6 +2208,24 @@
 </div>
 
 <script>
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('crosspoint-theme', theme); } catch (e) {}
+    document.querySelectorAll('.theme-icon-dark').forEach(function(icon) {
+      icon.style.display = theme === 'dark' ? '' : 'none';
+    });
+    document.querySelectorAll('.theme-icon-light').forEach(function(icon) {
+      icon.style.display = theme === 'light' ? '' : 'none';
+    });
+  }
+  function toggleTheme() {
+    applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  }
+  function readStoredTheme() {
+    try { return localStorage.getItem('crosspoint-theme') || 'dark'; } catch (e) { return 'dark'; }
+  }
+  applyTheme(readStoredTheme());
+
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
 
@@ -1766,6 +2261,16 @@
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
   }
+
+  const icons = {
+    home: '<svg viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>',
+    folder: '<svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>',
+    file: '<svg viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path></svg>',
+    book: '<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"></path></svg>',
+    trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>',
+    edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>',
+    move: '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path><path d="M12 8v8"></path><path d="m8 12 4-4 4 4"></path></svg>'
+  };
 
   function showNotification(message, type = 'info') {
     // Create notification element if it doesn't exist
@@ -1844,12 +2349,13 @@
 
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
+    fileTable.addEventListener('click', handleFileTableAction);
 
     let breadcrumbContent = '<span class="sep">/</span>';
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      breadcrumbContent += '<span class="current">' + icons.home + '</span>';
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
+      breadcrumbContent += '<a href="/files">' + icons.home + '</a>';
       const pathSegments = currentPath.split('/');
       pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
         breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
@@ -1890,7 +2396,7 @@
       let fileTableContent = '<table class="file-table">';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
+      fileTableContent += '<tr><th class="select-col"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th class="type-col">Type</th><th class="size-col">Size</th><th class="actions-col">Actions</th></tr>';
 
 
       const sortedFiles = files.sort((a, b) => {
@@ -1910,11 +2416,11 @@
 
          // Checkbox cell + folder row
           fileTableContent += `<tr class="folder-row">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
-          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
-          fileTableContent += '<td><span class="folder-badge">FOLDER</span></td>';
-          fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
+          fileTableContent += `<td class="select-col"><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
+          fileTableContent += `<td class="file-name-cell"><div class="file-name-row"><span class="file-icon">${icons.folder}</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</a></div></td>`;
+          fileTableContent += '<td class="type-col"><span class="folder-badge">FOLDER</span></td>';
+          fileTableContent += '<td class="size-col">-</td>';
+          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" data-file-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-is-folder="1" title="Delete folder">${icons.trash}</button></div></td>`;
           fileTableContent += '</tr>';
         } else {
           let filePath = currentPath;
@@ -1923,16 +2429,16 @@
 
           // Checkbox cell + file row
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
-          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
-          fileTableContent += '</td>';
-          fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
-          fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
+          fileTableContent += `<td class="select-col"><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
+          fileTableContent += `<td class="file-name-cell"><div class="file-name-row"><span class="file-icon">${file.isEpub ? icons.book : icons.file}</span>`;
+          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</a>`;
+          fileTableContent += '</div></td>';
+          fileTableContent += file.isEpub ? '<td class="type-col"><span class="epub-badge">EPUB</span></td>' : `<td class="type-col">${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
+          fileTableContent += `<td class="size-col">${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
+          fileTableContent += `<button class="move-btn" data-file-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Move file">${icons.move}</button>`;
+          fileTableContent += `<button class="rename-btn" data-file-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Rename file">${icons.edit}</button>`;
+          fileTableContent += `<button class="delete-btn" data-file-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="0" title="Delete file">${icons.trash}</button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         }
@@ -1941,6 +2447,19 @@
       fileTableContent += '</table>';
       fileTable.innerHTML = fileTableContent;
     }
+  }
+
+  function handleFileTableAction(event) {
+    const target = event.target;
+    if (!target || !target.closest) return;
+    const button = target.closest('[data-file-action]');
+    if (!button) return;
+    const action = button.dataset.fileAction;
+    const name = button.dataset.name || '';
+    const path = button.dataset.path || '';
+    if (action === 'move') openMoveModal(name, path);
+    if (action === 'rename') openRenameModal(name, path);
+    if (action === 'delete') openDeleteModal(name, path, button.dataset.isFolder === '1');
   }
 
   // Modal functions
@@ -1957,6 +2476,7 @@
     if (convertOptions) {
       convertOptions.style.display = 'none';
     }
+    syncUploadPanelShape();
 
     // Reset rotation and overlap UI
     setHandedness('right');
@@ -1968,7 +2488,7 @@
     const logContainer = document.getElementById('log-container');
     if (logContainer) logContainer.innerHTML = '';
 
-    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/' : currentPath;
     document.getElementById('uploadModal').classList.add('open');
   }
 
@@ -2021,6 +2541,7 @@
     document.getElementById('convertBeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
+    document.getElementById('convertOptions').style.display = 'none';
     // Clear image picker cache and reset layout
     epubImagesCache = [];
     imageStates = {};
@@ -2034,11 +2555,14 @@
     // Reset advanced options
     const advancedSettingsContent = document.getElementById('advancedSettingsContent');
     if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
-    document.getElementById('advancedOptionsArrow').classList.remove('expanded');
+    const advancedModeSwitch = document.getElementById('advancedModeSwitch');
+    if (advancedModeSwitch) {
+      advancedModeSwitch.checked = false;
+      advancedModeSwitch.disabled = true;
+    }
     const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
     if (advancedOptionsToggle) {
-      advancedOptionsToggle.style.opacity = '0.5';
-      advancedOptionsToggle.style.pointerEvents = 'none';
+      advancedOptionsToggle.classList.add('is-disabled');
     }
     // Reset to defaults
     document.getElementById('qualitySlider').value = 85;
@@ -2047,6 +2571,7 @@
     setOverlap(5);
     // Update converter variables
     updateQualitySettings();
+    syncUploadPanelShape();
   }
 
   function updateBatchModeUI(isBatch) {
@@ -2054,6 +2579,13 @@
     const overlapRow = document.getElementById('overlapSettingRow');
     if (rotationRow) rotationRow.style.display = isBatch ? 'none' : '';
     if (overlapRow) overlapRow.style.display = isBatch ? 'none' : '';
+  }
+
+  function syncUploadPanelShape() {
+    const uploadDrop = document.querySelector('.upload-drop');
+    const convertOptions = document.getElementById('convertOptions');
+    if (!uploadDrop || !convertOptions) return;
+    uploadDrop.classList.toggle('connected', convertOptions.style.display !== 'none');
   }
 
   function toggleConvertOptions() {
@@ -2075,13 +2607,18 @@
     if (!checked) {
       const advancedSettingsContent = document.getElementById('advancedSettingsContent');
       if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
-      document.getElementById('advancedOptionsArrow').classList.remove('expanded');
+      const advancedModeSwitch = document.getElementById('advancedModeSwitch');
+      if (advancedModeSwitch) advancedModeSwitch.checked = false;
     }
     // Disable/enable advanced mode toggle
     const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
+    const advancedModeSwitch = document.getElementById('advancedModeSwitch');
     if (advancedOptionsToggle) {
-      advancedOptionsToggle.style.opacity = checked ? '1' : '0.5';
-      advancedOptionsToggle.style.pointerEvents = checked ? 'auto' : 'none';
+      advancedOptionsToggle.classList.toggle('is-disabled', !checked);
+    }
+    if (advancedModeSwitch) {
+      advancedModeSwitch.disabled = !checked;
+      if (!checked) advancedModeSwitch.checked = false;
     }
   }
 
@@ -2093,11 +2630,10 @@
     }
 
     const content = document.getElementById('advancedSettingsContent');
-    const arrow = document.getElementById('advancedOptionsArrow');
-    const isExpanding = !content.classList.contains('visible');
+    const advancedModeSwitch = document.getElementById('advancedModeSwitch');
+    const isExpanding = advancedModeSwitch ? advancedModeSwitch.checked : !content.classList.contains('visible');
     
-    content.classList.toggle('visible');
-    arrow.classList.toggle('expanded');
+    content.classList.toggle('visible', isExpanding);
     
     // When expanding, show image picker if an EPUB is selected
     if (isExpanding) {
@@ -2139,7 +2675,7 @@
     // Update displays (if element exists)
     const qualityDisplay = document.getElementById('qualityDisplaySimple');
     if (qualityDisplay) {
-      qualityDisplay.textContent = '📦 ' + quality + '% JPEG';
+      qualityDisplay.textContent = quality + '% JPEG';
     }
 
     // Update converter variables (used by processImage and applyGrayscale)
@@ -2232,7 +2768,7 @@
           if (id === coverId) coverImagePath = fullPath;
         }
 
-        // Cover-page reconciliation — if the cover XHTML references a different
+        // Cover-page reconciliation: if the cover XHTML references a different
         // but byte-identical image, prefer the one actually displayed on the page.
         if (coverImagePath) {
           try {
@@ -2354,8 +2890,9 @@
       const dims = await getImageDimensions(data);
       
       // Check if this is the cover image
-      const isCover = (path === coverImagePath) || 
-                      path.toLowerCase().includes('cover') && images.length === 0;
+      const basename = path.split('/').pop() || '';
+      const isCover = (path === coverImagePath) ||
+                      (/(^|[_-])cover([._-]|$)/i.test(basename) && images.length === 0);
       
       // Check if this is a separator/ornament (skip cover check)
       const filename = path.split('/').pop();
@@ -2509,7 +3046,7 @@
     // Check if JSZip is available
     if (typeof JSZip === 'undefined') {
       console.error('JSZip not loaded');
-      alert('JSZip library not available. Conversion will proceed without image picker.');
+      showNotification('JSZip library not available. Conversion will proceed without image picker.', 'warning');
       startConversionWithImageStates();
       return;
     }
@@ -2561,7 +3098,7 @@
 
     } catch (error) {
       console.error('Failed to extract images:', error);
-      alert('Failed to preview images: ' + error.message + '\n\nConversion will proceed normally.');
+      showNotification('Failed to preview images: ' + error.message + '. Conversion will proceed normally.', 'warning');
       // Fallback: start conversion directly
       startConversionWithImageStates();
     }
@@ -2590,7 +3127,7 @@
         item.className = 'image-item cover-locked';
         item.title = `${img.width}×${img.height} - Cover image (locked)`;
         item.innerHTML = `
-          <span class="image-state-badge cover-badge">🔒</span>
+          <span class="image-state-badge cover-badge">Cover</span>
           <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
@@ -2599,7 +3136,7 @@
         item.className = 'image-item separator-locked';
         item.title = `${img.width}×${img.height} - Separator (locked)`;
         item.innerHTML = `
-          <span class="image-state-badge separator-badge">✦</span>
+          <span class="image-state-badge separator-badge">Separator</span>
           <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
@@ -2757,10 +3294,11 @@
     // Initialize advanced mode toggle state based on Optimize EPUB checkbox
     const convertCheckbox = document.getElementById('convertBeforeUpload');
     const advancedToggle = document.getElementById('advancedOptionsToggle');
-    if (convertCheckbox && advancedToggle) {
+    const advancedModeSwitch = document.getElementById('advancedModeSwitch');
+    if (convertCheckbox && advancedToggle && advancedModeSwitch) {
       const isOptimizeEnabled = convertCheckbox.checked;
-      advancedToggle.style.opacity = isOptimizeEnabled ? '1' : '0.5';
-      advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
+      advancedToggle.classList.toggle('is-disabled', !isOptimizeEnabled);
+      advancedModeSwitch.disabled = !isOptimizeEnabled;
     }
 
     if (qualitySlider && qualityInput) {
@@ -2793,7 +3331,7 @@
   });
 
   function openFolderModal() {
-    document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/' : currentPath;
     document.getElementById('folderModal').classList.add('open');
     document.getElementById('folderName').value = '';
     setTimeout(() => document.getElementById('folderName').focus(), 50);
@@ -2828,7 +3366,7 @@
   function openDeleteSelectedModal() {
     const items = getSelectedItems();
     if (items.length === 0) {
-      alert('Please select at least one item to delete.');
+      showNotification('Please select at least one item to delete.', 'warning');
       return;
     }
     openDeleteModalForItems(items);
@@ -2848,7 +3386,7 @@
     items.forEach(it => {
       const div = document.createElement('div');
       div.style.marginBottom = '6px';
-      div.textContent = (it.isFolder ? '📁 ' : '📄 ') + it.path;
+      div.textContent = it.path;
       listEl.appendChild(div);
     });
     document.getElementById('deleteModal').classList.add('open');
@@ -2881,11 +3419,11 @@
         window.location.reload();
       } else {
         const text = await res.text();
-        alert('Failed to delete: ' + text);
+        showNotification('Failed to delete: ' + text, 'error');
         closeDeleteModal();
       }
     }).catch(() => {
-      alert('Failed to delete - network error');
+      showNotification('Failed to delete - network error', 'error');
       closeDeleteModal();
     });
   }
@@ -2930,13 +3468,25 @@
     const files = fileInput.files;
     const convertOptions = document.getElementById('convertOptions');
     fileInput.classList.toggle('has-files', files.length > 0);
+    const fileSelectionText = document.getElementById('fileSelectionText');
+    if (fileSelectionText) {
+      if (files.length === 0) {
+        fileSelectionText.textContent = 'No files selected';
+      } else if (files.length === 1) {
+        fileSelectionText.textContent = files[0].name;
+      } else {
+        fileSelectionText.textContent = files.length + ' files selected';
+      }
+    }
 
     // Show/hide convert options based on file selection
     if (files.length > 0) {
       convertOptions.style.display = 'block';
     } else {
+      convertOptions.style.display = 'none';
       clearImagePicker();
     }
+    syncUploadPanelShape();
 
     if (files.length > 0) {
       // If advanced settings is expanded and single EPUB, show image picker
@@ -3097,23 +3647,23 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
     // Build parts detail string
     let partsDetail = '';
     if (partsInfo && partsInfo.length > 0) {
-      const baseName = name.replace(/\.[^.]+$/, '');
+      const baseName = escapeHtml(name.replace(/\.[^.]+$/, ''));
       partsDetail = partsInfo.map(p =>
-        `${baseName}${p.suffix}.jpg (${p.width}×${p.height}, ${formatBytes(p.size)})`
+        `${baseName}${escapeHtml(p.suffix)}.jpg (${p.width}×${p.height}, ${formatBytes(p.size)})`
       ).join(', ');
     }
     const savedInfo = saved > 0 ? `, <span style="color:#27ae60">-${savedPct}%</span>` : '';
     const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
-    log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
+    log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) -> ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
     if (partsDetail) {
-      log(`<span class="log-detail" style="margin-left: 20px;">↳ ${partsDetail}</span>`, '', '');
+      log(`<span class="log-detail" style="margin-left: 20px;">${partsDetail}</span>`, '', '');
     }
   } else {
     conversionStats.images++;
     const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
     const detail = saved > 0
-      ? `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(origSize)} → ${formatBytes(newSize)}, <span style="color:#27ae60">-${savedPct}%</span>)</span>`
-      : `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(newSize)})</span>`;
+      ? `<span class="log-detail">(${dims} -> ${newDims}, ${formatBytes(origSize)} -> ${formatBytes(newSize)}, <span style="color:#27ae60">-${savedPct}%</span>)</span>`
+      : `<span class="log-detail">(${dims} -> ${newDims}, ${formatBytes(newSize)})</span>`;
     log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} ${detail}`, '', 'CONVERT');
   }
 }
@@ -3145,7 +3695,7 @@ function logSummary(originalSize, newSize, timeElapsed) {
 
   const summaryHtml = `
     <div class="log-summary">
-      <div class="log-summary-title">📊 Conversion Summary</div>
+      <div class="log-summary-title">Conversion Summary</div>
       <table class="log-summary-table">
         <tr><td>Images found</td><td class="highlight">${totalImages}</td></tr>
         <tr><td>Images processed</td><td>${totalOutput}${conversionStats.splitParts > conversionStats.splits ? ` (+${conversionStats.splitParts - conversionStats.splits} from splits)` : ''}</td></tr>
@@ -3226,7 +3776,7 @@ function finalizeBatchLog() {
     fileHeader.style.marginTop = index > 0 ? '15px' : '5px';
     fileHeader.style.borderTop = index > 0 ? '1px solid var(--border-color)' : 'none';
     fileHeader.style.paddingTop = index > 0 ? '10px' : '0';
-    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${escapeHtml(fileLog.fileName)}</strong> — ${fileLog.succeeded ? '<span style="color:#27ae60">✓ Success</span>' : '<span style="color:#e74c3c">✗ Failed</span>'}</span>`;
+    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${escapeHtml(fileLog.fileName)}</strong> - ${fileLog.succeeded ? '<span style="color:#27ae60">Success</span>' : '<span style="color:#e74c3c">Failed</span>'}</span>`;
     logContainer.appendChild(fileHeader);
 
     fileLog.entries.forEach(entry => {
@@ -3238,11 +3788,11 @@ function finalizeBatchLog() {
   // Add batch summary
   const batchSummaryHtml = `
     <div class="log-summary">
-      <div class="log-summary-title">📊 Batch Conversion Summary</div>
+      <div class="log-summary-title">Batch Conversion Summary</div>
       <table class="log-summary-table">
         <tr><td>Files processed</td><td class="highlight">${batchStats.filesProcessed}</td></tr>
         <tr><td>Successful</td><td style="color:#27ae60">${batchStats.filesSucceeded}</td></tr>
-        <tr><td>Failed</td><td style="${batchStats.filesFailed > 0 ? '#e74c3c' : '#7f8c8d'}">${batchStats.filesFailed}</td></tr>
+        <tr><td>Failed</td><td style="color:${batchStats.filesFailed > 0 ? '#e74c3c' : '#7f8c8d'}">${batchStats.filesFailed}</td></tr>
         <tr><td>Total images processed</td><td>${batchStats.totalImages}</td></tr>
         <tr><td>Total splits</td><td>${batchStats.totalSplits}</td></tr>
         <tr><td>Total fixes applied</td><td>${batchStats.totalFixes}</td></tr>
@@ -3338,10 +3888,10 @@ function exportLogToFile(filename = null, isBatch = false) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EPUB Utilities — ported from EPUB Optimizer Pro
+// EPUB Utilities: ported from EPUB Optimizer Pro
 // ═══════════════════════════════════════════════════════════════════
 
-/** Defensive CSS injected into every XHTML <head> — prevents e-ink overflow. */
+/** Defensive CSS injected into every XHTML <head>: prevents e-ink overflow. */
 const DEFENSIVE_STYLE = '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
 
 /** Escape a string for safe insertion into XML attribute values / text content. */
@@ -3352,7 +3902,7 @@ function xmlEscape(str) {
 function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 /**
- * Decode a URI-encoded href (e.g., "my%20image.jpg" → "my image.jpg").
+ * Decode a URI-encoded href (e.g., "my%20image.jpg" -> "my image.jpg").
  * Handles double-encoding gracefully.
  */
 function decodeHref(href) {
@@ -3730,7 +4280,7 @@ function fixSvgWrappedImages(content) {
   }
 }
 
-// Ensure cover meta tag exists in OPF — DOMParser with regex fallback
+// Ensure cover meta tag exists in OPF: DOMParser with regex fallback
 function ensureCoverMeta(opfString) {
   try {
     const parser = new DOMParser();
@@ -4390,7 +4940,7 @@ async function convertEpubFile(file, progressCallback) {
               matchingImgs.push(img);
             }
 
-            // Process each matching img — Pro's strip+inject approach
+            // Process each matching img: Pro's strip+inject approach
             for (const img of matchingImgs) {
               const src = img.getAttribute('src') || '';
 
@@ -4409,7 +4959,7 @@ async function convertEpubFile(file, progressCallback) {
                 const safeContainers = ['div', 'p', 'figure', 'aside', 'section', 'body'];
                 while (container && !safeContainers.includes(container.tagName.toLowerCase())) container = container.parentElement;
                 const insertTarget = container || img.parentElement;
-                // Strip constraining classes/styles from container — they were for the unsplit image
+                // Strip constraining classes/styles from container: they were for the unsplit image
                 if (insertTarget && insertTarget.tagName.toLowerCase() !== 'body') {
                   insertTarget.removeAttribute('class');
                   insertTarget.removeAttribute('style');
@@ -4445,7 +4995,7 @@ async function convertEpubFile(file, progressCallback) {
       console.warn('DOMParser error for', xhtmlPath, e.message);
     }
 
-    // Inject universal image constraint — prevents overflow on e-ink displays
+    // Inject universal image constraint: prevents overflow on e-ink displays
     if (t.includes('</head>')) {
       t = t.replace('</head>', DEFENSIVE_STYLE + '</head>');
     }
@@ -4683,7 +5233,7 @@ function uploadFile() {
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
 
   if (files.length === 0) {
-    alert('Please select at least one file!');
+    showNotification('Please select at least one file.', 'warning');
     return;
   }
 
@@ -4787,7 +5337,7 @@ function uploadFile() {
       const displayPercent = conversionSucceeded ? 50 + Math.round(uploadPercent / 2) : uploadPercent;
       progressFill.style.width = displayPercent + '%';
       const prefix = conversionSucceeded ? 'Converting & uploading' : 'Uploading';
-      progressText.textContent = `${prefix} ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${uploadPercent}%`;
+      progressText.textContent = `${prefix} ${file.name} (${currentIndex + 1}/${files.length})${methodText} - ${uploadPercent}%`;
     };
 
     const onComplete = () => {
@@ -4931,7 +5481,7 @@ function showFailedUploadsBanner() {
     item.className = 'failed-file-item';
     item.innerHTML = `
       <div class="failed-file-info">
-        <div class="failed-file-name">📄 ${escapeHtml(failedFile.name)}</div>
+        <div class="failed-file-name">${escapeHtml(failedFile.name)}</div>
         <div class="failed-file-error">Error: ${escapeHtml(failedFile.error)}</div>
       </div>
       <button class="retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
@@ -5001,14 +5551,14 @@ function retryAllFailedUploads() {
     const folderName = document.getElementById('folderName').value.trim();
 
     if (!folderName) {
-      alert('Please enter a folder name!');
+      showNotification('Please enter a folder name.', 'warning');
       return;
     }
 
     // Validate folder name
     const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(folderName);
     if (!validName) {
-      alert('Folder name cannot contain \" * : < > ? / \\ | and must not be . or ..');
+      showNotification('Folder name cannot contain \" * : < > ? / \\ | and must not be . or ..', 'warning');
       return;
     }
 
@@ -5023,12 +5573,12 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to create folder: ' + xhr.responseText);
+        showNotification('Failed to create folder: ' + xhr.responseText, 'error');
       }
     };
 
     xhr.onerror = function() {
-      alert('Failed to create folder - network error');
+      showNotification('Failed to create folder - network error', 'error');
     };
 
     xhr.send(formData);
@@ -5036,7 +5586,7 @@ function retryAllFailedUploads() {
 
   // Rename functions
   function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+    document.getElementById('renameItemName').textContent = name;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
     document.getElementById('renameModal').classList.add('open');
@@ -5056,11 +5606,11 @@ function retryAllFailedUploads() {
     const newName = document.getElementById('renameNewName').value.trim();
 
     if (!newName) {
-      alert('Please enter a new name.');
+      showNotification('Please enter a new name.', 'warning');
       return;
     }
     if (newName.includes('/') || newName.includes('\\')) {
-      alert('File name cannot include slashes.');
+      showNotification('File name cannot include slashes.', 'warning');
       return;
     }
 
@@ -5075,13 +5625,13 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to rename: ' + xhr.responseText);
+        showNotification('Failed to rename: ' + xhr.responseText, 'error');
       }
       closeRenameModal();
     };
 
     xhr.onerror = function() {
-      alert('Failed to rename - network error');
+      showNotification('Failed to rename - network error', 'error');
       closeRenameModal();
     };
 
@@ -5151,7 +5701,7 @@ function retryAllFailedUploads() {
   }
 
   function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
+    document.getElementById('moveItemName').textContent = name;
     document.getElementById('moveItemPath').value = path;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
     document.getElementById('moveModal').classList.add('open');
@@ -5170,7 +5720,7 @@ function retryAllFailedUploads() {
     const destPath = normalizePath(document.getElementById('moveDestPath').value);
 
     if (!destPath) {
-      alert('Please enter a destination folder.');
+      showNotification('Please enter a destination folder.', 'warning');
       return;
     }
 
@@ -5185,13 +5735,13 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to move: ' + xhr.responseText);
+        showNotification('Failed to move: ' + xhr.responseText, 'error');
       }
       closeMoveModal();
     };
 
     xhr.onerror = function() {
-      alert('Failed to move - network error');
+      showNotification('Failed to move - network error', 'error');
       closeMoveModal();
     };
 

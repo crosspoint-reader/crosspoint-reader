@@ -21,6 +21,8 @@
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/appCss.generated.h"
+#include "html/faviconIco.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 
 namespace {
@@ -107,7 +109,7 @@ void CrossPointWebServer::begin() {
   const bool isInApMode = (wifiMode & WIFI_MODE_AP) && (WiFi.softAPgetStationNum() >= 0);  // AP is running
 
   if (!isStaConnected && !isInApMode) {
-    LOG_DBG("WEB", "Cannot start webserver - no valid network (mode=%d, status=%d)", wifiMode, WiFi.status());
+    LOG_DBG("WEB", "Cannot start web server - no valid network (mode=%d, status=%d)", wifiMode, WiFi.status());
     return;
   }
 
@@ -140,6 +142,8 @@ void CrossPointWebServer::begin() {
   // Setup routes
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
+  server->on("/app.css", HTTP_GET, [this] { handleAppCss(); });
+  server->on("/favicon.ico", HTTP_GET, [this] { handleFavicon(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
 
@@ -341,9 +345,9 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   return status;
 }
 
-static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
+static void sendHtmlContent(WebServer* server, const unsigned char* data, size_t len) {
   server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "text/html", data, len);
+  server->send_P(200, "text/html", reinterpret_cast<const char*>(data), len);
 }
 
 void CrossPointWebServer::handleRoot() const {
@@ -351,9 +355,20 @@ void CrossPointWebServer::handleRoot() const {
   LOG_DBG("WEB", "Served root page");
 }
 
+void CrossPointWebServer::handleAppCss() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "text/css", reinterpret_cast<const char*>(appCss), appCssCompressedSize);
+  LOG_DBG("WEB", "Served app.css");
+}
+
+void CrossPointWebServer::handleFavicon() const {
+  server->send_P(200, "image/x-icon", reinterpret_cast<const char*>(faviconIco), faviconIcoCompressedSize);
+  LOG_DBG("WEB", "Served favicon.ico");
+}
+
 void CrossPointWebServer::handleJszip() const {
   server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
+  server->send_P(200, "application/javascript", reinterpret_cast<const char*>(jszip_minJs), jszip_minJsCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
