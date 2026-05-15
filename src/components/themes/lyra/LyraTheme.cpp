@@ -559,6 +559,22 @@ Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   return Rect{x, y, w, h};
 }
 
+void LyraTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) const {
+  constexpr int outline = 2;
+  renderer.fillRoundedRect(rect.x - outline, rect.y - outline, rect.width + outline * 2, rect.height + outline * 2,
+                           cornerRadius + outline, Color::White);
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::Black);
+}
+
+void LyraTheme::drawPopupSelection(const GfxRenderer& renderer, Rect rect, const char* text) const {
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::LightGray);
+  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, text);
+  const int textX = rect.x + (rect.width - textWidth) / 2;
+  const int textLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int textY = rect.y + (rect.height - textLineHeight) / 2;
+  renderer.drawText(UI_10_FONT_ID, textX, textY, text, true);
+}
+
 void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
   constexpr int barHeight = 4;
 
