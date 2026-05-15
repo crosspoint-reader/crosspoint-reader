@@ -6,7 +6,7 @@ on:
 jobs:
   build-release-candidate:
     if: startsWith(github.ref_name, 'release/')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v6
         with:
