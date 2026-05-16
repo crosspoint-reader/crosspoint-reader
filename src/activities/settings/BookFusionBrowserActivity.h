@@ -49,6 +49,7 @@ class BookFusionBrowserActivity final : public Activity {
   char downloadTitle[64] = {};
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
+  bool cancelRequested = false;
 
   char errorMsg[128] = {};
 

@@ -169,12 +169,28 @@ void BookFusionBrowserActivity::startDownload(int bookIndex) {
   const std::string filename = "/" + StringUtils::sanitizeFilename(baseName) + "." + ext;
   LOG_DBG("BFB", "Downloading book_id=%lu -> %s", static_cast<unsigned long>(book.id), filename.c_str());
 
-  const auto dlResult =
-      HttpDownloader::downloadToFile(downloadUrl, filename, [this](const size_t downloaded, const size_t total) {
+  cancelRequested = false;
+  const auto dlResult = HttpDownloader::downloadToFile(
+      downloadUrl, filename,
+      [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);
-      });
+        mappedInput.update();
+        if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+          cancelRequested = true;
+        }
+      },
+      &cancelRequested);
+
+  if (dlResult == HttpDownloader::ABORTED) {
+    {
+      RenderLock lock(*this);
+      state = BROWSING;
+    }
+    requestUpdate();
+    return;
+  }
 
   if (dlResult != HttpDownloader::OK) {
     {
@@ -354,7 +370,18 @@ void BookFusionBrowserActivity::render(RenderLock&&) {
       const int barWidth = pageWidth - 100;
       const int barY = pageHeight / 2 + 20;
       GUI.drawProgressBar(renderer, Rect{barX, barY, barWidth, barHeight}, downloadProgress, downloadTotal);
+    } else if (downloadProgress > 0) {
+      char progressText[32];
+      const float kb = downloadProgress / 1024.0f;
+      if (kb < 1024.0f) {
+        snprintf(progressText, sizeof(progressText), "%.0f KB", kb);
+      } else {
+        snprintf(progressText, sizeof(progressText), "%.1f MB", kb / 1024.0f);
+      }
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, progressText);
     }
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -371,7 +398,6 @@ void BookFusionBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  // BROWSING state — draw paginated book list via UITheme.
   const int totalItems = searchResult.count + (searchResult.hasMore ? 1 : 0);
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
