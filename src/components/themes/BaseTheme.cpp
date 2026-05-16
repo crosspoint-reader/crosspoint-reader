@@ -784,12 +784,12 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Progress Bar
-  const bool drawProgressBar =
+  const bool shouldDrawProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS &&
       (SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::CHAPTER_PROGRESS ||
        shouldDrawChapterProgressBar(pageInfo));
   const int progressBarHeight = (SETTINGS.statusBarProgressBarThickness + 1) * 2;
-  if (drawProgressBar) {
+  if (shouldDrawProgressBar) {
     const int progressBarMaxWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
     const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - progressBarHeight - paddingBottom;
     size_t progress;
@@ -812,7 +812,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       renderer.drawText(SMALL_FONT_ID, progressTextX - INDEXING_INDICATOR_AFTER_PAGE_COUNT_GAP - indicatorWidth, textY,
                         indicator);
     } else {
-      const int reservedBottomHeight = drawProgressBar ? progressBarHeight + INDEXING_INDICATOR_GAP : 0;
+      const int reservedBottomHeight = shouldDrawProgressBar ? progressBarHeight + INDEXING_INDICATOR_GAP : 0;
       const auto position = currentIndexingStandalonePlusBottomRight(
           renderer.getScreenWidth(), screenHeight, orientedMarginRight, orientedMarginBottom, paddingBottom,
           reservedBottomHeight, metrics.statusBarVerticalMargin, renderer.getTextHeight(SMALL_FONT_ID));
@@ -828,7 +828,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                                                             textY, renderer.getTextHeight(SMALL_FONT_ID));
       drawFutureIndexingDot(renderer, position.x, position.y);
     } else {
-      const int reservedBottomHeight = drawProgressBar ? progressBarHeight + INDEXING_INDICATOR_GAP : 0;
+      const int reservedBottomHeight = shouldDrawProgressBar ? progressBarHeight + INDEXING_INDICATOR_GAP : 0;
       const auto position = futureIndexingDotBottomRight(
           renderer.getScreenWidth(), screenHeight, orientedMarginRight, orientedMarginBottom, paddingBottom,
           reservedBottomHeight, metrics.statusBarVerticalMargin, renderer.getTextHeight(SMALL_FONT_ID));
