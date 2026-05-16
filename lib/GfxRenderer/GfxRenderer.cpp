@@ -23,6 +23,28 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, int p
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
   return font.resolveStyle(static_cast<uint8_t>(style));
 }
+
+// Bundles every panel-level value derived from a caller-facing GrayscaleDriveMode,
+// so the three grayscale entry points share one mapping instead of repeating ternaries.
+struct GrayscaleDriveSpec {
+  GfxRenderer::RenderMode lsbMode;
+  GfxRenderer::RenderMode msbMode;
+  const unsigned char* lut;  // nullptr for Differential
+  bool factoryMode;
+  bool differentialQuantize;
+};
+
+GrayscaleDriveSpec resolveGrayscaleDrive(GfxRenderer::GrayscaleDriveMode mode) {
+  switch (mode) {
+    case GfxRenderer::GrayscaleDriveMode::Differential:
+      return {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB, nullptr, false, true};
+    case GfxRenderer::GrayscaleDriveMode::FactoryFast:
+      return {GfxRenderer::GRAY2_LSB, GfxRenderer::GRAY2_MSB, lut_factory_fast, true, false};
+    case GfxRenderer::GrayscaleDriveMode::FactoryQuality:
+      return {GfxRenderer::GRAY2_LSB, GfxRenderer::GRAY2_MSB, lut_factory_quality, true, false};
+  }
+  return {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB, nullptr, false, true};
+}
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -1459,30 +1481,25 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuff
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
-void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const GfxRenderer&, const void*),
+void GfxRenderer::renderGrayscale(GrayscaleDriveMode mode, void (*renderFn)(const GfxRenderer&, const void*),
                                   const void* ctx, void (*preFlashOverlayFn)(const GfxRenderer&, const void*),
                                   const void* preFlashCtx) {
-  if (mode == GrayscaleMode::FactoryFast || mode == GrayscaleMode::FactoryQuality) {
+  const auto spec = resolveGrayscaleDrive(mode);
+
+  if (spec.factoryMode) {
     clearScreen();
     if (preFlashOverlayFn) preFlashOverlayFn(*this, preFlashCtx);
     displayBuffer(HalDisplay::HALF_REFRESH);
   }
 
-  const RenderMode lsbMode = (mode == GrayscaleMode::Differential) ? GRAYSCALE_LSB : GRAY2_LSB;
-  const RenderMode msbMode = (mode == GrayscaleMode::Differential) ? GRAYSCALE_MSB : GRAY2_MSB;
-  const bool factoryMode = (mode != GrayscaleMode::Differential);
-  const unsigned char* lut = (mode == GrayscaleMode::FactoryFast)      ? lut_factory_fast
-                             : (mode == GrayscaleMode::FactoryQuality) ? lut_factory_quality
-                                                                       : nullptr;
-
-  g_differentialQuantize = (mode == GrayscaleMode::Differential);
+  g_differentialQuantize = spec.differentialQuantize;
 
   clearScreen(0x00);
-  setRenderMode(lsbMode);
+  setRenderMode(spec.lsbMode);
   renderFn(*this, ctx);
 
   uint8_t* lsbCopy = nullptr;
-  if (screenshotHook && factoryMode) {
+  if (screenshotHook && spec.factoryMode) {
     lsbCopy = static_cast<uint8_t*>(malloc(frameBufferSize));
     if (lsbCopy) {
       memcpy(lsbCopy, frameBuffer, frameBufferSize);
@@ -1495,12 +1512,12 @@ void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const Gfx
   copyGrayscaleLsbBuffers();
 
   clearScreen(0x00);
-  setRenderMode(msbMode);
+  setRenderMode(spec.msbMode);
   renderFn(*this, ctx);
   copyGrayscaleMsbBuffers();
 
   // Fire hook: LSB = lsbCopy, MSB = frameBuffer (still holds second-pass data).
-  if (screenshotHook && factoryMode && lsbCopy) {
+  if (screenshotHook && spec.factoryMode && lsbCopy) {
     screenshotHook(lsbCopy, frameBuffer, panelWidth, panelHeight, screenshotHookCtx);
     screenshotHook = nullptr;
     screenshotHookCtx = nullptr;
@@ -1512,7 +1529,7 @@ void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const Gfx
 
   g_differentialQuantize = false;
 
-  displayGrayBuffer(lut, factoryMode);
+  displayGrayBuffer(spec.lut, spec.factoryMode);
   // Suppress the SDK's automatic grayscaleRevert on the next BW page turn.
   // Caller is responsible for cleanup: restoreBwBuffer rebases RED RAM, and
   // displayBuffer promotes the first post-factory FAST refresh to HALF.
@@ -1520,11 +1537,13 @@ void GfxRenderer::renderGrayscale(GrayscaleMode mode, void (*renderFn)(const Gfx
   setRenderMode(BW);
 }
 
-void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)(const GfxRenderer&, const void*),
+void GfxRenderer::renderGrayscaleSinglePass(GrayscaleDriveMode mode, void (*renderFn)(const GfxRenderer&, const void*),
                                             const void* ctx, void (*preFlashOverlayFn)(const GfxRenderer&, const void*),
                                             const void* preFlashCtx, const HalDisplay::RefreshMode preFlashRefreshMode,
                                             const uint8_t preFlashPasses) {
-  if ((mode == GrayscaleMode::FactoryFast || mode == GrayscaleMode::FactoryQuality) && preFlashPasses > 0) {
+  const auto spec = resolveGrayscaleDrive(mode);
+
+  if (spec.factoryMode && preFlashPasses > 0) {
     for (uint8_t pass = 0; pass < preFlashPasses; pass++) {
       clearScreen();
       if (pass == 0 && preFlashOverlayFn) preFlashOverlayFn(*this, preFlashCtx);
@@ -1532,13 +1551,7 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
     }
   }
 
-  const RenderMode lsbMode = (mode == GrayscaleMode::Differential) ? GRAYSCALE_LSB : GRAY2_LSB;
-  const bool factoryMode = (mode != GrayscaleMode::Differential);
-  const unsigned char* lut = (mode == GrayscaleMode::FactoryFast)      ? lut_factory_fast
-                             : (mode == GrayscaleMode::FactoryQuality) ? lut_factory_quality
-                                                                       : nullptr;
-
-  g_differentialQuantize = (mode == GrayscaleMode::Differential);
+  g_differentialQuantize = spec.differentialQuantize;
 
   auto* secBuf = static_cast<uint8_t*>(malloc(frameBufferSize));
   if (!secBuf) {
@@ -1547,15 +1560,15 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
     screenshotHook = nullptr;
     screenshotHookCtx = nullptr;
     clearScreen(0x00);
-    setRenderMode(lsbMode);
+    setRenderMode(spec.lsbMode);
     renderFn(*this, ctx);
     copyGrayscaleLsbBuffers();
     clearScreen(0x00);
-    setRenderMode(mode == GrayscaleMode::Differential ? GRAYSCALE_MSB : GRAY2_MSB);
+    setRenderMode(spec.msbMode);
     renderFn(*this, ctx);
     copyGrayscaleMsbBuffers();
     g_differentialQuantize = false;
-    displayGrayBuffer(lut, factoryMode);
+    displayGrayBuffer(spec.lut, spec.factoryMode);
     // See note in renderGrayscale().
     display.clearGrayscaleModeFlag();
     setRenderMode(BW);
@@ -1566,21 +1579,36 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
 
   // Single pass: renderFn writes LSB plane to frameBuffer and MSB plane to secondaryFrameBuffer.
   clearScreen(0x00);
-  setRenderMode(lsbMode);
+  setRenderMode(spec.lsbMode);
   renderFn(*this, ctx);
 
   // One-shot screenshot hook: fired while both planes are still in software, before either is
   // pushed to the controller. frameBuffer = LSB plane, secBuf = MSB plane.
-  if (screenshotHook && factoryMode) {
+  if (screenshotHook && spec.factoryMode) {
     screenshotHook(frameBuffer, secBuf, panelWidth, panelHeight, screenshotHookCtx);
     screenshotHook = nullptr;
     screenshotHookCtx = nullptr;
   }
 
-  // Push LSB plane (frameBuffer) → BW RAM.
-  copyGrayscaleLsbBuffers();
+  // EXPERIMENT: match stock V5.5.9 SPI order: LUT load → RAM writes → activate.
+  // For factory mode, use the split SDK API so RAM data is written AFTER setCustomLUT
+  // and Border Waveform, BEFORE the MASTER_ACTIVATION. See docs/v559-disassembly-findings.md.
+  if (spec.factoryMode) {
+    display.displayGrayBufferFactorySetup(spec.lut);
+    copyGrayscaleLsbBuffers();
+    memcpy(frameBuffer, secBuf, frameBufferSize);
+    copyGrayscaleMsbBuffers();
+    free(secBuf);
+    secondaryFrameBuffer = nullptr;
+    g_differentialQuantize = false;
+    display.displayGrayBufferFactoryActivate();
+    display.clearGrayscaleModeFlag();
+    setRenderMode(BW);
+    return;
+  }
 
-  // Push MSB plane (secondaryFrameBuffer → frameBuffer → RED RAM).
+  // Differential path: original order (RAM writes then combined displayGrayBuffer).
+  copyGrayscaleLsbBuffers();
   memcpy(frameBuffer, secBuf, frameBufferSize);
   copyGrayscaleMsbBuffers();
 
@@ -1588,15 +1616,14 @@ void GfxRenderer::renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)
   secondaryFrameBuffer = nullptr;
 
   g_differentialQuantize = false;
-  displayGrayBuffer(lut, factoryMode);
-  // See note in renderGrayscale().
+  displayGrayBuffer(spec.lut, spec.factoryMode);
   display.clearGrayscaleModeFlag();
   setRenderMode(BW);
 }
 
 void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, const uint16_t pageWidth,
                                     const uint16_t pageHeight, RenderHook overlayFn, const void* overlayCtx,
-                                    GrayscaleMode mode, const bool preFlash,
+                                    GrayscaleDriveMode mode, const bool preFlash,
                                     const HalDisplay::RefreshMode preFlashRefreshMode, const uint8_t preFlashPasses) {
   const size_t colBytes = (pageHeight + 7) / 8;
   const uint16_t fbStride = panelWidthBytes;
@@ -1655,8 +1682,8 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
     screenshotHookCtx = nullptr;
   }
 
-  const unsigned char* lut = (mode == GrayscaleMode::FactoryQuality) ? lut_factory_quality : lut_factory_fast;
-  displayGrayBuffer(lut, true);
+  const auto spec = resolveGrayscaleDrive(mode);
+  displayGrayBuffer(spec.lut, true);
   setRenderMode(BW);
 }
 

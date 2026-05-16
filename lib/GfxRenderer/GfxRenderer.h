@@ -35,11 +35,12 @@ class GfxRenderer {
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
 
-  // Selects LUT, pixel-plane encoding, and pre-flash behavior for renderGrayscale().
-  enum class GrayscaleMode {
-    FactoryFast,     // Factory absolute 2-bit (lut_factory_fast); HALF_REFRESH pre-flash to white
-    FactoryQuality,  // Factory absolute 2-bit (lut_factory_quality); HALF_REFRESH pre-flash to white
-    Differential,    // Differential 2-bit overlay (no LUT); no pre-flash, requires prior BW state
+  // Selects LUT and pixel-plane encoding for renderGrayscale() / renderGrayscaleSinglePass() /
+  // displayXtchPlanes(). Pre-flash policy is per-call, not part of the drive mode.
+  enum class GrayscaleDriveMode {
+    FactoryFast,     // Factory absolute 2-bit (lut_factory_fast)
+    FactoryQuality,  // Factory absolute 2-bit (lut_factory_quality)
+    Differential,    // Differential 2-bit overlay (no LUT); requires prior BW state
   };
 
   // Display state — tracks whether the physical display was last updated via a factory LUT render.
@@ -216,7 +217,7 @@ class GfxRenderer {
   // storeBwBuffer / restoreBwBuffer remain the caller's responsibility.
   // preFlashOverlayFn (optional): called after clearScreen() but before the pre-flash displayBuffer(),
   // allowing callers to draw a loading indicator that appears during the pre-flash without an extra refresh.
-  void renderGrayscale(GrayscaleMode mode, void (*renderFn)(const GfxRenderer&, const void*), const void* ctx,
+  void renderGrayscale(GrayscaleDriveMode mode, void (*renderFn)(const GfxRenderer&, const void*), const void* ctx,
                        void (*preFlashOverlayFn)(const GfxRenderer&, const void*) = nullptr,
                        const void* preFlashCtx = nullptr);
   // Single-pass variant: calls renderFn once in GRAY2_LSB mode while simultaneously writing
@@ -224,8 +225,8 @@ class GfxRenderer {
   // Falls back to two-pass on secondary buffer allocation failure. Factory modes pre-flash to
   // white with HALF_REFRESH by default. preFlashPasses=0 skips the internal pre-flash so
   // callers can run a custom conditioning sequence first.
-  void renderGrayscaleSinglePass(GrayscaleMode mode, void (*renderFn)(const GfxRenderer&, const void*), const void* ctx,
-                                 void (*preFlashOverlayFn)(const GfxRenderer&, const void*) = nullptr,
+  void renderGrayscaleSinglePass(GrayscaleDriveMode mode, void (*renderFn)(const GfxRenderer&, const void*),
+                                 const void* ctx, void (*preFlashOverlayFn)(const GfxRenderer&, const void*) = nullptr,
                                  const void* preFlashCtx = nullptr,
                                  HalDisplay::RefreshMode preFlashRefreshMode = HalDisplay::HALF_REFRESH,
                                  uint8_t preFlashPasses = 1);
@@ -236,7 +237,7 @@ class GfxRenderer {
   // mode selects the factory LUT: FactoryFast (default) or FactoryQuality; Differential is invalid here.
   void displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2, uint16_t pageWidth, uint16_t pageHeight,
                          RenderHook overlayFn = nullptr, const void* overlayCtx = nullptr,
-                         GrayscaleMode mode = GrayscaleMode::FactoryFast, bool preFlash = false,
+                         GrayscaleDriveMode mode = GrayscaleDriveMode::FactoryFast, bool preFlash = false,
                          HalDisplay::RefreshMode preFlashRefreshMode = HalDisplay::HALF_REFRESH,
                          uint8_t preFlashPasses = 1);
 

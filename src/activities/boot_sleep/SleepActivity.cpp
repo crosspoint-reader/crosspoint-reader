@@ -35,7 +35,7 @@ void runFactorySleepPrecondition(const GfxRenderer& renderer) {
     renderer.displayBuffer(pass.refreshMode);
   }
 }
-}
+}  // namespace
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -257,9 +257,10 @@ bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
   };
   PxcCtx ctx{&file, dataOffset, pxcWidth, pxcHeight};
 
-  runFactorySleepPrecondition(renderer);
+  // EXPERIMENT: precondition disabled to test ghost hypothesis. See docs/v559-disassembly-findings.md.
+  // runFactorySleepPrecondition(renderer);
   renderer.renderGrayscaleSinglePass(
-      GfxRenderer::GrayscaleMode::FactoryQuality,
+      GfxRenderer::GrayscaleDriveMode::FactoryQuality,
       [](const GfxRenderer& r, const void* raw) {
         const auto* c = static_cast<const PxcCtx*>(raw);
         c->file->seek(c->dataOffset);
@@ -342,9 +343,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
       float cropX, cropY;
     };
     BitmapGrayCtx grayCtx{&bitmap, x, y, pageWidth, pageHeight, cropX, cropY};
-    runFactorySleepPrecondition(renderer);
+    // EXPERIMENT: precondition disabled to test ghost hypothesis.
+    // runFactorySleepPrecondition(renderer);
     renderer.renderGrayscaleSinglePass(
-        GfxRenderer::GrayscaleMode::FactoryQuality,
+        GfxRenderer::GrayscaleDriveMode::FactoryQuality,
         [](const GfxRenderer& r, const void* raw) {
           const auto* c = static_cast<const BitmapGrayCtx*>(raw);
           r.drawBitmap(*c->bitmap, c->x, c->y, c->maxWidth, c->maxHeight, c->cropX, c->cropY);
@@ -416,10 +418,10 @@ void SleepActivity::renderCoverSleepScreen() const {
       }
 
       LOG_DBG("SLP", "Direct XTCH plane render: %ux%u", lastXtc.getPageWidth(), lastXtc.getPageHeight());
-      runFactorySleepPrecondition(renderer);
+      // EXPERIMENT: precondition disabled to test ghost hypothesis.
+      // runFactorySleepPrecondition(renderer);
       renderer.displayXtchPlanes(plane1, plane2, lastXtc.getPageWidth(), lastXtc.getPageHeight(), nullptr, nullptr,
-                                 GfxRenderer::GrayscaleMode::FactoryQuality, false, HalDisplay::FULL_REFRESH,
-                                 SLEEP_FACTORY_INTERNAL_PREFLASH_PASSES);
+                                 GfxRenderer::GrayscaleDriveMode::FactoryQuality, false);
       free(plane1);
       free(plane2);
       return;

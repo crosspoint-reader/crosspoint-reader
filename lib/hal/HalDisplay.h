@@ -48,6 +48,9 @@ class HalDisplay {
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 
   void displayGrayBuffer(bool turnOffScreen = false, const unsigned char* lut = nullptr, bool factoryMode = false);
+  // Two-phase factory grayscale render — see EInkDisplay.h.
+  void displayGrayBufferFactorySetup(const unsigned char* lut);
+  void displayGrayBufferFactoryActivate();
 
   // Tell the SDK that grayscale state has been cleaned up by the consumer
   // (RAM banks rebased + a follow-up FAST_REFRESH will handle pixel cleanup),

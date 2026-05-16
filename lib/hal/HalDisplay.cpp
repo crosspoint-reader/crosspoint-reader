@@ -84,6 +84,12 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen, const unsigned char* lut,
   einkDisplay.displayGrayBuffer(turnOffScreen, lut, factoryMode);
 }
 
+void HalDisplay::displayGrayBufferFactorySetup(const unsigned char* lut) {
+  einkDisplay.displayGrayBufferFactorySetup(lut);
+}
+
+void HalDisplay::displayGrayBufferFactoryActivate() { einkDisplay.displayGrayBufferFactoryActivate(); }
+
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 
 uint16_t HalDisplay::getDisplayHeight() const { return einkDisplay.getDisplayHeight(); }

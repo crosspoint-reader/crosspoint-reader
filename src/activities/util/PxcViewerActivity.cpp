@@ -109,7 +109,7 @@ void PxcViewerActivity::renderPxcToFramebuffer(FsFile& file, uint16_t width, uin
   const auto labels =
       mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
   PxcCtx ctx{&file, dataOffset, width, height, labels};
-  renderer.renderGrayscaleSinglePass(GfxRenderer::GrayscaleMode::FactoryQuality, &pxcRenderCallback, &ctx,
+  renderer.renderGrayscaleSinglePass(GfxRenderer::GrayscaleDriveMode::FactoryQuality, &pxcRenderCallback, &ctx,
                                      &pxcLoadingOverlay, nullptr);
 }
 

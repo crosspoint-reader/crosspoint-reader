@@ -813,8 +813,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     PageRenderCtx grayCtx{page.get(), SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop, this};
 
     const auto tGrayStart = millis();
-    const auto grayMode =
-        useFactoryGray ? GfxRenderer::GrayscaleMode::FactoryQuality : GfxRenderer::GrayscaleMode::Differential;
+    const auto grayMode = useFactoryGray ? GfxRenderer::GrayscaleDriveMode::FactoryQuality
+                                         : GfxRenderer::GrayscaleDriveMode::Differential;
     renderer.renderGrayscale(grayMode, &renderPageCallback, &grayCtx);
     const auto tGrayEnd = millis();
     fcm->logStats(useFactoryGray ? "gray_factory_quality" : "gray");
@@ -856,7 +856,7 @@ void EpubReaderActivity::onScreenshotRequest() {
   if (!renderer.storeBwBuffer()) return;
 
   PageRenderCtx grayCtx{p.get(), SETTINGS.getReaderFontId(), lastFactoryMarginLeft, lastFactoryMarginTop, this};
-  renderer.renderGrayscale(GfxRenderer::GrayscaleMode::FactoryQuality, &renderPageCallback, &grayCtx);
+  renderer.renderGrayscale(GfxRenderer::GrayscaleDriveMode::FactoryQuality, &renderPageCallback, &grayCtx);
   renderer.restoreBwBuffer();
 }
 
