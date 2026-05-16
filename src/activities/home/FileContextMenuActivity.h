@@ -20,8 +20,7 @@ class FileContextMenuActivity final : public MenuListActivity {
     Remove,
   };
 
-  explicit FileContextMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const std::string& filePath);
+  explicit FileContextMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& filePath);
 
   void render(RenderLock&&) override;
 
