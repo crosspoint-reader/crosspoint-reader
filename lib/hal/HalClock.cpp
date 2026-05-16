@@ -7,8 +7,6 @@
 
 #include <cassert>
 
-#include "CrossPointSettings.h"
-
 HalClock halClock;  // Singleton instance
 
 // DS3231 register layout (BCD encoded):
@@ -151,13 +149,8 @@ bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
   return true;
 }
 
-bool HalClock::syncFromNTP(bool force) {
+bool HalClock::syncFromNTP() {
   if (!_available) return false;
-
-  if (!force && SETTINGS.clockHasBeenSynced) {
-    LOG_DBG("CLK", "Skipping NTP sync, RTC already initialised");
-    return false;
-  }
 
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
@@ -177,10 +170,6 @@ bool HalClock::syncFromNTP(bool force) {
 
       if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
         LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-        if (!SETTINGS.clockHasBeenSynced) {
-          SETTINGS.clockHasBeenSynced = 1;
-          SETTINGS.saveToFile();
-        }
         return true;
       }
       return false;

@@ -37,15 +37,11 @@ class HalClock {
 
   // Sync the DS3231 RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
+  // Returns true if the RTC was successfully updated.
   //
-  // When force is false (the default for auto-sync calls), the sync is skipped if the
-  // RTC has already been synced at least once. The DS3231 drifts ~2 ppm (about a minute
-  // per year) so one initial sync is enough for typical use; re-syncing on every WiFi
-  // connect just adds latency without measurable accuracy gain.
-  //
-  // Pass force=true for user-initiated sync (timezone change, accuracy doubt).
-  // Returns true if the RTC was successfully updated, or false if skipped or failed.
-  bool syncFromNTP(bool force = false);
+  // Debouncing (skip if already synced once) is enforced by the caller, not here,
+  // so the HAL stays free of any app-layer settings dependency.
+  bool syncFromNTP();
 
  private:
   bool writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second);

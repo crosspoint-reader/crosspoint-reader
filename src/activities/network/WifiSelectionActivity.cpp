@@ -8,6 +8,7 @@
 
 #include <map>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -249,8 +250,15 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Sync RTC from NTP if available (blocks up to ~5s)
-    halClock.syncFromNTP();
+    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
+    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
+    // Settings > Customise Status Bar > Sync clock now.
+    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+      if (halClock.syncFromNTP()) {
+        SETTINGS.clockHasBeenSynced = 1;
+        SETTINGS.saveToFile();
+      }
+    }
 
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both
