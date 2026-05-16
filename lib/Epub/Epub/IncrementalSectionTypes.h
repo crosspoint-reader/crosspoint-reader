@@ -30,12 +30,11 @@ struct LayoutCacheKey {
   bool focusReadingEnabled = false;
 
   bool matches(const LayoutCacheKey& other) const {
-    return cacheVersion == other.cacheVersion && fontId == other.fontId &&
-           lineCompression == other.lineCompression && extraParagraphSpacing == other.extraParagraphSpacing &&
-           paragraphAlignment == other.paragraphAlignment && viewportWidth == other.viewportWidth &&
-           viewportHeight == other.viewportHeight && hyphenationEnabled == other.hyphenationEnabled &&
-           embeddedStyle == other.embeddedStyle && imageRendering == other.imageRendering &&
-           focusReadingEnabled == other.focusReadingEnabled;
+    return cacheVersion == other.cacheVersion && fontId == other.fontId && lineCompression == other.lineCompression &&
+           extraParagraphSpacing == other.extraParagraphSpacing && paragraphAlignment == other.paragraphAlignment &&
+           viewportWidth == other.viewportWidth && viewportHeight == other.viewportHeight &&
+           hyphenationEnabled == other.hyphenationEnabled && embeddedStyle == other.embeddedStyle &&
+           imageRendering == other.imageRendering && focusReadingEnabled == other.focusReadingEnabled;
   }
 };
 

@@ -1,7 +1,7 @@
+#include <cassert>
+
 #include "../../lib/Epub/Epub/EpubIndexingPolicy.h"
 #include "../../lib/Epub/Epub/IncrementalBuildBudget.h"
-
-#include <cassert>
 
 static_assert(EpubIndexingPolicy::CURRENT_INDEX_BATCH_PAGES == 1);
 static_assert(EpubIndexingPolicy::INITIAL_INDEX_BATCH_PAGES == 1);

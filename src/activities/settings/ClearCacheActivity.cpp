@@ -1,7 +1,7 @@
 #include "ClearCacheActivity.h"
 
-#include <GfxRenderer.h>
 #include <FsHelpers.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>

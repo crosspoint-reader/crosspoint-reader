@@ -26,8 +26,7 @@ bool checkedWriteBytes(FsFile& file, const uint8_t* data, const size_t size, con
   }
   const size_t written = file.write(data, size);
   if (written != size) {
-    LOG_ERR("ISC", "Short write %s: %u/%u bytes", label, static_cast<unsigned>(written),
-            static_cast<unsigned>(size));
+    LOG_ERR("ISC", "Short write %s: %u/%u bytes", label, static_cast<unsigned>(written), static_cast<unsigned>(size));
     return false;
   }
   return true;
@@ -95,7 +94,9 @@ void readIndexRecordFromFile(FsFile& file, PageIndexRecord& record) {
 }  // namespace
 
 Cache::Cache(std::string sectionsDir, const uint32_t spineIndex)
-    : sectionsDir_(std::move(sectionsDir)), spineIndex_(spineIndex), paths_(pathsForSection(sectionsDir_, spineIndex)) {}
+    : sectionsDir_(std::move(sectionsDir)),
+      spineIndex_(spineIndex),
+      paths_(pathsForSection(sectionsDir_, spineIndex)) {}
 
 bool Cache::loadMeta(Meta& out) const {
   FsFile file;
@@ -133,15 +134,14 @@ bool Cache::writeMeta(const Meta& meta) const {
   }
 
   const uint8_t state = static_cast<uint8_t>(meta.state);
-  const bool success = checkedWritePod(file, CACHE_MAGIC, "meta.magic") &&
-                       checkedWritePod(file, CACHE_VERSION, "meta.version") &&
-                       checkedWritePod(file, state, "meta.state") &&
-                       checkedWritePod(file, meta.spineIndex, "meta.spineIndex") &&
-                       checkedWriteLayoutKey(file, meta.layoutKey) &&
-                       checkedWritePod(file, meta.sourceUncompressedSize, "meta.sourceUncompressedSize") &&
-                       checkedWritePod(file, meta.finalPageCount, "meta.finalPageCount") &&
-                       checkedWritePod(file, meta.anchorCount, "meta.anchorCount") &&
-                       checkedWritePod(file, meta.generationId, "meta.generationId");
+  const bool success =
+      checkedWritePod(file, CACHE_MAGIC, "meta.magic") && checkedWritePod(file, CACHE_VERSION, "meta.version") &&
+      checkedWritePod(file, state, "meta.state") && checkedWritePod(file, meta.spineIndex, "meta.spineIndex") &&
+      checkedWriteLayoutKey(file, meta.layoutKey) &&
+      checkedWritePod(file, meta.sourceUncompressedSize, "meta.sourceUncompressedSize") &&
+      checkedWritePod(file, meta.finalPageCount, "meta.finalPageCount") &&
+      checkedWritePod(file, meta.anchorCount, "meta.anchorCount") &&
+      checkedWritePod(file, meta.generationId, "meta.generationId");
   file.close();
   return success;
 }

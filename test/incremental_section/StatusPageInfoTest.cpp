@@ -1,7 +1,7 @@
-#include "../../src/components/themes/StatusPageInfo.h"
-
 #include <cassert>
 #include <cstring>
+
+#include "../../src/components/themes/StatusPageInfo.h"
 
 static_assert(shouldDrawChapterProgressBar(StatusPageInfo{0, 10, true, false, false}));
 static_assert(!shouldDrawChapterProgressBar(StatusPageInfo{0, 10, false, true, false}));

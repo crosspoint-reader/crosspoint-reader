@@ -754,9 +754,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       const int pagePercentGapWidth = renderer.getTextWidth(SMALL_FONT_ID, "  ");
       pageTextWidth = renderer.getTextWidth(SMALL_FONT_ID, pageStr);
       plusTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "+");
-      progressTextWidth =
-          statusPageAndPercentTextWidth(pageTextWidth, percentTextWidth, pagePercentGapWidth, plusTextWidth,
-                                        drawFutureIndicator);
+      progressTextWidth = statusPageAndPercentTextWidth(pageTextWidth, percentTextWidth, pagePercentGapWidth,
+                                                        plusTextWidth, drawFutureIndicator);
       progressTextX =
           renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth;
       pageTextX = progressTextX;
@@ -805,8 +804,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, progressBarHeight, true);
   }
 
-  const bool drawCurrentIndicator =
-      !SETTINGS.statusBarChapterPageCount && shouldDrawCurrentIndexingIndicator(pageInfo);
+  const bool drawCurrentIndicator = !SETTINGS.statusBarChapterPageCount && shouldDrawCurrentIndexingIndicator(pageInfo);
   if (drawCurrentIndicator) {
     constexpr const char* indicator = "+";
     const int indicatorWidth = renderer.getTextWidth(SMALL_FONT_ID, indicator);

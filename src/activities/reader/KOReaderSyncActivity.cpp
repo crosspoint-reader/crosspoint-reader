@@ -198,8 +198,9 @@ void KOReaderSyncActivity::performSync() {
       }
     }
     if (!refined && remotePosition.xpathAnchorId[0] != '\0') {
-      const auto anchorPage = useIncrementalCache ? incrementalCache.getPageForAnchor(std::string(remotePosition.xpathAnchorId))
-                                                  : std::optional<uint16_t>{};
+      const auto anchorPage = useIncrementalCache
+                                  ? incrementalCache.getPageForAnchor(std::string(remotePosition.xpathAnchorId))
+                                  : std::optional<uint16_t>{};
       if (anchorPage.has_value()) {
         LOG_DBG("KOSync", "Anchor '%s' -> page %d (was %d)", remotePosition.xpathAnchorId, *anchorPage,
                 remotePosition.pageNumber);
@@ -213,9 +214,9 @@ void KOReaderSyncActivity::performSync() {
       const auto paragraphPage = useIncrementalCache
                                      ? incrementalCache.getPageForParagraphIndex(remotePosition.paragraphIndex)
                                      : std::optional<uint16_t>{};
-      const auto nextParagraphPage =
-          useIncrementalCache ? incrementalCache.getPageForParagraphIndex(remotePosition.paragraphIndex + 1)
-                              : std::optional<uint16_t>{};
+      const auto nextParagraphPage = useIncrementalCache
+                                         ? incrementalCache.getPageForParagraphIndex(remotePosition.paragraphIndex + 1)
+                                         : std::optional<uint16_t>{};
       if (paragraphPage.has_value()) {
         int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
         if (nextParagraphPage.has_value()) {

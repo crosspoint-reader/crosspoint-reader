@@ -1,7 +1,7 @@
 #pragma once
 
-#include <expat.h>
 #include <HalStorage.h>
+#include <expat.h>
 
 #include <climits>
 #include <functional>

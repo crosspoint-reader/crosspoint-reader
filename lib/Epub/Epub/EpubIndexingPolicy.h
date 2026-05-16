@@ -48,7 +48,7 @@ class EpubIndexingPolicy {
   }
 
   static constexpr bool outrunIndexWindowNeedsPages(const uint32_t targetPage, const uint32_t knownPages,
-                                                   const bool complete) {
+                                                    const bool complete) {
     return !complete && knownPages < outrunTargetKnownPages(targetPage);
   }
 

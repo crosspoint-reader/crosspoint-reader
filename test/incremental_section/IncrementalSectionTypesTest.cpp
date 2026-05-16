@@ -1,7 +1,7 @@
-#include "../../lib/Epub/Epub/IncrementalSectionTypes.h"
-#include "../../lib/Epub/Epub/IncrementalSectionCache.h"
-
 #include <cassert>
+
+#include "../../lib/Epub/Epub/IncrementalSectionCache.h"
+#include "../../lib/Epub/Epub/IncrementalSectionTypes.h"
 
 int main() {
   assert(IncrementalSection::CACHE_MAGIC == 0x43504953U);

@@ -24,7 +24,8 @@ std::unique_ptr<SectionHandle> SectionHandle::openOrCreate(const std::shared_ptr
   handle->options_ = options;
 
   const auto sectionsDir = epub->getCachePath() + "/sections";
-  handle->incrementalCache_ = makeUniqueNoThrow<IncrementalSection::Cache>(sectionsDir, static_cast<uint32_t>(spineIndex));
+  handle->incrementalCache_ =
+      makeUniqueNoThrow<IncrementalSection::Cache>(sectionsDir, static_cast<uint32_t>(spineIndex));
   if (!handle->incrementalCache_) {
     LOG_ERR("SH", "OOM: IncrementalSection::Cache");
     return handle;
@@ -98,9 +99,7 @@ std::unique_ptr<Page> SectionHandle::loadPage(const uint32_t pageNumber) const {
   return incrementalCache_ ? incrementalCache_->loadPage(pageNumber) : nullptr;
 }
 
-bool SectionHandle::isComplete() const {
-  return mode_ == SectionHandleMode::IncrementalComplete;
-}
+bool SectionHandle::isComplete() const { return mode_ == SectionHandleMode::IncrementalComplete; }
 
 uint32_t SectionHandle::knownPageCount() const {
   if (mode_ == SectionHandleMode::MissingOrFailed) {
