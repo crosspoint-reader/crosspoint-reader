@@ -17,8 +17,23 @@
 void SdFirmwareUpdateActivity::onEnter() {
   Activity::onEnter();
   LOG_INF("FW", "SdFirmwareUpdateActivity build=%s %s recovery=%d", __DATE__, __TIME__, recoveryMode ? 1 : 0);
-  state = State::PICKING;
-  launchPicker();
+  if (!firmwarePath.empty()) {
+    // Pre-selected path: skip picker and go straight to validation.
+    {
+      RenderLock lock(*this);
+      state = State::VALIDATING;
+    }
+    requestUpdateAndWait();
+    if (!validateFirmware()) {
+      state = State::FAILED;
+      requestUpdate();
+      return;
+    }
+    promptConfirmation();
+  } else {
+    state = State::PICKING;
+    launchPicker();
+  }
 }
 
 void SdFirmwareUpdateActivity::launchPicker() {

@@ -31,6 +31,12 @@ class SdFirmwareUpdateActivity : public Activity {
   explicit SdFirmwareUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool recoveryMode = false)
       : Activity("SdFirmwareUpdate", renderer, mappedInput), recoveryMode(recoveryMode) {}
 
+  // Start with a pre-selected firmware path — skips the file picker.
+  explicit SdFirmwareUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string preSelectedPath)
+      : Activity("SdFirmwareUpdate", renderer, mappedInput),
+        recoveryMode(false),
+        firmwarePath(std::move(preSelectedPath)) {}
+
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;

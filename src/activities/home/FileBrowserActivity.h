@@ -14,8 +14,14 @@ class FileBrowserActivity final : public Activity {
   enum class Mode { Books, PickFirmware };
 
  private:
-  // Deletion
   void clearFileMetadata(const std::string& fullPath);
+  void openContextMenu();
+  void handleContextMenuAction(int action, const std::string& fullPath, const std::string& entry);
+  void doMarkAsRead(const std::string& fullPath);
+  void doSetAsSleepCover(const std::string& fullPath);
+  void doDeleteCache(const std::string& fullPath, const std::string& entry);
+  void doRemove(const std::string& fullPath, const std::string& entry, bool isDirectory);
+  void doFlashFirmware(const std::string& fullPath);
 
   ButtonNavigator buttonNavigator;
 

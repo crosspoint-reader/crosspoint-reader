@@ -3,16 +3,24 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Txt.h>
+#include <Xtc.h>
 
 #include <algorithm>
 
 #include "../ActivityManager.h"
+#include "../ActivityResult.h"
+#include "../reader/FinishedBookActivity.h"
+#include "../settings/SdFirmwareUpdateActivity.h"
+#include "../util/BmpViewerActivity.h"
 #include "../util/ConfirmationActivity.h"
 #include "BookInfoActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "FileContextMenuActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -133,9 +141,11 @@ void FileBrowserActivity::onExit() {
 }
 
 void FileBrowserActivity::clearFileMetadata(const std::string& fullPath) {
-  // Only clear cache for .epub files
   if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
+    LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
+  } else if (FsHelpers::hasXtcExtension(fullPath)) {
+    Xtc(fullPath, "/.crosspoint").clearCache();
     LOG_DBG("FileBrowser", "Cleared metadata cache for: %s", fullPath.c_str());
   }
 }
@@ -229,50 +239,21 @@ void FileBrowserActivity::loop() {
       const std::string& entry = files[selectorIndex];
       const bool isDirectory = (entry.back() == '/');
       std::string entryName = entry;
-      if (isDirectory) {
-        entryName.pop_back();
-      }
+      if (isDirectory) entryName.pop_back();
 
       std::string cleanBase = basepath;
       if (cleanBase.back() != '/') cleanBase += "/";
       const std::string fullPath = cleanBase + entryName;
 
-      auto handler = [this, fullPath, isDirectory](const ActivityResult& res) {
-        if (!res.isCancelled) {
-          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-          clearFileMetadata(fullPath);
-          const bool deleted = isDirectory ? Storage.removeDir(fullPath.c_str()) : Storage.remove(fullPath.c_str());
-          if (deleted) {
-            LOG_DBG("FileBrowser", "Deleted successfully");
-            loadFiles();
-            if (files.empty()) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= static_cast<int>(files.size())) {
-              selectorIndex = static_cast<int>(files.size()) - 1;
-            }
-            requestUpdate(true);
-          } else {
-            LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
-          }
-        } else {
-          LOG_DBG("FileBrowser", "Delete cancelled by user");
-        }
-      };
-
-      startActivityForResult(
-          std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), entry),
-          handler);
+      doRemove(fullPath, entry, isDirectory);
       return;
     }
 
     if (ev.button == MappedInputManager::Button::Right && ev.type == ButtonEventManager::PressType::Short) {
       if (files.empty()) return;
       const std::string& entry = files[selectorIndex];
-      if (entry.back() != '/' && (FsHelpers::hasEpubExtension(entry) || FsHelpers::hasXtcExtension(entry))) {
-        std::string cleanBase = basepath;
-        if (cleanBase.back() != '/') cleanBase += "/";
-        startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, cleanBase + entry),
-                               [this](const ActivityResult&) { requestUpdate(); });
+      if (entry.back() != '/') {
+        openContextMenu();
       }
       return;
     }
@@ -332,10 +313,8 @@ void FileBrowserActivity::render(RenderLock&&) {
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
   const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const bool hasInfo =
-      mode == Mode::Books && !files.empty() && files[selectorIndex].back() != '/' &&
-      (FsHelpers::hasEpubExtension(files[selectorIndex]) || FsHelpers::hasXtcExtension(files[selectorIndex]));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "", hasInfo ? tr(STR_INFO) : "");
+  const bool hasContextMenu = mode == Mode::Books && !files.empty() && files[selectorIndex].back() != '/';
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "", hasContextMenu ? tr(STR_OPTIONS) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
@@ -345,4 +324,234 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i;
   return files.size();
+}
+
+void FileBrowserActivity::openContextMenu() {
+  if (files.empty() || selectorIndex < 0 || selectorIndex >= static_cast<int>(files.size())) return;
+  const std::string& entry = files[selectorIndex];
+  if (entry.back() == '/') return;
+
+  std::string cleanBase = basepath;
+  if (cleanBase.back() != '/') cleanBase += "/";
+  const std::string fullPath = cleanBase + entry;
+
+  startActivityForResult(std::make_unique<FileContextMenuActivity>(renderer, mappedInput, fullPath),
+                         [this, fullPath, entry](const ActivityResult& res) {
+                           if (res.isCancelled) {
+                             requestUpdate();
+                             return;
+                           }
+                           const auto* menuRes = std::get_if<MenuResult>(&res.data);
+                           if (!menuRes) {
+                             requestUpdate();
+                             return;
+                           }
+                           handleContextMenuAction(menuRes->action, fullPath, entry);
+                         });
+}
+
+void FileBrowserActivity::handleContextMenuAction(int action, const std::string& fullPath, const std::string& entry) {
+  using Action = FileContextMenuActivity::Action;
+  switch (static_cast<Action>(action)) {
+    case Action::Open: {
+      ReturnHint hint;
+      hint.target = ReturnTo::FileBrowser;
+      hint.path = basepath;
+      hint.selectName = entry;
+      activityManager.replaceWithReader(std::string(fullPath), std::move(hint));
+      return;
+    }
+    case Action::FetchAndOpen: {
+      if (KOREADER_STORE.hasCredentials() && FsHelpers::hasEpubExtension(fullPath)) {
+        auto& sync = APP_STATE.koReaderSyncSession;
+        sync.autoPullEpubPath = fullPath;
+        sync.exitToHomeAfterSync = false;
+        APP_STATE.saveToFile();
+      }
+      ReturnHint hint;
+      hint.target = ReturnTo::FileBrowser;
+      hint.path = basepath;
+      hint.selectName = entry;
+      activityManager.replaceWithReader(std::string(fullPath), std::move(hint));
+      return;
+    }
+    case Action::MarkAsRead:
+      doMarkAsRead(fullPath);
+      return;
+    case Action::Info:
+      startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, fullPath),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      return;
+    case Action::DeleteCache:
+      doDeleteCache(fullPath, entry);
+      return;
+    case Action::SetAsSleepCover:
+      doSetAsSleepCover(fullPath);
+      return;
+    case Action::FlashFirmware:
+      doFlashFirmware(fullPath);
+      return;
+    case Action::Remove:
+      doRemove(fullPath, entry, false);
+      return;
+    default:
+      requestUpdate();
+      return;
+  }
+}
+
+void FileBrowserActivity::doMarkAsRead(const std::string& fullPath) {
+  std::string cachePath;
+  uint8_t data[7] = {0};
+  size_t dataLen = 0;
+
+  if (FsHelpers::hasEpubExtension(fullPath)) {
+    Epub epub(fullPath, "/.crosspoint");
+    epub.setupCacheDir();
+    cachePath = epub.getCachePath();
+    // 7-byte EPUB progress: spine(2) + page(2) + pageCount(2) + percent(1)
+    data[6] = 100;
+    dataLen = 7;
+  } else if (FsHelpers::hasXtcExtension(fullPath)) {
+    Xtc xtc(fullPath, "/.crosspoint");
+    xtc.setupCacheDir();
+    cachePath = xtc.getCachePath();
+    // 5-byte XTC progress: page(4) + percent(1)
+    data[4] = 100;
+    dataLen = 5;
+  } else if (FsHelpers::hasTxtExtension(fullPath) || FsHelpers::hasMarkdownExtension(fullPath)) {
+    Txt txt(fullPath, "/.crosspoint");
+    txt.setupCacheDir();
+    cachePath = txt.getCachePath();
+    // 7-byte TXT progress: page(2) + offset(4) + percent(1)
+    data[6] = 100;
+    dataLen = 7;
+  } else {
+    return;
+  }
+
+  FsFile f;
+  if (!Storage.openFileForWrite("FBR", cachePath + "/progress.bin", f)) {
+    LOG_ERR("FBR", "Failed to write progress for mark-as-read: %s", fullPath.c_str());
+    return;
+  }
+  f.write(data, dataLen);
+  f.close();
+  LOG_INF("FBR", "Marked as read: %s", fullPath.c_str());
+
+  // Series/index unknown without loading — findNextBook falls back to alphabetical order.
+  const std::string nextBookPath = BookFinished::findNextBookInDirectory(fullPath, {}, {});
+  startActivityForResult(std::make_unique<FinishedBookActivity>(renderer, mappedInput, fullPath, nextBookPath),
+                         [this, fullPath, nextBookPath](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             requestUpdate();
+                             return;
+                           }
+                           const auto& menuResult = std::get<MenuResult>(result.data);
+                           if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
+                             if (SETTINGS.moveFinishedBooksToCompleted) {
+                               std::string movedPath;
+                               BookFinished::moveFinishedBookToCompleted(fullPath, movedPath);
+                             }
+                             if (SETTINGS.removeFinishedBooksFromRecents) {
+                               RECENT_BOOKS.removeBook(fullPath);
+                             }
+                             onGoHome();
+                             return;
+                           }
+                           if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::OpenNextBook) &&
+                               !nextBookPath.empty()) {
+                             if (SETTINGS.moveFinishedBooksToCompleted) {
+                               std::string movedPath;
+                               BookFinished::moveFinishedBookToCompleted(fullPath, movedPath);
+                             }
+                             if (SETTINGS.removeFinishedBooksFromRecents) {
+                               RECENT_BOOKS.removeBook(fullPath);
+                             }
+                             ReturnHint hint;
+                             hint.target = ReturnTo::FileBrowser;
+                             hint.path = basepath;
+                             activityManager.replaceWithReader(nextBookPath, std::move(hint));
+                             return;
+                           }
+                           // Stay — apply side effects then reload the list (file may have moved to /COMPLETED).
+                           if (SETTINGS.moveFinishedBooksToCompleted) {
+                             std::string movedPath;
+                             BookFinished::moveFinishedBookToCompleted(fullPath, movedPath);
+                           }
+                           if (SETTINGS.removeFinishedBooksFromRecents) {
+                             RECENT_BOOKS.removeBook(fullPath);
+                           }
+                           loadFiles();
+                           if (selectorIndex >= static_cast<int>(files.size())) {
+                             selectorIndex = files.empty() ? 0 : static_cast<int>(files.size()) - 1;
+                           }
+                           requestUpdate(true);
+                         });
+}
+
+void FileBrowserActivity::doSetAsSleepCover(const std::string& fullPath) {
+  if (FsHelpers::hasBmpExtension(fullPath)) {
+    // BMP: use the shared helper that just does a file copy + settings update.
+    const bool success = BmpViewerActivity::setBmpFileAsSleepScreen(fullPath);
+    {
+      RenderLock lock(*this);
+      const char* msg = success ? tr(STR_SLEEP_SCREEN_SET) : tr(STR_FAILED_TO_SET_SLEEP_SCREEN);
+      GUI.drawPopup(renderer, msg);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    }
+    requestUpdate();
+  } else {
+    // JPG/PNG: must render to framebuffer — open the image viewer so the user can use its Set Sleep button.
+    ReturnHint hint;
+    hint.target = ReturnTo::FileBrowser;
+    hint.path = basepath;
+    hint.selectName = files[selectorIndex];
+    activityManager.replaceWithReader(std::string(fullPath), std::move(hint));
+  }
+}
+
+void FileBrowserActivity::doDeleteCache(const std::string& fullPath, const std::string& entry) {
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE_CACHE) + std::string("?"), entry),
+      [this, fullPath](const ActivityResult& res) {
+        if (!res.isCancelled) {
+          clearFileMetadata(fullPath);
+          LOG_INF("FBR", "Cache deleted for: %s", fullPath.c_str());
+        }
+        requestUpdate();
+      });
+}
+
+void FileBrowserActivity::doRemove(const std::string& fullPath, const std::string& entry, bool isDirectory) {
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), entry),
+      [this, fullPath, isDirectory](const ActivityResult& res) {
+        if (!res.isCancelled) {
+          LOG_DBG("FBR", "Attempting to delete: %s", fullPath.c_str());
+          clearFileMetadata(fullPath);
+          const bool deleted = isDirectory ? Storage.removeDir(fullPath.c_str()) : Storage.remove(fullPath.c_str());
+          if (deleted) {
+            LOG_DBG("FBR", "Deleted successfully");
+            loadFiles();
+            if (files.empty()) {
+              selectorIndex = 0;
+            } else if (selectorIndex >= static_cast<int>(files.size())) {
+              selectorIndex = static_cast<int>(files.size()) - 1;
+            }
+            requestUpdate(true);
+          } else {
+            LOG_ERR("FBR", "Failed to delete: %s", fullPath.c_str());
+            requestUpdate();
+          }
+        } else {
+          requestUpdate();
+        }
+      });
+}
+
+void FileBrowserActivity::doFlashFirmware(const std::string& fullPath) {
+  // Use the pre-selected-path constructor to skip the picker inside SdFirmwareUpdateActivity.
+  startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput, fullPath),
+                         [this](const ActivityResult&) { requestUpdate(); });
 }

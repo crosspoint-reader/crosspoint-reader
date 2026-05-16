@@ -41,4 +41,9 @@ class BmpViewerActivity final : public Activity {
 #endif
   void renderError(const char* message);
   void setAsSleepScreen();
+
+ public:
+  // Sets a BMP file as the sleep screen without needing an open viewer instance.
+  // Returns true on success.  Only works for .bmp files; for JPG/PNG open BmpViewerActivity.
+  static bool setBmpFileAsSleepScreen(const std::string& filePath);
 };

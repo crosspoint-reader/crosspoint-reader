@@ -343,11 +343,23 @@ void BmpViewerActivity::renderError(const char* message) {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
+bool BmpViewerActivity::setBmpFileAsSleepScreen(const std::string& filePath) {
+  const bool success = (filePath == SLEEP_BMP_PATH) ? true : Storage.copyFile("BMP", filePath, SLEEP_BMP_PATH);
+  if (success) {
+    SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    SETTINGS.saveToFile();
+    LOG_INF("BMP", "Set %s as sleep screen", filePath.c_str());
+  } else {
+    LOG_ERR("BMP", "Failed to copy %s as sleep screen", filePath.c_str());
+  }
+  return success;
+}
+
 void BmpViewerActivity::setAsSleepScreen() {
   bool success = false;
 
   if (FsHelpers::hasBmpExtension(filePath)) {
-    success = (filePath == SLEEP_BMP_PATH) ? true : Storage.copyFile("BMP", filePath, SLEEP_BMP_PATH);
+    success = setBmpFileAsSleepScreen(filePath);
   } else {
     const bool renderedForCapture = renderDecodedImage(false);
     if (renderedForCapture) {
@@ -361,27 +373,25 @@ void BmpViewerActivity::setAsSleepScreen() {
     if (!success && Storage.exists(SLEEP_BMP_TMP_PATH)) {
       Storage.remove(SLEEP_BMP_TMP_PATH);
     }
+
+    if (success) {
+      SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+      SETTINGS.saveToFile();
+      LOG_INF("BMP", "Set %s as sleep screen", filePath.c_str());
+    }
   }
 
   if (!success) {
     LOG_ERR("BMP", "Failed to set %s as sleep screen", filePath.c_str());
-    {
-      RenderLock lock(*this);
-      GUI.drawPopup(renderer, tr(STR_FAILED_TO_SET_SLEEP_SCREEN));
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-    }
+    RenderLock lock(*this);
+    GUI.drawPopup(renderer, tr(STR_FAILED_TO_SET_SLEEP_SCREEN));
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     return;
   }
 
-  SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
-  SETTINGS.saveToFile();
-  LOG_INF("BMP", "Set %s as sleep screen", filePath.c_str());
-
-  {
-    RenderLock lock(*this);
-    GUI.drawPopup(renderer, tr(STR_SLEEP_SCREEN_SET));
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-  }
+  RenderLock lock(*this);
+  GUI.drawPopup(renderer, tr(STR_SLEEP_SCREEN_SET));
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void BmpViewerActivity::loop() {

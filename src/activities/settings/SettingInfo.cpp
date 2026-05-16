@@ -6,8 +6,11 @@
 #include "components/UITheme.h"
 
 std::string SettingInfo::getTitle() const {
-  const auto t = I18N.get(nameId);
-  return isSeparator ? UITheme::makeSeparatorTitle(t) : t;
+  if (isSeparator) {
+    if (nameId == StrId::STR_NONE_OPT) return UITheme::makeSeparatorTitle(std::string{});
+    return UITheme::makeSeparatorTitle(std::string{I18N.get(nameId)});
+  }
+  return std::string{I18N.get(nameId)};
 }
 
 std::string SettingInfo::getDisplayValue() const {
