@@ -8,15 +8,19 @@
 #include "LanguageHyphenator.h"
 #include "LanguageRegistry.h"
 
-const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
+struct Iso639Mapping {
+  const char* iso639_2;
+  const char* iso639_1;
+};
+static constexpr Iso639Mapping kIso639Mappings[] = {{"eng", "en"}, {"fra", "fr"}, {"fre", "fr"}, {"deu", "de"},
+                                                    {"ger", "de"}, {"rus", "ru"}, {"spa", "es"}, {"ita", "it"},
+                                                    {"ukr", "uk"}, {"swe", "sv"}};
 
 namespace {
 
-// Maps a BCP-47 language tag to a language-specific hyphenator.
 const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   if (langTag.empty()) return nullptr;
 
-  // Extract primary subtag and normalize to lowercase (e.g., "en-US" -> "en").
   std::string primary;
   primary.reserve(langTag.size());
   for (char c : langTag) {
@@ -25,6 +29,12 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
     primary.push_back(c);
   }
   if (primary.empty()) return nullptr;
+
+  for (const auto& mapping : kIso639Mappings) {
+    if (primary == mapping.iso639_2) {
+      return getLanguageHyphenatorForPrimaryTag(mapping.iso639_1);
+    }
+  }
 
   return getLanguageHyphenatorForPrimaryTag(primary);
 }
