@@ -6,11 +6,11 @@ class EpubIndexingPolicy {
  public:
   static constexpr uint16_t INDEX_BATCH_MIN_PAGES = 1;
   static constexpr uint16_t INDEX_BATCH_MAX_PAGES = 10;
-  static constexpr uint16_t CURRENT_INDEX_BATCH_PAGES = 10;
-  static constexpr uint16_t INITIAL_INDEX_BATCH_PAGES = 3;
-  static constexpr uint16_t INITIAL_INDEX_TARGET_PAGES = 3;
-  static constexpr uint16_t OUTRUN_INDEX_BATCH_PAGES = 5;
-  static constexpr uint16_t NEXT_PREWARM_BATCH_PAGES = 3;
+  static constexpr uint16_t CURRENT_INDEX_BATCH_PAGES = 1;
+  static constexpr uint16_t INITIAL_INDEX_BATCH_PAGES = 1;
+  static constexpr uint16_t INITIAL_INDEX_TARGET_PAGES = 1;
+  static constexpr uint16_t OUTRUN_INDEX_BATCH_PAGES = 1;
+  static constexpr uint16_t NEXT_PREWARM_BATCH_PAGES = 1;
   static constexpr uint16_t NEXT_PREWARM_INPUT_CHUNKS_PER_PAGE = 3;
   static constexpr uint32_t INDEX_BATCH_MS_PER_PAGE = 50;
   static constexpr uint32_t CURRENT_INDEX_MIN_INTERVAL_MS = 1000;

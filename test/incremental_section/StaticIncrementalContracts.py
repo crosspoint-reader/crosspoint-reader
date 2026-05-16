@@ -102,9 +102,25 @@ def main() -> None:
     )
 
     assert_contains(
+        "src/activities/reader/ReaderProgressPolicy.h",
+        "namespace ReaderProgressPolicy",
+        "persistablePageCount",
+        "decideResumeRemap",
+        "deferUntilComplete",
+    )
+
+    assert_contains(
         "src/activities/reader/EpubReaderActivity.h",
         "std::unique_ptr<SectionHandle> section",
         "std::unique_ptr<SectionHandle> nextSectionPrewarm",
+        "bool backgroundIndexingWorkActive = false",
+        "int pendingPageTurnDirection = 0",
+        "bool hasCurrentIndexingWork() const",
+        "bool hasPrewarmIndexingWork() const",
+        "bool hasBackgroundIndexingWork() const",
+        "bool pumpBackgroundIndexing()",
+        "bool skipLoopDelay() override",
+        "bool preventAutoSleep() override",
     )
 
     assert_contains(
@@ -112,14 +128,45 @@ def main() -> None:
         "SectionHandle::openOrCreate",
         "pumpSectionUntil",
         "maintainPrewarmWindow",
+        "responsiveBackgroundBudget",
+        "maxCompletedPages = 1",
+        "indexBatchMaxMillis(1)",
+        "bool EpubReaderActivity::hasCurrentIndexingWork() const",
+        "bool EpubReaderActivity::hasPrewarmIndexingWork() const",
+        "bool EpubReaderActivity::hasBackgroundIndexingWork() const",
+        "bool EpubReaderActivity::hasBackgroundIndexingWork() const {\n  if (RenderLock::peek()) {",
+        "return backgroundIndexingWorkActive;",
+        "bool EpubReaderActivity::skipLoopDelay()",
+        "bool EpubReaderActivity::preventAutoSleep()",
+        "bool EpubReaderActivity::pumpBackgroundIndexing()",
+        "if (pendingPageTurnDirection != 0 && !RenderLock::peek())",
+        "const bool queuedForwardTurn = pendingPageTurnDirection > 0;",
+        "pendingPageTurnDirection = 0;",
+        "Loop-side background indexing waits for render ownership to clear",
+        "if (!prevTriggered && !nextTriggered) {\n    // Loop-side background indexing waits for render ownership to clear.\n    if (!RenderLock::peek()) {\n      pumpBackgroundIndexing();\n    }\n    return;\n  }",
+        "backgroundIndexingWorkActive = false;",
+        "backgroundIndexingWorkActive = currentNowActive || prewarmNowActive;",
+        "const bool currentWasActive",
+        "const bool prewarmWasActive",
+        "requestUpdate();",
         "knownPageCount()",
         "finalPageCount()",
         "loadPage(",
-        "Ignoring page turn while render/indexing is active",
+        "Queued page turn while render/indexing is active",
         "renderer.copyGrayscaleLsbBuffers();",
         "renderer.copyGrayscaleMsbBuffers();",
         "renderer.displayGrayBuffer();",
         "Skipping EPUB text grayscale AA: failed to store BW buffer",
+        "persistablePageCountForSection",
+        "ReaderProgressPolicy::decideResumeRemap",
+    )
+
+    assert_not_contains(
+        "src/activities/reader/EpubReaderActivity.cpp",
+        "Background render/indexing owns section state; keep loop-side pumps out until it releases the lock.",
+        "  pumpBackgroundIndexing();\n  saveProgress",
+        "Ignoring page turn while render/indexing is active",
+        "saveProgress(currentSpineIndex, section->currentPage, static_cast<int>(displayPageCount(section.get())))",
     )
 
     assert_contains(
@@ -154,6 +201,30 @@ def main() -> None:
         "removeDirectoryWithRetry(path)",
         "Storage.rmdir(path)",
     )
+
+    assert_contains(
+        "test/incremental_section/CleanScopeContractTest.sh",
+        "INCREMENTAL_SECTION_BASE_REF",
+        "origin/master",
+        "merge-base",
+        "committed_changed_paths",
+        "working_changed_paths",
+        "inspect_sdk_range",
+        "git -C \"$ROOT_DIR/open-x4-sdk\" diff --name-only",
+    )
+
+    assert_contains(
+        "lib/Epub/Epub/IncrementalSectionCache.cpp",
+        "checkedWritePod",
+        "checkedWriteString",
+        "checkedWriteLayoutKey",
+        "checkedWriteIndexRecord",
+        "Short write",
+    )
+    cache_cpp = read("lib/Epub/Epub/IncrementalSectionCache.cpp")
+    cache_write_section = cache_cpp[: cache_cpp.index("void readLayoutKey")]
+    assert "serialization::writePod" not in cache_write_section
+    assert "serialization::writeString" not in cache_write_section
 
     assert_not_contains(
         "src/activities/reader/EpubReaderActivity.cpp",

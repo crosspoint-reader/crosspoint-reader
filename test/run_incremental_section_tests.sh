@@ -47,4 +47,5 @@ build_and_run() {
 
 build_and_run IncrementalSectionTypesTest.cpp IncrementalSectionTypesTest
 build_and_run EpubIndexingPolicyTest.cpp EpubIndexingPolicyTest
+build_and_run ReaderProgressPolicyTest.cpp ReaderProgressPolicyTest
 build_and_run StatusPageInfoTest.cpp StatusPageInfoTest

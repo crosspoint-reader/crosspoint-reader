@@ -32,6 +32,8 @@ class EpubReaderActivity final : public Activity {
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  bool backgroundIndexingWorkActive = false;
+  int pendingPageTurnDirection = 0;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -46,7 +48,11 @@ class EpubReaderActivity final : public Activity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
-  void maintainPrewarmWindow(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool maintainPrewarmWindow(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool hasCurrentIndexingWork() const;
+  bool hasPrewarmIndexingWork() const;
+  bool hasBackgroundIndexingWork() const;
+  bool pumpBackgroundIndexing();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
@@ -66,6 +72,8 @@ class EpubReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
+  bool skipLoopDelay() override;
+  bool preventAutoSleep() override;
   bool isReaderActivity() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
 };

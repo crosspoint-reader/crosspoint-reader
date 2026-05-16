@@ -5,6 +5,7 @@
 #include <Serialization.h>
 #include <common/FsApiConstants.h>
 
+#include <limits>
 #include <utility>
 
 #include "Page.h"
@@ -19,18 +20,46 @@ bool ensureDirectory(const std::string& path) {
   return Storage.mkdir(path.c_str());
 }
 
-void writeLayoutKey(FsFile& file, const LayoutCacheKey& key) {
-  serialization::writePod(file, key.cacheVersion);
-  serialization::writePod(file, key.fontId);
-  serialization::writePod(file, key.lineCompression);
-  serialization::writePod(file, key.extraParagraphSpacing);
-  serialization::writePod(file, key.paragraphAlignment);
-  serialization::writePod(file, key.viewportWidth);
-  serialization::writePod(file, key.viewportHeight);
-  serialization::writePod(file, key.hyphenationEnabled);
-  serialization::writePod(file, key.embeddedStyle);
-  serialization::writePod(file, key.imageRendering);
-  serialization::writePod(file, key.focusReadingEnabled);
+bool checkedWriteBytes(FsFile& file, const uint8_t* data, const size_t size, const char* label) {
+  if (size == 0) {
+    return true;
+  }
+  const size_t written = file.write(data, size);
+  if (written != size) {
+    LOG_ERR("ISC", "Short write %s: %u/%u bytes", label, static_cast<unsigned>(written),
+            static_cast<unsigned>(size));
+    return false;
+  }
+  return true;
+}
+
+template <typename T>
+bool checkedWritePod(FsFile& file, const T& value, const char* label) {
+  return checkedWriteBytes(file, reinterpret_cast<const uint8_t*>(&value), sizeof(T), label);
+}
+
+bool checkedWriteString(FsFile& file, const std::string& value, const char* label) {
+  if (value.size() > std::numeric_limits<uint32_t>::max()) {
+    LOG_ERR("ISC", "String too large for %s: %u bytes", label, static_cast<unsigned>(value.size()));
+    return false;
+  }
+  const uint32_t length = static_cast<uint32_t>(value.size());
+  return checkedWritePod(file, length, label) &&
+         checkedWriteBytes(file, reinterpret_cast<const uint8_t*>(value.data()), length, label);
+}
+
+bool checkedWriteLayoutKey(FsFile& file, const LayoutCacheKey& key) {
+  return checkedWritePod(file, key.cacheVersion, "layout.cacheVersion") &&
+         checkedWritePod(file, key.fontId, "layout.fontId") &&
+         checkedWritePod(file, key.lineCompression, "layout.lineCompression") &&
+         checkedWritePod(file, key.extraParagraphSpacing, "layout.extraParagraphSpacing") &&
+         checkedWritePod(file, key.paragraphAlignment, "layout.paragraphAlignment") &&
+         checkedWritePod(file, key.viewportWidth, "layout.viewportWidth") &&
+         checkedWritePod(file, key.viewportHeight, "layout.viewportHeight") &&
+         checkedWritePod(file, key.hyphenationEnabled, "layout.hyphenationEnabled") &&
+         checkedWritePod(file, key.embeddedStyle, "layout.embeddedStyle") &&
+         checkedWritePod(file, key.imageRendering, "layout.imageRendering") &&
+         checkedWritePod(file, key.focusReadingEnabled, "layout.focusReadingEnabled");
 }
 
 void readLayoutKey(FsFile& file, LayoutCacheKey& key) {
@@ -47,12 +76,12 @@ void readLayoutKey(FsFile& file, LayoutCacheKey& key) {
   serialization::readPod(file, key.focusReadingEnabled);
 }
 
-void writeIndexRecord(FsFile& file, const PageIndexRecord& record) {
-  serialization::writePod(file, record.pageOffset);
-  serialization::writePod(file, record.pageLength);
-  serialization::writePod(file, record.paragraphIndex);
-  serialization::writePod(file, record.listItemIndex);
-  serialization::writePod(file, record.sourceByteOffset);
+bool checkedWriteIndexRecord(FsFile& file, const PageIndexRecord& record) {
+  return checkedWritePod(file, record.pageOffset, "index.pageOffset") &&
+         checkedWritePod(file, record.pageLength, "index.pageLength") &&
+         checkedWritePod(file, record.paragraphIndex, "index.paragraphIndex") &&
+         checkedWritePod(file, record.listItemIndex, "index.listItemIndex") &&
+         checkedWritePod(file, record.sourceByteOffset, "index.sourceByteOffset");
 }
 
 void readIndexRecordFromFile(FsFile& file, PageIndexRecord& record) {
@@ -103,17 +132,18 @@ bool Cache::writeMeta(const Meta& meta) const {
     return false;
   }
 
-  serialization::writePod(file, CACHE_MAGIC);
-  serialization::writePod(file, CACHE_VERSION);
-  serialization::writePod(file, static_cast<uint8_t>(meta.state));
-  serialization::writePod(file, meta.spineIndex);
-  writeLayoutKey(file, meta.layoutKey);
-  serialization::writePod(file, meta.sourceUncompressedSize);
-  serialization::writePod(file, meta.finalPageCount);
-  serialization::writePod(file, meta.anchorCount);
-  serialization::writePod(file, meta.generationId);
+  const uint8_t state = static_cast<uint8_t>(meta.state);
+  const bool success = checkedWritePod(file, CACHE_MAGIC, "meta.magic") &&
+                       checkedWritePod(file, CACHE_VERSION, "meta.version") &&
+                       checkedWritePod(file, state, "meta.state") &&
+                       checkedWritePod(file, meta.spineIndex, "meta.spineIndex") &&
+                       checkedWriteLayoutKey(file, meta.layoutKey) &&
+                       checkedWritePod(file, meta.sourceUncompressedSize, "meta.sourceUncompressedSize") &&
+                       checkedWritePod(file, meta.finalPageCount, "meta.finalPageCount") &&
+                       checkedWritePod(file, meta.anchorCount, "meta.anchorCount") &&
+                       checkedWritePod(file, meta.generationId, "meta.generationId");
   file.close();
-  return true;
+  return success;
 }
 
 bool Cache::beginBuild(const LayoutCacheKey& key, const uint32_t sourceUncompressedSize, const uint32_t generationId) {
@@ -188,7 +218,10 @@ bool Cache::appendPage(const uint32_t pageNumber, const Page& page, const uint16
   record.paragraphIndex = paragraphIndex;
   record.listItemIndex = listItemIndex;
   record.sourceByteOffset = sourceByteOffset;
-  writeIndexRecord(index, record);
+  if (!checkedWriteIndexRecord(index, record)) {
+    index.close();
+    return false;
+  }
   index.close();
   return true;
 }
@@ -198,8 +231,10 @@ bool Cache::appendAnchor(const std::string& anchor, const uint16_t page) {
   if (!file) {
     return false;
   }
-  serialization::writeString(file, anchor);
-  serialization::writePod(file, page);
+  if (!checkedWriteString(file, anchor, "anchor.key") || !checkedWritePod(file, page, "anchor.page")) {
+    file.close();
+    return false;
+  }
   file.close();
   return true;
 }
