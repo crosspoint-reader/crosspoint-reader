@@ -1,9 +1,13 @@
 #include "ClearCacheActivity.h"
 
 #include <GfxRenderer.h>
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+
+#include <string>
+#include <vector>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -88,30 +92,41 @@ void ClearCacheActivity::clearCache() {
   clearedCount = 0;
   failedCount = 0;
   char name[128];
+  std::vector<std::string> cachePaths;
 
   // Iterate through all entries in the directory
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
-    file.getName(name, sizeof(name));
-    String itemName(name);
+    const size_t nameLen = file.getName(name, sizeof(name));
+    const bool isDirectory = file.isDirectory();
+    file.close();
 
-    // Only delete directories starting with epub_ or xtc_
-    if (file.isDirectory() && (itemName.startsWith("epub_") || itemName.startsWith("xtc_"))) {
-      String fullPath = "/.crosspoint/" + itemName;
-      LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
+    if (nameLen == 0 || nameLen >= sizeof(name)) {
+      LOG_ERR("CLEAR_CACHE", "Skipping cache entry with invalid name length: %u", static_cast<unsigned>(nameLen));
+      continue;
+    }
 
-      file.close();  // Close before attempting to delete
+    const std::string itemName(name);
+    const bool isCacheDir = itemName.rfind("epub_", 0) == 0 || itemName.rfind("xtc_", 0) == 0;
 
-      if (Storage.removeDir(fullPath.c_str())) {
-        clearedCount++;
-      } else {
-        LOG_ERR("CLEAR_CACHE", "Failed to remove: %s", fullPath.c_str());
-        failedCount++;
-      }
-    } else {
-      file.close();
+    // Only delete directories starting with epub_ or xtc_.
+    if (isDirectory && isCacheDir) {
+      cachePaths.emplace_back("/.crosspoint/" + itemName);
     }
   }
   root.close();
+
+  // Delete after closing the parent directory iterator. Some embedded FS
+  // wrappers reject rmdir while the parent directory is still being enumerated.
+  for (const auto& fullPath : cachePaths) {
+    LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
+
+    if (FsHelpers::removeDirRecursive(fullPath.c_str())) {
+      clearedCount++;
+    } else {
+      LOG_ERR("CLEAR_CACHE", "Failed to remove: %s", fullPath.c_str());
+      failedCount++;
+    }
+  }
 
   LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
 

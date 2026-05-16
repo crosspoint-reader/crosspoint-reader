@@ -1,11 +1,41 @@
 #include "FsHelpers.h"
 
+#include <Arduino.h>
+#include <HalStorage.h>
+#include <Logging.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <vector>
 
 namespace FsHelpers {
+namespace {
+
+constexpr uint8_t REMOVE_RETRY_COUNT = 3;
+constexpr uint16_t REMOVE_RETRY_DELAY_MS = 10;
+
+bool removeFileWithRetry(const std::string& path) {
+  for (uint8_t attempt = 0; attempt < REMOVE_RETRY_COUNT; attempt++) {
+    if (Storage.remove(path.c_str()) || !Storage.exists(path.c_str())) {
+      return true;
+    }
+    delay(REMOVE_RETRY_DELAY_MS);
+  }
+  return false;
+}
+
+bool removeDirectoryWithRetry(const char* path) {
+  for (uint8_t attempt = 0; attempt < REMOVE_RETRY_COUNT; attempt++) {
+    if (Storage.rmdir(path) || !Storage.exists(path)) {
+      return true;
+    }
+    delay(REMOVE_RETRY_DELAY_MS);
+  }
+  return false;
+}
+
+}  // namespace
 
 std::string normalisePath(const std::string& path) {
   std::vector<std::string> components;
@@ -137,6 +167,71 @@ std::string extractFolderPath(const std::string& filePath) {
     return "/";
   }
   return filePath.substr(0, lastSlash);
+}
+
+bool removeDirRecursive(const char* path) {
+  if (path == nullptr || path[0] == '\0') {
+    return false;
+  }
+
+  FsFile dir = Storage.open(path);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) {
+      dir.close();
+    }
+    if (!Storage.exists(path)) {
+      return true;
+    }
+    LOG_ERR("FSH", "removeDirRecursive open failed: %s", path);
+    return false;
+  }
+
+  bool success = true;
+  char name[128];
+  while (true) {
+    FsFile entry = dir.openNextFile();
+    if (!entry) {
+      break;
+    }
+
+    const size_t nameLen = entry.getName(name, sizeof(name));
+    const bool isDirectory = entry.isDirectory();
+    entry.close();
+
+    if (nameLen == 0 || nameLen >= sizeof(name) || std::strcmp(name, ".") == 0 || std::strcmp(name, "..") == 0) {
+      LOG_ERR("FSH", "removeDirRecursive invalid child under %s len=%u", path, static_cast<unsigned>(nameLen));
+      success = false;
+      break;
+    }
+
+    std::string childPath = path;
+    if (!childPath.empty() && childPath.back() != '/') {
+      childPath += "/";
+    }
+    childPath += name;
+
+    if (isDirectory) {
+      if (!removeDirRecursive(childPath.c_str())) {
+        LOG_ERR("FSH", "removeDirRecursive child dir failed: %s", childPath.c_str());
+        success = false;
+        break;
+      }
+    } else if (!removeFileWithRetry(childPath)) {
+      LOG_ERR("FSH", "removeDirRecursive file failed: %s", childPath.c_str());
+      success = false;
+      break;
+    }
+  }
+
+  dir.close();
+  if (!success) {
+    return false;
+  }
+  if (!removeDirectoryWithRetry(path)) {
+    LOG_ERR("FSH", "removeDirRecursive rmdir failed: %s", path);
+    return false;
+  }
+  return true;
 }
 
 void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen) {

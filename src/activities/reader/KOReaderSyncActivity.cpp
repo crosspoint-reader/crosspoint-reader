@@ -10,7 +10,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <optional>
 
+#include "Epub/IncrementalSectionCache.h"
 #include "Epub/Section.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
@@ -179,10 +181,13 @@ void KOReaderSyncActivity::performSync() {
 
   // Refine page using section cache LUTs: li index, anchor, or paragraph index.
   if (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex) {
-    Section tempSection(epub, remotePosition.spineIndex, renderer);
+    IncrementalSection::Cache incrementalCache(epub->getCachePath() + "/sections",
+                                               static_cast<uint32_t>(remotePosition.spineIndex));
+    const bool useIncrementalCache = incrementalCache.isComplete();
     bool refined = false;
     if (remotePosition.hasLiIndex) {
-      const auto liPage = tempSection.getPageForListItemIndex(remotePosition.liIndex);
+      const auto liPage = useIncrementalCache ? incrementalCache.getPageForListItemIndex(remotePosition.liIndex)
+                                              : std::optional<uint16_t>{};
       if (liPage.has_value()) {
         LOG_DBG("KOSync", "Li index %u -> page %d (was %d)", remotePosition.liIndex, *liPage,
                 remotePosition.pageNumber);
@@ -193,7 +198,8 @@ void KOReaderSyncActivity::performSync() {
       }
     }
     if (!refined && remotePosition.xpathAnchorId[0] != '\0') {
-      const auto anchorPage = tempSection.getPageForAnchor(std::string(remotePosition.xpathAnchorId));
+      const auto anchorPage = useIncrementalCache ? incrementalCache.getPageForAnchor(std::string(remotePosition.xpathAnchorId))
+                                                  : std::optional<uint16_t>{};
       if (anchorPage.has_value()) {
         LOG_DBG("KOSync", "Anchor '%s' -> page %d (was %d)", remotePosition.xpathAnchorId, *anchorPage,
                 remotePosition.pageNumber);
@@ -204,8 +210,12 @@ void KOReaderSyncActivity::performSync() {
       }
     }
     if (!refined && remotePosition.hasParagraphIndex) {
-      const auto paragraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex);
-      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex + 1);
+      const auto paragraphPage = useIncrementalCache
+                                     ? incrementalCache.getPageForParagraphIndex(remotePosition.paragraphIndex)
+                                     : std::optional<uint16_t>{};
+      const auto nextParagraphPage =
+          useIncrementalCache ? incrementalCache.getPageForParagraphIndex(remotePosition.paragraphIndex + 1)
+                              : std::optional<uint16_t>{};
       if (paragraphPage.has_value()) {
         int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
         if (nextParagraphPage.has_value()) {
@@ -227,6 +237,44 @@ void KOReaderSyncActivity::performSync() {
         remotePosition.pageNumber = refinedPage;
       } else {
         LOG_DBG("KOSync", "Paragraph %u not found in section LUT", remotePosition.paragraphIndex);
+      }
+    }
+
+    if (!useIncrementalCache && !refined) {
+      Section tempSection(epub, remotePosition.spineIndex, renderer);
+      if (remotePosition.hasLiIndex) {
+        const auto liPage = tempSection.getPageForListItemIndex(remotePosition.liIndex);
+        if (liPage.has_value()) {
+          LOG_DBG("KOSync", "Legacy li index %u -> page %d (was %d)", remotePosition.liIndex, *liPage,
+                  remotePosition.pageNumber);
+          remotePosition.pageNumber = *liPage;
+          refined = true;
+        }
+      }
+      if (!refined && remotePosition.xpathAnchorId[0] != '\0') {
+        const auto anchorPage = tempSection.getPageForAnchor(std::string(remotePosition.xpathAnchorId));
+        if (anchorPage.has_value()) {
+          LOG_DBG("KOSync", "Legacy anchor '%s' -> page %d (was %d)", remotePosition.xpathAnchorId, *anchorPage,
+                  remotePosition.pageNumber);
+          remotePosition.pageNumber = *anchorPage;
+          refined = true;
+        }
+      }
+      if (!refined && remotePosition.hasParagraphIndex) {
+        const auto paragraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex);
+        const auto nextParagraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex + 1);
+        if (paragraphPage.has_value()) {
+          int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
+          if (nextParagraphPage.has_value()) {
+            const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+            if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+              refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+            }
+          }
+          LOG_DBG("KOSync", "Legacy paragraph %u -> page %d (was %d)", remotePosition.paragraphIndex, refinedPage,
+                  remotePosition.pageNumber);
+          remotePosition.pageNumber = refinedPage;
+        }
       }
     }
   }
