@@ -121,11 +121,6 @@ void EpubReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  // Ensure BW render mode and controller grayscale/previous-plane state match the
-  // framebuffer after leaving the reader so home/settings redraws are readable.
-  renderer.setRenderMode(GfxRenderer::BW);
-  renderer.cleanupGrayscaleWithFrameBuffer();
-
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   section.reset();
@@ -861,28 +856,31 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
   const auto tDisplay = millis();
 
-  // Snapshot BW framebuffer before grayscale passes. If allocation fails, skip AA —
-  // otherwise grayscale + a failed restore leaves e-ink RED/previous RAM desynced and
-  // subsequent FAST refreshes look corrupted until a full resync.
-  const bool bwSnapshotOk = renderer.storeBwBuffer();
+  // Save bw buffer to reset buffer state after grayscale data sync
+  renderer.storeBwBuffer();
   const auto tBwStore = millis();
 
-  if (SETTINGS.textAntiAliasing && bwSnapshotOk) {
+  // grayscale rendering
+  // TODO: Only do this if font supports it
+  if (SETTINGS.textAntiAliasing) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleLsbBuffers();
     const auto tGrayLsb = millis();
 
+    // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleMsbBuffers();
     const auto tGrayMsb = millis();
 
+    // display grayscale part
     renderer.displayGrayBuffer();
     const auto tGrayDisplay = millis();
     renderer.setRenderMode(GfxRenderer::BW);
+    // restore the bw data
     renderer.restoreBwBuffer();
     const auto tBwRestore = millis();
 
@@ -893,14 +891,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
             tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, tGrayLsb - tBwStore,
             tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
   } else {
-    if (SETTINGS.textAntiAliasing && !bwSnapshotOk) {
-      LOG_ERR("ERS", "storeBwBuffer failed; skipping grayscale AA pass");
-    }
-    if (bwSnapshotOk) {
-      renderer.restoreBwBuffer();
-    } else {
-      renderer.cleanupGrayscaleWithFrameBuffer();
-    }
+    // restore the bw data
+    renderer.restoreBwBuffer();
     const auto tBwRestore = millis();
 
     const auto tEnd = millis();
