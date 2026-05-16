@@ -1,122 +1,169 @@
 # CrossPoint Reader
 
-Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
-Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
+CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
 
-CrossPoint Reader is a purpose-built firmware designed to be a drop-in, fully open-source replacement for the official 
-Xteink firmware. It aims to match or improve upon the standard EPUB reading experience.
+**Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
 
-![](./docs/images/cover.jpg)
+![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
-## Motivation
+## What can CrossPoint do?
 
-E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited 
-customisation. The **Xteink X4** is an affordable, e-paper device, however the official firmware remains closed.
-CrossPoint exists partly as a fun side-project and partly to open up the ecosystem and truly unlock the device's
-potential.
+- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
 
-CrossPoint Reader aims to:
-* Provide a **fully open-source alternative** to the official firmware.
-* Offer a **document reader** capable of handling EPUB content on constrained hardware.
-* Support **customisable font, layout, and display** options.
-* Run purely on the **Xteink X4 hardware**.
+- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
 
-This project is **not affiliated with Xteink**; it's built as a community project.
+- **Screenshots.**
 
-## Features & Usage
+- **Custom fonts**: install your favorite fonts on the SD card.
 
-- [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
-- [x] Image support within EPUB
-- [x] Saved reading position
-- [x] File explorer with file picker
-  - [x] Basic EPUB picker from root directory
-  - [x] Support nested folders
-  - [ ] EPUB picker with cover art
-- [x] Custom sleep screen
-  - [x] Cover sleep screen
-- [x] Wifi book upload
-- [x] Wifi OTA updates
-- [x] KOReader Sync integration for cross-device reading progress
-- [x] Configurable font, layout, and display options
-  - [ ] User provided fonts
-  - [ ] Full UTF support
-- [x] Screen rotation
+- **Tilt page turn (X3 only)**.
 
-Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
+- **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, SD-cache management.
 
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint, including the
-[KOReader Sync quick setup](./USER_GUIDE.md#367-koreader-sync-quick-setup).
+- **Wireless workflows**:
+  
+  - File transfer web UI
+  - EPUB Optimizer
+  - Web settings UI/API (edit many device settings from browser)
+  - WebSocket fast uploads
+  - WebDAV handler
+  - AP mode (hotspot) and STA mode (join existing WiFi), both with QR helpers
+  - Calibre wireless connect flow
+  - OPDS browser with saved servers (up to 8), search, pagination, and direct download
+  - OTA update checks and installs from GitHub releases
 
-For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
+- **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-## Installing
+- **Localization**: 22 UI languages and counting.
 
-### Web (latest firmware)
+### Coming soon:
 
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
-2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
+- RTL support — Arabic, Hebrew, and Farsi.
 
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
+- Bookmarks.
 
-### Web (specific firmware version)
+- Dictionary lookup — inline word lookup without leaving the reader.
 
-1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
-3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
+- More themes.
 
-To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
-back to the other partition using the "Swap boot partition" button here https://xteink.dve.al/debug.
+- Much more! stay tuned.
 
-### Command line (specific firmware version)
+---
 
-1. Install [`esptool`](https://github.com/espressif/esptool) :
+## USB-locked devices (Xteink Unlocker)
+
+Some Xteink units purchased from third-party stores (e.g. AliExpress) ship with USB flashing locked from the factory.
+If your device is locked, you will need to use the **Xteink Unlocker** tool available at
+https://crosspointreader.com/#unlock-tool before you can flash CrossPoint.
+
+**You do not need this tool if you bought your device directly from xteink.com.** Those units are not locked.
+
+**Not sure if your device is locked?** Power it on, connect the USB-C cable, and try flashing via the web flasher first (see
+[Install firmware](#install-firmware) below). If the browser's serial device picker does not show your device, try a different
+USB port or browser before assuming the device is locked. Only reach for the unlocker if the device still doesn't appear.
+
+> ### ⚠️ WARNING: READ THIS BEFORE USING THE UNLOCKER ⚠️
+> 
+> **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
+> 
+> Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
+> stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
+> the firmware you flashed doesn't support OTA, **there is no way out**.
+> 
+> **The Papyrix fork has removed OTA update support from its code.** If you flash Papyrix onto a
+> USB-locked unit, you will have **zero update or recovery path** and will be stuck on it forever. **Do not flash
+> Papyrix (or any other unsupported firmware) on a locked device.**
+
+## Install firmware
+
+### Web installer (recommended)
+
+1. Connect your device to your computer via USB-C and wake/unlock the device
+2. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), and choose an official CrossPoint release.
+
+### Web installer (specific version)
+
+1. Connect your device to your computer via USB-C and wake/unlock the device
+2. Download a `firmware.bin` from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), local build, or continuous integration artifact.
+3. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), click "Custom .bin" and upload a `firmware.bin`.
+
+### Revert to Official Firmware
+
+To revert to the official firmware, you can also flash the latest official firmware using https://crosspointreader.com/#flash-tools.
+
+### Command line
+
+1. Install [`esptool`](https://github.com/espressif/esptool):
+
 ```bash
 pip install esptool
 ```
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
-3. Connect your Xteink X4 to your computer via USB-C.
-4. Note the device location. On Linux, run `dmesg` after connecting. On MacOS, run :
+
+2. Download `firmware.bin` from the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases).
+3. Connect your device via USB-C.
+4. Find the device port. On Linux, run `dmesg` after connecting. On macOS:
+
 ```bash
 log stream --predicate 'subsystem == "com.apple.iokit"' --info
 ```
-5. Flash the firmware :
+
+5. Flash:
+
 ```bash
 esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 /path/to/firmware.bin
 ```
-Change `/dev/ttyACM0` to the device for your system.
+
+Adjust `/dev/ttyACM0` to match your system.
 
 ### Manual
 
-See [Development](#development) below.
+See [Development quick start](#development-quick-start) below.
 
-## Development
+---
+
+## Documentation
+
+- [User Guide](./USER_GUIDE.md)
+- [Web server usage](./docs/webserver.md)
+- [Web server endpoints](./docs/webserver-endpoints.md)
+- [Project scope](./SCOPE.md)
+- [Contributing docs](./docs/contributing/README.md)
+
+---
+
+## Development quick start
 
 ### Prerequisites
 
-* **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Python 3.8+
-* USB-C cable for flashing the ESP32-C3
-* Xteink X4
+- [pioarduino](https://github.com/pioarduino/pioarduino) or VS Code + pioarduino plugin
+- Python 3.8+
+- `clang-format` 21
+- USB-C cable supporting data transfer
 
-### Checking out the code
+### Setup
 
-CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
-
-```
+```bash
 git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
+cd crosspoint-reader
 
-# Or, if you've already cloned without --recursive:
+# if cloned without --recursive:
 git submodule update --init --recursive
 ```
 
-### Flashing your device
+### Build / flash / monitor
 
-Connect your Xteink X4 to your computer via USB-C and run the following command.
-
-```sh
+```bash
 pio run --target upload
 ```
+
+### Contributor pre-PR checks
+
+```bash
+./bin/clang-format-fix
+pio check -e default
+pio run -e default
+```
+
 ### Debugging
 
 After flashing the new features, it’s recommended to capture detailed logs from the serial port.
@@ -126,7 +173,9 @@ First, make sure all required Python packages are installed:
 ```python
 python3 -m pip install pyserial colorama matplotlib
 ```
-after that run the script:
+
+After that run the script:
+
 ```sh
 # For Linux
 # This was tested on Debian and should work on most Linux systems.
@@ -135,63 +184,72 @@ python3 scripts/debugging_monitor.py
 # For macOS
 python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
 ```
+
 Minor adjustments may be required for Windows.
+
+---
 
 ## Internals
 
-CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only
-has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based
-on this constraint.
+CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
 
 ### Data caching
 
 The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the 
 cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
 
-
-```
+```text
 .crosspoint/
-├── epub_12471232/       # Each EPUB is cached to a subdirectory named `epub_<hash>`
-│   ├── progress.bin     # Stores reading progress (chapter, page, etc.)
-│   ├── cover.bmp        # Book cover image (once generated)
-│   ├── book.bin         # Book metadata (title, author, spine, table of contents, etc.)
-│   └── sections/        # All chapter data is stored in the sections subdirectory
-│       ├── 0.bin        # Chapter data (screen count, all text layout info, etc.)
-│       ├── 1.bin        #     files are named by their index in the spine
+├── epub_<hash>/         # one directory per book, named by content hash
+│   ├── progress.bin     # reading position (chapter, page, etc.)
+│   ├── cover.bmp        # generated cover image
+│   ├── book.bin         # metadata: title, author, spine, TOC
+│   └── sections/        # per-chapter layout cache
+│       ├── 0.bin
+│       ├── 1.bin
 │       └── ...
-│
-└── epub_189013891/
 ```
 
-Deleting the `.crosspoint` directory will clear the entire cache. 
-
-Due the way it's currently implemented, the cache is not automatically cleared when a book is deleted and moving a book
-file will use a new cache directory, resetting the reading progress.
+Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Note: the cache isn't cleared automatically when you delete a book, and moving a file to a new path resets its reading progress.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 
+---
+
 ## Contributing
 
-Contributions are very welcome!
+Contributions are welcome. If you're new to the codebase, start with the [contributing docs](./docs/contributing/README.md). For things to work on, check the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas) — leave a comment before starting so we don't duplicate effort.
 
-If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
-
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
-If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
-
-Everyone here is a volunteer, so please be respectful and patient. For more details on our governance and community 
-principles, please see [GOVERNANCE.md](GOVERNANCE.md).
-
-### To submit a contribution:
-
-1. Fork the repo
-2. Create a branch (`feature/dithering-improvement`)
-3. Make changes
-4. Submit a PR
+Everyone here is a volunteer, so please be respectful and patient. For governance and community expectations, see [GOVERNANCE.md](./GOVERNANCE.md).
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any manufacturer of the X4 hardware**.
+## Community forks
 
-Huge shoutout to [**diy-esp32-epub-reader** by atomic14](https://github.com/atomic14/diy-esp32-epub-reader), which was a project I took a lot of inspiration from as I
-was making CrossPoint.
+One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossPoint's [scope](./SCOPE.md), check out the community forks:
+
+- [CrossInk](https://github.com/uxjulia/CrossInk) — Typography and reading tracking: Bionic Reading (bolds word stems to create fixation points), guide dots between words, improved paragraph indents, and replaces the default fonts with ChareInk/Lexend/Bitter.
+
+- [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes via SD card.
+
+- [crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.
+
+- [crosspoint-reader (jpirnay)](https://github.com/jpirnay/crosspoint-reader) — Faster integration of functionality. Tracks upstream PRs and integrates the good ones ahead of the official merge.
+
+- [crosspoint-reader-cjk](https://github.com/aBER0724/crosspoint-reader-cjk) — Purpose-built for Chinese, Japanese, and Korean reading.
+
+- [inx](https://github.com/obijuankenobiii/inx) — Completely reimagines the user interface with tabbed navigation.
+
+- ~~[PlusPoint](https://github.com/ngxson/pluspoint-reader) — custom JS apps support.~~ (Unmaintained)
+
+- [crosspoint-reader-papers3](https://github.com/juicecultus/crosspoint-reader-papers3) — Crosspoint port for M5Stack Paper S3. 
+
+**Note:** Many of these features will make their way into CrossPoint over time. We maintain a slower pace to ensure rock-solid stability and squash bugs before they reach your device.
+
+Want to build your own device? Be sure to check out the [de-link](https://github.com/iandchasse/de-link) project.
+
+---
+
+CrossPoint Reader is **not affiliated with Xteink or any device manufacturer**.
+
+Huge shoutout to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader), which inspired this project.

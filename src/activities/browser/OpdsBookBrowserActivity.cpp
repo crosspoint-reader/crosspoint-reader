@@ -8,6 +8,7 @@
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -40,9 +41,14 @@ void OpdsBookBrowserActivity::onEnter() {
 
 void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
-  WiFi.mode(WIFI_OFF);
   entries.clear();
   navigationHistory.clear();
+
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void OpdsBookBrowserActivity::loop() {
@@ -274,7 +280,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         downloadTotal = total;
         requestUpdate(true);
       },
-      server.username, server.password);
+      nullptr, server.username, server.password);
 
   if (result == HttpDownloader::OK) {
     Epub(filename, "/.crosspoint").clearCache();
@@ -364,8 +370,7 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     requestUpdate(true);
     fetchFeed(currentPath);
   } else {
-    WiFi.disconnect();
-    WiFi.mode(WIFI_OFF);
+    // Leave WiFi up; onExit's silent reboot handles teardown without fragmenting.
     state = BrowserState::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();

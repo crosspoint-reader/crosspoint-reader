@@ -16,13 +16,17 @@
 namespace {
 class FileWriteStream final : public Stream {
  public:
-  FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress)
-      : file_(file), total_(total), progress_(std::move(progress)) {}
+  FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress, bool* cancelFlag)
+      : file_(file), total_(total), progress_(std::move(progress)), cancelFlag_(cancelFlag) {}
 
   size_t write(uint8_t byte) override { return write(&byte, 1); }
 
   size_t write(const uint8_t* buffer, size_t size) override {
     // Write-through stream for HTTPClient::writeToStream with progress tracking.
+    if (cancelFlag_ && *cancelFlag_) {
+      writeOk_ = false;
+      return 0;
+    }
     const size_t written = file_.write(buffer, size);
     if (written != size) {
       writeOk_ = false;
@@ -48,6 +52,7 @@ class FileWriteStream final : public Stream {
   size_t downloaded_ = 0;
   bool writeOk_ = true;
   HttpDownloader::ProgressCallback progress_;
+  bool* cancelFlag_;
 };
 }  // namespace
 
@@ -101,8 +106,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             ProgressCallback progress, const std::string& username,
-                                                             const std::string& password) {
+                                                             ProgressCallback progress, bool* cancelFlag,
+                                                             const std::string& username, const std::string& password) {
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new NetworkClientSecure();
@@ -155,11 +160,16 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   // Let HTTPClient handle chunked decoding and stream body bytes into the file.
-  FileWriteStream fileStream(file, contentLength, progress);
+  FileWriteStream fileStream(file, contentLength, progress, cancelFlag);
   const int writeResult = http.writeToStream(&fileStream);
 
   file.close();
   http.end();
+
+  if (cancelFlag && *cancelFlag) {
+    Storage.remove(destPath.c_str());
+    return ABORTED;
+  }
 
   if (writeResult < 0) {
     LOG_ERR("HTTP", "writeToStream error: %d", writeResult);

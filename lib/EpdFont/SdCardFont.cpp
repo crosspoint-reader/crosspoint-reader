@@ -16,11 +16,13 @@ static_assert(sizeof(EpdUnicodeInterval) == 12, "EpdUnicodeInterval must be 12 b
 static_assert(sizeof(EpdKernClassEntry) == 3, "EpdKernClassEntry must be 3 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdLigaturePair) == 8, "EpdLigaturePair must be 8 bytes to match .cpfont file layout");
 
-// FNV-1a hash for content-based font ID generation
-static constexpr uint32_t FNV_OFFSET = 2166136261u;
-static constexpr uint32_t FNV_PRIME = 16777619u;
+namespace {
 
-static uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSET) {
+// FNV-1a hash for content-based font ID generation
+constexpr uint32_t FNV_OFFSET = 2166136261u;
+constexpr uint32_t FNV_PRIME = 16777619u;
+
+uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSET) {
   for (size_t i = 0; i < len; i++) {
     hash ^= data[i];
     hash *= FNV_PRIME;
@@ -29,16 +31,44 @@ static uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSE
 }
 
 // .cpfont magic bytes
-static constexpr char CPFONT_MAGIC[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
+constexpr char CPFONT_MAGIC[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
 // CPFONT_VERSION is defined as a #define in SdCardFont.h so it can be
 // stringified into FONT_MANIFEST_URL.
-static constexpr uint32_t HEADER_SIZE = 32;
-static constexpr uint32_t STYLE_TOC_ENTRY_SIZE = 32;
+constexpr uint32_t HEADER_SIZE = 32;
+constexpr uint32_t STYLE_TOC_ENTRY_SIZE = 32;
 
 // Helper to read little-endian values from byte buffer
-static inline uint16_t readU16(const uint8_t* p) { return p[0] | (p[1] << 8); }
-static inline int16_t readI16(const uint8_t* p) { return static_cast<int16_t>(p[0] | (p[1] << 8)); }
-static inline uint32_t readU32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24); }
+inline uint16_t readU16(const uint8_t* p) { return p[0] | (p[1] << 8); }
+inline int16_t readI16(const uint8_t* p) { return static_cast<int16_t>(p[0] | (p[1] << 8)); }
+inline uint32_t readU32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24); }
+
+// Walks a null-terminated UTF-8 string and appends each unique codepoint to
+// codepoints[0..cpCount-1] via O(n²) dedup.  Returns true if the buffer
+// reached maxCount (cap hit), false if all codepoints fit.
+bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& cpCount, uint32_t maxCount) {
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
+  while (*p) {
+    uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0) break;
+    bool found = false;
+    for (uint32_t i = 0; i < cpCount; i++) {
+      if (codepoints[i] == cp) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      if (cpCount >= maxCount) return true;
+      codepoints[cpCount++] = cp;
+    }
+  }
+  return false;
+}
+
+const char* asCStr(const std::string& s) { return s.c_str(); }
+const char* asCStr(const char* s) { return s; }
+
+}  // namespace
 
 SdCardFont::~SdCardFont() { freeAll(); }
 
@@ -1019,64 +1049,10 @@ uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
   return 0;
 }
 
-int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
-  if (!loaded_) return -1;
-  styleMask = resolveStyleMask(styleMask);
-  if (styleMask == 0) return 0;
-
-  // Note: advance table is preserved across calls. We only fetch codepoints
-  // not already present, then merge them in. Use clearPersistentCache() to
-  // wipe the table when the font/size/family changes.
-
-  unsigned long startMs = millis();
-
-  // Step 1: Extract unique codepoints, capped at MAX_UNIQUE_CODEPOINTS.
-  // The dedup buffer is sized to the cap, not total chars — a large EPUB section
-  // may contain 50K+ characters but real text has far fewer unique codepoints.
-  // 4096 × 4 bytes = 16KB temporary; bounded regardless of input size.
-  static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;
-  uint32_t* codepoints = new (std::nothrow) uint32_t[MAX_UNIQUE_CODEPOINTS];
-  if (!codepoints) {
-    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", MAX_UNIQUE_CODEPOINTS * 4);
-    return -1;
-  }
-  uint32_t cpCount = 0;
-  bool hitCap = false;
-
-  // Second pass: collect unique codepoints via O(n²) dedup.
-  // Bounded by uniqueCount × totalChars comparisons. For 2000 unique from 2291 total,
-  // worst case ~4.6M comparisons of uint32_t — ~30ms on 160MHz RISC-V, acceptable
-  // for one-time section indexing.
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
-  while (*p) {
-    uint32_t cp = utf8NextCodepoint(&p);
-    if (cp == 0) break;
-
-    bool found = false;
-    for (uint32_t i = 0; i < cpCount; i++) {
-      if (codepoints[i] == cp) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      if (cpCount >= MAX_UNIQUE_CODEPOINTS) {
-        hitCap = true;
-        break;
-      }
-      codepoints[cpCount++] = cp;
-    }
-  }
-  if (hitCap) {
-    LOG_ERR("SDCF", "buildAdvanceTable: unique codepoint cap (%u) hit, layout may be approximate",
-            MAX_UNIQUE_CODEPOINTS);
-  }
-
-  // Sort for ordered glyph index mapping and final table output
-  std::sort(codepoints, codepoints + cpCount);
-
-  // Step 2: For each requested style, fetch any codepoints not yet cached and
-  // merge them into the persistent advance table.
+// Given a sorted array of unique codepoints, resolve glyph indices per style,
+// batch-read advanceX from SD, and merge into the persistent advance table.
+// Caller owns the codepoints buffer.
+int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask) {
   int totalMissed = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
@@ -1175,10 +1151,53 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
             ADVANCE_CACHE_LIMIT);
   }
 
-  delete[] codepoints;
+  return totalMissed;
+}
 
+template <typename Iter>
+int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask) {
+  if (!loaded_) return -1;
+  styleMask = resolveStyleMask(styleMask);
+  if (styleMask == 0) return 0;
+
+  unsigned long startMs = millis();
+
+  // +2 reserved slots for space and hyphen injected after the main scan.
+  static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;
+  uint32_t* codepoints = new (std::nothrow) uint32_t[MAX_UNIQUE_CODEPOINTS + 2];
+  if (!codepoints) {
+    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", MAX_UNIQUE_CODEPOINTS * 4);
+    return -1;
+  }
+  uint32_t cpCount = 0;
+  bool hitCap = false;
+
+  for (auto it = begin; it != end && !hitCap; ++it) {
+    hitCap = collectUniqueCodepoints(asCStr(*it), codepoints, cpCount, MAX_UNIQUE_CODEPOINTS);
+  }
+
+  if (includeSpace && std::none_of(codepoints, codepoints + cpCount, [](uint32_t c) { return c == ' '; }))
+    codepoints[cpCount++] = ' ';
+  if (includeHyphen && std::none_of(codepoints, codepoints + cpCount, [](uint32_t c) { return c == '-'; }))
+    codepoints[cpCount++] = '-';
+
+  if (hitCap) {
+    LOG_ERR("SDCF", "buildAdvanceTable: unique codepoint cap (%u) hit, layout may be approximate",
+            MAX_UNIQUE_CODEPOINTS);
+  }
+  std::sort(codepoints, codepoints + cpCount);
+  int totalMissed = fetchAdvancesForCodepoints(codepoints, cpCount, styleMask);
+  delete[] codepoints;
   stats_.prewarmTotalMs = millis() - startMs;
   return totalMissed;
+}
+
+int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
+  return buildAdvanceTableRange(&utf8Text, &utf8Text + 1, false, false, styleMask);
+}
+
+int SdCardFont::buildAdvanceTable(const std::vector<std::string>& words, bool includeHyphen, uint8_t styleMask) {
+  return buildAdvanceTableRange(words.begin(), words.end(), words.size() > 1, includeHyphen, styleMask);
 }
 
 // --- Stats ---

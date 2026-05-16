@@ -54,10 +54,21 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
 void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask) const {
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {
+    int missed = it->second->buildAdvanceTable(utf8Text, styleMask);
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
+}
+
+void GfxRenderer::ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+                                        uint8_t styleMask) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
     // Augment the persistent advance-only table for layout measurement.
     // The table survives across paragraphs/sections (capped per font), so
     // repeated indexing of the same SD font amortizes glyph-metric SD reads.
-    int missed = it->second->buildAdvanceTable(utf8Text, styleMask);
+    int missed = it->second->buildAdvanceTable(words, includeHyphen, styleMask);
     if (missed > 0) {
       LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
     }
