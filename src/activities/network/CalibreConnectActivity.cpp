@@ -13,7 +13,7 @@
 #include "util/RadioManager.h"
 
 namespace {
-constexpr const char* HOSTNAME = "biscuit";
+constexpr const char* HOSTNAME = "shortbread";
 }  // namespace
 
 void CalibreConnectActivity::onEnter() {

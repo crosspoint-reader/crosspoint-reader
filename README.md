@@ -2,13 +2,13 @@
 
 ![shortbread on desk](./docs/images/desk.jpg)
 
-Custom firmware for the **Xteink X4** e-paper device. A lean, focused build — e-reader first, with WiFi, games, and tools on the side.
+Custom firmware for the **Xteink X4** e-paper device. A lean, focused build — e-reader first, with games and small utilities on the side.
 
 ## Why this exists
 
-There were a few forks of the Xteink firmware I really liked — each had something the others didn't. [biscuit](https://github.com/yattsu/biscuit) had a great UI and games. [CrossInk](https://github.com/uxjulia/CrossInk) had the best reading experience. I wanted all of it in one place, stripped of the parts I didn't need. So I built shortbread.
+A couple of Xteink firmware forks caught my eye — each had something the others didn't. [biscuit](https://github.com/yattsu/biscuit) had the cleanest UI and the games. [CrossInk](https://github.com/uxjulia/CrossInk) had the best reading experience. I wanted both in one place, stripped to just the parts I actually use. So I built shortbread.
 
-If you want a feature added, changed, or removed — reach out. Open to modifications and happy to work on this with people who are actually using it. Open an issue or find me on GitHub — always happy to chat.
+Want a feature added, changed, or removed? Open an issue or ping me on GitHub.
 
 ## Hardware
 
@@ -62,7 +62,7 @@ pio run -j 16
 
 ## SD card
 
-Data is stored under `/biscuit/` on the MicroSD card (FAT32).
+Data is stored under `/shortbread/` on the MicroSD card (FAT32).
 
 ## Credits
 

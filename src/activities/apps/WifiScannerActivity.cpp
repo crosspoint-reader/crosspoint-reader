@@ -126,10 +126,10 @@ const char* WifiScannerActivity::signalBars(int32_t rssi) const {
 }
 
 void WifiScannerActivity::saveToCsv() {
-  Storage.mkdir("/biscuit");
-  Storage.mkdir("/biscuit/logs");
+  Storage.mkdir("/shortbread");
+  Storage.mkdir("/shortbread/logs");
   char filename[64];
-  snprintf(filename, sizeof(filename), "/biscuit/logs/wifi_scan_%lu.csv", millis());
+  snprintf(filename, sizeof(filename), "/shortbread/logs/wifi_scan_%lu.csv", millis());
 
   String csv = "SSID,BSSID,RSSI,Channel,Encryption\n";
   for (const auto& net : networks) {

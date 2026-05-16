@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// biscuit. native test mock — GfxRenderer
+// shortbread. native test mock — GfxRenderer
 // No-op renderer that tracks calls for assertions
 // ============================================================
 

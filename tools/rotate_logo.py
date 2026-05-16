@@ -103,7 +103,7 @@ def format_header(data: list[int]) -> str:
     lines = []
     lines.append("#pragma once")
     lines.append("")
-    lines.append("// Biscuit logo 120x120, 1-bit")
+    lines.append("// Shortbread logo 120x120, 1-bit")
     lines.append("// Auto-generated - do not edit manually")
     lines.append("")
     lines.append("static const uint8_t Logo120[] = {")

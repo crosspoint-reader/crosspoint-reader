@@ -87,7 +87,7 @@ static void drawResultOverlay(const char* msg, const char* amount, int credits) 
 
 void preview_lobby() {
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_12_FONT_ID, 12, "biscuit. Casino", true, 1);
+  renderer.drawCenteredText(UI_12_FONT_ID, 12, "shortbread. Casino", true, 1);
   renderer.drawLine(15, 42, 465, 42);
   drawCredits(2450);
 

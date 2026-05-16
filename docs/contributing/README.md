@@ -1,6 +1,6 @@
 # Contributing Docs
 
-This section is a lightweight contributor guide for Biscuit Reader.
+This section is a lightweight contributor guide for Shortbread Reader.
 It is written for software developers who may be new to embedded development.
 
 - [Getting Started](./getting-started.md)

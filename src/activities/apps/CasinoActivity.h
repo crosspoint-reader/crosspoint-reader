@@ -28,7 +28,7 @@ class CasinoActivity final : public Activity {
 
   // ---- credits ----
   int32_t credits = 1000;
-  static constexpr const char* SAVE_PATH = "/biscuit/casino.dat";
+  static constexpr const char* SAVE_PATH = "/shortbread/casino.dat";
   void loadCredits();
   void saveCredits();
 
@@ -186,7 +186,7 @@ class CasinoActivity final : public Activity {
   void drawCard(int x, int y, const Card& c, bool faceDown = false);
 
   // ============ LOOT BOX ============
-  static constexpr const char* LB_COLLECTION_SAVE_PATH = "/biscuit/lootbox.dat";
+  static constexpr const char* LB_COLLECTION_SAVE_PATH = "/shortbread/lootbox.dat";
 
   // Collection: 50 items stored as bitfield (7 bytes = 56 bits, using first 50)
   uint8_t lbCollected[7] = {};

@@ -209,7 +209,7 @@ void AppsMenuActivity::loop() {
         }
         case 1: {
           std::vector<AppCategoryActivity::AppEntry> e = {
-              {"Casino", "Slots, blackjack, roulette + lootbox", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<CasinoActivity>(r, m); }, false, []() -> bool { return Storage.exists("/biscuit/casino.dat"); }},
+              {"Casino", "Slots, blackjack, roulette + lootbox", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<CasinoActivity>(r, m); }, false, []() -> bool { return Storage.exists("/shortbread/casino.dat"); }},
               {tr(STR_MINESWEEPER), "Classic minesweeper", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<MinesweeperActivity>(r, m); }},
               {tr(STR_SUDOKU), "Number puzzle", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<SudokuActivity>(r, m); }},
               {tr(STR_CHESS), "Play against the device", UIIcon::File, [](GfxRenderer& r, MappedInputManager& m) { return std::make_unique<ChessActivity>(r, m); }},
@@ -418,7 +418,7 @@ void AppsMenuActivity::loadLastUsed() {
   for (int i = 0; i < ITEM_COUNT; i++) {
     lastUsedName[i][0] = '\0';
     char path[40];
-    snprintf(path, sizeof(path), "/biscuit/lastused_%d.txt", i);
+    snprintf(path, sizeof(path), "/shortbread/lastused_%d.txt", i);
     FsFile file;
     if (Storage.openFileForRead("APPS", path, file)) {
       int len = file.read((uint8_t*)lastUsedName[i], 31);

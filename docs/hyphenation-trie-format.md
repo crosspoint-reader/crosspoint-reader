@@ -1,6 +1,6 @@
 # Hypher Binary Tries
 
-Biscuit embeds the exact binary automata produced by
+Shortbread embeds the exact binary automata produced by
 [Typst's `hypher`](https://github.com/typst/hypher). 
 
 ## File layout

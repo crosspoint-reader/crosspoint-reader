@@ -111,19 +111,19 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  // Create /biscuit/ directory structure on SD card if it doesn't exist
-  Storage.mkdir("/biscuit");
-  Storage.mkdir("/biscuit/drawings");
-  Storage.mkdir("/biscuit/pcap");
-  Storage.mkdir("/biscuit/scans");
-  Storage.mkdir("/biscuit/logs");
-  Storage.mkdir("/biscuit/loot");
-  Storage.mkdir("/biscuit/loot/handshakes");
-  Storage.mkdir("/biscuit/loot/pmkid");
-  Storage.mkdir("/biscuit/loot/ble");
-  Storage.mkdir("/biscuit/loot/hashcat");
-  Storage.mkdir("/biscuit/portals");
-  Storage.mkdir("/biscuit/targets");
+  // Create /shortbread/ directory structure on SD card if it doesn't exist
+  Storage.mkdir("/shortbread");
+  Storage.mkdir("/shortbread/drawings");
+  Storage.mkdir("/shortbread/pcap");
+  Storage.mkdir("/shortbread/scans");
+  Storage.mkdir("/shortbread/logs");
+  Storage.mkdir("/shortbread/loot");
+  Storage.mkdir("/shortbread/loot/handshakes");
+  Storage.mkdir("/shortbread/loot/pmkid");
+  Storage.mkdir("/shortbread/loot/ble");
+  Storage.mkdir("/shortbread/loot/hashcat");
+  Storage.mkdir("/shortbread/portals");
+  Storage.mkdir("/shortbread/targets");
 
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;

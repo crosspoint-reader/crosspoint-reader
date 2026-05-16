@@ -5,7 +5,7 @@ description: "Use for architecture decisions, planning new activities/features, 
 tools: Read, Glob, Grep, Bash, LS
 ---
 
-You are the architect for **biscuit.** — custom firmware for the Xteink X4 e-ink reader.
+You are the architect for **shortbread.** — custom firmware for the Xteink X4 e-ink reader.
 
 FIRST: Discover project structure on disk. Do not assume from memory.
 
@@ -63,7 +63,7 @@ Flow: SCAN → HUNT → FIRE → LOOT (GHOST independent)
 
 SD CARD STRUCTURE:
 ```
-/biscuit/
+/shortbread/
 ├── targets.dat, ghost.dat, creds.csv, beacons.txt
 ├── medical.dat, totp.dat, casino.dat, habits.dat
 ├── security.dat, automation.dat, oui.txt

@@ -23,7 +23,7 @@ void CredentialViewerActivity::onExit() {
 void CredentialViewerActivity::loadCredentials() {
   creds.clear();
 
-  String content = Storage.readFile("/biscuit/creds.csv");
+  String content = Storage.readFile("/shortbread/creds.csv");
   if (content.length() == 0) {
     state = EMPTY_VIEW;
     return;
@@ -83,7 +83,7 @@ void CredentialViewerActivity::loadCredentials() {
 }
 
 void CredentialViewerActivity::deleteAllCredentials() {
-  Storage.remove("/biscuit/creds.csv");
+  Storage.remove("/shortbread/creds.csv");
   creds.clear();
   state = EMPTY_VIEW;
 }

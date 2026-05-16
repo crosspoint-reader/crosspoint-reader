@@ -13,10 +13,10 @@ class DuressManager {
   void deactivate() { duressActive = false; }
   bool isActive() const { return duressActive; }
 
-  // If duress active, redirect /biscuit/ paths to /biscuit_safe/
+  // If duress active, redirect /shortbread/ paths to /shortbread_safe/
   std::string resolvePath(const char* path) const {
-    if (duressActive && strncmp(path, "/biscuit/", 9) == 0) {
-      return std::string("/biscuit_safe/") + (path + 9);
+    if (duressActive && strncmp(path, "/shortbread/", 9) == 0) {
+      return std::string("/shortbread_safe/") + (path + 9);
     }
     return path;
   }

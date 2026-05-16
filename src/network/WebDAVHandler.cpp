@@ -663,7 +663,7 @@ void WebDAVHandler::handleLock(WebServer& s) {
       "<D:locktype><D:write/></D:locktype>\n"
       "<D:lockscope><D:exclusive/></D:lockscope>\n"
       "<D:depth>infinity</D:depth>\n"
-      "<D:owner><D:href>biscuit</D:href></D:owner>\n"
+      "<D:owner><D:href>shortbread</D:href></D:owner>\n"
       "<D:timeout>Second-3600</D:timeout>\n"
       "<D:locktoken><D:href>urn:uuid:dummy-lock-token</D:href></D:locktoken>\n"
       "<D:lockroot><D:href>/</D:href></D:lockroot>\n"

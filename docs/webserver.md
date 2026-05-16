@@ -1,10 +1,10 @@
 # Web Server Guide
 
-This guide explains how to connect your Biscuit Reader to WiFi and use the built-in web server to upload files from your computer or phone.
+This guide explains how to connect your Shortbread Reader to WiFi and use the built-in web server to upload files from your computer or phone.
 
 ## Overview
 
-Biscuit Reader includes a built-in web server that allows you to:
+Shortbread Reader includes a built-in web server that allows you to:
 
 - Upload files wirelessly from any device on the same WiFi network
 - Browse and manage files on your device's SD card
@@ -13,7 +13,7 @@ Biscuit Reader includes a built-in web server that allows you to:
 
 ## Prerequisites
 
-- Your Biscuit Reader device
+- Your Shortbread Reader device
 - A WiFi network
 - A computer, phone, or tablet connected to the **same WiFi network**
 
@@ -88,7 +88,7 @@ Once connected, the screen will display:
 
 ### From a Computer
 
-1. Ensure your computer is connected to the **same WiFi network** as your Biscuit Reader
+1. Ensure your computer is connected to the **same WiFi network** as your Shortbread Reader
 2. Open any web browser (Chrome is recommended)
 3. Type the IP address shown on your device into the browser's address bar
    - Example: `http://192.168.1.102/`
@@ -96,7 +96,7 @@ Once connected, the screen will display:
 
 ### From a Phone or Tablet
 
-1. Ensure your phone/tablet is connected to the **same WiFi network** as your Biscuit Reader
+1. Ensure your phone/tablet is connected to the **same WiFi network** as your Shortbread Reader
 2. Open your mobile browser (Safari, Chrome, etc.)
 3. Type the IP address into the address bar
    - Example: `http://192.168.1.102/`
@@ -219,7 +219,7 @@ For power users, you can manage files directly from your terminal using `curl` w
 
 When you're finished uploading files:
 
-1. Press the **Back** button on your Biscuit Reader
+1. Press the **Back** button on your Shortbread Reader
 2. The web server will automatically stop
 3. WiFi will disconnect to conserve battery
 4. You'll return to the previous screen

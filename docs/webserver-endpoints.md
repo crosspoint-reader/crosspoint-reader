@@ -1,6 +1,6 @@
 # Webserver Endpoints
 
-This document describes all HTTP and WebSocket endpoints available on the Biscuit Reader webserver.
+This document describes all HTTP and WebSocket endpoints available on the Shortbread Reader webserver.
 
 - [Webserver Endpoints](#webserver-endpoints)
   - [Overview](#overview)
@@ -22,7 +22,7 @@ This document describes all HTTP and WebSocket endpoints available on the Biscui
 
 ## Overview
 
-The Biscuit Reader exposes a webserver for file management and device monitoring:
+The Shortbread Reader exposes a webserver for file management and device monitoring:
 
 - **HTTP Server**: Port 80
 - **WebSocket Server**: Port 81 (for fast binary uploads)
@@ -37,7 +37,7 @@ Serves the home page HTML interface.
 
 **Request:**
 ```bash
-curl http://biscuit.local/
+curl http://shortbread.local/
 ```
 
 **Response:** HTML page (200 OK)
@@ -50,7 +50,7 @@ Serves the file browser HTML interface.
 
 **Request:**
 ```bash
-curl http://biscuit.local/files
+curl http://shortbread.local/files
 ```
 
 **Response:** HTML page (200 OK)
@@ -63,7 +63,7 @@ Returns JSON with device status information.
 
 **Request:**
 ```bash
-curl http://biscuit.local/api/status
+curl http://shortbread.local/api/status
 ```
 
 **Response (200 OK):**
@@ -80,7 +80,7 @@ curl http://biscuit.local/api/status
 
 | Field      | Type   | Description                                               |
 | ---------- | ------ | --------------------------------------------------------- |
-| `version`  | string | Biscuit firmware version                               |
+| `version`  | string | Shortbread firmware version                               |
 | `ip`       | string | Device IP address                                         |
 | `mode`     | string | `"STA"` (connected to WiFi) or `"AP"` (access point mode) |
 | `rssi`     | number | WiFi signal strength in dBm (0 in AP mode)                |
@@ -96,10 +96,10 @@ Returns a JSON array of files and folders in the specified directory.
 **Request:**
 ```bash
 # List root directory
-curl http://biscuit.local/api/files
+curl http://shortbread.local/api/files
 
 # List specific directory
-curl "http://biscuit.local/api/files?path=/Books"
+curl "http://shortbread.local/api/files?path=/Books"
 ```
 
 **Query Parameters:**
@@ -137,10 +137,10 @@ Uploads a file to the SD card via multipart form data.
 **Request:**
 ```bash
 # Upload to root directory
-curl -X POST -F "file=@mybook.epub" http://biscuit.local/upload
+curl -X POST -F "file=@mybook.epub" http://shortbread.local/upload
 
 # Upload to specific directory
-curl -X POST -F "file=@mybook.epub" "http://biscuit.local/upload?path=/Books"
+curl -X POST -F "file=@mybook.epub" "http://shortbread.local/upload?path=/Books"
 ```
 
 **Query Parameters:**
@@ -176,7 +176,7 @@ Creates a new folder on the SD card.
 
 **Request:**
 ```bash
-curl -X POST -d "name=NewFolder&path=/" http://biscuit.local/mkdir
+curl -X POST -d "name=NewFolder&path=/" http://shortbread.local/mkdir
 ```
 
 **Form Parameters:**
@@ -209,10 +209,10 @@ Deletes a file or folder from the SD card.
 **Request:**
 ```bash
 # Delete a file
-curl -X POST -d "path=/Books/mybook.epub&type=file" http://biscuit.local/delete
+curl -X POST -d "path=/Books/mybook.epub&type=file" http://shortbread.local/delete
 
 # Delete an empty folder
-curl -X POST -d "path=/OldFolder&type=folder" http://biscuit.local/delete
+curl -X POST -d "path=/OldFolder&type=folder" http://shortbread.local/delete
 ```
 
 **Form Parameters:**
@@ -254,7 +254,7 @@ A WebSocket endpoint for high-speed binary file uploads. More efficient than HTT
 
 **Connection:**
 ```
-ws://biscuit.local:81/
+ws://shortbread.local:81/
 ```
 
 **Protocol:**
@@ -291,7 +291,7 @@ Server -> "DONE"
 **Example with `websocat`:**
 ```bash
 # Interactive session
-websocat ws://biscuit.local:81
+websocat ws://shortbread.local:81
 
 # Then type:
 START:mybook.epub:1234567:/Books
@@ -325,7 +325,7 @@ The device can operate in two network modes:
 
 ## Notes
 
-- These examples use `biscuit.local`. If your network does not support mDNS or the address does not resolve, replace it with the specific **IP Address** displayed on your device screen (e.g., `http://192.168.1.102/`).
+- These examples use `shortbread.local`. If your network does not support mDNS or the address does not resolve, replace it with the specific **IP Address** displayed on your device screen (e.g., `http://192.168.1.102/`).
 - All paths on the SD card start with `/`
 - Trailing slashes are automatically stripped (except for root `/`)
 - The webserver uses chunked transfer encoding for file listings

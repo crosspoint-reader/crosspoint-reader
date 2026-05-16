@@ -1,6 +1,6 @@
 # Translators
 
-Below is a list of users and languages Biscuit may support in the future.
+Below is a list of users and languages Shortbread may support in the future.
 Note because a language is below does not mean there is official support for the language at this time.
 
 ## Contributing

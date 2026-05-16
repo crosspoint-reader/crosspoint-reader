@@ -48,10 +48,10 @@ def get_base_version(project_dir):
         return '0.0.0'
     config = configparser.ConfigParser()
     config.read(ini_path)
-    if not config.has_option('biscuit', 'version'):
-        warn('No [biscuit] version in platformio.ini; base version will be "0.0.0"')
+    if not config.has_option('shortbread', 'version'):
+        warn('No [shortbread] version in platformio.ini; base version will be "0.0.0"')
         return '0.0.0'
-    return config.get('biscuit', 'version')
+    return config.get('shortbread', 'version')
 
 
 def inject_version(env):
@@ -66,7 +66,7 @@ def inject_version(env):
     version_string = f'{base_version}-dev+{branch}'
 
     env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
-    print(f'biscuit. build version: {version_string}')
+    print(f'shortbread. build version: {version_string}')
 
 
 # PlatformIO/SCons entry point — Import and env are SCons builtins injected at runtime.

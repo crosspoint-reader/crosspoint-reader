@@ -34,7 +34,7 @@ void AppCategoryActivity::launchSelected() {
 
   if (categoryIndex >= 0) {
     char path[40];
-    snprintf(path, sizeof(path), "/biscuit/lastused_%d.txt", categoryIndex);
+    snprintf(path, sizeof(path), "/shortbread/lastused_%d.txt", categoryIndex);
     FsFile file;
     if (Storage.openFileForWrite("APPS", path, file)) {
       file.write((const uint8_t*)entries[entryIdx].nameStrId, strlen(entries[entryIdx].nameStrId));

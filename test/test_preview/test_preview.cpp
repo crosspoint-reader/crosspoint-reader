@@ -1,6 +1,6 @@
 // test/test_preview/test_preview.cpp
 // ============================================================
-// biscuit. Screen Preview Tool
+// shortbread. Screen Preview Tool
 //
 // Renders activity screens to BMP files without hardware.
 // After running: open test/preview_*.bmp in any image viewer.

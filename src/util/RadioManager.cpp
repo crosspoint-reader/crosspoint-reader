@@ -25,7 +25,7 @@ bool RadioManager::ensureBle() {
     deinitWifi();
   }
 
-  BLEDevice::init("biscuit");
+  BLEDevice::init("shortbread");
   state = RadioState::BLE;
   LOG_DBG("RADIO", "Switched to BLE mode, heap: %d", ESP.getFreeHeap());
   return true;
@@ -52,7 +52,7 @@ void RadioManager::deinitBle() {
 
 bool RadioManager::isDisclaimerAcknowledged() const {
   Preferences prefs;
-  prefs.begin("biscuit", true);
+  prefs.begin("shortbread", true);
   bool ack = prefs.getBool("disc_ack", false);
   prefs.end();
   return ack;
@@ -60,7 +60,7 @@ bool RadioManager::isDisclaimerAcknowledged() const {
 
 void RadioManager::setDisclaimerAcknowledged() {
   Preferences prefs;
-  prefs.begin("biscuit", false);
+  prefs.begin("shortbread", false);
   prefs.putBool("disc_ack", true);
   prefs.end();
 }

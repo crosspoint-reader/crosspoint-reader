@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide helps you build and run Biscuit locally.
+This guide helps you build and run Shortbread locally.
 
 ## Prerequisites
 

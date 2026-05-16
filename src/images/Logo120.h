@@ -1,6 +1,6 @@
 #pragma once
 
-// Biscuit logo 120x120, 1-bit
+// Shortbread logo 120x120, 1-bit
 // Shield + mesh network
 // Pre-rotated 90 CCW for Portrait mode (drawImage does not rotate bitmap bits)
 

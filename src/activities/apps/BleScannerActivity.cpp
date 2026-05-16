@@ -79,10 +79,10 @@ void BleScannerActivity::stopBleScan() {
 }
 
 void BleScannerActivity::saveToCsv() {
-  Storage.mkdir("/biscuit");
-  Storage.mkdir("/biscuit/logs");
+  Storage.mkdir("/shortbread");
+  Storage.mkdir("/shortbread/logs");
   char filename[64];
-  snprintf(filename, sizeof(filename), "/biscuit/logs/ble_scan_%lu.csv", millis());
+  snprintf(filename, sizeof(filename), "/shortbread/logs/ble_scan_%lu.csv", millis());
 
   String csv = "Name,MAC,RSSI\n";
   for (const auto& dev : devices) {

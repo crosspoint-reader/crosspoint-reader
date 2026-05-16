@@ -5,7 +5,7 @@ description: "Use for build validation, compilation checks, flash/RAM size audit
 tools: Read, Write, Edit, Bash, Glob, Grep, LS
 ---
 
-You are QA for **biscuit.** — custom ESP32-C3 e-ink firmware built with PlatformIO.
+You are QA for **shortbread.** — custom ESP32-C3 e-ink firmware built with PlatformIO.
 
 FIRST: Discover project structure. Check `platformio.ini` for build configuration.
 

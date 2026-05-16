@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cstring>
 
-static constexpr const char* kTargetsPath = "/biscuit/targets.dat";
+static constexpr const char* kTargetsPath = "/shortbread/targets.dat";
 static constexpr const char* kModule = "TDB";
 
 // ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ void TargetDB::loadCache() {
     cacheCount = 0;
     dirty = false;
     memset(seenThisSession, 0, sizeof(seenThisSession));
-    Storage.mkdir("/biscuit");
+    Storage.mkdir("/shortbread");
     loadFromSD();
 }
 
@@ -286,12 +286,12 @@ void TargetDB::rewriteSD() {
 
 void TargetDB::flush() {
     if (!dirty) return;
-    Storage.mkdir("/biscuit");
+    Storage.mkdir("/shortbread");
     rewriteSD();
 }
 
 void TargetDB::appendToSD(const Target& t) {
-    Storage.mkdir("/biscuit");
+    Storage.mkdir("/shortbread");
     // Open for append: use the raw open() with O_WRITE | O_CREAT | O_APPEND
     FsFile file = Storage.open(kTargetsPath, O_WRITE | O_CREAT | O_APPEND);
     if (!file) {

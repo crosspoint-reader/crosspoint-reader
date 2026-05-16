@@ -67,7 +67,7 @@ void CasinoActivity::onExit() {
 // ================================================================
 
 void CasinoActivity::loadCredits() {
-  Storage.mkdir("/biscuit");
+  Storage.mkdir("/shortbread");
   auto file = Storage.open(SAVE_PATH);
   if (file && !file.isDirectory()) {
     uint8_t buf[4];
@@ -2041,7 +2041,7 @@ const CasinoActivity::LbItem CasinoActivity::LB_ITEMS[50] = {
   {"Root Shell",     LB_LEGENDARY, 46},
   {"Packet Ghost",   LB_LEGENDARY, 47},
   {"E-Ink Dragon",   LB_LEGENDARY, 48},
-  {"biscuit. Logo",  LB_LEGENDARY, 49},
+  {"shortbread. Logo",  LB_LEGENDARY, 49},
 };
 
 // ================================================================
@@ -3321,7 +3321,7 @@ void CasinoActivity::lbDrawItemIcon(int x, int y, int size, int iconId, bool loc
       renderer.drawLine(cx - s,     cy + s / 2,   cx - s + s / 3, cy + s);
       break;
     }
-    case 49: { // biscuit. Logo
+    case 49: { // shortbread. Logo
       for (int a = 0; a < 360; a += 5) {
         float rad = a * 3.14159f / 180.0f;
         renderer.drawPixel(cx + (int)(s * cosf(rad)),       cy + (int)(s * sinf(rad)), true);

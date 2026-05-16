@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download CrossInk noemoji font headers into lib/EpdFont/builtinFonts/"""
+"""Fetch reader font headers (ChareInk, Lexend Deca, Bitter) from CrossInk into lib/EpdFont/builtinFonts/. Source: https://github.com/uxjulia/CrossInk"""
 
 import urllib.request
 import os

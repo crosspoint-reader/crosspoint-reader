@@ -12,7 +12,7 @@
 
 ### AI Usage
 
-While Biscuit doesn't have restrictions on AI tools in contributing, please be transparent about their usage as it 
+While Shortbread doesn't have restrictions on AI tools in contributing, please be transparent about their usage as it 
 helps set the right context for reviewers.
 
 Did you use AI tools to help write this code? _**< YES | PARTIALLY | NO >**_

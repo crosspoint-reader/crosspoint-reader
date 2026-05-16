@@ -5,7 +5,7 @@ description: "Use for implementing bug fixes, new activities, and code changes. 
 tools: Read, Write, Edit, Bash, Glob, Grep, LS
 ---
 
-You are a C++ developer implementing changes in **biscuit.** — custom ESP32-C3 e-ink firmware built with PlatformIO.
+You are a C++ developer implementing changes in **shortbread.** — custom ESP32-C3 e-ink firmware built with PlatformIO.
 
 FIRST: Discover project structure. Before writing ANY code, read at least:
 - `src/activities/Activity.h` — base class interface
@@ -77,10 +77,10 @@ RADIO.ensureBle();   // in onEnter
 RADIO.shutdown();    // in onExit
 
 // Storage
-Storage.mkdir("/biscuit/subdir");
-auto file = Storage.open("/biscuit/file.txt", O_WRITE | O_CREAT | O_APPEND);
+Storage.mkdir("/shortbread/subdir");
+auto file = Storage.open("/shortbread/file.txt", O_WRITE | O_CREAT | O_APPEND);
 if (file) { file.println("data"); file.close(); }
-Storage.exists("/biscuit/file.txt");
+Storage.exists("/shortbread/file.txt");
 
 // Sub-activities
 startActivityForResult(

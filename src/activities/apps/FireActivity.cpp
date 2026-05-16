@@ -294,7 +294,7 @@ void FireActivity::startAttack() {
             sanitizeFilename(ssidSafe, sizeof(ssidSafe),
                              target->ssid[0] ? target->ssid : "capture");
             char path[80];
-            snprintf(path, sizeof(path), "/biscuit/loot/handshakes/%s.pcap", ssidSafe);
+            snprintf(path, sizeof(path), "/shortbread/loot/handshakes/%s.pcap", ssidSafe);
             savePcapHeader(path);
             break;
         }
@@ -453,7 +453,7 @@ void FireActivity::buildAuthFrame(uint8_t* frame, const uint8_t* bssid, const ui
 // ---------------------------------------------------------------------------
 
 void FireActivity::savePcapHeader(const char* path) {
-    Storage.mkdir("/biscuit/loot/handshakes");
+    Storage.mkdir("/shortbread/loot/handshakes");
     FsFile file;
     if (!Storage.openFileForWrite("FIRE", path, file)) return;
 
@@ -509,7 +509,7 @@ void FireActivity::checkEapolFrame(const uint8_t* data, uint16_t len) {
     sanitizeFilename(ssidSafe, sizeof(ssidSafe),
                      (target && target->ssid[0]) ? target->ssid : "capture");
     char path[80];
-    snprintf(path, sizeof(path), "/biscuit/loot/handshakes/%s.pcap", ssidSafe);
+    snprintf(path, sizeof(path), "/shortbread/loot/handshakes/%s.pcap", ssidSafe);
     appendPcapPacket(path, data, len);
 
     // Determine EAPOL offset
@@ -541,8 +541,8 @@ void FireActivity::checkEapolFrame(const uint8_t* data, uint16_t len) {
                 sanitizeFilename(pmkidSafe, sizeof(pmkidSafe),
                                  (target && target->ssid[0]) ? target->ssid : "capture");
                 char pmkidPath[80];
-                snprintf(pmkidPath, sizeof(pmkidPath), "/biscuit/loot/pmkid/%s.pmkid", pmkidSafe);
-                Storage.mkdir("/biscuit/loot/pmkid");
+                snprintf(pmkidPath, sizeof(pmkidPath), "/shortbread/loot/pmkid/%s.pmkid", pmkidSafe);
+                Storage.mkdir("/shortbread/loot/pmkid");
 
                 FsFile pf;
                 if (Storage.openFileForWrite("FIRE", pmkidPath, pf)) {
@@ -654,7 +654,7 @@ void FireActivity::tickHandshakeCapture() {
     if (captureComplete) {
         state = RESULTS;
         snprintf(resultLine, sizeof(resultLine),
-                 "Handshake captured!\n%d EAPOL frames, PMKID: %s\nSaved to /biscuit/loot/handshakes/",
+                 "Handshake captured!\n%d EAPOL frames, PMKID: %s\nSaved to /shortbread/loot/handshakes/",
                  eapolCount, pmkidFound ? "Yes" : "No");
         stopAttack();
         requestUpdate();
@@ -701,7 +701,7 @@ void FireActivity::tickPmkidHarvest() {
     if (pmkidFound) {
         state = RESULTS;
         snprintf(resultLine, sizeof(resultLine),
-                 "PMKID captured!\nSaved to /biscuit/loot/pmkid/");
+                 "PMKID captured!\nSaved to /shortbread/loot/pmkid/");
         stopAttack();
         requestUpdate();
         return;

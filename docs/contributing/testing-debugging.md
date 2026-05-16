@@ -1,6 +1,6 @@
 # Testing and Debugging
 
-Biscuit runs on real hardware, so debugging usually combines local build checks and on-device logs.
+Shortbread runs on real hardware, so debugging usually combines local build checks and on-device logs.
 
 ## Local checks
 
