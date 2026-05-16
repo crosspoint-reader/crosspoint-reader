@@ -41,8 +41,11 @@ class BookFusionBrowserActivity final : public Activity {
   int selectedCategory = 0;
   int currentCategory = 0;
 
-  // Large enough for pre-signed S3 URLs (typically 500–900 chars).
-  char downloadUrl[1024] = {};
+  // Pre-signed S3 URLs from BookFusion have grown to ~1450+ chars; size for
+  // headroom. strlcpy() in BookFusionSyncClient::getDownloadUrl silently
+  // truncates if this is too small, which produces a bad URL and a failed
+  // download with no obvious error.
+  char downloadUrl[2048] = {};
   char downloadTitle[64] = {};
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
