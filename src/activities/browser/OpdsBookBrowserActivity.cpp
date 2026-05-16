@@ -280,7 +280,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         downloadTotal = total;
         requestUpdate(true);
       },
-      server.username, server.password);
+      nullptr, server.username, server.password);
 
   if (result == HttpDownloader::OK) {
     Epub(filename, "/.crosspoint").clearCache();
