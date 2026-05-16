@@ -30,10 +30,10 @@ class HalClock {
 
   // Format time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
-  // utcOffsetBiased: biased half-hour offset (24 = UTC+0, 0 = UTC-12, 52 = UTC+14).
+  // utcOffsetQuarterHoursBiased: biased quarter-hour offset (48 = UTC+0, 0 = UTC-12, 104 = UTC+14).
   // use12Hour: when true, format as 12-hour clock with AM/PM suffix.
   // Returns false if RTC is not available.
-  bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetBiased = 24, bool use12Hour = false) const;
+  bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
 
   // Sync the DS3231 RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.

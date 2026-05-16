@@ -169,11 +169,12 @@ class CrossPointSettings {
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock display in status bar (X3 only — requires DS3231 RTC)
+  // Clock display in status bar (X3 only, requires DS3231 RTC)
   uint8_t statusBarClock = 0;
-  // Clock UTC offset in half-hour steps, biased by 24 so it fits in uint8_t.
-  // Value 24 = UTC+0, 0 = UTC-12:00, 52 = UTC+14:00.
-  uint8_t clockUtcOffset = 24;
+  // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
+  // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
+  // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
+  uint8_t clockUtcOffsetQ = 48;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
   // Text rendering settings
