@@ -116,14 +116,20 @@ void ButtonEventManager::processButton(const int idx, const Button btn) {
       break;
 
     case State::ReleasedOnce:
-      if (pressed) {
+      if (now - s.releaseTime >= DOUBLE_WINDOW_MS) {
+        // Window expired without a second press — it was a short press.
+        pushEvent(btn, PressType::Short);
+        s.state = State::Idle;
+        if (pressed) {
+          // The user pressed again after the double-click window expired;
+          // start a fresh press sequence instead of treating it as a double click.
+          s.state = State::Pressed;
+          s.pressDownTime = now;
+        }
+      } else if (pressed) {
         // Second press within window — start tracking it
         s.state = State::DoublePressed;
         s.pressDownTime = now;
-      } else if (now - s.releaseTime >= DOUBLE_WINDOW_MS) {
-        // Window expired without a second press — it was a short press
-        pushEvent(btn, PressType::Short);
-        s.state = State::Idle;
       }
       break;
 
