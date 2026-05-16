@@ -16,6 +16,8 @@ static constexpr Iso639Mapping kIso639Mappings[] = {{"eng", "en"}, {"fra", "fr"}
                                                     {"ger", "de"}, {"rus", "ru"}, {"spa", "es"}, {"ita", "it"},
                                                     {"ukr", "uk"}, {"swe", "sv"}};
 
+const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
+
 namespace {
 
 const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
