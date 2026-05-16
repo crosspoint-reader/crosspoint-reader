@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ClockOffsetActivity.h"
+#include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -24,9 +25,10 @@ enum MenuItem {
   ITEM_TITLE,
   ITEM_BATTERY,
   ITEM_XTC_STATUS_BAR,
-  ITEM_CLOCK,           // X3 only
-  ITEM_CLOCK_FORMAT,    // X3 only
-  ITEM_CLOCK_UTC_OFFSET, // X3 only, launches ClockOffsetActivity
+  ITEM_CLOCK,             // X3 only
+  ITEM_CLOCK_FORMAT,      // X3 only
+  ITEM_CLOCK_UTC_OFFSET,  // X3 only, launches ClockOffsetActivity
+  ITEM_CLOCK_SYNC,        // X3 only, launches ClockSyncActivity
   ITEM_COUNT
 };
 
@@ -34,11 +36,17 @@ constexpr int BASE_MENU_ITEMS = ITEM_CLOCK;  // Items shown on every device
 constexpr int FULL_MENU_ITEMS = ITEM_COUNT;  // Items shown when RTC is available
 
 const StrId menuNames[FULL_MENU_ITEMS] = {
-    StrId::STR_CHAPTER_PAGE_COUNT, StrId::STR_BOOK_PROGRESS_PERCENTAGE,
-    StrId::STR_PROGRESS_BAR,       StrId::STR_PROGRESS_BAR_THICKNESS,
-    StrId::STR_TITLE,              StrId::STR_BATTERY,
-    StrId::STR_XTC_STATUS_BAR,     StrId::STR_CLOCK,
-    StrId::STR_CLOCK_FORMAT,       StrId::STR_CLOCK_UTC_OFFSET,
+    StrId::STR_CHAPTER_PAGE_COUNT,
+    StrId::STR_BOOK_PROGRESS_PERCENTAGE,
+    StrId::STR_PROGRESS_BAR,
+    StrId::STR_PROGRESS_BAR_THICKNESS,
+    StrId::STR_TITLE,
+    StrId::STR_BATTERY,
+    StrId::STR_XTC_STATUS_BAR,
+    StrId::STR_CLOCK,
+    StrId::STR_CLOCK_FORMAT,
+    StrId::STR_CLOCK_UTC_OFFSET,
+    StrId::STR_CLOCK_SYNC_NOW,
 };
 
 constexpr int CLOCK_FORMAT_ITEMS = 2;
@@ -177,6 +185,9 @@ void StatusBarSettingsActivity::handleSelection() {
       // Launch the dedicated offset picker. It saves on exit, no result handler needed.
       startActivityForResult(std::make_unique<ClockOffsetActivity>(renderer, mappedInput), nullptr);
       return;
+    case ITEM_CLOCK_SYNC:
+      startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), nullptr);
+      return;
     default:
       return;
   }
@@ -221,6 +232,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
           }
           case ITEM_CLOCK_UTC_OFFSET:
             return formatUtcOffset(SETTINGS.clockUtcOffsetQ);
+          case ITEM_CLOCK_SYNC:
+            return SETTINGS.clockHasBeenSynced ? tr(STR_CLOCK_SYNCED) : tr(STR_NOT_SET);
           default:
             return tr(STR_HIDE);
         }
