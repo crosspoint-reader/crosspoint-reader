@@ -73,7 +73,7 @@ constexpr SerializedHyphenationPatterns {patterns_symbol} = {{
     sizeof({data_symbol}),
 }};
 """
-    path.write_text(content)
+    path.write_text(content, encoding='utf-8')
 
 
 def main() -> None:
