@@ -4316,10 +4316,6 @@ async function convertEpubFile(file, progressCallback) {
     const r2 = fixSvgWrappedImages(t);
     if (r2.fixed) { t = r2.c; logFix(`SVG images (${r2.count})`, xhtmlPath.split('/').pop()); }
 
-    for (const [o, n] of Object.entries(renamed)) {
-      t = t.split(o.split('/').pop()).join(n.split('/').pop());
-    }
-
     // Use DOMParser for all img modifications: remove width/height and handle split images
     try {
       const parser = new DOMParser();
@@ -4335,6 +4331,20 @@ async function convertEpubFile(file, progressCallback) {
         for (const img of allImgElements) {
           if (img.hasAttribute('width')) { img.removeAttribute('width'); modified = true; }
           if (img.hasAttribute('height')) { img.removeAttribute('height'); modified = true; }
+
+          const src = img.getAttribute('src');
+          if (src) {
+            const decodedSrc = decodeHref(src);
+            const resolvedSrc = resolvePath(xhtmlPath, decodedSrc);
+
+            const match = Object.entries(renamed).find(([oldPath]) => resolvedSrc === oldPath);
+
+            if (match) {
+              const [oldPath, newPath] = match;
+              img.setAttribute('src', decodedSrc.replace(oldPath.split('/').pop(), newPath.split('/').pop()));
+              modified = true;
+            }
+          }
         }
 
         // Handle split images with path collision prevention
