@@ -421,15 +421,6 @@ def format_cpp_string_literal(segments: List[str], indent: str = "    ") -> List
 # ---------------------------------------------------------------------------
 
 
-def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -> str:
-    """Return a sorted string of every unique character used in a language."""
-    chars = set()
-    for values in translations.values():
-        for ch in values[lang_index]:
-            chars.add(ord(ch))
-    return "".join(chr(cp) for cp in sorted(chars))
-
-
 # ---------------------------------------------------------------------------
 # Code generators
 # ---------------------------------------------------------------------------
@@ -477,9 +468,6 @@ def generate_keys_header(
 
     lines.append("// Language display names (defined in I18nStrings.cpp)")
     lines.append("extern const char* const LANGUAGE_NAMES[];")
-    lines.append("")
-    lines.append("// Character sets for each language (defined in I18nStrings.cpp)")
-    lines.append("extern const char* const CHARACTER_SETS[];")
     lines.append("")
 
     # StrId enum
@@ -626,15 +614,6 @@ def generate_strings_cpp(
     lines.append("const char* const LANGUAGE_NAMES[] = {")
     for name in language_names:
         _append_string_entry(lines, name)
-    lines.append("};")
-    lines.append("")
-
-    # CHARACTER_SETS array
-    lines.append("// Character sets for each language")
-    lines.append("const char* const CHARACTER_SETS[] = {")
-    for lang_idx, name in enumerate(language_names):
-        charset = compute_character_set(translations, lang_idx)
-        _append_string_entry(lines, charset, comment=name)
     lines.append("};")
     lines.append("")
 

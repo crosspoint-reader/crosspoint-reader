@@ -25,10 +25,6 @@ class I18n {
   const char* getLanguageName(Language lang) const;
   static Language languageFromCode(const char* code);
 
-  // Get all unique characters used in a specific language
-  // Returns a sorted string of unique characters
-  static const char* getCharacterSet(Language lang);
-
  private:
   I18n() : _language(Language::EN) {}
 
