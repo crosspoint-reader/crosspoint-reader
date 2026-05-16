@@ -5,6 +5,7 @@
 
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
+#include "util/DictLookup.h"
 
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
@@ -27,6 +28,30 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+
+  // Dictionary mode (Power button in reader -> word selection + lookup)
+  struct DictWord {
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+    int16_t lineY;   // groups words into lines for Up/Down navigation
+    std::string text;
+    EpdFontFamily::Style style;
+  };
+  bool dictMode = false;
+  bool dictHighlightDirty = false;
+  int dictWordIndex = 0;
+  std::vector<DictWord> dictWords;
+  DictLookup dict;
+
+  void enterDictMode();
+  void exitDictMode();
+  void dictMoveHorizontal(int direction);
+  void dictMoveVertical(int direction);
+  void dictDoLookup();
+  void dictDrawHighlight();
+  void captureDictWords(const class Page& page, int orientedMarginLeft, int orientedMarginTop, int fontId);
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

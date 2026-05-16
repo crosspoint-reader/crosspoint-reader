@@ -126,15 +126,12 @@ void SleepActivity::renderCustomSleepScreen() const {
 }
 
 void SleepActivity::renderDefaultSleepScreen() const {
-  const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   renderer.clearScreen();
-  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+  renderer.drawCenteredText(UI_12_FONT_ID, (pageHeight - lineHeight) / 2, tr(STR_CROSSPOINT), true,
+                            EpdFontFamily::BOLD);
 
-  // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
     renderer.invertScreen();
   }

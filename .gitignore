@@ -16,3 +16,8 @@ build
 .history/
 /.venv
 *.local*
+
+# generated dictionary build output
+dict_out/
+.cache/
+
