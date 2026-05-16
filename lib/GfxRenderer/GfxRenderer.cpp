@@ -1346,6 +1346,12 @@ void GfxRenderer::restoreBwBuffer() {
   }
 
   if (missingChunks) {
+    // Grayscale may have left the controller's RED/previous plane desynced from the BW
+    // framebuffer. Resync from whatever is currently in the framebuffer so the next
+    // differential FAST refresh has a sane baseline (avoids unreadable ghosting).
+    if (frameBuffer) {
+      display.cleanupGrayscaleBuffers(frameBuffer);
+    }
     freeBwBufferChunks();
     return;
   }
