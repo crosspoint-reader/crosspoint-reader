@@ -2280,7 +2280,7 @@ void CrossPointWebServer::handlePackageInstall() {
   response["name"] = manifest.name;
   String json;
   serializeJson(response, json);
-  Marginalia::markPackageThemeHostDirty();
+  Marginalia::refreshPackageThemeHost();
   server->send(200, "application/json", json);
   LOG_DBG("WEB", "Installed package: %s", manifest.id.c_str());
 }

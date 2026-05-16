@@ -10,7 +10,6 @@
 #include "PackageSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "marginalia/PackageThemeHost.h"
 
 namespace {
 std::string joinValues(const std::vector<std::string>& values) {
@@ -100,7 +99,6 @@ void PackageDetailActivity::handleSelection() {
   if (row.action == RowAction::ToggleEnabled) {
     if (package_.compatible && Marginalia::setPackageEnabled(package_.id, !package_.enabled)) {
       package_.enabled = !package_.enabled;
-      Marginalia::markPackageThemeHostDirty();
       rebuildRows();
       requestUpdate();
     }

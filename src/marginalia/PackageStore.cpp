@@ -72,11 +72,7 @@ bool savePackageState(const std::string& packageId, JsonDocument& doc) {
 
   String json;
   serializeJson(doc, json);
-  const bool saved = Storage.writeFile(packageStatePath(packageId).c_str(), json);
-  if (saved) {
-    markPackageThemeHostDirty();
-  }
-  return saved;
+  return Storage.writeFile(packageStatePath(packageId).c_str(), json);
 }
 
 bool arrayContains(JsonVariantConst value, const char* expected) {
@@ -374,7 +370,9 @@ bool setPackageEnabled(const std::string& packageId, const bool enabled) {
   JsonDocument doc;
   if (!loadPackageState(packageId, doc)) return false;
   doc["enabled"] = enabled;
-  return savePackageState(packageId, doc);
+  const bool saved = savePackageState(packageId, doc);
+  if (saved) refreshPackageThemeHost();
+  return saved;
 }
 
 bool readPackageSettingBool(const std::string& packageId, const std::string& settingId, const bool defaultValue) {
@@ -402,7 +400,9 @@ bool writePackageSettingBool(const std::string& packageId, const std::string& se
   JsonDocument doc;
   if (!loadPackageState(packageId, doc)) return false;
   doc["settings"][settingId.c_str()] = value;
-  return savePackageState(packageId, doc);
+  const bool saved = savePackageState(packageId, doc);
+  if (saved) refreshPackageThemeHost();
+  return saved;
 }
 
 bool writePackageSettingString(const std::string& packageId, const std::string& settingId, const std::string& value) {
@@ -411,7 +411,9 @@ bool writePackageSettingString(const std::string& packageId, const std::string& 
   JsonDocument doc;
   if (!loadPackageState(packageId, doc)) return false;
   doc["settings"][settingId.c_str()] = value;
-  return savePackageState(packageId, doc);
+  const bool saved = savePackageState(packageId, doc);
+  if (saved) refreshPackageThemeHost();
+  return saved;
 }
 
 bool uninstallPackage(const std::string& packageId) {
@@ -432,7 +434,7 @@ bool uninstallPackage(const std::string& packageId) {
   if (Storage.exists(statePath.c_str())) {
     Storage.remove(statePath.c_str());
   }
-  markPackageThemeHostDirty();
+  refreshPackageThemeHost();
   return true;
 }
 

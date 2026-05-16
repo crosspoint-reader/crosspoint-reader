@@ -182,6 +182,9 @@ grayscale antialiasing without overwriting the user's saved setting. `textAntial
 package boolean setting named `textAntialiasing`; this lets the theme expose an antialiasing toggle in its package
 settings while still keeping the normal reader setting intact.
 
+Theme host state is refreshed during firmware startup and package lifecycle changes. Rendering code reads only cached
+theme flags; it must not scan package directories or parse package JSON from `displayBuffer()`.
+
 ## Compatibility Gate
 
 Manifest `target` metadata is optional for early local packages. When present, firmware evaluates it before install and

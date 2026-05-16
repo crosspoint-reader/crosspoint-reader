@@ -104,26 +104,13 @@ void reloadThemeState() {
 
 }  // namespace
 
-bool packageThemeInvertsDisplay() {
-  if (!loaded) {
-    reloadThemeState();
-  }
-  return invertDisplay;
-}
+bool packageThemeInvertsDisplay() { return loaded && invertDisplay; }
 
-bool packageThemeRequestsHalfRefresh() {
-  if (!loaded) {
-    reloadThemeState();
-  }
-  return halfRefresh;
-}
+bool packageThemeRequestsHalfRefresh() { return loaded && halfRefresh; }
 
-bool packageThemeDisablesTextAntialiasing() {
-  if (!loaded) {
-    reloadThemeState();
-  }
-  return disableTextAntialiasing;
-}
+bool packageThemeDisablesTextAntialiasing() { return loaded && disableTextAntialiasing; }
+
+void refreshPackageThemeHost() { reloadThemeState(); }
 
 void markPackageThemeHostDirty() { loaded = false; }
 
