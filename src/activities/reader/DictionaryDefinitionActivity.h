@@ -83,6 +83,12 @@ class DictionaryDefinitionActivity final : public Activity {
   WordSelectNavigator navigator;
   DictionaryLookupController controller;
 
+  // Differential repaint state for in-definition word-select mode. Only consulted
+  // when isWordSelectMode is true; reset on every view-mode render.
+  enum class RenderMode { FullPage, Differential };
+  RenderMode nextRenderMode_ = RenderMode::FullPage;
+  int prevHighlightIdx_ = -1;
+
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
   void wrapText();

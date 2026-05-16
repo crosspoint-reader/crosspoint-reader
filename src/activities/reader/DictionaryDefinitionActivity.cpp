@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <memory>
 #include <numeric>
 
@@ -518,8 +519,33 @@ void DictionaryDefinitionActivity::loop() {
 // ---------------------------------------------------------------------------
 
 void DictionaryDefinitionActivity::render(RenderLock&&) {
+  // Differential fast path: only when we're already in word-select mode AND
+  // we set it up on the previous frame AND the controller has nothing pending.
+  if (isWordSelectMode && nextRenderMode_ == RenderMode::Differential && !controller.isActive()) {
+    const int currIdx = navigator.getCurrentFlatIndex();
+    if (currIdx >= 0) {
+      const int lineHeight = getLineHeight();
+      auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, prevHighlightIdx_, currIdx);
+      if (dirty.has_value()) {
+        // Full panel push — matches DictionaryWordSelectActivity. Windowed refresh is not
+        // wired up because the SDK's experimental path produces alternating black→white
+        // failures on consecutive partial refreshes. Savings come from skipping page->render.
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        prevHighlightIdx_ = currIdx;
+        return;
+      }
+      // fall through to full repaint path
+    }
+  }
+
+  // Full repaint path.
   renderer.clearScreen();
-  if (controller.render()) return;
+  if (controller.render()) {
+    // Controller drew an overlay; framebuffer state is unknown.
+    nextRenderMode_ = RenderMode::FullPage;
+    prevHighlightIdx_ = -1;
+    return;
+  }
 
   const auto metrics = UITheme::getInstance().getMetrics();
   const int indentStep = renderer.getTextWidth(SETTINGS.getDefinitionFontId(), "   ");
@@ -558,17 +584,39 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   };
   renderBody();
 
-  // Word-select mode: overlay highlighted word(s)
+  // Word-select mode: overlay highlighted word(s) and prime snapshot for next frame.
+  // The -1 prevWordIdx literal is load-bearing: renderHighlightDifferential uses
+  // prevWordIdx < 0 as the signal "framebuffer was just redrawn from scratch,
+  // discard any stale snapshot rather than restoring it on top of fresh pixels."
+  // This is the only path that disturbs the framebuffer outside the differential
+  // cycle, so it's also the only call site that must pass -1.
   if (isWordSelectMode) {
-    navigator.renderHighlight(renderer, lineHeight);
+    const int currIdx = navigator.getCurrentFlatIndex();
+    bool snapshotPrimed = false;
+    if (currIdx >= 0) {
+      auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
+      snapshotPrimed = setup.has_value();
+    }
+    if (!snapshotPrimed) {
+      navigator.renderHighlight(renderer, lineHeight);
+    }
+
     // Empty button hints in word-select mode (same convention as EPUB word-select)
     const auto labels = mappedInput.mapLabels("", "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+    prevHighlightIdx_ = currIdx;
+    nextRenderMode_ = snapshotPrimed ? RenderMode::Differential : RenderMode::FullPage;
     return;
   }
 
-  // View mode: pagination indicator and button hints
+  // View mode: differential state is irrelevant — reset so that the next entry
+  // into word-select starts cleanly with a full repaint.
+  nextRenderMode_ = RenderMode::FullPage;
+  prevHighlightIdx_ = -1;
+
+  // Pagination indicator and button hints
   if (totalPages > 1) {
     char pageInfo[16];
     snprintf(pageInfo, sizeof(pageInfo), "%d/%d", currentPage + 1, totalPages);

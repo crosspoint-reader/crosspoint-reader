@@ -154,7 +154,7 @@ void EpubReaderActivity::loop() {
   if (SETTINGS.holdToLookup && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS && section &&
       Dictionary::exists(epub->getCachePath().c_str())) {
-    openWordSelect();
+    openWordSelect(/*framebufferContainsPage=*/true);
     return;
   }
 
@@ -355,7 +355,7 @@ void EpubReaderActivity::openReaderMenu() {
       });
 }
 
-void EpubReaderActivity::openWordSelect() {
+void EpubReaderActivity::openWordSelect(bool framebufferContainsPage) {
   auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
   if (!pageForLookup) {
     requestUpdate();
@@ -366,6 +366,19 @@ void EpubReaderActivity::openWordSelect() {
                                    &orientedMarginLeft);
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
+
+  // Bottom reserved-area height (matches renderContents() at line 695-703). The
+  // word-select activity uses this to clear exactly the strip we drew the
+  // status-bar / auto-turn label into, so its first frame matches the menu
+  // path which wipes everything via clearScreen + page->render.
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  const int reservedBottomHeight =
+      (automaticPageTurnActive &&
+       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()))
+          ? std::max(
+                SETTINGS.screenMargin,
+                static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin))
+          : std::max(SETTINGS.screenMargin, statusBarHeight);
   std::string nextPageFirstWord;
   if (section && section->currentPage < section->pageCount - 1) {
     int savedPage = section->currentPage;
@@ -384,9 +397,9 @@ void EpubReaderActivity::openWordSelect() {
     }
   }
   const std::string bookCachePath = epub->getCachePath();
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(pageForLookup),
-                                                                        orientedMarginLeft, orientedMarginTop,
-                                                                        bookCachePath, nextPageFirstWord),
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft, orientedMarginTop,
+                             bookCachePath, nextPageFirstWord, framebufferContainsPage, reservedBottomHeight),
                          [this](const ActivityResult&) {
                            ignoreBackUntilRelease = true;
                            requestUpdate();
@@ -547,7 +560,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP: {
-      openWordSelect();
+      // Menu activity rendered over the page; the framebuffer no longer
+      // matches what DictionaryWordSelectActivity expects.
+      openWordSelect(/*framebufferContainsPage=*/false);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {

@@ -235,26 +235,122 @@ WordSelectNavigator::MultiSelectAction WordSelectNavigator::handleMultiSelectInp
   return MultiSelectAction::None;
 }
 
+bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                                     const GfxRenderer& renderer) {
+  if (w == 0 || h == 0) {
+    bytes_ = 0;
+    return false;
+  }
+  // The renderer translates (x, y, w, h) from screen to byte-aligned memory
+  // coords and writes that many bytes; it returns 0 on capacity overflow,
+  // out-of-bounds, or rejection. We do NOT pre-check capacity here because the
+  // aligned-memory size differs from the naive screen-coord size, and only
+  // the renderer knows the exact figure.
+  const size_t written = renderer.readFramebufferRegion(x, y, w, h, buf_, MAX_SNAPSHOT_BYTES);
+  if (written == 0) {
+    bytes_ = 0;
+    return false;
+  }
+  x_ = x;
+  y_ = y;
+  w_ = w;
+  h_ = h;
+  bytes_ = written;
+  return true;
+}
+
+void WordSelectNavigator::HighlightSnapshot::restore(GfxRenderer& renderer) const {
+  if (bytes_ == 0) return;
+  renderer.writeFramebufferRegion(x_, y_, w_, h_, buf_);
+}
+
 void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineHeight) const {
   if (inMultiSelectMode) {
     const int cursorIdx = getCurrentFlatIndex();
     const int lo = std::min(anchorFlatIndex, cursorIdx);
     const int hi = std::max(anchorFlatIndex, cursorIdx);
     for (int i = lo; i <= hi; i++) {
-      const auto* w = getWordAt(i);
-      if (!w) continue;
-      renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-      renderer.drawText(w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style);
+      drawSingleHighlight(renderer, lineHeight, i);
     }
   } else {
-    const auto* sel = getSelected();
-    if (!sel) return;
-    renderer.fillRect(sel->screenX - 2, sel->screenY - 2, sel->width + 4, lineHeight + 4, true);
-    renderer.drawText(sel->fontId, sel->screenX, sel->screenY, getDisplay(*sel), false, sel->style);
-    const auto* other = getContinuation();
-    if (other) {
-      renderer.fillRect(other->screenX - 2, other->screenY - 2, other->width + 4, lineHeight + 4, true);
-      renderer.drawText(other->fontId, other->screenX, other->screenY, getDisplay(*other), false, other->style);
+    const int selIdx = getCurrentFlatIndex();
+    if (selIdx < 0) return;
+    drawSingleHighlight(renderer, lineHeight, selIdx);
+    const auto* sel = getWordAt(selIdx);
+    if (sel && sel->continuationIndex >= 0) {
+      drawSingleHighlight(renderer, lineHeight, sel->continuationIndex);
     }
   }
+}
+
+void WordSelectNavigator::drawSingleHighlight(const GfxRenderer& renderer, int lineHeight, int wordIndex) const {
+  const auto* w = getWordAt(wordIndex);
+  if (!w) return;
+  renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
+  renderer.drawText(w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style);
+}
+
+WordSelectNavigator::Rect WordSelectNavigator::boundsForWord(int wordIndex, int lineHeight) const {
+  const auto* w = getWordAt(wordIndex);
+  if (!w) return Rect{};
+  return Rect{static_cast<int>(w->screenX) - 2, static_cast<int>(w->screenY) - 2, static_cast<int>(w->width) + 4,
+              lineHeight + 4};
+}
+
+WordSelectNavigator::Rect WordSelectNavigator::computeDirtyRect(int prevWordIdx, int currWordIdx,
+                                                                int lineHeight) const {
+  Rect curr = boundsForWord(currWordIdx, lineHeight);
+  if (prevWordIdx < 0) return curr;
+  Rect prev = boundsForWord(prevWordIdx, lineHeight);
+  if (prev.width == 0 || prev.height == 0) return curr;
+  if (curr.width == 0 || curr.height == 0) return prev;
+  const int x0 = std::min(prev.x, curr.x);
+  const int y0 = std::min(prev.y, curr.y);
+  const int x1 = std::max(prev.x + prev.width, curr.x + curr.width);
+  const int y1 = std::max(prev.y + prev.height, curr.y + curr.height);
+  return Rect{x0, y0, x1 - x0, y1 - y0};
+}
+
+std::optional<WordSelectNavigator::Rect> WordSelectNavigator::renderHighlightDifferential(GfxRenderer& renderer,
+                                                                                          int lineHeight,
+                                                                                          int prevWordIdx,
+                                                                                          int currWordIdx) {
+  // Fallback paths.
+  if (inMultiSelectMode) return std::nullopt;
+  const auto* curr = getWordAt(currWordIdx);
+  if (!curr) return std::nullopt;
+  if (curr->continuationIndex >= 0) {
+    // Hyphenated wrap — two-word highlight is not yet supported by the
+    // single-snapshot fast path. Caller falls back to full repaint.
+    return std::nullopt;
+  }
+
+  // Step 1: restore pixels under the previous highlight (wipe it).
+  // prevWordIdx < 0 is the caller's signal "no previous highlight on screen"
+  // (typically because the framebuffer was just redrawn from scratch via the
+  // full-repaint path or a sub-activity return). In that case any snapshot we
+  // still hold from a prior render cycle is stale relative to the current
+  // framebuffer — discard it rather than restoring it on top of fresh pixels.
+  if (prevWordIdx >= 0 && snapshot_.valid()) {
+    snapshot_.restore(renderer);
+  }
+  snapshot_.clear();
+
+  // Step 2: snapshot pixels under the new highlight, clamping coordinates so we
+  // never pass negative values into the renderer's uint16_t API.
+  const Rect newRect = boundsForWord(currWordIdx, lineHeight);
+  const uint16_t snapX = static_cast<uint16_t>(std::max(newRect.x, 0));
+  const uint16_t snapY = static_cast<uint16_t>(std::max(newRect.y, 0));
+  const uint16_t snapW = static_cast<uint16_t>(std::max(newRect.width, 0));
+  const uint16_t snapH = static_cast<uint16_t>(std::max(newRect.height, 0));
+  if (!snapshot_.capture(snapX, snapY, snapW, snapH, renderer)) {
+    // Capture failed — either too big or out of bounds. Caller falls back.
+    return std::nullopt;
+  }
+
+  // Step 3: draw the new highlight on top of the captured pixels.
+  drawSingleHighlight(renderer, lineHeight, currWordIdx);
+
+  // Step 4: caller pushes the union region.
+  return computeDirtyRect(prevWordIdx, currWordIdx, lineHeight);
 }
