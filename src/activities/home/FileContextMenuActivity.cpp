@@ -4,10 +4,10 @@
 #include <I18n.h>
 
 #include "../ActivityResult.h"
+#include "../settings/SettingInfo.h"
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "components/UITheme.h"
-#include "../settings/SettingInfo.h"
 
 FileContextMenuActivity::FileContextMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  const std::string& filePath)
@@ -17,17 +17,16 @@ FileContextMenuActivity::FileContextMenuActivity(GfxRenderer& renderer, MappedIn
   const bool isEpub = FsHelpers::hasEpubExtension(name);
   const bool isXtc = FsHelpers::hasXtcExtension(name);
   const bool isTxt = FsHelpers::hasTxtExtension(name) || FsHelpers::hasMarkdownExtension(name);
-  const bool isImage = FsHelpers::hasBmpExtension(name) || FsHelpers::hasJpgExtension(name) ||
-                       FsHelpers::hasPngExtension(name);
+  const bool isImage =
+      FsHelpers::hasBmpExtension(name) || FsHelpers::hasJpgExtension(name) || FsHelpers::hasPngExtension(name);
 
   if (isBin) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_FLASH_FIRMWARE, SettingAction::None));
-    menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT));
     menuItems.push_back(SettingInfo::Action(StrId::STR_REMOVE, SettingAction::None));
   } else if (isImage) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_OPEN, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_SET_SLEEP_SCREEN, SettingAction::None));
-    menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT));
+    menuItems.push_back(SettingInfo::Separator(StrId::STR_TOOL_UTILITIES));
     menuItems.push_back(SettingInfo::Action(StrId::STR_REMOVE, SettingAction::None));
   } else if (isEpub) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_OPEN, SettingAction::None));
@@ -36,20 +35,20 @@ FileContextMenuActivity::FileContextMenuActivity(GfxRenderer& renderer, MappedIn
     }
     menuItems.push_back(SettingInfo::Action(StrId::STR_MARK_AS_READ, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_INFO, SettingAction::None));
-    menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT));
+    menuItems.push_back(SettingInfo::Separator(StrId::STR_TOOL_UTILITIES));
     menuItems.push_back(SettingInfo::Action(StrId::STR_DELETE_CACHE, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_REMOVE, SettingAction::None));
   } else if (isXtc) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_OPEN, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_MARK_AS_READ, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_INFO, SettingAction::None));
-    menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT));
+    menuItems.push_back(SettingInfo::Separator(StrId::STR_TOOL_UTILITIES));
     menuItems.push_back(SettingInfo::Action(StrId::STR_DELETE_CACHE, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_REMOVE, SettingAction::None));
   } else if (isTxt) {
     menuItems.push_back(SettingInfo::Action(StrId::STR_OPEN, SettingAction::None));
     menuItems.push_back(SettingInfo::Action(StrId::STR_MARK_AS_READ, SettingAction::None));
-    menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT));
+    menuItems.push_back(SettingInfo::Separator(StrId::STR_TOOL_UTILITIES));
     menuItems.push_back(SettingInfo::Action(StrId::STR_REMOVE, SettingAction::None));
   }
 }

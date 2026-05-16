@@ -256,15 +256,17 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
       SettingInfo::Action(StrId::STR_MARK_AS_READ, SettingAction::None).withSubmenu(StrId::STR_READER_TOOLS));
   menuItems.push_back(
       SettingInfo::Action(StrId::STR_DELETE_CACHE, SettingAction::None).withSubmenu(StrId::STR_READER_TOOLS));
-  menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT).withSubmenu(StrId::STR_READER_TOOLS));
+  menuItems.push_back(SettingInfo::Separator(StrId::STR_TOOL_UTILITIES).withSubmenu(StrId::STR_READER_TOOLS));
   menuItems.push_back(
       SettingInfo::Action(StrId::STR_SCREENSHOT_BUTTON, SettingAction::None).withSubmenu(StrId::STR_READER_TOOLS));
   menuItems.push_back(
       SettingInfo::Action(StrId::STR_DISPLAY_QR, SettingAction::None).withSubmenu(StrId::STR_READER_TOOLS));
   menuItems.push_back(SettingInfo::Action(StrId::STR_GO_HOME_BUTTON, SettingAction::None));
+#ifdef ENABLE_BENCHMARKS
   menuItems.push_back(SettingInfo::Separator(StrId::STR_NONE_OPT).withSubmenu(StrId::STR_READER_TOOLS));
   menuItems.push_back(
       SettingInfo::Action(StrId::STR_RENDER_BENCHMARK, SettingAction::None).withSubmenu(StrId::STR_READER_TOOLS));
+#endif
 }
 
 EpubReaderMenuActivity::MenuAction EpubReaderMenuActivity::actionForNameId(StrId nameId) {
