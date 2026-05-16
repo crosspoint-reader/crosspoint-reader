@@ -280,20 +280,24 @@ XtcError XtcParser::readChapters() {
     return XtcError::OK;
   }
 
-  uint64_t chapterOffset = 0;
+  // chapterOffset is uint32_t in the header struct (at 0x30, followed by 4 bytes padding at 0x34)
+  uint32_t chapterOffset32 = 0;
   if (!m_file.seek64(0x30)) {
     return XtcError::READ_ERROR;
   }
-  if (m_file.read(reinterpret_cast<uint8_t*>(&chapterOffset), sizeof(chapterOffset)) != sizeof(chapterOffset)) {
+  if (m_file.read(reinterpret_cast<uint8_t*>(&chapterOffset32), sizeof(chapterOffset32)) != sizeof(chapterOffset32)) {
     return XtcError::READ_ERROR;
   }
+  const uint64_t chapterOffset = chapterOffset32;
 
   if (chapterOffset == 0) {
     return XtcError::OK;
   }
 
   const uint64_t fileSize = m_file.size64();
-  if (chapterOffset < sizeof(XtcHeader) || chapterOffset >= fileSize || chapterOffset + 96 > fileSize) {
+  // Minimum valid chapter offset: past all known metadata (title@0x38+128, author@0xB8+64 = 0xF8 = 248)
+  constexpr uint64_t kMinChapterOffset = 0xF8;
+  if (chapterOffset < kMinChapterOffset || chapterOffset >= fileSize || chapterOffset + 96 > fileSize) {
     return XtcError::OK;
   }
 
@@ -310,7 +314,7 @@ XtcError XtcParser::readChapters() {
   }
 
   constexpr size_t chapterSize = 96;
-  constexpr uint64_t kMaxChapters = 4096;
+  constexpr uint64_t kMaxChapters = 200;
   const uint64_t available = maxOffset - chapterOffset;
   const uint64_t rawCount = available / chapterSize;
   const size_t chapterCount = static_cast<size_t>(rawCount > kMaxChapters ? kMaxChapters : rawCount);

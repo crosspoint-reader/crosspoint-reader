@@ -248,8 +248,10 @@ void XtcReaderActivity::renderPage() {
   renderer.clearScreen();
 
   // Copy page bitmap using GfxRenderer's drawPixel
-  // XTC/XTCH pages are pre-rendered with status bar included, so render full page
-  const uint16_t maxSrcY = pageHeight;
+  // XTC/XTCH pages are pre-rendered with status bar included, so render full page.
+  // Clamp to display bounds: some files are encoded for a different screen size.
+  const uint16_t maxSrcX = std::min(pageWidth, static_cast<uint16_t>(renderer.getScreenWidth()));
+  const uint16_t maxSrcY = std::min(pageHeight, static_cast<uint16_t>(renderer.getScreenHeight()));
 
   if (bitDepth == 2) {
     // XTH 2-bit mode: Two bit planes, column-major order
@@ -280,8 +282,8 @@ void XtcReaderActivity::renderPage() {
 
     // Count pixel distribution for debugging
     uint32_t pixelCounts[4] = {0, 0, 0, 0};
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
+    for (uint16_t y = 0; y < maxSrcY; y++) {
+      for (uint16_t x = 0; x < maxSrcX; x++) {
         pixelCounts[getPixelValue(x, y)]++;
       }
     }
@@ -289,8 +291,8 @@ void XtcReaderActivity::renderPage() {
             pixelCounts[1], pixelCounts[2], pixelCounts[3]);
 
     // Pass 1: BW buffer - draw all non-white pixels as black
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
+    for (uint16_t y = 0; y < maxSrcY; y++) {
+      for (uint16_t x = 0; x < maxSrcX; x++) {
         if (getPixelValue(x, y) >= 1) {
           renderer.drawPixel(x, y, true);
         }
@@ -309,8 +311,8 @@ void XtcReaderActivity::renderPage() {
     // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
     // In LUT: 0 bit = apply gray effect, 1 bit = untouched
     renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
+    for (uint16_t y = 0; y < maxSrcY; y++) {
+      for (uint16_t x = 0; x < maxSrcX; x++) {
         if (getPixelValue(x, y) == 1) {  // Dark grey only
           renderer.drawPixel(x, y, false);
         }
@@ -321,8 +323,8 @@ void XtcReaderActivity::renderPage() {
     // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
     // In LUT: 0 bit = apply gray effect, 1 bit = untouched
     renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
+    for (uint16_t y = 0; y < maxSrcY; y++) {
+      for (uint16_t x = 0; x < maxSrcX; x++) {
         const uint8_t pv = getPixelValue(x, y);
         if (pv == 1 || pv == 2) {  // Dark grey or Light grey
           renderer.drawPixel(x, y, false);
@@ -336,8 +338,8 @@ void XtcReaderActivity::renderPage() {
 
     // Pass 4: Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
     renderer.clearScreen();
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
+    for (uint16_t y = 0; y < maxSrcY; y++) {
+      for (uint16_t x = 0; x < maxSrcX; x++) {
         if (getPixelValue(x, y) >= 1) {
           renderer.drawPixel(x, y, true);
         }
@@ -358,7 +360,7 @@ void XtcReaderActivity::renderPage() {
     for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
       const size_t srcRowStart = srcY * srcRowBytes;
 
-      for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
+      for (uint16_t srcX = 0; srcX < maxSrcX; srcX++) {
         // Read source pixel (MSB first, bit 7 = leftmost pixel)
         const size_t srcByte = srcRowStart + srcX / 8;
         const size_t srcBit = 7 - (srcX % 8);
@@ -461,14 +463,17 @@ bool XtcReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
 
   renderer.clearScreen();
 
+  const uint16_t maxX = std::min(pageWidth, static_cast<uint16_t>(renderer.getScreenWidth()));
+  const uint16_t maxY = std::min(pageHeight, static_cast<uint16_t>(renderer.getScreenHeight()));
+
   if (bitDepth == 2) {
     // 2-bit XTH: draw all non-white pixels as black (BW pass only)
     const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
     const uint8_t* plane1 = pageBuffer;
     const uint8_t* plane2 = pageBuffer + planeSize;
     const size_t colBytes = (pageHeight + 7) / 8;
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
+    for (uint16_t y = 0; y < maxY; y++) {
+      for (uint16_t x = 0; x < maxX; x++) {
         const size_t colIndex = pageWidth - 1 - x;
         const size_t byteInCol = y / 8;
         const size_t bitInByte = 7 - (y % 8);
@@ -483,8 +488,8 @@ bool XtcReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   } else {
     // 1-bit XTG: draw black pixels
     const size_t srcRowBytes = (pageWidth + 7) / 8;
-    for (uint16_t srcY = 0; srcY < pageHeight; srcY++) {
-      for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
+    for (uint16_t srcY = 0; srcY < maxY; srcY++) {
+      for (uint16_t srcX = 0; srcX < maxX; srcX++) {
         const bool isBlack = !((pageBuffer[srcY * srcRowBytes + srcX / 8] >> (7 - srcX % 8)) & 1);
         if (isBlack) renderer.drawPixel(srcX, srcY, true);
       }
