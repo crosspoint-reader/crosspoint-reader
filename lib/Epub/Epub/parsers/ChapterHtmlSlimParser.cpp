@@ -125,6 +125,7 @@ void ChapterHtmlSlimParser::compactCurrentTextBlockIfNeeded() {
   const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
+  applyCurrentTextBlockTopInset();
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false);
@@ -159,6 +160,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  currentTextBlockTopInsetApplied = false;
   wordsExtractedInBlock = 0;
 }
 
@@ -1234,6 +1236,26 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   currentPageNextY += lineHeight;
 }
 
+void ChapterHtmlSlimParser::applyCurrentTextBlockTopInset() {
+  if (!currentTextBlock || currentTextBlockTopInsetApplied) {
+    return;
+  }
+
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
+  if (blockStyle.marginTop > 0) {
+    currentPageNextY += blockStyle.marginTop;
+  }
+  if (blockStyle.paddingTop > 0) {
+    currentPageNextY += blockStyle.paddingTop;
+  }
+  currentTextBlockTopInsetApplied = true;
+}
+
 void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
@@ -1247,16 +1269,10 @@ void ChapterHtmlSlimParser::makePages() {
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
-  // Apply top spacing before the paragraph (stored in pixels)
-  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
-  }
+  applyCurrentTextBlockTopInset();
 
   // Calculate effective width accounting for horizontal margins/padding
+  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
   const int horizontalInset = blockStyle.totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;

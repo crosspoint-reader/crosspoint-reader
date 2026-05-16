@@ -55,6 +55,7 @@ class ChapterHtmlSlimParser {
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;
+  bool currentTextBlockTopInsetApplied = false;
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
@@ -113,6 +114,7 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPartWordBuffer();
   void compactCurrentTextBlockIfNeeded();
+  void applyCurrentTextBlockTopInset();
   void makePages();
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);

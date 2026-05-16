@@ -35,6 +35,14 @@ int main() {
   assert(remapped.applyPage);
   assert(remapped.pageNumber == 10);
 
+  const auto penultimate = ReaderProgressPolicy::decideResumeRemap(2, 2, 18, 20, true, 40);
+  assert(penultimate.applyPage);
+  assert(penultimate.pageNumber == 37);
+
+  const auto singleCachedPage = ReaderProgressPolicy::decideResumeRemap(2, 2, 0, 1, true, 40);
+  assert(singleCachedPage.applyPage);
+  assert(singleCachedPage.pageNumber == 0);
+
   const auto clamped = ReaderProgressPolicy::decideResumeRemap(2, 2, 20, 20, true, 40);
   assert(clamped.applyPage);
   assert(clamped.pageNumber == 39);

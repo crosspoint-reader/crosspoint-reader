@@ -71,6 +71,8 @@ def main() -> None:
     assert "return pageNumber < knownPageCount_;" in section_handle_cpp
     assert "incrementalCache_->hasPage" not in section_handle_cpp
     assert "return knownPageCount_;" in section_handle_cpp
+    assert "if (state == IncrementalBuildState::Parsing)" in section_handle_cpp
+    assert "return {SectionPumpStatus::Pumped, pagesBefore, pagesAfter};" in section_handle_cpp
 
     builder_cpp = read("lib/Epub/Epub/IncrementalSectionBuilder.cpp")
     assert "const uint32_t pageNumber = knownPageCount_;" in builder_cpp
@@ -182,9 +184,15 @@ def main() -> None:
         "src/activities/reader/KOReaderSyncActivity.cpp",
         "IncrementalSection::Cache incrementalCache",
         "incrementalCache.isComplete()",
-        "incrementalCache.getPageForListItemIndex",
-        "incrementalCache.getPageForAnchor",
-        "incrementalCache.getPageForParagraphIndex",
+        'refineRemotePositionFromLookup(incrementalCache, remotePosition, "Cached")',
+        "getPageForListItemIndex",
+        "getPageForAnchor",
+        "getPageForParagraphIndex",
+        "refineRemoteProgressWithIncrementalIndexing",
+        "SectionHandle::openOrCreate",
+        "while (!refined && sectionHandle->hasActiveBuilder())",
+        "sectionHandle->pump(indexBudget(IncrementalBuildBudgetProfile::Outrun))",
+        'refineRemotePositionFromLookup(*sectionHandle, position, "Indexed")',
         "Section tempSection",
     )
 
@@ -211,6 +219,15 @@ def main() -> None:
         "working_changed_paths",
         "inspect_sdk_range",
         "git -C \"$ROOT_DIR/open-x4-sdk\" diff --name-only",
+        "gh_release_block",
+        "^\\[env:gh_release\\]$",
+    )
+
+    assert_contains(
+        "test/run_incremental_section_tests.sh",
+        "command -v python",
+        "command -v python3",
+        "StaticIncrementalContracts.py",
     )
 
     assert_contains(
@@ -219,6 +236,8 @@ def main() -> None:
         "checkedWriteString",
         "checkedWriteLayoutKey",
         "checkedWriteIndexRecord",
+        "readNextIndexRecord",
+        "indexSize / PAGE_INDEX_RECORD_SIZE",
         "Short write",
     )
     cache_cpp = read("lib/Epub/Epub/IncrementalSectionCache.cpp")

@@ -91,13 +91,18 @@ inline void formatStatusPageText(char* buffer, const size_t bufferSize, const St
     return;
   }
 
+  if (pageInfo.totalPages == 0) {
+    std::snprintf(buffer, bufferSize, "0/0");
+    return;
+  }
+
   const auto displayPage = static_cast<unsigned long>(pageInfo.currentPage + 1);
   if (pageInfo.totalKnown) {
     std::snprintf(buffer, bufferSize, "%lu/%lu", displayPage, static_cast<unsigned long>(pageInfo.totalPages));
     return;
   }
 
-  if (pageInfo.hasMorePages && pageInfo.totalPages > 0) {
+  if (pageInfo.hasMorePages) {
     std::snprintf(buffer, bufferSize, "%lu/%lu+", displayPage, static_cast<unsigned long>(pageInfo.totalPages));
     return;
   }

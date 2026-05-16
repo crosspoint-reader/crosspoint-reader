@@ -143,6 +143,9 @@ SectionPumpResult SectionHandle::applyPumpState(const IncrementalBuildState stat
     return {SectionPumpStatus::Failed, pagesBefore, pagesAfter};
   }
   knownPageCount_ = pagesAfter;
+  if (state == IncrementalBuildState::Parsing) {
+    return {SectionPumpStatus::Pumped, pagesBefore, pagesAfter};
+  }
   if (pagesAfter > pagesBefore) {
     return {SectionPumpStatus::Pumped, pagesBefore, pagesAfter};
   }

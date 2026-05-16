@@ -94,7 +94,12 @@ if printf '%s\n' "$combined_diff" | rg -q 'WorkInterrupt|pollAndQueueEvents|Loop
   exit 1
 fi
 
-if ! rg -q 'LOG_LEVEL=0' "$ROOT_DIR/platformio.ini"; then
+gh_release_block="$(awk '
+  /^\[env:gh_release\]$/ { in_block = 1; next }
+  /^\[env:/ { if (in_block) exit }
+  in_block { print }
+' "$ROOT_DIR/platformio.ini")"
+if ! printf '%s\n' "$gh_release_block" | rg -q 'LOG_LEVEL=0'; then
   echo "gh_release must build with LOG_LEVEL=0 for performance verification" >&2
   exit 1
 fi

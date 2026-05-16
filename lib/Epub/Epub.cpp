@@ -358,7 +358,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         // Invalidate section caches so they are rebuilt with the new CSS.
         const auto sectionsPath = cachePath + "/sections";
         if (Storage.exists(sectionsPath.c_str())) {
-          FsHelpers::removeDirRecursive(sectionsPath.c_str());
+          if (!FsHelpers::removeDirRecursive(sectionsPath.c_str())) {
+            LOG_ERR("EBP", "Failed to remove stale section cache after CSS rebuild: %s", sectionsPath.c_str());
+            return false;
+          }
         }
       }
     }
@@ -463,7 +466,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     parseCssFiles();
     const auto sectionsPath = cachePath + "/sections";
     if (Storage.exists(sectionsPath.c_str())) {
-      FsHelpers::removeDirRecursive(sectionsPath.c_str());
+      if (!FsHelpers::removeDirRecursive(sectionsPath.c_str())) {
+        LOG_ERR("EBP", "Failed to remove stale section cache after CSS parse: %s", sectionsPath.c_str());
+        return false;
+      }
     }
   }
 

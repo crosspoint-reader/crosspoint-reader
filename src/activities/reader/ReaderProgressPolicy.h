@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
@@ -40,12 +41,27 @@ inline ResumeRemapDecision decideResumeRemap(const int currentSpineIndex, const 
     return decision;
   }
 
-  const float progress = static_cast<float>(currentPage) / static_cast<float>(cachedPageCount);
-  int remappedPage = static_cast<int>(progress * static_cast<float>(finalPageCount));
+  if (cachedPageCount == 1) {
+    decision.applyPage = true;
+    decision.pageNumber = 0;
+    return decision;
+  }
+
+  const int cachedLastPage = static_cast<int>(cachedPageCount - 1);
+  const int finalLastPage = static_cast<int>(finalPageCount - 1);
+  int cachedPage = currentPage;
+  if (cachedPage < 0) {
+    cachedPage = 0;
+  } else if (cachedPage > cachedLastPage) {
+    cachedPage = cachedLastPage;
+  }
+
+  const float progress = static_cast<float>(cachedPage) / static_cast<float>(cachedLastPage);
+  int remappedPage = static_cast<int>(std::lround(progress * static_cast<float>(finalLastPage)));
   if (remappedPage < 0) {
     remappedPage = 0;
-  } else if (remappedPage >= static_cast<int>(finalPageCount)) {
-    remappedPage = static_cast<int>(finalPageCount - 1);
+  } else if (remappedPage > finalLastPage) {
+    remappedPage = finalLastPage;
   }
 
   decision.applyPage = true;

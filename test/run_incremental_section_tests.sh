@@ -8,7 +8,15 @@ cd "$ROOT_DIR"
 mkdir -p "$BUILD_DIR"
 
 bash "$ROOT_DIR/test/incremental_section/CleanScopeContractTest.sh"
-python "$ROOT_DIR/test/incremental_section/StaticIncrementalContracts.py"
+if command -v python >/dev/null 2>&1; then
+  PYTHON=python
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON=python3
+else
+  echo "No Python interpreter found; cannot run static incremental contracts."
+  exit 1
+fi
+"$PYTHON" "$ROOT_DIR/test/incremental_section/StaticIncrementalContracts.py"
 
 if command -v c++ >/dev/null 2>&1; then
   CXX=c++

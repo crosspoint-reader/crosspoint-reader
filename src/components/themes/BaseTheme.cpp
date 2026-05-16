@@ -767,8 +767,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     } else if (SETTINGS.statusBarBookProgressPercentage) {
       snprintf(progressStr, sizeof(progressStr), "%s", percentStr);
       progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-      progressTextX =
-          renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth;
+      const int futureIndicatorReservation =
+          drawFutureIndicator ? futureIndexingPageCountRightReservation(FUTURE_INDEXING_DOT_SIZE) : 0;
+      progressTextX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight -
+                      progressTextWidth - futureIndicatorReservation;
       renderer.drawText(SMALL_FONT_ID, progressTextX, textY, progressStr);
     } else {
       snprintf(progressStr, sizeof(progressStr), "%s", pageStr);

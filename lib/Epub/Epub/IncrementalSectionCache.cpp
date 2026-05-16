@@ -91,6 +91,14 @@ void readIndexRecordFromFile(FsFile& file, PageIndexRecord& record) {
   serialization::readPod(file, record.sourceByteOffset);
 }
 
+bool readNextIndexRecord(FsFile& file, PageIndexRecord& record) {
+  if (static_cast<size_t>(file.available()) < PAGE_INDEX_RECORD_SIZE) {
+    return false;
+  }
+  readIndexRecordFromFile(file, record);
+  return true;
+}
+
 }  // namespace
 
 Cache::Cache(std::string sectionsDir, const uint32_t spineIndex)
@@ -261,7 +269,8 @@ bool Cache::readIndexRecord(const uint32_t pageNumber, PageIndexRecord& out) con
     return false;
   }
   const size_t indexSize = index.size();
-  if ((pageNumber + 1) * PAGE_INDEX_RECORD_SIZE > indexSize) {
+  const size_t recordCount = indexSize / PAGE_INDEX_RECORD_SIZE;
+  if (pageNumber >= recordCount) {
     index.close();
     return false;
   }
@@ -329,9 +338,14 @@ std::optional<uint16_t> Cache::getPageForParagraphIndex(const uint16_t paragraph
     return std::nullopt;
   }
   uint16_t resultPage = static_cast<uint16_t>(count - 1);
+  FsFile index;
+  if (!Storage.openFileForRead("ISC", paths_.index, index)) {
+    return std::nullopt;
+  }
   for (uint32_t i = 0; i < count; i++) {
     PageIndexRecord record;
-    if (!readIndexRecord(i, record)) {
+    if (!readNextIndexRecord(index, record)) {
+      index.close();
       return std::nullopt;
     }
     if (record.paragraphIndex >= paragraphIndex) {
@@ -339,6 +353,7 @@ std::optional<uint16_t> Cache::getPageForParagraphIndex(const uint16_t paragraph
       break;
     }
   }
+  index.close();
   return resultPage;
 }
 
@@ -348,9 +363,14 @@ std::optional<uint16_t> Cache::getPageForListItemIndex(const uint16_t listItemIn
     return std::nullopt;
   }
   uint16_t resultPage = static_cast<uint16_t>(count - 1);
+  FsFile index;
+  if (!Storage.openFileForRead("ISC", paths_.index, index)) {
+    return std::nullopt;
+  }
   for (uint32_t i = 0; i < count; i++) {
     PageIndexRecord record;
-    if (!readIndexRecord(i, record)) {
+    if (!readNextIndexRecord(index, record)) {
+      index.close();
       return std::nullopt;
     }
     if (record.listItemIndex >= listItemIndex) {
@@ -358,6 +378,7 @@ std::optional<uint16_t> Cache::getPageForListItemIndex(const uint16_t listItemIn
       break;
     }
   }
+  index.close();
   return resultPage;
 }
 

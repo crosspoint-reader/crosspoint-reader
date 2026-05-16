@@ -88,6 +88,7 @@ class KOReaderSyncActivity final : public Activity {
   void performSync();
   void performUpload();
   void ensureEpubLoaded();
+  bool refineRemoteProgressWithIncrementalIndexing(CrossPointPosition& position);
   void saveProgressAndReturn(int spineIndex, int page);
   void returnToReader();
 };

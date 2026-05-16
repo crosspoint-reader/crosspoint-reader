@@ -19,7 +19,10 @@ int main() {
   assert(std::strcmp(buffer, "4/8+") == 0);
 
   formatStatusPageText(buffer, sizeof(buffer), StatusPageInfo{0, 0, false, false, false});
-  assert(std::strcmp(buffer, "1/?") == 0);
+  assert(std::strcmp(buffer, "0/0") == 0);
+
+  formatStatusPageText(buffer, sizeof(buffer), StatusPageInfo{3, 0, true, false, false});
+  assert(std::strcmp(buffer, "0/0") == 0);
 
   char tiny[2] = {};
   formatStatusPageText(tiny, sizeof(tiny), StatusPageInfo{99, 100, true, false, false});
