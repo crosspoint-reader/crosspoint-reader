@@ -71,5 +71,8 @@ class RoundedRaffTheme : public BaseTheme {
                 const std::function<bool(int index)>& rowDimmed = nullptr) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
+  void drawDialogBackground(const GfxRenderer& renderer, Rect rect) const override;
+  void drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                          bool selected) const override;
   bool homeMenuShowsContinueReading() const { return true; }
 };

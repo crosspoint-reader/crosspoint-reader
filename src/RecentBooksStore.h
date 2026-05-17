@@ -7,6 +7,7 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  bool coverDisabled = false;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -43,6 +44,8 @@ class RecentBooksStore {
   // Remove entries whose backing file is no longer on the SD card.
   // Returns true if any entry was removed. Does not persist — caller decides.
   bool pruneMissing();
+
+  void setCoverDisabled(const std::string& path, bool disabled);
 
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }

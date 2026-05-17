@@ -1,5 +1,6 @@
 #include "RecentBooksStore.h"
 
+#include <CrossPointSettings.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -28,12 +29,16 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+
+  const bool existingDisabled =
+      (it != recentBooks.end()) ? it->coverDisabled : (SETTINGS.coverMode == CrossPointSettings::COVER_DISABLED);
+
   if (it != recentBooks.end()) {
     recentBooks.erase(it);
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath, existingDisabled});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -62,6 +67,15 @@ bool RecentBooksStore::pruneMissing() {
   const size_t before = recentBooks.size();
   recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
   return recentBooks.size() != before;
+}
+
+void RecentBooksStore::setCoverDisabled(const std::string& path, bool disabled) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end() && it->coverDisabled != disabled) {
+    it->coverDisabled = disabled;
+    saveToFile();
+  }
 }
 
 bool RecentBooksStore::saveToFile() const {

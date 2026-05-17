@@ -9,6 +9,11 @@
 class GfxRenderer;
 struct RecentBook;
 
+struct BookCoverParams {
+  std::string title;
+  std::string author;
+};
+
 struct Rect {
   int x;
   int y;
@@ -153,6 +158,7 @@ class BaseTheme {
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
+  virtual void drawDialogBackground(const GfxRenderer& renderer, Rect rect) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
                      std::string title, const int paddingBottom = 0, const int textYOffset = 0) const;
@@ -162,7 +168,11 @@ class BaseTheme {
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
                                const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
                                bool inactiveSelection = false) const;
+  virtual void drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                                  bool selected) const;
   virtual bool showsFileIcons() const { return false; }
+  void drawClassicalBookCover(GfxRenderer& renderer, int x, int y, int w, int h, const BookCoverParams& params,
+                              bool inverted = false, int continueTextWidth = 0) const;
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;

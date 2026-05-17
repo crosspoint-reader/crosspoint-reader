@@ -34,32 +34,40 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
            i < std::min(static_cast<int>(recentBooks.size()), Lyra3CoversMetrics::values.homeRecentBooksCount); i++) {
         std::string coverPath = recentBooks[i].coverBmpPath;
         bool hasCover = true;
-        int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
+        int tileX = rect.x + Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
         if (coverPath.empty()) {
           hasCover = false;
         } else {
-          const std::string coverBmpPath =
-              UITheme::getCoverThumbPath(coverPath, Lyra3CoversMetrics::values.homeCoverHeight);
+          const bool skipCover = recentBooks[i].coverDisabled;
+          if (skipCover) {
+            hasCover = false;
+          } else {
+            const std::string coverBmpPath =
+                UITheme::getCoverThumbPath(coverPath, Lyra3CoversMetrics::values.homeCoverHeight);
 
-          // First time: load cover from SD and render
-          FsFile file;
-          if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
-            Bitmap bitmap(file);
-            if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-              float coverHeight = static_cast<float>(bitmap.getHeight());
-              float coverWidth = static_cast<float>(bitmap.getWidth());
-              float ratio = coverWidth / coverHeight;
-              const float tileRatio = static_cast<float>(tileWidth - 2 * hPaddingInSelection) /
-                                      static_cast<float>(Lyra3CoversMetrics::values.homeCoverHeight);
-              float cropX = 1.0f - (tileRatio / ratio);
+            FsFile file;
+            if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
+              Bitmap bitmap(file);
+              if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+                float coverHeight = static_cast<float>(bitmap.getHeight());
+                float coverWidth = static_cast<float>(bitmap.getWidth());
+                float ratio = coverWidth / coverHeight;
+                const float tileRatio = static_cast<float>(tileWidth - 2 * hPaddingInSelection) /
+                                        static_cast<float>(Lyra3CoversMetrics::values.homeCoverHeight);
+                float cropX = 1.0f - (tileRatio / ratio);
 
-              renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
-                                  tileWidth - 2 * hPaddingInSelection, Lyra3CoversMetrics::values.homeCoverHeight,
-                                  cropX);
+                if (!renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
+                                         tileWidth - 2 * hPaddingInSelection,
+                                         Lyra3CoversMetrics::values.homeCoverHeight, cropX)) {
+                  hasCover = false;
+                }
+              } else {
+                hasCover = false;
+              }
+              file.close();
             } else {
               hasCover = false;
             }
-            file.close();
           }
         }
         // Draw either way
@@ -76,15 +84,15 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         }
       }
 
+      coverRendered = true;
       coverBufferStored = storeCoverBuffer();
-      coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
 
     for (int i = 0; i < std::min(static_cast<int>(recentBooks.size()), Lyra3CoversMetrics::values.homeRecentBooksCount);
          i++) {
       bool bookSelected = (selectorIndex == i);
 
-      int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
+      int tileX = rect.x + Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
 
       const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
 

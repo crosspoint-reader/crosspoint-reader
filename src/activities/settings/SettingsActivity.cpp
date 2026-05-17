@@ -1,11 +1,16 @@
 #include "SettingsActivity.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
+#include <HalStorage.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -13,6 +18,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
+#include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -100,6 +106,11 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
+  if (coverPopupVisible) {
+    handleCoverPopup();
+    return;
+  }
+
   bool hasChangedCategory = false;
 
   // Handle actions with early return
@@ -182,11 +193,31 @@ void SettingsActivity::toggleCurrentSetting() {
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    if (setting.nameId == StrId::STR_HOME_COVER) {
+      coverModeBeforePopup = SETTINGS.coverMode;
+      switch (SETTINGS.coverMode) {
+        case CrossPointSettings::COVER_ENABLED:
+          coverPopupSelection = 0;
+          break;
+        case CrossPointSettings::COVER_TIMEOUT:
+          coverPopupSelection = 2;
+          break;
+        case CrossPointSettings::COVER_DISABLED:
+          coverPopupSelection = 3;
+          break;
+        default:
+          coverPopupSelection = 0;
+          break;
+      }
+      coverPopupVisible = true;
+      requestUpdate();
+      return;
+    }
+
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
     if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      // Launch font selection submenu instead of cycling
       startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                              [this](const ActivityResult&) {
                                SETTINGS.saveToFile();
@@ -313,6 +344,159 @@ void SettingsActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  // Always use standard refresh for settings screen
+  if (coverPopupVisible) {
+    renderCoverPopup();
+  }
   renderer.displayBuffer();
+}
+
+void SettingsActivity::handleCoverPopup() {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    coverPopupSelection = (coverPopupSelection - 1 + kCoverOptionCount) % kCoverOptionCount;
+    requestUpdate();
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) ||
+             mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    coverPopupSelection = (coverPopupSelection + 1) % kCoverOptionCount;
+    requestUpdate();
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    applyCoverOption();
+    coverPopupVisible = false;
+    SETTINGS.saveToFile();
+    requestUpdate();
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    SETTINGS.coverMode = coverModeBeforePopup;
+    coverPopupVisible = false;
+    requestUpdate();
+  }
+}
+
+void SettingsActivity::applyCoverOption() {
+  switch (coverPopupSelection) {
+    case 0:  // Enabled
+      SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
+      break;
+    case 1:  // Regenerate All
+      SETTINGS.coverMode = CrossPointSettings::COVER_ENABLED;
+      resetAllCoverDisabled();
+      APP_STATE.forceRenderCoverPath = "__regenerate_all__";
+      break;
+    case 2:  // Timeout
+      SETTINGS.coverMode = CrossPointSettings::COVER_TIMEOUT;
+      break;
+    case 3:  // Disabled
+      SETTINGS.coverMode = CrossPointSettings::COVER_DISABLED;
+      break;
+    case 4:  // Delete All
+      SETTINGS.coverMode = CrossPointSettings::COVER_DISABLED;
+      APP_STATE.forceRenderCoverPath = "";
+      deleteAllCoverThumbs();
+      break;
+  }
+}
+
+void SettingsActivity::deleteAllCoverThumbs() {
+  auto root = Storage.open("/.crosspoint");
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return;
+  }
+
+  char name[128];
+  for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    file.getName(name, sizeof(name));
+    String itemName(name);
+
+    if (file.isDirectory() && (itemName.startsWith("epub_") || itemName.startsWith("xtc_"))) {
+      file.close();
+      String dirPath = "/.crosspoint/" + itemName;
+      auto dir = Storage.open(dirPath.c_str());
+      if (dir && dir.isDirectory()) {
+        char entryName[64];
+        for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+          entry.getName(entryName, sizeof(entryName));
+          String eName(entryName);
+          if (!entry.isDirectory() && eName.startsWith("thumb_") && eName.endsWith(".bmp")) {
+            String thumbPath = dirPath + "/" + eName;
+            Storage.remove(thumbPath.c_str());
+          }
+          entry.close();
+        }
+      }
+      if (dir) dir.close();
+    } else {
+      file.close();
+    }
+  }
+  root.close();
+
+  const auto& books = RECENT_BOOKS.getBooks();
+  for (const auto& book : books) {
+    RECENT_BOOKS.setCoverDisabled(book.path, true);
+  }
+}
+
+void SettingsActivity::resetAllCoverDisabled() {
+  const auto& books = RECENT_BOOKS.getBooks();
+  for (const auto& book : books) {
+    RECENT_BOOKS.setCoverDisabled(book.path, false);
+  }
+}
+
+void SettingsActivity::renderCoverPopup() {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto height10 = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto height12 = renderer.getLineHeight(UI_12_FONT_ID);
+  const auto heightSmall = renderer.getLineHeight(SMALL_FONT_ID);
+
+  static const StrId optionLabels[kCoverOptionCount] = {
+      StrId::STR_HOME_COVER_ENABLED, StrId::STR_HOME_COVER_REGENERATE_ALL, StrId::STR_HOME_COVER_TIMEOUT,
+      StrId::STR_HOME_COVER_DISABLED, StrId::STR_HOME_COVER_DELETE_ALL};
+
+  static const StrId optionDescs[kCoverOptionCount] = {
+      StrId::STR_HOME_COVER_ENABLED_DESC, StrId::STR_HOME_COVER_REGENERATE_ALL_DESC, StrId::STR_HOME_COVER_TIMEOUT_DESC,
+      StrId::STR_HOME_COVER_DISABLED_DESC, StrId::STR_HOME_COVER_DELETE_ALL_DESC};
+
+  constexpr int itemSpacing = 6;
+  constexpr int innerPadding = 16;
+
+  int maxTextWidth = 0;
+  for (int i = 0; i < kCoverOptionCount; i++) {
+    const int labelW = renderer.getTextWidth(UI_10_FONT_ID, I18N.get(optionLabels[i]), EpdFontFamily::BOLD);
+    if (labelW > maxTextWidth) maxTextWidth = labelW;
+    const int descW = renderer.getTextWidth(SMALL_FONT_ID, I18N.get(optionDescs[i]));
+    if (descW > maxTextWidth) maxTextWidth = descW;
+  }
+
+  const int listHeight = height10 * kCoverOptionCount + itemSpacing * (kCoverOptionCount - 1);
+  const int dialogW = std::min((maxTextWidth + innerPadding * 2) * 12 / 10, pageWidth - 20);
+  const int contentHeight = height12 + 10 + listHeight + 14 + heightSmall;
+  const int dialogH = contentHeight + innerPadding * 2;
+  const int dialogX = (pageWidth - dialogW) / 2;
+  const int dialogY = (pageHeight - dialogH) / 2;
+
+  GUI.drawDialogBackground(renderer, Rect{dialogX, dialogY, dialogW, dialogH});
+
+  int y = dialogY + innerPadding;
+
+  renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_HOME_COVER), true, EpdFontFamily::BOLD);
+  y += height12 + 10;
+
+  constexpr int selectionHPadding = 8;
+  constexpr int selectionVPadding = 4;
+  for (int i = 0; i < kCoverOptionCount; i++) {
+    const int itemY = y + i * (height10 + itemSpacing);
+    const bool selected = (i == coverPopupSelection);
+    const char* labelText = I18N.get(optionLabels[i]);
+    const int labelWidth = renderer.getTextWidth(UI_10_FONT_ID, labelText, EpdFontFamily::BOLD);
+    const int labelX = (pageWidth - labelWidth) / 2;
+
+    Rect itemRect(labelX - selectionHPadding, itemY - selectionVPadding, labelWidth + selectionHPadding * 2,
+                  height10 + selectionVPadding * 2);
+    GUI.drawPopupSelection(renderer, UI_10_FONT_ID, itemRect, labelText, selected);
+  }
+
+  y += listHeight + 14;
+  renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(optionDescs[coverPopupSelection]), true);
 }
