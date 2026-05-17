@@ -17,6 +17,7 @@ class CrossPointState {
   bool lastSleepFromReader = false;
   bool pendingCoverGeneration = false;
   std::string forceRenderCoverPath;
+  uint8_t pendingMenuAction = 0xFF;
 
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.

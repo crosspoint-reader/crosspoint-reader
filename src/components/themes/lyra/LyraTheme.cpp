@@ -571,6 +571,18 @@ void LyraTheme::drawDialogBackground(const GfxRenderer& renderer, Rect rect) con
   renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::White);
 }
 
+void LyraTheme::drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
+                                   bool selected) const {
+  const int textH = renderer.getLineHeight(fontId);
+  const int textW = renderer.getTextWidth(fontId, text);
+  const int textY = rect.y + (rect.height - textH) / 2;
+  const int textX = rect.x + (rect.width - textW) / 2;
+  if (selected) {
+    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, cornerRadius, Color::LightGray);
+  }
+  renderer.drawText(fontId, textX, textY, text, true);
+}
+
 void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
   constexpr int barHeight = 4;
 
