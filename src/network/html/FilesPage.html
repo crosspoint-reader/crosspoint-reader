@@ -2385,13 +2385,13 @@
       const isTiny = (dims.width < 200 && dims.height < 200);
       
       // Images that fit screen can only rotate, not split
-      const fitsScreen = (dims.width <= 480 && dims.height <= 800);
-      
+      const fitsScreen = (dims.width <= MAX_WIDTH && dims.height <= MAX_HEIGHT);
+
       // Split capability - no upscaling allowed
-      // H-Split scales width to 800, so needs width >= 800
-      // V-Split scales height to 800, so needs height >= 800
-      const canHSplit = dims.width >= 800;
-      const canVSplit = dims.height >= 800;
+      // H-Split scales width to MAX_HEIGHT (long edge), so needs width >= MAX_HEIGHT
+      // V-Split scales height to MAX_HEIGHT, so needs height >= MAX_HEIGHT
+      const canHSplit = dims.width >= MAX_HEIGHT;
+      const canVSplit = dims.height >= MAX_HEIGHT;
 
       images.push({
         path: path,
@@ -2629,16 +2629,16 @@
         if (showSplitLines) {
           let finalWidth;
           if (state === 1) {
-            // H-Split: scale width to 800, rotate, then check width
-            const scaledH = Math.round(img.height * (800 / img.width));
+            // H-Split: scale width to MAX_HEIGHT, rotate, then check width
+            const scaledH = Math.round(img.height * (MAX_HEIGHT / img.width));
             finalWidth = scaledH; // After rotation, height becomes width
           } else {
-            // V-Split: scale height to 800, then check width
-            finalWidth = Math.round(img.width * (800 / img.height));
+            // V-Split: scale height to MAX_HEIGHT, then check width
+            finalWidth = Math.round(img.width * (MAX_HEIGHT / img.height));
           }
-          if (finalWidth > 480) {
-            const minOverlapPx = Math.round(480 * (OVERLAP_PERCENT / 100));
-            const maxStep = 480 - minOverlapPx;
+          if (finalWidth > MAX_WIDTH) {
+            const minOverlapPx = Math.round(MAX_WIDTH * (OVERLAP_PERCENT / 100));
+            const maxStep = MAX_WIDTH - minOverlapPx;
             numParts = Math.ceil((finalWidth - minOverlapPx) / maxStep);
             if (numParts < 2) numParts = 2;
           }
@@ -3084,6 +3084,19 @@ function applyDeviceTarget() {
   const autoLabel = document.getElementById('deviceAutoLabel');
   if (autoLabel) {
     autoLabel.textContent = DETECTED_DEVICE ? `Auto (${DETECTED_DEVICE})` : 'Auto';
+  }
+
+  // Recompute picker classification with new dimensions, then refresh grid.
+  if (Array.isArray(epubImagesCache) && epubImagesCache.length > 0) {
+    for (const img of epubImagesCache) {
+      img.fitsScreen = (img.width <= MAX_WIDTH && img.height <= MAX_HEIGHT);
+      img.canHSplit = img.width >= MAX_HEIGHT;
+      img.canVSplit = img.height >= MAX_HEIGHT;
+    }
+    const pickerSection = document.getElementById('imagePickerSection');
+    if (pickerSection && pickerSection.style.display !== 'none' && typeof renderImageGrid === 'function') {
+      renderImageGrid();
+    }
   }
 }
 
