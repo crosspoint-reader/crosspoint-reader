@@ -73,6 +73,7 @@ class Page {
   }
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
+  void renderTextOnly(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);
 

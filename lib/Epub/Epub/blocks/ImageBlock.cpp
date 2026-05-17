@@ -99,7 +99,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   // Bounds check render position using logical screen dimensions
   if (x < 0 || y < 0 || x + width > screenWidth || y + height > screenHeight) {
-    LOG_ERR("IMG", "Invalid render position: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
+    LOG_ERR("IMG", "Render bounds rejected: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
             screenHeight);
     return;
   }

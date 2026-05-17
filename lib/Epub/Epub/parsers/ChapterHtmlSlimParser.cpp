@@ -25,7 +25,7 @@ constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
 constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
-constexpr const char* IMAGE_TAGS[] = {"img"};
+constexpr const char* IMAGE_TAGS[] = {"img", "image"};
 constexpr const char* SKIP_TAGS[] = {"head"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -269,13 +269,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "src") == 0) {
           src = atts[i + 1];
+        } else if (src.empty() && strcmp(atts[i], "href") == 0) {
+          src = atts[i + 1];
+        } else if (src.empty() && strcmp(atts[i], "xlink:href") == 0) {
+          src = atts[i + 1];
         } else if (strcmp(atts[i], "alt") == 0) {
           alt = atts[i + 1];
         }
       }
+      const size_t hashPos = src.find('#');
+      if (hashPos != std::string::npos) {
+        src = src.substr(0, hashPos);
+      }
+      LOG_DBG("EHP", "Parsed image element: tag=%s src=%s alt=%s", name, src.c_str(), alt.c_str());
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
       if (self->imageRendering == 2) {
+        LOG_DBG("EHP", "Image suppressed by reader setting: %s", src.c_str());
         self->skipUntilDepth = self->depth;
         self->depth += 1;
         return;
@@ -283,23 +293,27 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
       // Skip image if CSS display:none
       if (self->cssParser) {
-        CssStyle imgDisplayStyle = self->cssParser->resolveStyle("img", classAttr);
+        CssStyle imgDisplayStyle = self->cssParser->resolveStyle(name, classAttr);
         if (!styleAttr.empty()) {
           imgDisplayStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
         }
         if (imgDisplayStyle.hasDisplay() && imgDisplayStyle.display == CssDisplay::None) {
+          LOG_DBG("EHP", "Image skipped by CSS display:none: %s", src.c_str());
           self->skipUntilDepth = self->depth;
           self->depth += 1;
           return;
         }
       }
 
-      if (!src.empty() && self->imageRendering != 1) {
-        LOG_DBG("EHP", "Found image: src=%s", src.c_str());
+      if (self->imageRendering == 1) {
+        LOG_DBG("EHP", "Image placeholder by reader setting: %s", src.c_str());
+      }
 
+      if (!src.empty() && self->imageRendering != 1) {
         {
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(self->contentBase + src);
+          LOG_DBG("EHP", "Resolved image: src=%s resolved=%s", src.c_str(), resolvedPath.c_str());
 
           if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
             // Create a unique filename for the cached image
@@ -508,7 +522,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
             } else {
               LOG_ERR("EHP", "Failed to extract image");
             }
-          }  // isFormatSupported
+          } else {
+            LOG_DBG("EHP", "Unsupported image format: %s", resolvedPath.c_str());
+          }
         }
       }
 
