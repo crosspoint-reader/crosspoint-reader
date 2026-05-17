@@ -43,7 +43,13 @@ def decode_status(data: bytearray | bytes) -> dict[str, Any]:
 
 async def find_device(timeout: float):
     print(f"Scanning for {DEVICE_NAME}...")
-    devices = await BleakScanner.discover(timeout=timeout, service_uuids=[SERVICE_UUID])
+    devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    service_uuid = SERVICE_UUID.lower()
+    for device, advertisement in devices.values():
+        advertised_uuids = {uuid.lower() for uuid in advertisement.service_uuids}
+        if service_uuid in advertised_uuids:
+            return device
+    devices = [device for device, _ in devices.values()]
     for device in devices:
         if device.name == DEVICE_NAME:
             return device
