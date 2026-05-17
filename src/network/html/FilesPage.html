@@ -4903,7 +4903,9 @@ function uploadFile() {
       // Save failed file log to batch if in batch mode
       if (useBatchLog && needsConversion) {
         logError(`Upload failed: ${error}`);
-        saveToFileBatchLog(file.name, false, 0, 0);
+        // Preserve conversion size totals when the convert step succeeded but
+        // the upload failed; otherwise nothing was produced and 0/0 is correct.
+        saveToFileBatchLog(file.name, false, convOriginalSize, convNewSize);
       }
 
       failedFiles.push({ name: file.name, error: error, file: originalFile });
