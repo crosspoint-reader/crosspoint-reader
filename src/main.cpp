@@ -201,9 +201,27 @@ void ensureSdFontLoadedForPath(const char* path) {
   const bool isTxtMd = static_cast<bool (*)(std::string_view)>(FsHelpers::hasTxtExtension)(filePath) ||
                        static_cast<bool (*)(std::string_view)>(FsHelpers::hasMarkdownExtension)(filePath);
   if (isTxtMd) {
+    // TXT/MD has no per-book SD font override — use global settings directly.
     sdFontSystem.ensureLoaded(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontSize);
+    return;
+  }
+
+  // For EPUB: honour per-book SD font and/or size overrides. The book record
+  // is available here — the reader activity hasn't started yet, but
+  // RecentBooksStore already has the persisted overrides for this path.
+  const RecentBook book = RECENT_BOOKS.getBookByPath(path);
+  const uint8_t effectiveSize =
+      (book.fontSizeOverride >= 0) ? static_cast<uint8_t>(book.fontSizeOverride) : SETTINGS.fontSize;
+
+  if (!book.sdFontFamilyOverride.empty()) {
+    // Per-book SD font override: load that family at the effective size.
+    sdFontSystem.ensureLoaded(renderer, book.sdFontFamilyOverride.c_str(), effectiveSize);
+  } else if (book.fontFamilyOverride >= 0) {
+    // Per-book built-in font override: no SD font needed; unload if one was active.
+    sdFontSystem.ensureLoaded(renderer, "", effectiveSize);
   } else {
-    sdFontSystem.ensureLoaded(renderer, SETTINGS.sdFontFamilyName, SETTINGS.fontSize);
+    // No family override: use global SD font (if any) at the effective size.
+    sdFontSystem.ensureLoaded(renderer, SETTINGS.sdFontFamilyName, effectiveSize);
   }
 }
 
