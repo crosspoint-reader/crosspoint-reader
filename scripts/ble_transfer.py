@@ -68,6 +68,7 @@ async def put_package(args: argparse.Namespace) -> int:
     size = archive.stat().st_size
     digest = sha256_file(archive)
     final_status: dict[str, Any] = {}
+    status_event = asyncio.Event()
     done = asyncio.Event()
 
     def on_status(_: Any, data: bytearray) -> None:
@@ -80,8 +81,22 @@ async def put_package(args: argparse.Namespace) -> int:
             print(f"\r{state}: {received}/{total} bytes", end="", flush=True)
         else:
             print(f"\n{state}: {final_status}")
+        status_event.set()
         if state in {"installed", "error"}:
             done.set()
+
+    async def wait_for_status(states: set[str], timeout: float) -> dict[str, Any]:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if final_status.get("state") in states:
+                return final_status
+            status_event.clear()
+            remaining = deadline - asyncio.get_running_loop().time()
+            try:
+                await asyncio.wait_for(status_event.wait(), timeout=min(0.25, max(0.0, remaining)))
+            except asyncio.TimeoutError:
+                pass
+        return final_status
 
     device = await find_device(args.scan_timeout)
     if device is None:
@@ -92,15 +107,25 @@ async def put_package(args: argparse.Namespace) -> int:
     async with BleakClient(device) as client:
         await client.start_notify(STATUS_UUID, on_status)
         await write_json(client, {"op": "hello", "version": 1, "code": args.code})
-        await asyncio.sleep(0.2)
-        if final_status.get("state") == "error":
+        hello_status = await wait_for_status({"connected", "error"}, args.control_timeout)
+        if hello_status.get("state") == "error":
             print(f"\nDevice rejected session: {final_status.get('error')}", file=sys.stderr)
+            return 1
+        if hello_status.get("state") != "connected":
+            print("\nTimed out waiting for device session confirmation.", file=sys.stderr)
             return 1
 
         await write_json(
             client,
             {"op": "start_put", "kind": "package", "name": archive.name, "size": size, "sha256": digest},
         )
+        start_status = await wait_for_status({"receiving", "error"}, args.control_timeout)
+        if start_status.get("state") == "error":
+            print(f"\nDevice rejected transfer: {final_status.get('error')}", file=sys.stderr)
+            return 1
+        if start_status.get("state") != "receiving":
+            print("\nTimed out waiting for device transfer start.", file=sys.stderr)
+            return 1
 
         sequence = 0
         with archive.open("rb") as handle:
@@ -141,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     put.add_argument("--chunk-size", type=int, default=160, help="Payload bytes per BLE data frame")
     put.add_argument("--chunk-delay", type=float, default=0.0, help="Delay between chunk writes, in seconds")
     put.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
+    put.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
     put.add_argument("--install-timeout", type=float, default=60.0, help="Install result timeout, in seconds")
     return parser
 

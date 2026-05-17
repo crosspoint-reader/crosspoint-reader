@@ -90,9 +90,9 @@ Build SD-card package archive install first, because BLE uploads should land in 
 directory and reuse the same installer.
 
 The first firmware implementation should live under **File Transfer > Bluetooth Transfer** and should use
-NimBLE-Arduino directly. Start with package upload only, because `.mpkg.zip` archives are small and already have
-size/SHA verification in the package path. Add crash-report download second. Add EPUB upload after the transfer protocol
-survives real phone testing.
+NimBLE-Arduino pinned to an upstream commit that embeds Apache NimBLE 1.9.0 or newer. Start with package upload only,
+because `.mpkg.zip` archives are small and already have size/SHA verification in the package path. Add crash-report
+download second. Add EPUB upload after the transfer protocol survives real phone testing.
 
 ## References
 

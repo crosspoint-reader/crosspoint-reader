@@ -36,7 +36,8 @@ The activity should not start Wi-Fi and should not trigger the web-server silent
 
 ## GATT Protocol
 
-Use NimBLE-Arduino and a private Marginalia service UUID. The first protocol version uses three characteristics:
+Use NimBLE-Arduino from a commit that embeds Apache NimBLE 1.9.0 or newer, because earlier embedded NimBLE versions have
+public Bluetooth security CVEs. The first protocol version uses three characteristics:
 
 - `control`: write with response, UTF-8 JSON commands
 - `data-in`: write without response, binary chunk frames
