@@ -1537,7 +1537,7 @@
 
           <div class="convert-settings" id="convertSettings" style="display:block;">
             <span>⚫ True-Grayscale</span>
-          <span>📏 Max 480×800px</span>
+          <span id="convertSizeSummary">📏 Max 480×800px</span>
           <span>📦 85% JPEG</span>
           <span>🔧 Fix SVG</span>
         </div>
@@ -1572,6 +1572,19 @@
             </div>
           </div>
           -->
+          <!-- Target Device -->
+          <div class="advanced-setting-row" id="deviceSettingRow">
+            <div class="setting-title">📱 Target Device</div>
+            <div class="setting-controls">
+              <div class="rotation-buttons">
+                <button class="rotation-btn device-btn active" data-value="auto" onclick="setDeviceTarget('auto')">
+                  <span id="deviceAutoLabel">Auto</span>
+                </button>
+                <button class="rotation-btn device-btn" data-value="X4" onclick="setDeviceTarget('X4')">X4</button>
+                <button class="rotation-btn device-btn" data-value="X3" onclick="setDeviceTarget('X3')">X3</button>
+              </div>
+            </div>
+          </div>
           <!-- Rotation Direction -->
           <div class="advanced-setting-row" id="rotationSettingRow">
             <div class="setting-title">↻ Rotation Direction</div>
@@ -2990,14 +3003,24 @@ const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 // EPUB Image Conversion Functions (from Baseline JPEG Converter)
 // ============================================================================
 
+// Device profiles (short edge × long edge in portrait orientation)
+const DEVICE_PROFILES = {
+  X4: { width: 480, height: 800, label: 'X4' },
+  X3: { width: 528, height: 792, label: 'X3' },
+};
+
 // Default conversion settings
-const DEFAULT_MAX_WIDTH = 480;
-const DEFAULT_MAX_HEIGHT = 800;
+const DEFAULT_DEVICE = 'X4';
+const DEFAULT_MAX_WIDTH = DEVICE_PROFILES[DEFAULT_DEVICE].width;
+const DEFAULT_MAX_HEIGHT = DEVICE_PROFILES[DEFAULT_DEVICE].height;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
 // Note: Overlap is now always centered distribution (min 5%)
 
 // Dynamic conversion settings (updated by UI)
+let DEVICE_TARGET = 'auto';      // 'auto' | 'X4' | 'X3'
+let DETECTED_DEVICE = null;      // populated from /api/status
+let ACTIVE_DEVICE = DEFAULT_DEVICE;
 let MAX_WIDTH = DEFAULT_MAX_WIDTH;
 let MAX_HEIGHT = DEFAULT_MAX_HEIGHT;
 let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
@@ -3033,10 +3056,40 @@ async function fetchVersion() {
     if (response.ok) {
       const data = await response.json();
       crosspointVersion = data.version || 'Unknown';
+      if (data.device === 'X3' || data.device === 'X4') {
+        DETECTED_DEVICE = data.device;
+        applyDeviceTarget();
+      }
     }
   } catch (e) {
     console.error('Failed to fetch version:', e);
   }
+}
+
+// Resolve DEVICE_TARGET ('auto' | 'X4' | 'X3') to a concrete profile and update UI.
+function applyDeviceTarget() {
+  const resolved = DEVICE_TARGET === 'auto' ? (DETECTED_DEVICE || DEFAULT_DEVICE) : DEVICE_TARGET;
+  const profile = DEVICE_PROFILES[resolved] || DEVICE_PROFILES[DEFAULT_DEVICE];
+  ACTIVE_DEVICE = resolved;
+  MAX_WIDTH = profile.width;
+  MAX_HEIGHT = profile.height;
+
+  const summary = document.getElementById('convertSizeSummary');
+  if (summary) {
+    summary.textContent = `📏 Max ${profile.width}×${profile.height}px`;
+  }
+  document.querySelectorAll('.device-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === DEVICE_TARGET);
+  });
+  const autoLabel = document.getElementById('deviceAutoLabel');
+  if (autoLabel) {
+    autoLabel.textContent = DETECTED_DEVICE ? `Auto (${DETECTED_DEVICE})` : 'Auto';
+  }
+}
+
+function setDeviceTarget(value) {
+  DEVICE_TARGET = value;
+  applyDeviceTarget();
 }
 
 // Batch logging system for multiple files
