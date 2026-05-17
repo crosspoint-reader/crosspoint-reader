@@ -38,6 +38,12 @@ uint32_le sequence
 bytes payload
 ```
 
+For reliability and speed, the host should default to a windowed `write without response` strategy instead of fully
+unacknowledged streaming. The device publishes progress through `status`; the host sends a bounded byte window, waits
+until device progress reaches that window, then continues. Keep acknowledged writes available as a conservative fallback
+and reserve fully unacknowledged writes for debugging because real hardware can drop enough frames to trigger sequence
+mismatch failures.
+
 Add or reuse status states:
 
 ```json

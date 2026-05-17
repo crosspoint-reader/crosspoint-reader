@@ -25,9 +25,13 @@ constexpr const char* BLE_SERVICE_UUID = "6f9f0a00-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BLE_CONTROL_UUID = "6f9f0a01-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BLE_DATA_IN_UUID = "6f9f0a02-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BLE_STATUS_UUID = "6f9f0a03-9b1d-4d1f-9f53-5b6b8b3d0f10";
+constexpr const char* BOOKS_ROOT = "/Books";
 constexpr size_t MAX_BLE_PACKAGE_BYTES = 4UL * 1024UL * 1024UL;
+constexpr size_t MAX_BLE_BOOK_BYTES = 32UL * 1024UL * 1024UL;
 constexpr size_t MAX_FILENAME_BYTES = 96;
+constexpr size_t BLE_PROGRESS_STATUS_INTERVAL_BYTES = 4UL * 1024UL;
 constexpr size_t MPKG_SUFFIX_LEN = 9;
+constexpr size_t EPUB_SUFFIX_LEN = 5;
 
 std::string makeSessionCode() {
   char buffer[7];
@@ -55,15 +59,36 @@ bool endsWithMpkgZip(const std::string& value) {
   return toLowerAscii(value.substr(value.length() - MPKG_SUFFIX_LEN)) == suffix;
 }
 
-bool isSafeBlePackageName(const std::string& value) {
+bool endsWithEpub(const std::string& value) {
+  constexpr const char* suffix = ".epub";
+  if (value.length() < EPUB_SUFFIX_LEN) return false;
+  return toLowerAscii(value.substr(value.length() - EPUB_SUFFIX_LEN)) == suffix;
+}
+
+bool isSafeBleFileName(const std::string& value) {
   if (value.empty() || value.length() > MAX_FILENAME_BYTES || value[0] == '.') return false;
-  if (!endsWithMpkgZip(value)) return false;
   for (const char c : value) {
     const auto uc = static_cast<unsigned char>(c);
     if (std::isalnum(uc) || c == '.' || c == '_' || c == '-') continue;
     return false;
   }
   return true;
+}
+
+bool isSafeBlePackageName(const std::string& value) { return isSafeBleFileName(value) && endsWithMpkgZip(value); }
+
+bool isSafeBleBookName(const std::string& value) { return isSafeBleFileName(value) && endsWithEpub(value); }
+
+std::string transferKindName(const BleTransferActivity::TransferKind kind) {
+  switch (kind) {
+    case BleTransferActivity::TransferKind::PACKAGE:
+      return "package";
+    case BleTransferActivity::TransferKind::BOOK:
+      return "book";
+    case BleTransferActivity::TransferKind::NONE:
+      return "";
+  }
+  return "";
 }
 
 std::string sha256ToHex(const uint8_t digest[32]) {
@@ -93,6 +118,8 @@ std::string stateName(BleTransferActivity::State state) {
       return "installing";
     case BleTransferActivity::State::INSTALLED:
       return "installed";
+    case BleTransferActivity::State::SAVED:
+      return "saved";
     case BleTransferActivity::State::ERROR:
       return "error";
   }
@@ -109,7 +136,11 @@ class ServerCallbacks final : public NimBLEServerCallbacks {
  public:
   explicit ServerCallbacks(BleTransferActivity& activity) : activity_(activity) {}
 
-  void onConnect(NimBLEServer*, NimBLEConnInfo&) override { activity_.onBleConnected(); }
+  void onConnect(NimBLEServer* server, NimBLEConnInfo& connInfo) override {
+    server->updateConnParams(connInfo.getConnHandle(), 6, 12, 0, 120);
+    server->setDataLen(connInfo.getConnHandle(), 251);
+    activity_.onBleConnected();
+  }
 
   void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { activity_.onBleDisconnected(); }
 
@@ -156,17 +187,18 @@ struct BleTransferRuntime {
 
   bool begin(BleTransferActivity& activity) {
     NimBLEDevice::init(BLE_DEVICE_NAME);
+    NimBLEDevice::setMTU(517);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
     server = NimBLEDevice::createServer();
     if (!server) return false;
-    server->setCallbacks(&serverCallbacks);
+    server->setCallbacks(&serverCallbacks, false);
 
     service = server->createService(BLE_SERVICE_UUID);
     if (!service) return false;
 
     auto* control = service->createCharacteristic(BLE_CONTROL_UUID, NIMBLE_PROPERTY::WRITE);
-    auto* dataIn = service->createCharacteristic(BLE_DATA_IN_UUID, NIMBLE_PROPERTY::WRITE_NR);
+    auto* dataIn = service->createCharacteristic(BLE_DATA_IN_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
     status = service->createCharacteristic(BLE_STATUS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     if (!control || !dataIn || !status) return false;
 
@@ -296,33 +328,55 @@ void BleTransferActivity::onControlWrite(const std::string& value) {
     fileName_ = doc["name"] | "";
     expectedSize_ = doc["size"] | 0;
     expectedSha256_ = toLowerAscii(doc["sha256"] | "");
+    transferKind_ = TransferKind::NONE;
 
-    if (kind != "package") {
-      setError("unsupported transfer kind");
-      return;
-    }
-    if (!isSafeBlePackageName(fileName_)) {
-      setError("unsafe package filename");
-      return;
-    }
-    if (expectedSize_ == 0 || expectedSize_ > MAX_BLE_PACKAGE_BYTES) {
-      setError("invalid package size");
-      return;
-    }
     if (!isHexSha256(expectedSha256_)) {
       setError("invalid sha256");
       return;
     }
-    if (!Marginalia::ensurePackageBaseDirectories()) {
-      setError("could not create package directories");
+    if (kind == "package") {
+      if (!isSafeBlePackageName(fileName_)) {
+        setError("unsafe package filename");
+        return;
+      }
+      if (expectedSize_ == 0 || expectedSize_ > MAX_BLE_PACKAGE_BYTES) {
+        setError("invalid package size");
+        return;
+      }
+      if (!Marginalia::ensurePackageBaseDirectories()) {
+        setError("could not create package directories");
+        return;
+      }
+      transferKind_ = TransferKind::PACKAGE;
+      partPath_ = std::string(Marginalia::PACKAGE_SIDELOAD_ROOT) + "/.ble-" + fileName_ + ".part";
+      finalPath_ = std::string(Marginalia::PACKAGE_SIDELOAD_ROOT) + "/" + fileName_;
+    } else if (kind == "book") {
+      if (!isSafeBleBookName(fileName_)) {
+        setError("unsafe book filename");
+        return;
+      }
+      if (expectedSize_ == 0 || expectedSize_ > MAX_BLE_BOOK_BYTES) {
+        setError("invalid book size");
+        return;
+      }
+      if (!Storage.exists(BOOKS_ROOT) && !Storage.mkdir(BOOKS_ROOT)) {
+        setError("could not create books directory");
+        return;
+      }
+      transferKind_ = TransferKind::BOOK;
+      partPath_ = std::string(BOOKS_ROOT) + "/.ble-" + fileName_ + ".part";
+      finalPath_ = std::string(BOOKS_ROOT) + "/" + fileName_;
+      if (Storage.exists(finalPath_.c_str())) {
+        setError("exists");
+        return;
+      }
+    } else {
+      setError("unsupported transfer kind");
       return;
     }
-
-    partPath_ = std::string(Marginalia::PACKAGE_SIDELOAD_ROOT) + "/.ble-" + fileName_ + ".part";
-    finalPath_ = std::string(Marginalia::PACKAGE_SIDELOAD_ROOT) + "/" + fileName_;
     if (Storage.exists(partPath_.c_str())) Storage.remove(partPath_.c_str());
     if (!Storage.openFileForWrite("BLE", partPath_, uploadFile_)) {
-      setError("could not open package file");
+      setError("could not open transfer file");
       return;
     }
 
@@ -373,13 +427,13 @@ void BleTransferActivity::onDataWrite(const std::string& value) {
   const uint8_t* payload = reinterpret_cast<const uint8_t*>(value.data() + sizeof(uint32_t));
   const size_t payloadSize = value.size() - sizeof(uint32_t);
   if (receivedBytes_ + payloadSize > expectedSize_) {
-    setError("package too large");
+    setError("transfer too large");
     resetTransfer(true);
     return;
   }
 
   if (uploadFile_.write(payload, payloadSize) != payloadSize) {
-    setError("package write failed");
+    setError("transfer write failed");
     resetTransfer(true);
     return;
   }
@@ -387,8 +441,12 @@ void BleTransferActivity::onDataWrite(const std::string& value) {
   mbedtls_sha256_update(&shaContext_, payload, payloadSize);
   receivedBytes_ += payloadSize;
   expectedSequence_++;
-  statusDirty_ = true;
-  requestUpdate();
+  if (receivedBytes_ == expectedSize_ ||
+      receivedBytes_ - lastProgressStatusBytes_ >= BLE_PROGRESS_STATUS_INTERVAL_BYTES) {
+    lastProgressStatusBytes_ = receivedBytes_;
+    statusDirty_ = true;
+    requestUpdate();
+  }
 }
 
 void BleTransferActivity::processCommit() {
@@ -400,7 +458,7 @@ void BleTransferActivity::processCommit() {
   transferOpen_ = false;
 
   if (receivedBytes_ != expectedSize_) {
-    setError("package size mismatch");
+    setError("size mismatch");
     resetTransfer(true);
     return;
   }
@@ -415,17 +473,30 @@ void BleTransferActivity::processCommit() {
     return;
   }
 
-  if (Storage.exists(finalPath_.c_str()) && !Storage.remove(finalPath_.c_str())) {
-    setError("could not replace existing package");
+  if (transferKind_ == TransferKind::BOOK && Storage.exists(finalPath_.c_str())) {
+    setError("exists");
     resetTransfer(true);
     return;
   }
+  if (transferKind_ == TransferKind::PACKAGE) {
+    if (Storage.exists(finalPath_.c_str()) && !Storage.remove(finalPath_.c_str())) {
+      setError("could not replace existing package");
+      resetTransfer(true);
+      return;
+    }
+  }
   if (!Storage.rename(partPath_.c_str(), finalPath_.c_str())) {
-    setError("could not finalize package");
+    setError("could not finalize transfer");
     resetTransfer(true);
     return;
   }
   removePartOnExit_ = false;
+
+  if (transferKind_ == TransferKind::BOOK) {
+    savedPath_ = finalPath_;
+    setState(State::SAVED);
+    return;
+  }
 
   const auto archive = Marginalia::inspectPackageArchive(finalPath_);
   if (!archive.ok) {
@@ -475,8 +546,13 @@ void BleTransferActivity::resetTransfer(const bool removePart) {
   partPath_.clear();
   finalPath_.clear();
   expectedSha256_.clear();
+  packageId_.clear();
+  packageName_.clear();
+  savedPath_.clear();
+  transferKind_ = TransferKind::NONE;
   expectedSize_ = 0;
   receivedBytes_ = 0;
+  lastProgressStatusBytes_ = 0;
   expectedSequence_ = 0;
   transferOpen_ = false;
   pendingCommit_ = false;
@@ -507,11 +583,17 @@ std::string BleTransferActivity::buildStatusJson() const {
   doc["state"] = state.c_str();
   doc["code"] = sessionCode_.c_str();
   if (expectedSize_ > 0) {
+    const std::string kind = transferKindName(transferKind_);
+    if (!kind.empty()) doc["kind"] = kind.c_str();
     doc["received"] = receivedBytes_;
     doc["size"] = expectedSize_;
   }
   if (!packageId_.empty()) doc["package"] = packageId_.c_str();
   if (!packageName_.empty()) doc["name"] = packageName_.c_str();
+  if (state_ == State::SAVED && !savedPath_.empty()) {
+    doc["name"] = fileName_.c_str();
+    doc["path"] = savedPath_.c_str();
+  }
   if (state_ == State::ERROR && !errorMessage_.empty()) doc["error"] = errorMessage_.c_str();
 
   String output;
@@ -562,6 +644,10 @@ void BleTransferActivity::render(RenderLock&&) {
     case State::INSTALLED:
       primary = tr(STR_BLE_TRANSFER_INSTALLED);
       secondary = packageName_.empty() ? packageId_ : packageName_;
+      break;
+    case State::SAVED:
+      primary = tr(STR_BLE_TRANSFER_SAVED);
+      secondary = savedPath_.empty() ? fileName_ : savedPath_;
       break;
     case State::ERROR:
       primary = tr(STR_ERROR_MSG);

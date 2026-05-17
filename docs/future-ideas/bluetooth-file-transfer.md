@@ -77,9 +77,23 @@ Do not provide arbitrary SD-card read/write over BLE. It creates security and co
 
 ## Security And UX
 
-BLE transfer mode should be explicit and temporary. The device should show a pairing code or confirmation prompt before
-accepting writes. Encrypted/authenticated characteristics are preferred once pairing is reliable; until then, only allow
-writes while the user is physically on the transfer screen.
+BLE transfer mode should be explicit and temporary. The device should only advertise while the user is physically on the
+Bluetooth Transfer screen.
+
+Pairing should follow the Wi-Fi credential model already used by the firmware:
+
+- first use requires the visible six-digit transfer code
+- after a successful authenticated handshake, prompt **Save this host?**
+- save a trusted-host record with a host id, display name, and shared secret
+- store the shared secret with the same hardware-tied obfuscation pattern used for saved Wi-Fi passwords
+- let later transfers authenticate with a nonce-based challenge response instead of asking for the code again
+- show the trusted host name while connected
+- provide **Forget host** with the same cancel/forget prompt shape as saved Wi-Fi networks
+- keep the visible code fallback for new hosts, deleted host config, and recovery tooling
+
+Use application-level trust before OS BLE bonding. NimBLE bonding and encrypted characteristics can be added later, but
+the first paired-host flow should be testable through Bleak on macOS, Linux, and phones without relying on platform-
+specific bonding behavior.
 
 The protocol should treat disconnects as normal. Incomplete uploads remain as `.part` files in staging and are removed
 on the next transfer-mode start unless a resumable manifest says they can continue.
