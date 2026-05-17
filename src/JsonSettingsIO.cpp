@@ -240,6 +240,47 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
 
+  // Legacy migration: if old keys exist, convert to unified sleep screen format.
+  if (!doc["sleepScreenCoverMode"].isNull() || !doc["sleepScreen"].isNull()) {
+    uint8_t oldSleepScreen = doc["sleepScreen"] | (uint8_t)0;
+    uint8_t oldCoverMode = doc["sleepScreenCoverMode"] | (uint8_t)0;
+    switch (oldSleepScreen) {
+      case 0:  // DARK
+        s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+        break;
+      case 1:  // LIGHT
+        s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+        s.sleepScreenFilter = CrossPointSettings::SLEEP_SCREEN_FILTER::FILTER_NEGATIVE;
+        break;
+      case 2:  // CUSTOM
+        s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+        break;
+      case 3:  // COVER
+        s.sleepScreen = (oldCoverMode == 1) ? CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP
+                                            : CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT;
+        break;
+      case 4:  // BLANK
+        s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::BLANK;
+        break;
+      case 5:  // COVER_CUSTOM
+        s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
+        break;
+      default:
+        s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::LOGO;
+        break;
+    }
+    if (!doc["sleepScreenCoverFilter"].isNull()) {
+      uint8_t oldFilter = doc["sleepScreenCoverFilter"] | (uint8_t)0;
+      if ((s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_FIT ||
+           s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CROP ||
+           s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM) &&
+          oldFilter < CrossPointSettings::SLEEP_SCREEN_FILTER_COUNT) {
+        s.sleepScreenFilter = oldFilter;
+      }
+    }
+    if (needsResave) *needsResave = true;
+  }
+
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
     s.language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));

@@ -120,20 +120,17 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 #### 3.6.1 Display
 
-- **Sleep Screen**: Which sleep screen to display when the device sleeps:
-  - "Dark" (default) - The default dark Crosspoint logo sleep screen
-  - "Light" - The same default sleep screen, on a white background
+- **Sleep Screen Mode**: Which sleep screen to display when the device sleeps:
+  - "Logo" (default) - The CrossPoint logo on a dark background
   - "Custom" - Custom images from the SD card; see [Sleep Screen](#37-sleep-screen) below for more information
-  - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
-  - "None" - A blank screen
-  - "Cover + Custom" - The book cover image, falls back to "Custom" behavior
-- **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
-  - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
-  - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
-- **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected:
-  - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
-  - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
-  - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
+  - "Cover (Fit)" - The book cover image scaled to fit, falls back to **Logo** if no book is open
+  - "Cover (Crop)" - The book cover image scaled and cropped to fill, falls back to **Logo** if no book is open
+  - "Cover + Custom" - The book cover image, falls back to **Custom** if no book is open, then **Logo**
+  - "Blank" - A blank screen
+- **Sleep Screen Filter**: Visual filter applied to the sleep screen:
+  - "None" (default) - Bitmap-based modes (Custom, Cover) render with greyscale dithering
+  - "Contrast" - Bitmap-based modes render as black & white without greyscale (no effect on Logo or Blank)
+  - "Negative" - Inverts the sleep screen: light logo, black blank screen, inverted bitmaps
 - **Status Bar**: Configure the status bar displayed while reading:
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
@@ -350,23 +347,24 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 
 ### 3.7 Sleep Screen
 
-The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
+The **Sleep Screen Mode** setting controls what is displayed when the device goes to sleep:
 
 | Mode | Behavior |
 |------|----------|
-| **Dark** (default) | The CrossPoint logo on a dark background. |
-| **Light** | The CrossPoint logo on a white background. |
-| **Custom** | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found. |
-| **Cover** | The cover of the currently open book. Falls back to **Dark** if no book is open. |
-| **Cover + Custom** | The cover of the currently open book. Falls back to **Custom** behavior if no book is open. |
-| **None** | A blank screen. |
+| **Logo** (default) | The CrossPoint logo on a dark background. |
+| **Custom** | A custom image from the SD card (see below). Falls back to **Logo** if no custom image is found. |
+| **Cover (Fit)** | The cover of the currently open book, scaled to fit. Falls back to **Logo** if no book is open. |
+| **Cover (Crop)** | The cover of the currently open book, scaled and cropped to fill. Falls back to **Logo** if no book is open. |
+| **Cover + Custom** | The cover of the currently open book. Falls back to **Custom** if no book is open, then **Logo**. |
+| **Blank** | A blank screen. |
 
-#### Cover settings
+#### Sleep Screen Filter
 
-When using **Cover** or **Cover + Custom**, two additional settings apply:
+The **Sleep Screen Filter** applies a visual filter:
 
-- **Sleep Screen Cover Mode**: **Fit** (scale to fit, white borders) or **Crop** (scale and crop to fill the screen).
-- **Sleep Screen Cover Filter**: **None** (grayscale), **Contrast** (black & white), or **Inverted** (inverted black & white).
+- **None** (default): Bitmap-based modes (Custom, Cover) render with greyscale dithering.
+- **Contrast**: Bitmap-based modes render as black & white without greyscale. No effect on Logo or Blank modes.
+- **Negative**: Inverts the entire sleep screen — light logo, black blank screen, inverted bitmaps.
 
 #### Custom images
 
