@@ -69,7 +69,7 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   config.event_handler = httpEventHandler;
   config.user_data = buf;
   config.method = method;
-  config.timeout_ms = 15000;
+  config.timeout_ms = 5000;
   config.buffer_size = HTTP_BUF_SIZE;
   config.buffer_size_tx = HTTP_BUF_SIZE;
   config.crt_bundle_attach = esp_crt_bundle_attach;

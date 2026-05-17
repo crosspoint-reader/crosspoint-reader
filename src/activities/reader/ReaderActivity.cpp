@@ -2,17 +2,23 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <I18n.h>
 
+#include "AutoKOSync.h"
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "KOReaderCredentialStore.h"
 #include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
+#include "WifiCredentialStore.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -74,10 +80,11 @@ void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   activityManager.goToFileBrowser(std::move(initialPath));
 }
 
-void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
+void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub, std::optional<KOReaderProgress> remoteProgress) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub)));
+  activityManager.replaceActivity(
+      std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub), std::move(remoteProgress)));
 }
 
 void ReaderActivity::onGoToBmpViewer(const std::string& path) {
@@ -124,12 +131,38 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
+    // Sync on open: fetch remote progress BEFORE loading epub.
+    // At this point no Epub is in memory, so full heap is available for TLS.
+    std::optional<KOReaderProgress> remoteProgress;
+    if (SETTINGS.autoKOSync >= AutoKOSync::ON_OPEN_CLOSE && KOREADER_STORE.hasCredentials()) {
+      const auto& ssid = WIFI_STORE.getLastConnectedSsid();
+      const auto* cred = WIFI_STORE.findCredential(ssid);
+      if (cred) {
+        LOG_DBG("READER", "Auto sync on open: %s", initialBookPath.c_str());
+        GUI.drawPopup(renderer, tr(STR_SYNC_PROGRESS_SYNCING));
+        auto syncResult = AutoKOSync::syncOnOpen(initialBookPath, cred->ssid, cred->password);
+        if (syncResult.hasRemote) {
+          remoteProgress = std::move(syncResult.remoteProgress);
+        }
+        if (syncResult.status == AutoKOSync::SyncStatus::SUCCESS) {
+          GUI.drawPopup(renderer, tr(STR_SYNC_PROGRESS_DONE));
+        } else if (syncResult.status == AutoKOSync::SyncStatus::WIFI_FAILED) {
+          GUI.drawPopup(renderer, tr(STR_SYNC_PROGRESS_NO_WIFI));
+        } else if (syncResult.status != AutoKOSync::SyncStatus::SKIPPED) {
+          GUI.drawPopup(renderer, tr(STR_SYNC_PROGRESS_FAILED));
+        }
+      } else {
+        LOG_DBG("READER", "Auto sync on open: no WiFi credential for SSID '%s'", ssid.c_str());
+        AutoKOSync::logToSd("SKIP open: no WiFi credential");
+      }
+    }
+
     auto epub = loadEpub(initialBookPath);
     if (!epub) {
       onGoBack();
       return;
     }
-    onGoToEpubReader(std::move(epub));
+    onGoToEpubReader(std::move(epub), std::move(remoteProgress));
   }
 }
 

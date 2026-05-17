@@ -5,7 +5,9 @@
 
 #include <optional>
 
+#include "AutoKOSync.h"
 #include "EpubReaderMenuActivity.h"
+#include "KOReaderSyncClient.h"
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
@@ -32,6 +34,11 @@ class EpubReaderActivity final : public Activity {
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
 
+  // Auto KOSync state
+  std::optional<KOReaderProgress> remoteProgressOnOpen;
+  AutoKOSync::ClosePayload autoSyncClosePayload{};
+  bool manualSyncTriggered = false;  // Suppress auto-close-sync after manual sync
+
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
@@ -53,14 +60,19 @@ class EpubReaderActivity final : public Activity {
   void applyOrientation(uint8_t orientation);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
+  void prepareAutoSyncClosePayload();
+  float getCurrentBookProgressPercent() const;
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 
  public:
-  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
-      : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
+  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
+                              std::optional<KOReaderProgress> remoteProgress = std::nullopt)
+      : Activity("EpubReader", renderer, mappedInput),
+        epub(std::move(epub)),
+        remoteProgressOnOpen(std::move(remoteProgress)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

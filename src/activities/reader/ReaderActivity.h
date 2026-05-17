@@ -1,6 +1,8 @@
 #pragma once
 #include <memory>
+#include <optional>
 
+#include "KOReaderSyncClient.h"
 #include "activities/Activity.h"
 #include "activities/home/FileBrowserActivity.h"
 
@@ -19,7 +21,7 @@ class ReaderActivity final : public Activity {
   static bool isBmpFile(const std::string& path);
 
   void goToLibrary(const std::string& fromBookPath = "");
-  void onGoToEpubReader(std::unique_ptr<Epub> epub);
+  void onGoToEpubReader(std::unique_ptr<Epub> epub, std::optional<KOReaderProgress> remoteProgress = std::nullopt);
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
   void onGoToTxtReader(std::unique_ptr<Txt> txt);
   void onGoToBmpViewer(const std::string& path);

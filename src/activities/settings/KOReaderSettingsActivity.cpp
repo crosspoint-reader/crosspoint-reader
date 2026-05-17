@@ -5,6 +5,8 @@
 
 #include <cstring>
 
+#include "AutoKOSync.h"
+#include "CrossPointSettings.h"
 #include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -13,9 +15,9 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+constexpr int MENU_ITEMS = 6;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,    StrId::STR_SYNC_SERVER_URL,
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTO_KOSYNC, StrId::STR_AUTHENTICATE};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -98,6 +100,11 @@ void KOReaderSettingsActivity::handleSelection() {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (selectedIndex == 4) {
+    // Auto KOSync - cycle through Off / On Close / On Open + Close
+    SETTINGS.autoKOSync = (SETTINGS.autoKOSync + 1) % 3;
+    SETTINGS.saveToFile();
+    requestUpdate();
+  } else if (selectedIndex == 5) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -136,6 +143,15 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
           return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
+          switch (SETTINGS.autoKOSync) {
+            case AutoKOSync::ON_CLOSE:
+              return std::string(tr(STR_AUTO_KOSYNC_ON_CLOSE));
+            case AutoKOSync::ON_OPEN_CLOSE:
+              return std::string(tr(STR_AUTO_KOSYNC_ON_OPEN_CLOSE));
+            default:
+              return std::string(tr(STR_AUTO_KOSYNC_OFF));
+          }
+        } else if (index == 5) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));
