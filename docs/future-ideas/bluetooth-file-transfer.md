@@ -45,7 +45,7 @@ Create a Marginalia BLE Transfer GATT service with four characteristics:
 
 Upload flow:
 
-1. User opens **Extensions > Transfer > Bluetooth**.
+1. User opens **File Transfer > Bluetooth Transfer**.
 2. Device advertises `Marginalia Transfer` for a limited window and keeps auto-sleep disabled.
 3. Client connects and sends `START_PUT` with destination class, filename, byte size, and SHA-256.
 4. Firmware opens a `.part` file under a staging directory.
