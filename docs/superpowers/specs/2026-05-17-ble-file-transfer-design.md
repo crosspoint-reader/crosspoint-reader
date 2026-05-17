@@ -52,6 +52,21 @@ Control commands:
 {"op":"cancel"}
 ```
 
+The initial authentication flow is code-based: the host sends `hello` with the visible six-digit code, and the device
+accepts the session only if the code matches the current Bluetooth Transfer screen.
+
+The paired-host flow should extend `hello` without changing the transfer commands:
+
+```json
+{"op":"hello","version":1,"host_id":"host-uuid","device_nonce":"base64","response":"base64"}
+```
+
+The device generates a single-use nonce when advertising starts and includes it in the status payload for trusted-host
+clients. The host computes `HMAC-SHA256(device_nonce || host_id || protocol_version)` with the shared secret from its
+trusted-host record and sends the result as `response`. The device verifies the HMAC, marks the nonce consumed, and
+accepts the session on match. Failed nonce authentication should leave the session unauthenticated, log the failure, and
+fall back to the visible-code `hello` path.
+
 Data frames use a simple binary header:
 
 ```text
@@ -93,7 +108,24 @@ BLE transfer is explicit and temporary. The device only advertises while the Blu
 
 The screen shows a six-digit session code. The client must send that code in `hello` before transfer begins. This is not a replacement for BLE pairing security, but it prevents accidental writes from nearby generic BLE clients and keeps the first PR simple.
 
-Future hardening can add NimBLE bonding, MITM passkey confirmation, and phone UI pairing. The protocol shape should not depend on those later additions.
+The first hardening step should mirror the existing Wi-Fi credential UX instead of forcing users to type a code every time:
+
+- first connection uses the visible six-digit code
+- after the first successful authenticated commit, the device can prompt **Save this host?**
+- if accepted, firmware stores a trusted-host record with a host id, display name, and shared secret
+- the host stores the matching device id, host id, and shared secret in its local Marginalia config
+- later transfers use a nonce-based challenge response in `hello` and do not require a visible code
+- the Bluetooth Transfer screen shows when a trusted host is connected
+- the screen exposes a **Forget host** action using the same cancel/forget prompt shape as saved Wi-Fi networks
+- the six-digit code remains available for new hosts, deleted host config, and recovery tooling
+
+Prompting after commit avoids saving a host that merely guessed or entered the code but never completed a useful file
+operation. For package uploads, the prompt should appear after the archive is accepted into sideload and the install
+transaction reaches a final state; for book uploads, after the file is verified and saved.
+
+Store trusted hosts with a small `BleTrustedHostStore` modeled on `WifiCredentialStore`: JSON on SD card, hardware-tied obfuscation for the shared secret, an explicit maximum host count, and remove/clear helpers for UI actions. Start with one trusted host unless the host-management UI is expanded to list multiple names.
+
+Avoid OS BLE bonding in the first pairing PR. NimBLE bonding and encrypted characteristics can be layered on later, but a Marginalia application-level trust record is easier to test with Bleak across macOS, Linux, and phones and matches the existing Wi-Fi save/forget product behavior.
 
 ## Host Tool
 
@@ -152,6 +184,14 @@ Hardware validation:
 - verify installed package appears in Extensions
 - verify bad SHA fails and leaves no `.part` file
 - verify Back exits BLE and returns to File Transfer mode selection
+
+Trusted-host validation for the pairing follow-up:
+
+- first connect with the visible code, complete one authenticated transfer, and verify the **Save this host?** prompt
+- accept the prompt and verify the next connection uses nonce-based `hello` authentication without requiring the code
+- decline the prompt and verify the next connection still requires the visible code
+- use **Forget host** on the Bluetooth Transfer screen and verify the trusted host can no longer authenticate by nonce
+- verify a bad nonce/HMAC falls back to code-based authentication and does not accept writes before a valid `hello`
 
 ## Out Of Scope
 

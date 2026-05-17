@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload Marginalia package archives over Bluetooth LE."""
+"""Upload Marginalia files over Bluetooth LE."""
 
 from __future__ import annotations
 
@@ -24,6 +24,9 @@ CONTROL_UUID = "6f9f0a01-9b1d-4d1f-9f53-5b6b8b3d0f10"
 DATA_IN_UUID = "6f9f0a02-9b1d-4d1f-9f53-5b6b8b3d0f10"
 STATUS_UUID = "6f9f0a03-9b1d-4d1f-9f53-5b6b8b3d0f10"
 DEVICE_NAME = "Marginalia Transfer"
+PROGRESS_PRINT_BYTES = 4096
+PROGRESS_PRINT_SECONDS = 1.0
+DEFAULT_WINDOW_BYTES = 4096
 
 
 def sha256_file(path: Path) -> str:
@@ -63,33 +66,53 @@ async def write_json(client: BleakClient, payload: dict[str, Any]) -> None:
     await client.write_gatt_char(CONTROL_UUID, json.dumps(payload, separators=(",", ":")).encode("utf-8"), response=True)
 
 
-async def put_package(args: argparse.Namespace) -> int:
-    archive = Path(args.archive).expanduser().resolve()
-    if not archive.is_file():
-        print(f"Archive not found: {archive}", file=sys.stderr)
+async def put_file(
+    args: argparse.Namespace,
+    *,
+    kind: str,
+    path_arg: str,
+    required_suffix: str,
+    success_states: set[str],
+) -> int:
+    source = Path(path_arg).expanduser().resolve()
+    if not source.is_file():
+        print(f"File not found: {source}", file=sys.stderr)
         return 2
-    if not archive.name.endswith(".mpkg.zip"):
-        print("Archive filename must end with .mpkg.zip", file=sys.stderr)
+    if not source.name.lower().endswith(required_suffix):
+        print(f"Filename must end with {required_suffix}", file=sys.stderr)
         return 2
 
-    size = archive.stat().st_size
-    digest = sha256_file(archive)
+    size = source.stat().st_size
+    digest = sha256_file(source)
     final_status: dict[str, Any] = {}
     status_event = asyncio.Event()
     done = asyncio.Event()
+    last_print_received = -PROGRESS_PRINT_BYTES
+    last_print_time = 0.0
 
     def on_status(_: Any, data: bytearray) -> None:
-        nonlocal final_status
+        nonlocal final_status, last_print_received, last_print_time
         final_status = decode_status(data)
         state = final_status.get("state", "?")
         received = final_status.get("received")
         total = final_status.get("size")
         if received is not None and total:
-            print(f"\r{state}: {received}/{total} bytes", end="", flush=True)
+            now = asyncio.get_running_loop().time()
+            is_final = state in success_states or state == "error" or received == total
+            should_print = (
+                is_final
+                or received == 0
+                or received - last_print_received >= PROGRESS_PRINT_BYTES
+                or now - last_print_time >= PROGRESS_PRINT_SECONDS
+            )
+            if should_print:
+                print(f"\r{state}: {received}/{total} bytes", end="", flush=True)
+                last_print_received = received
+                last_print_time = now
         else:
             print(f"\n{state}: {final_status}")
         status_event.set()
-        if state in {"installed", "error"}:
+        if state in success_states or state == "error":
             done.set()
 
     async def wait_for_status(states: set[str], timeout: float) -> dict[str, Any]:
@@ -104,6 +127,23 @@ async def put_package(args: argparse.Namespace) -> int:
             except asyncio.TimeoutError:
                 pass
         return final_status
+
+    async def wait_for_received(min_received: int, timeout: float) -> bool:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            state = final_status.get("state")
+            if state == "error":
+                return False
+            received = final_status.get("received")
+            if isinstance(received, int) and received >= min_received:
+                return True
+            status_event.clear()
+            remaining = deadline - asyncio.get_running_loop().time()
+            try:
+                await asyncio.wait_for(status_event.wait(), timeout=min(0.5, max(0.0, remaining)))
+            except asyncio.TimeoutError:
+                pass
+        return False
 
     try:
         device = await find_device(args.scan_timeout)
@@ -130,7 +170,7 @@ async def put_package(args: argparse.Namespace) -> int:
 
                 await write_json(
                     client,
-                    {"op": "start_put", "kind": "package", "name": archive.name, "size": size, "sha256": digest},
+                    {"op": "start_put", "kind": kind, "name": source.name, "size": size, "sha256": digest},
                 )
                 start_status = await wait_for_status({"receiving", "error"}, args.control_timeout)
                 if start_status.get("state") == "error":
@@ -141,22 +181,35 @@ async def put_package(args: argparse.Namespace) -> int:
                     return 1
 
                 sequence = 0
-                with archive.open("rb") as handle:
+                sent_bytes = 0
+                ack_floor = 0
+                with source.open("rb") as handle:
                     while True:
                         payload = handle.read(args.chunk_size)
                         if not payload:
                             break
                         frame = struct.pack("<I", sequence) + payload
-                        await client.write_gatt_char(DATA_IN_UUID, frame, response=False)
+                        await client.write_gatt_char(DATA_IN_UUID, frame, response=args.transfer_mode == "response")
                         sequence += 1
+                        sent_bytes += len(payload)
+                        if args.transfer_mode == "windowed" and sent_bytes - ack_floor >= args.window_bytes:
+                            ack_floor = sent_bytes
+                            if not await wait_for_received(ack_floor, args.control_timeout):
+                                error = final_status.get("error") or f"receiver did not acknowledge {ack_floor} bytes"
+                                print(f"\nTransfer failed: {error}", file=sys.stderr)
+                                return 1
                         if args.chunk_delay > 0:
                             await asyncio.sleep(args.chunk_delay)
+                if args.transfer_mode == "windowed" and not await wait_for_received(sent_bytes, args.control_timeout):
+                    error = final_status.get("error") or f"receiver did not acknowledge {sent_bytes} bytes"
+                    print(f"\nTransfer failed: {error}", file=sys.stderr)
+                    return 1
 
                 await write_json(client, {"op": "commit"})
                 try:
                     await asyncio.wait_for(done.wait(), timeout=args.install_timeout)
                 except asyncio.TimeoutError:
-                    print("\nTimed out waiting for install result.", file=sys.stderr)
+                    print("\nTimed out waiting for transfer result.", file=sys.stderr)
                     return 1
             finally:
                 try:
@@ -169,10 +222,33 @@ async def put_package(args: argparse.Namespace) -> int:
 
     print()
     if final_status.get("state") == "installed":
-        print(f"Installed {final_status.get('name') or final_status.get('package') or archive.name}")
+        print(f"Installed {final_status.get('name') or final_status.get('package') or source.name}")
+        return 0
+    if final_status.get("state") == "saved":
+        print(f"Saved {final_status.get('path') or final_status.get('name') or source.name}")
         return 0
     print(f"Transfer failed: {final_status.get('error') or final_status}", file=sys.stderr)
     return 1
+
+
+async def put_package(args: argparse.Namespace) -> int:
+    return await put_file(
+        args,
+        kind="package",
+        path_arg=args.archive,
+        required_suffix=".mpkg.zip",
+        success_states={"installed"},
+    )
+
+
+async def put_book(args: argparse.Namespace) -> int:
+    return await put_file(
+        args,
+        kind="book",
+        path_arg=args.book,
+        required_suffix=".epub",
+        success_states={"saved"},
+    )
 
 
 def six_digit_code(value: str) -> str:
@@ -200,9 +276,46 @@ def build_parser() -> argparse.ArgumentParser:
     put.add_argument("--code", required=True, type=six_digit_code, help="Six-digit code shown on the device")
     put.add_argument("--chunk-size", type=positive_int, default=160, help="Payload bytes per BLE data frame")
     put.add_argument("--chunk-delay", type=float, default=0.0, help="Delay between chunk writes, in seconds")
+    put.add_argument(
+        "--transfer-mode",
+        choices=("windowed", "response", "no-response"),
+        default="windowed",
+        help="BLE write strategy: windowed is faster with receiver ACKs; response is slowest; no-response is unsafe",
+    )
+    put.add_argument("--window-bytes", type=positive_int, default=DEFAULT_WINDOW_BYTES, help="Bytes sent before waiting for receiver progress in windowed mode")
+    put.add_argument(
+        "--write-without-response",
+        dest="transfer_mode",
+        action="store_const",
+        const="no-response",
+        help="Deprecated alias for --transfer-mode no-response; may require --chunk-delay",
+    )
     put.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
     put.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
     put.add_argument("--install-timeout", type=float, default=60.0, help="Install result timeout, in seconds")
+
+    put_book_parser = sub.add_parser("put-book", help="Upload an .epub book")
+    put_book_parser.add_argument("book", help="Path to the .epub book")
+    put_book_parser.add_argument("--code", required=True, type=six_digit_code, help="Six-digit code shown on the device")
+    put_book_parser.add_argument("--chunk-size", type=positive_int, default=160, help="Payload bytes per BLE data frame")
+    put_book_parser.add_argument("--chunk-delay", type=float, default=0.0, help="Delay between chunk writes, in seconds")
+    put_book_parser.add_argument(
+        "--transfer-mode",
+        choices=("windowed", "response", "no-response"),
+        default="windowed",
+        help="BLE write strategy: windowed is faster with receiver ACKs; response is slowest; no-response is unsafe",
+    )
+    put_book_parser.add_argument("--window-bytes", type=positive_int, default=DEFAULT_WINDOW_BYTES, help="Bytes sent before waiting for receiver progress in windowed mode")
+    put_book_parser.add_argument(
+        "--write-without-response",
+        dest="transfer_mode",
+        action="store_const",
+        const="no-response",
+        help="Deprecated alias for --transfer-mode no-response; may require --chunk-delay",
+    )
+    put_book_parser.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
+    put_book_parser.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
+    put_book_parser.add_argument("--save-timeout", type=float, default=60.0, help="Save result timeout, in seconds")
     return parser
 
 
@@ -210,6 +323,9 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.command == "put-package":
         return asyncio.run(put_package(args))
+    if args.command == "put-book":
+        args.install_timeout = args.save_timeout
+        return asyncio.run(put_book(args))
     return 2
 
 

@@ -13,7 +13,8 @@ struct BleTransferRuntime;
 
 class BleTransferActivity final : public Activity {
  public:
-  enum class State { STARTING, ADVERTISING, CONNECTED, RECEIVING, VERIFYING, INSTALLING, INSTALLED, ERROR };
+  enum class State { STARTING, ADVERTISING, CONNECTED, RECEIVING, VERIFYING, INSTALLING, INSTALLED, SAVED, ERROR };
+  enum class TransferKind { NONE, PACKAGE, BOOK };
 
   explicit BleTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   ~BleTransferActivity() override;
@@ -44,10 +45,13 @@ class BleTransferActivity final : public Activity {
   std::string expectedSha256_;
   std::string packageId_;
   std::string packageName_;
+  std::string savedPath_;
   std::string errorMessage_;
 
+  TransferKind transferKind_ = TransferKind::NONE;
   size_t expectedSize_ = 0;
   size_t receivedBytes_ = 0;
+  size_t lastProgressStatusBytes_ = 0;
   uint32_t expectedSequence_ = 0;
   bool helloAccepted_ = false;
   bool transferOpen_ = false;
