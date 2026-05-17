@@ -19,20 +19,16 @@
 namespace {
 constexpr uint8_t SLEEP_FACTORY_INTERNAL_PREFLASH_PASSES = 0;
 
-struct FactorySleepPreconditionPass {
-  uint8_t color;
-  HalDisplay::RefreshMode refreshMode;
-};
-
-constexpr FactorySleepPreconditionPass FACTORY_SLEEP_PRECONDITION[] = {
-    {0x00, HalDisplay::FULL_REFRESH},
-    {0xFF, HalDisplay::FULL_REFRESH},
-};
+// Stock V5.5.9 byte-match: black flash then white flash, each via the new
+// EInkDisplay::displayBufferPrecondition() path which fires CTRL2=0xF7 (full
+// power cycle) and skips the SINGLE_BUFFER_MODE post-RED-sync. Matches stock's
+// precondition function at firmware addr 0x42010096 — see
+// docs/v559-disassembly-findings.md.
+constexpr uint8_t FACTORY_SLEEP_PRECONDITION_COLORS[] = {0x00, 0xFF};
 
 void runFactorySleepPrecondition(const GfxRenderer& renderer) {
-  for (const auto& pass : FACTORY_SLEEP_PRECONDITION) {
-    renderer.clearScreen(pass.color);
-    renderer.displayBuffer(pass.refreshMode);
+  for (const uint8_t color : FACTORY_SLEEP_PRECONDITION_COLORS) {
+    renderer.displayBufferPrecondition(color);
   }
 }
 }  // namespace
@@ -257,8 +253,7 @@ bool SleepActivity::renderPxcSleepScreen(const std::string& path) const {
   };
   PxcCtx ctx{&file, dataOffset, pxcWidth, pxcHeight};
 
-  // EXPERIMENT: precondition disabled to test ghost hypothesis. See docs/v559-disassembly-findings.md.
-  // runFactorySleepPrecondition(renderer);
+  runFactorySleepPrecondition(renderer);
   renderer.renderGrayscaleSinglePass(
       GfxRenderer::GrayscaleDriveMode::FactoryQuality,
       [](const GfxRenderer& r, const void* raw) {
@@ -343,8 +338,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
       float cropX, cropY;
     };
     BitmapGrayCtx grayCtx{&bitmap, x, y, pageWidth, pageHeight, cropX, cropY};
-    // EXPERIMENT: precondition disabled to test ghost hypothesis.
-    // runFactorySleepPrecondition(renderer);
+    runFactorySleepPrecondition(renderer);
     renderer.renderGrayscaleSinglePass(
         GfxRenderer::GrayscaleDriveMode::FactoryQuality,
         [](const GfxRenderer& r, const void* raw) {
@@ -418,8 +412,7 @@ void SleepActivity::renderCoverSleepScreen() const {
       }
 
       LOG_DBG("SLP", "Direct XTCH plane render: %ux%u", lastXtc.getPageWidth(), lastXtc.getPageHeight());
-      // EXPERIMENT: precondition disabled to test ghost hypothesis.
-      // runFactorySleepPrecondition(renderer);
+      runFactorySleepPrecondition(renderer);
       renderer.displayXtchPlanes(plane1, plane2, lastXtc.getPageWidth(), lastXtc.getPageHeight(), nullptr, nullptr,
                                  GfxRenderer::GrayscaleDriveMode::FactoryQuality, false);
       free(plane1);

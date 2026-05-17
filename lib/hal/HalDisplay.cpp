@@ -90,6 +90,8 @@ void HalDisplay::displayGrayBufferFactorySetup(const unsigned char* lut) {
 
 void HalDisplay::displayGrayBufferFactoryActivate() { einkDisplay.displayGrayBufferFactoryActivate(); }
 
+void HalDisplay::displayBufferPrecondition(uint8_t color) { einkDisplay.displayBufferPrecondition(color); }
+
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 
 uint16_t HalDisplay::getDisplayHeight() const { return einkDisplay.getDisplayHeight(); }

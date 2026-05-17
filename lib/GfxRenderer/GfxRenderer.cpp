@@ -1168,6 +1168,11 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   displayState = DisplayState::BW;
 }
 
+void GfxRenderer::displayBufferPrecondition(uint8_t color) const {
+  display.displayBufferPrecondition(color);
+  displayState = DisplayState::BW;
+}
+
 void GfxRenderer::displayGrayBuffer(const unsigned char* lut, const bool factoryMode) const {
   display.displayGrayBuffer(fadingFix, lut, factoryMode);
   if (factoryMode) {

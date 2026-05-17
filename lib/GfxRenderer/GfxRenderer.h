@@ -140,6 +140,10 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  // Stock-V5.5.9 byte-match precondition flash (black or white). Fires CTRL2=0xF7
+  // (full power-cycle, rails off after) and skips SINGLE_BUFFER_MODE post-RED-sync.
+  // See docs/v559-disassembly-findings.md.
+  void displayBufferPrecondition(uint8_t color) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;

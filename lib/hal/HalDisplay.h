@@ -51,6 +51,8 @@ class HalDisplay {
   // Two-phase factory grayscale render — see EInkDisplay.h.
   void displayGrayBufferFactorySetup(const unsigned char* lut);
   void displayGrayBufferFactoryActivate();
+  // Stock-V5.5.9 byte-match precondition (black/white full power-cycle flash).
+  void displayBufferPrecondition(uint8_t color);
 
   // Tell the SDK that grayscale state has been cleaned up by the consumer
   // (RAM banks rebased + a follow-up FAST_REFRESH will handle pixel cleanup),
