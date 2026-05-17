@@ -2,10 +2,27 @@
 
 #include <HalGPIO.h>
 
+#include "HalTiltSensor.h"
+
 class MappedInputManager {
  public:
-  enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward };
-
+  enum class Button {
+    Back,
+    Confirm,
+    Left,
+    Right,
+    Up,
+    Down,
+    Power,
+    PageBack,
+    PageForward,
+    RollLeft,
+    RollRight,
+    PitcuUp,
+    PitchDown,
+    YawLeft,
+    YawRight
+  };
   struct Labels {
     const char* btn1;
     const char* btn2;
@@ -13,7 +30,7 @@ class MappedInputManager {
     const char* btn4;
   };
 
-  explicit MappedInputManager(HalGPIO& gpio) : gpio(gpio) {}
+  explicit MappedInputManager(HalGPIO& gpio, HalTiltSensor& tiltSensor) : gpio(gpio), tiltSensor(tiltSensor) {}
 
   void update() const { gpio.update(); }
   bool wasPressed(Button button) const;
@@ -28,6 +45,8 @@ class MappedInputManager {
 
  private:
   HalGPIO& gpio;
+  HalTiltSensor& tiltSensor;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
+  bool mapButton(Button button, bool (HalTiltSensor::*fn)(uint8_t) const) const;
 };

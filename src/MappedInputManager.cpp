@@ -54,6 +54,33 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
+bool MappedInputManager::mapButton(const Button button, bool (HalTiltSensor::*fn)(uint8_t) const) const {
+  SETTINGS.tiltPageTurn;
+
+  // Map the gyro axis to left/right tilt based on reader orientation.
+  // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
+  float tiltAxis;
+  switch (SETTINGS.orientation) {
+    case CrossPointOrientation::PORTRAIT:
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
+      break;
+    case CrossPointOrientation::INVERTED:
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
+      break;
+    case CrossPointOrientation::LANDSCAPE_CW:
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
+      break;
+    case CrossPointOrientation::LANDSCAPE_CCW:
+      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
+      break;
+    default:
+      tiltAxis = gx;
+      break;
+  }
+
+  return false;
+}
+
 bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
 
 bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
