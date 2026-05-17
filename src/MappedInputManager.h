@@ -16,12 +16,12 @@ class MappedInputManager {
     Power,
     PageBack,
     PageForward,
-    RollLeft,
-    RollRight,
-    PitcuUp,
-    PitchDown,
-    YawLeft,
-    YawRight
+    TiltLeft,
+    TiltRight,
+    TiltUp,
+    TiltDown,
+    RotateLeft,
+    RotateRight
   };
   struct Labels {
     const char* btn1;

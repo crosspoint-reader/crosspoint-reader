@@ -49,9 +49,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
     case Button::PageForward:
       // Reader page navigation uses side buttons and can be swapped via settings.
       return (gpio.*fn)(side.pageForward);
+    default:
+      return false;
   }
-
-  return false;
 }
 
 bool MappedInputManager::mapButton(const Button button, bool (HalTiltSensor::*fn)(uint8_t) const) const {
@@ -59,24 +59,24 @@ bool MappedInputManager::mapButton(const Button button, bool (HalTiltSensor::*fn
 
   // Map the gyro axis to left/right tilt based on reader orientation.
   // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
-  float tiltAxis;
-  switch (SETTINGS.orientation) {
-    case CrossPointOrientation::PORTRAIT:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
-      break;
-    case CrossPointOrientation::INVERTED:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
-      break;
-    case CrossPointOrientation::LANDSCAPE_CW:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
-      break;
-    case CrossPointOrientation::LANDSCAPE_CCW:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
-      break;
-    default:
-      tiltAxis = gx;
-      break;
-  }
+  // float tiltAxis;
+  // switch (SETTINGS.orientation) {
+  //   case CrossPointOrientation::PORTRAIT:
+  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
+  //     break;
+  //   case CrossPointOrientation::INVERTED:
+  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
+  //     break;
+  //   case CrossPointOrientation::LANDSCAPE_CW:
+  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
+  //     break;
+  //   case CrossPointOrientation::LANDSCAPE_CCW:
+  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
+  //     break;
+  //   default:
+  //     tiltAxis = gx;
+  //     break;
+  // }
 
   return false;
 }
