@@ -13,6 +13,7 @@ class BookMetadataCache {
     std::string author;
     std::string language;
     std::string coverItemHref;
+    std::string coverPageHref;
     std::string textReferenceHref;
   };
 
