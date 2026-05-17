@@ -260,6 +260,21 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+#ifdef ENABLE_SERIAL_LOG
+  // Earliest possible Serial setup. The 250 ms stall before begin() lets the
+  // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
+  // enumeration before we touch the CDC state — otherwise cold boot races
+  // and the host has to be physically replugged for logs to flow. Warm reboot
+  // worked without the delay because USB was already enumerated.
+  //
+  // setTxTimeoutMs(0) makes writes non-blocking — the HWCDC TX FIFO drops
+  // bytes harmlessly if the host isn't actively draining, instead of blocking
+  // for the default 250 ms per write and chaining into a firmware hang.
+  delay(250);
+  Serial.begin(115200);
+  logSerial.setTxTimeoutMs(0);
+#endif
+
   HalSystem::begin();
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
@@ -273,16 +288,6 @@ void setup() {
   gpio.begin();
   powerManager.begin();
   halTiltSensor.begin();
-
-#ifdef ENABLE_SERIAL_LOG
-  if (gpio.isUsbConnected()) {
-    Serial.begin(115200);
-    const unsigned long start = millis();
-    while (!Serial && (millis() - start) < 500) {
-      delay(10);
-    }
-  }
-#endif
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
