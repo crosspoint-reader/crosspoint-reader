@@ -1514,6 +1514,13 @@ void GfxRenderer::renderGrayscale(GrayscaleDriveMode mode, void (*renderFn)(cons
       screenshotHookCtx = nullptr;
     }
   }
+
+  // Match stock SPI order for factory mode: setCustomLUT + Border BEFORE the
+  // RAM writes. Differential path skips Setup (handled by displayGrayBuffer at
+  // the end). See docs/v559-disassembly-findings.md Difference #4.
+  if (spec.factoryMode) {
+    display.displayGrayBufferFactorySetup(spec.lut);
+  }
   copyGrayscaleLsbBuffers();
 
   clearScreen(0x00);
@@ -1534,7 +1541,14 @@ void GfxRenderer::renderGrayscale(GrayscaleDriveMode mode, void (*renderFn)(cons
 
   g_differentialQuantize = false;
 
-  displayGrayBuffer(spec.lut, spec.factoryMode);
+  // Factory mode: differential path keeps the original combined call. Factory
+  // path uses the split SDK API so the LUT load happens BEFORE RAM writes —
+  // matches stock V5.5.9 SPI order. Same pattern as renderGrayscaleSinglePass.
+  if (spec.factoryMode) {
+    display.displayGrayBufferFactoryActivate();
+  } else {
+    displayGrayBuffer(spec.lut, spec.factoryMode);
+  }
   // Suppress the SDK's automatic grayscaleRevert on the next BW page turn.
   // Caller is responsible for cleanup: restoreBwBuffer rebases RED RAM, and
   // displayBuffer promotes the first post-factory FAST refresh to HALF.
@@ -1652,6 +1666,12 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
     }
   }
 
+  // Match stock V5.5.9 SPI order: setCustomLUT + Border BEFORE RAM writes.
+  // Resolve drive spec early so we can use Setup/Activate. See
+  // docs/v559-disassembly-findings.md Difference #4.
+  const auto spec = resolveGrayscaleDrive(mode);
+  display.displayGrayBufferFactorySetup(spec.lut);
+
   // Pass 1: plane1 (MSB) → BW RAM via copyGrayscaleLsbBuffers.
   clearScreen(0x00);
   for (uint16_t c = 0; c < pageWidth; c++) {
@@ -1687,8 +1707,7 @@ void GfxRenderer::displayXtchPlanes(const uint8_t* plane1, const uint8_t* plane2
     screenshotHookCtx = nullptr;
   }
 
-  const auto spec = resolveGrayscaleDrive(mode);
-  displayGrayBuffer(spec.lut, true);
+  display.displayGrayBufferFactoryActivate();
   setRenderMode(BW);
 }
 
