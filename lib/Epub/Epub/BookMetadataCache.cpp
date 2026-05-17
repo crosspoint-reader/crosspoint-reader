@@ -1,5 +1,6 @@
 #include "BookMetadataCache.h"
 
+#include <Arduino.h>
 #include <Logging.h>
 #include <Serialization.h>
 #include <ZipFile.h>
@@ -40,6 +41,7 @@ bool BookMetadataCache::endContentOpfPass() {
 
 bool BookMetadataCache::beginTocPass() {
   LOG_DBG("BMC", "Beginning toc pass");
+  const uint32_t indexStart = millis();
 
   if (!Storage.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
@@ -50,7 +52,7 @@ bool BookMetadataCache::beginTocPass() {
     return false;
   }
 
-  if (spineCount >= LARGE_SPINE_THRESHOLD) {
+  if (spineCount >= FAST_LOOKUP_SPINE_THRESHOLD) {
     spineHrefIndex.clear();
     spineHrefIndex.resize(spineCount);
     spineFile.seek(0);
@@ -68,7 +70,7 @@ bool BookMetadataCache::beginTocPass() {
               });
     spineFile.seek(0);
     useSpineHrefIndex = true;
-    LOG_DBG("BMC", "Using fast index for %d spine items", spineCount);
+    LOG_DBG("BMC", "Using fast TOC spine index for %d spine items (%lu ms)", spineCount, millis() - indexStart);
   } else {
     useSpineHrefIndex = false;
   }
@@ -100,6 +102,9 @@ bool BookMetadataCache::endWrite() {
 }
 
 bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
+  const uint32_t buildStart = millis();
+  uint32_t stageStart = buildStart;
+
   // Open all three files, writing to meta, reading from spine and toc
   if (!Storage.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
@@ -153,6 +158,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     auto tocEntry = readTocEntry(tocFile);
     serialization::writePod(bookFile, pos + lutOffset + lutSize + static_cast<uint32_t>(spineFile.position()));
   }
+  const uint32_t headerAndLutMs = millis() - stageStart;
+  stageStart = millis();
 
   // LUTs complete
   // Loop through spines from spine file matching up TOC indexes, calculating cumulative size and writing to book.bin
@@ -168,6 +175,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       }
     }
   }
+  const uint32_t tocMapMs = millis() - stageStart;
+  stageStart = millis();
 
   ZipFile zip(epubPath);
   // Pre-open zip file to speed up size calculations
@@ -179,6 +188,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     tocFile.close();
     return false;
   }
+  const uint32_t zipOpenMs = millis() - stageStart;
+  stageStart = millis();
   // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
   // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
   // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
@@ -190,7 +201,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   std::deque<uint32_t> spineSizes;
   bool useBatchSizes = false;
 
-  if (spineCount >= LARGE_SPINE_THRESHOLD) {
+  if (spineCount >= FAST_LOOKUP_SPINE_THRESHOLD) {
     LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
 
     std::deque<ZipFile::SizeTarget> targets;
@@ -221,6 +232,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
     useBatchSizes = true;
   }
+  const uint32_t sizePrefetchMs = millis() - stageStart;
+  stageStart = millis();
 
   uint32_t cumSize = 0;
   spineFile.seek(0);
@@ -261,6 +274,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // Write out spine data to book.bin
     writeSpineEntry(bookFile, spineEntry);
   }
+  const uint32_t spineWriteMs = millis() - stageStart;
+  stageStart = millis();
   // Close opened zip file
   zip.close();
 
@@ -270,12 +285,17 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     auto tocEntry = readTocEntry(tocFile);
     writeTocEntry(bookFile, tocEntry);
   }
+  const uint32_t tocWriteMs = millis() - stageStart;
 
   // Explicit close() required: member variables persist beyond function scope
   bookFile.close();
   spineFile.close();
   tocFile.close();
 
+  LOG_DBG("BMC",
+          "buildBookBin timings: header_lut=%lums toc_map=%lums zip_open=%lums size_prefetch=%lums spine_write=%lums "
+          "toc_write=%lums total=%lums",
+          headerAndLutMs, tocMapMs, zipOpenMs, sizePrefetchMs, spineWriteMs, tocWriteMs, millis() - buildStart);
   LOG_DBG("BMC", "Successfully built book.bin");
   return true;
 }

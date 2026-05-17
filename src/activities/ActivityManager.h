@@ -4,6 +4,7 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include <atomic>
 #include <cassert>
 #include <memory>
 #include <string>
@@ -45,6 +46,8 @@ class ActivityManager {
   std::unique_ptr<Activity> pendingActivity;
   enum class PendingAction { None, Push, Pop, Replace };
   PendingAction pendingAction = PendingAction::None;
+  void processPendingActions();
+  std::atomic<bool> sleepTransitionPending{false};
 
   // Task to render and display the activity
   TaskHandle_t renderTaskHandle = nullptr;
@@ -98,6 +101,7 @@ class ActivityManager {
   void popActivity();
 
   bool preventAutoSleep() const;
+  bool isSleepTransitionPending() const { return sleepTransitionPending.load(std::memory_order_relaxed); }
   bool isReaderActivity() const;
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;

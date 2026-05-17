@@ -23,6 +23,12 @@ def assert_not_contains(rel: str, *needles: str) -> None:
         assert needle not in text, f"{rel} must not contain {needle!r}"
 
 
+def slice_between(text: str, start: str, end: str) -> str:
+    start_idx = text.index(start)
+    end_idx = text.index(end, start_idx)
+    return text[start_idx:end_idx]
+
+
 def main() -> None:
     assert_contains(
         "lib/Epub/Epub/IncrementalSectionTypes.h",
@@ -85,6 +91,14 @@ def main() -> None:
     assert "pages.close();" in cache_cpp
     assert "const auto pageCount = knownPageCountFromIndexBytes(index.size());" in cache_cpp
     assert "index.close();" in cache_cpp
+    anchor_lookup_body = slice_between(
+        cache_cpp,
+        "std::optional<uint16_t> Cache::getPageForAnchor",
+        "std::optional<uint16_t> Cache::getParagraphIndexForPage",
+    )
+    assert "readAnchorEntry(file, key, page)" in anchor_lookup_body
+    assert "serialization::readString(file, key)" not in anchor_lookup_body
+    assert "MAX_ANCHOR_KEY_LEN" in cache_cpp
 
     assert_contains(
         "src/activities/reader/EpubReaderUtils.h",
@@ -116,6 +130,9 @@ def main() -> None:
         "std::unique_ptr<SectionHandle> section",
         "std::unique_ptr<SectionHandle> nextSectionPrewarm",
         "bool backgroundIndexingWorkActive = false",
+        "bool bookCacheDeleted = false",
+        "bool freshBookEntry = false",
+        "bool initialBookEntryIndexingPopupShown = false",
         "int pendingPageTurnDirection = 0",
         "bool hasCurrentIndexingWork() const",
         "bool hasPrewarmIndexingWork() const",
@@ -162,6 +179,61 @@ def main() -> None:
         "persistablePageCountForSection",
         "ReaderProgressPolicy::decideResumeRemap",
     )
+    epub_reader_cpp = read("src/activities/reader/EpubReaderActivity.cpp")
+    pump_background_body = slice_between(
+        epub_reader_cpp,
+        "bool EpubReaderActivity::pumpBackgroundIndexing()",
+        "void EpubReaderActivity::loop()",
+    )
+    assert "backgroundIndexingWorkActive = currentNowActive || prewarmNowActive;" in pump_background_body
+    assert (
+        "requestUpdate();" not in pump_background_body
+    ), "Background/prewarm indexing state changes must not redraw the current page"
+    assert (
+        "currentWasActive != currentNowActive || prewarmWasActive != prewarmNowActive" not in pump_background_body
+    ), "Background/prewarm active-state transitions should not schedule UI-only repaints"
+    assert "displayedSectionProgress" in epub_reader_cpp
+    assert "static_cast<float>(section->currentPage) / static_cast<float>(pageCount)" not in epub_reader_cpp
+    assert "calculateProgress(currentSpineIndex, displayedSectionProgress(section.get()))" in epub_reader_cpp
+
+    activity_manager_cpp = read("src/activities/ActivityManager.cpp")
+    sleep_body = slice_between(
+        activity_manager_cpp,
+        "void ActivityManager::goToSleep()",
+        "void ActivityManager::goToBoot()",
+    )
+    assert "sleepTransitionPending.store(true" in sleep_body
+    assert "processPendingActions();" in sleep_body
+    assert "loop();" not in sleep_body, "Sleep must not run the outgoing activity loop before drawing the sleep screen"
+    assert "sleepTransitionPending.store(false" in sleep_body
+    assert "void ActivityManager::processPendingActions()" in activity_manager_cpp
+    assert "bool isSleepTransitionPending() const" in read("src/activities/ActivityManager.h")
+    activity_loop_body = slice_between(
+        activity_manager_cpp,
+        "void ActivityManager::loop()",
+        "void ActivityManager::processPendingActions()",
+    )
+    assert "currentActivity->loop();" in activity_loop_body
+    assert "processPendingActions();" in activity_loop_body
+
+    assert "popupFn" not in epub_reader_cpp, "Normal EPUB reader section loads must not wire parser popup redraws"
+    assert (
+        epub_reader_cpp.count("GUI.drawPopup(renderer, tr(STR_INDEXING));") == 1
+    ), "Indexing popup should be centralized behind a once-only helper, not drawn by first-page load"
+    assert "showIndexingPopupOnce" in epub_reader_cpp
+    assert "hasCompatibleCompleteIncrementalCache" in epub_reader_cpp
+    assert "Section open/create:" in epub_reader_cpp
+    assert "First-page pump" in epub_reader_cpp
+    assert "Initial-window pump" in epub_reader_cpp
+    assert "Position-resolution pump" in epub_reader_cpp
+    assert "Page load:" in epub_reader_cpp
+    assert "Page render/display:" in epub_reader_cpp
+    pump_until_body = slice_between(
+        epub_reader_cpp,
+        "SectionPumpLoopResult pumpSectionUntil(",
+        "bool ensureOutrunWindowAvailable(",
+    )
+    assert "activityManager.isSleepTransitionPending()" in pump_until_body
 
     assert_not_contains(
         "src/activities/reader/EpubReaderActivity.cpp",
@@ -195,6 +267,13 @@ def main() -> None:
         'refineRemotePositionFromLookup(*sectionHandle, position, "Indexed")',
         "Section tempSection",
     )
+    koreader_sync_cpp = read("src/activities/reader/KOReaderSyncActivity.cpp")
+    indexing_status = koreader_sync_cpp.index("statusMessage = tr(STR_INDEXING);")
+    indexing_wait = koreader_sync_cpp.index("requestUpdateAndWait();", indexing_status)
+    refine_after_wait = koreader_sync_cpp.index(
+        "refined = refineRemoteProgressWithIncrementalIndexing(remotePosition);", indexing_wait
+    )
+    assert indexing_status < indexing_wait < refine_after_wait
 
     assert_contains(
         "lib/FsHelpers/FsHelpers.h",
@@ -300,6 +379,88 @@ def main() -> None:
         "lib/Epub/Epub.cpp",
         "FsHelpers::removeDirRecursive(cachePath.c_str())",
     )
+
+    assert_contains(
+        "lib/Epub/Epub/BookMetadataCache.h",
+        "FAST_LOOKUP_SPINE_THRESHOLD = 64",
+    )
+    assert_contains(
+        "lib/Epub/Epub/BookMetadataCache.cpp",
+        "spineCount >= FAST_LOOKUP_SPINE_THRESHOLD",
+        "Using fast TOC spine index",
+        "Using batch size lookup for %d spine items",
+        "buildBookBin timings:",
+    )
+    assert_not_contains(
+        "lib/Epub/Epub/BookMetadataCache.cpp",
+        "spineCount >= LARGE_SPINE_THRESHOLD",
+    )
+    assert_contains(
+        "lib/Epub/Epub/parsers/ContentOpfParser.h",
+        "FAST_LOOKUP_SPINE_THRESHOLD = 64",
+    )
+    assert_contains(
+        "lib/Epub/Epub/parsers/ContentOpfParser.cpp",
+        "itemIndex.size() >= FAST_LOOKUP_SPINE_THRESHOLD",
+        "Using fast spine item index",
+    )
+    assert_not_contains(
+        "lib/Epub/Epub/parsers/ContentOpfParser.cpp",
+        "itemIndex.size() >= LARGE_SPINE_THRESHOLD",
+    )
+    on_enter_body = slice_between(
+        epub_reader_cpp,
+        "void EpubReaderActivity::onEnter()",
+        "void EpubReaderActivity::onExit()",
+    )
+    assert "bool loadedSavedProgress = false;" in on_enter_body
+    assert "loadedSavedProgress = true;" in on_enter_body
+    assert "freshBookEntry = !loadedSavedProgress;" in on_enter_body
+    render_load_section_body = slice_between(
+        epub_reader_cpp,
+        "if (!section) {",
+        "    const auto sectionOpenStart = millis();",
+    )
+    assert "freshBookEntry &&" in render_load_section_body
+    assert "!hasCompatibleCompleteIncrementalCache(epub, currentSpineIndex, layoutKey)" in render_load_section_body
+    assert "initialBookEntryIndexingPopupShown" in render_load_section_body
+    assert "showIndexingPopupOnce(renderer, indexingPopupShown);" in render_load_section_body
+    assert "freshBookEntry = false;" in epub_reader_cpp
+
+    reader_activity_cpp = read("src/activities/reader/ReaderActivity.cpp")
+    assert_contains(
+        "src/activities/reader/ReaderActivity.h",
+        "loadEpub(const std::string& path, const GfxRenderer& renderer,",
+        "onGoToEpubReader(std::unique_ptr<Epub> epub, bool initialIndexingPopupShown)",
+    )
+    load_epub_body = slice_between(
+        reader_activity_cpp,
+        "std::unique_ptr<Epub> ReaderActivity::loadEpub",
+        "std::unique_ptr<Xtc> ReaderActivity::loadXtc",
+    )
+    assert "makeUniqueNoThrow<Epub>" in load_epub_body
+    assert '"/book.bin"' in load_epub_body
+    assert '"/progress.bin"' in load_epub_body
+    assert "GUI.drawPopup(renderer, tr(STR_INDEXING));" in load_epub_body
+    assert "indexingPopupShown = true;" in load_epub_body
+    assert "epub->load(true, SETTINGS.embeddedStyle == 0)" in load_epub_body
+    assert "onGoToEpubReader(std::move(epub), initialIndexingPopupShown);" in reader_activity_cpp
+    delete_cache_body = slice_between(
+        epub_reader_cpp,
+        "case EpubReaderMenuActivity::MenuAction::DELETE_CACHE:",
+        "case EpubReaderMenuActivity::MenuAction::SCREENSHOT:",
+    )
+    assert "epub->clearCache();" in delete_cache_body
+    assert "bookCacheDeleted = true;" in delete_cache_body
+    assert "saveProgress" not in delete_cache_body
+    assert "setupCacheDir" not in delete_cache_body
+    assert "Book cache deleted; progress cache removed" in delete_cache_body
+    render_body = slice_between(
+        epub_reader_cpp,
+        "void EpubReaderActivity::render(RenderLock&& lock)",
+        "void EpubReaderActivity::renderContents(",
+    )
+    assert "if (bookCacheDeleted) {\n    return;\n  }" in render_body
 
 
 if __name__ == "__main__":

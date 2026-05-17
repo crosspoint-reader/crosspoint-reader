@@ -33,6 +33,9 @@ class EpubReaderActivity final : public Activity {
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
   bool backgroundIndexingWorkActive = false;
+  bool bookCacheDeleted = false;
+  bool freshBookEntry = false;
+  bool initialBookEntryIndexingPopupShown = false;
   int pendingPageTurnDirection = 0;
 
   // Footnote support
@@ -66,8 +69,11 @@ class EpubReaderActivity final : public Activity {
   void restoreSavedPosition();
 
  public:
-  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
-      : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
+  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
+                              const bool initialIndexingPopupShown = false)
+      : Activity("EpubReader", renderer, mappedInput),
+        epub(std::move(epub)),
+        initialBookEntryIndexingPopupShown(initialIndexingPopupShown) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

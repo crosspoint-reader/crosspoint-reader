@@ -13,6 +13,8 @@
 namespace IncrementalSection {
 namespace {
 
+constexpr uint32_t MAX_ANCHOR_KEY_LEN = 1024;
+
 bool ensureDirectory(const std::string& path) {
   if (Storage.exists(path.c_str())) {
     return true;
@@ -45,6 +47,34 @@ bool checkedWriteString(FsFile& file, const std::string& value, const char* labe
   const uint32_t length = static_cast<uint32_t>(value.size());
   return checkedWritePod(file, length, label) &&
          checkedWriteBytes(file, reinterpret_cast<const uint8_t*>(value.data()), length, label);
+}
+
+bool readAnchorEntry(FsFile& file, std::string& key, uint16_t& page) {
+  if (file.available() < static_cast<int>(sizeof(uint32_t) + sizeof(uint16_t))) {
+    LOG_ERR("ISC", "Truncated anchor entry");
+    return false;
+  }
+
+  uint32_t length = 0;
+  serialization::readPod(file, length);
+  const int remaining = file.available();
+  if (remaining < static_cast<int>(sizeof(uint16_t)) ||
+      length > static_cast<uint32_t>(remaining - static_cast<int>(sizeof(uint16_t))) || length > MAX_ANCHOR_KEY_LEN) {
+    LOG_ERR("ISC", "Invalid anchor key length: %lu", static_cast<unsigned long>(length));
+    return false;
+  }
+
+  key.resize(length);
+  if (length > 0) {
+    const size_t read = file.read(reinterpret_cast<uint8_t*>(&key[0]), length);
+    if (read != length) {
+      LOG_ERR("ISC", "Short read anchor key: %u/%lu bytes", static_cast<unsigned>(read),
+              static_cast<unsigned long>(length));
+      return false;
+    }
+  }
+  serialization::readPod(file, page);
+  return true;
 }
 
 bool checkedWriteLayoutKey(FsFile& file, const LayoutCacheKey& key) {
@@ -313,8 +343,10 @@ std::optional<uint16_t> Cache::getPageForAnchor(const std::string& anchor) const
   for (uint32_t i = 0; i < meta.anchorCount && file.available() > 0; i++) {
     std::string key;
     uint16_t page = 0;
-    serialization::readString(file, key);
-    serialization::readPod(file, page);
+    if (!readAnchorEntry(file, key, page)) {
+      file.close();
+      return std::nullopt;
+    }
     if (key == anchor) {
       file.close();
       return page;

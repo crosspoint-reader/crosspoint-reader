@@ -61,6 +61,10 @@ void ActivityManager::loop() {
     currentActivity->loop();
   }
 
+  processPendingActions();
+}
+
+void ActivityManager::processPendingActions() {
   while (pendingAction != PendingAction::None) {
     if (pendingAction == PendingAction::Pop) {
       RenderLock lock;
@@ -197,8 +201,12 @@ void ActivityManager::goToReader(std::string path) {
 }
 
 void ActivityManager::goToSleep() {
+  sleepTransitionPending.store(true, std::memory_order_relaxed);
   replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput));
-  loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
+  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns.
+  // Do not run the outgoing activity loop here; the reader may still have background indexing work to pump.
+  processPendingActions();
+  sleepTransitionPending.store(false, std::memory_order_relaxed);
 }
 
 void ActivityManager::goToBoot() { replaceActivity(std::make_unique<BootActivity>(renderer, mappedInput)); }
