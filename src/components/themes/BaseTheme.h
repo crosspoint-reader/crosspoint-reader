@@ -159,7 +159,6 @@ class BaseTheme {
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void drawDialogBackground(const GfxRenderer& renderer, Rect rect) const;
-  virtual void drawDialogBackground(const GfxRenderer& renderer, Rect rect) const;
   virtual void drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
                                   bool selected) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
@@ -170,9 +169,7 @@ class BaseTheme {
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
                                const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
-                               bool inactiveSelection = false) const;
-  virtual void drawPopupSelection(const GfxRenderer& renderer, int fontId, Rect rect, const char* text,
-                                  bool selected) const;
+                                bool inactiveSelection = false) const;
   virtual bool showsFileIcons() const { return false; }
   void drawClassicalBookCover(GfxRenderer& renderer, int x, int y, int w, int h, const BookCoverParams& params,
                               bool inverted = false, int continueTextWidth = 0) const;
