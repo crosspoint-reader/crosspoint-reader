@@ -187,15 +187,17 @@ For power users, you can manage files directly from your terminal using `curl` w
 
 ## Bluetooth Package Transfer
 
-Packages can also be installed without Wi-Fi from **File Transfer > Bluetooth Transfer**. Keep that screen open, note
-the six-digit code, then run:
+Packages and EPUB books can also be transferred without Wi-Fi from **File Transfer > Bluetooth Transfer**. Keep that
+screen open, note the six-digit code, then run:
 
 ```sh
 python3 scripts/ble_transfer.py put-package path/to/package.mpkg.zip --code 123456
+python3 scripts/ble_transfer.py put-book path/to/book.epub --code 123456
 ```
 
-The tool scans for `Marginalia Transfer`, streams the archive over BLE, and waits for the device to verify and install
-it. BLE transfer currently accepts package archives only; general SD-card browsing and book upload still use the web
+The tool scans for `Marginalia Transfer`, streams the file over BLE, and waits for the device to verify it. Package
+archives are installed through the package inbox; EPUB files are saved to `/Books`. After a successful code-based
+transfer, the device can save the host so later transfers can omit `--code`. General SD-card browsing still uses the web
 file manager.
 
 ## Security Notes

@@ -83,7 +83,7 @@ Bluetooth Transfer screen.
 Pairing should follow the Wi-Fi credential model already used by the firmware:
 
 - first use requires the visible six-digit transfer code
-- after a successful authenticated handshake, prompt **Save this host?**
+- after a successful authenticated transfer, prompt **Save this host?**
 - save a trusted-host record with a host id, display name, and shared secret
 - store the shared secret with the same hardware-tied obfuscation pattern used for saved Wi-Fi passwords
 - let later transfers authenticate with a nonce-based challenge response instead of asking for the code again

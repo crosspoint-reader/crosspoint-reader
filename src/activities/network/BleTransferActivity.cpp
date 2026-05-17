@@ -5,13 +5,16 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <NimBLEDevice.h>
+#include <esp_mac.h>
 #include <esp_random.h>
+#include <mbedtls/md.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
 
+#include "BleTrustedHostStore.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -29,6 +32,10 @@ constexpr const char* BOOKS_ROOT = "/Books";
 constexpr size_t MAX_BLE_PACKAGE_BYTES = 4UL * 1024UL * 1024UL;
 constexpr size_t MAX_BLE_BOOK_BYTES = 32UL * 1024UL * 1024UL;
 constexpr size_t MAX_FILENAME_BYTES = 96;
+constexpr size_t BLE_HOST_ID_MAX_BYTES = 64;
+constexpr size_t BLE_HOST_NAME_MAX_BYTES = 48;
+constexpr size_t BLE_SHARED_SECRET_HEX_BYTES = 64;
+constexpr size_t BLE_NONCE_BYTES = 16;
 constexpr size_t BLE_PROGRESS_STATUS_INTERVAL_BYTES = 4UL * 1024UL;
 constexpr size_t MPKG_SUFFIX_LEN = 9;
 constexpr size_t EPUB_SUFFIX_LEN = 5;
@@ -39,6 +46,29 @@ std::string makeSessionCode() {
   return buffer;
 }
 
+std::string bytesToHex(const uint8_t* data, const size_t length) {
+  static constexpr char hex[] = "0123456789abcdef";
+  std::string out;
+  out.resize(length * 2);
+  for (size_t i = 0; i < length; i++) {
+    out[i * 2] = hex[data[i] >> 4];
+    out[i * 2 + 1] = hex[data[i] & 0x0F];
+  }
+  return out;
+}
+
+std::string makeDeviceId() {
+  uint8_t mac[6] = {};
+  esp_efuse_mac_get_default(mac);
+  return bytesToHex(mac, sizeof(mac));
+}
+
+std::string makeNonceHex() {
+  uint8_t nonce[BLE_NONCE_BYTES] = {};
+  for (auto& byte : nonce) byte = static_cast<uint8_t>(esp_random() & 0xFF);
+  return bytesToHex(nonce, sizeof(nonce));
+}
+
 std::string toLowerAscii(std::string value) {
   for (char& c : value) {
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -46,12 +76,14 @@ std::string toLowerAscii(std::string value) {
   return value;
 }
 
-bool isHexSha256(const std::string& value) {
-  if (value.length() != 64) return false;
+bool isHexString(const std::string& value, const size_t length) {
+  if (value.length() != length) return false;
   return std::all_of(value.begin(), value.end(), [](const char c) {
     return std::isdigit(static_cast<unsigned char>(c)) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
   });
 }
+
+bool isHexSha256(const std::string& value) { return isHexString(value, 64); }
 
 bool endsWithMpkgZip(const std::string& value) {
   constexpr const char* suffix = ".mpkg.zip";
@@ -75,6 +107,24 @@ bool isSafeBleFileName(const std::string& value) {
   return true;
 }
 
+bool isSafeHostId(const std::string& value) {
+  if (value.empty() || value.length() > BLE_HOST_ID_MAX_BYTES) return false;
+  return std::all_of(value.begin(), value.end(), [](const char c) {
+    const auto uc = static_cast<unsigned char>(c);
+    return std::isalnum(uc) || c == '-' || c == '_';
+  });
+}
+
+std::string sanitizeHostName(std::string value) {
+  if (value.empty()) return "Trusted host";
+  if (value.length() > BLE_HOST_NAME_MAX_BYTES) value.resize(BLE_HOST_NAME_MAX_BYTES);
+  for (char& c : value) {
+    const auto uc = static_cast<unsigned char>(c);
+    if (uc < 32 || uc > 126) c = '?';
+  }
+  return value;
+}
+
 bool isSafeBlePackageName(const std::string& value) { return isSafeBleFileName(value) && endsWithMpkgZip(value); }
 
 bool isSafeBleBookName(const std::string& value) { return isSafeBleFileName(value) && endsWithEpub(value); }
@@ -91,15 +141,20 @@ std::string transferKindName(const BleTransferActivity::TransferKind kind) {
   return "";
 }
 
-std::string sha256ToHex(const uint8_t digest[32]) {
-  static constexpr char hex[] = "0123456789abcdef";
-  std::string out;
-  out.resize(64);
-  for (size_t i = 0; i < 32; i++) {
-    out[i * 2] = hex[digest[i] >> 4];
-    out[i * 2 + 1] = hex[digest[i] & 0x0F];
-  }
-  return out;
+std::string sha256ToHex(const uint8_t digest[32]) { return bytesToHex(digest, 32); }
+
+std::string trustedHostMessage(const std::string& nonce, const std::string& hostId) {
+  return nonce + "|" + hostId + "|1";
+}
+
+std::string hmacSha256Hex(const std::string& secret, const std::string& message) {
+  uint8_t output[32] = {};
+  const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  if (!md) return "";
+  const int ret = mbedtls_md_hmac(md, reinterpret_cast<const uint8_t*>(secret.data()), secret.size(),
+                                  reinterpret_cast<const uint8_t*>(message.data()), message.size(), output);
+  if (ret != 0) return "";
+  return bytesToHex(output, sizeof(output));
 }
 
 std::string stateName(BleTransferActivity::State state) {
@@ -120,6 +175,10 @@ std::string stateName(BleTransferActivity::State state) {
       return "installed";
     case BleTransferActivity::State::SAVED:
       return "saved";
+    case BleTransferActivity::State::SAVE_HOST_PROMPT:
+      return "save_host_prompt";
+    case BleTransferActivity::State::FORGET_HOST_PROMPT:
+      return "forget_host_prompt";
     case BleTransferActivity::State::ERROR:
       return "error";
   }
@@ -236,6 +295,12 @@ BleTransferActivity::~BleTransferActivity() = default;
 void BleTransferActivity::onEnter() {
   Activity::onEnter();
   sessionCode_ = makeSessionCode();
+  deviceId_ = makeDeviceId();
+  deviceNonce_ = makeNonceHex();
+  {
+    RenderLock lock(*this);
+    BLE_TRUSTED_HOSTS.loadFromFile();
+  }
   mbedtls_sha256_init(&shaContext_);
   setState(State::STARTING);
 
@@ -260,8 +325,25 @@ void BleTransferActivity::onExit() {
 }
 
 void BleTransferActivity::loop() {
+  if (state_ == State::SAVE_HOST_PROMPT) {
+    handleSaveHostPrompt();
+    return;
+  }
+
+  if (state_ == State::FORGET_HOST_PROMPT) {
+    handleForgetHostPrompt();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left) && BLE_TRUSTED_HOSTS.hasHosts() &&
+      (state_ == State::ADVERTISING || state_ == State::CONNECTED)) {
+    promptSelection_ = 0;
+    setState(State::FORGET_HOST_PROMPT);
     return;
   }
 
@@ -278,6 +360,8 @@ void BleTransferActivity::loop() {
 
 void BleTransferActivity::onBleConnected() {
   helloAccepted_ = false;
+  trustedHelloAccepted_ = false;
+  trustedHostName_.clear();
   setState(State::CONNECTED);
 }
 
@@ -303,15 +387,59 @@ void BleTransferActivity::onControlWrite(const std::string& value) {
   if (op == "hello") {
     const int version = doc["version"] | 0;
     const std::string code = doc["code"] | "";
+    const std::string hostId = doc["host_id"] | "";
+    const std::string response = toLowerAscii(doc["response"] | "");
     if (version != 1) {
       setError("unsupported protocol version");
       return;
     }
+
+    if (!hostId.empty() && !response.empty()) {
+      if (!isSafeHostId(hostId) || !isHexString(response, 64)) {
+        setError("invalid trusted host auth");
+        return;
+      }
+      const BleTrustedHost* host = BLE_TRUSTED_HOSTS.findHost(hostId);
+      if (!host) {
+        setError("unknown trusted host");
+        return;
+      }
+      const std::string expected = hmacSha256Hex(host->secret, trustedHostMessage(deviceNonce_, hostId));
+      if (expected.empty() || expected != response) {
+        setError("invalid trusted host auth");
+        return;
+      }
+      helloAccepted_ = true;
+      trustedHelloAccepted_ = true;
+      trustedHostName_ = host->name.empty() ? hostId : host->name;
+      deviceNonce_ = makeNonceHex();
+      setState(State::CONNECTED);
+      return;
+    }
+
     if (code != sessionCode_) {
       setError("invalid session code");
       return;
     }
+
+    const std::string candidateHostId = doc["pair_host_id"] | "";
+    const std::string candidateHostName = doc["pair_host_name"] | "";
+    const std::string candidateSecret = toLowerAscii(doc["pair_secret"] | "");
+    candidateHostId_.clear();
+    candidateHostName_.clear();
+    candidateHostSecret_.clear();
+    if (!candidateHostId.empty() || !candidateSecret.empty()) {
+      if (!isSafeHostId(candidateHostId) || !isHexString(candidateSecret, BLE_SHARED_SECRET_HEX_BYTES)) {
+        setError("invalid trusted host setup");
+        return;
+      }
+      candidateHostId_ = candidateHostId;
+      candidateHostName_ = sanitizeHostName(candidateHostName);
+      candidateHostSecret_ = candidateSecret;
+    }
+
     helloAccepted_ = true;
+    trustedHelloAccepted_ = false;
     setState(State::CONNECTED);
     return;
   }
@@ -494,7 +622,7 @@ void BleTransferActivity::processCommit() {
 
   if (transferKind_ == TransferKind::BOOK) {
     savedPath_ = finalPath_;
-    setState(State::SAVED);
+    completeFinalState(State::SAVED);
     return;
   }
 
@@ -526,7 +654,81 @@ void BleTransferActivity::processCommit() {
 
   packageId_ = install.packageId;
   packageName_ = install.packageName;
-  setState(State::INSTALLED);
+  completeFinalState(State::INSTALLED);
+}
+
+void BleTransferActivity::completeFinalState(const State finalState) {
+  hostPaired_ = false;
+  hostPairSkipped_ = false;
+  if (!trustedHelloAccepted_ && !candidateHostId_.empty() && !candidateHostSecret_.empty()) {
+    pendingFinalState_ = finalState;
+    promptSelection_ = 0;
+    setState(State::SAVE_HOST_PROMPT);
+    return;
+  }
+  setState(finalState);
+}
+
+void BleTransferActivity::handleSaveHostPrompt() {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (promptSelection_ > 0) {
+      promptSelection_--;
+      requestUpdate();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    if (promptSelection_ < 1) {
+      promptSelection_++;
+      requestUpdate();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (promptSelection_ == 0) {
+      RenderLock lock(*this);
+      hostPaired_ = BLE_TRUSTED_HOSTS.addOrReplaceHost(
+          BleTrustedHost{candidateHostId_, candidateHostName_, candidateHostSecret_});
+      hostPairSkipped_ = !hostPaired_;
+    } else {
+      hostPairSkipped_ = true;
+    }
+    candidateHostId_.clear();
+    candidateHostName_.clear();
+    candidateHostSecret_.clear();
+    setState(pendingFinalState_);
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    hostPairSkipped_ = true;
+    candidateHostId_.clear();
+    candidateHostName_.clear();
+    candidateHostSecret_.clear();
+    setState(pendingFinalState_);
+  }
+}
+
+void BleTransferActivity::handleForgetHostPrompt() {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (promptSelection_ > 0) {
+      promptSelection_--;
+      requestUpdate();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+             mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    if (promptSelection_ < 1) {
+      promptSelection_++;
+      requestUpdate();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (promptSelection_ == 1) {
+      RenderLock lock(*this);
+      if (!BLE_TRUSTED_HOSTS.clearAll()) {
+        setError("could not forget trusted host");
+        return;
+      }
+    }
+    setState(State::ADVERTISING);
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    setState(State::ADVERTISING);
+  }
 }
 
 void BleTransferActivity::resetTransfer(const bool removePart) {
@@ -550,6 +752,7 @@ void BleTransferActivity::resetTransfer(const bool removePart) {
   packageName_.clear();
   savedPath_.clear();
   transferKind_ = TransferKind::NONE;
+  pendingFinalState_ = State::CONNECTED;
   expectedSize_ = 0;
   receivedBytes_ = 0;
   lastProgressStatusBytes_ = 0;
@@ -581,7 +784,12 @@ std::string BleTransferActivity::buildStatusJson() const {
   JsonDocument doc;
   const std::string state = stateName(state_);
   doc["state"] = state.c_str();
-  doc["code"] = sessionCode_.c_str();
+  doc["device_id"] = deviceId_.c_str();
+  doc["device_nonce"] = deviceNonce_.c_str();
+  doc["has_trusted_host"] = BLE_TRUSTED_HOSTS.hasHosts();
+  if (!trustedHostName_.empty()) doc["trusted_host"] = trustedHostName_.c_str();
+  if (hostPaired_) doc["paired"] = true;
+  if (hostPairSkipped_) doc["pairing"] = "skipped";
   if (expectedSize_ > 0) {
     const std::string kind = transferKindName(transferKind_);
     if (!kind.empty()) doc["kind"] = kind.c_str();
@@ -649,6 +857,12 @@ void BleTransferActivity::render(RenderLock&&) {
       primary = tr(STR_BLE_TRANSFER_SAVED);
       secondary = savedPath_.empty() ? fileName_ : savedPath_;
       break;
+    case State::SAVE_HOST_PROMPT:
+      renderSaveHostPrompt();
+      return;
+    case State::FORGET_HOST_PROMPT:
+      renderForgetHostPrompt();
+      return;
     case State::ERROR:
       primary = tr(STR_ERROR_MSG);
       secondary = errorMessage_;
@@ -660,7 +874,80 @@ void BleTransferActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY + renderer.getLineHeight(UI_10_FONT_ID) + 8, secondary.c_str());
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const char* forgetLabel = BLE_TRUSTED_HOSTS.hasHosts() && (state_ == State::ADVERTISING || state_ == State::CONNECTED)
+                                ? tr(STR_FORGET_BUTTON)
+                                : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", forgetLabel, "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer();
+}
+
+void BleTransferActivity::renderSaveHostPrompt() const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height * 3) / 2;
+
+  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, tr(STR_BLE_SAVE_HOST), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, top,
+                            candidateHostName_.empty() ? "Trusted host" : candidateHostName_.c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, top + 40, tr(STR_BLE_SAVE_HOST_PROMPT));
+
+  const int buttonY = top + 80;
+  constexpr int buttonWidth = 60;
+  constexpr int buttonSpacing = 30;
+  constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
+  const int startX = (pageWidth - totalWidth) / 2;
+
+  if (promptSelection_ == 0) {
+    const std::string text = "[" + std::string(tr(STR_YES)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX, buttonY, text.c_str());
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, tr(STR_YES));
+  }
+
+  if (promptSelection_ == 1) {
+    const std::string text = "[" + std::string(tr(STR_NO)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, text.c_str());
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, tr(STR_NO));
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer();
+}
+
+void BleTransferActivity::renderForgetHostPrompt() const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = (pageHeight - height * 3) / 2;
+
+  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, tr(STR_BLE_FORGET_HOST), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_BLE_FORGET_HOST_PROMPT));
+
+  const int buttonY = top + 80;
+  constexpr int buttonWidth = 120;
+  constexpr int buttonSpacing = 30;
+  constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
+  const int startX = (pageWidth - totalWidth) / 2;
+
+  if (promptSelection_ == 0) {
+    const std::string text = "[" + std::string(tr(STR_CANCEL)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX, buttonY, text.c_str());
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, tr(STR_CANCEL));
+  }
+
+  if (promptSelection_ == 1) {
+    const std::string text = "[" + std::string(tr(STR_FORGET_BUTTON)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, text.c_str());
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, tr(STR_FORGET_BUTTON));
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 
+#include "BleTrustedHostStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
@@ -295,6 +296,53 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
   }
 
   LOG_DBG("WCS", "Loaded %zu WiFi credentials from file", store.credentials.size());
+  return true;
+}
+
+// ---- BleTrustedHostStore ----
+
+bool JsonSettingsIO::saveBleTrustedHosts(const BleTrustedHostStore& store, const char* path) {
+  JsonDocument doc;
+
+  JsonArray arr = doc["hosts"].to<JsonArray>();
+  for (const auto& host : store.getHosts()) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["hostId"] = host.hostId;
+    obj["name"] = host.name;
+    obj["secret_obf"] = obfuscation::obfuscateToBase64(host.secret);
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadBleTrustedHosts(BleTrustedHostStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("BTH", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  store.hosts.clear();
+  JsonArray arr = doc["hosts"].as<JsonArray>();
+  for (JsonObject obj : arr) {
+    if (store.hosts.size() >= store.MAX_HOSTS) break;
+    BleTrustedHost host;
+    host.hostId = obj["hostId"] | std::string("");
+    host.name = obj["name"] | std::string("");
+    bool ok = false;
+    host.secret = obfuscation::deobfuscateFromBase64(obj["secret_obf"] | "", &ok);
+    if (!ok || host.secret.empty()) {
+      host.secret = obj["secret"] | std::string("");
+      if (!host.secret.empty() && needsResave) *needsResave = true;
+    }
+    if (!host.hostId.empty() && !host.secret.empty()) store.hosts.push_back(host);
+  }
+
+  LOG_DBG("BTH", "Loaded %zu BLE trusted host(s) from file", store.hosts.size());
   return true;
 }
 

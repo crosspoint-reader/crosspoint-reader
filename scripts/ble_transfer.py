@@ -6,9 +6,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import hmac
 import json
+import os
+import platform
+import secrets
 import struct
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +32,7 @@ DEVICE_NAME = "Marginalia Transfer"
 PROGRESS_PRINT_BYTES = 4096
 PROGRESS_PRINT_SECONDS = 1.0
 DEFAULT_WINDOW_BYTES = 4096
+CONFIG_PATH = Path(os.environ.get("MARGINALIA_BLE_CONFIG", "~/.config/marginalia/ble_hosts.json")).expanduser()
 
 
 def sha256_file(path: Path) -> str:
@@ -42,6 +48,78 @@ def decode_status(data: bytearray | bytes) -> dict[str, Any]:
         return json.loads(bytes(data).decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {"state": "unknown", "raw": bytes(data).decode("utf-8", errors="replace")}
+
+
+def load_ble_config() -> dict[str, Any]:
+    try:
+        with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("devices", {})
+    if not isinstance(data["devices"], dict):
+        data["devices"] = {}
+    return data
+
+
+def save_ble_config(config: dict[str, Any]) -> None:
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG_PATH.with_suffix(CONFIG_PATH.suffix + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(config, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        os.fchmod(handle.fileno(), 0o600)
+    tmp.replace(CONFIG_PATH)
+    CONFIG_PATH.chmod(0o600)
+
+
+def get_host_identity(config: dict[str, Any]) -> tuple[str, str]:
+    host_id = config.get("host_id")
+    if not isinstance(host_id, str) or not host_id:
+        host_id = str(uuid.uuid4())
+        config["host_id"] = host_id
+    host_name = config.get("host_name")
+    if not isinstance(host_name, str) or not host_name:
+        host_name = (platform.node() or "Marginalia host")[:48]
+        config["host_name"] = host_name
+    return host_id, host_name
+
+
+def trusted_response(secret: str, device_nonce: str, host_id: str) -> str:
+    message = f"{device_nonce}|{host_id}|1".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def remember_trusted_host(
+    config: dict[str, Any],
+    device_id: str,
+    host_id: str,
+    host_name: str,
+    secret: str,
+    *,
+    transfer_label: str,
+) -> None:
+    config["devices"][device_id] = {"host_id": host_id, "host_name": host_name, "secret": secret}
+    try:
+        save_ble_config(config)
+    except OSError as exc:
+        print(
+            f"Warning: {transfer_label} succeeded, but failed to save trusted host for {device_id}: {exc}",
+            file=sys.stderr,
+        )
+    else:
+        print(f"Saved trusted host for {device_id}")
+
+
+def warn_pairing_not_saved(status: dict[str, Any], *, transfer_label: str) -> None:
+    pairing = status.get("pairing")
+    if pairing:
+        print(f"Warning: {transfer_label} succeeded, but trusted-host pairing was {pairing}.", file=sys.stderr)
+    else:
+        print(f"Warning: {transfer_label} succeeded, but the device did not confirm trusted-host pairing.", file=sys.stderr)
 
 
 async def find_device(timeout: float):
@@ -87,6 +165,11 @@ async def put_file(
     final_status: dict[str, Any] = {}
     status_event = asyncio.Event()
     done = asyncio.Event()
+    transfer_started = False
+    pending_pair_device: str | None = None
+    pending_pair_secret: str | None = None
+    config = load_ble_config()
+    host_id, host_name = get_host_identity(config)
     last_print_received = -PROGRESS_PRINT_BYTES
     last_print_time = 0.0
 
@@ -112,7 +195,7 @@ async def put_file(
         else:
             print(f"\n{state}: {final_status}")
         status_event.set()
-        if state in success_states or state == "error":
+        if transfer_started and (state in success_states or state == "error"):
             done.set()
 
     async def wait_for_status(states: set[str], timeout: float) -> dict[str, Any]:
@@ -159,7 +242,54 @@ async def put_file(
         async with BleakClient(device) as client:
             await client.start_notify(STATUS_UUID, on_status)
             try:
-                await write_json(client, {"op": "hello", "version": 1, "code": args.code})
+                try:
+                    on_status(None, await client.read_gatt_char(STATUS_UUID))
+                except (BleakError, OSError):
+                    pass
+
+                device_id = final_status.get("device_id")
+                device_nonce = final_status.get("device_nonce")
+                trusted = config["devices"].get(device_id) if isinstance(device_id, str) else None
+                used_trusted_auth = False
+                if (
+                    trusted
+                    and isinstance(trusted, dict)
+                    and isinstance(device_nonce, str)
+                    and not args.force_code
+                ):
+                    response = trusted_response(str(trusted.get("secret", "")), device_nonce, str(trusted.get("host_id", host_id)))
+                    final_status = {}
+                    await write_json(
+                        client,
+                        {
+                            "op": "hello",
+                            "version": 1,
+                            "host_id": trusted.get("host_id", host_id),
+                            "response": response,
+                        },
+                    )
+                    hello_status = await wait_for_status({"connected", "error"}, args.control_timeout)
+                    used_trusted_auth = hello_status.get("state") == "connected" and hello_status.get("trusted_host")
+                    if not used_trusted_auth:
+                        print("\nTrusted-host auth failed; falling back to code.", file=sys.stderr)
+
+                if not used_trusted_auth:
+                    if not args.code:
+                        print("\nNo trusted host was accepted; pass --code with the six-digit device code.", file=sys.stderr)
+                        return 1
+                    final_status = {}
+                    hello_payload: dict[str, Any] = {"op": "hello", "version": 1, "code": args.code}
+                    if not args.no_remember_host and isinstance(device_id, str):
+                        pending_pair_device = device_id
+                        pending_pair_secret = secrets.token_hex(32)
+                        hello_payload.update(
+                            {
+                                "pair_host_id": host_id,
+                                "pair_host_name": host_name,
+                                "pair_secret": pending_pair_secret,
+                            }
+                        )
+                    await write_json(client, hello_payload)
                 hello_status = await wait_for_status({"connected", "error"}, args.control_timeout)
                 if hello_status.get("state") == "error":
                     print(f"\nDevice rejected session: {final_status.get('error')}", file=sys.stderr)
@@ -180,6 +310,7 @@ async def put_file(
                     print("\nTimed out waiting for device transfer start.", file=sys.stderr)
                     return 1
 
+                transfer_started = True
                 sequence = 0
                 sent_bytes = 0
                 ack_floor = 0
@@ -206,6 +337,8 @@ async def put_file(
                     return 1
 
                 await write_json(client, {"op": "commit"})
+                if pending_pair_device and pending_pair_secret:
+                    print("\nApprove Save Host on the device to remember this computer.")
                 try:
                     await asyncio.wait_for(done.wait(), timeout=args.install_timeout)
                 except asyncio.TimeoutError:
@@ -222,9 +355,31 @@ async def put_file(
 
     print()
     if final_status.get("state") == "installed":
+        if final_status.get("paired") and pending_pair_device and pending_pair_secret:
+            remember_trusted_host(
+                config,
+                pending_pair_device,
+                host_id,
+                host_name,
+                pending_pair_secret,
+                transfer_label="install",
+            )
+        elif pending_pair_device and pending_pair_secret:
+            warn_pairing_not_saved(final_status, transfer_label="install")
         print(f"Installed {final_status.get('name') or final_status.get('package') or source.name}")
         return 0
     if final_status.get("state") == "saved":
+        if final_status.get("paired") and pending_pair_device and pending_pair_secret:
+            remember_trusted_host(
+                config,
+                pending_pair_device,
+                host_id,
+                host_name,
+                pending_pair_secret,
+                transfer_label="save",
+            )
+        elif pending_pair_device and pending_pair_secret:
+            warn_pairing_not_saved(final_status, transfer_label="save")
         print(f"Saved {final_status.get('path') or final_status.get('name') or source.name}")
         return 0
     print(f"Transfer failed: {final_status.get('error') or final_status}", file=sys.stderr)
@@ -273,7 +428,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     put = sub.add_parser("put-package", help="Upload and install a .mpkg.zip archive")
     put.add_argument("archive", help="Path to the .mpkg.zip archive")
-    put.add_argument("--code", required=True, type=six_digit_code, help="Six-digit code shown on the device")
+    put.add_argument("--code", type=six_digit_code, help="Six-digit code shown on the device")
+    put.add_argument("--force-code", action="store_true", help="Skip trusted-host auth and use --code")
+    put.add_argument("--no-remember-host", action="store_true", help="Do not ask the device to save this host")
     put.add_argument("--chunk-size", type=positive_int, default=160, help="Payload bytes per BLE data frame")
     put.add_argument("--chunk-delay", type=float, default=0.0, help="Delay between chunk writes, in seconds")
     put.add_argument(
@@ -296,7 +453,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     put_book_parser = sub.add_parser("put-book", help="Upload an .epub book")
     put_book_parser.add_argument("book", help="Path to the .epub book")
-    put_book_parser.add_argument("--code", required=True, type=six_digit_code, help="Six-digit code shown on the device")
+    put_book_parser.add_argument("--code", type=six_digit_code, help="Six-digit code shown on the device")
+    put_book_parser.add_argument("--force-code", action="store_true", help="Skip trusted-host auth and use --code")
+    put_book_parser.add_argument("--no-remember-host", action="store_true", help="Do not ask the device to save this host")
     put_book_parser.add_argument("--chunk-size", type=positive_int, default=160, help="Payload bytes per BLE data frame")
     put_book_parser.add_argument("--chunk-delay", type=float, default=0.0, help="Delay between chunk writes, in seconds")
     put_book_parser.add_argument(

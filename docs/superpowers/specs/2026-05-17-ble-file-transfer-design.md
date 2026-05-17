@@ -58,14 +58,14 @@ accepts the session only if the code matches the current Bluetooth Transfer scre
 The paired-host flow should extend `hello` without changing the transfer commands:
 
 ```json
-{"op":"hello","version":1,"host_id":"host-uuid","device_nonce":"base64","response":"base64"}
+{"op":"hello","version":1,"host_id":"host-uuid","response":"hex"}
 ```
 
 The device generates a single-use nonce when advertising starts and includes it in the status payload for trusted-host
-clients. The host computes `HMAC-SHA256(device_nonce || host_id || protocol_version)` with the shared secret from its
-trusted-host record and sends the result as `response`. The device verifies the HMAC, marks the nonce consumed, and
-accepts the session on match. Failed nonce authentication should leave the session unauthenticated, log the failure, and
-fall back to the visible-code `hello` path.
+clients. The host computes `HMAC-SHA256(device_nonce + "|" + host_id + "|1")` with the shared secret from its
+trusted-host record and sends the hex result as `response`. The device verifies the HMAC, rotates the nonce after a
+successful match, and accepts the session. Failed nonce authentication should leave the session unauthenticated, log the
+failure, and fall back to the visible-code `hello` path.
 
 Data frames use a simple binary header:
 
@@ -79,26 +79,32 @@ The firmware accepts monotonically increasing sequence numbers starting at zero.
 Status payloads:
 
 ```json
-{"state":"advertising","code":"123456"}
+{"state":"advertising","device_id":"...","device_nonce":"...","has_trusted_host":true}
 {"state":"receiving","received":512,"size":1234}
 {"state":"verifying","received":1234,"size":1234}
 {"state":"installing","package":"org.example.package"}
-{"state":"installed","package":"org.example.package"}
+{"state":"installed","package":"org.example.package","paired":true}
 {"state":"error","error":"sha256_mismatch"}
 ```
 
 ## File Safety
 
-The first PR only accepts package archives:
+BLE writes only accept the explicit file kinds implemented by the protocol. Package uploads go to the package inbox and
+book uploads go to `/Books`:
 
 - filename must be a basename with no slash or backslash
 - filename must not start with `.`
 - filename may contain only ASCII letters, digits, `.`, `_`, and `-`
-- filename must end with `.mpkg.zip`
+- package filenames must end with `.mpkg.zip`
+- book filenames must end with `.epub`
 - maximum filename length is 96 bytes
 - maximum upload size should be bounded conservatively for available SD-card and RAM behavior
 
-The temporary path is `/.marginalia/sideload/.ble-<safe-name>.part`. On successful verification, rename to `/.marginalia/sideload/<safe-name>`.
+Package uploads use `/.marginalia/sideload/.ble-<safe-name>.part` while receiving. On successful verification, rename
+to `/.marginalia/sideload/<safe-name>` and install from the package inbox path.
+
+Book uploads use `/Books/.ble-<safe-name>.part` while receiving. On successful verification, rename to
+`/Books/<safe-name>`.
 
 If install succeeds, the archive may remain available for manual reinstall. If install fails, keep the verified archive in sideload and show the install error.
 
