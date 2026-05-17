@@ -272,7 +272,7 @@ static uint8_t miniLookupKernClass(const EpdKernClassEntry* entries, uint16_t co
 // the mini versions together in applyKernLigaturePointers, so a codepoint not
 // on this page simply returns class 0 (no kerning), which was the pre-existing
 // behavior for any codepoint outside the kern classes.
-bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount) {
+bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount, HalFile& file) {
   freeStyleMiniKern(s);
   if (!s.kernLeftClasses || !s.kernRightClasses || s.header.kernLeftEntryCount == 0 ||
       s.header.kernRightEntryCount == 0) {
@@ -368,56 +368,123 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
     }
   }
 
-  // Step 6: read the full matrix's rows for each used left class, keep only
-  // columns for used right classes. One SD seek + one read per used left class;
-  // a row is kernRightClassCount bytes (~200 for Literata).
-  FsFile file;
-  if (!Storage.openFileForRead("SDCF", filePath_, file)) {
-    LOG_ERR("SDCF", "Failed to open .cpfont for mini kern: %s", filePath_);
-    freeStyleMiniKern(s);
-    return false;
+  // Step 6: read the full matrix's rows for each used left class, keeping only
+  // columns for used right classes.
+  //
+  // Strategy: read the matrix in fixed-size chunks (KERN_CHUNK_BYTES), sweeping
+  // forward through the file. Each chunk covers a contiguous run of full rows;
+  // we extract the needed columns inline as each chunk is read. This costs at
+  // most ceil(fullMatrixBytes / KERN_CHUNK_BYTES) seeks + reads regardless of
+  // how many left classes are used, and caps the heap spike at KERN_CHUNK_BYTES
+  // instead of the full matrix size (~28 KB for Literata).
+  //
+  // Fallback: if even the chunk buffer can't be allocated, fall back to one
+  // seek + one row read per used left class (original behavior).
+  static constexpr uint32_t KERN_CHUNK_BYTES = 4096;
+  const uint32_t rowBytes = s.header.kernRightClassCount;
+
+  // Build a sorted-by-oldL mapping so we sweep the file forward.
+  // Each entry: (oldL, newL) — oldL is the file row index (1-based).
+  // We reuse the usedLeft and usedRight scratch slots (slots 0 and 1), which
+  // are fully consumed after step 1 and not read again. newToOldLeft/Right
+  // (slots 4 and 5) must stay intact — they are still read during column
+  // extraction in the inner loop below.
+  uint8_t* sortedOldL = base + 0 * 256;  // reuse usedLeft slot
+  uint8_t* sortedNewL = base + 1 * 256;  // reuse usedRight slot
+  {
+    uint8_t k = 0;
+    // Sweep oldL in ascending order — newToOldLeft maps newL→oldL, so we
+    // scan all 255 possible oldL values and emit matches in order. O(255×numLeft).
+    for (int oldL = 1; oldL < 256; oldL++) {
+      for (uint8_t newL = 1; newL <= numLeft; newL++) {
+        if (newToOldLeft[newL] == static_cast<uint8_t>(oldL)) {
+          sortedOldL[k] = static_cast<uint8_t>(oldL);
+          sortedNewL[k] = newL;
+          k++;
+          break;
+        }
+      }
+    }
+    // k == numLeft at this point
   }
 
-  std::unique_ptr<int8_t[]> rowBuf(new (std::nothrow) int8_t[s.header.kernRightClassCount]);
-  if (!rowBuf) {
-    LOG_ERR("SDCF", "Failed to allocate row buffer (%u bytes)", s.header.kernRightClassCount);
-    file.close();
-    freeStyleMiniKern(s);
-    return false;
-  }
+  std::unique_ptr<int8_t[]> chunkBuf(new (std::nothrow) int8_t[KERN_CHUNK_BYTES]);
+  if (chunkBuf) {
+    // Chunked sweep: one seek per chunk boundary, rows processed in oldL order.
+    uint32_t chunkStart = UINT32_MAX;  // file offset of first byte in chunkBuf
+    uint32_t chunkEnd = 0;             // one-past-last valid byte in chunkBuf
+    uint32_t chunkSeeks = 0;
 
-  for (uint8_t newL = 1; newL <= numLeft; newL++) {
-    const uint8_t oldL = newToOldLeft[newL];
-    const uint32_t rowFileOff = s.kernMatrixFileOffset + (oldL - 1u) * s.header.kernRightClassCount;
-    if (!file.seekSet(rowFileOff)) {
-      LOG_ERR("SDCF", "Failed to seek to kern row %u", oldL);
-      file.close();
+    for (uint8_t k = 0; k < numLeft; k++) {
+      const uint8_t oldL = sortedOldL[k];
+      const uint8_t newL = sortedNewL[k];
+      const uint32_t rowFileOff = s.kernMatrixFileOffset + (oldL - 1u) * rowBytes;
+      const uint32_t rowFileEnd = rowFileOff + rowBytes;
+
+      // If this row is not fully inside the current chunk, load the next chunk.
+      if (rowFileOff < chunkStart || rowFileEnd > chunkEnd) {
+        chunkStart = rowFileOff;
+        uint32_t toRead = KERN_CHUNK_BYTES;
+        const uint32_t matrixEnd =
+            s.kernMatrixFileOffset + static_cast<uint32_t>(s.header.kernLeftClassCount) * rowBytes;
+        if (chunkStart + toRead > matrixEnd) toRead = matrixEnd - chunkStart;
+        if (!file.seekSet(chunkStart)) {
+          LOG_ERR("SDCF", "Failed to seek to kern chunk at %u", chunkStart);
+          freeStyleMiniKern(s);
+          return false;
+        }
+        if (file.read(reinterpret_cast<uint8_t*>(chunkBuf.get()), toRead) != static_cast<int>(toRead)) {
+          LOG_ERR("SDCF", "Failed to read kern chunk (%u bytes)", toRead);
+          freeStyleMiniKern(s);
+          return false;
+        }
+        chunkEnd = chunkStart + toRead;
+        chunkSeeks++;
+      }
+
+      const int8_t* srcRow = chunkBuf.get() + (rowFileOff - chunkStart);
+      int8_t* miniRow = s.miniKernMatrix + (newL - 1u) * numRight;
+      for (uint8_t newR = 1; newR <= numRight; newR++) {
+        miniRow[newR - 1] = srcRow[newToOldRight[newR] - 1u];
+      }
+    }
+    LOG_DBG("SDCF", "Built mini kern (chunked %uB): %u×%u=%u bytes, %u seeks (full was %u×%u=%u bytes)",
+            KERN_CHUNK_BYTES, numLeft, numRight, matrixBytes, chunkSeeks, s.header.kernLeftClassCount,
+            s.header.kernRightClassCount, static_cast<uint32_t>(s.header.kernLeftClassCount) * rowBytes);
+  } else {
+    // Fallback: one seek + one row read per used left class.
+    LOG_DBG("SDCF", "Built mini kern (per-row fallback): %u rows", numLeft);
+    std::unique_ptr<int8_t[]> rowBuf(new (std::nothrow) int8_t[rowBytes]);
+    if (!rowBuf) {
+      LOG_ERR("SDCF", "Failed to allocate row buffer (%u bytes)", rowBytes);
       freeStyleMiniKern(s);
       return false;
     }
-    if (file.read(reinterpret_cast<uint8_t*>(rowBuf.get()), s.header.kernRightClassCount) !=
-        static_cast<int>(s.header.kernRightClassCount)) {
-      LOG_ERR("SDCF", "Failed to read kern row %u", oldL);
-      file.close();
-      freeStyleMiniKern(s);
-      return false;
-    }
-    int8_t* miniRow = s.miniKernMatrix + (newL - 1u) * numRight;
-    for (uint8_t newR = 1; newR <= numRight; newR++) {
-      miniRow[newR - 1] = rowBuf[newToOldRight[newR] - 1u];
+    for (uint8_t k = 0; k < numLeft; k++) {
+      const uint8_t oldL = sortedOldL[k];
+      const uint8_t newL = sortedNewL[k];
+      const uint32_t rowFileOff = s.kernMatrixFileOffset + (oldL - 1u) * rowBytes;
+      if (!file.seekSet(rowFileOff)) {
+        LOG_ERR("SDCF", "Failed to seek to kern row %u", oldL);
+        freeStyleMiniKern(s);
+        return false;
+      }
+      if (file.read(reinterpret_cast<uint8_t*>(rowBuf.get()), rowBytes) != static_cast<int>(rowBytes)) {
+        LOG_ERR("SDCF", "Failed to read kern row %u", oldL);
+        freeStyleMiniKern(s);
+        return false;
+      }
+      int8_t* miniRow = s.miniKernMatrix + (newL - 1u) * numRight;
+      for (uint8_t newR = 1; newR <= numRight; newR++) {
+        miniRow[newR - 1] = rowBuf[newToOldRight[newR] - 1u];
+      }
     }
   }
-
-  file.close();
 
   s.miniKernLeftEntryCount = lIdx;
   s.miniKernRightEntryCount = rIdx;
   s.miniKernLeftClassCount = numLeft;
   s.miniKernRightClassCount = numRight;
-
-  LOG_DBG("SDCF", "Built mini kern: %u×%u matrix (%u bytes, full was %u×%u = %u bytes)", numLeft, numRight, matrixBytes,
-          s.header.kernLeftClassCount, s.header.kernRightClassCount,
-          static_cast<uint32_t>(s.header.kernLeftClassCount) * s.header.kernRightClassCount);
   return true;
 }
 
@@ -1164,7 +1231,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   }
 
   uint32_t sdTime = millis() - sdStart;
-  if (file) file.close();
   delete[] mappings;
 
   // Kern/ligature wiring strategy:
@@ -1183,13 +1249,25 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   bool kernLigOk = false;
   if (!metadataOnly) {
     if (loadStyleKernLigatureData(s)) {
-      kernLigOk = buildMiniKernMatrix(s, codepoints, cpCount);
+      // Reuse the file handle from the bitmap pass to avoid a redundant
+      // Storage.openFileForRead() inside buildMiniKernMatrix (fix A).
+      if (!file) {
+        if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+          LOG_ERR("SDCF", "Failed to open .cpfont for kern matrix (style %u)", styleIdx);
+        } else {
+          kernLigOk = buildMiniKernMatrix(s, codepoints, cpCount, file);
+        }
+      } else {
+        kernLigOk = buildMiniKernMatrix(s, codepoints, cpCount, file);
+      }
     }
   } else if (loadKernLigatureData) {
     loadStyleKernLigatureData(s, /*ligatureOnly=*/true);
     // Don't set kernLigOk → mini kern matrix stays null on miniData, but
     // ligatures are still resident on stubData (set in loadStyleKernLigatureData).
   }
+
+  if (file) file.close();
 
   // Populate miniData and swap
   memset(&s.miniData, 0, sizeof(s.miniData));

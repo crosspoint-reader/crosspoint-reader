@@ -6,6 +6,8 @@
 #include "EpdFont.h"
 #include "EpdFontData.h"
 
+class HalFile;
+
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
@@ -206,7 +208,7 @@ class SdCardFont {
   void freeStyleKernLigatureData(PerStyle& s);
   void freeStyleMiniKern(PerStyle& s);
   bool loadStyleKernLigatureData(PerStyle& s, bool ligatureOnly = false);
-  bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
+  bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount, HalFile& file);
   void applyKernLigaturePointers(const PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
