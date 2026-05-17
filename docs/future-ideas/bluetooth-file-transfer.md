@@ -89,9 +89,10 @@ on the next transfer-mode start unless a resumable manifest says they can contin
 Build SD-card package archive install first, because BLE uploads should land in the same `/.marginalia/sideload/`
 directory and reuse the same installer.
 
-Then prototype BLE transfer with NimBLE-Arduino behind a compile flag. Start with package upload only, because `.mpkg.zip`
-archives are small and already have size/SHA verification in the package path. Add crash-report download second. Add
-EPUB upload after the transfer protocol survives real phone testing.
+The first firmware implementation should live under **File Transfer > Bluetooth Transfer** and should use
+NimBLE-Arduino directly. Start with package upload only, because `.mpkg.zip` archives are small and already have
+size/SHA verification in the package path. Add crash-report download second. Add EPUB upload after the transfer protocol
+survives real phone testing.
 
 ## References
 

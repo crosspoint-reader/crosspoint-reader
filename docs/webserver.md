@@ -185,6 +185,19 @@ This is useful for organizing your library by genre, author, series or file type
 
 For power users, you can manage files directly from your terminal using `curl` while the device is in File Upload mode. Detailed documentation can be found [here](./webserver-endpoints.md). 
 
+## Bluetooth Package Transfer
+
+Packages can also be installed without Wi-Fi from **File Transfer > Bluetooth Transfer**. Keep that screen open, note
+the six-digit code, then run:
+
+```sh
+python3 scripts/ble_transfer.py put-package path/to/package.mpkg.zip --code 123456
+```
+
+The tool scans for `Marginalia Transfer`, streams the archive over BLE, and waits for the device to verify and install
+it. BLE transfer currently accepts package archives only; general SD-card browsing and book upload still use the web
+file manager.
+
 ## Security Notes
 
 - The web server runs on port 80 (standard HTTP)

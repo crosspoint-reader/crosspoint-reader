@@ -19,7 +19,8 @@ Marginalia is not affiliated with Xteink or any device manufacturer.
 - **Tilt page turn** on X3.
 - **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, and SD-cache management.
 - **Wireless workflows**: file transfer web UI, EPUB optimizer, web settings UI/API, WebSocket fast uploads, WebDAV,
-  AP/STA Wi-Fi modes with QR helpers, Calibre wireless connect flow, OPDS browsing, and OTA updates.
+  AP/STA Wi-Fi modes with QR helpers, Calibre wireless connect flow, BLE package transfer, OPDS browsing, and OTA
+  updates.
 - **Customization**: themes, sleep screen modes, front/side button remapping, status bar controls, power-button
   behavior, refresh cadence, and more.
 - **Extensions**: side-loaded package folders and SDK-built `.mpkg.zip` archives with a manifest, compatibility model,
@@ -184,8 +185,10 @@ automatically when you delete a book, and moving a file to a new path resets its
 Marginalia scans side-loaded packages from `/.marginalia/packages/*/manifest.json` on the SD card. Package folders and
 SDK-built `.mpkg.zip` archives can be uploaded from the local web package manager, and compatible hub entries can be
 downloaded from the package page. Archives can also be copied to `/.marginalia/sideload/` on the SD card and installed
-from **Extensions > SD Card**. Archives are unpacked into the package inbox before install. Runtime hooks and app
-launching will be added on top of this store instead of being mixed into the package installer.
+from **Extensions > SD Card**. Archives can also be uploaded from **File Transfer > Bluetooth Transfer** with
+`scripts/ble_transfer.py`; BLE uploads verify size and SHA-256, land in `/.marginalia/sideload/`, and then use the same
+inbox install transaction. Runtime hooks and app launching will be added on top of this store instead of being mixed
+into the package installer.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 

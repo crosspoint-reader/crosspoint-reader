@@ -9,6 +9,7 @@
 
 #include <cstddef>
 
+#include "BleTransferActivity.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
@@ -96,6 +97,8 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     modeName = "Connect to Calibre";
   } else if (mode == NetworkMode::CREATE_HOTSPOT) {
     modeName = "Create Hotspot";
+  } else if (mode == NetworkMode::BLUETOOTH_TRANSFER) {
+    modeName = "Bluetooth Transfer";
   }
   LOG_DBG("WEBACT", "Network mode selected: %s", modeName);
 
@@ -116,6 +119,22 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
                                    }
                                  });
         });
+    return;
+  }
+
+  if (mode == NetworkMode::BLUETOOTH_TRANSFER) {
+    startActivityForResult(std::make_unique<BleTransferActivity>(renderer, mappedInput), [this](const ActivityResult&) {
+      state = WebServerActivityState::MODE_SELECTION;
+
+      startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+                             [this](const ActivityResult& result) {
+                               if (result.isCancelled) {
+                                 onGoHome();
+                               } else {
+                                 onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
+                               }
+                             });
+    });
     return;
   }
 
