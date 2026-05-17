@@ -190,15 +190,18 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
     }
   } else {
     // Check for new tilt gesture (with cooldown)
+    _tiltedState = 0;
     if ((now - _lastTiltMs) >= COOLDOWN_MS) {
       if (gx > RATE_THRESHOLD_DPS) {
-        _tiltXPositiveEvent = true;
+        _tiltedState |= (1 << TILT_X_POS);
+        // _tiltXPositiveEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
         LOG_INF("GYR", "X-axis=(%.1f) dps", gx);
       } else if (gx < -RATE_THRESHOLD_DPS) {
-        _tiltXNegativeEvent = true;
+        _tiltedState |= (1 << TILT_X_NEG);
+        // _tiltXNegativeEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
@@ -206,13 +209,15 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
       }
 
       if (gy > RATE_THRESHOLD_DPS) {
-        _tiltYPositiveEvent = true;
+        _tiltedState |= (1 << TILT_Y_POS);
+        // _tiltYPositiveEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
         LOG_INF("GYR", "Y-axis=(%.1f) dps", gy);
       } else if (gy < -RATE_THRESHOLD_DPS) {
-        _tiltYNegativeEvent = true;
+        _tiltedState |= (1 << TILT_Y_NEG);
+        // _tiltYNegativeEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
@@ -220,12 +225,14 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
       }
 
       if (gz > RATE_THRESHOLD_DPS) {
-        _tiltZPositiveEvent = true;
+        _tiltedState |= (1 << TILT_Z_POS);
+        // _tiltZPositiveEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
         LOG_INF("GYR", "Z-axis=(%.1f) dps", gz);
       } else if (gz < -RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_Z_NEG);
         _tiltZNegativeEvent = true;
         _hadActivity = true;
         _inTilt = true;
@@ -249,72 +256,37 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
   }
 }
 
-bool HalTiltSensor::wasTiltedXNegative() {
-  const bool val = _tiltXNegativeEvent;
-  _tiltXNegativeEvent = false;
-  return val;
-}
-
-bool HalTiltSensor::wasTiltedXPositive() {
-  const bool val = _tiltXPositiveEvent;
-  _tiltXPositiveEvent = false;
-  return val;
-}
-
-bool HalTiltSensor::wasTiltedYNegative() {
-  const bool val = _tiltYNegativeEvent;
-  _tiltYNegativeEvent = false;
-  return val;
-}
-
-bool HalTiltSensor::wasTiltedYPositive() {
-  const bool val = _tiltYPositiveEvent;
-  _tiltYPositiveEvent = false;
-  return val;
-}
-
-bool HalTiltSensor::wasTiltedZNegative() {
-  const bool val = _tiltZNegativeEvent;
-  _tiltZNegativeEvent = false;
-  return val;
-}
-
-bool HalTiltSensor::wasTiltedZPositive() {
-  const bool val = _tiltZPositiveEvent;
-  _tiltZPositiveEvent = false;
-  return val;
-}
-
 bool HalTiltSensor::wasTilted(uint8_t tiltIndex) {
-  bool val;
-  switch (tiltIndex) {
-    case TILT_X_NEG:
-      val = _tiltXNegativeEvent;
-      break;
-    case TILT_X_POS:
-      val = _tiltXPositiveEvent;
-      break;
-    case TILT_Y_NEG:
-      val = _tiltYNegativeEvent;
-      break;
-    case TILT_Y_POS:
-      val = _tiltYPositiveEvent;
-      break;
-    case TILT_Z_NEG:
-      val = _tiltZNegativeEvent;
-      break;
-    case TILT_Z_POS:
-      val = _tiltZPositiveEvent;
-      break;
-    default:
-      val = false;
-  }
-  _tiltXNegativeEvent = false;
-  _tiltXPositiveEvent = false;
-  _tiltYNegativeEvent = false;
-  _tiltYPositiveEvent = false;
-  _tiltZNegativeEvent = false;
-  _tiltZPositiveEvent = false;
+  const bool val = _tiltedState & (1 << tiltIndex);
+  // switch (tiltIndex) {
+  //   case TILT_X_NEG:
+  //     val = _tiltXNegativeEvent;
+  //     break;
+  //   case TILT_X_POS:
+  //     val = _tiltXPositiveEvent;
+  //     break;
+  //   case TILT_Y_NEG:
+  //     val = _tiltYNegativeEvent;
+  //     break;
+  //   case TILT_Y_POS:
+  //     val = _tiltYPositiveEvent;
+  //     break;
+  //   case TILT_Z_NEG:
+  //     val = _tiltZNegativeEvent;
+  //     break;
+  //   case TILT_Z_POS:
+  //     val = _tiltZPositiveEvent;
+  //     break;
+  //   default:
+  //     val = false;
+  // }
+  // _tiltXNegativeEvent = false;
+  // _tiltXPositiveEvent = false;
+  // _tiltYNegativeEvent = false;
+  // _tiltYPositiveEvent = false;
+  // _tiltZNegativeEvent = false;
+  // _tiltZPositiveEvent = false;
+  _tiltedState = 0;
   return val;
 }
 
