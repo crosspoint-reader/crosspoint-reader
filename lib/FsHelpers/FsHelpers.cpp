@@ -11,26 +11,30 @@ std::string normalisePath(const std::string& path) {
   std::vector<std::string> components;
   std::string component;
 
+  const auto flushComponent = [&components, &component]() {
+    if (component.empty() || component == ".") {
+      component.clear();
+      return;
+    }
+    if (component == "..") {
+      if (!components.empty()) {
+        components.pop_back();
+      }
+    } else {
+      components.push_back(component);
+    }
+    component.clear();
+  };
+
   for (const auto c : path) {
     if (c == '/') {
-      if (!component.empty()) {
-        if (component == "..") {
-          if (!components.empty()) {
-            components.pop_back();
-          }
-        } else {
-          components.push_back(component);
-        }
-        component.clear();
-      }
+      flushComponent();
     } else {
       component += c;
     }
   }
 
-  if (!component.empty()) {
-    components.push_back(component);
-  }
+  flushComponent();
 
   std::string result;
   for (const auto& c : components) {
