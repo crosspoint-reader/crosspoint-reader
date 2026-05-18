@@ -198,8 +198,6 @@ bool Xtc::generateCoverBmp() const {
     // Allocate a row buffer for 1-bit output
     uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(dstRowSize));
     if (!rowBuffer) {
-      // Explicit close() required before leaving the open output file path.
-      coverBmp.close();
       free(pageBuffer);
       return false;
     }
@@ -256,8 +254,6 @@ bool Xtc::generateCoverBmp() const {
     }
   }
 
-  // Explicit close() required before returning from the generated output path.
-  coverBmp.close();
   free(pageBuffer);
 
   LOG_DBG("XTC", "Generated cover BMP: %s", getCoverBmpPath().c_str());
@@ -318,9 +314,7 @@ bool Xtc::generateThumbBmp(int height) const {
             size_t bytesRead = src.read(buffer, sizeof(buffer));
             dst.write(buffer, bytesRead);
           }
-          dst.close();
         }
-        src.close();
       }
       LOG_DBG("XTC", "Copied cover to thumb (no scaling needed)");
       return Storage.exists(getThumbBmpPath(height).c_str());
@@ -373,8 +367,6 @@ bool Xtc::generateThumbBmp(int height) const {
   // Allocate row buffer for 1-bit output
   uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
   if (!rowBuffer) {
-    // Explicit close() required before leaving the open output file path.
-    thumbBmp.close();
     free(pageBuffer);
     return false;
   }
@@ -482,8 +474,6 @@ bool Xtc::generateThumbBmp(int height) const {
   }
 
   free(rowBuffer);
-  // Explicit close() required before returning from the generated output path.
-  thumbBmp.close();
   free(pageBuffer);
 
   LOG_DBG("XTC", "Generated thumb BMP (%dx%d): %s", thumbWidth, thumbHeight, getThumbBmpPath(height).c_str());
