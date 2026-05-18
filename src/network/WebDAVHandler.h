@@ -18,6 +18,7 @@ class WebDAVHandler : public RequestHandler {
   String _putTempPath;
   bool _putOk = false;
   bool _putExisted = false;
+  bool _putComplete = false;
 
   // WebDAV method handlers
   void handleOptions(WebServer& s);
@@ -40,6 +41,7 @@ class WebDAVHandler : public RequestHandler {
   int getDepth(WebServer& s) const;
   bool getOverwrite(WebServer& s) const;
   String makeTempPath(const String& targetPath) const;
+  void restoreBackup(const String& backupPath, const String& targetPath, const char* operation) const;
   void clearEpubCacheIfNeeded(const String& path) const;
   void sendPropEntry(WebServer& s, const String& href, bool isDir, size_t size, const String& lastModified) const;
   String getMimeType(const String& path) const;
