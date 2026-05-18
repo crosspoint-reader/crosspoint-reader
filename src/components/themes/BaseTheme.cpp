@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
@@ -19,6 +20,18 @@ namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
+
+void drawCurrentIndexingStandalonePlus(const GfxRenderer& renderer, const int x, const int y) {
+  constexpr int strokeOffset = (CURRENT_INDEXING_STANDALONE_PLUS_SIZE - CURRENT_INDEXING_STANDALONE_PLUS_STROKE) / 2;
+  renderer.fillRect(x, y + strokeOffset, CURRENT_INDEXING_STANDALONE_PLUS_SIZE,
+                    CURRENT_INDEXING_STANDALONE_PLUS_STROKE);
+  renderer.fillRect(x + strokeOffset, y, CURRENT_INDEXING_STANDALONE_PLUS_STROKE,
+                    CURRENT_INDEXING_STANDALONE_PLUS_SIZE);
+}
+
+void drawFutureIndexingDot(const GfxRenderer& renderer, const int x, const int y) {
+  renderer.fillRect(x, y, FUTURE_INDEXING_DOT_SIZE, FUTURE_INDEXING_DOT_SIZE);
+}
 
 }  // namespace
 
@@ -702,6 +715,16 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom,
                               const int textYOffset) const {
+  StatusPageInfo pageInfo;
+  pageInfo.currentPage = currentPage > 0 ? static_cast<uint32_t>(currentPage - 1) : 0;
+  pageInfo.totalPages = pageCount > 0 ? static_cast<uint32_t>(pageCount) : 0;
+  pageInfo.totalKnown = true;
+  pageInfo.hasMorePages = false;
+  drawStatusBar(renderer, bookProgress, pageInfo, std::move(title), paddingBottom, textYOffset);
+}
+
+void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const StatusPageInfo pageInfo,
+                              std::string title, const int paddingBottom, const int textYOffset) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -711,41 +734,108 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const auto screenHeight = renderer.getScreenHeight();
   auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
   int progressTextWidth = 0;
+  int progressTextX = 0;
+  int pageTextWidth = 0;
+  int pageTextX = 0;
+  int plusTextWidth = 0;
+
+  const bool drawFutureIndicator = shouldDrawFutureIndexingIndicator(pageInfo);
 
   if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
     // Right aligned text for progress counter
     char progressStr[32];
+    char pageStr[16];
+    char percentStr[16];
+    formatStatusPageText(pageStr, sizeof(pageStr), pageInfo);
+    snprintf(percentStr, sizeof(percentStr), "%.0f%%", bookProgress);
 
     if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
+      const int percentTextWidth = renderer.getTextWidth(SMALL_FONT_ID, percentStr);
+      const int pagePercentGapWidth = renderer.getTextWidth(SMALL_FONT_ID, "  ");
+      pageTextWidth = renderer.getTextWidth(SMALL_FONT_ID, pageStr);
+      plusTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "+");
+      progressTextWidth = statusPageAndPercentTextWidth(pageTextWidth, percentTextWidth, pagePercentGapWidth,
+                                                        plusTextWidth, drawFutureIndicator);
+      progressTextX =
+          renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth;
+      pageTextX = progressTextX;
+      renderer.drawText(SMALL_FONT_ID, pageTextX, textY, pageStr);
+      const int percentTextX = progressTextX + pageTextWidth +
+                               (drawFutureIndicator ? futureIndexingPageCountRightReservation(plusTextWidth) : 0) +
+                               pagePercentGapWidth;
+      renderer.drawText(SMALL_FONT_ID, percentTextX, textY, percentStr);
     } else if (SETTINGS.statusBarBookProgressPercentage) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
+      snprintf(progressStr, sizeof(progressStr), "%s", percentStr);
+      progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
+      const int futureIndicatorReservation =
+          drawFutureIndicator ? futureIndexingPageCountRightReservation(FUTURE_INDEXING_DOT_SIZE) : 0;
+      progressTextX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight -
+                      progressTextWidth - futureIndicatorReservation;
+      renderer.drawText(SMALL_FONT_ID, progressTextX, textY, progressStr);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
+      snprintf(progressStr, sizeof(progressStr), "%s", pageStr);
+      pageTextWidth = renderer.getTextWidth(SMALL_FONT_ID, pageStr);
+      plusTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "+");
+      progressTextWidth =
+          pageTextWidth + (drawFutureIndicator ? futureIndexingPageCountRightReservation(plusTextWidth) : 0);
+      progressTextX =
+          renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth;
+      pageTextX = progressTextX;
+      renderer.drawText(SMALL_FONT_ID, pageTextX, textY, progressStr);
     }
-
-    progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    renderer.drawText(
-        SMALL_FONT_ID,
-        renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth, textY,
-        progressStr);
   }
 
   // Draw Progress Bar
-  if (SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS) {
+  const bool shouldDrawProgressBar =
+      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS &&
+      (SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::CHAPTER_PROGRESS ||
+       shouldDrawChapterProgressBar(pageInfo));
+  const int progressBarHeight = (SETTINGS.statusBarProgressBarThickness + 1) * 2;
+  if (shouldDrawProgressBar) {
     const int progressBarMaxWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom -
-                             ((SETTINGS.statusBarProgressBarThickness + 1) * 2) - paddingBottom;
+    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - progressBarHeight - paddingBottom;
     size_t progress;
     if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       progress = static_cast<size_t>(bookProgress);
     } else {
       // Chapter progress
-      progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
+      const uint32_t currentPage = pageInfo.currentPage + 1;
+      progress = (pageInfo.totalPages > 0) ? (static_cast<float>(currentPage) / pageInfo.totalPages) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
-    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, ((SETTINGS.statusBarProgressBarThickness + 1) * 2),
-                      true);
+    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, progressBarHeight, true);
+  }
+
+  const bool drawCurrentIndicator = !SETTINGS.statusBarChapterPageCount && shouldDrawCurrentIndexingIndicator(pageInfo);
+  if (drawCurrentIndicator) {
+    constexpr const char* indicator = "+";
+    const int indicatorWidth = renderer.getTextWidth(SMALL_FONT_ID, indicator);
+    if (progressTextWidth > 0) {
+      renderer.drawText(SMALL_FONT_ID, progressTextX - INDEXING_INDICATOR_AFTER_PAGE_COUNT_GAP - indicatorWidth, textY,
+                        indicator);
+    } else {
+      const int reservedBottomHeight = shouldDrawProgressBar ? progressBarHeight + INDEXING_INDICATOR_GAP : 0;
+      const auto position = currentIndexingStandalonePlusBottomRight(
+          renderer.getScreenWidth(), screenHeight, orientedMarginRight, orientedMarginBottom, paddingBottom,
+          reservedBottomHeight, metrics.statusBarVerticalMargin, renderer.getTextHeight(SMALL_FONT_ID));
+      drawCurrentIndexingStandalonePlus(renderer, position.x, position.y);
+    }
+  } else if (drawFutureIndicator) {
+    if (SETTINGS.statusBarChapterPageCount && pageTextWidth > 0) {
+      const auto position = futureIndexingDotAfterPageCount(pageTextX, pageTextWidth, plusTextWidth, textY,
+                                                            renderer.getTextHeight(SMALL_FONT_ID));
+      drawFutureIndexingDot(renderer, position.x, position.y);
+    } else if (progressTextWidth > 0) {
+      const auto position = futureIndexingDotAfterPageCount(progressTextX, progressTextWidth, FUTURE_INDEXING_DOT_SIZE,
+                                                            textY, renderer.getTextHeight(SMALL_FONT_ID));
+      drawFutureIndexingDot(renderer, position.x, position.y);
+    } else {
+      const int reservedBottomHeight = shouldDrawProgressBar ? progressBarHeight + INDEXING_INDICATOR_GAP : 0;
+      const auto position = futureIndexingDotBottomRight(
+          renderer.getScreenWidth(), screenHeight, orientedMarginRight, orientedMarginBottom, paddingBottom,
+          reservedBottomHeight, metrics.statusBarVerticalMargin, renderer.getTextHeight(SMALL_FONT_ID));
+      drawFutureIndexingDot(renderer, position.x, position.y);
+    }
   }
 
   // Draw Battery

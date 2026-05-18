@@ -2,6 +2,8 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <I18n.h>
+#include <Memory.h>
 
 #include "CrossPointSettings.h"
 #include "Epub.h"
@@ -13,6 +15,7 @@
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -23,13 +26,26 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
 
-std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
+std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, const GfxRenderer& renderer,
+                                               bool& indexingPopupShown) {
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
   }
 
-  auto epub = std::unique_ptr<Epub>(new Epub(path, "/.crosspoint"));
+  auto epub = makeUniqueNoThrow<Epub>(path, "/.crosspoint");
+  if (!epub) {
+    LOG_ERR("READER", "Failed to allocate epub");
+    return nullptr;
+  }
+
+  const auto bookBinPath = epub->getCachePath() + "/book.bin";
+  const auto progressPath = epub->getCachePath() + "/progress.bin";
+  if (!Storage.exists(bookBinPath.c_str()) || !Storage.exists(progressPath.c_str())) {
+    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    indexingPopupShown = true;
+  }
+
   if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
     return epub;
   }
@@ -74,10 +90,11 @@ void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   activityManager.goToFileBrowser(std::move(initialPath));
 }
 
-void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
+void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub, const bool initialIndexingPopupShown) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub)));
+  activityManager.replaceActivity(
+      std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub), initialIndexingPopupShown));
 }
 
 void ReaderActivity::onGoToBmpViewer(const std::string& path) {
@@ -124,12 +141,13 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
-    auto epub = loadEpub(initialBookPath);
+    bool initialIndexingPopupShown = false;
+    auto epub = loadEpub(initialBookPath, renderer, initialIndexingPopupShown);
     if (!epub) {
       onGoBack();
       return;
     }
-    onGoToEpubReader(std::move(epub));
+    onGoToEpubReader(std::move(epub), initialIndexingPopupShown);
   }
 }
 

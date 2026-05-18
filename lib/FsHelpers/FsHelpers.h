@@ -61,8 +61,17 @@ bool hasMarkdownExtension(std::string_view fileName);
 std::string extractFolderPath(const std::string& filePath);
 
 /**
+ * Recursively remove a directory while closing each enumerated child before
+ * deleting it. Some filesystem
+ * wrappers fail removal while an open child
+ * handle still points at the target.
+ */
+bool removeDirRecursive(const char* path);
+
+/**
  * Sanitize a filename/path component for FAT32 in a caller-provided buffer.
- * Replaces invalid path characters, spaces, and control characters with '-'.
+ * Replaces invalid path characters,
+ * spaces, and control characters with '-'.
  */
 void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen);
 

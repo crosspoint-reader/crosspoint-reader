@@ -1,7 +1,7 @@
 #pragma once
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
-#include <Epub/Section.h>
+#include <Epub/SectionHandle.h>
 
 #include <optional>
 
@@ -10,7 +10,8 @@
 
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
-  std::unique_ptr<Section> section = nullptr;
+  std::unique_ptr<SectionHandle> section = nullptr;
+  std::unique_ptr<SectionHandle> nextSectionPrewarm = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -31,6 +32,11 @@ class EpubReaderActivity final : public Activity {
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  bool backgroundIndexingWorkActive = false;
+  bool bookCacheDeleted = false;
+  bool freshBookEntry = false;
+  bool initialBookEntryIndexingPopupShown = false;
+  int pendingPageTurnDirection = 0;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -45,7 +51,11 @@ class EpubReaderActivity final : public Activity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
-  void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool maintainPrewarmWindow(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool hasCurrentIndexingWork() const;
+  bool hasPrewarmIndexingWork() const;
+  bool hasBackgroundIndexingWork() const;
+  bool pumpBackgroundIndexing();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
@@ -59,12 +69,17 @@ class EpubReaderActivity final : public Activity {
   void restoreSavedPosition();
 
  public:
-  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
-      : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
+  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
+                              const bool initialIndexingPopupShown = false)
+      : Activity("EpubReader", renderer, mappedInput),
+        epub(std::move(epub)),
+        initialBookEntryIndexingPopupShown(initialIndexingPopupShown) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
+  bool skipLoopDelay() override;
+  bool preventAutoSleep() override;
   bool isReaderActivity() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
 };

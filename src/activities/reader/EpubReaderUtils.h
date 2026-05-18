@@ -28,8 +28,10 @@ inline bool saveProgress(Epub& epub, int spineIndex, int pageNumber, int pageCou
   const size_t written = f.write(data, sizeof(data));
   if (written != sizeof(data)) {
     LOG_ERR("ERS", "Short write saving progress: %u/%u bytes", (unsigned)written, (unsigned)sizeof(data));
+    f.close();
     return false;
   }
+  f.close();
   LOG_DBG("ERS", "Progress saved: spine=%d page=%d", spineIndex, pageNumber);
   return true;
 }

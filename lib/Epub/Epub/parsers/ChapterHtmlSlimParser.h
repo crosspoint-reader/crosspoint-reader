@@ -1,5 +1,6 @@
 #pragma once
 
+#include <HalStorage.h>
 #include <expat.h>
 
 #include <climits>
@@ -9,17 +10,31 @@
 #include <vector>
 
 #include "Epub/FootnoteEntry.h"
+#include "Epub/Page.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
 #include "Epub/css/CssStyle.h"
 
-class Page;
 class GfxRenderer;
 class Epub;
 
 #define MAX_WORD_SIZE 200
+
+enum class ParsePumpStatus {
+  NeedsMore,
+  PageReady,
+  Complete,
+  Cancelled,
+  Error,
+};
+
+struct ParsePumpBudget {
+  uint16_t maxInputChunks = 0;
+  uint16_t maxCompletedPages = 0;
+  uint32_t maxMillis = 0;
+};
 
 class ChapterHtmlSlimParser {
   std::shared_ptr<Epub> epub;
@@ -40,6 +55,7 @@ class ChapterHtmlSlimParser {
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;
+  bool currentTextBlockTopInsetApplied = false;
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
@@ -86,10 +102,19 @@ class ChapterHtmlSlimParser {
   int currentFootnoteLinkTextLen = 0;
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
+  XML_Parser parser = nullptr;
+  FsFile parseFile;
+  bool* cancelFlag = nullptr;
+  bool parseStarted = false;
+  bool parseDone = false;
+  bool finalPageEmitted = false;
+  uint32_t chapterStartTime = 0;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPartWordBuffer();
+  void compactCurrentTextBlockIfNeeded();
+  void applyCurrentTextBlockTopInset();
   void makePages();
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
@@ -127,7 +152,11 @@ class ChapterHtmlSlimParser {
         contentBase(contentBase),
         imageBasePath(imageBasePath) {}
 
-  ~ChapterHtmlSlimParser() = default;
+  ~ChapterHtmlSlimParser();
+  bool begin(bool* cancel = nullptr);
+  ParsePumpStatus pump(const ParsePumpBudget& budget);
+  bool finish();
+  void close();
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }

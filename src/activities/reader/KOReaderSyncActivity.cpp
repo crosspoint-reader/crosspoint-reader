@@ -10,8 +10,15 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <optional>
 
+#include "CrossPointSettings.h"
+#include "Epub/IncrementalBuildBudget.h"
+#include "Epub/IncrementalSectionCache.h"
 #include "Epub/Section.h"
+#include "Epub/SectionHandle.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
@@ -24,6 +31,11 @@
 #include "fontIds.h"
 
 namespace {
+struct ReaderViewport {
+  uint16_t width = 0;
+  uint16_t height = 0;
+};
+
 void syncTimeWithNTP() {
   // Stop SNTP if already running (can't reconfigure while running)
   if (esp_sntp_enabled()) {
@@ -49,6 +61,116 @@ void syncTimeWithNTP() {
     LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }
 }
+
+IncrementalSection::LayoutCacheKey makeLayoutCacheKey(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  IncrementalSection::LayoutCacheKey key;
+  key.cacheVersion = IncrementalSection::CACHE_VERSION;
+  key.fontId = SETTINGS.getReaderFontId();
+  key.lineCompression = SETTINGS.getReaderLineCompression();
+  key.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+  key.paragraphAlignment = SETTINGS.paragraphAlignment;
+  key.viewportWidth = viewportWidth;
+  key.viewportHeight = viewportHeight;
+  key.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+  key.embeddedStyle = SETTINGS.embeddedStyle;
+  key.imageRendering = SETTINGS.imageRendering;
+  key.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+  return key;
+}
+
+IncrementalBuildOptions makeBuildOptions(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  IncrementalBuildOptions options;
+  options.fontId = SETTINGS.getReaderFontId();
+  options.lineCompression = SETTINGS.getReaderLineCompression();
+  options.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+  options.paragraphAlignment = SETTINGS.paragraphAlignment;
+  options.viewportWidth = viewportWidth;
+  options.viewportHeight = viewportHeight;
+  options.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+  options.embeddedStyle = SETTINGS.embeddedStyle;
+  options.imageRendering = SETTINGS.imageRendering;
+  options.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+  return options;
+}
+
+IncrementalBuildBudget indexBudget(const IncrementalBuildBudgetProfile profile) {
+  return IncrementalBuildBudgets::forProfile(profile);
+}
+
+ReaderViewport syncReaderViewport(GfxRenderer& renderer) {
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+  orientedMarginRight += SETTINGS.screenMargin;
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+
+  const int viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
+  const int viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+  return {static_cast<uint16_t>(std::max(0, viewportWidth)), static_cast<uint16_t>(std::max(0, viewportHeight))};
+}
+
+bool hasPreciseRemoteLocation(const CrossPointPosition& position) {
+  return position.hasLiIndex || position.xpathAnchorId[0] != '\0' || position.hasParagraphIndex;
+}
+
+template <typename Lookup>
+bool refineRemotePositionFromLookup(const Lookup& lookup, CrossPointPosition& position, const char* source) {
+  if (position.hasLiIndex) {
+    const auto liPage = lookup.getPageForListItemIndex(position.liIndex);
+    if (liPage.has_value()) {
+      LOG_DBG("KOSync", "%s li index %u -> page %d (was %d)", source, position.liIndex, *liPage, position.pageNumber);
+      position.pageNumber = *liPage;
+      return true;
+    }
+    LOG_DBG("KOSync", "%s li index %u not found in section LUT", source, position.liIndex);
+  }
+
+  if (position.xpathAnchorId[0] != '\0') {
+    const auto anchorPage = lookup.getPageForAnchor(std::string(position.xpathAnchorId));
+    if (anchorPage.has_value()) {
+      LOG_DBG("KOSync", "%s anchor '%s' -> page %d (was %d)", source, position.xpathAnchorId, *anchorPage,
+              position.pageNumber);
+      position.pageNumber = *anchorPage;
+      return true;
+    }
+    LOG_DBG("KOSync", "%s anchor '%s' not found in section LUT", source, position.xpathAnchorId);
+  }
+
+  if (position.hasParagraphIndex) {
+    const auto paragraphPage = lookup.getPageForParagraphIndex(position.paragraphIndex);
+    const auto nextParagraphPage = (position.paragraphIndex < UINT16_MAX)
+                                       ? lookup.getPageForParagraphIndex(position.paragraphIndex + 1)
+                                       : std::optional<uint16_t>{};
+    if (paragraphPage.has_value()) {
+      int refinedPage = std::max(position.pageNumber, static_cast<int>(*paragraphPage));
+      if (nextParagraphPage.has_value()) {
+        const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+        // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+        // coarse to trust over the intra-spine position.
+        if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+          refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+        }
+      }
+
+      char nextParaBuf[8];
+      if (nextParagraphPage.has_value()) {
+        snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+      } else {
+        snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
+      }
+      LOG_DBG("KOSync", "%s paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d", source,
+              position.paragraphIndex, *paragraphPage, nextParaBuf, position.pageNumber, refinedPage);
+      position.pageNumber = refinedPage;
+      return true;
+    }
+    LOG_DBG("KOSync", "%s paragraph %u not found in section LUT", source, position.paragraphIndex);
+  }
+
+  return false;
+}
 }  // namespace
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
@@ -64,6 +186,50 @@ void KOReaderSyncActivity::ensureEpubLoaded() {
     }
     LOG_DBG("KOSync", "Epub loaded (heap: %u)", (unsigned)ESP.getFreeHeap());
   }
+}
+
+bool KOReaderSyncActivity::refineRemoteProgressWithIncrementalIndexing(CrossPointPosition& position) {
+  if (!epub || !hasPreciseRemoteLocation(position)) {
+    return false;
+  }
+  if (position.spineIndex < 0 || position.spineIndex >= epub->getSpineItemsCount()) {
+    LOG_DBG("KOSync", "Skipping indexed refinement for out-of-range spine %d", position.spineIndex);
+    return false;
+  }
+
+  const auto viewport = syncReaderViewport(renderer);
+  if (viewport.width == 0 || viewport.height == 0) {
+    LOG_ERR("KOSync", "Skipping indexed refinement with invalid viewport %ux%u", viewport.width, viewport.height);
+    return false;
+  }
+
+  auto sectionHandle = SectionHandle::openOrCreate(epub, position.spineIndex, renderer,
+                                                   makeLayoutCacheKey(viewport.width, viewport.height),
+                                                   makeBuildOptions(viewport.width, viewport.height));
+  if (!sectionHandle || sectionHandle->mode() == SectionHandleMode::MissingOrFailed) {
+    LOG_DBG("KOSync", "Could not open incremental section %d for remote progress refinement", position.spineIndex);
+    return false;
+  }
+
+  bool refined = refineRemotePositionFromLookup(*sectionHandle, position, "Indexed");
+  while (!refined && sectionHandle->hasActiveBuilder()) {
+    const auto pumpResult = sectionHandle->pump(indexBudget(IncrementalBuildBudgetProfile::Outrun));
+    refined = refineRemotePositionFromLookup(*sectionHandle, position, "Indexed");
+
+    if (refined || pumpResult.status == SectionPumpStatus::DeferredLowMemory ||
+        pumpResult.status == SectionPumpStatus::Failed || pumpResult.status == SectionPumpStatus::Complete) {
+      if (!refined && pumpResult.status == SectionPumpStatus::DeferredLowMemory) {
+        LOG_DBG("KOSync", "Deferred indexed refinement for low memory at %lu known pages",
+                static_cast<unsigned long>(sectionHandle->knownPageCount()));
+      }
+      break;
+    }
+    if (pumpResult.status == SectionPumpStatus::NoWork && !sectionHandle->hasActiveBuilder()) {
+      break;
+    }
+  }
+
+  return refined;
 }
 
 void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
@@ -177,56 +343,27 @@ void KOReaderSyncActivity::performSync() {
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
 
-  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
-  if (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex) {
-    Section tempSection(epub, remotePosition.spineIndex, renderer);
-    bool refined = false;
-    if (remotePosition.hasLiIndex) {
-      const auto liPage = tempSection.getPageForListItemIndex(remotePosition.liIndex);
-      if (liPage.has_value()) {
-        LOG_DBG("KOSync", "Li index %u -> page %d (was %d)", remotePosition.liIndex, *liPage,
-                remotePosition.pageNumber);
-        remotePosition.pageNumber = *liPage;
-        refined = true;
-      } else {
-        LOG_DBG("KOSync", "Li index %u not found in section LUT", remotePosition.liIndex);
+  // Refine page using section LUTs: li index, anchor, or paragraph index.
+  if (hasPreciseRemoteLocation(remotePosition)) {
+    IncrementalSection::Cache incrementalCache(epub->getCachePath() + "/sections",
+                                               static_cast<uint32_t>(remotePosition.spineIndex));
+    const bool useIncrementalCache = incrementalCache.isComplete();
+    bool refined = useIncrementalCache && refineRemotePositionFromLookup(incrementalCache, remotePosition, "Cached");
+
+    if (!useIncrementalCache && !refined) {
+      {
+        RenderLock lock(*this);
+        statusMessage = tr(STR_INDEXING);
       }
+      requestUpdateAndWait();
+      refined = refineRemoteProgressWithIncrementalIndexing(remotePosition);
     }
-    if (!refined && remotePosition.xpathAnchorId[0] != '\0') {
-      const auto anchorPage = tempSection.getPageForAnchor(std::string(remotePosition.xpathAnchorId));
-      if (anchorPage.has_value()) {
-        LOG_DBG("KOSync", "Anchor '%s' -> page %d (was %d)", remotePosition.xpathAnchorId, *anchorPage,
+
+    if (!useIncrementalCache && !refined) {
+      Section tempSection(epub, remotePosition.spineIndex, renderer);
+      if (!refineRemotePositionFromLookup(tempSection, remotePosition, "Legacy")) {
+        LOG_DBG("KOSync", "Remote progress location was not resolved; keeping approximate page %d",
                 remotePosition.pageNumber);
-        remotePosition.pageNumber = *anchorPage;
-        refined = true;
-      } else {
-        LOG_DBG("KOSync", "Anchor '%s' not found in section cache", remotePosition.xpathAnchorId);
-      }
-    }
-    if (!refined && remotePosition.hasParagraphIndex) {
-      const auto paragraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex);
-      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(remotePosition.paragraphIndex + 1);
-      if (paragraphPage.has_value()) {
-        int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
-        if (nextParagraphPage.has_value()) {
-          const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
-          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
-          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
-          // occupies different pages than at build time).
-          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
-            refinedPage = static_cast<int>(*nextParagraphPage) - 1;
-          }
-        }
-        char nextParaBuf[8];
-        if (nextParagraphPage.has_value())
-          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
-        else
-          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
-        LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
-                remotePosition.paragraphIndex, *paragraphPage, nextParaBuf, remotePosition.pageNumber, refinedPage);
-        remotePosition.pageNumber = refinedPage;
-      } else {
-        LOG_DBG("KOSync", "Paragraph %u not found in section LUT", remotePosition.paragraphIndex);
       }
     }
   }

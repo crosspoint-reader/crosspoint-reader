@@ -355,8 +355,14 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
           // continue anyway - book will work without CSS and we'll still load any inline style CSS
         }
         parseCssFiles();
-        // Invalidate section caches so they are rebuilt with the new CSS
-        Storage.removeDir((cachePath + "/sections").c_str());
+        // Invalidate section caches so they are rebuilt with the new CSS.
+        const auto sectionsPath = cachePath + "/sections";
+        if (Storage.exists(sectionsPath.c_str())) {
+          if (!FsHelpers::removeDirRecursive(sectionsPath.c_str())) {
+            LOG_ERR("EBP", "Failed to remove stale section cache after CSS rebuild: %s", sectionsPath.c_str());
+            return false;
+          }
+        }
       }
     }
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
@@ -458,7 +464,13 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (!skipLoadingCss) {
     // Parse CSS files after cache reload
     parseCssFiles();
-    Storage.removeDir((cachePath + "/sections").c_str());
+    const auto sectionsPath = cachePath + "/sections";
+    if (Storage.exists(sectionsPath.c_str())) {
+      if (!FsHelpers::removeDirRecursive(sectionsPath.c_str())) {
+        LOG_ERR("EBP", "Failed to remove stale section cache after CSS parse: %s", sectionsPath.c_str());
+        return false;
+      }
+    }
   }
 
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
@@ -471,7 +483,7 @@ bool Epub::clearCache() const {
     return true;
   }
 
-  if (!Storage.removeDir(cachePath.c_str())) {
+  if (!FsHelpers::removeDirRecursive(cachePath.c_str())) {
     LOG_ERR("EPB", "Failed to clear cache");
     return false;
   }

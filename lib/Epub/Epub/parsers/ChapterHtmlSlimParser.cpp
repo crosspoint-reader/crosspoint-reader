@@ -18,7 +18,8 @@
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
-constexpr size_t PARSE_BUFFER_SIZE = 1024;
+constexpr size_t PARSE_BUFFER_SIZE = 256;
+constexpr size_t MAX_BUFFERED_WORDS_BEFORE_LAYOUT = 96;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
@@ -64,6 +65,8 @@ bool isHeaderOrBlock(const char* name) {
 bool isTableStructuralTag(const char* name) {
   return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
 }
+
+ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { close(); }
 
 // Update effective bold/italic/underline based on block style and inline style stack
 void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
@@ -111,6 +114,21 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
   partWordBufferIndex = 0;
   nextWordContinues = false;
+  compactCurrentTextBlockIfNeeded();
+}
+
+void ChapterHtmlSlimParser::compactCurrentTextBlockIfNeeded() {
+  if (!currentTextBlock || currentTextBlock->size() <= MAX_BUFFERED_WORDS_BEFORE_LAYOUT) {
+    return;
+  }
+
+  const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
+  const uint16_t effectiveWidth =
+      (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
+  applyCurrentTextBlockTopInset();
+  currentTextBlock->layoutAndExtractLines(
+      renderer, fontId, effectiveWidth,
+      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false);
 }
 
 // start a new text block if needed
@@ -142,6 +160,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     pendingAnchorId.clear();
   }
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  currentTextBlockTopInsetApplied = false;
   wordsExtractedInBlock = 0;
 }
 
@@ -879,20 +898,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
 
-  // If we have > 750 words buffered up, perform the layout and consume out all but the last line
-  // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
-  // memory.
-  // Spotted when reading Intermezzo, there are some really long text blocks in there.
-  if (self->currentTextBlock->size() > 750) {
-    LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
-  }
+  self->compactCurrentTextBlockIfNeeded();
 }
 
 void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const XML_Char* s, const int len) {
@@ -1032,7 +1038,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 }
 
-bool ChapterHtmlSlimParser::parseAndBuildPages() {
+bool ChapterHtmlSlimParser::begin(bool* cancel) {
+  cancelFlag = cancel;
+  parseDone = false;
+  parseStarted = false;
+  finalPageEmitted = false;
+
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -1050,9 +1061,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
-  XML_Parser parser = XML_ParserCreate(nullptr);
-  int done;
-
+  parser = XML_ParserCreate(nullptr);
   if (!parser) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
     return false;
@@ -1062,14 +1071,13 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
   XML_SetDefaultHandlerExpand(parser, defaultHandlerExpand);
 
-  FsFile file;
-  if (!Storage.openFileForRead("EHP", filepath, file)) {
-    destroyXmlParser(parser);
+  if (!Storage.openFileForRead("EHP", filepath, parseFile)) {
+    close();
     return false;
   }
 
   // Get file size to decide whether to show indexing popup.
-  if (popupFn && file.size() >= MIN_SIZE_FOR_POPUP) {
+  if (popupFn && parseFile.size() >= MIN_SIZE_FOR_POPUP) {
     popupFn();
   }
 
@@ -1078,40 +1086,79 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   XML_SetCharacterDataHandler(parser, characterData);
 
   // Compute the time taken to parse and build pages
-  const uint32_t chapterStartTime = millis();
-  do {
+  chapterStartTime = millis();
+  parseStarted = true;
+  return true;
+}
+
+ParsePumpStatus ChapterHtmlSlimParser::pump(const ParsePumpBudget& budget) {
+  if (cancelFlag && *cancelFlag) {
+    close();
+    return ParsePumpStatus::Cancelled;
+  }
+  if (!parseStarted || !parser || !parseFile) {
+    return ParsePumpStatus::Error;
+  }
+  if (parseDone) {
+    return ParsePumpStatus::Complete;
+  }
+
+  const uint32_t pumpStart = millis();
+  const int pagesAtStart = completedPageCount;
+  uint16_t chunksProcessed = 0;
+
+  while (!parseDone) {
+    if (cancelFlag && *cancelFlag) {
+      close();
+      return ParsePumpStatus::Cancelled;
+    }
+
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-      destroyXmlParser(parser);
-      file.close();
-      return false;
+      close();
+      return ParsePumpStatus::Error;
     }
 
-    const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
+    const size_t len = parseFile.read(buf, PARSE_BUFFER_SIZE);
 
-    if (len == 0 && file.available() > 0) {
+    if (len == 0 && parseFile.available() > 0) {
       LOG_ERR("EHP", "File read error");
-      destroyXmlParser(parser);
-      file.close();
-      return false;
+      close();
+      return ParsePumpStatus::Error;
     }
 
-    done = file.available() == 0;
+    const int done = parseFile.available() == 0;
 
     if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
       LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      destroyXmlParser(parser);
-      file.close();
-      return false;
+      close();
+      return ParsePumpStatus::Error;
     }
-  } while (!done);
+
+    chunksProcessed++;
+    parseDone = done;
+
+    if (budget.maxCompletedPages > 0 && completedPageCount - pagesAtStart >= budget.maxCompletedPages) {
+      return ParsePumpStatus::PageReady;
+    }
+    if (budget.maxInputChunks > 0 && chunksProcessed >= budget.maxInputChunks) {
+      return ParsePumpStatus::NeedsMore;
+    }
+    if (budget.maxMillis > 0 && millis() - pumpStart >= budget.maxMillis) {
+      return ParsePumpStatus::NeedsMore;
+    }
+  }
+
   LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
+  return ParsePumpStatus::Complete;
+}
 
-  destroyXmlParser(parser);
-  file.close();
-
+bool ChapterHtmlSlimParser::finish() {
+  if (finalPageEmitted) {
+    return true;
+  }
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
@@ -1125,7 +1172,38 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     currentTextBlock.reset();
   }
 
+  finalPageEmitted = true;
+  close();
   return true;
+}
+
+void ChapterHtmlSlimParser::close() {
+  if (parser) {
+    destroyXmlParser(parser);
+    parser = nullptr;
+  }
+  if (parseFile) {
+    parseFile.close();
+  }
+}
+
+bool ChapterHtmlSlimParser::parseAndBuildPages() {
+  bool cancel = false;
+  if (!begin(&cancel)) {
+    return false;
+  }
+
+  ParsePumpBudget budget;
+  while (true) {
+    const auto status = pump(budget);
+    if (status == ParsePumpStatus::Complete) {
+      return finish();
+    }
+    if (status == ParsePumpStatus::Cancelled || status == ParsePumpStatus::Error) {
+      close();
+      return false;
+    }
+  }
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
@@ -1158,6 +1236,26 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   currentPageNextY += lineHeight;
 }
 
+void ChapterHtmlSlimParser::applyCurrentTextBlockTopInset() {
+  if (!currentTextBlock || currentTextBlockTopInsetApplied) {
+    return;
+  }
+
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
+  if (blockStyle.marginTop > 0) {
+    currentPageNextY += blockStyle.marginTop;
+  }
+  if (blockStyle.paddingTop > 0) {
+    currentPageNextY += blockStyle.paddingTop;
+  }
+  currentTextBlockTopInsetApplied = true;
+}
+
 void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
@@ -1171,16 +1269,10 @@ void ChapterHtmlSlimParser::makePages() {
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
-  // Apply top spacing before the paragraph (stored in pixels)
-  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
-  }
+  applyCurrentTextBlockTopInset();
 
   // Calculate effective width accounting for horizontal margins/padding
+  const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
   const int horizontalInset = blockStyle.totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
