@@ -42,6 +42,12 @@ class RecentBooksStore {
   // is rolled back. Returns false for "no match" or a rolled-back failure.
   bool removeByPath(const std::string& path);
 
+  // Repoint an entry's path (and coverBmpPath, if it lived under the old cache dir) after the
+  // backing file and cache dir were moved on disk. No-op if no entry matches oldPath.
+  // Persists on success. Keeps the entry's list position (does not reorder).
+  void updatePath(const std::string& oldPath, const std::string& newPath, const std::string& oldCachePath,
+                  const std::string& newCachePath);
+
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);
 

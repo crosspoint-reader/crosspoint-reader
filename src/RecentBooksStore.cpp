@@ -78,6 +78,20 @@ bool RecentBooksStore::removeByPath(const std::string& path) {
   return true;
 }
 
+void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath,
+                                  const std::string& oldCachePath, const std::string& newCachePath) {
+  auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
+                         [&](const RecentBook& book) { return book.path == oldPath; });
+  if (it == recentBooks.end()) {
+    return;
+  }
+  it->path = newPath;
+  if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
+    it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
+  }
+  saveToFile();
+}
+
 bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
 
 bool RecentBooksStore::pruneMissing() {
