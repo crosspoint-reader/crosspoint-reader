@@ -1,5 +1,6 @@
 #include "HttpDownloader.h"
 
+#include <Arduino.h>
 #include <HTTPClient.h>
 #include <Logging.h>
 #include <NetworkClient.h>
@@ -54,6 +55,72 @@ class FileWriteStream final : public Stream {
   HttpDownloader::ProgressCallback progress_;
   bool* cancelFlag_;
 };
+
+std::string makeDownloadTempPath(const std::string& targetPath, const char* prefix) {
+  const size_t lastSlash = targetPath.find_last_of('/');
+  const std::string parentPath =
+      (lastSlash != std::string::npos && lastSlash > 0) ? targetPath.substr(0, lastSlash) : "/";
+
+  for (uint8_t attempt = 0; attempt < 8; attempt++) {
+    std::string tempPath = parentPath;
+    if (tempPath.back() != '/') tempPath += "/";
+    tempPath += ".";
+    tempPath += prefix;
+    tempPath += "-";
+    tempPath += std::to_string(millis());
+    tempPath += "-";
+    tempPath += std::to_string(attempt);
+
+    if (!Storage.exists(tempPath.c_str())) {
+      return tempPath;
+    }
+  }
+  return "";
+}
+
+bool downloadPathIsDirectory(const std::string& path) {
+  FsFile file = Storage.open(path.c_str());
+  if (!file) return false;
+  const bool isDirectory = file.isDirectory();
+  file.close();
+  return isDirectory;
+}
+
+bool commitDownloadedFile(const std::string& tempPath, const std::string& targetPath, bool existed) {
+  std::string backupPath;
+  if (existed) {
+    backupPath = makeDownloadTempPath(targetPath, "httpbak");
+    FsFile existing = Storage.open(targetPath.c_str());
+    if (backupPath.empty() || !existing || !existing.rename(backupPath.c_str())) {
+      if (existing) existing.close();
+      return false;
+    }
+    existing.close();
+  }
+
+  FsFile tempFile = Storage.open(tempPath.c_str());
+  const bool renamed = tempFile && tempFile.rename(targetPath.c_str());
+  if (tempFile) tempFile.close();
+
+  if (renamed) {
+    if (!backupPath.empty()) Storage.remove(backupPath.c_str());
+    return true;
+  }
+
+  if (!backupPath.empty()) {
+    FsFile backup = Storage.open(backupPath.c_str());
+    if (backup) {
+      if (!backup.rename(targetPath.c_str())) {
+        LOG_ERR("HTTP", "Rollback failed; original file remains at %s instead of %s", backupPath.c_str(),
+                targetPath.c_str());
+      }
+      backup.close();
+    } else {
+      LOG_ERR("HTTP", "Rollback failed; could not reopen backup %s for %s", backupPath.c_str(), targetPath.c_str());
+    }
+  }
+  return false;
+}
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
@@ -146,14 +213,23 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     LOG_DBG("HTTP", "Content-Length: unknown");
   }
 
-  // Remove existing file if present
-  if (Storage.exists(destPath.c_str())) {
-    Storage.remove(destPath.c_str());
+  const bool destExists = Storage.exists(destPath.c_str());
+  if (destExists && downloadPathIsDirectory(destPath)) {
+    LOG_ERR("HTTP", "Destination is a directory");
+    http.end();
+    return FILE_ERROR;
+  }
+
+  const std::string tempPath = makeDownloadTempPath(destPath, "httptmp");
+  if (tempPath.empty()) {
+    LOG_ERR("HTTP", "Failed to create temp path");
+    http.end();
+    return FILE_ERROR;
   }
 
   // Open file for writing
   FsFile file;
-  if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
+  if (!Storage.openFileForWrite("HTTP", tempPath.c_str(), file)) {
     LOG_ERR("HTTP", "Failed to open file for writing");
     http.end();
     return FILE_ERROR;
@@ -167,13 +243,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   http.end();
 
   if (cancelFlag && *cancelFlag) {
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return ABORTED;
   }
 
   if (writeResult < 0) {
     LOG_ERR("HTTP", "writeToStream error: %d", writeResult);
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return HTTP_ERROR;
   }
 
@@ -183,21 +259,27 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Guard against partial writes even if HTTPClient completes.
   if (!fileStream.ok()) {
     LOG_ERR("HTTP", "Write failed during download");
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return FILE_ERROR;
   }
 
   if (contentLength == 0 && downloaded == 0) {
     LOG_ERR("HTTP", "Download failed: no data received");
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return HTTP_ERROR;
   }
 
   // Verify download size if known
   if (contentLength > 0 && downloaded != contentLength) {
     LOG_ERR("HTTP", "Size mismatch: got %zu, expected %zu", downloaded, contentLength);
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return HTTP_ERROR;
+  }
+
+  if (!commitDownloadedFile(tempPath, destPath, destExists)) {
+    LOG_ERR("HTTP", "Failed to finalize download");
+    Storage.remove(tempPath.c_str());
+    return FILE_ERROR;
   }
 
   return OK;
