@@ -137,9 +137,14 @@ Also includes:
 
 import io
 import os
+import sys
 import zipfile
 import uuid
 from datetime import datetime
+
+if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+    print(__doc__.strip())
+    sys.exit(0)
 
 try:
     from PIL import Image, ImageDraw, ImageFont

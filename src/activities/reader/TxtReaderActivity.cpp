@@ -19,7 +19,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -71,7 +71,7 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -192,6 +192,17 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   }
   buffer[chunkSize] = '\0';
 
+  // Prime the SD card font's advance table with this chunk's codepoints.
+  // Without this, every getTextAdvanceX() call in the wrap loop below triggers
+  // on-demand glyph loads through the 8-slot overflow ring buffer, which
+  // thrashes for any text with more than 8 unique chars (i.e. all English),
+  // floods the heap with short-lived bitmap allocations, and eventually
+  // corrupts FreeRTOS state. The advance table persists across calls per
+  // font, so the cost amortizes to ~ASCII-size after the first chunk.
+  if (renderer.isSdCardFont(cachedFontId)) {
+    renderer.ensureSdCardFontReady(cachedFontId, reinterpret_cast<const char*>(buffer), /*styleMask=*/0x01);
+  }
+
   // Parse lines from buffer
   size_t pos = 0;
 
@@ -223,9 +234,15 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     // Track position within this source line (in bytes from pos)
     size_t lineBytePos = 0;
 
-    // Word wrap if needed
-    while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
-      int lineWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+    // Emit at least one visual line for each source line (including blank lines),
+    // then continue with wrapping when needed.
+    do {
+      if (line.empty()) {
+        outLines.emplace_back();
+        break;
+      }
+
+      int lineWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
 
       if (lineWidth <= viewportWidth) {
         outLines.push_back(line);
@@ -236,7 +253,8 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
       // Find break point
       size_t breakPos = line.length();
-      while (breakPos > 0 && renderer.getTextWidth(cachedFontId, line.substr(0, breakPos).c_str()) > viewportWidth) {
+      while (breakPos > 0 && renderer.getTextAdvanceX(cachedFontId, line.substr(0, breakPos).c_str(),
+                                                      EpdFontFamily::REGULAR) > viewportWidth) {
         // Try to break at space
         size_t spacePos = line.rfind(' ', breakPos - 1);
         if (spacePos != std::string::npos && spacePos > 0) {
@@ -264,7 +282,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       }
       lineBytePos += skipChars;
       line = line.substr(skipChars);
-    }
+    } while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage);
 
     // Determine how much of the source buffer we consumed
     if (line.empty()) {
@@ -348,12 +366,12 @@ void TxtReaderActivity::renderPage() {
             // x already set to left margin
             break;
           case CrossPointSettings::CENTER_ALIGN: {
-            int textWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+            int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
             x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
             break;
           }
           case CrossPointSettings::RIGHT_ALIGN: {
-            int textWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+            int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
             x = cachedOrientedMarginLeft + contentWidth - textWidth;
             break;
           }

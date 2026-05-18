@@ -22,6 +22,9 @@ RecentBooksStore RecentBooksStore::instance;
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& coverBmpPath) {
+  // Drop stale entries first so a new add can't evict a valid book in their stead.
+  pruneMissing();
+
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
@@ -51,6 +54,14 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
+
+bool RecentBooksStore::pruneMissing() {
+  const size_t before = recentBooks.size();
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
+  return recentBooks.size() != before;
 }
 
 bool RecentBooksStore::saveToFile() const {
