@@ -25,13 +25,21 @@ PHYSICAL_BUTTONS = {"BACK", "CONFIRM", "LEFT", "RIGHT", "UP", "DOWN", "POWER"}
 
 def _autodetect_port() -> str:
     system = platform.system()
-    pattern = "/dev/tty.usbmodem*" if system == "Darwin" else "/dev/ttyACM*"
-    candidates = sorted(glob.glob(pattern.replace("tty", "cu")))
-    if not candidates:
-        candidates = sorted(glob.glob(pattern))
-    if not candidates:
-        raise RuntimeError("no /dev/cu.usbmodem* found; pass port=... explicitly")
-    return candidates[0]
+    if system == "Darwin":
+        # macOS exposes both /dev/cu.* and /dev/tty.* for the same USB CDC
+        # device. Prefer /dev/cu.* (call-out): pyserial's DTR/RTS handling is
+        # more reliable on cu.* than on tty.* under macOS.
+        patterns = ["/dev/cu.usbmodem*", "/dev/tty.usbmodem*"]
+    else:
+        patterns = ["/dev/ttyACM*", "/dev/ttyUSB*"]
+    for pat in patterns:
+        candidates = sorted(glob.glob(pat))
+        if candidates:
+            return candidates[0]
+    raise RuntimeError(
+        f"no serial device found (searched {', '.join(repr(p) for p in patterns)}); "
+        f"pass port=... explicitly"
+    )
 
 
 class Device:
@@ -53,10 +61,16 @@ class Device:
         self._lines: deque[tuple[float, str]] = deque(maxlen=4096)
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
-        # Snapshot of len(_lines) taken just before the most recent CMD send.
-        # wait_for() defaults to this so common patterns like
+        # Absolute, monotonic count of lines appended over the session's
+        # lifetime. Diverges from len(self._lines) once the deque rotates
+        # past maxlen. Cursors (_send_cursor, since= args to wait_for) are
+        # also absolute, so they stay correct after rotation. _slice_since()
+        # translates absolute → deque-local for actual scanning.
+        self._lines_total: int = 0
+        # Absolute line index just before the most recent CMD send. wait_for()
+        # defaults to scanning from here so common patterns like
         # `hold(); wait_for(predicate)` aren't racy against the firmware
-        # processing the CMD faster than we can re-enter the Condition.
+        # processing the CMD faster than we re-enter the Condition.
         self._send_cursor: int = 0
 
     def __enter__(self) -> "Device":
@@ -106,17 +120,18 @@ class Device:
                     continue
                 with self._cond:
                     self._lines.append((time.time(), text))
+                    self._lines_total += 1
                     self._cond.notify_all()
 
     # ----- inputs -----
 
     def _write(self, payload: str) -> None:
-        """Send a CMD line. Snapshots the current line count first so the next
-        wait_for() can scan lines emitted in response to this send, even if
-        the firmware emits them before the host re-enters the Condition."""
+        """Send a CMD line. Snapshots the absolute line count first so the
+        next wait_for() can scan lines emitted in response to this send, even
+        if the firmware emits them before the host re-enters the Condition."""
         assert self._ser is not None
         with self._lock:
-            self._send_cursor = len(self._lines)
+            self._send_cursor = self._lines_total
         self._ser.write(payload.encode("utf-8"))
         self._ser.flush()
 
@@ -181,9 +196,8 @@ class Device:
         don't pick up a stale selector value from a previous Home entry; the
         wait timeout covers the ~100ms gap between [STATE] activity=Home and
         Home's first render."""
-        # Backward scan from latest line down to _send_cursor.
         with self._lock:
-            window = list(self._lines)[self._send_cursor:]
+            window = self._slice_since(self._send_cursor)
         for _ts, text in reversed(window):
             m = self._HOME_MENU_RE.search(text)
             if m:
@@ -222,25 +236,35 @@ class Device:
     # ----- observation -----
 
     def lines_count(self) -> int:
-        """Snapshot the current number of captured lines. Pair with wait_for's
-        `since=` to wait for events produced after a specific moment (e.g.
-        after sending a CMD)."""
+        """Absolute count of lines captured over the session lifetime. Pair
+        with wait_for's `since=` to wait for events produced after a specific
+        moment (e.g. after sending a CMD). Survives deque rotation: returns a
+        monotonically-increasing value even after older lines age out."""
         with self._lock:
-            return len(self._lines)
+            return self._lines_total
+
+    def _slice_since(self, since: int) -> list[tuple[float, str]]:
+        """Return _lines from absolute index `since` onwards. Caller must
+        hold _lock. Translates the absolute index to a deque-local one,
+        accounting for any lines that have aged out of the maxlen window."""
+        base = self._lines_total - len(self._lines)
+        local_start = max(0, since - base)
+        return list(self._lines)[local_start:]
 
     def wait_for(self, predicate, timeout: float = 5.0, since: int | None = None) -> str:
         """Block until a captured log line satisfies predicate. Returns the
         matching line. Raises TimeoutError otherwise.
 
-        `since` is an index from lines_count(). If omitted, defaults to the
-        line count just before the most recent CMD send, so common patterns
-        like `hold(...); wait_for(...)` aren't racy. Pass since=lines_count()
-        explicitly to scan only future lines, or since=0 to scan everything."""
+        `since` is an absolute index from lines_count(). If omitted, defaults
+        to the snapshot taken just before the most recent CMD send, so common
+        patterns like `hold(...); wait_for(...)` aren't racy. Pass
+        since=lines_count() explicitly to scan only future lines, or since=0
+        to scan everything still in the buffer."""
         deadline = time.time() + timeout
         with self._cond:
             start = since if since is not None else self._send_cursor
             while True:
-                for _ts, text in list(self._lines)[start:]:
+                for _ts, text in self._slice_since(start):
                     if predicate(text):
                         return text
                 remaining = deadline - time.time()
