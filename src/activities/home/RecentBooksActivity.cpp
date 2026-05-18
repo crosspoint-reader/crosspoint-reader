@@ -15,22 +15,16 @@ namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 }  // namespace
 
-void RecentBooksActivity::loadRecentBooks() {
-  recentBooks.clear();
-  const auto& books = RECENT_BOOKS.getBooks();
-  recentBooks.reserve(books.size());
-
-  for (const auto& book : books) {
-    // Skip if file no longer exists
-    if (!Storage.exists(book.path.c_str())) {
-      continue;
-    }
-    recentBooks.push_back(book);
-  }
-}
+void RecentBooksActivity::loadRecentBooks() { recentBooks = RECENT_BOOKS.getBooks(); }
 
 void RecentBooksActivity::onEnter() {
   Activity::onEnter();
+
+  // Prune entries whose backing files are gone; this is one of two interaction
+  // points where the persistent store gets cleaned (the other is addBook).
+  if (RECENT_BOOKS.pruneMissing()) {
+    RECENT_BOOKS.saveToFile();
+  }
 
   // Load data
   loadRecentBooks();
