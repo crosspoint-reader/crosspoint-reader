@@ -142,6 +142,8 @@ std::string transferKindName(const BleTransferActivity::TransferKind kind) {
       return "book";
     case BleTransferActivity::TransferKind::CRASH_REPORT:
       return "crash_report";
+    case BleTransferActivity::TransferKind::PACKAGE_STATE:
+      return "package_state";
     case BleTransferActivity::TransferKind::NONE:
       return "";
   }
@@ -548,12 +550,15 @@ void BleTransferActivity::onControlWrite(const std::string& value) {
     resetTransfer(true);
 
     const std::string kind = doc["kind"] | "";
-    if (kind != "crash_report") {
-      setError("unsupported transfer kind");
+    if (kind == "crash_report") {
+      startCrashReportDownload();
       return;
     }
-
-    startCrashReportDownload();
+    if (kind == "package_state") {
+      startPackageStateDownload(doc["package_id"] | "");
+      return;
+    }
+    setError("unsupported transfer kind");
     return;
   }
 
@@ -734,6 +739,35 @@ void BleTransferActivity::startCrashReportDownload() {
   setState(State::SENDING);
 }
 
+void BleTransferActivity::startPackageStateDownload(const std::string& packageId) {
+  if (!Marginalia::isSafePackageId(packageId)) {
+    setError("invalid package id");
+    return;
+  }
+
+  const std::string path = std::string(Marginalia::PACKAGE_STATE_ROOT) + "/" + packageId + ".json";
+  if (!Storage.exists(path.c_str())) {
+    setError("not_found");
+    return;
+  }
+
+  if (!Storage.openFileForRead("BLE", path, downloadFile_)) {
+    setError("could not open package state");
+    return;
+  }
+
+  packageId_ = packageId;
+  fileName_ = packageId + ".json";
+  transferKind_ = TransferKind::PACKAGE_STATE;
+  expectedSize_ = downloadFile_.fileSize();
+  sentBytes_ = 0;
+  downloadSequence_ = 0;
+  pendingDownloadAck_ = 0;
+  downloadAwaitingAck_ = false;
+  downloadOpen_ = true;
+  setState(State::SENDING);
+}
+
 void BleTransferActivity::pumpDownload() {
   if (!downloadOpen_) return;
   if (downloadAwaitingAck_) {
@@ -751,7 +785,7 @@ void BleTransferActivity::pumpDownload() {
   if (read < 0) {
     downloadFile_.close();
     downloadOpen_ = false;
-    setError("crash report read failed");
+    setError("download read failed");
     return;
   }
 

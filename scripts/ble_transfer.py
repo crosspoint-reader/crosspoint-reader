@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 import platform
+import re
 import secrets
 import struct
 import sys
@@ -34,6 +35,7 @@ PROGRESS_PRINT_BYTES = 4096
 PROGRESS_PRINT_SECONDS = 1.0
 DEFAULT_WINDOW_BYTES = 4096
 CONFIG_PATH = Path(os.environ.get("MARGINALIA_BLE_CONFIG", "~/.config/marginalia/ble_hosts.json")).expanduser()
+PACKAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,95}$")
 
 
 def sha256_file(path: Path) -> str:
@@ -424,8 +426,14 @@ async def put_book(args: argparse.Namespace) -> int:
     )
 
 
-async def get_crash_report(args: argparse.Namespace) -> int:
-    output = Path(args.output).expanduser().resolve()
+async def get_ble_download(
+    args: argparse.Namespace,
+    *,
+    output_path: Path,
+    start_payload: dict[str, Any],
+    timeout_label: str,
+) -> int:
+    output = output_path.expanduser().resolve()
     if output.exists() and not args.force:
         print(f"Output already exists: {output}", file=sys.stderr)
         return 2
@@ -445,6 +453,7 @@ async def get_crash_report(args: argparse.Namespace) -> int:
     host_id, _ = get_host_identity(config)
     last_print_sent = -PROGRESS_PRINT_BYTES
     last_print_time = 0.0
+    pending_ack_tasks: list[asyncio.Task[Any]] = []
 
     def on_status(_: Any, data: bytearray) -> None:
         nonlocal final_status, last_print_sent, last_print_time
@@ -498,6 +507,18 @@ async def get_crash_report(args: argparse.Namespace) -> int:
             except asyncio.TimeoutError:
                 pass
         return final_status
+
+    async def collect_ack_errors() -> None:
+        nonlocal data_error
+        if not pending_ack_tasks:
+            return
+        results = await asyncio.gather(*pending_ack_tasks, return_exceptions=True)
+        pending_ack_tasks.clear()
+        for result in results:
+            if isinstance(result, Exception) and data_error is None:
+                data_error = f"failed to send download ACK: {result}"
+                done.set()
+                return
 
     try:
         device = await find_device(args.scan_timeout)
@@ -564,19 +585,6 @@ async def get_crash_report(args: argparse.Namespace) -> int:
                     return 1
 
                 handle = part.open("wb")
-                pending_ack_tasks: list[asyncio.Task[Any]] = []
-
-                async def collect_ack_errors() -> None:
-                    nonlocal data_error
-                    if not pending_ack_tasks:
-                        return
-                    results = await asyncio.gather(*pending_ack_tasks, return_exceptions=True)
-                    pending_ack_tasks.clear()
-                    for result in results:
-                        if isinstance(result, Exception) and data_error is None:
-                            data_error = f"failed to send download ACK: {result}"
-                            done.set()
-                            return
 
                 def on_data(_: Any, data: bytearray) -> None:
                     nonlocal received_bytes, expected_sequence, data_error
@@ -591,7 +599,12 @@ async def get_crash_report(args: argparse.Namespace) -> int:
                         done.set()
                         return
                     payload = raw[4:]
-                    handle.write(payload)
+                    try:
+                        handle.write(payload)
+                    except OSError as exc:
+                        data_error = f"failed to write output file: {exc}"
+                        done.set()
+                        return
                     received_bytes += len(payload)
                     expected_sequence += 1
                     task = asyncio.create_task(write_json(client, {"op": "get_ack", "sequence": sequence}))
@@ -600,7 +613,7 @@ async def get_crash_report(args: argparse.Namespace) -> int:
                 await client.start_notify(DATA_OUT_UUID, on_data)
                 data_notify_started = True
                 download_started = True
-                await write_json(client, {"op": "start_get", "kind": "crash_report"})
+                await write_json(client, start_payload)
                 start_status = await wait_for_status({"sending", "sent", "error"}, args.control_timeout)
                 if start_status.get("state") == "error":
                     print(f"\nDevice rejected download: {final_status.get('error')}", file=sys.stderr)
@@ -616,7 +629,7 @@ async def get_crash_report(args: argparse.Namespace) -> int:
                     for task in pending_ack_tasks:
                         task.cancel()
                     await collect_ack_errors()
-                    print("\nTimed out waiting for crash report.", file=sys.stderr)
+                    print(f"\nTimed out waiting for {timeout_label}.", file=sys.stderr)
                     return 1
             finally:
                 await collect_ack_errors()
@@ -660,6 +673,28 @@ async def get_crash_report(args: argparse.Namespace) -> int:
     part.replace(output)
     print(f"Saved {output}")
     return 0
+
+
+async def get_crash_report(args: argparse.Namespace) -> int:
+    return await get_ble_download(
+        args,
+        output_path=Path(args.output),
+        start_payload={"op": "start_get", "kind": "crash_report"},
+        timeout_label="crash report",
+    )
+
+
+async def get_package_state(args: argparse.Namespace) -> int:
+    if not PACKAGE_ID_RE.fullmatch(args.package_id):
+        print("Package id is invalid.", file=sys.stderr)
+        return 2
+    output = Path(args.output) if args.output else Path(f"{args.package_id}.json")
+    return await get_ble_download(
+        args,
+        output_path=output,
+        start_payload={"op": "start_get", "kind": "package_state", "package_id": args.package_id},
+        timeout_label="package state",
+    )
 
 
 def six_digit_code(value: str) -> str:
@@ -740,6 +775,19 @@ def build_parser() -> argparse.ArgumentParser:
     get_crash.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
     get_crash.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
     get_crash.add_argument("--download-timeout", type=float, default=60.0, help="Download timeout, in seconds")
+
+    get_package_state_parser = sub.add_parser(
+        "get-package-state",
+        help="Download /.marginalia/package-state/<package-id>.json",
+    )
+    get_package_state_parser.add_argument("package_id", help="Package id to download state for")
+    get_package_state_parser.add_argument("output", nargs="?", help="Output path")
+    get_package_state_parser.add_argument("--code", type=six_digit_code, help="Six-digit code shown on the device")
+    get_package_state_parser.add_argument("--force-code", action="store_true", help="Skip trusted-host auth and use --code")
+    get_package_state_parser.add_argument("--force", action="store_true", help="Overwrite output path if it already exists")
+    get_package_state_parser.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
+    get_package_state_parser.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
+    get_package_state_parser.add_argument("--download-timeout", type=float, default=60.0, help="Download timeout, in seconds")
     return parser
 
 
@@ -752,6 +800,8 @@ def main() -> int:
         return asyncio.run(put_book(args))
     if args.command == "get-crash-report":
         return asyncio.run(get_crash_report(args))
+    if args.command == "get-package-state":
+        return asyncio.run(get_package_state(args))
     return 2
 
 

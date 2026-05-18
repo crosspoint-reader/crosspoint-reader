@@ -193,12 +193,14 @@ screen open, note the six-digit code, then run:
 ```sh
 python3 scripts/ble_transfer.py put-package path/to/package.mpkg.zip --code 123456
 python3 scripts/ble_transfer.py put-book path/to/book.epub --code 123456
+python3 scripts/ble_transfer.py get-crash-report ./crash_report.txt --code 123456
+python3 scripts/ble_transfer.py get-package-state org.example.package ./package-state.json --code 123456
 ```
 
 The tool scans for `Marginalia Transfer`, streams the file over BLE, and waits for the device to verify it. Package
-archives are installed through the package inbox; EPUB files are saved to `/Books`. After a successful code-based
-transfer, the device can save the host so later transfers can omit `--code`. General SD-card browsing still uses the web
-file manager.
+archives are installed through the package inbox; EPUB files are saved to `/Books`; diagnostic downloads are limited to
+approved read-only files. After a successful code-based upload, the device can save the host so later transfers can omit
+`--code`. General SD-card browsing still uses the web file manager.
 
 ## Security Notes
 

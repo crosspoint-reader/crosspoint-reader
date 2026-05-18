@@ -28,7 +28,7 @@ class BleTransferActivity final : public Activity {
     FORGET_HOST_PROMPT,
     ERROR
   };
-  enum class TransferKind { NONE, PACKAGE, BOOK, CRASH_REPORT };
+  enum class TransferKind { NONE, PACKAGE, BOOK, CRASH_REPORT, PACKAGE_STATE };
 
   explicit BleTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   ~BleTransferActivity() override;
@@ -96,6 +96,7 @@ class BleTransferActivity final : public Activity {
 
   void processCommit();
   void startCrashReportDownload();
+  void startPackageStateDownload(const std::string& packageId);
   void pumpDownload();
   void resetTransfer(bool removePart);
   void setState(State state);

@@ -54,6 +54,7 @@ Implemented pieces:
 - `.mpkg.zip` package upload and install with `scripts/ble_transfer.py put-package`
 - `.epub` book upload to `/Books/` with `scripts/ble_transfer.py put-book`
 - `/crash_report.txt` download with `scripts/ble_transfer.py get-crash-report`
+- package state download with `scripts/ble_transfer.py get-package-state <package-id>`
 
 Download notifications originally arrived out of order on hardware, so crash-report download now uses stop-and-go ACKs:
 the device sends one numbered `data-out` frame, the host validates it, then the host sends `get_ack` before the next
@@ -100,10 +101,7 @@ Current write support is narrow:
 Current read support is narrow:
 
 - `/crash_report.txt`
-
-Potential next read support:
-
-- package diagnostics under `/.marginalia/package-state/`
+- `/.marginalia/package-state/<safe-package-id>.json`
 
 Do not provide arbitrary SD-card read/write over BLE. It creates security and corruption risk without much user value.
 
@@ -134,22 +132,19 @@ next transfer-mode start. A resumable manifest is still future work.
 
 Useful follow-up PRs, in recommended order:
 
-1. Package diagnostics download.
-   Add one or more read-only `start_get` kinds for narrowly approved package diagnostics under
-   `/.marginalia/package-state/`. Keep this read-only and avoid arbitrary path reads.
-2. BMP upload.
+1. BMP upload.
    Add a `put-bmp` style upload kind only if there is a clear destination and UI path for viewing imported images. Reuse
    the existing upload helper and keep extension/path validation strict.
-3. Phone or web companion UI.
+2. Phone or web companion UI.
    Build a small user-facing client once the Python CLI protocol has stabilized. The UI should use the same code/trusted
    host model rather than introducing a second pairing concept.
-4. Resumable transfers.
+3. Resumable transfers.
    Add transfer manifests and byte-offset resume only if large files or phone clients make interruption recovery
    necessary. This should cover both uploads and downloads.
-5. BLE OTA.
+4. BLE OTA.
    Defer until resumability, rollback UX, and stronger authenticity checks are in place. Firmware images are larger and
    failed updates have higher support cost than book/package transfers.
-6. OS BLE bonding or encrypted characteristics.
+5. OS BLE bonding or encrypted characteristics.
    Application-level trust is enough for the current CLI and is easier to test across macOS, Linux, and phones. Bonding
    can be layered on later if the phone UI needs platform-native trust.
 
