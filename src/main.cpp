@@ -346,7 +346,7 @@ void setup() {
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    setupDisplayAndFonts();
+    setupDisplayAndFonts(isSilentReboot);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
@@ -403,10 +403,11 @@ void setup() {
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
-  setupDisplayAndFonts(/*seamless=*/!APP_STATE.showBootScreen);
+  setupDisplayAndFonts(isSilentReboot || /*seamless=*/!APP_STATE.showBootScreen);
 
-  // First paint after silent reboot is HALF_REFRESH (SDK forces it after begin()'s
-  // panel reset); subsequent paints FAST.
+  // Silent reboot suppresses the boot splash and the X3 initial-full-sync
+  // arming (see HalDisplay::begin), so the first Home paint is FAST_REFRESH
+  // (~500ms) and input dispatches against the visible menu.
   if (!isSilentReboot) {
     if (APP_STATE.showBootScreen) {
       activityManager.goToBoot();

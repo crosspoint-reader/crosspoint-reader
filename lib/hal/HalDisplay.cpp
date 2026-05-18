@@ -18,14 +18,18 @@ void HalDisplay::begin(bool seamless) {
 
   einkDisplay.begin();
 
+  if (seamless) {
+    // Defuse the SDK's X3 _x3InitialFullSyncsRemaining counter (no-op on X4)
+    // so the first paint isn't promoted to FULL (~770ms). Skips the wakeup-
+    // gated requestResync() below for the same reason.
+    einkDisplay.skipInitialResync();
+    return;
+  }
   // Request resync after specific wakeup events to ensure clean display state.
-  // Skip when seamless=true so the current screen content is preserved.
-  if (!seamless) {
-    const auto wakeupReason = gpio.getWakeupReason();
-    if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
-        wakeupReason == HalGPIO::WakeupReason::Other) {
-      einkDisplay.requestResync();
-    }
+  const auto wakeupReason = gpio.getWakeupReason();
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
+      wakeupReason == HalGPIO::WakeupReason::Other) {
+    einkDisplay.requestResync();
   }
 }
 
