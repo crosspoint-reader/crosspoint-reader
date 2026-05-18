@@ -408,6 +408,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
+  // Track SVG nesting depth. Must be checked before the svgDepth>0 guard below so that
+  // nested <svg> elements increment the counter rather than being swallowed as unknowns.
+  if (strcmp(name, "svg") == 0) {
+    self->svgDepth += 1;
+    self->depth += 1;
+    return;
+  }
+
+  // Inside SVG: only process <image> elements (raster images); skip everything else.
+  // SVG child elements like <path>, <rect>, <circle>, <text> must not reach the layout
+  // engine — they would accumulate path data and exhaust heap on large inline SVG.
+  if (self->svgDepth > 0 && !matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
+    self->depth += 1;
+    return;
+  }
+
   // Extract class, style, and id attributes
   std::string classAttr;
   std::string styleAttr;
@@ -1319,6 +1335,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
+  // Skip SVG text content (path data, coordinates, etc.) — it would be treated as words
+  // and exhaust heap on EPUBs with large inline SVG elements.
+  if (self->svgDepth > 0) {
+    return;
+  }
+
   // Collect footnote link display text (for the number label)
   // Remove leading/trailing whitespace and square brackets from the
   // footnote link text to normalize noterefs like "[1]" → "1"
@@ -1558,6 +1580,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   self->depth -= 1;
+
+  if (strcmp(name, "svg") == 0 && self->svgDepth > 0) {
+    self->svgDepth -= 1;
+  }
 
   // Pop list entries whose ul/ol is now out of scope
   while (!self->listStack.empty() && self->listStack.back().depth >= self->depth) {
