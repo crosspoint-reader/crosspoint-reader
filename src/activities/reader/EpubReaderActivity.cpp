@@ -1015,7 +1015,6 @@ void EpubReaderActivity::addBookmark() {
   const std::string bookmarksDir = BookmarkUtil::getBookmarksDir();
   Storage.mkdir(bookmarksDir.c_str());
   std::vector<BookmarkEntry> bookmarks;
-  std::string json;
   if (Storage.exists(path.c_str())) {
     LOG_DBG("ERS", "Existing bookmark file found, loading bookmarks");
     String json = Storage.readFile(path.c_str());

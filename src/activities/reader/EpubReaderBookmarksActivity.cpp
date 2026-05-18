@@ -27,7 +27,6 @@ void EpubReaderBookmarksActivity::onEnter() {
   }
 
   const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
-  std::string json;
   if (Storage.exists(path.c_str())) {
     String json = Storage.readFile(path.c_str());
     if (json.isEmpty()) {
