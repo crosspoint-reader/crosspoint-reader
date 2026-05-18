@@ -36,6 +36,7 @@ class ChapterHtmlSlimParser final : public Print {
   int underlineUntilDepth = INT_MAX;
   int strikethroughUntilDepth = INT_MAX;
   int preUntilDepth = INT_MAX;  // set when inside a <pre> element; enables \n → line-break handling
+  int svgDepth = 0;             // nesting counter for <svg> elements; text inside SVG is skipped (path data etc.)
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
