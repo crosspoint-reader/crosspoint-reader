@@ -1,5 +1,9 @@
 #include "FsHelpers.h"
 
+#include <Arduino.h>
+#include <HalStorage.h>
+#include <Logging.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -45,6 +49,95 @@ std::string normalisePath(const std::string& path) {
   }
 
   return result;
+}
+
+std::string makeTempPath(const std::string& targetPath, const char* prefix, bool timestampHex) {
+  const size_t lastSlash = targetPath.find_last_of('/');
+  const std::string parentPath =
+      (lastSlash != std::string::npos && lastSlash > 0) ? targetPath.substr(0, lastSlash) : "/";
+
+  for (uint8_t attempt = 0; attempt < 8; attempt++) {
+    std::string tempPath = parentPath;
+    if (tempPath.back() != '/') tempPath += "/";
+    tempPath += ".";
+    tempPath += prefix;
+    tempPath += "-";
+    if (timestampHex) {
+      tempPath += String(millis(), HEX).c_str();
+    } else {
+      tempPath += std::to_string(millis());
+    }
+    tempPath += "-";
+    tempPath += std::to_string(attempt);
+
+    if (!Storage.exists(tempPath.c_str())) {
+      return tempPath;
+    }
+  }
+  return "";
+}
+
+String makeTempPath(const String& targetPath, const char* prefix, bool timestampHex) {
+  std::string tempPath = makeTempPath(std::string(targetPath.c_str()), prefix, timestampHex);
+  return tempPath.c_str();
+}
+
+bool pathIsDirectory(const char* path) {
+  FsFile file = Storage.open(path);
+  if (!file) return false;
+  const bool isDirectory = file.isDirectory();
+  file.close();
+  return isDirectory;
+}
+
+bool commitTempFile(const char* tempPath, const char* targetPath, bool existed, const char* moduleName,
+                    const char* backupPrefix, bool timestampHex) {
+  std::string backupPath;
+  if (existed) {
+    backupPath = makeTempPath(std::string(targetPath), backupPrefix, timestampHex);
+    FsFile existing = Storage.open(targetPath);
+    if (backupPath.empty() || !existing || !existing.rename(backupPath.c_str())) {
+      if (existing) existing.close();
+      return false;
+    }
+    existing.close();
+  }
+
+  FsFile tempFile = Storage.open(tempPath);
+  const bool renamed = tempFile && tempFile.rename(targetPath);
+  if (tempFile) tempFile.close();
+
+  if (renamed) {
+    if (!backupPath.empty()) Storage.remove(backupPath.c_str());
+    return true;
+  }
+
+  if (!backupPath.empty()) {
+    FsFile backup = Storage.open(backupPath.c_str());
+    if (backup) {
+      if (!backup.rename(targetPath)) {
+        LOG_ERR(moduleName, "Rollback failed; original file remains at %s instead of %s", backupPath.c_str(),
+                targetPath);
+      }
+      backup.close();
+    } else {
+      LOG_ERR(moduleName, "Rollback failed; could not reopen backup %s for %s", backupPath.c_str(), targetPath);
+    }
+  }
+  return false;
+}
+
+void restoreBackup(const char* backupPath, const char* targetPath, const char* moduleName, const char* operation) {
+  FsFile backup = Storage.open(backupPath);
+  if (backup) {
+    if (!backup.rename(targetPath)) {
+      LOG_ERR(moduleName, "%s rollback failed; original file remains at %s instead of %s", operation, backupPath,
+              targetPath);
+    }
+    backup.close();
+  } else {
+    LOG_ERR(moduleName, "%s rollback failed; could not reopen backup %s for %s", operation, backupPath, targetPath);
+  }
 }
 
 void sortFileList(std::vector<std::string>& strs) {

@@ -1,6 +1,6 @@
 #include "HttpDownloader.h"
 
-#include <Arduino.h>
+#include <FsHelpers.h>
 #include <HTTPClient.h>
 #include <Logging.h>
 #include <NetworkClient.h>
@@ -56,71 +56,6 @@ class FileWriteStream final : public Stream {
   bool* cancelFlag_;
 };
 
-std::string makeDownloadTempPath(const std::string& targetPath, const char* prefix) {
-  const size_t lastSlash = targetPath.find_last_of('/');
-  const std::string parentPath =
-      (lastSlash != std::string::npos && lastSlash > 0) ? targetPath.substr(0, lastSlash) : "/";
-
-  for (uint8_t attempt = 0; attempt < 8; attempt++) {
-    std::string tempPath = parentPath;
-    if (tempPath.back() != '/') tempPath += "/";
-    tempPath += ".";
-    tempPath += prefix;
-    tempPath += "-";
-    tempPath += std::to_string(millis());
-    tempPath += "-";
-    tempPath += std::to_string(attempt);
-
-    if (!Storage.exists(tempPath.c_str())) {
-      return tempPath;
-    }
-  }
-  return "";
-}
-
-bool downloadPathIsDirectory(const std::string& path) {
-  FsFile file = Storage.open(path.c_str());
-  if (!file) return false;
-  const bool isDirectory = file.isDirectory();
-  file.close();
-  return isDirectory;
-}
-
-bool commitDownloadedFile(const std::string& tempPath, const std::string& targetPath, bool existed) {
-  std::string backupPath;
-  if (existed) {
-    backupPath = makeDownloadTempPath(targetPath, "httpbak");
-    FsFile existing = Storage.open(targetPath.c_str());
-    if (backupPath.empty() || !existing || !existing.rename(backupPath.c_str())) {
-      if (existing) existing.close();
-      return false;
-    }
-    existing.close();
-  }
-
-  FsFile tempFile = Storage.open(tempPath.c_str());
-  const bool renamed = tempFile && tempFile.rename(targetPath.c_str());
-  if (tempFile) tempFile.close();
-
-  if (renamed) {
-    if (!backupPath.empty()) Storage.remove(backupPath.c_str());
-    return true;
-  }
-
-  if (!backupPath.empty()) {
-    FsFile backup = Storage.open(backupPath.c_str());
-    if (backup) {
-      if (!backup.rename(targetPath.c_str())) {
-        LOG_ERR("HTTP", "Rollback failed; original file remains at %s instead of %s", backupPath.c_str(),
-                targetPath.c_str());
-      }
-      backup.close();
-    } else {
-      LOG_ERR("HTTP", "Rollback failed; could not reopen backup %s for %s", backupPath.c_str(), targetPath.c_str());
-    }
-  }
-  return false;
-}
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
@@ -214,13 +149,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   const bool destExists = Storage.exists(destPath.c_str());
-  if (destExists && downloadPathIsDirectory(destPath)) {
+  if (destExists && FsHelpers::pathIsDirectory(destPath.c_str())) {
     LOG_ERR("HTTP", "Destination is a directory");
     http.end();
     return FILE_ERROR;
   }
 
-  const std::string tempPath = makeDownloadTempPath(destPath, "httptmp");
+  const std::string tempPath = FsHelpers::makeTempPath(destPath, "httptmp", false);
   if (tempPath.empty()) {
     LOG_ERR("HTTP", "Failed to create temp path");
     http.end();
@@ -276,7 +211,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return HTTP_ERROR;
   }
 
-  if (!commitDownloadedFile(tempPath, destPath, destExists)) {
+  if (!FsHelpers::commitTempFile(tempPath.c_str(), destPath.c_str(), destExists, "HTTP", "httpbak", false)) {
     LOG_ERR("HTTP", "Failed to finalize download");
     Storage.remove(tempPath.c_str());
     return FILE_ERROR;

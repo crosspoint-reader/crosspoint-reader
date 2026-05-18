@@ -121,70 +121,6 @@ bool isValidWebPathComponent(const String& name) {
   return !isProtectedItemName(name);
 }
 
-String makeWebTempPath(const String& targetPath, const char* prefix) {
-  int lastSlash = targetPath.lastIndexOf('/');
-  const String parentPath = lastSlash > 0 ? targetPath.substring(0, lastSlash) : "/";
-
-  for (uint8_t attempt = 0; attempt < 8; attempt++) {
-    String tempPath = parentPath;
-    if (!tempPath.endsWith("/")) tempPath += "/";
-    tempPath += ".";
-    tempPath += prefix;
-    tempPath += "-";
-    tempPath += String(millis(), HEX);
-    tempPath += "-";
-    tempPath += String(attempt);
-
-    if (!Storage.exists(tempPath.c_str())) {
-      return tempPath;
-    }
-  }
-  return "";
-}
-
-bool pathIsDirectory(const String& path) {
-  FsFile file = Storage.open(path.c_str());
-  if (!file) return false;
-  const bool isDirectory = file.isDirectory();
-  file.close();
-  return isDirectory;
-}
-
-bool commitTempFile(const String& tempPath, const String& targetPath, bool existed) {
-  String backupPath;
-  if (existed) {
-    backupPath = makeWebTempPath(targetPath, "webbak");
-    FsFile existing = Storage.open(targetPath.c_str());
-    if (backupPath.isEmpty() || !existing || !existing.rename(backupPath.c_str())) {
-      if (existing) existing.close();
-      return false;
-    }
-    existing.close();
-  }
-
-  FsFile tempFile = Storage.open(tempPath.c_str());
-  const bool renamed = tempFile && tempFile.rename(targetPath.c_str());
-  if (tempFile) tempFile.close();
-
-  if (renamed) {
-    if (!backupPath.isEmpty()) Storage.remove(backupPath.c_str());
-    return true;
-  }
-
-  if (!backupPath.isEmpty()) {
-    FsFile backup = Storage.open(backupPath.c_str());
-    if (backup) {
-      if (!backup.rename(targetPath.c_str())) {
-        LOG_ERR("WEB", "Rollback failed; original file remains at %s instead of %s", backupPath.c_str(),
-                targetPath.c_str());
-      }
-      backup.close();
-    } else {
-      LOG_ERR("WEB", "Rollback failed; could not reopen backup %s for %s", backupPath.c_str(), targetPath.c_str());
-    }
-  }
-  return false;
-}
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -752,12 +688,12 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     esp_task_wdt_reset();
     state.existed = Storage.exists(filePath.c_str());
-    if (state.existed && pathIsDirectory(filePath)) {
+    if (state.existed && FsHelpers::pathIsDirectory(filePath.c_str())) {
       state.error = "Cannot overwrite directory";
       LOG_DBG("WEB", "[UPLOAD] Rejected directory overwrite: %s", filePath.c_str());
       return;
     }
-    state.tempPath = makeWebTempPath(filePath, "webtmp");
+    state.tempPath = FsHelpers::makeTempPath(filePath, "webtmp");
     if (state.tempPath.isEmpty()) {
       state.error = "Failed to create temporary upload path";
       LOG_DBG("WEB", "[UPLOAD] Failed to create temp path for: %s", filePath.c_str());
@@ -824,7 +760,8 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       state.file.close();
 
       if (state.error.isEmpty()) {
-        state.success = commitTempFile(state.tempPath, state.targetPath, state.existed);
+        state.success =
+            FsHelpers::commitTempFile(state.tempPath.c_str(), state.targetPath.c_str(), state.existed, "WEB", "webbak");
         if (!state.success) {
           state.error = "Failed to finalize upload";
           Storage.remove(state.tempPath.c_str());
@@ -1706,11 +1643,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
           esp_task_wdt_reset();
           wsUploadExisted = Storage.exists(filePath.c_str());
-          if (wsUploadExisted && pathIsDirectory(filePath)) {
+          if (wsUploadExisted && FsHelpers::pathIsDirectory(filePath.c_str())) {
             wsServer->sendTXT(num, "ERROR:Cannot overwrite directory");
             return;
           }
-          wsUploadTempPath = makeWebTempPath(filePath, "wstmp");
+          wsUploadTempPath = FsHelpers::makeTempPath(filePath, "wstmp");
           if (wsUploadTempPath.isEmpty()) {
             wsServer->sendTXT(num, "ERROR:Failed to create temporary upload path");
             return;
@@ -1730,7 +1667,8 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           if (wsUploadSize == 0) {
             // Explicit close() required: file-scope global persists beyond function scope
             wsUploadFile.close();
-            if (!commitTempFile(wsUploadTempPath, wsUploadTargetPath, wsUploadExisted)) {
+            if (!FsHelpers::commitTempFile(wsUploadTempPath.c_str(), wsUploadTargetPath.c_str(), wsUploadExisted, "WEB",
+                                           "webbak")) {
               Storage.remove(wsUploadTempPath.c_str());
               wsServer->sendTXT(num, "ERROR:Failed to finalize upload");
               return;
@@ -1794,7 +1732,8 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       if (wsUploadReceived >= wsUploadSize) {
         // Explicit close() required: file-scope global persists beyond function scope
         wsUploadFile.close();
-        if (!commitTempFile(wsUploadTempPath, wsUploadTargetPath, wsUploadExisted)) {
+        if (!FsHelpers::commitTempFile(wsUploadTempPath.c_str(), wsUploadTargetPath.c_str(), wsUploadExisted, "WEB",
+                                       "webbak")) {
           Storage.remove(wsUploadTempPath.c_str());
           wsUploadInProgress = false;
           wsUploadClientNum = 255;
@@ -1928,11 +1867,11 @@ void CrossPointWebServer::handleFontUploadData() {
       FontInstaller::buildFontPath(family.c_str(), filename.c_str(), path, sizeof(path));
       fontUpload.filePath = path;
       fontUpload.existed = Storage.exists(path);
-      if (fontUpload.existed && pathIsDirectory(path)) {
+      if (fontUpload.existed && FsHelpers::pathIsDirectory(path)) {
         LOG_ERR("WEB", "Cannot overwrite font directory: %s", path);
         break;
       }
-      const String tempPath = makeWebTempPath(path, "fonttmp");
+      const String tempPath = FsHelpers::makeTempPath(String(path), "fonttmp");
       if (tempPath.isEmpty()) {
         LOG_ERR("WEB", "Failed to create temp font path: %s", path);
         break;
@@ -2005,7 +1944,8 @@ void CrossPointWebServer::handleFontUploadData() {
       }
 
       if (fontUpload.valid) {
-        fontUpload.valid = commitTempFile(fontUpload.tempPath.c_str(), fontUpload.filePath.c_str(), fontUpload.existed);
+        fontUpload.valid = FsHelpers::commitTempFile(fontUpload.tempPath.c_str(), fontUpload.filePath.c_str(),
+                                                     fontUpload.existed, "WEB", "webbak");
       }
       if (!fontUpload.valid && !fontUpload.tempPath.empty()) {
         Storage.remove(fontUpload.tempPath.c_str());
