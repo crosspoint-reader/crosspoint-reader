@@ -22,11 +22,13 @@ class BleTransferActivity final : public Activity {
     INSTALLING,
     INSTALLED,
     SAVED,
+    SENDING,
+    SENT,
     SAVE_HOST_PROMPT,
     FORGET_HOST_PROMPT,
     ERROR
   };
-  enum class TransferKind { NONE, PACKAGE, BOOK };
+  enum class TransferKind { NONE, PACKAGE, BOOK, CRASH_REPORT };
 
   explicit BleTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   ~BleTransferActivity() override;
@@ -36,7 +38,9 @@ class BleTransferActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override { return true; }
-  bool skipLoopDelay() override { return state_ == State::VERIFYING || state_ == State::INSTALLING; }
+  bool skipLoopDelay() override {
+    return state_ == State::VERIFYING || state_ == State::INSTALLING || state_ == State::SENDING;
+  }
 
   void onBleConnected();
   void onBleDisconnected();
@@ -49,6 +53,7 @@ class BleTransferActivity final : public Activity {
   State state_ = State::STARTING;
   std::unique_ptr<BleTransferRuntime> ble_;
   FsFile uploadFile_;
+  FsFile downloadFile_;
 
   std::string sessionCode_;
   std::string fileName_;
@@ -70,10 +75,15 @@ class BleTransferActivity final : public Activity {
   State pendingFinalState_ = State::CONNECTED;
   size_t expectedSize_ = 0;
   size_t receivedBytes_ = 0;
+  size_t sentBytes_ = 0;
   size_t lastProgressStatusBytes_ = 0;
   uint32_t expectedSequence_ = 0;
+  uint32_t downloadSequence_ = 0;
+  uint32_t pendingDownloadAck_ = 0;
   bool helloAccepted_ = false;
   bool transferOpen_ = false;
+  bool downloadOpen_ = false;
+  bool downloadAwaitingAck_ = false;
   bool trustedHelloAccepted_ = false;
   bool hostPaired_ = false;
   bool hostPairSkipped_ = false;
@@ -85,6 +95,8 @@ class BleTransferActivity final : public Activity {
   int promptSelection_ = 0;
 
   void processCommit();
+  void startCrashReportDownload();
+  void pumpDownload();
   void resetTransfer(bool removePart);
   void setState(State state);
   void setError(const std::string& error);

@@ -10,6 +10,7 @@
 #include <mbedtls/md.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -28,9 +29,13 @@ constexpr const char* BLE_SERVICE_UUID = "6f9f0a00-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BLE_CONTROL_UUID = "6f9f0a01-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BLE_DATA_IN_UUID = "6f9f0a02-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BLE_STATUS_UUID = "6f9f0a03-9b1d-4d1f-9f53-5b6b8b3d0f10";
+constexpr const char* BLE_DATA_OUT_UUID = "6f9f0a04-9b1d-4d1f-9f53-5b6b8b3d0f10";
 constexpr const char* BOOKS_ROOT = "/Books";
+constexpr const char* CRASH_REPORT_PATH = "/crash_report.txt";
+constexpr const char* CRASH_REPORT_NAME = "crash_report.txt";
 constexpr size_t MAX_BLE_PACKAGE_BYTES = 4UL * 1024UL * 1024UL;
 constexpr size_t MAX_BLE_BOOK_BYTES = 32UL * 1024UL * 1024UL;
+constexpr size_t BLE_DOWNLOAD_CHUNK_BYTES = 160;
 constexpr size_t MAX_FILENAME_BYTES = 96;
 constexpr size_t BLE_HOST_ID_MAX_BYTES = 64;
 constexpr size_t BLE_HOST_NAME_MAX_BYTES = 48;
@@ -135,6 +140,8 @@ std::string transferKindName(const BleTransferActivity::TransferKind kind) {
       return "package";
     case BleTransferActivity::TransferKind::BOOK:
       return "book";
+    case BleTransferActivity::TransferKind::CRASH_REPORT:
+      return "crash_report";
     case BleTransferActivity::TransferKind::NONE:
       return "";
   }
@@ -175,6 +182,10 @@ std::string stateName(BleTransferActivity::State state) {
       return "installed";
     case BleTransferActivity::State::SAVED:
       return "saved";
+    case BleTransferActivity::State::SENDING:
+      return "sending";
+    case BleTransferActivity::State::SENT:
+      return "sent";
     case BleTransferActivity::State::SAVE_HOST_PROMPT:
       return "save_host_prompt";
     case BleTransferActivity::State::FORGET_HOST_PROMPT:
@@ -240,6 +251,7 @@ struct BleTransferRuntime {
   NimBLEServer* server = nullptr;
   NimBLEService* service = nullptr;
   NimBLECharacteristic* status = nullptr;
+  NimBLECharacteristic* dataOut = nullptr;
   ServerCallbacks serverCallbacks;
   ControlCallbacks controlCallbacks;
   DataCallbacks dataCallbacks;
@@ -259,7 +271,8 @@ struct BleTransferRuntime {
     auto* control = service->createCharacteristic(BLE_CONTROL_UUID, NIMBLE_PROPERTY::WRITE);
     auto* dataIn = service->createCharacteristic(BLE_DATA_IN_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
     status = service->createCharacteristic(BLE_STATUS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-    if (!control || !dataIn || !status) return false;
+    dataOut = service->createCharacteristic(BLE_DATA_OUT_UUID, NIMBLE_PROPERTY::NOTIFY);
+    if (!control || !dataIn || !status || !dataOut) return false;
 
     control->setCallbacks(&controlCallbacks);
     dataIn->setCallbacks(&dataCallbacks);
@@ -278,12 +291,19 @@ struct BleTransferRuntime {
     status->notify();
   }
 
+  void notifyData(const uint8_t* data, const size_t length) {
+    if (!dataOut) return;
+    dataOut->setValue(data, length);
+    dataOut->notify();
+  }
+
   void end() {
     NimBLEDevice::stopAdvertising();
     NimBLEDevice::deinit(true);
     server = nullptr;
     service = nullptr;
     status = nullptr;
+    dataOut = nullptr;
   }
 };
 
@@ -353,6 +373,12 @@ void BleTransferActivity::loop() {
     return;
   }
 
+  if (state_ == State::SENDING && downloadOpen_) {
+    if (statusDirty_) publishStatus();
+    pumpDownload();
+    return;
+  }
+
   if (statusDirty_) {
     publishStatus();
   }
@@ -366,7 +392,7 @@ void BleTransferActivity::onBleConnected() {
 }
 
 void BleTransferActivity::onBleDisconnected() {
-  if (transferOpen_) {
+  if (transferOpen_ || downloadOpen_) {
     setError("client disconnected");
     resetTransfer(true);
     return;
@@ -518,6 +544,35 @@ void BleTransferActivity::onControlWrite(const std::string& value) {
     return;
   }
 
+  if (op == "start_get") {
+    resetTransfer(true);
+
+    const std::string kind = doc["kind"] | "";
+    if (kind != "crash_report") {
+      setError("unsupported transfer kind");
+      return;
+    }
+
+    startCrashReportDownload();
+    return;
+  }
+
+  if (op == "get_ack") {
+    if (!downloadOpen_ || !downloadAwaitingAck_) {
+      setError("no download pending");
+      return;
+    }
+    const uint32_t sequence = doc["sequence"] | UINT32_MAX;
+    if (sequence != pendingDownloadAck_) {
+      setError("unexpected download ack");
+      return;
+    }
+    downloadAwaitingAck_ = false;
+    statusDirty_ = true;
+    requestUpdate();
+    return;
+  }
+
   if (op == "commit") {
     if (!transferOpen_) {
       setError("no transfer open");
@@ -657,6 +712,68 @@ void BleTransferActivity::processCommit() {
   completeFinalState(State::INSTALLED);
 }
 
+void BleTransferActivity::startCrashReportDownload() {
+  if (!Storage.exists(CRASH_REPORT_PATH)) {
+    setError("not_found");
+    return;
+  }
+
+  if (!Storage.openFileForRead("BLE", CRASH_REPORT_PATH, downloadFile_)) {
+    setError("could not open crash report");
+    return;
+  }
+
+  fileName_ = CRASH_REPORT_NAME;
+  transferKind_ = TransferKind::CRASH_REPORT;
+  expectedSize_ = downloadFile_.fileSize();
+  sentBytes_ = 0;
+  downloadSequence_ = 0;
+  pendingDownloadAck_ = 0;
+  downloadAwaitingAck_ = false;
+  downloadOpen_ = true;
+  setState(State::SENDING);
+}
+
+void BleTransferActivity::pumpDownload() {
+  if (!downloadOpen_) return;
+  if (downloadAwaitingAck_) {
+    if (statusDirty_) publishStatus();
+    return;
+  }
+
+  std::array<uint8_t, sizeof(uint32_t) + BLE_DOWNLOAD_CHUNK_BYTES> frame = {};
+  frame[0] = static_cast<uint8_t>(downloadSequence_ & 0xFF);
+  frame[1] = static_cast<uint8_t>((downloadSequence_ >> 8) & 0xFF);
+  frame[2] = static_cast<uint8_t>((downloadSequence_ >> 16) & 0xFF);
+  frame[3] = static_cast<uint8_t>((downloadSequence_ >> 24) & 0xFF);
+
+  const int read = downloadFile_.read(frame.data() + sizeof(uint32_t), BLE_DOWNLOAD_CHUNK_BYTES);
+  if (read < 0) {
+    downloadFile_.close();
+    downloadOpen_ = false;
+    setError("crash report read failed");
+    return;
+  }
+
+  if (read == 0) {
+    downloadFile_.close();
+    downloadOpen_ = false;
+    setState(State::SENT);
+    return;
+  }
+
+  ble_->notifyData(frame.data(), sizeof(uint32_t) + static_cast<size_t>(read));
+  sentBytes_ += static_cast<size_t>(read);
+  pendingDownloadAck_ = downloadSequence_;
+  downloadAwaitingAck_ = true;
+  downloadSequence_++;
+  if (sentBytes_ == expectedSize_ || sentBytes_ - lastProgressStatusBytes_ >= BLE_PROGRESS_STATUS_INTERVAL_BYTES) {
+    lastProgressStatusBytes_ = sentBytes_;
+    statusDirty_ = true;
+    requestUpdate();
+  }
+}
+
 void BleTransferActivity::completeFinalState(const State finalState) {
   hostPaired_ = false;
   hostPairSkipped_ = false;
@@ -740,6 +857,9 @@ void BleTransferActivity::resetTransfer(const bool removePart) {
   if (uploadFile_) {
     uploadFile_.close();
   }
+  if (downloadFile_) {
+    downloadFile_.close();
+  }
   if (removePart && removePartOnExit_ && !partPath_.empty() && Storage.exists(partPath_.c_str())) {
     Storage.remove(partPath_.c_str());
   }
@@ -755,9 +875,14 @@ void BleTransferActivity::resetTransfer(const bool removePart) {
   pendingFinalState_ = State::CONNECTED;
   expectedSize_ = 0;
   receivedBytes_ = 0;
+  sentBytes_ = 0;
   lastProgressStatusBytes_ = 0;
   expectedSequence_ = 0;
+  downloadSequence_ = 0;
+  pendingDownloadAck_ = 0;
   transferOpen_ = false;
+  downloadOpen_ = false;
+  downloadAwaitingAck_ = false;
   pendingCommit_ = false;
   removePartOnExit_ = false;
 }
@@ -790,10 +915,14 @@ std::string BleTransferActivity::buildStatusJson() const {
   if (!trustedHostName_.empty()) doc["trusted_host"] = trustedHostName_.c_str();
   if (hostPaired_) doc["paired"] = true;
   if (hostPairSkipped_) doc["pairing"] = "skipped";
-  if (expectedSize_ > 0) {
+  if (expectedSize_ > 0 || state_ == State::SENDING || state_ == State::SENT) {
     const std::string kind = transferKindName(transferKind_);
     if (!kind.empty()) doc["kind"] = kind.c_str();
-    doc["received"] = receivedBytes_;
+    if (state_ == State::SENDING || state_ == State::SENT) {
+      doc["sent"] = sentBytes_;
+    } else {
+      doc["received"] = receivedBytes_;
+    }
     doc["size"] = expectedSize_;
   }
   if (!packageId_.empty()) doc["package"] = packageId_.c_str();
@@ -801,6 +930,9 @@ std::string BleTransferActivity::buildStatusJson() const {
   if (state_ == State::SAVED && !savedPath_.empty()) {
     doc["name"] = fileName_.c_str();
     doc["path"] = savedPath_.c_str();
+  }
+  if (state_ == State::SENT) {
+    doc["name"] = fileName_.c_str();
   }
   if (state_ == State::ERROR && !errorMessage_.empty()) doc["error"] = errorMessage_.c_str();
 
@@ -856,6 +988,18 @@ void BleTransferActivity::render(RenderLock&&) {
     case State::SAVED:
       primary = tr(STR_BLE_TRANSFER_SAVED);
       secondary = savedPath_.empty() ? fileName_ : savedPath_;
+      break;
+    case State::SENDING: {
+      primary = "Sending diagnostic";
+      char buffer[48];
+      snprintf(buffer, sizeof(buffer), "%u / %u bytes", static_cast<unsigned>(sentBytes_),
+               static_cast<unsigned>(expectedSize_));
+      secondary = buffer;
+      break;
+    }
+    case State::SENT:
+      primary = "Diagnostic sent";
+      secondary = fileName_;
       break;
     case State::SAVE_HOST_PROMPT:
       renderSaveHostPrompt();

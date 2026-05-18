@@ -34,9 +34,34 @@ read/write characteristics and server notifications or indications.
 Context7 lookup also points to NimBLE-Arduino as the practical Arduino-facing stack. Its GATT server API supports custom
 services, writable characteristics, encrypted writes, and notifications. That is enough for a framed transfer protocol.
 
-## Proposed Protocol Shape
+## Current State
 
-Create a Marginalia BLE Transfer GATT service with four characteristics:
+The first implementation is now split across focused PRs and uses a custom Marginalia BLE Transfer GATT service under
+**File Transfer > Bluetooth Transfer**.
+
+Implemented pieces:
+
+- `control`: write with response; starts sessions, commits uploads, cancels transfers, requests approved downloads
+- `data-in`: write/write-without-response; host sends upload chunks
+- `data-out`: notify; reader sends download chunks
+- `status`: read/notify; current state, progress, errors, session nonce, and trusted-host metadata
+- visible six-digit code authentication for first use and recovery
+- trusted-host authentication with a nonce-based HMAC challenge response
+- **Save Host?** after successful authenticated uploads
+- **Forget Host** from the Bluetooth Transfer screen
+- host-side trusted-device config in `~/.config/marginalia/ble_hosts.json` with `0600` permissions
+- firmware trusted-host storage on SD card with hardware-tied secret obfuscation
+- `.mpkg.zip` package upload and install with `scripts/ble_transfer.py put-package`
+- `.epub` book upload to `/Books/` with `scripts/ble_transfer.py put-book`
+- `/crash_report.txt` download with `scripts/ble_transfer.py get-crash-report`
+
+Download notifications originally arrived out of order on hardware, so crash-report download now uses stop-and-go ACKs:
+the device sends one numbered `data-out` frame, the host validates it, then the host sends `get_ack` before the next
+frame is emitted. This is slower than raw notification streaming but avoids dropped or reordered BLE notifications.
+
+## Protocol Shape
+
+The Marginalia BLE Transfer GATT service has four characteristics:
 
 - `control`: write with response; starts sessions, commits files, cancels transfers, requests file reads
 - `data-in`: write without response; phone/computer sends upload chunks
@@ -47,31 +72,38 @@ Upload flow:
 
 1. User opens **File Transfer > Bluetooth Transfer**.
 2. Device advertises `Marginalia Transfer` for a limited window and keeps auto-sleep disabled.
-3. Client connects and sends `START_PUT` with destination class, filename, byte size, and SHA-256.
+3. Client connects and sends `start_put` with destination class, filename, byte size, and SHA-256.
 4. Firmware opens a `.part` file under a staging directory.
 5. Client streams numbered chunks to `data-in`.
 6. Firmware acknowledges progress through `status`.
-7. Client sends `COMMIT`.
+7. Client sends `commit`.
 8. Firmware verifies byte count and SHA-256, renames into the final approved path, then offers install if it is an
    `.mpkg.zip`.
 
 Download flow:
 
-1. Client sends `START_GET` for an approved diagnostic path such as `/crash_report.txt`.
-2. Firmware streams numbered chunks over `data-out`.
-3. Client acknowledges completion or requests resume from a byte offset.
+1. Client sends `start_get` for an approved diagnostic kind such as `crash_report`.
+2. Firmware sends one numbered chunk over `data-out`.
+3. Client validates the sequence and sends `get_ack`.
+4. Firmware sends the next chunk, repeating until complete.
+5. Firmware publishes final `sent` status.
+
+Resume from byte offsets is not implemented yet.
 
 ## Approved Destinations
 
-Initial write support should be narrow:
+Current write support is narrow:
 
 - `/.marginalia/sideload/<safe-name>.mpkg.zip`
 - `/Books/<safe-name>.epub`
 
-Initial read support should also be narrow:
+Current read support is narrow:
 
 - `/crash_report.txt`
-- optional package diagnostics under `/.marginalia/package-state/`
+
+Potential next read support:
+
+- package diagnostics under `/.marginalia/package-state/`
 
 Do not provide arbitrary SD-card read/write over BLE. It creates security and corruption risk without much user value.
 
@@ -95,18 +127,37 @@ Use application-level trust before OS BLE bonding. NimBLE bonding and encrypted 
 the first paired-host flow should be testable through Bleak on macOS, Linux, and phones without relying on platform-
 specific bonding behavior.
 
-The protocol should treat disconnects as normal. Incomplete uploads remain as `.part` files in staging and are removed
-on the next transfer-mode start unless a resumable manifest says they can continue.
+The protocol treats disconnects as normal. Incomplete uploads remain as `.part` files in staging and are removed on the
+next transfer-mode start. A resumable manifest is still future work.
 
-## Recommendation
+## Remaining Work
 
-Build SD-card package archive install first, because BLE uploads should land in the same `/.marginalia/sideload/`
-directory and reuse the same installer.
+Useful follow-up PRs, in recommended order:
 
-The first firmware implementation should live under **File Transfer > Bluetooth Transfer** and should use
-NimBLE-Arduino pinned to an upstream commit that embeds Apache NimBLE 1.9.0 or newer. Start with package upload only,
-because `.mpkg.zip` archives are small and already have size/SHA verification in the package path. Add crash-report
-download second. Add EPUB upload after the transfer protocol survives real phone testing.
+1. Package diagnostics download.
+   Add one or more read-only `start_get` kinds for narrowly approved package diagnostics under
+   `/.marginalia/package-state/`. Keep this read-only and avoid arbitrary path reads.
+2. BMP upload.
+   Add a `put-bmp` style upload kind only if there is a clear destination and UI path for viewing imported images. Reuse
+   the existing upload helper and keep extension/path validation strict.
+3. Phone or web companion UI.
+   Build a small user-facing client once the Python CLI protocol has stabilized. The UI should use the same code/trusted
+   host model rather than introducing a second pairing concept.
+4. Resumable transfers.
+   Add transfer manifests and byte-offset resume only if large files or phone clients make interruption recovery
+   necessary. This should cover both uploads and downloads.
+5. BLE OTA.
+   Defer until resumability, rollback UX, and stronger authenticity checks are in place. Firmware images are larger and
+   failed updates have higher support cost than book/package transfers.
+6. OS BLE bonding or encrypted characteristics.
+   Application-level trust is enough for the current CLI and is easier to test across macOS, Linux, and phones. Bonding
+   can be layered on later if the phone UI needs platform-native trust.
+
+Still intentionally out of scope:
+
+- arbitrary SD-card browsing or writes over BLE
+- permanent background BLE advertising
+- exposing the SD card as a mounted filesystem over BLE
 
 ## References
 

@@ -28,6 +28,7 @@ SERVICE_UUID = "6f9f0a00-9b1d-4d1f-9f53-5b6b8b3d0f10"
 CONTROL_UUID = "6f9f0a01-9b1d-4d1f-9f53-5b6b8b3d0f10"
 DATA_IN_UUID = "6f9f0a02-9b1d-4d1f-9f53-5b6b8b3d0f10"
 STATUS_UUID = "6f9f0a03-9b1d-4d1f-9f53-5b6b8b3d0f10"
+DATA_OUT_UUID = "6f9f0a04-9b1d-4d1f-9f53-5b6b8b3d0f10"
 DEVICE_NAME = "Marginalia Transfer"
 PROGRESS_PRINT_BYTES = 4096
 PROGRESS_PRINT_SECONDS = 1.0
@@ -211,6 +212,21 @@ async def put_file(
                 pass
         return final_status
 
+    async def wait_for_trusted_auth(timeout: float) -> dict[str, Any]:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if final_status.get("state") == "error":
+                return final_status
+            if final_status.get("state") == "connected" and final_status.get("trusted_host"):
+                return final_status
+            status_event.clear()
+            remaining = deadline - asyncio.get_running_loop().time()
+            try:
+                await asyncio.wait_for(status_event.wait(), timeout=min(0.25, max(0.0, remaining)))
+            except asyncio.TimeoutError:
+                pass
+        return final_status
+
     async def wait_for_received(min_received: int, timeout: float) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
@@ -259,6 +275,7 @@ async def put_file(
                 ):
                     response = trusted_response(str(trusted.get("secret", "")), device_nonce, str(trusted.get("host_id", host_id)))
                     final_status = {}
+                    status_event.clear()
                     await write_json(
                         client,
                         {
@@ -268,7 +285,7 @@ async def put_file(
                             "response": response,
                         },
                     )
-                    hello_status = await wait_for_status({"connected", "error"}, args.control_timeout)
+                    hello_status = await wait_for_trusted_auth(args.control_timeout)
                     used_trusted_auth = hello_status.get("state") == "connected" and hello_status.get("trusted_host")
                     if not used_trusted_auth:
                         print("\nTrusted-host auth failed; falling back to code.", file=sys.stderr)
@@ -278,6 +295,7 @@ async def put_file(
                         print("\nNo trusted host was accepted; pass --code with the six-digit device code.", file=sys.stderr)
                         return 1
                     final_status = {}
+                    status_event.clear()
                     hello_payload: dict[str, Any] = {"op": "hello", "version": 1, "code": args.code}
                     if not args.no_remember_host and isinstance(device_id, str):
                         pending_pair_device = device_id
@@ -406,6 +424,244 @@ async def put_book(args: argparse.Namespace) -> int:
     )
 
 
+async def get_crash_report(args: argparse.Namespace) -> int:
+    output = Path(args.output).expanduser().resolve()
+    if output.exists() and not args.force:
+        print(f"Output already exists: {output}", file=sys.stderr)
+        return 2
+    output.parent.mkdir(parents=True, exist_ok=True)
+    part = output.with_name(output.name + ".part")
+    if part.exists():
+        part.unlink()
+
+    final_status: dict[str, Any] = {}
+    status_event = asyncio.Event()
+    done = asyncio.Event()
+    download_started = False
+    received_bytes = 0
+    expected_sequence = 0
+    data_error: str | None = None
+    config = load_ble_config()
+    host_id, _ = get_host_identity(config)
+    last_print_sent = -PROGRESS_PRINT_BYTES
+    last_print_time = 0.0
+
+    def on_status(_: Any, data: bytearray) -> None:
+        nonlocal final_status, last_print_sent, last_print_time
+        final_status = decode_status(data)
+        state = final_status.get("state", "?")
+        sent = final_status.get("sent")
+        total = final_status.get("size")
+        if sent is not None and total is not None:
+            now = asyncio.get_running_loop().time()
+            is_final = state in {"sent", "error"} or sent == total
+            should_print = (
+                is_final
+                or sent == 0
+                or sent - last_print_sent >= PROGRESS_PRINT_BYTES
+                or now - last_print_time >= PROGRESS_PRINT_SECONDS
+            )
+            if should_print:
+                print(f"\r{state}: {sent}/{total} bytes", end="", flush=True)
+                last_print_sent = sent
+                last_print_time = now
+        else:
+            print(f"\n{state}: {final_status}")
+        status_event.set()
+        if download_started and (state == "sent" or state == "error"):
+            done.set()
+
+    async def wait_for_status(states: set[str], timeout: float) -> dict[str, Any]:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if final_status.get("state") in states:
+                return final_status
+            status_event.clear()
+            remaining = deadline - asyncio.get_running_loop().time()
+            try:
+                await asyncio.wait_for(status_event.wait(), timeout=min(0.25, max(0.0, remaining)))
+            except asyncio.TimeoutError:
+                pass
+        return final_status
+
+    async def wait_for_trusted_auth(timeout: float) -> dict[str, Any]:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if final_status.get("state") == "error":
+                return final_status
+            if final_status.get("state") == "connected" and final_status.get("trusted_host"):
+                return final_status
+            status_event.clear()
+            remaining = deadline - asyncio.get_running_loop().time()
+            try:
+                await asyncio.wait_for(status_event.wait(), timeout=min(0.25, max(0.0, remaining)))
+            except asyncio.TimeoutError:
+                pass
+        return final_status
+
+    try:
+        device = await find_device(args.scan_timeout)
+    except (BleakError, OSError) as exc:
+        print(f"BLE scan failed: {exc}", file=sys.stderr)
+        return 1
+    if device is None:
+        print("No Marginalia BLE transfer device found.", file=sys.stderr)
+        return 1
+
+    print(f"Connecting to {device.name or device.address}...")
+    try:
+        async with BleakClient(device) as client:
+            await client.start_notify(STATUS_UUID, on_status)
+            handle = None
+            data_notify_started = False
+            try:
+                try:
+                    on_status(None, await client.read_gatt_char(STATUS_UUID))
+                except (BleakError, OSError):
+                    pass
+
+                device_id = final_status.get("device_id")
+                device_nonce = final_status.get("device_nonce")
+                trusted = config["devices"].get(device_id) if isinstance(device_id, str) else None
+                used_trusted_auth = False
+                if (
+                    trusted
+                    and isinstance(trusted, dict)
+                    and isinstance(device_nonce, str)
+                    and not args.force_code
+                ):
+                    response = trusted_response(str(trusted.get("secret", "")), device_nonce, str(trusted.get("host_id", host_id)))
+                    final_status = {}
+                    status_event.clear()
+                    await write_json(
+                        client,
+                        {
+                            "op": "hello",
+                            "version": 1,
+                            "host_id": trusted.get("host_id", host_id),
+                            "response": response,
+                        },
+                    )
+                    hello_status = await wait_for_trusted_auth(args.control_timeout)
+                    used_trusted_auth = hello_status.get("state") == "connected" and hello_status.get("trusted_host")
+                    if not used_trusted_auth:
+                        print("\nTrusted-host auth failed; falling back to code.", file=sys.stderr)
+
+                if not used_trusted_auth:
+                    if not args.code:
+                        print("\nNo trusted host was accepted; pass --code with the six-digit device code.", file=sys.stderr)
+                        return 1
+                    final_status = {}
+                    status_event.clear()
+                    await write_json(client, {"op": "hello", "version": 1, "code": args.code})
+
+                hello_status = await wait_for_status({"connected", "error"}, args.control_timeout)
+                if hello_status.get("state") == "error":
+                    print(f"\nDevice rejected session: {final_status.get('error')}", file=sys.stderr)
+                    return 1
+                if hello_status.get("state") != "connected":
+                    print("\nTimed out waiting for device session confirmation.", file=sys.stderr)
+                    return 1
+
+                handle = part.open("wb")
+                pending_ack_tasks: list[asyncio.Task[Any]] = []
+
+                async def collect_ack_errors() -> None:
+                    nonlocal data_error
+                    if not pending_ack_tasks:
+                        return
+                    results = await asyncio.gather(*pending_ack_tasks, return_exceptions=True)
+                    pending_ack_tasks.clear()
+                    for result in results:
+                        if isinstance(result, Exception) and data_error is None:
+                            data_error = f"failed to send download ACK: {result}"
+                            done.set()
+                            return
+
+                def on_data(_: Any, data: bytearray) -> None:
+                    nonlocal received_bytes, expected_sequence, data_error
+                    raw = bytes(data)
+                    if len(raw) <= 4:
+                        data_error = "invalid data frame"
+                        done.set()
+                        return
+                    sequence = struct.unpack("<I", raw[:4])[0]
+                    if sequence != expected_sequence:
+                        data_error = f"unexpected data sequence: got {sequence}, expected {expected_sequence}"
+                        done.set()
+                        return
+                    payload = raw[4:]
+                    handle.write(payload)
+                    received_bytes += len(payload)
+                    expected_sequence += 1
+                    task = asyncio.create_task(write_json(client, {"op": "get_ack", "sequence": sequence}))
+                    pending_ack_tasks.append(task)
+
+                await client.start_notify(DATA_OUT_UUID, on_data)
+                data_notify_started = True
+                download_started = True
+                await write_json(client, {"op": "start_get", "kind": "crash_report"})
+                start_status = await wait_for_status({"sending", "sent", "error"}, args.control_timeout)
+                if start_status.get("state") == "error":
+                    print(f"\nDevice rejected download: {final_status.get('error')}", file=sys.stderr)
+                    return 1
+                if start_status.get("state") not in {"sending", "sent"}:
+                    print("\nTimed out waiting for device download start.", file=sys.stderr)
+                    return 1
+
+                try:
+                    await asyncio.wait_for(done.wait(), timeout=args.download_timeout)
+                    await collect_ack_errors()
+                except asyncio.TimeoutError:
+                    for task in pending_ack_tasks:
+                        task.cancel()
+                    await collect_ack_errors()
+                    print("\nTimed out waiting for crash report.", file=sys.stderr)
+                    return 1
+            finally:
+                await collect_ack_errors()
+                if handle:
+                    handle.close()
+                if data_notify_started:
+                    try:
+                        await client.stop_notify(DATA_OUT_UUID)
+                    except (BleakError, OSError):
+                        pass
+                try:
+                    await client.stop_notify(STATUS_UUID)
+                except (BleakError, OSError) as exc:
+                    print(f"\nWarning: failed to stop BLE notifications: {exc}", file=sys.stderr)
+    except (BleakError, OSError) as exc:
+        print(f"\nBLE transfer failed: {exc}", file=sys.stderr)
+        return 1
+
+    print()
+    if data_error:
+        if part.exists():
+            part.unlink()
+        print(f"Download failed: {data_error}", file=sys.stderr)
+        return 1
+    if final_status.get("state") == "error":
+        if part.exists():
+            part.unlink()
+        print(f"Download failed: {final_status.get('error')}", file=sys.stderr)
+        return 1
+    if final_status.get("state") != "sent":
+        if part.exists():
+            part.unlink()
+        print(f"Download failed: {final_status}", file=sys.stderr)
+        return 1
+    expected_size = final_status.get("size")
+    if not isinstance(expected_size, int) or received_bytes != expected_size:
+        if part.exists():
+            part.unlink()
+        print(f"Download failed: received {received_bytes} bytes, expected {expected_size}", file=sys.stderr)
+        return 1
+    part.replace(output)
+    print(f"Saved {output}")
+    return 0
+
+
 def six_digit_code(value: str) -> str:
     if len(value) != 6 or not value.isdigit():
         raise argparse.ArgumentTypeError("must be exactly 6 digits")
@@ -475,6 +731,15 @@ def build_parser() -> argparse.ArgumentParser:
     put_book_parser.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
     put_book_parser.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
     put_book_parser.add_argument("--save-timeout", type=float, default=60.0, help="Save result timeout, in seconds")
+
+    get_crash = sub.add_parser("get-crash-report", help="Download /crash_report.txt")
+    get_crash.add_argument("output", nargs="?", default="crash_report.txt", help="Output path")
+    get_crash.add_argument("--code", type=six_digit_code, help="Six-digit code shown on the device")
+    get_crash.add_argument("--force-code", action="store_true", help="Skip trusted-host auth and use --code")
+    get_crash.add_argument("--force", action="store_true", help="Overwrite output path if it already exists")
+    get_crash.add_argument("--scan-timeout", type=float, default=8.0, help="BLE scan timeout, in seconds")
+    get_crash.add_argument("--control-timeout", type=float, default=5.0, help="Control response timeout, in seconds")
+    get_crash.add_argument("--download-timeout", type=float, default=60.0, help="Download timeout, in seconds")
     return parser
 
 
@@ -485,6 +750,8 @@ def main() -> int:
     if args.command == "put-book":
         args.install_timeout = args.save_timeout
         return asyncio.run(put_book(args))
+    if args.command == "get-crash-report":
+        return asyncio.run(get_crash_report(args))
     return 2
 
 
