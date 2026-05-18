@@ -189,10 +189,6 @@ constexpr size_t MIN_FREE_HEAP_FOR_JPEG = JPEG_DECODER_APPROX_SIZE + 16 * 1024;
 #define JPEG_CACHE_MIN_FREE_HEAP_MARGIN (24 * 1024)
 #endif
 
-#ifndef JPEG_CACHE_MIN_MAX_ALLOC_MARGIN
-#define JPEG_CACHE_MIN_MAX_ALLOC_MARGIN (20 * 1024)
-#endif
-
 #ifndef JPEG_DITHER_LOW_MEM_MIN_FREE_HEAP
 #define JPEG_DITHER_LOW_MEM_MIN_FREE_HEAP (MIN_FREE_HEAP_FOR_JPEG + 8 * 1024)
 #endif
@@ -216,9 +212,7 @@ bool shouldEnableJpegCache(const RenderConfig& config, int width, int height) {
 
   const size_t cacheBytes = jpegCacheBytes(width, height);
   const size_t freeHeap = ESP.getFreeHeap();
-  const size_t maxAlloc = ESP.getMaxAllocHeap();
   const size_t minFreeForCaching = MIN_FREE_HEAP_FOR_JPEG + JPEG_CACHE_MIN_FREE_HEAP_MARGIN;
-  const size_t minMaxAllocForCaching = cacheBytes + JPEG_CACHE_MIN_MAX_ALLOC_MARGIN;
 
   if (freeHeap < minFreeForCaching) {
     LOG_DBG("JPG", "Skipping cache: free heap %u < %u (cache %u bytes)", static_cast<unsigned>(freeHeap),
@@ -226,12 +220,9 @@ bool shouldEnableJpegCache(const RenderConfig& config, int width, int height) {
     return false;
   }
 
-  if (maxAlloc < minMaxAllocForCaching) {
-    LOG_DBG("JPG", "Skipping cache: max alloc %u < %u (cache %u bytes)", static_cast<unsigned>(maxAlloc),
-            static_cast<unsigned>(minMaxAllocForCaching), static_cast<unsigned>(cacheBytes));
-    return false;
-  }
-
+  // Don't pre-check maxAlloc: the JPEG decoder (~20 KB) is already allocated here so
+  // maxAlloc already reflects that. Let allocate() attempt malloc and fail gracefully
+  // rather than refusing on a conservative margin that double-counts live allocations.
   return true;
 }
 
@@ -306,12 +297,8 @@ bool readJpegDimensionsFromHeader(const std::string& imagePath, ImageDimensions&
         return false;
       }
 
-      constexpr int MAX_SOURCE_PIXELS = 3145728;  // Keep in sync with ImageToFramebufferDecoder contract.
-      const int widthInt = static_cast<int>(width);
-      const int heightInt = static_cast<int>(height);
       if (width > static_cast<uint16_t>(std::numeric_limits<int16_t>::max()) ||
-          height > static_cast<uint16_t>(std::numeric_limits<int16_t>::max()) ||
-          widthInt * heightInt > MAX_SOURCE_PIXELS) {
+          height > static_cast<uint16_t>(std::numeric_limits<int16_t>::max())) {
         LOG_ERR("JPG", "JPEG dimensions out of supported range %ux%u: %s", width, height, imagePath.c_str());
         return false;
       }
@@ -608,11 +595,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  if (!validateImageDimensions(srcWidth, srcHeight, "JPEG")) {
-    jpeg->close();
-    return false;
-  }
-
   bool isProgressive = jpeg->getJPEGType() == JPEG_MODE_PROGRESSIVE;
   if (isProgressive) {
     LOG_INF("JPG", "Progressive JPEG detected - decoding DC coefficients only (lower quality)");
@@ -651,6 +633,13 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   ctx.scaledSrcWidth = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
   ctx.scaledSrcHeight = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
+
+  // Validate memory footprint against the post-scaling decode size, not raw dimensions.
+  // A 1447x2200 image decoded at 1/4 scale is only ~362x550 — well within limits.
+  if (!validateImageDimensions(ctx.scaledSrcWidth, ctx.scaledSrcHeight, "JPEG")) {
+    jpeg->close();
+    return false;
+  }
   ctx.dstWidth = destWidth;
   ctx.dstHeight = destHeight;
   if (destWidth <= 0 || destHeight <= 0) {

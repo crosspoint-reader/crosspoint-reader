@@ -765,7 +765,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           uint16_t backupPage = section->currentPage;
           uint16_t backupPageCount = section->pageCount;
           section.reset();
-          epub->clearCache();
+          epub->clearCache(true);
           epub->setupCacheDir();
           saveProgress(backupSpine, backupPage, backupPageCount);
           if (!bookmarkStore.isEmpty()) {

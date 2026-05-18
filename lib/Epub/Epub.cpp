@@ -649,19 +649,53 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::clearCache() const {
+bool Epub::clearCache(const bool preserveThumbs) const {
   if (!Storage.exists(cachePath.c_str())) {
     LOG_DBG("EPB", "Cache does not exist, no action needed");
     return true;
   }
 
-  if (!Storage.removeDir(cachePath.c_str())) {
-    LOG_ERR("EPB", "Failed to clear cache");
+  if (!preserveThumbs) {
+    if (!Storage.removeDir(cachePath.c_str())) {
+      LOG_ERR("EPB", "Failed to clear cache");
+      return false;
+    }
+    LOG_DBG("EPB", "Cache cleared successfully");
+    return true;
+  }
+
+  // Delete sections subdirectory (bulk removal).
+  Storage.removeDir((cachePath + "/sections").c_str());
+
+  // Iterate the cache root and remove parsing artifacts, but preserve thumbnail
+  // and cover BMPs so the home screen doesn't have to regenerate them (slow).
+  FsFile dir = Storage.open(cachePath.c_str());
+  if (!dir || !dir.isDirectory()) {
+    LOG_ERR("EPB", "Failed to open cache dir for selective clear");
+    if (dir) dir.close();
     return false;
   }
 
+  char nameBuf[128];
+  bool anyFailed = false;
+  for (FsFile f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    f.getName(nameBuf, sizeof(nameBuf));
+    f.close();
+
+    const std::string name(nameBuf);
+    // Keep thumbnail and cover BMPs — regenerating them is expensive.
+    if (FsHelpers::hasBmpExtension(name)) continue;
+
+    const std::string fullPath = cachePath + "/" + name;
+    if (!Storage.remove(fullPath.c_str())) {
+      LOG_ERR("EPB", "Failed to remove cache file: %s", fullPath.c_str());
+      anyFailed = true;
+    }
+  }
+  dir.close();
+
   LOG_DBG("EPB", "Cache cleared successfully");
-  return true;
+  return !anyFailed;
 }
 
 void Epub::setupCacheDir() const {
