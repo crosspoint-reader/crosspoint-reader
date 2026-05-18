@@ -92,6 +92,9 @@ void EpubReaderBookmarksActivity::loop() {
       confirmingDelete = true;
       requestUpdate();
     } else {
+      if (bookmarks.empty()) {
+        return;
+      }
       auto bookmark = bookmarks.at(selectorIndex);
       setResult(ProgressChangeResult{bookmark.spineIndex, bookmark.pageIndex});
       finish();
