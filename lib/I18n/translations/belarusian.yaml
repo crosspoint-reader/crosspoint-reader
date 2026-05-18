@@ -209,6 +209,7 @@ STR_REMAP_FRONT_BUTTONS: "Пераназначыць пярэднія кнопк
 STR_OPDS_BROWSER: "OPDS браўзер"
 STR_COVER_CUSTOM: "Вокладка + Свой"
 STR_MENU_RECENT_BOOKS: "Нядаўнія кнігі"
+STR_REMOVE_FROM_RECENTS: "Выдаліць з нядаўніх кніг?"
 STR_NO_RECENT_BOOKS: "Няма нядаўніх кніг"
 STR_CALIBRE_DESC: "Выкарыстоўваць бесправадную перадачу Calibre"
 STR_FORGET_AND_REMOVE: "Забыць сетку і выдаліць захаваны пароль?"
