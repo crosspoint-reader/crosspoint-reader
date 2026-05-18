@@ -32,6 +32,9 @@ class EpubReaderActivity final : public Activity {
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
   bool showBookmarkMessage = false;
+  // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
+  // Consumed in onExit() to relocate the finished book into /Read/.
+  bool pendingReadFolderMove = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
