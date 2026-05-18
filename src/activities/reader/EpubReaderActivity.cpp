@@ -119,6 +119,22 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // When the End-of-Book screen is reached (currentSpineIndex == spine count), drop this
+  // book from the Recent Books list; if the reader then pages back into the book, re-add
+  // it. So removal only sticks if the reader leaves while still on the End-of-Book screen.
+  // Acts only on the transition (guarded by recentsEntryRemoved) — no per-frame writes.
+  if (SETTINGS.removeReadBooksFromRecents) {
+    const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
+    if (atEndOfBook && !recentsEntryRemoved) {
+      RECENT_BOOKS.removeByPath(epub->getPath());
+      recentsEntryRemoved = true;
+    } else if (!atEndOfBook && recentsEntryRemoved) {
+      // Re-add (goes to front of the list via addBook — accepted ordering side effect).
+      RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+      recentsEntryRemoved = false;
+    }
+  }
+
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back)) {
