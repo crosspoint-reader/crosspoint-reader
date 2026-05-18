@@ -80,8 +80,8 @@ std::string buildReadFolderDestination(const std::string& srcPath) {
   return dstPath;
 }
 
-// Relocate a finished book and its cache dir into /Read/, drop it (and any other
-// now-missing books) from recents, and repoint the resume pointer to the new path.
+// Relocate a finished book and its cache dir into /read/, keep it in recents by
+// repointing its entry to the new path, and repoint the resume pointer too.
 // On rename failure: LOG_ERR and leave everything in place (no UI alert subsystem here).
 void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
                                   const std::string& oldCachePath) {
@@ -99,11 +99,9 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     }
   }
 
-  // srcPath no longer exists after the rename, so the finished book (and any other
-  // books whose files are gone) drop out of recents here.
-  if (RECENT_BOOKS.pruneMissing()) {
-    RECENT_BOOKS.saveToFile();
-  }
+  // Keep the book in recents (crossink behavior): repoint the entry to its new
+  // location instead of dropping it. updatePath persists on success.
+  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;
     APP_STATE.saveToFile();
