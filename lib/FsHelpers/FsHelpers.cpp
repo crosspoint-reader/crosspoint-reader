@@ -79,7 +79,7 @@ std::string makeTempPath(const std::string& targetPath, const char* prefix, bool
 
 String makeTempPath(const String& targetPath, const char* prefix, bool timestampHex) {
   std::string tempPath = makeTempPath(std::string(targetPath.c_str()), prefix, timestampHex);
-  return tempPath.c_str();
+  return String(tempPath.c_str());
 }
 
 bool pathIsDirectory(const char* path) {
