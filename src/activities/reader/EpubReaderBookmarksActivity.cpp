@@ -1,14 +1,18 @@
 #include "EpubReaderBookmarksActivity.h"
 
+#include <algorithm>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
+#include <JsonSettingsIO.h>
+#include <util/BookmarkUtil.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
+  constexpr int SKIP_PAGE_MS = 700;
 }
 
 // Layout constants used in renderScreen
@@ -21,7 +25,20 @@ void EpubReaderBookmarksActivity::onEnter() {
     return;
   }
 
-  bookmarks = BookmarkStore::loadBookmarks(epubPath);
+  const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
+  std::string json;
+  if (Storage.exists(path.c_str())) {
+    String json = Storage.readFile(path.c_str());
+    if (json.isEmpty()) {
+      LOG_ERR("EPB", "Failed to load bookmarks from %s. Empty bookmark file", path.c_str());
+      bookmarks.clear();
+    } else {
+      JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
+    }
+  } else {
+    LOG_DBG("EPB", "No bookmark file found at %s, starting with empty bookmarks", path.c_str());
+    bookmarks.clear();
+  }
   LOG_DBG("EPB", "Loaded %d bookmarks for book: %s", static_cast<int>(bookmarks.size()), epubPath.c_str());
 
   // Trigger first update
@@ -45,15 +62,18 @@ void EpubReaderBookmarksActivity::loop() {
   // Delete confirmation mode
   if (confirmingDelete) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!BookmarkStore::deleteBookmark(epubPath, selectorIndex)) {
-        LOG_DBG("EPB", "Failed to delete bookmark at index %d", selectorIndex);
-      } else {
-        bookmarks.erase(bookmarks.begin() + selectorIndex);
-        // Move selector up if we deleted the last item
-        if (selectorIndex >= bookmarks.size() && selectorIndex > 0) {
-          selectorIndex--;
-        }
+      bookmarks.erase(bookmarks.begin() + selectorIndex);
+      const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
+      Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
+      if (!JsonSettingsIO::saveBookmarks(bookmarks, path.c_str())) {
+        LOG_ERR("EPB", "Failed to save bookmarks after delete");
       }
+      
+      // Move selector up if we deleted the last item
+      if (selectorIndex >= bookmarks.size() && selectorIndex > 0) {
+        selectorIndex--;
+      }
+      
       requestUpdate();
       confirmingDelete = false;
       return;

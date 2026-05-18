@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 
+#include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -412,5 +413,51 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   }
 
   LOG_DBG("OPS", "Loaded %zu OPDS servers from file", store.servers.size());
+  return true;
+}
+
+// ---- Bookmarks ----
+
+bool JsonSettingsIO::saveBookmarks(const std::vector<BookmarkEntry>& bookmarks, const char* path) {
+  JsonDocument doc;
+  JsonArray arr = doc["bookmarks"].to<JsonArray>();
+  LOG_DBG("BKM", "Saving %zu bookmarks to file", bookmarks.size());
+  for (const auto& bookmark : bookmarks) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["bookPercent"] = bookmark.bookPercent;
+    obj["chapterPageCount"] = bookmark.chapterPageCount;
+    obj["chapterProgress"] = bookmark.chapterProgress;
+    obj["spineIndex"] = bookmark.spineIndex;
+    obj["pageIndex"] = bookmark.pageIndex;
+    obj["summary"] = bookmark.summary;
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("BKM", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  bookmarks.clear();
+  JsonArray arr = doc["bookmarks"].as<JsonArray>();
+  for (JsonObject obj : arr) {
+    BookmarkEntry bookmark;
+    bookmark.bookPercent = obj["bookPercent"] | static_cast<uint8_t>(0);
+    bookmark.chapterPageCount = obj["chapterPageCount"] | static_cast<uint16_t>(0);
+    bookmark.chapterProgress = obj["chapterProgress"] | static_cast<uint16_t>(0);
+    bookmark.spineIndex = obj["spineIndex"] | static_cast<uint16_t>(0);
+    bookmark.pageIndex = obj["pageIndex"] | static_cast<uint16_t>(0);
+    bookmark.summary = obj["summary"] | std::string("");
+    bookmarks.push_back(bookmark);
+  }
+
+  LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
   return true;
 }

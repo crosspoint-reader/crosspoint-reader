@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "../../BookmarkStore.h"
+#include "../../BookmarkEntry.h"
 #include "../Activity.h"
 #include "util/ButtonNavigator.h"
 
