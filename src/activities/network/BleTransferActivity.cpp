@@ -299,6 +299,11 @@ struct BleTransferRuntime {
     dataOut->notify();
   }
 
+  void startAdvertising() {
+    NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
+    if (advertising) advertising->start();
+  }
+
   void end() {
     NimBLEDevice::stopAdvertising();
     NimBLEDevice::deinit(true);
@@ -400,7 +405,11 @@ void BleTransferActivity::onBleDisconnected() {
     return;
   }
   helloAccepted_ = false;
+  trustedHelloAccepted_ = false;
+  trustedHostName_.clear();
+  deviceNonce_ = makeNonceHex();
   setState(State::ADVERTISING);
+  if (ble_) ble_->startAdvertising();
 }
 
 void BleTransferActivity::onControlWrite(const std::string& value) {
