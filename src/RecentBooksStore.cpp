@@ -63,7 +63,11 @@ bool RecentBooksStore::removeByPath(const std::string& path) {
     return false;
   }
   recentBooks.erase(it);
-  saveToFile();
+  if (!saveToFile()) {
+    // In-memory removal succeeded; persistence is best-effort here (consistent with
+    // addBook/updateBook). Log the failure but still report the entry as removed.
+    LOG_ERR("RBS", "Failed to persist removal of recent book: %s", path.c_str());
+  }
   return true;
 }
 

@@ -38,7 +38,8 @@ class RecentBooksStore {
                   const std::string& coverBmpPath);
 
   // Remove the entry whose path matches (used when a book is finished/read).
-  // Returns true and persists if an entry was removed; no-op otherwise.
+  // Returns true if an entry was found and removed (no-op + false otherwise).
+  // Persistence is best-effort: a failed save is logged, not reflected in the return.
   bool removeByPath(const std::string& path);
 
   // True if the book's backing file is no longer present on the SD card.
