@@ -443,13 +443,20 @@ void loop() {
             name = cmd.substring(secondSpace + 1);
           }
           int idx = -1;
-          if (name == "BACK") idx = HalGPIO::BTN_BACK;
-          else if (name == "CONFIRM") idx = HalGPIO::BTN_CONFIRM;
-          else if (name == "LEFT") idx = HalGPIO::BTN_LEFT;
-          else if (name == "RIGHT") idx = HalGPIO::BTN_RIGHT;
-          else if (name == "UP") idx = HalGPIO::BTN_UP;
-          else if (name == "DOWN") idx = HalGPIO::BTN_DOWN;
-          else if (name == "POWER") idx = HalGPIO::BTN_POWER;
+          if (name == "BACK")
+            idx = HalGPIO::BTN_BACK;
+          else if (name == "CONFIRM")
+            idx = HalGPIO::BTN_CONFIRM;
+          else if (name == "LEFT")
+            idx = HalGPIO::BTN_LEFT;
+          else if (name == "RIGHT")
+            idx = HalGPIO::BTN_RIGHT;
+          else if (name == "UP")
+            idx = HalGPIO::BTN_UP;
+          else if (name == "DOWN")
+            idx = HalGPIO::BTN_DOWN;
+          else if (name == "POWER")
+            idx = HalGPIO::BTN_POWER;
           if (idx >= 0) {
             const uint8_t btnIdx = static_cast<uint8_t>(idx);
             if (action == "PRESS") {
