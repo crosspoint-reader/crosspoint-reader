@@ -132,21 +132,13 @@ void Section::evictOldVariants() const {
   // Find all cache variants belonging to this spineIndex
   char prefix[16];
   snprintf(prefix, sizeof(prefix), "%d_", spineIndex);
-  size_t prefixLen = strlen(prefix);
 
   for (const auto& file : files) {
-    if (file.startsWith(prefix) && file.endsWith(".bin")) {
-      HalFile hf = Storage.open((sectionsDir + "/" + file.c_str()).c_str(), O_RDONLY);
-      if (hf) {
-        uint16_t md, mt;
-        if (hf.getModifyDateTime(&md, &mt)) {
-          variants.push_back({file.c_str(), md, mt});
-        } else {
-          // If we can't get modified time, assume it's very old to evict it
-          variants.push_back({file.c_str(), 0, 0});
-        }
-      }
-    }
+    if (!file.startsWith(prefix) || !file.endsWith(".bin")) continue;
+    uint16_t md = 0, mt = 0;
+    HalFile hf = Storage.open((sectionsDir + "/" + file.c_str()).c_str(), O_RDONLY);
+    if (hf) hf.getModifyDateTime(&md, &mt);
+    variants.push_back({file.c_str(), md, mt});
   }
 
   if (variants.size() <= MAX_VARIANTS) return;

@@ -343,12 +343,14 @@ void KOReaderSyncActivity::performSync() {
   // Drop EPUB state before HTTPS to maximize contiguous heap for TLS.
   releaseEpubForMapping();
 
-  // Push intent skips comparison UI but still warms an HTTP/TLS session first
-  // so PUT can reuse the connection instead of forcing a fresh handshake.
-  if (syncIntent == KOReaderSyncIntentState::PUSH_LOCAL || syncIntent == KOReaderSyncIntentState::AUTO_PUSH) {
-    if (!handleAutoPushPreflight()) {
-      return;
-    }
+  // PUSH_LOCAL is an explicit user upload — go straight to PUT.
+  // AUTO_PUSH needs the preflight GET to bail out if the remote is already ahead.
+  if (syncIntent == KOReaderSyncIntentState::PUSH_LOCAL) {
+    performUpload();
+    return;
+  }
+  if (syncIntent == KOReaderSyncIntentState::AUTO_PUSH) {
+    if (!handleAutoPushPreflight()) return;
     performUpload();
     return;
   }
