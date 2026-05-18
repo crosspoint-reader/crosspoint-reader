@@ -1,5 +1,6 @@
 #include "WebDAVHandler.h"
 
+#include <Arduino.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -47,6 +48,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
     _putPath = getRequestPath(server);
+    _putTempPath = "";
     if (isProtectedPath(_putPath)) {
       _putOk = false;
       return;
@@ -75,10 +77,13 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
       if (existing) existing.close();
     }
 
-    // Write to a temp file to avoid destroying the original on failed upload
-    String tempPath = _putPath + ".davtmp";
-    Storage.remove(tempPath.c_str());
-    _putOk = Storage.openFileForWrite("DAV", tempPath, _putFile);
+    // Write to a temp file to avoid destroying the original on failed upload.
+    _putTempPath = makeTempPath(_putPath);
+    if (_putTempPath.isEmpty()) {
+      _putOk = false;
+      return;
+    }
+    _putOk = Storage.openFileForWrite("DAV", _putTempPath, _putFile);
     LOG_DBG("DAV", "PUT START: %s", _putPath.c_str());
 
   } else if (raw.status == RAW_WRITE) {
@@ -92,24 +97,45 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
 
   } else if (raw.status == RAW_END) {
     if (_putFile) _putFile.close();
+    String backupPath;
     if (_putOk) {
-      String tempPath = _putPath + ".davtmp";
-      if (_putExisted) Storage.remove(_putPath.c_str());
-      FsFile tmp = Storage.open(tempPath.c_str());
+      if (_putExisted) {
+        backupPath = makeTempPath(_putPath);
+        FsFile existing = Storage.open(_putPath.c_str());
+        if (backupPath.isEmpty() || !existing || !existing.rename(backupPath.c_str())) {
+          if (existing) existing.close();
+          _putOk = false;
+        } else {
+          existing.close();
+        }
+      }
+    }
+    if (_putOk) {
+      FsFile tmp = Storage.open(_putTempPath.c_str());
       if (tmp) {
         _putOk = tmp.rename(_putPath.c_str());
         tmp.close();
       } else {
         _putOk = false;
       }
-      if (!_putOk) Storage.remove(tempPath.c_str());
+      if (_putOk) {
+        if (_putExisted) Storage.remove(backupPath.c_str());
+      } else if (_putExisted && !backupPath.isEmpty()) {
+        FsFile backup = Storage.open(backupPath.c_str());
+        if (backup) {
+          backup.rename(_putPath.c_str());
+          backup.close();
+        }
+      }
+    }
+    if (!_putOk) {
+      if (!_putTempPath.isEmpty()) Storage.remove(_putTempPath.c_str());
     }
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
 
   } else if (raw.status == RAW_ABORTED) {
     if (_putFile) _putFile.close();
-    String tempPath = _putPath + ".davtmp";
-    Storage.remove(tempPath.c_str());
+    if (!_putTempPath.isEmpty()) Storage.remove(_putTempPath.c_str());
     _putOk = false;
   }
 }
@@ -378,8 +404,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
   }
 
   if (!_putOk) {
-    String tempPath = path + ".davtmp";
-    Storage.remove(tempPath.c_str());
+    if (!_putTempPath.isEmpty()) Storage.remove(_putTempPath.c_str());
     s.send(500, "text/plain", "Write failed - incomplete upload or disk full");
     return;
   }
@@ -532,12 +557,37 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
+  String backupPath;
   if (dstExists) {
-    Storage.remove(dstPath.c_str());
+    FsFile existing = Storage.open(dstPath.c_str());
+    if (existing && existing.isDirectory()) {
+      existing.close();
+      s.send(403, "text/plain", "Cannot overwrite directory");
+      return;
+    }
+    if (!existing) {
+      s.send(500, "text/plain", "Failed to open destination");
+      return;
+    }
+
+    backupPath = makeTempPath(dstPath);
+    if (backupPath.isEmpty() || !existing.rename(backupPath.c_str())) {
+      existing.close();
+      s.send(500, "text/plain", "Failed to prepare overwrite");
+      return;
+    }
+    existing.close();
   }
 
   FsFile file = Storage.open(srcPath.c_str());
   if (!file) {
+    if (!backupPath.isEmpty()) {
+      FsFile backup = Storage.open(backupPath.c_str());
+      if (backup) {
+        backup.rename(dstPath.c_str());
+        backup.close();
+      }
+    }
     s.send(500, "text/plain", "Failed to open source");
     return;
   }
@@ -547,8 +597,17 @@ void WebDAVHandler::handleMove(WebServer& s) {
   file.close();
 
   if (success) {
+    if (!backupPath.isEmpty()) Storage.remove(backupPath.c_str());
+    clearEpubCacheIfNeeded(dstPath);
     s.send(dstExists ? 204 : 201);
   } else {
+    if (!backupPath.isEmpty()) {
+      FsFile backup = Storage.open(backupPath.c_str());
+      if (backup) {
+        backup.rename(dstPath.c_str());
+        backup.close();
+      }
+    }
     s.send(500, "text/plain", "Move failed");
   }
 }
@@ -613,11 +672,19 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   if (dstExists) {
-    Storage.remove(dstPath.c_str());
+    FsFile existing = Storage.open(dstPath.c_str());
+    if (existing && existing.isDirectory()) {
+      existing.close();
+      srcFile.close();
+      s.send(403, "text/plain", "Cannot overwrite directory");
+      return;
+    }
+    if (existing) existing.close();
   }
 
   FsFile dstFile;
-  if (!Storage.openFileForWrite("DAV", dstPath, dstFile)) {
+  const String tempPath = makeTempPath(dstPath);
+  if (tempPath.isEmpty() || !Storage.openFileForWrite("DAV", tempPath, dstFile)) {
     srcFile.close();
     s.send(500, "text/plain", "Failed to create destination");
     return;
@@ -640,11 +707,49 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   srcFile.close();
   dstFile.close();
 
-  if (copyOk) {
+  if (!copyOk) {
+    Storage.remove(tempPath.c_str());
+    s.send(500, "text/plain", "Copy failed - disk full?");
+    return;
+  }
+
+  String backupPath;
+  if (dstExists) {
+    backupPath = makeTempPath(dstPath);
+    if (backupPath.isEmpty()) {
+      Storage.remove(tempPath.c_str());
+      s.send(500, "text/plain", "Failed to prepare overwrite");
+      return;
+    }
+
+    FsFile existing = Storage.open(dstPath.c_str());
+    if (!existing || !existing.rename(backupPath.c_str())) {
+      if (existing) existing.close();
+      Storage.remove(tempPath.c_str());
+      s.send(500, "text/plain", "Failed to replace destination");
+      return;
+    }
+    existing.close();
+  }
+
+  FsFile tmp = Storage.open(tempPath.c_str());
+  const bool renamed = tmp && tmp.rename(dstPath.c_str());
+  if (tmp) tmp.close();
+
+  if (renamed) {
+    if (!backupPath.isEmpty()) Storage.remove(backupPath.c_str());
+    clearEpubCacheIfNeeded(dstPath);
     s.send(dstExists ? 204 : 201);
   } else {
-    Storage.remove(dstPath.c_str());
-    s.send(500, "text/plain", "Copy failed - disk full?");
+    if (!backupPath.isEmpty()) {
+      FsFile backup = Storage.open(backupPath.c_str());
+      if (backup) {
+        backup.rename(dstPath.c_str());
+        backup.close();
+      }
+    }
+    Storage.remove(tempPath.c_str());
+    s.send(500, "text/plain", "Copy failed");
   }
 }
 
@@ -795,6 +900,25 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
   String ow = s.header("Overwrite");
   if (ow == "F" || ow == "f") return false;
   return true;  // Default is T
+}
+
+String WebDAVHandler::makeTempPath(const String& targetPath) const {
+  int lastSlash = targetPath.lastIndexOf('/');
+  const String parentPath = lastSlash > 0 ? targetPath.substring(0, lastSlash) : "/";
+
+  for (uint8_t attempt = 0; attempt < 8; attempt++) {
+    String tempPath = parentPath;
+    if (!tempPath.endsWith("/")) tempPath += "/";
+    tempPath += ".davtmp-";
+    tempPath += String(millis(), HEX);
+    tempPath += "-";
+    tempPath += String(attempt);
+
+    if (!Storage.exists(tempPath.c_str())) {
+      return tempPath;
+    }
+  }
+  return "";
 }
 
 void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
