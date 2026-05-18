@@ -1,6 +1,5 @@
 #include "EpubReaderActivity.h"
 
-#include <algorithm>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
@@ -12,6 +11,7 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <algorithm>
 #include <iterator>
 #include <limits>
 
@@ -32,8 +32,8 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/ScreenshotUtil.h"
 #include "util/BookmarkUtil.h"
+#include "util/ScreenshotUtil.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()

@@ -1,24 +1,23 @@
 #include "BookmarkUtil.h"
-#include <string>
-#include <algorithm>
 
-std::string BookmarkUtil::getBookmarksDir() {
-    return "/.crosspoint/bookmarks/";
-}
+#include <algorithm>
+#include <string>
+
+std::string BookmarkUtil::getBookmarksDir() { return "/.crosspoint/bookmarks/"; }
 
 std::string BookmarkUtil::getBookmarkPath(const std::string& bookPath) {
-    const size_t lastSlash = bookPath.find_last_of('/');
-    std::string bookName = (lastSlash != std::string::npos) ? bookPath.substr(lastSlash + 1) : bookPath;
-    std::replace(bookName.begin(), bookName.end(), '/', '_');
-    std::replace(bookName.begin(), bookName.end(), '\\', '_');
-    const size_t lastDot = bookName.find_last_of('.');
-    if (lastDot != std::string::npos) {
-        bookName.erase(lastDot);
-        bookName += ".json";
-    } else {
-        bookName += ".json";
-    }
-    return getBookmarksDir() + bookName;
+  const size_t lastSlash = bookPath.find_last_of('/');
+  std::string bookName = (lastSlash != std::string::npos) ? bookPath.substr(lastSlash + 1) : bookPath;
+  std::replace(bookName.begin(), bookName.end(), '/', '_');
+  std::replace(bookName.begin(), bookName.end(), '\\', '_');
+  const size_t lastDot = bookName.find_last_of('.');
+  if (lastDot != std::string::npos) {
+    bookName.erase(lastDot);
+    bookName += ".json";
+  } else {
+    bookName += ".json";
+  }
+  return getBookmarksDir() + bookName;
 }
 
 std::string BookmarkUtil::sanitizeBookmarkSummary(std::string summary) {

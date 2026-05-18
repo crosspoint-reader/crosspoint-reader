@@ -1,18 +1,19 @@
 #include "EpubReaderBookmarksActivity.h"
 
-#include <algorithm>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <JsonSettingsIO.h>
 #include <util/BookmarkUtil.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-  constexpr int SKIP_PAGE_MS = 700;
+constexpr int SKIP_PAGE_MS = 700;
 }
 
 // Layout constants used in renderScreen
@@ -68,12 +69,12 @@ void EpubReaderBookmarksActivity::loop() {
       if (!JsonSettingsIO::saveBookmarks(bookmarks, path.c_str())) {
         LOG_ERR("EPB", "Failed to save bookmarks after delete");
       }
-      
+
       // Move selector up if we deleted the last item
       if (selectorIndex >= bookmarks.size() && selectorIndex > 0) {
         selectorIndex--;
       }
-      
+
       requestUpdate();
       confirmingDelete = false;
       return;
