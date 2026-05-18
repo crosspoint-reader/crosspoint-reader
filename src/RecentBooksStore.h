@@ -37,8 +37,9 @@ class RecentBooksStore {
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
 
-  // Remove the entry whose path matches. Returns true and persists if an entry
-  // was removed; no-op (returns false) otherwise.
+  // Remove the entry whose path matches. Returns true only if an entry was
+  // removed AND the change was persisted; on a persistence failure the removal
+  // is rolled back. Returns false for "no match" or a rolled-back failure.
   bool removeByPath(const std::string& path);
 
   // True if the book's backing file is no longer present on the SD card.
