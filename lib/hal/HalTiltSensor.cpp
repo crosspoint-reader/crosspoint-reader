@@ -234,19 +234,6 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
         _lastTiltMs = now;
         LOG_INF("GYR", "Z-axis=(%.1f) dps", gz);
       }
-      // if (tiltAxis > RATE_THRESHOLD_DPS) {
-      //   _tiltForwardEvent = true;
-      //   _hadActivity = true;
-      //   _inTilt = true;
-      //   _lastTiltMs = now;
-      //   LOG_INF("GYR", "Forward Trigger=(%.1f) dps", tiltAxis);
-      // } else if (tiltAxis < -RATE_THRESHOLD_DPS) {
-      //   _tiltBackEvent = true;
-      //   _hadActivity = true;
-      //   _inTilt = true;
-      //   _lastTiltMs = now;
-      //   LOG_INF("GYR", "Backward Trigger=(%.1f) dps", tiltAxis);
-      // }
     }
   }
 }
@@ -258,18 +245,6 @@ bool HalTiltSensor::wasTilted(uint8_t tiltIndex) {
 }
 
 bool HalTiltSensor::wasAnyTilted() { return _tiltedState > 0; }
-
-// bool HalTiltSensor::wasTiltedForward() {
-//   const bool val = _tiltForwardEvent;
-//   _tiltForwardEvent = false;
-//   return val;
-// }
-
-// bool HalTiltSensor::wasTiltedBack() {
-//   const bool val = _tiltBackEvent;
-//   _tiltBackEvent = false;
-//   return val;
-// }
 
 bool HalTiltSensor::hadActivity() {
   const bool val = _hadActivity;

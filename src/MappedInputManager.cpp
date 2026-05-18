@@ -1,5 +1,7 @@
 #include "MappedInputManager.h"
 
+#include <cstdint>
+
 #include "CrossPointSettings.h"
 #include "HalTiltSensor.h"
 
@@ -57,46 +59,33 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
 }
 
 bool MappedInputManager::mapButton(const Button button, bool (HalTiltSensor::*fn)(uint8_t)) const {
-  switch (button) {
-    case Button::TiltRight:
-      return (tiltSensor.*fn)(HalTiltSensor::TILT_X_POS);
-    case Button::TiltLeft:
-      return (tiltSensor.*fn)(HalTiltSensor::TILT_X_NEG);
-    case Button::TiltUp:
-      return (tiltSensor.*fn)(HalTiltSensor::TILT_Y_POS);
-    case Button::TiltDown:
-      return (tiltSensor.*fn)(HalTiltSensor::TILT_Y_NEG);
-    case Button::RotateRight:
-      return (tiltSensor.*fn)(HalTiltSensor::TILT_Z_POS);
-    case Button::RotateLeft:
-      return (tiltSensor.*fn)(HalTiltSensor::TILT_Z_NEG);
-    default:
-      return false;
+  if (SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_OFF) {
+    return false;
   }
-  // SETTINGS.tiltPageTurn;
 
-  // Map the gyro axis to left/right tilt based on reader orientation.
-  // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
-  // float tiltAxis;
-  // switch (SETTINGS.orientation) {
-  //   case CrossPointOrientation::PORTRAIT:
-  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
-  //     break;
-  //   case CrossPointOrientation::INVERTED:
-  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
-  //     break;
-  //   case CrossPointOrientation::LANDSCAPE_CW:
-  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
-  //     break;
-  //   case CrossPointOrientation::LANDSCAPE_CCW:
-  //     tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
-  //     break;
-  //   default:
-  //     tiltAxis = gx;
-  //     break;
-  // }
-
-  return false;
+  std::map<Button, uint8_t> LogicalToPhysicalMap;
+  switch (SETTINGS.orientation) {
+    case CrossPointOrientation::PORTRAIT:
+      LogicalToPhysicalMap =
+          SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? PortraitTiltInverted : PortraitTiltNormal;
+      break;
+    case CrossPointOrientation::INVERTED:
+      LogicalToPhysicalMap =
+          SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? InvertTiltInverted : InvertTiltNormal;
+      break;
+    case CrossPointOrientation::LANDSCAPE_CW:
+      LogicalToPhysicalMap = SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? LandscapeCWTiltInverted
+                                                                                            : LandscapeCWTiltNormal;
+      break;
+    case CrossPointOrientation::LANDSCAPE_CCW:
+      LogicalToPhysicalMap = SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? LandscapeCCWTiltInverted
+                                                                                            : LandscapeCCWTiltNormal;
+      break;
+    default:
+      LogicalToPhysicalMap = PortraitTiltNormal;
+      break;
+  }
+  return (tiltSensor.*fn)(LogicalToPhysicalMap[button]);
 }
 
 bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }

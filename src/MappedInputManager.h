@@ -2,6 +2,8 @@
 
 #include <HalGPIO.h>
 
+#include <map>
+
 #include "HalTiltSensor.h"
 
 class MappedInputManager {
@@ -51,4 +53,46 @@ class MappedInputManager {
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   bool mapButton(Button button, bool (HalTiltSensor::*fn)(uint8_t)) const;
+
+  // Map the gyro axis to left/right tilt based on reader orientation.
+  // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
+  const std::map<Button, uint8_t> PortraitTiltNormal = {
+      {Button::TiltRight, HalTiltSensor::TILT_X_POS},   {Button::TiltLeft, HalTiltSensor::TILT_X_NEG},
+      {Button::TiltUp, HalTiltSensor::TILT_Y_NEG},      {Button::TiltDown, HalTiltSensor::TILT_Y_POS},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_POS}, {Button::RotateLeft, HalTiltSensor::TILT_Z_NEG}};
+
+  const std::map<Button, uint8_t> PortraitTiltInverted = {
+      {Button::TiltRight, HalTiltSensor::TILT_X_NEG},   {Button::TiltLeft, HalTiltSensor::TILT_X_POS},
+      {Button::TiltUp, HalTiltSensor::TILT_Y_POS},      {Button::TiltDown, HalTiltSensor::TILT_Y_NEG},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_NEG}, {Button::RotateLeft, HalTiltSensor::TILT_Z_POS}};
+
+  const std::map<Button, uint8_t> InvertTiltNormal = {
+      {Button::TiltRight, HalTiltSensor::TILT_X_NEG},   {Button::TiltLeft, HalTiltSensor::TILT_X_POS},
+      {Button::TiltUp, HalTiltSensor::TILT_Y_POS},      {Button::TiltDown, HalTiltSensor::TILT_Y_NEG},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_POS}, {Button::RotateLeft, HalTiltSensor::TILT_Z_NEG}};
+
+  const std::map<Button, uint8_t> InvertTiltInverted = {
+      {Button::TiltRight, HalTiltSensor::TILT_X_POS},   {Button::TiltLeft, HalTiltSensor::TILT_X_NEG},
+      {Button::TiltUp, HalTiltSensor::TILT_Y_NEG},      {Button::TiltDown, HalTiltSensor::TILT_Y_POS},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_NEG}, {Button::RotateLeft, HalTiltSensor::TILT_Z_POS}};
+
+  const std::map<Button, uint8_t> LandscapeCWTiltNormal = {
+      {Button::TiltRight, HalTiltSensor::TILT_Y_NEG},   {Button::TiltLeft, HalTiltSensor::TILT_Y_POS},
+      {Button::TiltUp, HalTiltSensor::TILT_X_POS},      {Button::TiltDown, HalTiltSensor::TILT_X_NEG},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_POS}, {Button::RotateLeft, HalTiltSensor::TILT_Z_NEG}};
+
+  const std::map<Button, uint8_t> LandscapeCWTiltInverted = {
+      {Button::TiltRight, HalTiltSensor::TILT_Y_POS},   {Button::TiltLeft, HalTiltSensor::TILT_Y_NEG},
+      {Button::TiltUp, HalTiltSensor::TILT_X_NEG},      {Button::TiltDown, HalTiltSensor::TILT_X_POS},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_NEG}, {Button::RotateLeft, HalTiltSensor::TILT_Z_POS}};
+
+  const std::map<Button, uint8_t> LandscapeCCWTiltNormal = {
+      {Button::TiltRight, HalTiltSensor::TILT_Y_POS},   {Button::TiltLeft, HalTiltSensor::TILT_Y_NEG},
+      {Button::TiltUp, HalTiltSensor::TILT_X_NEG},      {Button::TiltDown, HalTiltSensor::TILT_X_POS},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_POS}, {Button::RotateLeft, HalTiltSensor::TILT_Z_NEG}};
+
+  const std::map<Button, uint8_t> LandscapeCCWTiltInverted = {
+      {Button::TiltRight, HalTiltSensor::TILT_Y_NEG},   {Button::TiltLeft, HalTiltSensor::TILT_Y_POS},
+      {Button::TiltUp, HalTiltSensor::TILT_X_POS},      {Button::TiltDown, HalTiltSensor::TILT_X_NEG},
+      {Button::RotateRight, HalTiltSensor::TILT_Z_NEG}, {Button::RotateLeft, HalTiltSensor::TILT_Z_POS}};
 };
