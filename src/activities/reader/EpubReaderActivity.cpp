@@ -10,6 +10,8 @@
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -2256,6 +2258,30 @@ void EpubReaderActivity::renderStatusBar() const {
   const bool isStarred = section && bookmarkStore.has(static_cast<uint16_t>(currentSpineIndex),
                                                       static_cast<uint16_t>(section->currentPage));
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, isStarred);
+
+  lastStatusBarPage = currentPage;
+  lastStatusBarBattery = SETTINGS.statusBarBattery ? static_cast<int>(powerManager.getBatteryPercentage()) : -1;
+  if (SETTINGS.useClock && SETTINGS.statusBarClock && HalClock::isSynced()) {
+    const time_t now = HalClock::now();
+    lastStatusBarClockMinute = now > 0 ? static_cast<int>(now / 60) : -1;
+  } else {
+    lastStatusBarClockMinute = -1;
+  }
+}
+
+bool EpubReaderActivity::shouldSkipPeriodicUpdate() const {
+  if (lastStatusBarPage < 0) return false;  // no baseline yet — let the first render happen
+  const int currentPage = section ? section->currentPage + 1 : -1;
+  if (currentPage != lastStatusBarPage) return false;
+  if (SETTINGS.statusBarBattery) {
+    if (static_cast<int>(powerManager.getBatteryPercentage()) != lastStatusBarBattery) return false;
+  }
+  if (SETTINGS.useClock && SETTINGS.statusBarClock && HalClock::isSynced()) {
+    const time_t now = HalClock::now();
+    const int minute = now > 0 ? static_cast<int>(now / 60) : -1;
+    if (minute != lastStatusBarClockMinute) return false;
+  }
+  return true;
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

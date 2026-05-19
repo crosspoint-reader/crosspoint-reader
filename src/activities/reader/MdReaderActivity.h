@@ -60,6 +60,10 @@ class MdReaderActivity final : public Activity {
 
   void renderPage();
   void renderStatusBar() const;
+  // See EpubReaderActivity for rationale — suppresses no-op minute-tick re-renders.
+  mutable int lastStatusBarPage = -1;
+  mutable int lastStatusBarBattery = -1;
+  mutable int lastStatusBarClockMinute = -1;
 
   void initializeReader();
   bool loadPageAtOffset(size_t offset, bool startInCodeBlock, std::vector<RenderedLine>& outLines, size_t& nextOffset,
@@ -91,5 +95,6 @@ class MdReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
 };

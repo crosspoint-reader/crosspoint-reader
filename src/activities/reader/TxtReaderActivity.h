@@ -39,6 +39,10 @@ class TxtReaderActivity final : public Activity {
 
   void renderPage();
   void renderStatusBar() const;
+  // See EpubReaderActivity for rationale — suppresses no-op minute-tick re-renders.
+  mutable int lastStatusBarPage = -1;
+  mutable int lastStatusBarBattery = -1;
+  mutable int lastStatusBarClockMinute = -1;
 
   void initializeReader();
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
@@ -60,6 +64,7 @@ class TxtReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
 
   // Renders the last saved page to the frame buffer without flushing to display.

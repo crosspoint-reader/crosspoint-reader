@@ -138,9 +138,11 @@ inline const std::vector<SettingInfo> list = {
                         StrId::STR_CAT_READER),
     SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                       {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
-                      "imageRendering", StrId::STR_CAT_READER),
+                      "imageRendering", StrId::STR_CAT_READER)
+        .withSubmenu(StrId::STR_IMAGES),
     SettingInfo::Toggle(StrId::STR_LARGE_IMAGE_PLACEHOLDER, &CrossPointSettings::largeImagePlaceholder,
-                        "largeImagePlaceholder", StrId::STR_CAT_READER),
+                        "largeImagePlaceholder", StrId::STR_CAT_READER)
+        .withSubmenu(StrId::STR_IMAGES),
     SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
                        StrId::STR_CAT_READER)
         .withSubmenu(StrId::STR_MENU_READER_SPACING),

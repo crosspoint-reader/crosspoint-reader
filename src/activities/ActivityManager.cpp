@@ -111,7 +111,9 @@ void ActivityManager::loop() {
       time_t minute = now / 60;
       if (minute != lastMinute) {
         lastMinute = minute;
-        requestUpdate();
+        if (!currentActivity || !currentActivity->shouldSkipPeriodicUpdate()) {
+          requestUpdate();
+        }
       }
     }
   }

@@ -47,6 +47,11 @@ class Activity {
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
 
+  // Return true to suppress the minute-tick requestUpdate() from ActivityManager when nothing
+  // status-bar-relevant has changed since the last render. Skipping avoids a no-op page render
+  // followed by a no-diff e-ink refresh, which on X3 panels accumulates visible speckle.
+  virtual bool shouldSkipPeriodicUpdate() const { return false; }
+
   // Called by ActivityManager when a globally-configured button action targets the
   // current activity. Override in reader activities to handle reader-specific actions.
   // Non-reader activities can ignore this (default is no-op).

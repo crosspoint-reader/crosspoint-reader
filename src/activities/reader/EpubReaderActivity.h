@@ -262,6 +262,12 @@ class EpubReaderActivity final : public Activity {
   void displayPreRenderedPage(const Page& page, int orientedMarginTop, int orientedMarginRight,
                               int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
+  // Snapshot of the three status-bar signals that can change while a page is otherwise idle.
+  // Compared in shouldSkipPeriodicUpdate() to suppress no-op minute-tick re-renders that on
+  // X3 panels accumulate visible speckle via repeated no-diff FAST refreshes.
+  mutable int lastStatusBarPage = -1;
+  mutable int lastStatusBarBattery = -1;
+  mutable int lastStatusBarClockMinute = -1;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   void saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
@@ -314,6 +320,7 @@ class EpubReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&& lock) override;
   bool isReaderActivity() const override { return true; }
+  bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
 
   // Renders the last saved page to the frame buffer without flushing to display.

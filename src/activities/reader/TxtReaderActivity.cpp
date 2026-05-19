@@ -2,6 +2,8 @@
 
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Serialization.h>
@@ -482,6 +484,29 @@ void TxtReaderActivity::renderStatusBar() const {
   }
   const bool isStarred = bookmarkStore.has(0, static_cast<uint16_t>(currentPage));
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title, 0, isStarred);
+
+  lastStatusBarPage = currentPage + 1;
+  lastStatusBarBattery = SETTINGS.statusBarBattery ? static_cast<int>(powerManager.getBatteryPercentage()) : -1;
+  if (SETTINGS.useClock && SETTINGS.statusBarClock && HalClock::isSynced()) {
+    const time_t now = HalClock::now();
+    lastStatusBarClockMinute = now > 0 ? static_cast<int>(now / 60) : -1;
+  } else {
+    lastStatusBarClockMinute = -1;
+  }
+}
+
+bool TxtReaderActivity::shouldSkipPeriodicUpdate() const {
+  if (lastStatusBarPage < 0) return false;
+  if (currentPage + 1 != lastStatusBarPage) return false;
+  if (SETTINGS.statusBarBattery) {
+    if (static_cast<int>(powerManager.getBatteryPercentage()) != lastStatusBarBattery) return false;
+  }
+  if (SETTINGS.useClock && SETTINGS.statusBarClock && HalClock::isSynced()) {
+    const time_t now = HalClock::now();
+    const int minute = now > 0 ? static_cast<int>(now / 60) : -1;
+    if (minute != lastStatusBarClockMinute) return false;
+  }
+  return true;
 }
 
 void TxtReaderActivity::saveProgress() const {
