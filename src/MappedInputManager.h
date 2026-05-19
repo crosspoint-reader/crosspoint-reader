@@ -52,7 +52,7 @@ class MappedInputManager {
   HalTiltSensor& tiltSensor;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
-  bool mapButton(Button button, bool (HalTiltSensor::*fn)(uint8_t)) const;
+  bool mapTilt(Button button, bool (HalTiltSensor::*fn)(uint8_t)) const;
 
   // Map the gyro axis to left/right tilt based on reader orientation.
   // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.

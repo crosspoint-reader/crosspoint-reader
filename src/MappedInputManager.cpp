@@ -58,7 +58,7 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::mapButton(const Button button, bool (HalTiltSensor::*fn)(uint8_t)) const {
+bool MappedInputManager::mapTilt(const Button button, bool (HalTiltSensor::*fn)(uint8_t)) const {
   if (SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_OFF) {
     return false;
   }
@@ -98,7 +98,7 @@ bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 
 bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
 
-bool MappedInputManager::wasTilted(const Button button) const { return mapButton(button, &HalTiltSensor::wasTilted); }
+bool MappedInputManager::wasTilted(const Button button) const { return mapTilt(button, &HalTiltSensor::wasTilted); }
 
 bool MappedInputManager::wasAnyTilted() const { return tiltSensor.wasAnyTilted(); }
 
