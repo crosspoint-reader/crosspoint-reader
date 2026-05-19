@@ -17,7 +17,7 @@ constexpr int ENTER_DELETE_MODE_MS = 700;
 constexpr int DELETE_MODE_OFF = 0;
 constexpr int DELETE_MODE_DISPLAY = 1;
 constexpr int DELETE_MODE_CONFIRM = 2;
-}
+}  // namespace
 
 // Layout constants used in renderScreen
 const int LINE_HEIGHT = 60;
@@ -66,7 +66,7 @@ void EpubReaderBookmarksActivity::loop() {
   if (confirmingDelete >= DELETE_MODE_DISPLAY) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (confirmingDelete == DELETE_MODE_DISPLAY) {
-        confirmingDelete = DELETE_MODE_CONFIRM; // first confirmation, update text
+        confirmingDelete = DELETE_MODE_CONFIRM;  // first confirmation, update text
         requestUpdate();
         return;
       }
@@ -109,11 +109,11 @@ void EpubReaderBookmarksActivity::loop() {
   }
 
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
-      if (bookmarks.empty()) {
-        return;
-      }
-      confirmingDelete = DELETE_MODE_DISPLAY;
-      requestUpdate();
+    if (bookmarks.empty()) {
+      return;
+    }
+    confirmingDelete = DELETE_MODE_DISPLAY;
+    requestUpdate();
   }
 
   buttonNavigator.onNextRelease([this] {
@@ -203,7 +203,8 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   }
 
   const auto backLabel = confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_CANCEL) : tr(STR_BACK);
-  const auto confirmLabel = bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_OPEN)) : "";
+  const auto confirmLabel =
+      bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_OPEN)) : "";
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

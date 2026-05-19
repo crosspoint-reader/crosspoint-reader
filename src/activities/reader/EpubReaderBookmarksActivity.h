@@ -13,7 +13,7 @@ class EpubReaderBookmarksActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   std::vector<BookmarkEntry> bookmarks;
-  int confirmingDelete = 0; // 0 = hide dialog, 1 = show dialog, 2 = allow confirmation to delete
+  int confirmingDelete = 0;  // 0 = hide dialog, 1 = show dialog, 2 = allow confirmation to delete
 
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

@@ -251,8 +251,8 @@ void EpubReaderActivity::loop() {
   }
 
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
-      showBookmarkMessage = false;
-      requestUpdate();
+    showBookmarkMessage = false;
+    requestUpdate();
   }
 
   // Enter reader menu activity.
@@ -261,14 +261,13 @@ void EpubReaderActivity::loop() {
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
     if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-      const float chapterProgress =
-          static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
-                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
+                               SETTINGS.orientation, !currentPageFootnotes.empty()),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -280,7 +279,8 @@ void EpubReaderActivity::loop() {
                            });
   }
 
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
     if (!showBookmarkMessage) {
       addBookmark();
       showBookmarkMessage = true;
