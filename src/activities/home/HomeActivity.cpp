@@ -308,6 +308,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             if (FsHelpers::hasEpubExtension(book.path)) {
               Epub epub(book.path, "/.crosspoint");
               epub.load(true, true);
+              epub.load(true, true);
               for (const auto& sz : thumbSizes) {
                 const std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, sz.first, sz.second);
                 if (!Storage.exists(path.c_str())) success = epub.generateThumbBmp(sz.first, sz.second) && success;
@@ -333,6 +334,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (!Storage.exists(coverPath.c_str())) {
             if (FsHelpers::hasEpubExtension(book.path)) {
               Epub epub(book.path, "/.crosspoint");
+              epub.load(true, true);
               epub.load(true, true);
               bool success = epub.generateThumbBmp(coverHeight);
               if (!success) {
@@ -465,6 +467,11 @@ void HomeActivity::loop() {
   const bool isCarousel = (GUI.getHomeNavigation() == HomeNavigation::Carousel);
 
   if (isCarousel) {
+    if (firstRenderDone && !recentsLoaded && !recentsLoading) {
+      loadRecentCovers(UITheme::getInstance().getMetrics().homeCoverHeight);
+      return;
+    }
+
     if (firstRenderDone && !recentsLoaded && !recentsLoading) {
       loadRecentCovers(UITheme::getInstance().getMetrics().homeCoverHeight);
       return;
