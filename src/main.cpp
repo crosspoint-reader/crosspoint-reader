@@ -29,6 +29,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "WeatherSettingsStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
@@ -123,6 +124,29 @@ EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 EpdFont ui12RegularFont(&inter_ui_12_regular);
 EpdFont ui12BoldFont(&inter_ui_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+
+// SilentRestart.h definitions. RTC_NOINIT survives ESP.restart() but not power loss.
+RTC_NOINIT_ATTR uint32_t silentRebootMagic;
+RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
+constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
+constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+
+void silentRestart() {
+  silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=home)");
+  delay(50);
+  ESP.restart();
+}
+
+void silentRestartToReader() {
+  silentRebootTarget = SILENT_REBOOT_TARGET_READER;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=reader)");
+  delay(50);
+  ESP.restart();
+}
 
 // Enter deep sleep mode
 void enterDeepSleep() {
@@ -233,6 +257,15 @@ void setup() {
       esp_ota_mark_app_valid_cancel_rollback();
     }
   }
+
+  // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
+  // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
+  const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
+  const uint32_t silentRebootTargetSnapshot =
+      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
+  silentRebootMagic = 0;
+  silentRebootTarget = 0;
+
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();
@@ -330,7 +363,16 @@ void setup() {
 
   setupDisplayAndFonts();
 
-  activityManager.goToBoot();
+  if (!isSilentReboot) {
+    activityManager.goToBoot();
+  } else {
+    // After a silent reboot the panel still shows the previous session's pixels but
+    // the SDK's RED-RAM diff buffer was cleared by begin(). A FAST refresh would only
+    // flip pixels the SDK *thinks* changed, leaving the old screen visible. Force the
+    // first paint to HALF_REFRESH so the panel cleanly repaints; subsequent paints
+    // resume FAST as normal.
+    renderer.setNextDisplayRefreshMode(HalDisplay::HALF_REFRESH);
+  }
 
   APP_STATE.loadFromFile();
   HalClock::restore();
@@ -341,6 +383,14 @@ void setup() {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
+  } else if (isSilentReboot && silentRebootTargetSnapshot == SILENT_REBOOT_TARGET_READER &&
+             !APP_STATE.openEpubPath.empty()) {
+    activityManager.goToReader(APP_STATE.openEpubPath);
+  } else if (isSilentReboot) {
+    // target == home (or reader with no open book): land on home — don't fall
+    // through to the sleep-wake "resume reader" logic, which fires on stale
+    // openEpubPath + lastSleepFromReader from a prior session.
+    activityManager.goHome();
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     activityManager.goHome();
@@ -353,9 +403,12 @@ void setup() {
     activityManager.goToReader(path);
   }
 
-  // Ensure we're not still holding the power button before leaving setup
+  // Ensure we're not still holding the power button before leaving setup.
   // waitForStablePowerRelease protects against switch bounce that might register as a false double-press.
-  gpio.waitForStablePowerRelease();
+  // Skip on silent reboot: the firmware triggered the restart, so the button isn't held.
+  if (!isSilentReboot) {
+    gpio.waitForStablePowerRelease();
+  }
   // Flush any pin state transitions that occurred during boot before entering the main loop
   mappedInputManager.update();
   buttonEventManager.drain();

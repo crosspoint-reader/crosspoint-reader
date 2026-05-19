@@ -102,6 +102,16 @@ class KOReaderSyncActivity final : public Activity {
   unsigned long uploadCompleteTime = 0;
   bool closeRequested = false;
 
+  // Tracks whether this session activated WiFi. Set in onEnter past the credentials
+  // check; checked in onExit to decide whether to silent-reboot. Can't rely on
+  // WiFi.getMode() because intermediate paths call esp_wifi_stop() to drop the
+  // radio while user reads the result, which makes WiFi.getMode() return WIFI_MODE_NULL.
+  bool wifiActivated = false;
+
+  // Captured from sync.exitToHomeAfterSync in resumeReader() so onExit can route the
+  // silent reboot to home instead of the reader when reader-close auto-sync triggered.
+  bool exitToHomeAfterSync = false;
+
   void onWifiSelectionComplete(bool success);
   void performSync();
   bool calculateDocumentHash();

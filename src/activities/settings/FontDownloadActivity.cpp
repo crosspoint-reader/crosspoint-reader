@@ -12,6 +12,7 @@
 
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -32,10 +33,12 @@ void FontDownloadActivity::onEnter() {
 
 void FontDownloadActivity::onExit() {
   Activity::onExit();
-  WiFi.disconnect(false);
-  delay(100);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
+
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {

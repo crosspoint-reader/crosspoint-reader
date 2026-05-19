@@ -1,11 +1,11 @@
 #include "OtaUpdateActivity.h"
 
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -68,7 +68,11 @@ void OtaUpdateActivity::onEnter() {
 void OtaUpdateActivity::onExit() {
   Activity::onExit();
 
-  HalClock::wifiOff();
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {

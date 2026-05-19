@@ -8,10 +8,12 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
+#include <esp_wifi.h>
 
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -140,7 +142,8 @@ bool KOReaderSyncActivity::handleAutoPushPreflight() {
     LOG_DBG("KOSync", "AUTO_PUSH skipped: remote %.4f >= local %.4f", warmupProgress.percentage,
             localProgress.percentage);
     KOReaderSyncClient::endPersistentSession();
-    HalClock::wifiOff(true);
+    // Drop the radio while user reads the result; full teardown happens at silent reboot.
+    esp_wifi_stop();
     APP_STATE.koReaderSyncSession.outcome = KOReaderSyncOutcomeState::UPLOAD_COMPLETE;
     APP_STATE.saveToFile();
     resumeReader(KOReaderSyncOutcomeState::UPLOAD_COMPLETE);
@@ -180,7 +183,7 @@ void KOReaderSyncActivity::performFetchAndCompare() {
     if (syncIntent == KOReaderSyncIntentState::AUTO_PULL) {
       // Auto-pull at book open: nothing to apply, just open the book with local progress.
       KOReaderSyncClient::endPersistentSession();
-      HalClock::wifiOff(true);
+      esp_wifi_stop();
       resumeReader(KOReaderSyncOutcomeState::CANCELLED);
       return;
     }
@@ -230,7 +233,7 @@ void KOReaderSyncActivity::performFetchAndCompare() {
     if (!ensureRemotePositionMapped()) {
       if (syncIntent == KOReaderSyncIntentState::AUTO_PULL) {
         // Auto-pull was best-effort. Fail silently and just open the book.
-        HalClock::wifiOff(true);
+        esp_wifi_stop();
         resumeReader(KOReaderSyncOutcomeState::CANCELLED);
         return;
       }
@@ -258,7 +261,7 @@ void KOReaderSyncActivity::performFetchAndCompare() {
     if (syncIntent == KOReaderSyncIntentState::AUTO_PULL) {
       // Auto-pull skips the success-screen dwell — the reader will render the new
       // position immediately, which is the only visible feedback the user needs.
-      HalClock::wifiOff(true);
+      esp_wifi_stop();
       resumeReader(KOReaderSyncOutcomeState::APPLIED_REMOTE);
       return;
     }
@@ -418,7 +421,8 @@ void KOReaderSyncActivity::performUpload() {
   logSyncMemSnapshot("after_updateProgress");
 
   if (result != KOReaderSyncClient::OK) {
-    HalClock::wifiOff(true);
+    // Drop the radio while user reads the result; full teardown happens at silent reboot.
+    esp_wifi_stop();
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -435,7 +439,8 @@ void KOReaderSyncActivity::performUpload() {
     return;
   }
 
-  HalClock::wifiOff(true);
+  // Drop the radio while user reads the success screen; full teardown happens at silent reboot.
+  esp_wifi_stop();
   APP_STATE.koReaderSyncSession.outcome = KOReaderSyncOutcomeState::UPLOAD_COMPLETE;
   APP_STATE.saveToFile();
   if (syncIntent == KOReaderSyncIntentState::AUTO_PUSH) {
@@ -465,6 +470,9 @@ void KOReaderSyncActivity::onEnter() {
     return;
   }
 
+  // Past this point every path uses WiFi.
+  wifiActivated = true;
+
   // Check if already connected (e.g. from settings page auth)
   if (WiFi.status() == WL_CONNECTED) {
     LOG_DBG("KOSync", "Already connected to WiFi");
@@ -483,9 +491,18 @@ void KOReaderSyncActivity::onExit() {
 
   logSyncMemSnapshot("onExit_before_cleanup");
   KOReaderSyncClient::endPersistentSession();
-  HalClock::wifiOff(true);
   releaseEpubForMapping();
   logSyncMemSnapshot("onExit_after_cleanup");
+
+  if (wifiActivated) {
+    WiFi.disconnect(false);
+    delay(30);
+    if (exitToHomeAfterSync) {
+      silentRestart();
+    } else {
+      silentRestartToReader();
+    }
+  }
 }
 
 void KOReaderSyncActivity::closeCancelled() {
@@ -526,6 +543,7 @@ void KOReaderSyncActivity::resumeReader(const KOReaderSyncOutcomeState outcome, 
   // the user just left would be jarring. The session state is consumed and cleared by the
   // home destination's normal flow (no reader to apply it to in this case).
   const bool exitToHome = sync.exitToHomeAfterSync;
+  exitToHomeAfterSync = exitToHome;
   if (exitToHome) {
     sync.clear();
   }

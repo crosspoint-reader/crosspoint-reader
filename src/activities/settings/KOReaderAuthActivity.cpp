@@ -1,13 +1,13 @@
 #include "KOReaderAuthActivity.h"
 
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncClient.h"
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -104,7 +104,11 @@ void KOReaderAuthActivity::onEnter() {
 void KOReaderAuthActivity::onExit() {
   Activity::onExit();
 
-  HalClock::wifiOff();
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void KOReaderAuthActivity::render(RenderLock&&) {

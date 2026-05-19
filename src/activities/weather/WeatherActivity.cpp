@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "WeatherSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -222,7 +223,11 @@ void WeatherActivity::onExit() {
   // Weather screen is always landscape; restore app UI to portrait on exit.
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  WiFi.mode(WIFI_OFF);
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void WeatherActivity::loadAndDisplay() {
@@ -298,8 +303,7 @@ void WeatherActivity::onWifiSelectionComplete(bool connected) {
     LOG_DBG("WEA", "state -> CHECK_WIFI (waitStart=%lu)", (unsigned long)wifiWaitStartedAtMs);
     requestUpdate(true);
   } else {
-    WiFi.disconnect();
-    WiFi.mode(WIFI_OFF);
+    // Leave WiFi up; onExit's silent reboot handles teardown without further fragmenting.
     state = State::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();

@@ -2,7 +2,6 @@
 
 #include <Epub.h>
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -17,6 +16,7 @@
 
 #include "MappedInputManager.h"
 #include "OpdsFormatLabel.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -133,12 +133,16 @@ void OpdsBookBrowserActivity::onEnter() {
 void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
 
-  HalClock::wifiOff();
-
   entryOffsets.clear();
   navigationHistory.clear();
   formatSelectionLabels.clear();
   Storage.remove("/.tmp_opds_cache.dat");
+
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void OpdsBookBrowserActivity::loop() {
@@ -701,8 +705,7 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     requestUpdate(true);
     fetchFeed(currentPath);
   } else {
-    WiFi.disconnect();
-    WiFi.mode(WIFI_OFF);
+    // Leave WiFi up; onExit's silent reboot handles teardown without further fragmenting.
     state = BrowserState::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();

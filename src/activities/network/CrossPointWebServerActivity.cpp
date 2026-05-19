@@ -3,7 +3,6 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <I18n.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
@@ -12,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
+#include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "activities/network/SignalStrengthWidget.h"
@@ -64,45 +64,17 @@ void CrossPointWebServerActivity::onEnter() {
 void CrossPointWebServerActivity::onExit() {
   Activity::onExit();
 
-  LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
-
   state = WebServerActivityState::SHUTTING_DOWN;
 
-  // Stop the web server first (before disconnecting WiFi)
-  stopWebServer();
-
-  // Stop mDNS
-  MDNS.end();
-
-  // Stop DNS server if running (AP mode)
-  if (dnsServer) {
-    LOG_DBG("WEBACT", "Stopping DNS server...");
-    dnsServer->stop();
-    delete dnsServer;
-    dnsServer = nullptr;
-  }
-
-  // Brief wait for LWIP stack to flush pending packets
-  delay(50);
-
-  // Disconnect WiFi gracefully
-  if (isApMode) {
-    LOG_DBG("WEBACT", "Stopping WiFi AP...");
-    WiFi.softAPdisconnect(true);
+  // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    if (isApMode) {
+      WiFi.softAPdisconnect(true);
+    } else {
+      WiFi.disconnect(false);
+    }
     delay(30);
-    WiFi.mode(WIFI_OFF);
-    delay(30);
-  } else {
-    HalClock::wifiOff();
-  }
-
-  LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
-  requestUpdate();
-
-  if (webServerStarted) {
-    GUI.drawPopup(renderer, tr(STR_RESTART_DEVICE));
-    LOG_DBG("WEBACT", "Restarting device after webserver exit to regain heap...");
-    ESP.restart();
+    silentRestart();
   }
 }
 
@@ -269,15 +241,6 @@ void CrossPointWebServerActivity::startWebServer() {
     // Go back on error
     onGoHome();
   }
-}
-
-void CrossPointWebServerActivity::stopWebServer() {
-  if (webServer && webServer->isRunning()) {
-    LOG_DBG("WEBACT", "Stopping web server...");
-    webServer->stop();
-    LOG_DBG("WEBACT", "Web server stopped");
-  }
-  webServer.reset();
 }
 
 void CrossPointWebServerActivity::loop() {
