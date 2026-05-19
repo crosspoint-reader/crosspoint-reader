@@ -2136,7 +2136,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 }
 
-void EpubReaderActivity::renderPageContentOnly(Page& page, const int orientedMarginTop, const int orientedMarginRight,
+void EpubReaderActivity::renderPageContentOnly(const Page& page, const int orientedMarginTop,
+                                               const int orientedMarginRight,
                                                const int orientedMarginBottom, const int orientedMarginLeft) {
   auto* fcm = renderer.getFontCacheManager();
   fcm->resetStats();
@@ -2153,7 +2154,8 @@ void EpubReaderActivity::renderPageContentOnly(Page& page, const int orientedMar
   // Status bar intentionally omitted — superimposed at display time with live values.
 }
 
-void EpubReaderActivity::displayPreRenderedPage(Page& page, const int orientedMarginTop, const int orientedMarginRight,
+void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orientedMarginTop,
+                                                const int orientedMarginRight,
                                                 const int orientedMarginBottom, const int orientedMarginLeft) {
   const int viewportHeight = std::max(0, renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom);
   const int contentTop = orientedMarginTop + getImageOnlyPageYOffset(page, viewportHeight);

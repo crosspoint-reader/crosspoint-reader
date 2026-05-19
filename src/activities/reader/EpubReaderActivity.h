@@ -249,12 +249,12 @@ class EpubReaderActivity final : public Activity {
   // Renders page content into the frame buffer (prewarm + BW pass) without drawing the status bar
   // or flushing to the display. Used by the pre-render pass so the status bar can be superimposed
   // at display time with live values (clock, battery).
-  void renderPageContentOnly(Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
+  void renderPageContentOnly(const Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
                              int orientedMarginLeft);
   // Draws the status bar over the current frame buffer and flushes to the display.
   // Handles the refresh cycle and grayscale AA pass. page must be the same page
   // that was last rendered into the buffer (needed for image AA re-render).
-  void displayPreRenderedPage(Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
+  void displayPreRenderedPage(const Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
                               int orientedMarginLeft);
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
