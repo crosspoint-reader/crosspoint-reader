@@ -259,8 +259,8 @@ class EpubReaderActivity final : public Activity {
   // Draws the status bar over the current frame buffer and flushes to the display.
   // Handles the refresh cycle and grayscale AA pass. page must be the same page
   // that was last rendered into the buffer (needed for image AA re-render).
-  void displayPreRenderedPage(const Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
-                              int orientedMarginLeft);
+  void displayPreRenderedPage(const Page& page, int orientedMarginTop, int orientedMarginRight,
+                              int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   void saveProgress(int spineIndex, int currentPage, int pageCount);

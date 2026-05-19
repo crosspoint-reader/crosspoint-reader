@@ -2155,8 +2155,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::renderPageContentOnly(const Page& page, const int orientedMarginTop,
-                                               const int orientedMarginRight,
-                                               const int orientedMarginBottom, const int orientedMarginLeft) {
+                                               const int orientedMarginRight, const int orientedMarginBottom,
+                                               const int orientedMarginLeft) {
   auto* fcm = renderer.getFontCacheManager();
   fcm->resetStats();
 
@@ -2173,8 +2173,8 @@ void EpubReaderActivity::renderPageContentOnly(const Page& page, const int orien
 }
 
 void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orientedMarginTop,
-                                                const int orientedMarginRight,
-                                                const int orientedMarginBottom, const int orientedMarginLeft) {
+                                                const int orientedMarginRight, const int orientedMarginBottom,
+                                                const int orientedMarginLeft) {
   const int viewportHeight = std::max(0, renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom);
   const int contentTop = orientedMarginTop + getImageOnlyPageYOffset(page, viewportHeight);
 
