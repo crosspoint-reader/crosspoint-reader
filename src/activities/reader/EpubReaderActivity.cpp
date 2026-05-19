@@ -613,6 +613,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                     : std::nullopt;
             if (resolvedPage) {
               section->currentPage = *resolvedPage;
+              forceLoadLargeImages = false;
+              pageHasPlaceholders = false;
             } else {
               navTarget =
                   chapter.tocIndex ? NavigationTarget::makeTocIndex(*chapter.tocIndex) : NavigationTarget::makePage(0);
@@ -1716,6 +1718,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
     navTarget.resolveInto(*section, currentSpineIndex);
     navTarget = NavigationTarget::makePage(section->currentPage);
+    forceLoadLargeImages = false;
+    pageHasPlaceholders = false;
   }
 
   renderer.clearScreen();
@@ -1876,15 +1880,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
   lastRenderStats.textAntiAliasing = aaEnabledForThisRender;
 
+  const bool effectiveForceLoad = forceLoadLargeImages || !SETTINGS.largeImagePlaceholder;
+  pageHasPlaceholders = page->hasPlaceholderImages(effectiveForceLoad);
+
   // Force special handling for pages with real (non-placeholder) images when anti-aliasing is on
   bool imagePageWithAA = page->hasImages() && !pageHasPlaceholders && aaEnabledForThisRender;
   bool forceHalfRefreshThisPage = pendingHalfRefreshAfterImagePage && SETTINGS.halfRefreshAfterImagePage;
   pendingHalfRefreshAfterImagePage = false;
   lastRenderStats.imagePageWithAA = imagePageWithAA;
   lastRenderStats.forcedHalfRefresh = forceHalfRefreshThisPage;
-
-  const bool effectiveForceLoad = forceLoadLargeImages || !SETTINGS.largeImagePlaceholder;
-  pageHasPlaceholders = page->hasPlaceholderImages(effectiveForceLoad);
 
   logReaderMemSnapshot("before_bw_render");
   page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad);
@@ -2369,6 +2373,8 @@ void EpubReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION 
                                          : std::nullopt;
                                  if (resolvedPage) {
                                    section->currentPage = *resolvedPage;
+                                   forceLoadLargeImages = false;
+                                   pageHasPlaceholders = false;
                                  } else {
                                    navTarget = chapter.tocIndex ? NavigationTarget::makeTocIndex(*chapter.tocIndex)
                                                                 : NavigationTarget::makePage(0);
@@ -2395,6 +2401,8 @@ void EpubReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION 
             if (newSpineIndex == currentSpineIndex) {
               if (const auto resolvedPage = section->getPageForTocIndex(nextTocIndex)) {
                 section->currentPage = *resolvedPage;
+                forceLoadLargeImages = false;
+                pageHasPlaceholders = false;
               }
             } else {
               navTarget = NavigationTarget::makeTocIndex(nextTocIndex);
