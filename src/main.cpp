@@ -14,6 +14,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <builtinFonts/all.h>
 #include <esp_ota_ops.h>
 
@@ -165,7 +166,12 @@ void enterDeepSleep() {
     APP_STATE.readerActivityLoadCount = 0;
   }
   APP_STATE.saveToFile();
-
+  // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
+  // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+  }
   activityManager.goToSleep();
   halTiltSensor.deepSleep();
 
