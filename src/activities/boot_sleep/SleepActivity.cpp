@@ -392,7 +392,7 @@ void SleepActivity::onEnter() {
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
     if (APP_STATE.lastSleepFromReader) {
-      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
     return renderTransparentCustomSleepScreen();
   }
@@ -548,7 +548,6 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   }
 
   LOG_ERR("SLP", "No valid transparent sleep overlay found");
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   renderDefaultSleepScreen();
 }
 
