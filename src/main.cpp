@@ -220,8 +220,13 @@ static void saveSleepFrameBuffer() {
 static bool loadSleepFrameBuffer() {
   FsFile file;
   if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
-  file.read(display.getFrameBuffer(), display.getBufferSize());
+  const size_t bufferSize = display.getBufferSize();
+  const size_t bytesRead = file.read(display.getFrameBuffer(), bufferSize);
   file.close();
+  if (bytesRead != bufferSize) {
+    Storage.remove(SLEEP_FRAME_FILE);
+    return false;
+  }
   Storage.remove(SLEEP_FRAME_FILE);
   return true;
 }
