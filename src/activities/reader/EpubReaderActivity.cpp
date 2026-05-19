@@ -39,6 +39,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontGlobals.h"
 #include "StarredPagesActivity.h"
+#include "activities/settings/ReadingStatsBookDetailActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -722,6 +723,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (tryAutoPushOnClose()) return;
       onGoHome();
       return;
+    }
+    case EpubReaderMenuActivity::MenuAction::READING_STATS: {
+      // Jump to this book's detail screen using the same filename-hash docId
+      // the session was opened with. The in-flight session's time isn't
+      // visible here — it lands in the store only when end() runs on reader
+      // exit. For a brand-new book that's never been finished a session yet
+      // the screen will show "no data"; that's accurate.
+      if (!epub) break;
+      startActivityForResult(std::make_unique<ReadingStatsBookDetailActivity>(
+                                 renderer, mappedInput, KOReaderDocumentId::calculateFromFilename(epub->getPath())),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      break;
     }
     case EpubReaderMenuActivity::MenuAction::MARK_AS_READ: {
       if (!epub) {

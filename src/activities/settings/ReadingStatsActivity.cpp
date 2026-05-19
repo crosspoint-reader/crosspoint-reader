@@ -5,20 +5,22 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 #include "MappedInputManager.h"
 #include "ReadingSessionTracker.h"
 #include "ReadingStats.h"
 #include "ReadingStatsBookListActivity.h"
+#include "components/CardLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
 
-// "1h 23m" / "23m 45s" / "12s" — Phase 1 keeps it compact so a long row fits
-// the right column without truncation on the X3's narrow screen.
+// "1h 23m" / "23m 45s" / "12s" — compact so a long row fits on the X3.
 std::string formatDuration(uint32_t totalSeconds) {
   const uint32_t h = totalSeconds / 3600;
   const uint32_t m = (totalSeconds % 3600) / 60;
@@ -31,6 +33,19 @@ std::string formatDuration(uint32_t totalSeconds) {
   } else {
     snprintf(buf, sizeof(buf), "%us", s);
   }
+  return buf;
+}
+
+// Pages per minute, rounded to 1 decimal. Returns "—" when there's not enough
+// data (fewer than a minute total) so we don't display "120.0 ppm" when only
+// a handful of seconds have been recorded.
+std::string formatPagesPerMin(uint32_t pages, uint32_t seconds) {
+  if (seconds < 60 || pages == 0) {
+    return tr(STR_READING_STATS_UNKNOWN);
+  }
+  const float ppm = (pages * 60.0f) / seconds;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%.1f", ppm);
   return buf;
 }
 
@@ -53,8 +68,7 @@ void ReadingStatsActivity::loop() {
                            [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-  // If a reading session happens to be live (e.g. a future entry point lets
-  // the user pop this screen mid-read), tick at most once per second so
+  // If a reading session happens to be live, tick at most once per second so
   // "this session" moves visibly without hammering the e-ink panel.
   if (globalReadingSessionTracker().isActive()) {
     const uint32_t now = millis();
@@ -75,100 +89,87 @@ void ReadingStatsActivity::render(RenderLock&&) {
                  Rect{contentRect.x, contentRect.y + metrics.topPadding, contentRect.width, metrics.headerHeight},
                  tr(STR_READING_STATS), nullptr);
 
-  const int leftX = contentRect.x + metrics.verticalSpacing * 3;
-  const int valueX = contentRect.x + contentRect.width / 2;
-  const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
-  const int rowStep = lineH + 2;
-  const int subHeaderHeight = lineH + 6;
-  int y = contentRect.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-
-  auto drawSection = [&](const char* title) {
-    GUI.drawSubHeader(renderer, Rect{contentRect.x, y, contentRect.width, subHeaderHeight}, title);
-    y += subHeaderHeight + 2;
-  };
-  auto drawRow = [&](const char* label, const std::string& value) {
-    renderer.drawText(UI_10_FONT_ID, leftX, y, label, true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, valueX, y, value.c_str());
-    y += rowStep;
-  };
+  const int startY = contentRect.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  CardLayout::Config cfg;
+  cfg.outerMarginX = metrics.verticalSpacing * 2;
+  CardLayout layout(renderer, contentRect, startY, cfg);
 
   const auto& store = READING_STATS;
   auto& tracker = globalReadingSessionTracker();
 
-  // ---- Live session (only if currently reading) ----
+  // ---- Live session card ----
   if (tracker.isActive()) {
-    drawSection(tr(STR_READING_STATS_CURRENT_SESSION));
-    drawRow(tr(STR_READING_STATS_TOTAL_TIME), formatDuration(tracker.getLiveSeconds()));
-    drawRow(tr(STR_READING_STATS_PAGES), std::to_string(tracker.getLivePages()));
+    layout.card(tr(STR_READING_STATS_CURRENT_SESSION), [&](CardLayout::Body& b) {
+      b.rowLR(tr(STR_READING_STATS_TOTAL_TIME), formatDuration(tracker.getLiveSeconds()));
+      b.rowLR(tr(STR_READING_STATS_PAGES), std::to_string(tracker.getLivePages()));
+    });
   }
 
-  // ---- All time ----
-  drawSection(tr(STR_READING_STATS_TOTAL_TIME));
-  if (store.getGlobalTotalSeconds() == 0) {
-    drawRow("", tr(STR_READING_STATS_NO_DATA));
-  } else {
-    drawRow(tr(STR_READING_STATS_TOTAL_TIME), formatDuration(store.getGlobalTotalSeconds()));
-    drawRow(tr(STR_READING_STATS_SESSIONS), std::to_string(store.getGlobalTotalSessions()));
-    drawRow(tr(STR_READING_STATS_PAGES), std::to_string(store.getGlobalTotalPagesTurned()));
-    drawRow(tr(STR_READING_STATS_BOOKS), std::to_string(store.getBookCount()));
-
-    // Streaks: only meaningful when at least one wall-clocked session exists.
-    if (!store.getGlobalDays().empty()) {
-      const uint16_t today = currentLocalDayIndex();
-      const uint16_t current = store.computeCurrentStreak(today);
-      const uint16_t longest = store.computeLongestStreak();
-      char buf[24];
-      snprintf(buf, sizeof(buf), "%u%s / %u%s", current, tr(STR_READING_STATS_DAYS_UNIT), longest,
-               tr(STR_READING_STATS_DAYS_UNIT));
-      drawRow(tr(STR_READING_STATS_STREAK), buf);
+  // ---- All-time card ----
+  layout.card(tr(STR_READING_STATS_TOTAL_TIME), [&](CardLayout::Body& b) {
+    if (store.getGlobalTotalSeconds() == 0) {
+      b.centeredMessage(tr(STR_READING_STATS_NO_DATA));
+      return;
     }
-  }
 
-  // ---- 30-day sparkline ----
-  // Renders one bar per day for the last 30 local days ending at "today".
-  // Height of each bar is proportional to that day's seconds vs. the maximum
-  // seen in the window. Days with no reading get a flat 1px baseline so the
-  // gap pattern stays visible. Drawn only when the clock is synced — without
-  // it we have no "today" to anchor the window against.
+    // 4-cell stat grid: sessions / books / current streak / longest streak.
+    // Streaks read "—" when the clock has never been wall-anchored.
+    const uint16_t today = currentLocalDayIndex();
+    const bool haveStreak = today != 0 && !store.getGlobalDays().empty();
+    const std::string curStreak =
+        haveStreak ? std::to_string(store.computeCurrentStreak(today)) : std::string(tr(STR_READING_STATS_UNKNOWN));
+    const std::string maxStreak =
+        haveStreak ? std::to_string(store.computeLongestStreak()) : std::string(tr(STR_READING_STATS_UNKNOWN));
+    b.statGrid({{{std::to_string(store.getGlobalTotalSessions()), tr(STR_READING_STATS_SESSIONS)},
+                 {std::to_string(store.getBookCount()), tr(STR_READING_STATS_BOOKS)},
+                 {curStreak, tr(STR_READING_STATS_STREAK)},
+                 {maxStreak, tr(STR_READING_STATS_LONGEST)}}});
+
+    b.rowLR(tr(STR_READING_STATS_TOTAL_TIME), formatDuration(store.getGlobalTotalSeconds()));
+    b.rowLR(tr(STR_READING_STATS_PAGES), std::to_string(store.getGlobalTotalPagesTurned()));
+    b.rowLR(tr(STR_READING_STATS_PAGES_PER_MIN),
+            formatPagesPerMin(store.getGlobalTotalPagesTurned(), store.getGlobalTotalSeconds()));
+  });
+
+  // ---- 30-day sparkline card ----
   const uint16_t today = currentLocalDayIndex();
   if (today != 0 && !store.getGlobalDays().empty()) {
-    drawSection(tr(STR_READING_STATS_LAST_30D));
-    constexpr int kSparkDays = 30;
-    constexpr int kSparkHeight = 38;
-    constexpr int kBarGap = 1;
-    const int sparkLeft = leftX;
-    const int sparkRight = contentRect.x + contentRect.width - metrics.verticalSpacing * 3;
-    const int sparkWidth = std::max(0, sparkRight - sparkLeft);
-    const int barWidth = std::max(2, (sparkWidth - (kSparkDays - 1) * kBarGap) / kSparkDays);
-    const int totalSpan = barWidth * kSparkDays + kBarGap * (kSparkDays - 1);
-    const int sparkOriginX = sparkLeft + (sparkWidth - totalSpan) / 2;
-    const int sparkOriginY = y;
+    layout.card(tr(STR_READING_STATS_LAST_30D), [&](CardLayout::Body& b) {
+      constexpr int kSparkDays = 30;
+      constexpr int kSparkHeight = 32;
+      constexpr int kBarGap = 1;
+      const int innerWidth = b.innerWidth();
+      const int innerLeft = b.innerLeft();
+      const int barWidth = std::max(2, (innerWidth - (kSparkDays - 1) * kBarGap) / kSparkDays);
+      const int totalSpan = barWidth * kSparkDays + kBarGap * (kSparkDays - 1);
+      const int sparkOriginX = innerLeft + (innerWidth - totalSpan) / 2;
+      const int sparkOriginY = b.currentY();
 
-    uint32_t maxSeconds = 1;
-    for (int i = 0; i < kSparkDays; ++i) {
-      const uint16_t d =
-          (today > static_cast<uint16_t>(kSparkDays - 1 - i)) ? static_cast<uint16_t>(today - (kSparkDays - 1 - i)) : 0;
-      const uint32_t s = store.getSecondsForDay(d);
-      if (s > maxSeconds) maxSeconds = s;
-    }
+      uint32_t maxSeconds = 1;
+      for (int i = 0; i < kSparkDays; ++i) {
+        const uint16_t d = (today > static_cast<uint16_t>(kSparkDays - 1 - i))
+                               ? static_cast<uint16_t>(today - (kSparkDays - 1 - i))
+                               : 0;
+        const uint32_t s = store.getSecondsForDay(d);
+        if (s > maxSeconds) maxSeconds = s;
+      }
 
-    // Baseline (axis) — 1px line under the bars so the visual grouping reads
-    // as a chart even when most days are empty.
-    renderer.drawLine(sparkOriginX, sparkOriginY + kSparkHeight, sparkOriginX + totalSpan, sparkOriginY + kSparkHeight,
-                      true);
-    for (int i = 0; i < kSparkDays; ++i) {
-      const uint16_t d =
-          (today > static_cast<uint16_t>(kSparkDays - 1 - i)) ? static_cast<uint16_t>(today - (kSparkDays - 1 - i)) : 0;
-      const uint32_t s = store.getSecondsForDay(d);
-      const int barX = sparkOriginX + i * (barWidth + kBarGap);
-      // 1px minimum so empty days still tick on the axis.
-      const int h = s == 0 ? 1 : std::max<int>(2, (s * kSparkHeight) / maxSeconds);
-      renderer.fillRect(barX, sparkOriginY + kSparkHeight - h, barWidth, h, true);
-    }
-    y += kSparkHeight + 6;
+      renderer.drawLine(sparkOriginX, sparkOriginY + kSparkHeight, sparkOriginX + totalSpan,
+                        sparkOriginY + kSparkHeight, true);
+      for (int i = 0; i < kSparkDays; ++i) {
+        const uint16_t d = (today > static_cast<uint16_t>(kSparkDays - 1 - i))
+                               ? static_cast<uint16_t>(today - (kSparkDays - 1 - i))
+                               : 0;
+        const uint32_t s = store.getSecondsForDay(d);
+        const int barX = sparkOriginX + i * (barWidth + kBarGap);
+        const int h = s == 0 ? 1 : std::max<int>(2, (s * kSparkHeight) / maxSeconds);
+        renderer.fillRect(barX, sparkOriginY + kSparkHeight - h, barWidth, h, true);
+      }
+      b.advance(kSparkHeight + 2);
+    });
   }
 
-  // ---- Top books (up to 3 by total time) ----
+  // ---- Top books card ----
   if (!store.getBooks().empty()) {
     std::vector<const BookReadingStats*> sorted;
     sorted.reserve(store.getBooks().size());
@@ -176,20 +177,31 @@ void ReadingStatsActivity::render(RenderLock&&) {
     std::sort(sorted.begin(), sorted.end(),
               [](const BookReadingStats* a, const BookReadingStats* b) { return a->totalSeconds > b->totalSeconds; });
 
-    drawSection(tr(STR_READING_STATS_TOP_BOOKS));
-    const size_t shown = std::min<size_t>(sorted.size(), 3);
-    for (size_t i = 0; i < shown; ++i) {
-      const auto* b = sorted[i];
-      // Use the title when known; fall back to docId so the row is never
-      // empty even before metadata is recorded.
-      std::string label = b->title.empty() ? b->docId : b->title;
-      // Trim to fit; 22 chars keeps it in the left column at UI_10.
-      if (label.size() > 22) {
-        label.resize(22);
-        label += "…";
+    layout.card(tr(STR_READING_STATS_TOP_BOOKS), [&](CardLayout::Body& b) {
+      const int ellipsisWidth = renderer.getTextWidth(UI_10_FONT_ID, "…");
+      constexpr int kTitleGap = 8;
+      const size_t shown = std::min<size_t>(sorted.size(), 3);
+      const int innerLeft = b.innerLeft();
+      const int innerRight = b.innerRight();
+      for (size_t i = 0; i < shown; ++i) {
+        const auto* bk = sorted[i];
+        const std::string time = formatDuration(bk->totalSeconds);
+        const int timeWidth = renderer.getTextWidth(UI_10_FONT_ID, time.c_str());
+        renderer.drawText(UI_10_FONT_ID, innerRight - timeWidth, b.currentY(), time.c_str());
+
+        std::string label = bk->title.empty() ? bk->docId : bk->title;
+        const int maxLabelWidth = (innerRight - timeWidth - kTitleGap) - innerLeft;
+        if (maxLabelWidth > 0 && renderer.getTextWidth(UI_10_FONT_ID, label.c_str()) > maxLabelWidth) {
+          while (!label.empty() &&
+                 renderer.getTextWidth(UI_10_FONT_ID, label.c_str()) + ellipsisWidth > maxLabelWidth) {
+            label.pop_back();
+          }
+          label += "…";
+        }
+        renderer.drawText(UI_10_FONT_ID, innerLeft, b.currentY(), label.c_str(), true, EpdFontFamily::BOLD);
+        b.advance(b.rowStep());
       }
-      drawRow(label.c_str(), formatDuration(b->totalSeconds));
-    }
+    });
   }
 
   const char* btn2 = store.getBooks().empty() ? "" : tr(STR_READING_STATS_BOOK_LIST);
