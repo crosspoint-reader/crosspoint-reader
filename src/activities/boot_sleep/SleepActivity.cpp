@@ -21,7 +21,8 @@ void SleepActivity::onEnter() {
 
   const bool renderSeamless =
       SETTINGS.seamlessSleepScreen == CrossPointSettings::SEAMLESS_SLEEP_SCREEN::SEAMLESS_ALWAYS ||
-      (fromTimeout && SETTINGS.seamlessSleepScreen == CrossPointSettings::SEAMLESS_SLEEP_SCREEN::SEAMLESS_AFTER_TIMEOUT);
+      (fromTimeout &&
+       SETTINGS.seamlessSleepScreen == CrossPointSettings::SEAMLESS_SLEEP_SCREEN::SEAMLESS_AFTER_TIMEOUT);
 
   if (renderSeamless) {
     return renderLastScreenSleepScreen();
