@@ -23,3 +23,5 @@ process es
 process ru
 process it
 process uk
+process pl
+process sv

@@ -5,7 +5,7 @@
 #include <Serialization.h>
 #include <XmlParserUtils.h>
 
-#include "../BookMetadataCache.h"
+#include "Epub/BookMetadataCache.h"
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
