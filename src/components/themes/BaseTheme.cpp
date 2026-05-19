@@ -672,8 +672,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
 
   const int textX = x + (w - textWidth) / 2;
   const int textY = y + marginY + metrics.popupTextBaselineOffsetY;
-  const bool invertText = !useRoundedPopup;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, invertText, popupFontFamily);
+  renderer.drawText(UI_12_FONT_ID, textX, textY, message, metrics.popupTextInverted, popupFontFamily);
   renderer.displayBuffer();
   return Rect{x, y, w, h};
 }

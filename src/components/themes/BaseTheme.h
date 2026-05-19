@@ -83,6 +83,7 @@ struct ThemeMetrics {
   int popupFrameThickness;
   int popupCornerRadius;
   bool popupTextBold;
+  bool popupTextInverted;
   int popupTextBaselineOffsetY;
   int popupProgressBarHeight;
   bool popupProgressDrawOutline;
@@ -154,6 +155,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupFrameThickness = 2,
                                  .popupCornerRadius = 0,
                                  .popupTextBold = true,
+                                 .popupTextInverted = true,
                                  .popupTextBaselineOffsetY = -2,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = false,
