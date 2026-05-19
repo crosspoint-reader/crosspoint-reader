@@ -18,7 +18,7 @@ class HalDisplay {
   };
 
   // Initialize the display hardware and driver
-  void begin();
+  void begin(bool seamless = false);
 
   // Display dimensions
   static constexpr uint16_t DISPLAY_WIDTH = EInkDisplay::DISPLAY_WIDTH;

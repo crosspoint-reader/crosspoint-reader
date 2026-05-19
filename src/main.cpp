@@ -28,6 +28,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
+#include "images/LoadingIcon.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -38,6 +39,7 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
+static unsigned long allowSleepAt = 0;
 
 // Fonts
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
@@ -210,6 +212,12 @@ void waitForPowerRelease() {
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+
+  const bool isSeamless =
+      SETTINGS.seamlessSleepScreen == CrossPointSettings::SEAMLESS_SLEEP_SCREEN::SEAMLESS_ALWAYS ||
+      (fromTimeout && SETTINGS.seamlessSleepScreen == CrossPointSettings::SEAMLESS_SLEEP_SCREEN::SEAMLESS_AFTER_TIMEOUT);
+  APP_STATE.showBootScreen = !isSeamless;
+
   APP_STATE.saveToFile();
 
   activityManager.goToSleep(fromTimeout);
@@ -221,8 +229,8 @@ void enterDeepSleep(bool fromTimeout = false) {
   powerManager.startDeepSleep(gpio);
 }
 
-void setupDisplayAndFonts() {
-  display.begin();
+void setupDisplayAndFonts(bool seamless = false) {
+  display.begin(seamless);
   renderer.begin();
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
@@ -305,6 +313,8 @@ void setup() {
   HalSystem::checkPanic();
 
   SETTINGS.loadFromFile();
+  APP_STATE.loadFromFile();
+  RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
@@ -352,16 +362,22 @@ void setup() {
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
-  setupDisplayAndFonts();
+  setupDisplayAndFonts(/*seamless=*/!APP_STATE.showBootScreen);
 
   // First paint after silent reboot is HALF_REFRESH (SDK forces it after begin()'s
   // panel reset); subsequent paints FAST.
   if (!isSilentReboot) {
-    activityManager.goToBoot();
+    if (APP_STATE.showBootScreen) {
+      activityManager.goToBoot();
+    } else {
+      // Seamless wake: keep last screen content, replace moon icon with loading icon
+      const auto pageHeight = renderer.getScreenHeight();
+      renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      APP_STATE.showBootScreen = true;
+      APP_STATE.saveToFile();
+    }
   }
-
-  APP_STATE.loadFromFile();
-  RECENT_BOOKS.loadFromFile();
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
@@ -393,6 +409,7 @@ void setup() {
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
+  allowSleepAt = millis() + 2000;
 }
 
 void loop() {
@@ -468,7 +485,8 @@ void loop() {
     return;
   }
 
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
