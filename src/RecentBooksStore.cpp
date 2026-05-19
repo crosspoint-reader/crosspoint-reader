@@ -9,6 +9,7 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <iterator>
 
 namespace {
 constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
@@ -54,6 +55,33 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+bool RecentBooksStore::removeByPath(const std::string& path) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return false;
+  }
+  recentBooks.erase(it);
+  if (!saveToFile()) {
+    LOG_ERR("RBS", "Failed to persist removal of recent book: %s", path.c_str());
+  }
+  return true;
+}
+
+void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath,
+                                  const std::string& oldCachePath, const std::string& newCachePath) {
+  auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
+                         [&](const RecentBook& book) { return book.path == oldPath; });
+  if (it == recentBooks.end()) {
+    return;
+  }
+  it->path = newPath;
+  if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
+    it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
+  }
+  saveToFile();
 }
 
 bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
