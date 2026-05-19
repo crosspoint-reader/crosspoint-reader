@@ -10,6 +10,7 @@
 #include <Logging.h>
 #include <esp_system.h>
 
+#include <functional>
 #include <iterator>
 #include <limits>
 
@@ -43,6 +44,68 @@ int clampPercent(int percent) {
     return 100;
   }
   return percent;
+}
+
+// SD card folder finished books are moved into. Single source of truth for the path.
+// constexpr ⇒ lives in flash .rodata, no DRAM cost.
+constexpr char READ_FOLDER[] = "/read";
+
+// True if path is inside READ_FOLDER (starts with "<READ_FOLDER>/"). Non-allocating so
+// it is cheap to call from loop(), and avoids reintroducing a separate "/Read/" literal.
+bool isInReadFolder(const std::string& path) {
+  constexpr size_t n = sizeof(READ_FOLDER) - 1;  // length of "/Read" (excludes NUL)
+  return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
+}
+
+// Pick a non-colliding destination path inside /Read/ for a finished book.
+// Mirrors the suffixing scheme used elsewhere: "name.epub" -> "name (2).epub", etc.
+std::string buildReadFolderDestination(const std::string& srcPath) {
+  const size_t lastSlash = srcPath.rfind('/');
+  const std::string filename = (lastSlash != std::string::npos) ? srcPath.substr(lastSlash + 1) : srcPath;
+
+  Storage.mkdir(READ_FOLDER);
+  std::string dstPath = std::string(READ_FOLDER) + "/" + filename;
+  if (!Storage.exists(dstPath.c_str())) {
+    return dstPath;
+  }
+
+  const size_t dotPos = filename.rfind('.');
+  const std::string base = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
+  const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
+  int suffix = 2;
+  do {
+    dstPath = std::string(READ_FOLDER) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
+    suffix++;
+  } while (Storage.exists(dstPath.c_str()) && suffix < 100);
+  return dstPath;
+}
+
+// Relocate a finished book and its cache dir into /read/, keep it in recents by
+// repointing its entry to the new path, and repoint the resume pointer too.
+// On rename failure: LOG_ERR and leave everything in place (no UI alert subsystem here).
+void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
+                                  const std::string& oldCachePath) {
+  LOG_INF("ERS", "Moving finished epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
+  if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
+    LOG_ERR("ERS", "Failed to move finished book to '/Read' folder");
+    return;
+  }
+
+  // Cache dir is keyed by hash of the epub path (see Epub ctor), so it must be re-keyed.
+  const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));
+  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
+    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
+      LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
+    }
+  }
+
+  // Keep the book in recents (crossink behavior): repoint the entry to its new
+  // location instead of dropping it. updatePath persists on success.
+  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
+  if (APP_STATE.openEpubPath == srcPath) {
+    APP_STATE.openEpubPath = dstPath;
+    APP_STATE.saveToFile();
+  }
 }
 
 }  // namespace
@@ -109,7 +172,15 @@ void EpubReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   section.reset();
-  epub.reset();
+  if (pendingReadFolderMove && epub) {
+    const std::string srcPath = epub->getPath();
+    const std::string oldCachePath = epub->getCachePath();
+    const std::string dstPath = buildReadFolderDestination(srcPath);
+    epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
+    moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath);
+  } else {
+    epub.reset();
+  }
 }
 
 void EpubReaderActivity::loop() {
@@ -117,6 +188,35 @@ void EpubReaderActivity::loop() {
     // Should never happen
     finish();
     return;
+  }
+
+  // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
+  // finished. Two independent finished-book features key off this same condition.
+  const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
+
+  // Drop this book from the Recent Books list; if the reader then pages back into the book,
+  // re-add it. So removal only sticks if the reader leaves while still on the End-of-Book
+  // screen. Acts only on the transition (guarded by recentsEntryRemoved) — no per-frame writes.
+  if (SETTINGS.removeReadBooksFromRecents) {
+    if (atEndOfBook && !recentsEntryRemoved) {
+      // Only treat the book as "removed by us" if it was actually in the list, so the
+      // re-add branch below doesn't insert a book the feature never removed.
+      recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
+    } else if (!atEndOfBook && recentsEntryRemoved) {
+      // Re-add (goes to front of the list via addBook — accepted ordering side effect).
+      RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+      recentsEntryRemoved = false;
+    }
+  }
+
+  // Arm the move here so ANY exit path (Back, Home, file browser) relocates the book into
+  // /Read/ in onExit(); paging back off the end screen disarms it (book not actually
+  // finished). If removeReadBooksFromRecents also fired, RecentBooksStore::updatePath in the
+  // move path becomes a safe no-op since the entry was already removed.
+  if (atEndOfBook) {
+    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+  } else {
+    pendingReadFolderMove = false;
   }
 
   if (automaticPageTurnActive) {

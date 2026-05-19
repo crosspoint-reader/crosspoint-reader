@@ -94,6 +94,8 @@ class GfxRenderer {
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
   void ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F) const;
+  void ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+                             uint8_t styleMask = 0x0F) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -183,4 +185,16 @@ class GfxRenderer {
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }
   uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }
+
+  // Region cache: take a logical (orientation-aware) rect, hit the framebuffer
+  // bytes that the rect can have touched, and pump them in or out of a caller-
+  // supplied buffer. Used by HomeActivity to snapshot just the cover tile
+  // (~16 KB in Portrait) instead of cloning the entire 48 KB framebuffer.
+  //
+  // getRegionByteSize: required buffer length for the rect at current orientation.
+  // copyRegionToBuffer / copyBufferToRegion: false if `bufSize` is smaller than that.
+  size_t getRegionByteSize(int logicalX, int logicalY, int logicalW, int logicalH) const;
+  bool copyRegionToBuffer(int logicalX, int logicalY, int logicalW, int logicalH, uint8_t* buf, size_t bufSize) const;
+  bool copyBufferToRegion(int logicalX, int logicalY, int logicalW, int logicalH, const uint8_t* buf,
+                          size_t bufSize) const;
 };
