@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build firmware at selected commits and report flash usage.
+Build firmware at selected commits and report flash and RAM usage.
 
 Two modes (mutually exclusive, one required):
 
@@ -33,6 +33,9 @@ import re
 import subprocess
 import sys
 
+RAM_RE = re.compile(
+    r"RAM:.*?(\d+)\s+bytes\s+from\s+(\d+)\s+bytes"
+)
 FLASH_RE = re.compile(
     r"Flash:.*?(\d+)\s+bytes\s+from\s+(\d+)\s+bytes"
 )
@@ -93,9 +96,9 @@ def build_firmware(env):
     return result.returncode, result.stdout + "\n" + result.stderr
 
 
-def parse_flash_used(output):
-    """Extract used-bytes integer from PlatformIO output, or None."""
-    m = FLASH_RE.search(output)
+def parse_size_line(regex, output):
+    """Extract used-bytes integer matching *regex* from PlatformIO output, or None."""
+    m = regex.search(output)
     if m:
         return int(m.group(1))
     return None
@@ -111,10 +114,10 @@ def write_csv(out, rows, fieldnames):
 def format_table(rows):
     """Print rows as an aligned human-readable table to stdout."""
     COL_COMMIT = 10
-    COL_FLASH = 11
+    COL_SIZE = 11
     COL_DELTA = 7
 
-    def fmt_flash(val):
+    def fmt_size(val):
         if val == "FAILED":
             return "FAILED"
         return f"{val:,}"
@@ -126,25 +129,33 @@ def format_table(rows):
 
     header = (
         f"{'Commit':<{COL_COMMIT}}  "
-        f"{'Flash':>{COL_FLASH}}  "
+        f"{'Flash':>{COL_SIZE}}  "
+        f"{'Delta':>{COL_DELTA}}  "
+        f"{'RAM':>{COL_SIZE}}  "
         f"{'Delta':>{COL_DELTA}}  "
         f"Title"
     )
     sep = (
         f"{BOX_CHAR * COL_COMMIT}  "
-        f"{BOX_CHAR * COL_FLASH}  "
+        f"{BOX_CHAR * COL_SIZE}  "
+        f"{BOX_CHAR * COL_DELTA}  "
+        f"{BOX_CHAR * COL_SIZE}  "
         f"{BOX_CHAR * COL_DELTA}  "
         f"{BOX_CHAR * 40}"
     )
     print(header)
     print(sep)
     for row in rows:
-        flash_str = fmt_flash(row["flash_bytes"])
-        delta_str = fmt_delta(row["delta"])
+        flash_str = fmt_size(row["flash_bytes"])
+        flash_d = fmt_delta(row["flash_delta"])
+        ram_str = fmt_size(row["ram_bytes"])
+        ram_d = fmt_delta(row["ram_delta"])
         print(
             f"{row['commit']:<{COL_COMMIT}}  "
-            f"{flash_str:>{COL_FLASH}}  "
-            f"{delta_str:>{COL_DELTA}}  "
+            f"{flash_str:>{COL_SIZE}}  "
+            f"{flash_d:>{COL_DELTA}}  "
+            f"{ram_str:>{COL_SIZE}}  "
+            f"{ram_d:>{COL_DELTA}}  "
             f"{row['title']}"
         )
 
@@ -173,7 +184,7 @@ def build_commits_from_list(refs):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Measure firmware flash size across git commits.",
+        description="Measure firmware flash and RAM size across git commits.",
         epilog=(
             "Range mode walks every commit between START and END (one branch).  "
             "List mode builds specific refs that may come from different branches."
@@ -233,19 +244,22 @@ def main():
             print(f"  Building (env: {args.env})...", file=sys.stderr)
             rc, output = build_firmware(args.env)
 
-            if rc != 0:
+            build_failed = rc != 0
+            if build_failed:
                 print(f"  BUILD FAILED (exit {rc}) -- skipping", file=sys.stderr)
-                results.append((sha, title, None))
+                results.append((sha, title, None, None, True))
                 continue
 
-            used = parse_flash_used(output)
-            if used is None:
+            flash_used = parse_size_line(FLASH_RE, output)
+            ram_used = parse_size_line(RAM_RE, output)
+            if flash_used is None:
                 print("  Could not parse flash size from output -- skipping", file=sys.stderr)
-                results.append((sha, title, None))
+                results.append((sha, title, None, None, True))
                 continue
 
-            print(f"  Flash used: {used:,} bytes", file=sys.stderr)
-            results.append((sha, title, used))
+            ram_str = f", RAM: {ram_used:,}" if ram_used is not None else ""
+            print(f"  Flash: {flash_used:,}{ram_str} bytes", file=sys.stderr)
+            results.append((sha, title, flash_used, ram_used, False))
 
     except KeyboardInterrupt:
         print("\n[info] Interrupted -- writing partial results.", file=sys.stderr)
@@ -258,22 +272,35 @@ def main():
 
     # Build result rows with deltas
     rows = []
-    prev_size = None
-    for sha, title, used in results:
-        if used is not None and prev_size is not None:
-            delta = used - prev_size
+    prev_flash = None
+    prev_ram = None
+    for sha, title, flash_used, ram_used, build_failed in results:
+        flash_delta = ""
+        ram_delta = ""
+        if flash_used is not None and prev_flash is not None:
+            flash_delta = flash_used - prev_flash
+        if ram_used is not None and prev_ram is not None:
+            ram_delta = ram_used - prev_ram
+        if build_failed:
+            flash_bytes = "FAILED"
+            ram_bytes = "FAILED"
         else:
-            delta = ""
+            flash_bytes = flash_used if flash_used is not None else "N/A"
+            ram_bytes = ram_used if ram_used is not None else "N/A"
         rows.append({
             "commit": sha[:10],
             "title": title,
-            "flash_bytes": used if used is not None else "FAILED",
-            "delta": delta,
+            "flash_bytes": flash_bytes,
+            "flash_delta": flash_delta,
+            "ram_bytes": ram_bytes,
+            "ram_delta": ram_delta,
         })
-        if used is not None:
-            prev_size = used
+        if flash_used is not None:
+            prev_flash = flash_used
+        if ram_used is not None:
+            prev_ram = ram_used
 
-    fieldnames = ["commit", "title", "flash_bytes", "delta"]
+    fieldnames = ["commit", "title", "flash_bytes", "flash_delta", "ram_bytes", "ram_delta"]
 
     if args.csv is not None:
         if args.csv == "-":

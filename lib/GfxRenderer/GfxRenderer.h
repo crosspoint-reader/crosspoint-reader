@@ -4,6 +4,7 @@
 #include <HalDisplay.h>
 
 class FontCacheManager;
+class SdCardFont;
 
 #include <cstring>
 #include <map>
@@ -42,6 +43,11 @@ class GfxRenderer {
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
+  // Mutable because ensureSdCardFontReady() is const (called from layout code
+  // that holds a const GfxRenderer&) but triggers SD card reads and heap
+  // allocation inside the SdCardFont objects. Same pragmatic compromise as
+  // fontCacheManager_ below.
+  mutable std::map<int, SdCardFont*> sdCardFonts_;
 
   // Mutable because drawText() is const but needs to delegate scan-mode
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
@@ -69,9 +75,27 @@ class GfxRenderer {
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
+  // Clears both the flash-font map and any SD-font registration for fontId.
+  // Coupled to avoid dangling SdCardFont* in sdCardFonts_ when callers free
+  // the underlying SdCardFont and forget the SD-side unregister.
+  void removeFont(int fontId) {
+    fontMap.erase(fontId);
+    sdCardFonts_.erase(fontId);
+  }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
+  void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
+  void unregisterSdCardFont(int fontId) { removeFont(fontId); }
+  void clearSdCardFonts() { sdCardFonts_.clear(); }
+  const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
+  bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
+  // Ensure SD card font glyph data is loaded for the given text. Called from layout code
+  // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
+  // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
+  void ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F) const;
+  void ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+                             uint8_t styleMask = 0x0F) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -161,4 +185,16 @@ class GfxRenderer {
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }
   uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }
+
+  // Region cache: take a logical (orientation-aware) rect, hit the framebuffer
+  // bytes that the rect can have touched, and pump them in or out of a caller-
+  // supplied buffer. Used by HomeActivity to snapshot just the cover tile
+  // (~16 KB in Portrait) instead of cloning the entire 48 KB framebuffer.
+  //
+  // getRegionByteSize: required buffer length for the rect at current orientation.
+  // copyRegionToBuffer / copyBufferToRegion: false if `bufSize` is smaller than that.
+  size_t getRegionByteSize(int logicalX, int logicalY, int logicalW, int logicalH) const;
+  bool copyRegionToBuffer(int logicalX, int logicalY, int logicalW, int logicalH, uint8_t* buf, size_t bufSize) const;
+  bool copyBufferToRegion(int logicalX, int logicalY, int logicalW, int logicalH, const uint8_t* buf,
+                          size_t bufSize) const;
 };

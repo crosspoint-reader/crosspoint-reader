@@ -2,7 +2,7 @@
 
 #include <functional>
 
-#include "../Activity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };

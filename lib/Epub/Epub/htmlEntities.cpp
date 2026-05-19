@@ -4,6 +4,7 @@
 #include "htmlEntities.h"
 
 #include <cstring>
+#include <iterator>
 
 struct EntityPair {
   const char* key;
@@ -62,8 +63,6 @@ static constexpr EntityPair ENTITY_LOOKUP[] = {
     {"&yen;", "¥"},      {"&yuml;", "ÿ"},       {"&zeta;", "ζ"},       {"&zwj;", "\u200D"}, {"&zwnj;", "\u200C"},
 };
 
-static const size_t ENTITY_LOOKUP_COUNT = sizeof(ENTITY_LOOKUP) / sizeof(ENTITY_LOOKUP[0]);
-
 // Verify the table is sorted at compile time.
 static constexpr int constexprStrcmp(const char* a, const char* b) {
   for (size_t i = 0;; i++) {
@@ -73,7 +72,7 @@ static constexpr int constexprStrcmp(const char* a, const char* b) {
 }
 
 static constexpr bool isTableSorted() {
-  for (size_t i = 1; i < ENTITY_LOOKUP_COUNT; i++) {
+  for (size_t i = 1; i < std::size(ENTITY_LOOKUP); i++) {
     if (constexprStrcmp(ENTITY_LOOKUP[i - 1].key, ENTITY_LOOKUP[i].key) >= 0) return false;
   }
   return true;
@@ -85,7 +84,7 @@ const char* lookupHtmlEntity(const char* entity, size_t len) {
   if (entity == nullptr || len == 0) return nullptr;
 
   size_t lo = 0;
-  size_t hi = ENTITY_LOOKUP_COUNT;
+  size_t hi = std::size(ENTITY_LOOKUP);
 
   while (lo < hi) {
     const size_t mid = lo + (hi - lo) / 2;

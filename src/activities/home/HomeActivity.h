@@ -2,8 +2,8 @@
 #include <functional>
 #include <vector>
 
-#include "../Activity.h"
 #include "./FileBrowserActivity.h"
+#include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 struct RecentBook;
@@ -19,8 +19,16 @@ class HomeActivity final : public Activity {
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
-  const HomeMenuItem initialMenuItem;
+  size_t coverBufferSize = 0;      // Bytes allocated to coverBuffer
+  // Logical rect last passed to drawRecentBookCover. The cover snapshot only
+  // needs to cover this region, not the entire framebuffer, so we cache the
+  // tile instead of all 48 KB. Set in render() before the call.
+  int coverRectX = 0;
+  int coverRectY = 0;
+  int coverRectW = 0;
+  int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
+  const HomeMenuItem initialMenuItem;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
