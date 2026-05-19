@@ -16,6 +16,8 @@ namespace JsonSettingsIO {
 bool loadRecentBooks(RecentBooksStore& store, const char* json);
 }  // namespace JsonSettingsIO
 
+enum class RecentBookRemovalPersistence { BestEffort, RequirePersisted };
+
 class RecentBooksStore {
   // Static instance
   static RecentBooksStore instance;
@@ -37,10 +39,11 @@ class RecentBooksStore {
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
 
-  // Remove the entry whose path matches. Returns true only if an entry was
-  // removed AND the change was persisted; on a persistence failure the removal
-  // is rolled back. Returns false for "no match" or a rolled-back failure.
-  bool removeByPath(const std::string& path);
+  // Remove the entry whose path matches. Returns false if no entry matches.
+  // With RequirePersisted, a failed save rolls back the in-memory removal and returns false.
+  // With BestEffort, a failed save is logged but the in-memory removal is kept.
+  bool removeByPath(const std::string& path,
+                    RecentBookRemovalPersistence persistence = RecentBookRemovalPersistence::RequirePersisted);
 
   // Repoint an entry's path (and coverBmpPath, if it lived under the old cache dir) after the
   // backing file and cache dir were moved on disk. No-op if no entry matches oldPath.

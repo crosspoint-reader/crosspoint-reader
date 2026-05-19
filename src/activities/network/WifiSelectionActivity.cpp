@@ -1,12 +1,14 @@
 #include "WifiSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
 
 #include <map>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -247,6 +249,16 @@ void WifiSelectionActivity::checkConnectionStatus() {
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
     autoConnecting = false;
+
+    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
+    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
+    // Settings > Customise Status Bar > Sync clock now.
+    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+      if (halClock.syncFromNTP()) {
+        SETTINGS.clockHasBeenSynced = 1;
+        SETTINGS.saveToFile();
+      }
+    }
 
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both

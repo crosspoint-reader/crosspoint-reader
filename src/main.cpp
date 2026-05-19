@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -273,6 +274,7 @@ void setup() {
   gpio.begin();
   powerManager.begin();
   halTiltSensor.begin();
+  halClock.begin();
 
 #ifdef ENABLE_SERIAL_LOG
   if (gpio.isUsbConnected()) {

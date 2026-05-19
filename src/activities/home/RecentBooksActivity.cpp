@@ -104,7 +104,7 @@ void RecentBooksActivity::promptRemoveBook(const std::string& path, const std::s
       LOG_DBG("RBA", "Remove from recents cancelled");
       return;
     }
-    if (RECENT_BOOKS.removeByPath(path)) {
+    if (RECENT_BOOKS.removeByPath(path, RecentBookRemovalPersistence::RequirePersisted)) {
       LOG_DBG("RBA", "Removed from recents: %s", path.c_str());
       loadRecentBooks();
       if (recentBooks.empty()) {
