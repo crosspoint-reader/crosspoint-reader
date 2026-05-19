@@ -13,7 +13,10 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int SKIP_PAGE_MS = 700;
+constexpr int ENTER_DELETE_MODE_MS = 700;
+constexpr int DELETE_MODE_OFF = 0;
+constexpr int DELETE_MODE_DISPLAY = 1;
+constexpr int DELETE_MODE_CONFIRM = 2;
 }
 
 // Layout constants used in renderScreen
@@ -60,8 +63,13 @@ int EpubReaderBookmarksActivity::getListHeight(const GfxRenderer& renderer) {
 
 void EpubReaderBookmarksActivity::loop() {
   // Delete confirmation mode
-  if (confirmingDelete) {
+  if (confirmingDelete >= DELETE_MODE_DISPLAY) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      if (confirmingDelete == DELETE_MODE_DISPLAY) {
+        confirmingDelete = DELETE_MODE_CONFIRM; // first confirmation, update text
+        requestUpdate();
+        return;
+      }
       bookmarks.erase(bookmarks.begin() + selectorIndex);
       const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
       Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
@@ -75,35 +83,37 @@ void EpubReaderBookmarksActivity::loop() {
       }
 
       requestUpdate();
-      confirmingDelete = false;
+      confirmingDelete = DELETE_MODE_OFF;
       return;
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       requestUpdate();
-      confirmingDelete = false;
+      confirmingDelete = DELETE_MODE_OFF;
       return;
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
-    if (mappedInput.getHeldTime() > SKIP_PAGE_MS) {
-      if (bookmarks.empty()) {
-        return;
-      }
-      confirmingDelete = true;
-      requestUpdate();
-    } else {
-      if (bookmarks.empty()) {
-        return;
-      }
-      auto bookmark = bookmarks.at(selectorIndex);
-      setResult(ProgressChangeResult{bookmark.spineIndex, bookmark.pageIndex});
-      finish();
+    if (bookmarks.empty()) {
+      return;
     }
+    auto bookmark = bookmarks.at(selectorIndex);
+    setResult(ProgressChangeResult{bookmark.spineIndex, bookmark.pageIndex});
+    finish();
+    return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
+    return;
+  }
+
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
+      if (bookmarks.empty()) {
+        return;
+      }
+      confirmingDelete = DELETE_MODE_DISPLAY;
+      requestUpdate();
   }
 
   buttonNavigator.onNextRelease([this] {
@@ -158,10 +168,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_BOOKMARKS), true, EpdFontFamily::BOLD);
 
   const auto getBookmarkTitle = [this](int index) {
-    return bookmarks.at(confirmingDelete ? selectorIndex : index).summary;
+    return bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index).summary;
   };
   const auto getBookmarkSubtitle = [this](int index) {
-    auto bookmark = bookmarks.at(confirmingDelete ? selectorIndex : index);
+    auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
     auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.spineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
     return std::to_string(bookmark.bookPercent) + "% - " + std::to_string(bookmark.chapterProgress) + "/" +
@@ -173,7 +183,7 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   };
 
   if (numBookmarks > 0) {
-    if (confirmingDelete) {
+    if (confirmingDelete >= DELETE_MODE_DISPLAY) {
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
                        tr(STR_CONFIRM_DELETE_BOOKMARK));
 
@@ -192,8 +202,8 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
                      tr(STR_BOOKMARK_INSTRUCTIONS));
   }
 
-  const auto backLabel = confirmingDelete ? tr(STR_CANCEL) : tr(STR_BACK);
-  const auto confirmLabel = bookmarks.size() > 0 ? (confirmingDelete ? tr(STR_DELETE) : tr(STR_OPEN)) : "";
+  const auto backLabel = confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_CANCEL) : tr(STR_BACK);
+  const auto confirmLabel = bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_OPEN)) : "";
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
