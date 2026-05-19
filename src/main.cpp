@@ -217,12 +217,13 @@ static void saveSleepFrameBuffer() {
   file.close();
 }
 
-static void loadSleepFrameBuffer() {
+static bool loadSleepFrameBuffer() {
   FsFile file;
-  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return;
+  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
   file.read(display.getFrameBuffer(), display.getBufferSize());
   file.close();
   Storage.remove(SLEEP_FRAME_FILE);
+  return true;
 }
 
 // Enter deep sleep mode
@@ -390,14 +391,18 @@ void setup() {
   if (!isSilentReboot) {
     if (APP_STATE.showBootScreen) {
       activityManager.goToBoot();
-    } else {
-      // Seamless wake: restore frame buffer then replace moon icon with loading icon
-      loadSleepFrameBuffer();
+    } else if (loadSleepFrameBuffer()) {
+      // Seamless wake: buffer restored, replace moon icon with loading icon
       const auto pageHeight = renderer.getScreenHeight();
       renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
+    } else {
+      // Frame buffer file missing — fall back to normal boot screen
+      APP_STATE.showBootScreen = true;
+      APP_STATE.saveToFile();
+      activityManager.goToBoot();
     }
   }
 
