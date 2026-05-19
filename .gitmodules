@@ -1,4 +1,4 @@
 [submodule "open-x4-sdk"]
 	path = open-x4-sdk
 	url = https://github.com/jpirnay/community-sdk.git
-	branch = fear-sdcard-capacity
+	branch = crosspoint-sdcard-extensions
