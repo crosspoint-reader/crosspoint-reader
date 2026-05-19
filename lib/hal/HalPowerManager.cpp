@@ -70,7 +70,9 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
   // doesn't hold power domains that interfere with USB-powered GPIO wake.
-  Serial.end();
+  // logSerial is the raw HWCDC reference; Serial is the MySerialImpl proxy
+  // (which doesn't expose end()).
+  logSerial.end();
 #endif
 
   // Pre-sleep routines from the original firmware
