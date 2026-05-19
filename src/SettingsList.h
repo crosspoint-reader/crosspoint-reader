@@ -108,9 +108,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
                            StrId::STR_COVER_CUSTOM},
                           "sleepScreen", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SEAMLESS_SLEEP, &CrossPointSettings::seamlessSleepScreen,
-                          {StrId::STR_NEVER, StrId::STR_ALWAYS, StrId::STR_AFTER_TIMEOUT},
-                          "seamlessSleepScreen", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                           {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
@@ -129,6 +126,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "uiTheme", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_SEAMLESS_SLEEP, &CrossPointSettings::seamlessSleepScreen,
+                          {StrId::STR_NEVER, StrId::STR_AFTER_TIMEOUT, StrId::STR_ALWAYS},
+                          "seamlessSleepScreen", StrId::STR_CAT_DISPLAY),
 
         // --- Reader ---
         // Built-in font-family entry. Replaced per-call with a registry-aware
