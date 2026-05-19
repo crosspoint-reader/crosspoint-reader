@@ -132,6 +132,7 @@ class Page {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset, bool forceLoadLargeImages = true) const;
   void renderTextOnly(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool hasPlaceholderImages(bool forceLoadLargeImages) const;
+  bool allImagesArePlaceholders(bool forceLoadLargeImages) const;
   bool serialize(FsFile& file) const;
   static std::unique_ptr<Page> deserialize(FsFile& file);
 
