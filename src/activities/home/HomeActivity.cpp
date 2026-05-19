@@ -200,6 +200,42 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   for (; nextRecentCoverIndex < recentBooks.size(); nextRecentCoverIndex++) {
     RecentBook& book = recentBooks[nextRecentCoverIndex];
+
+    // If coverBmpPath was previously cleared (failed cover extraction) or is missing after
+    // a cache wipe, attempt to generate it now using the full load path (buildIfMissing=true).
+    if (book.coverBmpPath.empty() && Storage.exists(book.path.c_str())) {
+      if (FsHelpers::hasEpubExtension(book.path)) {
+        Epub epub(book.path, "/.crosspoint");
+        if (epub.load(true, true)) {
+          const std::string thumbPath = epub.getThumbBmpPath();
+          bool success = thumbSizes.empty() ? epub.generateThumbBmp(coverHeight)
+                                            : epub.generateThumbBmp(thumbSizes[0].first, thumbSizes[0].second);
+          if (success) {
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, thumbPath);
+            book.coverBmpPath = thumbPath;
+            LOG_DBG("HOME", "Generated missing cover for %s", book.path.c_str());
+          }
+        }
+      } else if (FsHelpers::hasXtcExtension(book.path)) {
+        Xtc xtc(book.path, "/.crosspoint");
+        if (xtc.load()) {
+          const std::string thumbPath = xtc.getThumbBmpPath();
+          bool success = thumbSizes.empty() ? xtc.generateThumbBmp(coverHeight)
+                                            : xtc.generateThumbBmp(thumbSizes[0].first, thumbSizes[0].second);
+          if (success) {
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, thumbPath);
+            book.coverBmpPath = thumbPath;
+            LOG_DBG("HOME", "Generated missing cover for %s", book.path.c_str());
+          }
+        }
+      }
+      coverRendered = false;
+      nextRecentCoverIndex++;
+      recentsLoading = false;
+      requestUpdate();
+      return;
+    }
+
     if (!book.coverBmpPath.empty()) {
       // Sidecar covers (JPG/PNG paths stored directly) must be converted to BMP thumbnails
       // and the stored coverBmpPath updated to the cache path with [WIDTH]x[HEIGHT] placeholder.
@@ -266,7 +302,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             bool success = true;
             if (FsHelpers::hasEpubExtension(book.path)) {
               Epub epub(book.path, "/.crosspoint");
-              epub.load(false, true);
+              epub.load(true, true);
               for (const auto& sz : thumbSizes) {
                 const std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, sz.first, sz.second);
                 if (!Storage.exists(path.c_str())) success = epub.generateThumbBmp(sz.first, sz.second) && success;
@@ -295,7 +331,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           if (!Storage.exists(coverPath.c_str())) {
             if (FsHelpers::hasEpubExtension(book.path)) {
               Epub epub(book.path, "/.crosspoint");
-              epub.load(false, true);
+              epub.load(true, true);
               bool success = epub.generateThumbBmp(coverHeight);
               if (!success) {
                 RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, "");
@@ -433,6 +469,11 @@ void HomeActivity::loop() {
   const bool isCarousel = (GUI.getHomeNavigation() == HomeNavigation::Carousel);
 
   if (isCarousel) {
+    if (firstRenderDone && !recentsLoaded && !recentsLoading) {
+      loadRecentCovers(UITheme::getInstance().getMetrics().homeCoverHeight);
+      return;
+    }
+
     const int bookCount = static_cast<int>(recentBooks.size());
     const int menuItemCount = static_cast<int>(menuEntries.size());
     const bool inCarouselRow = (selectorIndex < bookCount);
@@ -529,9 +570,6 @@ void HomeActivity::render(RenderLock&&) {
       if (!firstRenderDone) {
         firstRenderDone = true;
         requestUpdate();
-      } else if (!recentsLoaded && !recentsLoading) {
-        recentsLoading = true;
-        loadRecentCovers(metrics.homeCoverHeight);
       }
       return;
     }
@@ -571,9 +609,6 @@ void HomeActivity::render(RenderLock&&) {
   if (!firstRenderDone) {
     firstRenderDone = true;
     requestUpdate();
-  } else if (!recentsLoaded && !recentsLoading) {
-    recentsLoading = true;
-    loadRecentCovers(getHomeCoverRenderHeight(computeHomeScreenLayout(metrics, contentRect.height, menuCount)));
   }
 }
 
