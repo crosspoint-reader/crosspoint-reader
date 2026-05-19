@@ -36,6 +36,19 @@ namespace {
 // pages per minute, first item is 1 to prevent division by zero if accessed
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 
+// Re-render each PageImage at its un-inverted polarity. Called after the global
+// dark-mode invert so images don't appear as photographic negatives. No-op when
+// dark mode is off or the page has no images. Image bitmaps come from the SD
+// cache (already dithered), so this is a read + blit per image, not a re-decode.
+void overdrawDarkModeImages(GfxRenderer& renderer, const Page& page, const int xOffset, const int yOffset) {
+  if (!SETTINGS.readerDarkMode || !page.hasImages()) return;
+  for (const auto& el : page.elements) {
+    if (el->getTag() == TAG_PageImage) {
+      el->render(renderer, /*fontId unused for images*/ 0, xOffset, yOffset);
+    }
+  }
+}
+
 int clampPercent(int percent) {
   if (percent < 0) {
     return 0;
@@ -257,11 +270,12 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, SETTINGS.readerDarkMode, !currentPageFootnotes.empty()),
                            [this](const ActivityResult& result) {
-                             // Always apply orientation change even if the menu was cancelled
+                             // Always apply orientation + dark mode change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
                              applyOrientation(menu.orientation);
+                             applyDarkMode(menu.darkMode);
                              toggleAutoPageTurn(menu.pageTurnOption);
                              if (!result.isCancelled) {
                                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
@@ -591,6 +605,15 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   }
 }
 
+void EpubReaderActivity::applyDarkMode(const uint8_t darkMode) {
+  if (SETTINGS.readerDarkMode == darkMode) {
+    return;
+  }
+  SETTINGS.readerDarkMode = darkMode;
+  SETTINGS.saveToFile();
+  requestUpdate();
+}
+
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
   if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
     automaticPageTurnActive = false;
@@ -672,6 +695,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+    ReaderUtils::applyDarkModeIfEnabled(renderer);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
@@ -784,6 +808,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar();
+    ReaderUtils::applyDarkModeIfEnabled(renderer);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
@@ -794,6 +819,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
     renderStatusBar();
+    ReaderUtils::applyDarkModeIfEnabled(renderer);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
@@ -894,18 +920,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
+      ReaderUtils::applyDarkModeIfEnabled(renderer);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
       page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      ReaderUtils::applyDarkModeIfEnabled(renderer);
+      overdrawDarkModeImages(renderer, *page, orientedMarginLeft, orientedMarginTop);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
+      ReaderUtils::applyDarkModeIfEnabled(renderer);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
     // Double FAST_REFRESH handles ghosting for image pages; don't count toward full refresh cadence
   } else {
-    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, [&] {
+      overdrawDarkModeImages(renderer, *page, orientedMarginLeft, orientedMarginTop);
+    });
   }
   const auto tDisplay = millis();
 
@@ -915,7 +947,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   // grayscale rendering
   // TODO: Only do this if font supports it
-  if (SETTINGS.textAntiAliasing) {
+  if (SETTINGS.textAntiAliasing && !SETTINGS.readerDarkMode) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);

@@ -54,7 +54,30 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   return {prev, next, tiltPrev || tiltNext};
 }
 
+inline void applyDarkModeIfEnabled(const GfxRenderer& renderer) {
+  if (SETTINGS.readerDarkMode) {
+    renderer.invertScreen();
+  }
+}
+
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
+  applyDarkModeIfEnabled(renderer);
+  if (pagesUntilFullRefresh <= 1) {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+  } else {
+    renderer.displayBuffer();
+    pagesUntilFullRefresh--;
+  }
+}
+
+// Variant that runs a callback after the dark-mode invert but before displayBuffer.
+// EPUB uses this to overdraw images post-invert so they don't appear as negatives.
+template <typename PostInvertFn>
+inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh,
+                                    PostInvertFn&& postInvert) {
+  applyDarkModeIfEnabled(renderer);
+  postInvert();
   if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
