@@ -119,6 +119,7 @@ class CrossPointSettings {
     SLEEP_10_MIN = 2,
     SLEEP_15_MIN = 3,
     SLEEP_30_MIN = 4,
+    SLEEP_3_MIN = 5,
     SLEEP_TIMEOUT_COUNT
   };
 
@@ -169,6 +170,17 @@ class CrossPointSettings {
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
+  // Clock display in status bar (X3 only, requires DS3231 RTC)
+  uint8_t statusBarClock = 0;
+  // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
+  // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
+  // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
+  uint8_t clockUtcOffsetQ = 48;
+  // Clock display format: 0 = 24-hour, 1 = 12-hour
+  uint8_t clockFormat = 0;
+  // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
+  // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
+  uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
@@ -219,6 +231,10 @@ class CrossPointSettings {
   char sdFontFamilyName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
+  uint8_t removeReadBooksFromRecents = 0;
+  // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
+  uint8_t moveFinishedToReadFolder = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
