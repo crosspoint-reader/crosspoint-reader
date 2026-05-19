@@ -162,63 +162,68 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
     return;
   }
 
-  // Map the gyro axis to left/right tilt based on reader orientation.
-  // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
-  float tiltAxis;
-  switch (orientation) {
-    case CrossPointOrientation::PORTRAIT:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
-      break;
-    case CrossPointOrientation::INVERTED:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
-      break;
-    case CrossPointOrientation::LANDSCAPE_CW:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
-      break;
-    case CrossPointOrientation::LANDSCAPE_CCW:
-      tiltAxis = mode == CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
-      break;
-    default:
-      tiltAxis = gx;
-      break;
-  }
-
   if (_inTilt) {
     // Wait for device to return to neutral before allowing next trigger
-    if (fabsf(tiltAxis) < NEUTRAL_RATE_DPS) {
+    if (fabsf(gx) < NEUTRAL_RATE_DPS || fabsf(gy) < NEUTRAL_RATE_DPS || fabsf(gz) < NEUTRAL_RATE_DPS) {
       _inTilt = false;
     }
   } else {
     // Check for new tilt gesture (with cooldown)
+    _tiltedState = 0;
     if ((now - _lastTiltMs) >= COOLDOWN_MS) {
-      if (tiltAxis > RATE_THRESHOLD_DPS) {
-        _tiltForwardEvent = true;
+      if (gx > RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_X_POS);
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
-        LOG_INF("GYR", "Forward Trigger=(%.1f) dps", tiltAxis);
-      } else if (tiltAxis < -RATE_THRESHOLD_DPS) {
-        _tiltBackEvent = true;
+        LOG_INF("GYR", "X-axis=(%.1f) dps", gx);
+      } else if (gx < -RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_X_NEG);
+        // _tiltXNegativeEvent = true;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
-        LOG_INF("GYR", "Backward Trigger=(%.1f) dps", tiltAxis);
+        LOG_INF("GYR", "X-axis=(%.1f) dps", gx);
+      }
+
+      if (gy > RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_Y_POS);
+        _hadActivity = true;
+        _inTilt = true;
+        _lastTiltMs = now;
+        LOG_INF("GYR", "Y-axis=(%.1f) dps", gy);
+      } else if (gy < -RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_Y_NEG);
+        _hadActivity = true;
+        _inTilt = true;
+        _lastTiltMs = now;
+        LOG_INF("GYR", "Y-axis=(%.1f) dps", gy);
+      }
+
+      if (gz > RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_Z_POS);
+        _hadActivity = true;
+        _inTilt = true;
+        _lastTiltMs = now;
+        LOG_INF("GYR", "Z-axis=(%.1f) dps", gz);
+      } else if (gz < -RATE_THRESHOLD_DPS) {
+        _tiltedState |= (1 << TILT_Z_NEG);
+        _hadActivity = true;
+        _inTilt = true;
+        _lastTiltMs = now;
+        LOG_INF("GYR", "Z-axis=(%.1f) dps", gz);
       }
     }
   }
 }
 
-bool HalTiltSensor::wasTiltedForward() {
-  const bool val = _tiltForwardEvent;
-  _tiltForwardEvent = false;
+bool HalTiltSensor::wasTilted(uint8_t tiltIndex) {
+  const bool val = _tiltedState & (1 << tiltIndex);
+  _tiltedState = 0;
   return val;
 }
 
-bool HalTiltSensor::wasTiltedBack() {
-  const bool val = _tiltBackEvent;
-  _tiltBackEvent = false;
-  return val;
-}
+bool HalTiltSensor::wasAnyTilted() { return _tiltedState > 0; }
 
 bool HalTiltSensor::hadActivity() {
   const bool val = _hadActivity;
@@ -227,8 +232,7 @@ bool HalTiltSensor::hadActivity() {
 }
 
 void HalTiltSensor::clearPendingEvents() {
-  _tiltForwardEvent = false;
-  _tiltBackEvent = false;
+  _tiltedState = 0;
   _hadActivity = false;
   // Intentionally preserve _inTilt so a held tilt doesn't retrigger on next poll
 }

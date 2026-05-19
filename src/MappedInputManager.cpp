@@ -1,6 +1,9 @@
 #include "MappedInputManager.h"
 
+#include <cstdint>
+
 #include "CrossPointSettings.h"
+#include "HalTiltSensor.h"
 
 namespace {
 using ButtonIndex = uint8_t;
@@ -49,9 +52,40 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
     case Button::PageForward:
       // Reader page navigation uses side buttons and can be swapped via settings.
       return (gpio.*fn)(side.pageForward);
+    default:
+      return false;
+  }
+  return false;
+}
+
+bool MappedInputManager::mapTilt(const Button button, bool (HalTiltSensor::*fn)(uint8_t)) const {
+  if (SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_OFF) {
+    return false;
   }
 
-  return false;
+  std::map<Button, uint8_t> LogicalToPhysicalMap;
+  switch (SETTINGS.orientation) {
+    case CrossPointOrientation::PORTRAIT:
+      LogicalToPhysicalMap =
+          SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? PortraitTiltInverted : PortraitTiltNormal;
+      break;
+    case CrossPointOrientation::INVERTED:
+      LogicalToPhysicalMap =
+          SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? InvertTiltInverted : InvertTiltNormal;
+      break;
+    case CrossPointOrientation::LANDSCAPE_CW:
+      LogicalToPhysicalMap = SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? LandscapeCWTiltInverted
+                                                                                            : LandscapeCWTiltNormal;
+      break;
+    case CrossPointOrientation::LANDSCAPE_CCW:
+      LogicalToPhysicalMap = SETTINGS.tiltPageTurn == CrossPointTiltPageTurn::TILT_INVERTED ? LandscapeCCWTiltInverted
+                                                                                            : LandscapeCCWTiltNormal;
+      break;
+    default:
+      LogicalToPhysicalMap = PortraitTiltNormal;
+      break;
+  }
+  return (tiltSensor.*fn)(LogicalToPhysicalMap[button]);
 }
 
 bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
@@ -63,6 +97,10 @@ bool MappedInputManager::isPressed(const Button button) const { return mapButton
 bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 
 bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
+
+bool MappedInputManager::wasTilted(const Button button) const { return mapTilt(button, &HalTiltSensor::wasTilted); }
+
+bool MappedInputManager::wasAnyTilted() const { return tiltSensor.wasAnyTilted(); }
 
 unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(); }
 

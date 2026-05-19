@@ -33,7 +33,7 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-MappedInputManager mappedInputManager(gpio);
+MappedInputManager mappedInputManager(gpio, halTiltSensor);
 GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;

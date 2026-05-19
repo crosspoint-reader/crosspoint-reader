@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#include <cstdint>
+
 #include "HalGPIO.h"
 
 // TODO: Move enums into new header and share with CrossPointSettings.h
@@ -24,6 +26,7 @@ class HalTiltSensor {
   // Tilt gesture state machine
   bool _tiltForwardEvent = false;  // Consumed by wasTiltedForward()
   bool _tiltBackEvent = false;     // Consumed by wasTiltedBack()
+  uint8_t _tiltedState = 0;        // Consumed by wasTilted()
   bool _hadActivity = false;       // Non-consuming flag for sleep timer
   bool _inTilt = false;            // Currently tilted past threshold
   bool _isAwake = false;           // Tracks power state
@@ -91,10 +94,26 @@ class HalTiltSensor {
   // Consumed on read.
   bool wasTiltedBack();
 
+  // Returns once per tilt gesture
+  // Consumed on read.
+  bool wasTilted(uint8_t tiltIndex);
+
+  // Returns once per tilt gesture
+  // Does not consume on read.
+  bool wasAnyTilted();
+
   // Non-consuming: true if any tilt activity occurred since last call.
   // Used to reset the auto-sleep inactivity timer.
   bool hadActivity();
 
   // Discard any pending tilt events (call when leaving reader or disabling tilt).
   void clearPendingEvents();
+
+  // Tilt(button) indices
+  static constexpr uint8_t TILT_X_NEG = 0;
+  static constexpr uint8_t TILT_X_POS = 1;
+  static constexpr uint8_t TILT_Y_NEG = 2;
+  static constexpr uint8_t TILT_Y_POS = 3;
+  static constexpr uint8_t TILT_Z_NEG = 4;
+  static constexpr uint8_t TILT_Z_POS = 5;
 };
