@@ -109,6 +109,11 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   bool pendingHalfRefreshAfterImagePage = false;
+  // When true, large images on the current page are decoded instead of shown as placeholders.
+  // Reset to false on every page turn so the next image page starts with a placeholder again.
+  bool forceLoadLargeImages = false;
+  // Set after each render: true if the current page contains at least one placeholder image.
+  bool pageHasPlaceholders = false;
   // Temporary AA suspension when BW snapshot allocation fails under memory pressure.
   // Automatically lifted once heap recovers above hysteresis thresholds.
   bool antiAliasingSuspendedLowMemory = false;

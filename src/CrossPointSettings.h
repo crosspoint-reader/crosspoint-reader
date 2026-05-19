@@ -267,6 +267,9 @@ class CrossPointSettings {
   uint8_t showFileExtensions = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Show a placeholder for large images (>800×600 source pixels) instead of decoding immediately.
+  // The user can press OK on the placeholder page to decode the image on demand.
+  uint8_t largeImagePlaceholder = 1;
   // Dithering mode for decoded images (EPUB/JPG/PNG)
   uint8_t imageDithering = IMAGE_DITHER_BAYER;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)

@@ -407,6 +407,12 @@ void EpubReaderActivity::loop() {
         return;
       }
       if (ev.type == ButtonEventManager::PressType::Short) {
+        if (pageHasPlaceholders) {
+          forceLoadLargeImages = true;
+          pageHasPlaceholders = false;
+          requestUpdate();
+          return;
+        }
         openReaderMenu();
         return;
       }
@@ -1512,6 +1518,8 @@ bool EpubReaderActivity::stepPageState(const bool isForwardTurn) {
   }
 
   lastPageTurnTime = millis();
+  forceLoadLargeImages = false;
+  pageHasPlaceholders = false;
   return true;
 }
 
@@ -1868,15 +1876,18 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
   lastRenderStats.textAntiAliasing = aaEnabledForThisRender;
 
-  // Force special handling for pages with images when anti-aliasing is on
-  bool imagePageWithAA = page->hasImages() && aaEnabledForThisRender;
+  // Force special handling for pages with real (non-placeholder) images when anti-aliasing is on
+  bool imagePageWithAA = page->hasImages() && !pageHasPlaceholders && aaEnabledForThisRender;
   bool forceHalfRefreshThisPage = pendingHalfRefreshAfterImagePage && SETTINGS.halfRefreshAfterImagePage;
   pendingHalfRefreshAfterImagePage = false;
   lastRenderStats.imagePageWithAA = imagePageWithAA;
   lastRenderStats.forcedHalfRefresh = forceHalfRefreshThisPage;
 
+  const bool effectiveForceLoad = forceLoadLargeImages || !SETTINGS.largeImagePlaceholder;
+  pageHasPlaceholders = page->hasPlaceholderImages(effectiveForceLoad);
+
   logReaderMemSnapshot("before_bw_render");
-  page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);
+  page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad);
   renderStatusBar();
   if (showTruncatedSectionHintThisRender) {
     const int hintX = orientedMarginLeft + 4;
@@ -1912,7 +1923,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
-      page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);
+      page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -1970,7 +1981,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     LOG_INF("ERS", "Skipping grayscale/BW-restore for this page (insufficient heap for BW snapshot)");
   }
 
-  if (page->hasImages() && getEffectiveImageRendering() != CrossPointSettings::IMAGES_SUPPRESS) {
+  // Only schedule the half-refresh if real images were decoded on this page.
+  // Placeholder-only pages don't deposit grayscale data that needs settling.
+  if (page->hasImages() && !pageHasPlaceholders &&
+      getEffectiveImageRendering() != CrossPointSettings::IMAGES_SUPPRESS) {
     pendingHalfRefreshAfterImagePage = true;
   }
 

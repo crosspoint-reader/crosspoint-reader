@@ -1,12 +1,16 @@
 #include "ImageBlock.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
 
 #include "../../../../src/CrossPointSettings.h"
+#include "../../../../src/fontIds.h"
 #include "../converters/DirectPixelWriter.h"
 #include "../converters/ImageDecoderFactory.h"
+#include "../converters/JpegToFramebufferConverter.h"
+#include "../converters/PngToFramebufferConverter.h"
 
 // Cache file format:
 // - uint16_t width
@@ -97,7 +101,51 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
 }  // namespace
 
-void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
+bool ImageBlock::isLargeImage() const {
+  if (largeImageCached != 0) return largeImageCached == 1;
+  ImageDimensions dims{0, 0};
+  const bool ok = FsHelpers::hasJpgExtension(imagePath)
+                      ? JpegToFramebufferConverter::getDimensionsStatic(imagePath, dims)
+                      : PngToFramebufferConverter::getDimensionsStatic(imagePath, dims);
+  if (ok && dims.width > 0 && dims.height > 0) {
+    largeImageCached = (int32_t(dims.width) * dims.height > LARGE_IMAGE_PIXEL_THRESHOLD) ? 1 : -1;
+  } else {
+    largeImageCached = -1;  // unreadable header → assume not large, render normally
+  }
+  return largeImageCached == 1;
+}
+
+bool ImageBlock::wouldShowPlaceholder(bool forceLoad) const {
+  if (forceLoad) return false;
+  if (!isLargeImage()) return false;
+  // If the pixel cache already exists the render is instant — no placeholder needed
+  const ImageDitherMode ditherMode = imageDitherModeFromSetting(SETTINGS.imageDithering);
+  const std::string pxcPath = [&] {
+    size_t dot = imagePath.rfind('.');
+    return (dot != std::string::npos ? imagePath.substr(0, dot) : imagePath) + getImageDitherCacheSuffix(ditherMode) +
+           ".pxc";
+  }();
+  return !Storage.exists(pxcPath.c_str());
+}
+
+void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
+  constexpr int BORDER = 1;
+  constexpr int PADDING = 6;
+
+  renderer.drawRect(x, y, width, height, BORDER, true);
+
+  const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int totalTextH = lineH * 2;
+
+  if (lineH > 0 && width > PADDING * 2 && height > totalTextH + PADDING * 2) {
+    const int textX = x + PADDING;
+    const int textY = y + (height - totalTextH) / 2;
+    renderer.drawText(UI_10_FONT_ID, textX, textY, "Image");
+    renderer.drawText(UI_10_FONT_ID, textX, textY + lineH, "Press OK to load");
+  }
+}
+
+void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const bool forceLoad) {
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
   const int screenWidth = renderer.getScreenWidth();
@@ -110,15 +158,21 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
 
-  // Try to render from cache first
+  // Try to render from pixel cache first (always, regardless of forceLoad)
   const ImageDitherMode ditherMode = imageDitherModeFromSetting(SETTINGS.imageDithering);
   std::string cachePath = getCachePath(imagePath, ditherMode);
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
-    return;  // Successfully rendered from cache
+    return;
   }
 
-  // No cache - need to decode the image
-  // Check if image file exists
+  // No pixel cache — check if this is a large image that should show a placeholder
+  if (wouldShowPlaceholder(forceLoad)) {
+    LOG_DBG("IMG", "Large image placeholder at %d,%d (%dx%d): %s", x, y, width, height, imagePath.c_str());
+    renderPlaceholder(renderer, x, y);
+    return;
+  }
+
+  // Proceed with full decode
   FsFile file;
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
     LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
@@ -143,8 +197,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.useDithering = true;
   config.ditherMode = ditherMode;
   config.performanceMode = false;
-  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
-  config.cachePath = cachePath;      // Enable caching during decode
+  config.useExactDimensions = true;
+  config.cachePath = cachePath;
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
@@ -157,10 +211,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
   if (!success) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
-    return;
   }
-
-  LOG_DBG("IMG", "Decode successful");
 }
 
 bool ImageBlock::serialize(FsFile& file) {

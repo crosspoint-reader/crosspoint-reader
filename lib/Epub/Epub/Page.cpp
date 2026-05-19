@@ -27,8 +27,11 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
 }
 
 void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
-  // Images don't use fontId or text rendering
   imageBlock->render(renderer, xPos + xOffset, yPos + yOffset);
+}
+
+void PageImage::renderWithForceLoad(GfxRenderer& renderer, const int xOffset, const int yOffset, const bool forceLoad) {
+  imageBlock->render(renderer, xPos + xOffset, yPos + yOffset, forceLoad);
 }
 
 bool PageImage::serialize(FsFile& file) {
@@ -201,10 +204,26 @@ std::unique_ptr<PageTableFragment> PageTableFragment::deserialize(FsFile& file) 
       new PageTableFragment(columnCount, totalWidth, totalHeight, colWidths, std::move(rows), xPos, yPos));
 }
 
-void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
+                  const bool forceLoadLargeImages) const {
   for (auto& element : elements) {
-    element->render(renderer, fontId, xOffset, yOffset);
+    if (element->getTag() == TAG_PageImage) {
+      static_cast<PageImage&>(*element).renderWithForceLoad(renderer, xOffset, yOffset, forceLoadLargeImages);
+    } else {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
   }
+}
+
+bool Page::hasPlaceholderImages(const bool forceLoadLargeImages) const {
+  for (const auto& el : elements) {
+    if (el->getTag() == TAG_PageImage) {
+      if (static_cast<const PageImage&>(*el).getImageBlock().wouldShowPlaceholder(forceLoadLargeImages)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
