@@ -81,7 +81,8 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption, pendingDarkMode});
+    setResult(
+        MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption, pendingDarkMode});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {

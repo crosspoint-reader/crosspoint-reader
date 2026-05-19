@@ -935,8 +935,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
     // Double FAST_REFRESH handles ghosting for image pages; don't count toward full refresh cadence
   } else {
-    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh,
-                                         [&] { overdrawDarkModeImages(renderer, *page, orientedMarginLeft, orientedMarginTop); });
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, [&] {
+      overdrawDarkModeImages(renderer, *page, orientedMarginLeft, orientedMarginTop);
+    });
   }
   const auto tDisplay = millis();
 
