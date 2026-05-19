@@ -13,6 +13,7 @@
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "OpdsServerStore.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
@@ -587,5 +588,67 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   }
 
   LOG_DBG("OPS", "Loaded %zu OPDS servers from file", store.servers.size());
+  return true;
+}
+
+// ---- ReadingStatsStore ----
+
+bool JsonSettingsIO::saveReadingStats(const ReadingStatsStore& store, const char* path) {
+  JsonDocument doc;
+  doc["totalSeconds"] = store.getGlobalTotalSeconds();
+  doc["totalSessions"] = store.getGlobalTotalSessions();
+  doc["totalPagesTurned"] = store.getGlobalTotalPagesTurned();
+
+  JsonArray arr = doc["books"].to<JsonArray>();
+  for (const auto& book : store.getBooks()) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["docId"] = book.docId;
+    obj["title"] = book.title;
+    obj["author"] = book.author;
+    obj["totalSeconds"] = book.totalSeconds;
+    obj["pagesTurned"] = book.pagesTurned;
+    obj["sessions"] = book.sessions;
+    obj["firstReadEpoch"] = static_cast<int64_t>(book.firstReadEpoch);
+    obj["lastReadEpoch"] = static_cast<int64_t>(book.lastReadEpoch);
+    obj["progress"] = book.progress;
+    obj["finished"] = book.finished;
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadReadingStats(ReadingStatsStore& store, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("RST", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  store.books.clear();
+  store.globalTotalSeconds = doc["totalSeconds"] | (uint32_t)0;
+  store.globalTotalSessions = doc["totalSessions"] | (uint32_t)0;
+  store.globalTotalPagesTurned = doc["totalPagesTurned"] | (uint32_t)0;
+
+  JsonArray arr = doc["books"].as<JsonArray>();
+  for (JsonObject obj : arr) {
+    BookReadingStats book;
+    book.docId = obj["docId"] | std::string("");
+    if (book.docId.empty()) continue;  // skip corrupt entries
+    book.title = obj["title"] | std::string("");
+    book.author = obj["author"] | std::string("");
+    book.totalSeconds = obj["totalSeconds"] | (uint32_t)0;
+    book.pagesTurned = obj["pagesTurned"] | (uint32_t)0;
+    book.sessions = obj["sessions"] | (uint32_t)0;
+    book.firstReadEpoch = static_cast<time_t>(obj["firstReadEpoch"] | (int64_t)0);
+    book.lastReadEpoch = static_cast<time_t>(obj["lastReadEpoch"] | (int64_t)0);
+    book.progress = obj["progress"] | (uint8_t)0;
+    book.finished = obj["finished"] | false;
+    store.books.push_back(std::move(book));
+  }
+
+  LOG_DBG("RST", "Reading stats loaded (%zu books, %u s total)", store.books.size(), store.globalTotalSeconds);
   return true;
 }

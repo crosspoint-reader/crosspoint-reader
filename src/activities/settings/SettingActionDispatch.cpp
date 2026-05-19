@@ -10,6 +10,7 @@
 #include "LanguageSelectActivity.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
+#include "ReadingStatsActivity.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "StatusBarSettingsActivity.h"
 #include "SyncTimeActivity.h"
@@ -52,6 +53,8 @@ std::unique_ptr<Activity> createActivityForAction(SettingAction action, GfxRende
       return std::make_unique<SyncTimeActivity>(renderer, mappedInput);
     case SettingAction::DetectTimezone:
       return std::make_unique<DetectTimezoneActivity>(renderer, mappedInput);
+    case SettingAction::ReadingStats:
+      return std::make_unique<ReadingStatsActivity>(renderer, mappedInput);
     case SettingAction::Submenu:
     case SettingAction::None:
       return nullptr;

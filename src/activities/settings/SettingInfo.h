@@ -31,6 +31,7 @@ enum class SettingAction {
   DetectTimezone,
   SyncTime,
   Weather,
+  ReadingStats,
   Submenu,
 };
 
