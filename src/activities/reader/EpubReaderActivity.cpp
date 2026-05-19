@@ -201,7 +201,7 @@ void EpubReaderActivity::loop() {
     if (atEndOfBook && !recentsEntryRemoved) {
       // Only treat the book as "removed by us" if it was actually in the list, so the
       // re-add branch below doesn't insert a book the feature never removed.
-      recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath(), RecentBookRemovalPersistence::BestEffort);
+      recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
     } else if (!atEndOfBook && recentsEntryRemoved) {
       // Re-add (goes to front of the list via addBook — accepted ordering side effect).
       RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());

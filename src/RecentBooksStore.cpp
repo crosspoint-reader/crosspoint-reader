@@ -57,21 +57,15 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
   }
 }
 
-bool RecentBooksStore::removeByPath(const std::string& path, RecentBookRemovalPersistence persistence) {
+bool RecentBooksStore::removeByPath(const std::string& path) {
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it == recentBooks.end()) {
     return false;
   }
-  const size_t index = static_cast<size_t>(std::distance(recentBooks.begin(), it));
-  const RecentBook removed = *it;
   recentBooks.erase(it);
   if (!saveToFile()) {
     LOG_ERR("RBS", "Failed to persist removal of recent book: %s", path.c_str());
-    if (persistence == RecentBookRemovalPersistence::RequirePersisted) {
-      recentBooks.insert(recentBooks.begin() + index, removed);
-      return false;
-    }
   }
   return true;
 }
