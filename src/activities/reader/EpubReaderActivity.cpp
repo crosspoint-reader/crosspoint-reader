@@ -1964,8 +1964,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool effectiveForceLoad = forceLoadLargeImages || !SETTINGS.largeImagePlaceholder;
   pageHasPlaceholders = page->hasPlaceholderImages(effectiveForceLoad);
 
-  // Force special handling for pages with real (non-placeholder) images when anti-aliasing is on
-  bool imagePageWithAA = page->hasImages() && !pageHasPlaceholders && aaEnabledForThisRender;
+  // Force special handling for pages with at least one real (decoded) image when anti-aliasing is on.
+  // Mixed pages (some decoded, some placeholder) still need the AA codepath.
+  bool imagePageWithAA =
+      page->hasImages() && !page->allImagesArePlaceholders(effectiveForceLoad) && aaEnabledForThisRender;
   bool forceHalfRefreshThisPage = pendingHalfRefreshAfterImagePage && SETTINGS.halfRefreshAfterImagePage;
   pendingHalfRefreshAfterImagePage = false;
   lastRenderStats.imagePageWithAA = imagePageWithAA;
@@ -2066,9 +2068,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     LOG_INF("ERS", "Skipping grayscale/BW-restore for this page (insufficient heap for BW snapshot)");
   }
 
-  // Only schedule the half-refresh if real images were decoded on this page.
+  // Only schedule the half-refresh if at least one real image was decoded on this page.
   // Placeholder-only pages don't deposit grayscale data that needs settling.
-  if (page->hasImages() && !pageHasPlaceholders &&
+  if (page->hasImages() && !page->allImagesArePlaceholders(effectiveForceLoad) &&
       getEffectiveImageRendering() != CrossPointSettings::IMAGES_SUPPRESS) {
     pendingHalfRefreshAfterImagePage = true;
   }

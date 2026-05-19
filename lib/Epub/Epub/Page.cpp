@@ -226,6 +226,19 @@ bool Page::hasPlaceholderImages(const bool forceLoadLargeImages) const {
   return false;
 }
 
+bool Page::allImagesArePlaceholders(const bool forceLoadLargeImages) const {
+  bool anyImage = false;
+  for (const auto& el : elements) {
+    if (el->getTag() == TAG_PageImage) {
+      anyImage = true;
+      if (!static_cast<const PageImage&>(*el).getImageBlock().wouldShowPlaceholder(forceLoadLargeImages)) {
+        return false;
+      }
+    }
+  }
+  return anyImage;
+}
+
 void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   for (auto& element : elements) {
     if (element->getTag() == TAG_PageLine) {
