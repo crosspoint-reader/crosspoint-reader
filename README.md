@@ -121,6 +121,20 @@ See [Development quick start](#development-quick-start) below.
 
 ---
 
+## Custom SD-card fonts
+
+Convert your own TTF/OTF files into `.cpfont` files that load from the SD card. No firmware reflash is needed.
+
+1. Go to https://crosspointreader.com/fonts and open the "SD-card font builder" form.
+2. Upload up to four styles (regular, bold, italic, bold-italic), set the family name, point sizes, and Unicode range.
+3. Download the generated `.cpfont` files.
+4. Copy them to your SD card under `/fonts/YourFont/` (or `/.fonts/YourFont/` to hide the folder).
+5. Select the font on the device from the font settings.
+
+Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` script unmodified, so output matches a local host build.
+
+---
+
 ## Documentation
 
 - [User Guide](./USER_GUIDE.md)
