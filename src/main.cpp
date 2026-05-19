@@ -208,6 +208,23 @@ void waitForPowerRelease() {
   }
 }
 
+constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
+
+static void saveSleepFrameBuffer() {
+  FsFile file;
+  if (!Storage.openFileForWrite("SLP", SLEEP_FRAME_FILE, file)) return;
+  file.write(renderer.getFrameBuffer(), renderer.getBufferSize());
+  file.close();
+}
+
+static void loadSleepFrameBuffer() {
+  FsFile file;
+  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return;
+  file.read(display.getFrameBuffer(), display.getBufferSize());
+  file.close();
+  Storage.remove(SLEEP_FRAME_FILE);
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -221,6 +238,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   APP_STATE.saveToFile();
 
   activityManager.goToSleep(fromTimeout);
+
+  if (isSeamless) {
+    saveSleepFrameBuffer();
+  }
 
   halTiltSensor.deepSleep();
   display.deepSleep();
@@ -370,7 +391,8 @@ void setup() {
     if (APP_STATE.showBootScreen) {
       activityManager.goToBoot();
     } else {
-      // Seamless wake: keep last screen content, replace moon icon with loading icon
+      // Seamless wake: restore frame buffer then replace moon icon with loading icon
+      loadSleepFrameBuffer();
       const auto pageHeight = renderer.getScreenHeight();
       renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
