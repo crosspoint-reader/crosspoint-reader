@@ -9,6 +9,7 @@
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 #include <PngToBmpConverter.h>
+#include <Txt.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -239,6 +240,16 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             LOG_DBG("HOME", "Generated missing cover for %s", book.path.c_str());
           }
         }
+      } else if (FsHelpers::hasTxtExtension(book.path) || FsHelpers::hasMarkdownExtension(book.path)) {
+        Txt txt(book.path, "/.crosspoint");
+        const std::string thumbPath = txt.getThumbBmpPath();
+        bool success = thumbSizes.empty() ? txt.generateThumbBmp(coverHeight)
+                                          : txt.generateThumbBmp(thumbSizes[0].first, thumbSizes[0].second);
+        if (success) {
+          RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, thumbPath);
+          book.coverBmpPath = thumbPath;
+          LOG_DBG("HOME", "Generated surrogate cover for %s", book.path.c_str());
+        }
       }
       onCoverGenerated();
       return;
@@ -320,6 +331,12 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
                   if (!Storage.exists(path.c_str())) success = xtc.generateThumbBmp(sz.first, sz.second) && success;
                 }
               }
+            } else if (FsHelpers::hasTxtExtension(book.path) || FsHelpers::hasMarkdownExtension(book.path)) {
+              Txt txt(book.path, "/.crosspoint");
+              for (const auto& sz : thumbSizes) {
+                const std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, sz.first, sz.second);
+                if (!Storage.exists(path.c_str())) success = txt.generateThumbBmp(sz.first, sz.second) && success;
+              }
             }
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, "");
@@ -352,6 +369,15 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
                 onCoverGenerated();
                 return;
               }
+            } else if (FsHelpers::hasTxtExtension(book.path) || FsHelpers::hasMarkdownExtension(book.path)) {
+              Txt txt(book.path, "/.crosspoint");
+              bool success = txt.generateThumbBmp(coverHeight);
+              if (!success) {
+                RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.series, "");
+                book.coverBmpPath = "";
+              }
+              onCoverGenerated();
+              return;
             }
           }
         }

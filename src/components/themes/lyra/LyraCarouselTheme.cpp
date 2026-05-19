@@ -338,6 +338,7 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
           const float bmpRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
           const float tileRatio = static_cast<float>(maxW) / static_cast<float>(maxH);
           const float cropX = (bmpRatio > tileRatio) ? (1.0f - tileRatio / bmpRatio) : 0.0f;
+          renderer.fillRect(x, y, maxW, maxH, false);
           renderer.drawBitmap(bitmap, x, y, maxW, maxH, cropX, 0.0f);
           // Clear only the pixels outside the arc in each corner.
           // The arc centre for the top-left corner is (x+r, y+r). A pixel at

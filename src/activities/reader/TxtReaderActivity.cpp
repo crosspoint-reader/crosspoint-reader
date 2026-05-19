@@ -118,7 +118,9 @@ void TxtReaderActivity::onEnter() {
   auto fileName = filePath.substr(filePath.rfind('/') + 1);
   APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(filePath, fileName, "", "", ReaderActivity::sidecarCoverPath(filePath));
+  const std::string txtSidecar = ReaderActivity::sidecarCoverPath(filePath);
+  const std::string txtCover = txtSidecar.empty() ? txt->getThumbBmpPath() : txtSidecar;
+  RECENT_BOOKS.addBook(filePath, fileName, "", "", txtCover);
 
   // Trigger first update
   requestUpdate();

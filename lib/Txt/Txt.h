@@ -28,6 +28,13 @@ class Txt {
   [[nodiscard]] bool generateCoverBmp() const;
   [[nodiscard]] std::string findCoverImage() const;
 
+  // Thumbnail support - generates a surrogate placeholder cover BMP
+  [[nodiscard]] std::string getThumbBmpPath() const;
+  [[nodiscard]] std::string getThumbBmpPath(int height) const;
+  [[nodiscard]] std::string getThumbBmpPath(int width, int height) const;
+  [[nodiscard]] bool generateThumbBmp(int height) const;
+  [[nodiscard]] bool generateThumbBmp(int width, int height) const;
+
   // Read content from file
   [[nodiscard]] bool readContent(uint8_t* buffer, size_t offset, size_t length) const;
 };

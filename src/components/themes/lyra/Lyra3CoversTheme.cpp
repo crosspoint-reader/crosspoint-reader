@@ -57,6 +57,10 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                   static_cast<float>(tileWidth - 2 * hPaddingInSelection) / static_cast<float>(coverHeight);
               const float cropX = std::max(0.0f, 1.0f - (tileRatio / ratio));
 
+              // Clear tile to white before drawing: 1-bit BMPs only draw dark pixels,
+              // leaving white pixels transparent — any stale dark content shows through.
+              renderer.fillRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection,
+                                tileWidth - 2 * hPaddingInSelection, coverHeight, false);
               renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection,
                                   tileWidth - 2 * hPaddingInSelection, coverHeight, cropX);
             } else {

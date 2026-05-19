@@ -1,5 +1,7 @@
 #include "Txt.h"
 
+#include <Bitmap.h>
+#include <BitmapHelpers.h>
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
@@ -182,6 +184,98 @@ bool Txt::generateCoverBmp() const {
 
   LOG_ERR("TXT", "Cover image format not supported (only BMP/JPG/JPEG/PNG)");
   return false;
+}
+
+std::string Txt::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
+std::string Txt::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
+std::string Txt::getThumbBmpPath(int width, int height) const {
+  return cachePath + "/thumb_" + std::to_string(width) + "x" + std::to_string(height) + ".bmp";
+}
+
+bool Txt::generateThumbBmp(int height) const {
+  const std::string destPath = getThumbBmpPath(height);
+  if (Storage.exists(destPath.c_str())) return true;
+  const int width = static_cast<int>(height * 0.6f);
+  if (!generateThumbBmp(width, height)) return false;
+  const std::string srcPath = getThumbBmpPath(width, height);
+  Storage.rename(srcPath.c_str(), destPath.c_str());
+  return Storage.exists(destPath.c_str());
+}
+
+bool Txt::generateThumbBmp(int width, int height) const {
+  const std::string thumbPath = getThumbBmpPath(width, height);
+  if (Storage.exists(thumbPath.c_str())) return true;
+
+  setupCacheDir();
+
+  FsFile thumbBmp;
+  if (!Storage.openFileForWrite("TXT", thumbPath, thumbBmp)) return false;
+
+  const uint32_t rowSize = (static_cast<uint32_t>(width) + 31) / 32 * 4;
+  BmpHeader bmpHeader;
+  createBmpHeader(&bmpHeader, width, height, BmpRowOrder::TopDown);
+  thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(BmpHeader));
+
+  uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
+  if (!rowBuffer) {
+    thumbBmp.close();
+    Storage.remove(thumbPath.c_str());
+    return false;
+  }
+
+  // Matches the Lyra "no cover" placeholder: 1px border, white top third, black bottom two thirds.
+  // Book icon (32x32, 1=white/transparent, 0=black) centered in the white area.
+  // In 1-bit BMP: 1=white, 0=black.
+  static const uint8_t kIcon[] = {
+      0xFF, 0x00, 0x00, 0x1F, 0xFF, 0x00, 0x00, 0x1F, 0xFF, 0xFF, 0xFE, 0x1F, 0xE0, 0x00, 0x02, 0x1F, 0xE0, 0x00, 0x03,
+      0x1F, 0xE0, 0x00, 0x03, 0x1F, 0xF0, 0x00, 0x01, 0x1F, 0xF0, 0x00, 0x01, 0x1F, 0xF0, 0x00, 0x01, 0x9F, 0xF8, 0x00,
+      0x00, 0x9F, 0xF8, 0x00, 0x00, 0xDF, 0xFC, 0x00, 0x00, 0x6F, 0xFE, 0x00, 0x00, 0x3F, 0xFF, 0x00, 0x00, 0x1F, 0xFF,
+      0x80, 0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x00, 0x0F, 0xFF, 0x00, 0x00,
+      0x1F, 0xFE, 0x00, 0x00, 0x3F, 0xFC, 0x00, 0x00, 0x6F, 0xF8, 0x00, 0x00, 0xDF, 0xF8, 0x00, 0x00, 0x9F, 0xF0, 0x00,
+      0x01, 0x9F, 0xF0, 0x00, 0x01, 0x1F, 0xE0, 0x00, 0x01, 0x1F, 0xE0, 0x00, 0x03, 0x1F, 0xE0, 0x00, 0x02, 0x1F, 0xE0,
+      0x00, 0x02, 0x1F, 0xFF, 0xFF, 0xFE, 0x1F, 0xFF, 0x00, 0x00, 0x1F, 0xFF, 0x00, 0x00, 0x1F};
+  static constexpr int kIconSize = 32;
+  static constexpr int kIconStride = 4;  // bytes per icon row (32 bits)
+
+  const int splitY = height / 3;  // white above, black below
+  const int iconX = (width - kIconSize) / 2;
+  const int iconY = (splitY - kIconSize) / 2;
+
+  for (int y = 0; y < height; y++) {
+    const bool blackRegion = (y >= splitY);
+    memset(rowBuffer, blackRegion ? 0x00 : 0xFF, rowSize);
+
+    // 1px border
+    if (y == 0 || y == height - 1) {
+      memset(rowBuffer, 0x00, rowSize);
+    } else {
+      // Left and right border pixels
+      rowBuffer[0] &= 0x7F;                                         // clear MSB (x=0)
+      rowBuffer[(width - 1) / 8] &= ~(0x80u >> ((width - 1) % 8));  // clear x=width-1
+
+      // Overlay icon row if within icon bounds (icon is on white area)
+      const int iconRow = y - iconY;
+      if (!blackRegion && iconRow >= 0 && iconRow < kIconSize && iconX >= 0 && iconX + kIconSize <= width) {
+        // Icon format: 0=dark pixel, 1=white/transparent. In BMP: 0=black, 1=white.
+        // The icon pixels (0=dark) should clear bits in the white BMP region.
+        for (int ix = 0; ix < kIconSize; ix++) {
+          const int iconByte = iconRow * kIconStride + ix / 8;
+          const int iconBit = 7 - (ix % 8);
+          const bool iconDark = !((kIcon[iconByte] >> iconBit) & 1);
+          if (iconDark) {
+            const int bx = iconX + ix;
+            rowBuffer[bx / 8] &= ~(0x80u >> (bx % 8));
+          }
+        }
+      }
+    }
+    thumbBmp.write(rowBuffer, rowSize);
+  }
+
+  free(rowBuffer);
+  thumbBmp.close();
+  LOG_DBG("TXT", "Generated surrogate thumb BMP (%dx%d): %s", width, height, thumbPath.c_str());
+  return true;
 }
 
 bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {

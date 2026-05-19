@@ -457,9 +457,41 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
-  const int effectiveSrcW = progressive ? (srcWidth + 7) / 8 : srcWidth;
-  const int effectiveSrcH = progressive ? (srcHeight + 7) / 8 : srcHeight;
-  const int decodeFlags = progressive ? JPEG_SCALE_EIGHTH : 0;
+  // Progressive JPEGs must stay at 1/8 (DC-only mode, only safe scale with MCU_SKIP patch).
+  // For baseline JPEGs with a target size, pick the largest built-in DCT scale that still
+  // keeps the decoded image >= the target — the custom scaler handles the fine remainder.
+  // This avoids decoding millions of pixels that are immediately thrown away.
+  int jpegDecodeFlags = 0;
+  int jpegScaleDenom = 1;
+  if (progressive) {
+    jpegDecodeFlags = JPEG_SCALE_EIGHTH;
+    jpegScaleDenom = 8;
+  } else if (targetWidth > 0 && targetHeight > 0) {
+    // Use max(scaleX, scaleY) as the constraint: the DCT pre-scale must keep BOTH axes
+    // >= target so the fine scaler always downscales (never upscales) on either axis.
+    // This is safe for both crop=true (which uses max scale) and crop=false (uses min scale).
+    const float scaleX = static_cast<float>(targetWidth) / srcWidth;
+    const float scaleY = static_cast<float>(targetHeight) / srcHeight;
+    const float scaleMax = scaleX > scaleY ? scaleX : scaleY;
+    if (scaleMax <= 0.125f) {
+      jpegDecodeFlags = JPEG_SCALE_EIGHTH;
+      jpegScaleDenom = 8;
+    } else if (scaleMax <= 0.25f) {
+      jpegDecodeFlags = JPEG_SCALE_QUARTER;
+      jpegScaleDenom = 4;
+    } else if (scaleMax <= 0.5f) {
+      jpegDecodeFlags = JPEG_SCALE_HALF;
+      jpegScaleDenom = 2;
+    }
+  }
+
+  const int effectiveSrcW = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
+  const int effectiveSrcH = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
+
+  if (jpegScaleDenom > 1) {
+    LOG_DBG("JPG", "Using JPEGDEC 1/%d DCT scale: %dx%d -> %dx%d", jpegScaleDenom, srcWidth, srcHeight, effectiveSrcW,
+            effectiveSrcH);
+  }
 
   // Calculate output dimensions (pre-scale to fit display exactly)
   int outWidth = effectiveSrcW;
@@ -487,7 +519,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     scaleY_fp = (static_cast<uint32_t>(effectiveSrcH) << 16) / outHeight;
     needsScaling = true;
 
-    LOG_DBG("JPG", "Scaling %dx%d -> %dx%d (target %dx%d)", effectiveSrcW, effectiveSrcH, outWidth, outHeight,
+    LOG_DBG("JPG", "Fine-scaling %dx%d -> %dx%d (target %dx%d)", effectiveSrcW, effectiveSrcH, outWidth, outHeight,
             targetWidth, targetHeight);
   }
 
@@ -570,7 +602,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);
   jpeg->setUserPointer(&ctx);
 
-  rc = jpeg->decode(0, 0, decodeFlags);
+  rc = jpeg->decode(0, 0, jpegDecodeFlags);
 
   if (rc != 1 || ctx.error) {
     LOG_ERR("JPG", "JPEG decode failed (rc=%d, err=%d)", rc, jpeg->getLastError());
