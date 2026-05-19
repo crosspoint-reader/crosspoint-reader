@@ -105,7 +105,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
           if (endPos != std::string::npos) {
             const auto ref = std::string_view{coverPageHtml}.substr(pos, endPos - pos);
             // Check if it's an image file
-            if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref) || FsHelpers::hasGifExtension(ref)) {
+            if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref)) {
               imageRef = ref;
               break;
             }
