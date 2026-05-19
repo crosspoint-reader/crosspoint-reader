@@ -30,8 +30,6 @@ def patch_jpegdec(env):
     if not os.path.isdir(libdeps_dir):
         return
     patches = _patch_files()
-    if not patches:
-        return
     for env_dir in os.listdir(libdeps_dir):
         jpeg_dir = os.path.join(libdeps_dir, env_dir, "JPEGDEC")
         if not os.path.isdir(os.path.join(jpeg_dir, ".git")):
@@ -42,12 +40,21 @@ def patch_jpegdec(env):
 
 def _patch_files():
     if not os.path.isdir(PATCH_DIR):
-        return []
-    return sorted(
+        raise RuntimeError(
+            "JPEGDEC patches missing -- aborting build (expected directory %s)"
+            % PATCH_DIR
+        )
+    patches = sorted(
         os.path.join(PATCH_DIR, name)
         for name in os.listdir(PATCH_DIR)
         if name.endswith(".patch")
     )
+    if not patches:
+        raise RuntimeError(
+            "JPEGDEC patches missing -- aborting build (no .patch files in %s)"
+            % PATCH_DIR
+        )
+    return patches
 
 
 def _apply_one(jpeg_dir, patch_path):
