@@ -49,6 +49,14 @@ class HalDisplay {
 
   void displayGrayBuffer(bool turnOffScreen = false);
 
+  // Runtime geometry passthrough
+  uint16_t getDisplayWidth() const;
+  uint16_t getDisplayHeight() const;
+  uint16_t getDisplayWidthBytes() const;
+  uint32_t getBufferSize() const;
+
  private:
   EInkDisplay einkDisplay;
 };
+
+extern HalDisplay display;

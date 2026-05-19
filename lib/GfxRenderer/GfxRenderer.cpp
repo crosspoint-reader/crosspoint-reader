@@ -1,10 +1,27 @@
 #include "GfxRenderer.h"
 
 #include <FontDecompressor.h>
+#include <HalGPIO.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
 #include "FontCacheManager.h"
+
+namespace {
+
+const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
+
+/**
+ * Resolves the requested style to the best available style in the given SD card font.
+ * Falls back gracefully when the font lacks the requested variant.
+ */
+uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
+  return font.resolveStyle(static_cast<uint8_t>(style));
+}
+}  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
   if (fontData->groups != nullptr) {
@@ -19,7 +36,43 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     // must consume it (draw the glyph) before requesting another bitmap.
     return fd->getBitmap(fontData, glyph, glyphIndex);
   }
+  // For SD card fonts, check if the glyph was loaded on demand into the overflow
+  // buffer.  getOverflowBitmap() returns:
+  //   - bitmap pointer for overflow glyphs with bitmap data
+  //   - nullptr for overflow glyphs without bitmap data (e.g. space: width=0, height=0)
+  //   - nullptr for non-overflow glyphs (normal prewarmed path)
+  // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
+  if (fontData->glyphMissCtx) {
+    auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
+    if (sdFont->isOverflowGlyph(glyph)) {
+      return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs
+    }
+  }
   return &fontData->bitmap[glyph->dataOffset];
+}
+
+void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    int missed = it->second->buildAdvanceTable(utf8Text, styleMask);
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
+}
+
+void GfxRenderer::ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+                                        uint8_t styleMask) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    // Augment the persistent advance-only table for layout measurement.
+    // The table survives across paragraphs/sections (capped per font), so
+    // repeated indexing of the same SD font amortizes glyph-metric SD reads.
+    int missed = it->second->buildAdvanceTable(words, includeHyphen, styleMask);
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
 }
 
 void GfxRenderer::begin() {
@@ -28,32 +81,42 @@ void GfxRenderer::begin() {
     LOG_ERR("GFX", "!! No framebuffer");
     assert(false);
   }
+  panelWidth = display.getDisplayWidth();
+  panelHeight = display.getDisplayHeight();
+  panelWidthBytes = display.getDisplayWidthBytes();
+  frameBufferSize = display.getBufferSize();
+  bwBufferChunks.assign((frameBufferSize + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE, nullptr);
 }
 
-void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
+  auto result = fontMap.insert({fontId, font});
+  if (!result.second) {
+    LOG_ERR("GFX", "Font ID %d already registered, ignoring duplicate", fontId);
+  }
+}
 
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
 // This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
-                                     int* phyY) {
+                                     int* phyY, const uint16_t panelWidth, const uint16_t panelHeight) {
   switch (orientation) {
     case GfxRenderer::Portrait: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees clockwise
       *phyX = y;
-      *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
+      *phyY = panelHeight - 1 - x;
       break;
     }
     case GfxRenderer::LandscapeClockwise: {
       // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *phyX = HalDisplay::DISPLAY_WIDTH - 1 - x;
-      *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - y;
+      *phyX = panelWidth - 1 - x;
+      *phyY = panelHeight - 1 - y;
       break;
     }
     case GfxRenderer::PortraitInverted: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees counter-clockwise
-      *phyX = HalDisplay::DISPLAY_WIDTH - 1 - y;
+      *phyX = panelWidth - 1 - y;
       *phyY = x;
       break;
     }
@@ -127,6 +190,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
             renderer.drawPixel(screenX, screenY, pixelState);
           } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
             // Light gray (also mark the MSB if it's going to be a dark gray too)
+            // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
             // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
             renderer.drawPixel(screenX, screenY, false);
           } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
@@ -168,16 +232,16 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   int phyY = 0;
 
   // Note: this call should be inlined for better performance
-  rotateCoordinates(orientation, x, y, &phyX, &phyY);
+  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
 
-  // Bounds checking against physical panel dimensions
-  if (phyX < 0 || phyX >= HalDisplay::DISPLAY_WIDTH || phyY < 0 || phyY >= HalDisplay::DISPLAY_HEIGHT) {
+  // Bounds checking against runtime panel dimensions
+  if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
     LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
     return;
   }
 
   // Calculate byte position and bit position
-  const uint16_t byteIndex = phyY * HalDisplay::DISPLAY_WIDTH_BYTES + (phyX / 8);
+  const uint32_t byteIndex = static_cast<uint32_t>(phyY) * panelWidthBytes + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
 
   if (state) {
@@ -208,10 +272,11 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);
-  int32_t xPosFP = fp4::fromPixel(x);  // 12.4 fixed-point accumulator
   int lastBaseX = x;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
   int lastBaseTop = 0;
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
@@ -229,41 +294,38 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
   const auto& font = fontIt->second;
-  constexpr int MIN_COMBINING_GAP_PX = 1;
 
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      int raiseBy = 0;
-      if (combiningGlyph) {
-        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
-        if (currentGap < MIN_COMBINING_GAP_PX) {
-          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
-        }
-      }
-
-      const int combiningX = lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2);
-      const int combiningY = yPos - raiseBy;
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      if (!combiningGlyph) continue;
+      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+      const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
+                                                       combiningGlyph->width);
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
       continue;
     }
 
     cp = font.applyLigatures(cp, text, style);
-    const int kernFP = (prevCp != 0) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
-    xPosFP += kernFP;
 
-    lastBaseX = fp4::toPixel(xPosFP);  // snap 12.4 fixed-point to nearest pixel
+    // Differential rounding: snap (previous advance + current kern) as one unit so
+    // identical character pairs always produce the same pixel step regardless of
+    // where they fall on the line.
+    if (prevCp != 0) {
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+    }
+
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;
+    lastBaseLeft = glyph ? glyph->left : 0;
+    lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
     renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
-    if (glyph) {
-      xPosFP += glyph->advanceX;  // 12.4 fixed-point advance
-    }
     prevCp = cp;
   }
 }
@@ -338,17 +400,40 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
                           const int lineWidth, const bool state) const {
   const int stroke = std::min(lineWidth, maxRadius);
   const int innerRadius = std::max(maxRadius - stroke, 0);
-  const int outerRadiusSq = maxRadius * maxRadius;
+  const int outerRadius = maxRadius;
+
+  if (outerRadius <= 0) {
+    return;
+  }
+
+  const int outerRadiusSq = outerRadius * outerRadius;
   const int innerRadiusSq = innerRadius * innerRadius;
-  for (int dy = 0; dy <= maxRadius; ++dy) {
-    for (int dx = 0; dx <= maxRadius; ++dx) {
-      const int distSq = dx * dx + dy * dy;
-      if (distSq > outerRadiusSq || distSq < innerRadiusSq) {
-        continue;
-      }
-      const int px = cx + xDir * dx;
-      const int py = cy + yDir * dy;
-      drawPixel(px, py, state);
+
+  int xOuter = outerRadius;
+  int xInner = innerRadius;
+
+  for (int dy = 0; dy <= outerRadius; ++dy) {
+    while (xOuter > 0 && (xOuter * xOuter + dy * dy) > outerRadiusSq) {
+      --xOuter;
+    }
+    // Keep the smallest x that still lies outside/at the inner radius,
+    // i.e. (x^2 + y^2) >= innerRadiusSq.
+    while (xInner > 0 && ((xInner - 1) * (xInner - 1) + dy * dy) >= innerRadiusSq) {
+      --xInner;
+    }
+
+    if (xOuter < xInner) {
+      continue;
+    }
+
+    const int x0 = cx + xDir * xInner;
+    const int x1 = cx + xDir * xOuter;
+    const int left = std::min(x0, x1);
+    const int width = std::abs(x1 - x0) + 1;
+    const int py = cy + yDir * dy;
+
+    if (width > 0) {
+      fillRect(left, py, width, 1, state);
     }
   }
 };
@@ -465,17 +550,76 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
   }
 }
 
+void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
+                                                const int radius, const Color color) const {
+  if (radius <= 0 || color == Color::Clear) {
+    return;
+  }
+
+  const int rr = radius - 1;
+  const int rr2 = rr * rr;
+  for (int dy = 0; dy < radius; dy++) {
+    for (int dx = 0; dx < radius; dx++) {
+      const int tx = rr - dx;
+      const int ty = rr - dy;
+      if (tx * tx + ty * ty > rr2) {
+        if (color == Color::White || color == Color::Black) {
+          bool state = color == Color::Black;
+          drawPixel(x + dx, y + dy, state);                           // top-left
+          drawPixel(x + width - 1 - dx, y + dy, state);               // top-right
+          drawPixel(x + dx, y + height - 1 - dy, state);              // bottom-left
+          drawPixel(x + width - 1 - dx, y + height - 1 - dy, state);  // bottom-right
+        } else if (color == Color::LightGray) {
+          drawPixelDither<Color::LightGray>(x + dx, y + dy);                           // top-left
+          drawPixelDither<Color::LightGray>(x + width - 1 - dx, y + dy);               // top-right
+          drawPixelDither<Color::LightGray>(x + dx, y + height - 1 - dy);              // bottom-left
+          drawPixelDither<Color::LightGray>(x + width - 1 - dx, y + height - 1 - dy);  // bottom-right
+        } else if (color == Color::DarkGray) {
+          drawPixelDither<Color::DarkGray>(x + dx, y + dy);                           // top-left
+          drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + dy);               // top-right
+          drawPixelDither<Color::DarkGray>(x + dx, y + height - 1 - dy);              // bottom-left
+          drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + height - 1 - dy);  // bottom-right
+        }
+      }
+    }
+  }
+}
+
 template <Color color>
 void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir) const {
+  if (maxRadius <= 0) return;
+
+  if constexpr (color == Color::Clear) {
+    return;
+  }
+
   const int radiusSq = maxRadius * maxRadius;
+
+  // Avoid sqrt by scanning from outer radius inward while y grows.
+  int x = maxRadius;
   for (int dy = 0; dy <= maxRadius; ++dy) {
-    for (int dx = 0; dx <= maxRadius; ++dx) {
-      const int distSq = dx * dx + dy * dy;
-      const int px = cx + xDir * dx;
-      const int py = cy + yDir * dy;
-      if (distSq <= radiusSq) {
-        drawPixelDither<color>(px, py);
-      }
+    while (x > 0 && (x * x + dy * dy) > radiusSq) {
+      --x;
+    }
+    if (x < 0) break;
+
+    const int py = cy + yDir * dy;
+    if (py < 0 || py >= getScreenHeight()) continue;
+
+    int x0 = cx;
+    int x1 = cx + xDir * x;
+    if (x0 > x1) std::swap(x0, x1);
+    const int width = x1 - x0 + 1;
+
+    if (width <= 0) continue;
+
+    if constexpr (color == Color::Black) {
+      fillRect(x0, py, width, 1, true);
+    } else if constexpr (color == Color::White) {
+      fillRect(x0, py, width, 1, false);
+    } else {
+      // LightGray / DarkGray: use existing dithered fill path.
+      fillRectDither(x0, py, width, 1, color);
     }
   }
 }
@@ -556,7 +700,7 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   int rotatedX = 0;
   int rotatedY = 0;
-  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY);
+  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
   // Rotate origin corner
   switch (orientation) {
     case Portrait:
@@ -596,12 +740,24 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   LOG_DBG("GFX", "Cropping %dx%d by %dx%d pix, is %s", bitmap.getWidth(), bitmap.getHeight(), cropPixX, cropPixY,
           bitmap.isTopDown() ? "top-down" : "bottom-up");
 
-  if (maxWidth > 0 && (1.0f - cropX) * bitmap.getWidth() > maxWidth) {
-    scale = static_cast<float>(maxWidth) / static_cast<float>((1.0f - cropX) * bitmap.getWidth());
-    isScaled = true;
+  const float croppedWidth = (1.0f - cropX) * static_cast<float>(bitmap.getWidth());
+  const float croppedHeight = (1.0f - cropY) * static_cast<float>(bitmap.getHeight());
+  bool hasTargetBounds = false;
+  float fitScale = 1.0f;
+
+  if (maxWidth > 0 && croppedWidth > 0.0f) {
+    fitScale = static_cast<float>(maxWidth) / croppedWidth;
+    hasTargetBounds = true;
   }
-  if (maxHeight > 0 && (1.0f - cropY) * bitmap.getHeight() > maxHeight) {
-    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
+
+  if (maxHeight > 0 && croppedHeight > 0.0f) {
+    const float heightScale = static_cast<float>(maxHeight) / croppedHeight;
+    fitScale = hasTargetBounds ? std::min(fitScale, heightScale) : heightScale;
+    hasTargetBounds = true;
+  }
+
+  if (hasTargetBounds && fitScale < 1.0f) {
+    scale = fitScale;
     isScaled = true;
   }
   LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
@@ -783,16 +939,8 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       j = i;
     }
 
-    // Sort nodes by X (simple bubble sort, numPoints is small)
-    for (int i = 0; i < nodes - 1; i++) {
-      for (int k = i + 1; k < nodes; k++) {
-        if (nodeX[i] > nodeX[k]) {
-          int temp = nodeX[i];
-          nodeX[i] = nodeX[k];
-          nodeX[k] = temp;
-        }
-      }
-    }
+    // Sort nodes by X
+    std::sort(nodeX, nodeX + nodes);
 
     // Fill between pairs of nodes
     for (int i = 0; i < nodes - 1; i += 2) {
@@ -822,7 +970,7 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
 }
 
 void GfxRenderer::invertScreen() const {
-  for (int i = 0; i < HalDisplay::BUFFER_SIZE; i++) {
+  for (uint32_t i = 0; i < frameBufferSize; i++) {
     frameBuffer[i] = ~frameBuffer[i];
   }
 }
@@ -923,13 +1071,13 @@ int GfxRenderer::getScreenWidth() const {
     case Portrait:
     case PortraitInverted:
       // 480px wide in portrait logical coordinates
-      return HalDisplay::DISPLAY_HEIGHT;
+      return panelHeight;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 800px wide in landscape logical coordinates
-      return HalDisplay::DISPLAY_WIDTH;
+      return panelWidth;
   }
-  return HalDisplay::DISPLAY_HEIGHT;
+  return panelHeight;
 }
 
 int GfxRenderer::getScreenHeight() const {
@@ -937,16 +1085,106 @@ int GfxRenderer::getScreenHeight() const {
     case Portrait:
     case PortraitInverted:
       // 800px tall in portrait logical coordinates
-      return HalDisplay::DISPLAY_WIDTH;
+      return panelWidth;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 480px tall in landscape logical coordinates
-      return HalDisplay::DISPLAY_HEIGHT;
+      return panelHeight;
   }
-  return HalDisplay::DISPLAY_WIDTH;
+  return panelWidth;
+}
+
+// Translate a logical rect through rotateCoordinates and take the bounding
+// box of its four corners on the physical panel. Output coords are inclusive
+// and clamped. Returns false if the rect ends up fully off-panel.
+static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, int lx, int ly, int lw, int lh,
+                                        uint16_t panelWidth, uint16_t panelHeight, int* outX0, int* outY0, int* outX1,
+                                        int* outY1) {
+  if (lw <= 0 || lh <= 0) return false;
+  int minX = INT32_MAX;
+  int minY = INT32_MAX;
+  int maxX = INT32_MIN;
+  int maxY = INT32_MIN;
+  const int corners[4][2] = {{lx, ly}, {lx + lw - 1, ly}, {lx, ly + lh - 1}, {lx + lw - 1, ly + lh - 1}};
+  for (auto& c : corners) {
+    int phyX;
+    int phyY;
+    rotateCoordinates(orientation, c[0], c[1], &phyX, &phyY, panelWidth, panelHeight);
+    if (phyX < minX) minX = phyX;
+    if (phyY < minY) minY = phyY;
+    if (phyX > maxX) maxX = phyX;
+    if (phyY > maxY) maxY = phyY;
+  }
+  if (minX < 0) minX = 0;
+  if (minY < 0) minY = 0;
+  if (maxX >= panelWidth) maxX = panelWidth - 1;
+  if (maxY >= panelHeight) maxY = panelHeight - 1;
+  if (minX > maxX || minY > maxY) return false;
+  *outX0 = minX;
+  *outY0 = minY;
+  *outX1 = maxX;
+  *outY1 = maxY;
+  return true;
+}
+
+size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
+  int x0, y0, x1, y1;
+  if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
+    return 0;
+  }
+  // x bounds are in pixels; widen to byte boundaries on either side so per-row
+  // memcpy stays byte-aligned even when the logical rect doesn't.
+  const int byteX0 = x0 / 8;
+  const int byteX1 = x1 / 8;
+  const int bytesPerRow = byteX1 - byteX0 + 1;
+  const int rowCount = y1 - y0 + 1;
+  return static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+}
+
+bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* buf, size_t bufSize) const {
+  int x0, y0, x1, y1;
+  if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
+    return false;
+  }
+  const int byteX0 = x0 / 8;
+  const int byteX1 = x1 / 8;
+  const int bytesPerRow = byteX1 - byteX0 + 1;
+  const int rowCount = y1 - y0 + 1;
+  const size_t needed = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+  if (bufSize < needed || !frameBuffer || !buf) return false;
+  for (int row = 0; row < rowCount; row++) {
+    const uint8_t* src = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
+    memcpy(buf + row * bytesPerRow, src, bytesPerRow);
+  }
+  return true;
+}
+
+bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8_t* buf, size_t bufSize) const {
+  int x0, y0, x1, y1;
+  if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
+    return false;
+  }
+  const int byteX0 = x0 / 8;
+  const int byteX1 = x1 / 8;
+  const int bytesPerRow = byteX1 - byteX0 + 1;
+  const int rowCount = y1 - y0 + 1;
+  const size_t needed = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+  if (bufSize < needed || !frameBuffer || !buf) return false;
+  for (int row = 0; row < rowCount; row++) {
+    uint8_t* dst = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
+    memcpy(dst, buf + row * bytesPerRow, bytesPerRow);
+  }
+  return true;
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
+  // Advance table fast-path for SD card fonts during layout
+  auto sdIt = sdCardFonts_.find(fontId);
+  if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
+    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
+    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -959,6 +1197,15 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
 
 int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                                  const EpdFontFamily::Style style) const {
+  // Advance table fast-path for SD card fonts during layout.
+  // Kern data is not loaded during layout (consistent with previous metadataOnly behavior),
+  // so we return just the space advance without kerning.
+  auto sdIt = sdCardFonts_.find(fontId);
+  if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
+    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
+    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const auto& font = fontIt->second;
@@ -980,6 +1227,19 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+  // Advance table fast-path for SD card fonts during layout.
+  // No kerning/ligature lookup — consistent with previous metadataOnly behavior
+  // where kern/lig data was not loaded.
+  auto sdIt = sdCardFonts_.find(fontId);
+  if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
+    int32_t widthFP = 0;
+    const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
+    while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
+      widthFP += sdIt->second->getAdvance(cp, styleIdx);
+    }
+    return fp4::toPixel(widthFP);
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -988,21 +1248,28 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
   uint32_t cp;
   uint32_t prevCp = 0;
-  int32_t widthFP = 0;  // 12.4 fixed-point accumulator
+  int widthPx = 0;
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       continue;
     }
     cp = font.applyLigatures(cp, text, style);
+
+    // Differential rounding: snap (previous advance + current kern) together,
+    // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
-      widthFP += font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);         // snap 12.4 fixed-point to nearest pixel
     }
+
     const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (glyph) widthFP += glyph->advanceX;  // 12.4 fixed-point advance
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;
     prevCp = cp;
   }
-  return fp4::toPixel(widthFP);  // snap 12.4 fixed-point to nearest pixel
+  widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+  return widthPx;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -1049,53 +1316,50 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   const auto& font = fontIt->second;
 
-  int32_t yPosFP = fp4::fromPixel(y);  // 12.4 fixed-point accumulator
   int lastBaseY = y;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
   int lastBaseTop = 0;
-  constexpr int MIN_COMBINING_GAP_PX = 1;
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
-      int raiseBy = 0;
-      if (combiningGlyph) {
-        const int currentGap = combiningGlyph->top - combiningGlyph->height - lastBaseTop;
-        if (currentGap < MIN_COMBINING_GAP_PX) {
-          raiseBy = MIN_COMBINING_GAP_PX - currentGap;
-        }
-      }
-
+      if (!combiningGlyph) continue;
+      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
       const int combiningX = x - raiseBy;
-      const int combiningY = lastBaseY - fp4::toPixel(lastBaseAdvanceFP / 2);
+      const int combiningY = combiningMark::centerOverRotated90CW(lastBaseY, lastBaseLeft, lastBaseWidth,
+                                                                  combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
       continue;
     }
 
     cp = font.applyLigatures(cp, text, style);
+
+    // Differential rounding: snap (previous advance + current kern) as one unit,
+    // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
-      yPosFP -= font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern (subtract for rotated)
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
     }
 
-    lastBaseY = fp4::toPixel(yPosFP);  // snap 12.4 fixed-point to nearest pixel
     const EpdGlyph* glyph = font.getGlyph(cp, style);
 
-    lastBaseAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
+    lastBaseLeft = glyph ? glyph->left : 0;
+    lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
-    if (glyph) {
-      yPosFP -= glyph->advanceX;  // 12.4 fixed-point advance (subtract for rotated)
-    }
     prevCp = cp;
   }
 }
 
 uint8_t* GfxRenderer::getFrameBuffer() const { return frameBuffer; }
 
-size_t GfxRenderer::getBufferSize() { return HalDisplay::BUFFER_SIZE; }
+size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 
 // unused
 // void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
@@ -1123,7 +1387,7 @@ void GfxRenderer::freeBwBufferChunks() {
  */
 bool GfxRenderer::storeBwBuffer() {
   // Allocate and copy each chunk
-  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+  for (size_t i = 0; i < bwBufferChunks.size(); i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
       LOG_ERR("GFX", "!! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk", i);
@@ -1132,19 +1396,20 @@ bool GfxRenderer::storeBwBuffer() {
     }
 
     const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
-    bwBufferChunks[i] = static_cast<uint8_t*>(malloc(BW_BUFFER_CHUNK_SIZE));
+    const size_t chunkSize = std::min(BW_BUFFER_CHUNK_SIZE, static_cast<size_t>(frameBufferSize - offset));
+    bwBufferChunks[i] = static_cast<uint8_t*>(malloc(chunkSize));
 
     if (!bwBufferChunks[i]) {
-      LOG_ERR("GFX", "!! Failed to allocate BW buffer chunk %zu (%zu bytes)", i, BW_BUFFER_CHUNK_SIZE);
+      LOG_ERR("GFX", "!! Failed to allocate BW buffer chunk %zu (%zu bytes)", i, chunkSize);
       // Free previously allocated chunks
       freeBwBufferChunks();
       return false;
     }
 
-    memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
+    memcpy(bwBufferChunks[i], frameBuffer + offset, chunkSize);
   }
 
-  LOG_DBG("GFX", "Stored BW buffer in %zu chunks (%zu bytes each)", BW_BUFFER_NUM_CHUNKS, BW_BUFFER_CHUNK_SIZE);
+  LOG_DBG("GFX", "Stored BW buffer in %zu chunks (%zu bytes each)", bwBufferChunks.size(), BW_BUFFER_CHUNK_SIZE);
   return true;
 }
 
@@ -1168,9 +1433,10 @@ void GfxRenderer::restoreBwBuffer() {
     return;
   }
 
-  for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
+  for (size_t i = 0; i < bwBufferChunks.size(); i++) {
     const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
-    memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
+    const size_t chunkSize = std::min(BW_BUFFER_CHUNK_SIZE, static_cast<size_t>(frameBufferSize - offset));
+    memcpy(frameBuffer + offset, bwBufferChunks[i], chunkSize);
   }
 
   display.cleanupGrayscaleBuffers(frameBuffer);

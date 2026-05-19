@@ -6,20 +6,13 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
-
-std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
-  const auto lastSlash = filePath.find_last_of('/');
-  if (lastSlash == std::string::npos || lastSlash == 0) {
-    return "/";
-  }
-  return filePath.substr(0, lastSlash);
-}
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -77,7 +70,7 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
 
 void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   // If coming from a book, start in that book's folder; otherwise start from root
-  auto initialPath = fromBookPath.empty() ? "/" : extractFolderPath(fromBookPath);
+  auto initialPath = fromBookPath.empty() ? "/" : FsHelpers::extractFolderPath(fromBookPath);
   activityManager.goToFileBrowser(std::move(initialPath));
 }
 
@@ -110,6 +103,8 @@ void ReaderActivity::onEnter() {
     goToLibrary();  // Start from root when entering via Browse
     return;
   }
+
+  sdFontSystem.ensureLoaded(renderer);
 
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {

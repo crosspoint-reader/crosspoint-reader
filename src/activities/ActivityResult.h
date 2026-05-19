@@ -50,8 +50,12 @@ struct FootnoteResult {
   std::string href;
 };
 
+struct FilePathResult {
+  std::string path;
+};
+
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult>;
+                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
@@ -59,7 +63,8 @@ struct ActivityResult {
 
   explicit ActivityResult() = default;
 
-  template <typename ResultType, typename = std::enable_if_t<std::is_constructible_v<ResultVariant, ResultType&&>>>
+  template <typename ResultType>
+    requires std::is_constructible_v<ResultVariant, ResultType&&>
   // cppcheck-suppress noExplicitConstructor
   ActivityResult(ResultType&& result) : data{std::forward<ResultType>(result)} {}
 };
