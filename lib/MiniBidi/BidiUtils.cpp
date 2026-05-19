@@ -61,7 +61,6 @@ int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int ma
     const uchar cls = bidi_class(cp);
     if (cls == R || cls == AL) return 1;
     if (cls == L) return 0;
-    if (cls == EN || cls == AN) return 0;
     checked++;
     if (checked >= maxStrongChars) break;
   }
