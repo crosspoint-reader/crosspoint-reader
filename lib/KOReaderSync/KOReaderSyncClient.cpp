@@ -1,6 +1,7 @@
 #include "KOReaderSyncClient.h"
 
 #include <ArduinoJson.h>
+#include <CrossPointInfo.h>
 #include <Logging.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
@@ -83,7 +84,8 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   if (!client) return nullptr;
 
   // KOSync auth headers
-  if (esp_http_client_set_header(client, "Accept", "application/vnd.koreader.v1+json") != ESP_OK ||
+  if (esp_http_client_set_header(client, "User-Agent", getCrossPointHttpUserAgent()) != ESP_OK ||
+      esp_http_client_set_header(client, "Accept", "application/vnd.koreader.v1+json") != ESP_OK ||
       esp_http_client_set_header(client, "x-auth-user", KOREADER_STORE.getUsername().c_str()) != ESP_OK ||
       esp_http_client_set_header(client, "x-auth-key", KOREADER_STORE.getMd5Password().c_str()) != ESP_OK) {
     LOG_ERR("KOSync", "Failed to set auth headers");

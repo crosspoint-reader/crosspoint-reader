@@ -1,5 +1,6 @@
 #include "HttpDownloader.h"
 
+#include <CrossPointInfo.h>
 #include <HTTPClient.h>
 #include <Logging.h>
 #include <NetworkClient.h>
@@ -72,7 +73,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  http.addHeader("User-Agent", getCrossPointHttpUserAgent());
 
   if (!username.empty() && !password.empty()) {
     std::string credentials = username + ":" + password;
@@ -123,7 +124,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  http.addHeader("User-Agent", getCrossPointHttpUserAgent());
 
   if (!username.empty() && !password.empty()) {
     std::string credentials = username + ":" + password;
