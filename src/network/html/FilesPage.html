@@ -1539,7 +1539,7 @@
 
           <div class="convert-settings" id="convertSettings" style="display:block;">
             <span>⚫ True-Grayscale</span>
-          <span>📏 Max 480×800px</span>
+          <span id="convertSizeSummary">📏 Max 480×800px</span>
           <span>📦 85% JPEG</span>
           <span>🔧 Fix SVG</span>
         </div>
@@ -1574,6 +1574,19 @@
             </div>
           </div>
           -->
+          <!-- Target Device -->
+          <div class="advanced-setting-row" id="deviceSettingRow">
+            <div class="setting-title">📱 Target Device</div>
+            <div class="setting-controls">
+              <div class="rotation-buttons">
+                <button class="rotation-btn device-btn active" data-value="auto" onclick="setDeviceTarget('auto')">
+                  <span id="deviceAutoLabel">Auto</span>
+                </button>
+                <button class="rotation-btn device-btn" data-value="X4" onclick="setDeviceTarget('X4')">X4</button>
+                <button class="rotation-btn device-btn" data-value="X3" onclick="setDeviceTarget('X3')">X3</button>
+              </div>
+            </div>
+          </div>
           <!-- Rotation Direction -->
           <div class="advanced-setting-row" id="rotationSettingRow">
             <div class="setting-title">↻ Rotation Direction</div>
@@ -2374,13 +2387,13 @@
       const isTiny = (dims.width < 200 && dims.height < 200);
       
       // Images that fit screen can only rotate, not split
-      const fitsScreen = (dims.width <= 480 && dims.height <= 800);
-      
+      const fitsScreen = (dims.width <= MAX_WIDTH && dims.height <= MAX_HEIGHT);
+
       // Split capability - no upscaling allowed
-      // H-Split scales width to 800, so needs width >= 800
-      // V-Split scales height to 800, so needs height >= 800
-      const canHSplit = dims.width >= 800;
-      const canVSplit = dims.height >= 800;
+      // H-Split scales width to MAX_HEIGHT (long edge), so needs width >= MAX_HEIGHT
+      // V-Split scales height to MAX_HEIGHT, so needs height >= MAX_HEIGHT
+      const canHSplit = dims.width >= MAX_HEIGHT;
+      const canVSplit = dims.height >= MAX_HEIGHT;
 
       images.push({
         path: path,
@@ -2618,16 +2631,16 @@
         if (showSplitLines) {
           let finalWidth;
           if (state === 1) {
-            // H-Split: scale width to 800, rotate, then check width
-            const scaledH = Math.round(img.height * (800 / img.width));
+            // H-Split: scale width to MAX_HEIGHT, rotate, then check width
+            const scaledH = Math.round(img.height * (MAX_HEIGHT / img.width));
             finalWidth = scaledH; // After rotation, height becomes width
           } else {
-            // V-Split: scale height to 800, then check width
-            finalWidth = Math.round(img.width * (800 / img.height));
+            // V-Split: scale height to MAX_HEIGHT, then check width
+            finalWidth = Math.round(img.width * (MAX_HEIGHT / img.height));
           }
-          if (finalWidth > 480) {
-            const minOverlapPx = Math.round(480 * (OVERLAP_PERCENT / 100));
-            const maxStep = 480 - minOverlapPx;
+          if (finalWidth > MAX_WIDTH) {
+            const minOverlapPx = Math.round(MAX_WIDTH * (OVERLAP_PERCENT / 100));
+            const maxStep = MAX_WIDTH - minOverlapPx;
             numParts = Math.ceil((finalWidth - minOverlapPx) / maxStep);
             if (numParts < 2) numParts = 2;
           }
@@ -2933,11 +2946,20 @@
     const convertOptions = document.getElementById('convertOptions');
     fileInput.classList.toggle('has-files', files.length > 0);
 
-    // Show/hide convert options based on file selection
-    if (files.length > 0) {
+    // Show convert options only when at least one selected file is an EPUB.
+    const hasEpub = Array.from(files).some(f => f.name.toLowerCase().endsWith('.epub'));
+    if (files.length > 0 && hasEpub) {
       convertOptions.style.display = 'block';
     } else {
-      clearImagePicker();
+      convertOptions.style.display = 'none';
+      // Clear stale checkbox state so the "Optimize & Upload" button doesn't linger
+      // when the user re-picks a non-EPUB after having ticked Optimize for an EPUB.
+      const cb = document.getElementById('convertBeforeUpload');
+      if (cb && cb.checked) {
+        cb.checked = false;
+        toggleConvertOptions();
+      }
+      if (files.length === 0) clearImagePicker();
     }
 
     if (files.length > 0) {
@@ -2946,6 +2968,11 @@
       const convertEnabled = document.getElementById('convertBeforeUpload').checked;
       if (advancedContent.classList.contains('visible') && files.length === 1 && convertEnabled && files[0].name.toLowerCase().endsWith('.epub')) {
         showImagePicker(files[0]).catch(err => console.error('Image picker error:', err));
+      } else {
+        // New selection no longer matches single-EPUB-with-advanced-expanded —
+        // tear down any picker from a previous file so the grid and picker-mode
+        // layout don't linger. clearImagePicker is idempotent.
+        clearImagePicker();
       }
 
       // If multiple files with conversion, inform user about batch mode
@@ -2978,14 +3005,24 @@ const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 // EPUB Image Conversion Functions (from Baseline JPEG Converter)
 // ============================================================================
 
+// Device profiles (short edge × long edge in portrait orientation)
+const DEVICE_PROFILES = {
+  X4: { width: 480, height: 800, label: 'X4' },
+  X3: { width: 528, height: 792, label: 'X3' },
+};
+
 // Default conversion settings
-const DEFAULT_MAX_WIDTH = 480;
-const DEFAULT_MAX_HEIGHT = 800;
+const DEFAULT_DEVICE = 'X4';
+const DEFAULT_MAX_WIDTH = DEVICE_PROFILES[DEFAULT_DEVICE].width;
+const DEFAULT_MAX_HEIGHT = DEVICE_PROFILES[DEFAULT_DEVICE].height;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
 // Note: Overlap is now always centered distribution (min 5%)
 
 // Dynamic conversion settings (updated by UI)
+let DEVICE_TARGET = 'auto';      // 'auto' | 'X4' | 'X3'
+let DETECTED_DEVICE = null;      // populated from /api/status
+let ACTIVE_DEVICE = DEFAULT_DEVICE;
 let MAX_WIDTH = DEFAULT_MAX_WIDTH;
 let MAX_HEIGHT = DEFAULT_MAX_HEIGHT;
 let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
@@ -3021,10 +3058,53 @@ async function fetchVersion() {
     if (response.ok) {
       const data = await response.json();
       crosspointVersion = data.version || 'Unknown';
+      if (data.device === 'X3' || data.device === 'X4') {
+        DETECTED_DEVICE = data.device;
+        applyDeviceTarget();
+      }
     }
   } catch (e) {
     console.error('Failed to fetch version:', e);
   }
+}
+
+// Resolve DEVICE_TARGET ('auto' | 'X4' | 'X3') to a concrete profile and update UI.
+function applyDeviceTarget() {
+  const resolved = DEVICE_TARGET === 'auto' ? (DETECTED_DEVICE || DEFAULT_DEVICE) : DEVICE_TARGET;
+  const profile = DEVICE_PROFILES[resolved] || DEVICE_PROFILES[DEFAULT_DEVICE];
+  ACTIVE_DEVICE = resolved;
+  MAX_WIDTH = profile.width;
+  MAX_HEIGHT = profile.height;
+
+  const summary = document.getElementById('convertSizeSummary');
+  if (summary) {
+    summary.textContent = `📏 Max ${profile.width}×${profile.height}px`;
+  }
+  document.querySelectorAll('.device-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === DEVICE_TARGET);
+  });
+  const autoLabel = document.getElementById('deviceAutoLabel');
+  if (autoLabel) {
+    autoLabel.textContent = DETECTED_DEVICE ? `Auto (${DETECTED_DEVICE})` : 'Auto';
+  }
+
+  // Recompute picker classification with new dimensions, then refresh grid.
+  if (Array.isArray(epubImagesCache) && epubImagesCache.length > 0) {
+    for (const img of epubImagesCache) {
+      img.fitsScreen = (img.width <= MAX_WIDTH && img.height <= MAX_HEIGHT);
+      img.canHSplit = img.width >= MAX_HEIGHT;
+      img.canVSplit = img.height >= MAX_HEIGHT;
+    }
+    const pickerSection = document.getElementById('imagePickerSection');
+    if (pickerSection && pickerSection.style.display !== 'none' && typeof renderImageGrid === 'function') {
+      renderImageGrid();
+    }
+  }
+}
+
+function setDeviceTarget(value) {
+  DEVICE_TARGET = value;
+  applyDeviceTarget();
 }
 
 // Batch logging system for multiple files
@@ -3183,7 +3263,7 @@ function startBatchLog(fileCount) {
 }
 
 // Save current file's log to batch entries
-function saveToFileBatchLog(fileName, succeeded) {
+function saveToFileBatchLog(fileName, succeeded, originalSize = 0, newSize = 0) {
   if (!isBatchMode) return;
 
   const entries = Array.from(logContainer.querySelectorAll('.log-entry'));
@@ -3205,6 +3285,10 @@ function saveToFileBatchLog(fileName, succeeded) {
   batchStats.totalSplits += conversionStats.splits;
   batchStats.totalFixes += conversionStats.fixes;
   batchStats.totalErrors += conversionStats.errors;
+  // Defaults of 0 keep failure-path callers safe — files that never
+  // produced a converted blob contribute nothing to the totals.
+  batchStats.totalOriginalSize += originalSize;
+  batchStats.totalNewSize += newSize;
 
   // Clear for next file
   logContainer.innerHTML = '';
@@ -3237,6 +3321,22 @@ function finalizeBatchLog() {
     });
   });
 
+  // Aggregate size totals: only emit rows when at least one file was successfully
+  // converted (totalOriginalSize stays 0 for batches where conversion was off or
+  // every file fell back to original upload).
+  const totalSaved = batchStats.totalOriginalSize - batchStats.totalNewSize;
+  const totalSavedPct = batchStats.totalOriginalSize > 0
+    ? ((totalSaved / batchStats.totalOriginalSize) * 100).toFixed(1)
+    : '0.0';
+  const sizeRowsHtml = batchStats.totalOriginalSize > 0 ? `
+        <tr><td>Total original</td><td>${formatBytes(batchStats.totalOriginalSize)}</td></tr>
+        <tr><td>Total optimised</td><td>${formatBytes(batchStats.totalNewSize)}</td></tr>
+        <tr><td>Total saved</td><td class="${totalSaved > 0 ? 'saved' : 'increased'}">${
+          totalSaved > 0
+            ? `${formatBytes(totalSaved)} (${totalSavedPct}%)`
+            : `+${formatBytes(-totalSaved)}`
+        }</td></tr>` : '';
+
   // Add batch summary
   const batchSummaryHtml = `
     <div class="log-summary">
@@ -3248,7 +3348,7 @@ function finalizeBatchLog() {
         <tr><td>Total images processed</td><td>${batchStats.totalImages}</td></tr>
         <tr><td>Total splits</td><td>${batchStats.totalSplits}</td></tr>
         <tr><td>Total fixes applied</td><td>${batchStats.totalFixes}</td></tr>
-        ${batchStats.totalErrors > 0 ? `<tr><td>Total errors</td><td style="color:#e74c3c">${batchStats.totalErrors}</td></tr>` : ''}
+        ${batchStats.totalErrors > 0 ? `<tr><td>Total errors</td><td style="color:#e74c3c">${batchStats.totalErrors}</td></tr>` : ''}${sizeRowsHtml}
         <tr><td>Total time</td><td>${batchTime.toFixed(1)}s</td></tr>
       </table>
     </div>
@@ -4180,8 +4280,6 @@ async function processImage(data, imageState = 0, imagePath = '') {
 async function convertEpubFile(file, progressCallback) {
   const startTime = Date.now();
   const originalSize = file.size;
-  let totalImageSize = 0;
-  let totalNewSize = 0;
 
   // Initialize logging
   clearLog();
@@ -4264,9 +4362,6 @@ async function convertEpubFile(file, progressCallback) {
       const imgName = path.split('/').pop();
       const origFormat = path.split('.').pop();
       logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts, meta.imageState || 0);
-
-      totalImageSize += meta.origSize;
-      totalNewSize += meta.finalSize;
 
       if (parts.length === 1 && parts[0].suffix === '') {
         const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
@@ -4518,7 +4613,7 @@ async function convertEpubFile(file, progressCallback) {
 
   // Log completion
   log('Conversion complete!', 'success', 'DONE');
-  logSummary(totalImageSize > 0 ? totalImageSize : originalSize, totalNewSize > 0 ? totalNewSize : newSize, timeElapsed);
+  logSummary(originalSize, newSize, timeElapsed);
 
   // Auto-export only if NOT in batch mode (batch mode exports at the end)
   if (!isBatchMode && exportLogCheckbox && exportLogCheckbox.checked) {
@@ -4787,6 +4882,8 @@ function uploadFile() {
     const needsConversion = isEpub && convertEnabled;
     let conversionSucceeded = false;
     let conversionFailed = false;  // Track if conversion actually failed
+    let convOriginalSize = 0;      // Picked-file size; 0 unless conversion succeeded
+    let convNewSize = 0;           // Generated blob size; 0 unless conversion succeeded
 
     const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
     const stageText = needsConversion ? 'Converting & uploading' : 'Uploading';
@@ -4806,7 +4903,8 @@ function uploadFile() {
       // Save file log to batch if in batch mode and this file was converted
       // Consider it successful only if conversion didn't fail
       if (useBatchLog && needsConversion) {
-        saveToFileBatchLog(file.name, !conversionFailed && conversionSucceeded);
+        const ok = !conversionFailed && conversionSucceeded;
+        saveToFileBatchLog(file.name, ok, ok ? convOriginalSize : 0, ok ? convNewSize : 0);
       }
 
       currentIndex++;
@@ -4817,7 +4915,9 @@ function uploadFile() {
       // Save failed file log to batch if in batch mode
       if (useBatchLog && needsConversion) {
         logError(`Upload failed: ${error}`);
-        saveToFileBatchLog(file.name, false);
+        // Preserve conversion size totals when the convert step succeeded but
+        // the upload failed; otherwise nothing was produced and 0/0 is correct.
+        saveToFileBatchLog(file.name, false, convOriginalSize, convNewSize);
       }
 
       failedFiles.push({ name: file.name, error: error, file: originalFile });
@@ -4862,6 +4962,10 @@ function uploadFile() {
           showLog();
         }
 
+        // Snapshot before the `file =` reassignment below, which swaps in the
+        // converted blob and makes file.size point at the optimised size.
+        const origFileSize = file.size;
+
         try {
           const convertedBlob = await convertEpubFile(file, (percent) => {
             // Pass current quality setting to converter
@@ -4872,6 +4976,8 @@ function uploadFile() {
           file = new File([convertedBlob], file.name, { type: 'application/epub+zip' });
           progressFill.style.backgroundColor = '#27ae60'; // Back to green for upload
           conversionSucceeded = true;
+          convOriginalSize = origFileSize;
+          convNewSize = convertedBlob.size;
         } catch (convError) {
           if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
           console.error('Conversion error:', convError);

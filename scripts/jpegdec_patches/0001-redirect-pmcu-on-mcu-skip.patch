@@ -1,0 +1,28 @@
+From 5dff5afab0c68d0d0c4385d72e6f0c030b613960 Mon Sep 17 00:00:00 2001
+From: patch <patch@local>
+Date: Mon, 18 May 2026 20:57:54 -0700
+Subject: [PATCH 1/2] Redirect pMCU to sMCUs[0] when iMCU < 0 (MCU_SKIP)
+
+---
+ src/jpeg.inl | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+index a60b548..26bcf6f 100644
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -1824,7 +1824,10 @@ static int JPEGDecodeMCU_P(JPEGIMAGE *pJPEG, int iMCU, int *iDCPredictor)
+     unsigned short *pFast;
+     uint32_t usHuff; // this prevents an unnecessary & 65535 for shorts
+     signed int iPositive, iNegative, iCoeff;
+-    signed short *pMCU = &pJPEG->sMCUs[iMCU & 0xffffff];
++    // CrossPoint patch: redirect pMCU to sMCUs[0] when MCU_SKIP to avoid
++    // a wild pointer (~33 MB past sMCUs) that store-faults on AC writes.
++    signed short *pMCU = (iMCU < 0) ? pJPEG->sMCUs
++                                    : &pJPEG->sMCUs[iMCU & 0xffffff];
+     uint32_t ulBitOff;
+     my_ulong ulCode, ulBits, ulTemp; // local copies to allow compiler to use register vars
+     uint8_t *pBuf;
+-- 
+2.50.1 (Apple Git-155)
+
