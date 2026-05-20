@@ -13,10 +13,8 @@ std::string BookmarkUtil::getBookmarkPath(const std::string& bookPath) {
   const size_t lastDot = bookName.find_last_of('.');
   if (lastDot != std::string::npos) {
     bookName.erase(lastDot);
-    bookName += ".json";
-  } else {
-    bookName += ".json";
   }
+  bookName += ".json";
   return getBookmarksDir() + bookName;
 }
 
