@@ -8,7 +8,6 @@ class WifiCredentialStore;
 class RecentBooksStore;
 class OpdsServerStore;
 struct BookmarkEntry;
-struct BookmarkEntry;
 
 namespace JsonSettingsIO {
 
