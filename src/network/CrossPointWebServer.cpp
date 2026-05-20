@@ -1857,7 +1857,7 @@ void CrossPointWebServer::handleFontUploadData() {
         fontUpload.bytesWritten += fontUpload.bufferPos;
         fontUpload.bufferPos = 0;
       }
-      fontUpload.file.close();
+      if (fontUpload.file.isOpen()) fontUpload.file.close();
 
       if (!fontUpload.valid && !fontUpload.filePath.empty()) {
         Storage.remove(fontUpload.filePath.c_str());
