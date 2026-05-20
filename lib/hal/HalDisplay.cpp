@@ -10,7 +10,7 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
-void HalDisplay::begin() {
+void HalDisplay::begin(bool seamless) {
   // Set X3-specific panel mode before initializing.
   if (gpio.deviceIsX3()) {
     einkDisplay.setDisplayX3();
@@ -18,11 +18,14 @@ void HalDisplay::begin() {
 
   einkDisplay.begin();
 
-  // Request resync after specific wakeup events to ensure clean display state
-  const auto wakeupReason = gpio.getWakeupReason();
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
-      wakeupReason == HalGPIO::WakeupReason::Other) {
-    einkDisplay.requestResync();
+  // Request resync after specific wakeup events to ensure clean display state.
+  // Skip when seamless=true so the current screen content is preserved.
+  if (!seamless) {
+    const auto wakeupReason = gpio.getWakeupReason();
+    if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
+        wakeupReason == HalGPIO::WakeupReason::Other) {
+      einkDisplay.requestResync();
+    }
   }
 }
 

@@ -4,8 +4,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
-#include "../converters/DirectPixelWriter.h"
-#include "../converters/ImageDecoderFactory.h"
+#include "Epub/converters/DirectPixelWriter.h"
+#include "Epub/converters/ImageDecoderFactory.h"
 
 // Cache file format:
 // - uint16_t width

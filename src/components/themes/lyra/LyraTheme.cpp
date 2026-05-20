@@ -33,37 +33,11 @@ namespace {
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
-constexpr int popupMarginX = 16;
-constexpr int popupMarginY = 12;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
 constexpr int mainMenuColumns = 2;
 int coverWidth = 0;
-
-void drawLyraBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,
-                         uint16_t percentage) {
-  BaseTheme::drawBatteryOutline(renderer, x, y, battWidth, rectHeight);
-
-  const bool charging = gpio.isUsbConnected();
-
-  if (charging) {
-    // Draw solid fill when charging so lightning bolt is visible
-    renderer.fillRect(x + 2, y + 2, battWidth - 5, rectHeight - 4);
-    BaseTheme::drawBatteryLightningBolt(renderer, x + 4, y + 2);
-  } else {
-    // Draw bars when not charging
-    if (percentage > 10) {
-      renderer.fillRect(x + 2, y + 2, 3, rectHeight - 4);
-    }
-    if (percentage > 40) {
-      renderer.fillRect(x + 6, y + 2, 3, rectHeight - 4);
-    }
-    if (percentage > 70) {
-      renderer.fillRect(x + 10, y + 2, 3, rectHeight - 4);
-    }
-  }
-}
 
 const uint8_t* iconForName(UIIcon icon, int size) {
   if (size == 24) {
@@ -107,35 +81,24 @@ const uint8_t* iconForName(UIIcon icon, int size) {
 }
 }  // namespace
 
-void LyraTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
-  // Left aligned: icon on left, percentage on right (reader mode)
-  const uint16_t percentage = powerManager.getBatteryPercentage();
+void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
+  const bool charging = gpio.isUsbConnected();
 
-  if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + BaseTheme::batteryPercentSpacing + LyraMetrics::values.batteryWidth,
-                      rect.y, percentageText.c_str());
+  if (charging) {
+    // Solid fill when charging so lightning bolt is visible
+    renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4);
+    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
+  } else {
+    if (percentage > 10) {
+      renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4);
+    }
+    if (percentage > 40) {
+      renderer.fillRect(rect.x + 6, rect.y + 2, 3, rect.height - 4);
+    }
+    if (percentage > 70) {
+      renderer.fillRect(rect.x + 10, rect.y + 2, 3, rect.height - 4);
+    }
   }
-
-  drawLyraBatteryIcon(renderer, rect.x, rect.y + 6, LyraMetrics::values.batteryWidth, rect.height, percentage);
-}
-
-void LyraTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
-  // Right aligned: percentage on left, icon on right (UI headers)
-  const uint16_t percentage = powerManager.getBatteryPercentage();
-
-  if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    // Clear the area where we're going to draw the text to prevent ghosting
-    const auto textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.fillRect(rect.x - textWidth - BaseTheme::batteryPercentSpacing, rect.y, textWidth, textHeight, false);
-    // Draw text to the left of the icon
-    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - BaseTheme::batteryPercentSpacing, rect.y,
-                      percentageText.c_str());
-  }
-
-  drawLyraBatteryIcon(renderer, rect.x, rect.y + 6, LyraMetrics::values.batteryWidth, rect.height, percentage);
 }
 
 void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
@@ -243,7 +206,8 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowTitle,
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
-                         const std::function<std::string(int index)>& rowValue, bool highlightValue) const {
+                         const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                         const std::function<bool(int index)>& rowDimmed) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -267,9 +231,9 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       rect.width -
       (totalPages > 1 ? (LyraMetrics::values.scrollBarWidth + LyraMetrics::values.scrollBarRightOffset) : 1);
   if (selectedIndex >= 0) {
-    renderer.fillRoundedRect(LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
-                             contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight, cornerRadius,
-                             Color::LightGray);
+    renderer.fillRoundedRect(
+        rect.x + LyraMetrics::values.contentSidePadding, rect.y + selectedIndex % pageItems * rowHeight,
+        contentWidth - LyraMetrics::values.contentSidePadding * 2, rowHeight, cornerRadius, Color::LightGray);
   }
 
   int textX = rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection;
@@ -302,6 +266,15 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
     renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), true);
 
+    // Apply checkerboard dither to create gray text effect for dimmed items
+    if (rowDimmed && rowDimmed(i) && i != selectedIndex) {
+      const int titleWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
+      const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+      for (int py = itemY + 7; py < itemY + 7 + lineH; py++)
+        for (int px = textX; px < textX + titleWidth; px++)
+          if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
+    }
+
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
       const uint8_t* iconBitmap = iconForName(icon, iconSize);
@@ -322,12 +295,16 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     if (!valueText.empty()) {
       if (i == selectedIndex && highlightValue) {
         renderer.fillRoundedRect(
-            contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueWidth, itemY,
+            rect.x + contentWidth - LyraMetrics::values.contentSidePadding - hPaddingInSelection - valueWidth, itemY,
             valueWidth + hPaddingInSelection, rowHeight, cornerRadius, Color::Black);
       }
 
+      int valueY = itemY + 6;
+      if (rowSubtitle != nullptr) {
+        valueY = itemY + 16;
+      }
       renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - LyraMetrics::values.contentSidePadding - valueWidth,
-                        itemY + 6, valueText.c_str(), !(i == selectedIndex && highlightValue));
+                        valueY, valueText.c_str(), !(i == selectedIndex && highlightValue));
     }
   }
 }
@@ -556,42 +533,4 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
     renderer.drawText(UI_12_FONT_ID, textX, textY, label, true);
   }
-}
-
-Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
-  // Scale y position proportionally to screen height (16.5% from top)
-  const int y = static_cast<int>(renderer.getScreenHeight() * 0.165f);
-  constexpr int outline = 2;
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, EpdFontFamily::REGULAR);
-  const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int w = textWidth + popupMarginX * 2;
-  const int h = textHeight + popupMarginY * 2;
-  const int x = (renderer.getScreenWidth() - w) / 2;
-
-  renderer.fillRoundedRect(x - outline, y - outline, w + outline * 2, h + outline * 2, cornerRadius + outline,
-                           Color::White);
-  renderer.fillRoundedRect(x, y, w, h, cornerRadius, Color::Black);
-
-  const int textX = x + (w - textWidth) / 2;
-  const int textY = y + popupMarginY - 2;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, false, EpdFontFamily::REGULAR);
-  renderer.displayBuffer();
-
-  return Rect{x, y, w, h};
-}
-
-void LyraTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
-  constexpr int barHeight = 4;
-
-  // Twice the margin in drawPopup to match text width
-  const int barWidth = layout.width - popupMarginX * 2;
-  const int barX = layout.x + (layout.width - barWidth) / 2;
-  // Center inside the margin of drawPopup. The - 1 is added to account for the - 2 in drawPopup.
-  const int barY = layout.y + layout.height - popupMarginY / 2 - barHeight / 2 - 1;
-
-  int fillWidth = barWidth * progress / 100;
-
-  renderer.fillRect(barX, barY, fillWidth, barHeight, false);
-
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

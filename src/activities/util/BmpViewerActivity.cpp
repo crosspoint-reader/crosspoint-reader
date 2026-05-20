@@ -97,7 +97,12 @@ void BmpViewerActivity::onEnter() {
       }
 
       // 4. Prepare Rendering
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), "", "");
+      bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
+      bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
+                      currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
+
+      const auto labels =
+          mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
@@ -185,7 +190,8 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     if (siblingImages.size() > 1 && currentImageIndex > 0) {
       currentImageIndex--;
       std::string dirPath = FsHelpers::extractFolderPath(filePath);
@@ -196,7 +202,8 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     if (siblingImages.size() > 1 && currentImageIndex != -1 &&
         currentImageIndex < static_cast<int>(siblingImages.size()) - 1) {
       currentImageIndex++;

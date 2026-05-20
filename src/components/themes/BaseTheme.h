@@ -70,6 +70,31 @@ struct ThemeMetrics {
   int keyboardTextFieldWidthPercent;
   int keyboardWidthPercent;
   int keyboardKeyCornerRadius;
+  bool keyboardFillUnselected;
+  bool keyboardOutlineAllUnselected;
+  bool keyboardDrawSpecialOutlineWhenUnselected;
+  int keyboardSecondaryLabelRightPadding;
+  int keyboardSecondaryLabelTopPadding;
+  int keyboardMinArrowHeadSize;
+
+  float popupTopOffsetRatio;
+  int popupMarginX;
+  int popupMarginY;
+  int popupFrameThickness;
+  int popupCornerRadius;
+  bool popupTextBold;
+  bool popupTextInverted;
+  int popupTextBaselineOffsetY;
+  int popupProgressBarHeight;
+  bool popupProgressDrawOutline;
+  bool popupProgressClampPercent;
+  bool popupProgressFillInverted;
+  bool popupProgressOutlineInverted;
+
+  int textFieldHorizontalPadding;
+  int textFieldNormalThickness;
+  int textFieldCursorThickness;
+  int textFieldLineEndOffset;
 };
 
 enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot };
@@ -88,7 +113,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .verticalSpacing = 10,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
-                                 .listWithSubtitleRowHeight = 65,
+                                 .listWithSubtitleRowHeight = 50,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,
                                  .tabSpacing = 10,
@@ -117,7 +142,30 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 0};
+                                 .keyboardKeyCornerRadius = 0,
+                                 .keyboardFillUnselected = false,
+                                 .keyboardOutlineAllUnselected = false,
+                                 .keyboardDrawSpecialOutlineWhenUnselected = true,
+                                 .keyboardSecondaryLabelRightPadding = 1,
+                                 .keyboardSecondaryLabelTopPadding = 0,
+                                 .keyboardMinArrowHeadSize = 0,
+                                 .popupTopOffsetRatio = 0.075f,
+                                 .popupMarginX = 15,
+                                 .popupMarginY = 15,
+                                 .popupFrameThickness = 2,
+                                 .popupCornerRadius = 0,
+                                 .popupTextBold = true,
+                                 .popupTextInverted = true,
+                                 .popupTextBaselineOffsetY = -2,
+                                 .popupProgressBarHeight = 4,
+                                 .popupProgressDrawOutline = false,
+                                 .popupProgressClampPercent = false,
+                                 .popupProgressFillInverted = true,
+                                 .popupProgressOutlineInverted = true,
+                                 .textFieldHorizontalPadding = 6,
+                                 .textFieldNormalThickness = 1,
+                                 .textFieldCursorThickness = 3,
+                                 .textFieldLineEndOffset = 0};
 }
 
 class BaseTheme {
@@ -125,11 +173,12 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
-  virtual void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
-  virtual void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
-                               bool showPercentage = true) const;  // Left aligned (reader mode)
-  virtual void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
-                                bool showPercentage = true) const;  // Right aligned (UI headers)
+  void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
+  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
+                       bool showPercentage = true) const;  // Left aligned (reader mode)
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
+                        bool showPercentage = true) const;  // Right aligned (UI headers)
+  virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
@@ -137,8 +186,8 @@ class BaseTheme {
                         const std::function<std::string(int index)>& rowTitle,
                         const std::function<std::string(int index)>& rowSubtitle = nullptr,
                         const std::function<UIIcon(int index)>& rowIcon = nullptr,
-                        const std::function<std::string(int index)>& rowValue = nullptr,
-                        bool highlightValue = false) const;
+                        const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
+                        const std::function<bool(int index)>& rowDimmed = nullptr) const;
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
@@ -153,10 +202,9 @@ class BaseTheme {
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
-  virtual void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                             const int pageCount, std::string title, const int paddingBottom = 0,
-                             const int textYOffset = 0) const;
-  virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
+                     std::string title, const int paddingBottom = 0, const int textYOffset = 0) const;
+  void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,

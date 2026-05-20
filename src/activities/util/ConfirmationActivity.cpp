@@ -2,8 +2,8 @@
 
 #include <I18n.h>
 
-#include "../../components/UITheme.h"
 #include "HalDisplay.h"
+#include "components/UITheme.h"
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const std::string& heading, const std::string& body)
