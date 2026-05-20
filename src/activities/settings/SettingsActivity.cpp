@@ -253,6 +253,7 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
+  CrossPointSettings::normalizeDependentSettings(SETTINGS);
   SETTINGS.saveToFile();
 }
 

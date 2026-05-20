@@ -1274,6 +1274,7 @@ void CrossPointWebServer::handlePostSettings() {
     }
   }
 
+  CrossPointSettings::normalizeDependentSettings(SETTINGS);
   SETTINGS.saveToFile();
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
