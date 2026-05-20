@@ -17,10 +17,11 @@ constexpr int ENTER_DELETE_MODE_MS = 700;
 constexpr int DELETE_MODE_OFF = 0;
 constexpr int DELETE_MODE_DISPLAY = 1;
 constexpr int DELETE_MODE_CONFIRM = 2;
-}  // namespace
 
 // Layout constants used in renderScreen
-const int LINE_HEIGHT = 60;
+constexpr int LINE_HEIGHT = 60;
+}  // namespace
+
 
 void EpubReaderBookmarksActivity::onEnter() {
   Activity::onEnter();
@@ -35,12 +36,14 @@ void EpubReaderBookmarksActivity::onEnter() {
     if (json.isEmpty()) {
       LOG_ERR("EPB", "Failed to load bookmarks from %s. Empty bookmark file", path.c_str());
       bookmarks.clear();
+      bookmarks.shrink_to_fit();
     } else {
       JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
     }
   } else {
     LOG_DBG("EPB", "No bookmark file found at %s, starting with empty bookmarks", path.c_str());
     bookmarks.clear();
+    bookmarks.shrink_to_fit();
   }
   LOG_DBG("EPB", "Loaded %d bookmarks for book: %s", static_cast<int>(bookmarks.size()), epubPath.c_str());
 

@@ -423,8 +423,9 @@ bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const 
     return false;
   }
 
-  bookmarks.clear();
   JsonArray arr = doc["bookmarks"].as<JsonArray>();
+  bookmarks.clear();
+  bookmarks.reserve(arr.size());
   for (JsonObject obj : arr) {
     bookmarks.emplace_back();
     auto& bookmark = bookmarks.back();

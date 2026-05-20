@@ -6,8 +6,8 @@
 std::string BookmarkUtil::getBookmarksDir() { return "/.crosspoint/bookmarks/"; }
 
 std::string BookmarkUtil::getBookmarkPath(const std::string& bookPath) {
-  const size_t lastSlash = bookPath.find_last_of('/');
-  std::string bookName = (lastSlash != std::string::npos) ? bookPath.substr(lastSlash + 1) : bookPath;
+  // remove leading slash and replace internal slashes to create a flat filename
+  std::string bookName = std::string(bookPath).erase(0, 1);
   std::replace(bookName.begin(), bookName.end(), '/', '_');
   std::replace(bookName.begin(), bookName.end(), '\\', '_');
   const size_t lastDot = bookName.find_last_of('.');
