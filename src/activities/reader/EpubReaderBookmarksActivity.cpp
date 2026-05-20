@@ -22,7 +22,6 @@ constexpr int DELETE_MODE_CONFIRM = 2;
 constexpr int LINE_HEIGHT = 60;
 }  // namespace
 
-
 void EpubReaderBookmarksActivity::onEnter() {
   Activity::onEnter();
 
