@@ -426,14 +426,14 @@ bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const 
   bookmarks.clear();
   JsonArray arr = doc["bookmarks"].as<JsonArray>();
   for (JsonObject obj : arr) {
-    BookmarkEntry bookmark;
+    bookmarks.emplace_back();
+    auto& bookmark = bookmarks.back();
     bookmark.bookPercent = obj["bookPercent"] | static_cast<uint8_t>(0);
     bookmark.chapterPageCount = obj["chapterPageCount"] | static_cast<uint16_t>(0);
     bookmark.chapterProgress = obj["chapterProgress"] | static_cast<uint16_t>(0);
     bookmark.spineIndex = obj["spineIndex"] | static_cast<uint16_t>(0);
     bookmark.pageIndex = obj["pageIndex"] | static_cast<uint16_t>(0);
     bookmark.summary = obj["summary"] | std::string("");
-    bookmarks.push_back(bookmark);
   }
 
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
