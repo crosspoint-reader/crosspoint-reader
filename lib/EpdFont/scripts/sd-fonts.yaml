@@ -129,10 +129,10 @@ families:
     intervals: latin-ext
     sizes: [12, 14, 16, 18]
     styles:
-      regular:    {url: "https://github.com/impallari/Libre-Baskerville/blob/master/fonts/ttf/LibreBaskerville-Regular.ttf"}
-      bold:       {url: "https://github.com/impallari/Libre-Baskerville/blob/master/fonts/ttf/LibreBaskerville-Bold.ttf"}
-      italic:     {url: "https://github.com/impallari/Libre-Baskerville/blob/master/fonts/ttf/LibreBaskerville-Italic.ttf"}
-      bolditalic: {url: "https://github.com/impallari/Libre-Baskerville/blob/master/fonts/ttf/LibreBaskerville-BoldItalic.ttf"}
+      regular:    {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-BoldItalic.ttf"}
     
 
   # ── Sans-serif ─────────────────────────────────────────────────────────
