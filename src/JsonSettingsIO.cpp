@@ -75,6 +75,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["recentSleepFill"] = s.recentSleepFill;
   doc["readerActivityLoadCount"] = s.readerActivityLoadCount;
   doc["lastSleepFromReader"] = s.lastSleepFromReader;
+  doc["showBootScreen"] = s.showBootScreen;
 
   String json;
   serializeJson(doc, json);
@@ -109,6 +110,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   }
   s.readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
   s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
+  s.showBootScreen = doc["showBootScreen"] | true;
   return true;
 }
 
@@ -220,6 +222,10 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       s.*(info.valuePtr) = v;
     }
   }
+
+  const uint8_t quickResumeBeforeNormalize = s.quickResumeSleepScreen;
+  CrossPointSettings::normalizeDependentSettings(s);
+  if (s.quickResumeSleepScreen != quickResumeBeforeNormalize && needsResave) *needsResave = true;
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   using S = CrossPointSettings;

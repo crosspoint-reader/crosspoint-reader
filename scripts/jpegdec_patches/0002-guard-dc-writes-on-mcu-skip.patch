@@ -1,0 +1,41 @@
+From f6238b54c2de34c8e29b0d371a7e902d9cf579bf Mon Sep 17 00:00:00 2001
+From: patch <patch@local>
+Date: Mon, 18 May 2026 20:58:22 -0700
+Subject: [PATCH 2/2] Guard pMCU[0] DC writes against MCU_SKIP
+
+---
+ src/jpeg.inl | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+index 26bcf6f..1bd38b2 100644
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -1855,7 +1855,11 @@ static int JPEGDecodeMCU_P(JPEGIMAGE *pJPEG, int iMCU, int *iDCPredictor)
+             {
+                 //            (*iDCPredictor) |= iPositive;  // in case the scan is run more than once
+                 //            pMCU[0] = *iDCPredictor; // store in MCU[0]
+-                pMCU[0] |= iPositive;
++                // CrossPoint patch: guard against MCU_SKIP. The pMCU
++                // redirect makes &sMCUs[0] safe to dereference, but
++                // writing here would clobber the just-decoded Y DC.
++                if (iMCU >= 0)
++                    pMCU[0] |= iPositive;
+             }
+             goto mcu_done; // that's it
+         }
+@@ -1887,7 +1891,10 @@ static int JPEGDecodeMCU_P(JPEGIMAGE *pJPEG, int iMCU, int *iDCPredictor)
+             ulCode <<= pJPEG->cApproxBitsLow; // successive approximation shift value
+             (*iDCPredictor) += ulCode;
+         }
+-        pMCU[0] = (short)*iDCPredictor; // store in MCU[0]
++        // CrossPoint patch: guard against MCU_SKIP. See note on the
++        // matching SA write above.
++        if (iMCU >= 0)
++            pMCU[0] = (short)*iDCPredictor; // store in MCU[0]
+     }
+     // Now get the other 63 AC coefficients
+     pFast = &pJPEG->usHuffAC[pJPEG->ucACTable * HUFF11SIZE];
+-- 
+2.50.1 (Apple Git-155)
+

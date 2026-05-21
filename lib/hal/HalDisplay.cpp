@@ -10,7 +10,7 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
-void HalDisplay::begin() {
+void HalDisplay::begin(bool seamless) {
   // Set X3-specific panel mode before initializing.
   if (gpio.deviceIsX3()) {
     einkDisplay.setDisplayX3();
@@ -18,7 +18,14 @@ void HalDisplay::begin() {
 
   einkDisplay.begin();
 
-  // Request resync after specific wakeup events to ensure clean display state
+  if (seamless) {
+    // Defuse the SDK's X3 _x3InitialFullSyncsRemaining counter (no-op on X4)
+    // so the first paint isn't promoted to FULL (~770ms). Skips the wakeup-
+    // gated requestResync() below for the same reason.
+    einkDisplay.skipInitialResync();
+    return;
+  }
+  // Request resync after specific wakeup events to ensure clean display state.
   const auto wakeupReason = gpio.getWakeupReason();
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
       wakeupReason == HalGPIO::WakeupReason::Other) {

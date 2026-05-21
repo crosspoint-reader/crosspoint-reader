@@ -28,6 +28,33 @@ class HomeActivity final : public Activity {
   int coverRectW = 0;
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
+  const HomeMenuItem initialMenuItem;
+
+  // Convert HomeMenuItem to menu index (used in onEnter)
+  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
+    int i = 0;
+    if (item == HomeMenuItem::FILE_BROWSER) return i;
+    ++i;
+    if (item == HomeMenuItem::RECENTS) return i;
+    ++i;
+    if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
+    if (hasOpdsUrl) ++i;
+    if (item == HomeMenuItem::FILE_TRANSFER) return i;
+    ++i;
+    if (item == HomeMenuItem::SETTINGS_MENU) return i;
+    return 0;
+  }
+
+  // Convert menu index to HomeMenuItem (used in loop)
+  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
+    int i = 0;
+    if (idx == i++) return HomeMenuItem::FILE_BROWSER;
+    if (idx == i++) return HomeMenuItem::RECENTS;
+    if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
+    if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
+    if (idx == i) return HomeMenuItem::SETTINGS_MENU;
+    return HomeMenuItem::NONE;
+  }
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
   void onRecentsOpen();
@@ -43,8 +70,9 @@ class HomeActivity final : public Activity {
   void loadRecentCovers(int coverHeight);
 
  public:
-  explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Home", renderer, mappedInput) {}
+  explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE)
+      : Activity("Home", renderer, mappedInput), initialMenuItem(initialMenuItemValue) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
