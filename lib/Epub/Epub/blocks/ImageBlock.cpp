@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <unordered_map>
+
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 
@@ -19,6 +21,9 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 
 namespace {
 
+constexpr uint8_t kDecodeFailureSkipThreshold = 2;
+std::unordered_map<std::string, uint8_t> gDecodeFailureCounts;
+
 std::string getCachePath(const std::string& imagePath) {
   // Replace extension with .pxc (pixel cache)
   size_t dotPos = imagePath.rfind('.');
@@ -26,6 +31,24 @@ std::string getCachePath(const std::string& imagePath) {
     return imagePath.substr(0, dotPos) + ".pxc";
   }
   return imagePath + ".pxc";
+}
+
+bool shouldSkipDecode(const std::string& imagePath) {
+  auto it = gDecodeFailureCounts.find(imagePath);
+  return it != gDecodeFailureCounts.end() && it->second >= kDecodeFailureSkipThreshold;
+}
+
+void clearDecodeFailure(const std::string& imagePath) { gDecodeFailureCounts.erase(imagePath); }
+
+void registerDecodeFailure(const std::string& imagePath) {
+  uint8_t& failCount = gDecodeFailureCounts[imagePath];
+  if (failCount < 255) {
+    failCount++;
+  }
+
+  if (failCount == kDecodeFailureSkipThreshold) {
+    LOG_DBG("IMG", "Suppressing further decode attempts for %s after %u failures", imagePath.c_str(), failCount);
+  }
 }
 
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
@@ -107,7 +130,12 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
+    clearDecodeFailure(imagePath);
     return;  // Successfully rendered from cache
+  }
+
+  if (shouldSkipDecode(imagePath)) {
+    return;
   }
 
   // No cache - need to decode the image
@@ -140,6 +168,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
+    registerDecodeFailure(imagePath);
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
     return;
   }
@@ -148,10 +177,12 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
   if (!success) {
+    registerDecodeFailure(imagePath);
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
     return;
   }
 
+  clearDecodeFailure(imagePath);
   LOG_DBG("IMG", "Decode successful");
 }
 

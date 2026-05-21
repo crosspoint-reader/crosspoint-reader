@@ -7,12 +7,18 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <unordered_set>
 
 #include "FontCacheManager.h"
 
 namespace {
 
 const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
+
+bool shouldLogMissingGlyph(const uint32_t cp) {
+  static std::unordered_set<uint32_t> loggedMissingGlyphs;
+  return loggedMissingGlyphs.insert(cp).second;
+}
 
 /**
  * Resolves the requested style to the best available style in the given SD card font.
@@ -139,7 +145,9 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
                            const bool pixelState, const EpdFontFamily::Style style) {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
-    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
+    if (shouldLogMissingGlyph(cp)) {
+      LOG_ERR("GFX", "No glyph for codepoint %u (suppressing repeats)", cp);
+    }
     return;
   }
 
