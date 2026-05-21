@@ -6,6 +6,8 @@
 #include <Logging.h>
 #include <esp_task_wdt.h>
 
+#include "HttpFileStreamer.h"
+
 namespace {
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
@@ -327,8 +329,12 @@ void WebDAVHandler::handleGet(WebServer& s) {
   s.send(200, contentType.c_str(), "");
 
   NetworkClient client = s.client();
-  client.write(file);
-  file.close();
+  bool downloadOk = HttpFileStreamer::streamFileToClient(file, client);
+  client.clear();
+
+  if (!downloadOk) {
+    LOG_DBG("DAV", "GET interrupted while streaming: %s", path.c_str());
+  }
 }
 
 // ── HEAD ─────────────────────────────────────────────────────────────────────
