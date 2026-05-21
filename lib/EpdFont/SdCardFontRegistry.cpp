@@ -116,19 +116,16 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   dir.close();
 }
 
-bool SdCardFontRegistry::discover() {
-  families_.clear();
-  families_.reserve(MAX_SD_FAMILIES);
-
-  FsFile root = Storage.open(FONTS_DIR);
+void SdCardFontRegistry::scanRoot(const char* rootPath) {
+  FsFile root = Storage.open(rootPath);
   if (!root) {
-    LOG_DBG("SDREG", "Fonts directory not found: %s", FONTS_DIR);
-    return false;
+    LOG_DBG("SDREG", "Fonts directory not found: %s", rootPath);
+    return;
   }
   if (!root.isDirectory()) {
-    LOG_ERR("SDREG", "Fonts path is not a directory: %s", FONTS_DIR);
+    LOG_ERR("SDREG", "Fonts path is not a directory: %s", rootPath);
     root.close();
-    return false;
+    return;
   }
 
   char nameBuffer[128];
@@ -143,21 +140,58 @@ bool SdCardFontRegistry::discover() {
       // Skip hidden/system directories (macOS ._*, .Trashes, etc.)
       if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
 
+      // Skip in-flight install/rollback dirs (Bookerly__staging, Bookerly__backup, ...)
+      // — these may contain valid-looking .cpfont files during a resumable
+      // download but must not be exposed as installable families.
+      const size_t nameLen = strlen(nameBuffer);
+      static constexpr const char* kStagingSuffix = "__staging";
+      static constexpr const char* kBackupSuffix = "__backup";
+      const size_t stagingLen = strlen(kStagingSuffix);
+      const size_t backupLen = strlen(kBackupSuffix);
+      if ((nameLen > stagingLen && strcmp(nameBuffer + nameLen - stagingLen, kStagingSuffix) == 0) ||
+          (nameLen > backupLen && strcmp(nameBuffer + nameLen - backupLen, kBackupSuffix) == 0)) {
+        continue;
+      }
+
+      // Primary wins: skip if the family was already discovered in an earlier root.
+      bool alreadyKnown = false;
+      for (const auto& f : families_) {
+        if (f.name == nameBuffer) {
+          alreadyKnown = true;
+          break;
+        }
+      }
+      if (alreadyKnown) {
+        LOG_DBG("SDREG", "Skipping duplicate family %s in %s (primary wins)", nameBuffer, rootPath);
+        continue;
+      }
+
       SdCardFontFamilyInfo family;
       family.name = nameBuffer;
-      std::string subDirPath = std::string(FONTS_DIR) + "/" + nameBuffer;
+      std::string subDirPath = std::string(rootPath) + "/" + nameBuffer;
       scanDirectory(subDirPath.c_str(), family);
 
       if (!family.files.empty()) {
         families_.push_back(std::move(family));
-        LOG_DBG("SDREG", "Found family: %s (%d files)", families_.back().name.c_str(),
-                static_cast<int>(families_.back().files.size()));
+        LOG_DBG("SDREG", "Found family: %s (%d files) in %s", families_.back().name.c_str(),
+                static_cast<int>(families_.back().files.size()), rootPath);
       }
     } else {
       entry.close();
     }
   }
   root.close();
+}
+
+bool SdCardFontRegistry::discover() {
+  families_.clear();
+  families_.reserve(MAX_SD_FAMILIES);
+
+  // Primary first so it wins on family-name conflicts; the upstream roots are
+  // read-only fallbacks — installers/deleters always target only the primary.
+  scanRoot(FONTS_DIR);
+  scanRoot(FONTS_DIR_UPSTREAM_HIDDEN);
+  scanRoot(FONTS_DIR_UPSTREAM_VISIBLE);
 
   // Sort families alphabetically
   std::sort(families_.begin(), families_.end(),

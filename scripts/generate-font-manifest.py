@@ -22,6 +22,7 @@ import json
 import os
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 # --- .cpfont binary format constants ---
@@ -96,6 +97,17 @@ def read_cpfont_styles(filepath: Path) -> list[str]:
         return styles
 
 
+def compute_crc32(filepath: Path) -> int:
+    # Matches the on-device esp_rom_crc32_le(0, buf, len) accumulator used by
+    # FontDownloadActivity::computeFileCrc32. Originally introduced upstream in
+    # crosspoint-reader PR #1904 ("verify CRC32 checksum for font files").
+    crc = 0
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            crc = zlib.crc32(chunk, crc)
+    return crc & 0xFFFFFFFF
+
+
 def parse_filename(filename: str) -> tuple[str, str] | None:
     """Parse '<FamilyName>_<size>.cpfont' into (family, size_str).
 
@@ -162,6 +174,7 @@ def build_manifest(
                 {
                     "name": filepath.relative_to(input_dir).as_posix(),
                     "size": filepath.stat().st_size,
+                    "crc32": compute_crc32(filepath),
                 }
             )
 
@@ -175,7 +188,9 @@ def build_manifest(
         )
 
     return {
-        "version": 1,
+        # v2 adds per-file crc32 (kept optional on the device side so old v1
+        # manifests still load — see FontDownloadActivity::fetchAndParseManifest).
+        "version": 2,
         "baseUrl": base_url,
         "families": manifest_families,
     }

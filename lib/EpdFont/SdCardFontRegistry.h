@@ -29,7 +29,13 @@ struct SdCardFontFamilyInfo {
 class SdCardFontRegistry {
  public:
   static constexpr int MAX_SD_FAMILIES = 128;
+  // Primary (writable) location. All installs/downloads/deletes target this root.
   static constexpr const char* FONTS_DIR = "/.crosspoint/fonts";
+  // Read-only fallback roots for upstream crosspoint-reader compatibility.
+  // Upstream uses "/.fonts" (preferred, hidden) and "/fonts" (visible). Both are
+  // scanned after the primary; primary wins on family-name conflicts.
+  static constexpr const char* FONTS_DIR_UPSTREAM_HIDDEN = "/.fonts";
+  static constexpr const char* FONTS_DIR_UPSTREAM_VISIBLE = "/fonts";
 
   // Scan SD card, populate families_. Returns true if any families found.
   bool discover();
@@ -44,4 +50,5 @@ class SdCardFontRegistry {
 
   static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
   void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
+  void scanRoot(const char* rootPath);
 };
