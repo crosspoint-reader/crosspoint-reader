@@ -141,6 +141,10 @@ class GfxRenderer {
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  /// Draws centered text supporting newlines (\n) for multi-line rendering.
+  /// Each line is drawn separately, centered, with line height spacing between them.
+  void drawCenteredTextWithNewlines(int fontId, int y, const char* text, bool black = true,
+                                    EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;

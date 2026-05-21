@@ -269,6 +269,34 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
   drawText(fontId, x, y, text, black, style);
 }
 
+void GfxRenderer::drawCenteredTextWithNewlines(const int fontId, const int y, const char* text, const bool black,
+                                               const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  const int lineHeight = getLineHeight(fontId);
+  int currentY = y;
+  const char* start = text;
+
+  while (*start != '\0') {
+    const char* end = strchr(start, '\n');
+    std::string line;
+    if (end == nullptr) {
+      line = start;
+      start = start + strlen(start);  // Move to end
+    } else {
+      line = std::string(start, end);
+      start = end + 1;  // Skip the newline character
+    }
+
+    if (!line.empty()) {
+      drawCenteredText(fontId, currentY, line.c_str(), black, style);
+    }
+    currentY += lineHeight;
+  }
+}
+
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style) const {
   const int yPos = y + getFontAscenderSize(fontId);
