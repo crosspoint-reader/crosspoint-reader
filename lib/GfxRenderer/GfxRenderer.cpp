@@ -20,6 +20,33 @@ bool shouldLogMissingGlyph(const uint32_t cp) {
   return loggedMissingGlyphs.insert(cp).second;
 }
 
+const EpdGlyph* resolveGlyphWithFallback(const EpdFontFamily& fontFamily, const uint32_t cp,
+                                         const EpdFontFamily::Style style, uint32_t* resolvedCp = nullptr) {
+  uint32_t cpUsed = cp;
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+
+  if (!glyph && cp != REPLACEMENT_GLYPH) {
+    glyph = fontFamily.getGlyph(REPLACEMENT_GLYPH, style);
+    if (glyph) cpUsed = REPLACEMENT_GLYPH;
+  }
+
+  if (!glyph && cp != static_cast<uint32_t>('?')) {
+    glyph = fontFamily.getGlyph('?', style);
+    if (glyph) cpUsed = static_cast<uint32_t>('?');
+  }
+
+  if (!glyph && cp != static_cast<uint32_t>(' ')) {
+    glyph = fontFamily.getGlyph(' ', style);
+    if (glyph) cpUsed = static_cast<uint32_t>(' ');
+  }
+
+  if (resolvedCp) {
+    *resolvedCp = cpUsed;
+  }
+
+  return glyph;
+}
+
 /**
  * Resolves the requested style to the best available style in the given SD card font.
  * Falls back gracefully when the font lacks the requested variant.
@@ -143,12 +170,17 @@ template <TextRotation rotation>
 static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
-  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  uint32_t resolvedCp = cp;
+  const EpdGlyph* glyph = resolveGlyphWithFallback(fontFamily, cp, style, &resolvedCp);
   if (!glyph) {
     if (shouldLogMissingGlyph(cp)) {
       LOG_ERR("GFX", "No glyph for codepoint %u (suppressing repeats)", cp);
     }
     return;
+  }
+
+  if (resolvedCp != cp && shouldLogMissingGlyph(cp)) {
+    LOG_DBG("GFX", "Missing glyph U+%04X, using fallback U+%04X", cp, resolvedCp);
   }
 
   const EpdFontData* fontData = fontFamily.getData(style);
@@ -318,23 +350,24 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     cp = font.applyLigatures(cp, text, style);
 
+    uint32_t resolvedCp = cp;
+    const EpdGlyph* glyph = resolveGlyphWithFallback(font, cp, style, &resolvedCp);
+
     // Differential rounding: snap (previous advance + current kern) as one unit so
     // identical character pairs always produce the same pixel step regardless of
     // where they fall on the line.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = font.getKerning(prevCp, resolvedCp, style);  // 4.4 fixed-point kern
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);               // snap 12.4 fixed-point to nearest pixel
     }
-
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
     prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
-    prevCp = cp;
+    renderCharImpl<TextRotation::None>(*this, renderMode, font, resolvedCp, lastBaseX, yPos, black, style);
+    prevCp = resolvedCp;
   }
 }
 
@@ -1265,16 +1298,18 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     cp = font.applyLigatures(cp, text, style);
 
+    uint32_t resolvedCp = cp;
+    const EpdGlyph* glyph = resolveGlyphWithFallback(font, cp, style, &resolvedCp);
+
     // Differential rounding: snap (previous advance + current kern) together,
     // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      const auto kernFP = font.getKerning(prevCp, resolvedCp, style);  // 4.4 fixed-point kern
       widthPx += fp4::toPixel(prevAdvanceFP + kernFP);         // snap 12.4 fixed-point to nearest pixel
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
-    prevCp = cp;
+    prevCp = resolvedCp;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
   return widthPx;
@@ -1346,22 +1381,23 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     cp = font.applyLigatures(cp, text, style);
 
+    uint32_t resolvedCp = cp;
+    const EpdGlyph* glyph = resolveGlyphWithFallback(font, cp, style, &resolvedCp);
+
     // Differential rounding: snap (previous advance + current kern) as one unit,
     // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = font.getKerning(prevCp, resolvedCp, style);  // 4.4 fixed-point kern
+      lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);               // snap 12.4 fixed-point to nearest pixel
     }
-
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
     prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
-    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
-    prevCp = cp;
+    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, resolvedCp, x, lastBaseY, black, style);
+    prevCp = resolvedCp;
   }
 }
 

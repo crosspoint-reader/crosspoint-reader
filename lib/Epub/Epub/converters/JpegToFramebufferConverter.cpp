@@ -408,12 +408,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  if (!validateImageDimensions(srcWidth, srcHeight, "JPEG")) {
-    jpeg->close();
-    delete jpeg;
-    return false;
-  }
-
   bool isProgressive = jpeg->getJPEGType() == JPEG_MODE_PROGRESSIVE;
   if (isProgressive) {
     LOG_INF("JPG", "Progressive JPEG detected - decoding DC coefficients only (lower quality)");
@@ -458,8 +452,20 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  ctx.scaledSrcWidth = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
-  ctx.scaledSrcHeight = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
+  // Validate the effective decode workload after JPEGDEC coarse scaling.
+  // This avoids rejecting large source images that are downscaled before rendering.
+  const int scaledSrcWidth = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
+  const int scaledSrcHeight = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
+  if (!validateImageDimensions(scaledSrcWidth, scaledSrcHeight, "JPEG")) {
+    LOG_ERR("JPG", "Effective JPEG size too large after 1/%d scaling: %dx%d (source %dx%d)", jpegScaleDenom,
+            scaledSrcWidth, scaledSrcHeight, srcWidth, srcHeight);
+    jpeg->close();
+    delete jpeg;
+    return false;
+  }
+
+  ctx.scaledSrcWidth = scaledSrcWidth;
+  ctx.scaledSrcHeight = scaledSrcHeight;
   ctx.dstWidth = destWidth;
   ctx.dstHeight = destHeight;
   ctx.fineScaleFPX = (int32_t)((int64_t)destWidth * FP_ONE / ctx.scaledSrcWidth);
