@@ -261,6 +261,10 @@ class EpubReaderActivity final : public Activity {
   // that was last rendered into the buffer (needed for image AA re-render).
   void displayPreRenderedPage(const Page& page, int orientedMarginTop, int orientedMarginRight,
                               int orientedMarginBottom, int orientedMarginLeft);
+  // If the frame buffer currently holds a pre-rendered next page, redraw the current page
+  // into it (no status bar, no flush). Restores the invariant other activities — notably
+  // SleepActivity's OVERLAY mode — rely on when transitioning out of the reader.
+  void restoreCurrentPageToBufferIfPreRendered();
   void renderStatusBar() const;
   // Snapshot of the three status-bar signals that can change while a page is otherwise idle.
   // Compared in shouldSkipPeriodicUpdate() to suppress no-op minute-tick re-renders that on

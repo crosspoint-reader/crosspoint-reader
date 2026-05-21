@@ -1517,6 +1517,8 @@ namespace {
 struct RemoteManifestFile {
   std::string name;
   size_t size = 0;
+  uint32_t crc32 = 0;
+  bool hasCrc32 = false;
 };
 
 struct RemoteManifestFamily {
@@ -1542,11 +1544,12 @@ bool isValidFontFileName(const std::string& name) {
   return true;
 }
 
-bool fetchRemoteFontManifest(FontInstaller& installer, std::vector<RemoteManifestFamily>& outFamilies,
-                             std::string& outBaseUrl, std::string& outError) {
+bool fetchRemoteFontManifest(HttpDownloader::Session& session, FontInstaller& installer,
+                             std::vector<RemoteManifestFamily>& outFamilies, std::string& outBaseUrl,
+                             std::string& outError) {
   static constexpr const char* MANIFEST_TMP = "/fonts_manifest_web.tmp";
 
-  auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+  auto result = HttpDownloader::downloadToFile(session, FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
   if (result != HttpDownloader::OK) {
     outError = "Failed to fetch font manifest";
     Storage.remove(MANIFEST_TMP);
@@ -1570,7 +1573,9 @@ bool fetchRemoteFontManifest(FontInstaller& installer, std::vector<RemoteManifes
   }
 
   const int version = doc["version"] | 0;
-  if (version != 1) {
+  // v1 (legacy, no crc32) and v2 (with crc32) — crc check is skipped per-file
+  // when absent. See upstream PR #1904 and scripts/generate-font-manifest.py.
+  if (version != 1 && version != 2) {
     outError = "Unsupported manifest version";
     return false;
   }
@@ -1596,6 +1601,10 @@ bool fetchRemoteFontManifest(FontInstaller& installer, std::vector<RemoteManifes
       RemoteManifestFile file;
       file.name = fileObj["name"] | "";
       file.size = static_cast<size_t>(fileObj["size"] | 0);
+      if (fileObj["crc32"].is<uint32_t>()) {
+        file.crc32 = fileObj["crc32"].as<uint32_t>();
+        file.hasCrc32 = true;
+      }
       if (!isValidFontFileName(file.name)) {
         LOG_ERR("WEB", "Manifest entry rejected, invalid file name in %s: %s", family.name.c_str(), file.name.c_str());
         fileNamesOk = false;
@@ -1639,8 +1648,8 @@ bool fetchRemoteFontManifest(FontInstaller& installer, std::vector<RemoteManifes
   return true;
 }
 
-bool installRemoteFamily(const RemoteManifestFamily& family, const std::string& baseUrl, FontInstaller& installer,
-                         std::string& outError) {
+bool installRemoteFamily(HttpDownloader::Session& session, const RemoteManifestFamily& family,
+                         const std::string& baseUrl, FontInstaller& installer, std::string& outError) {
   if (!FontInstaller::isValidFamilyName(family.name.c_str())) {
     outError = "Invalid family name";
     return false;
@@ -1672,19 +1681,18 @@ bool installRemoteFamily(const RemoteManifestFamily& family, const std::string& 
     return false;
   }
 
-  if (Storage.exists(stagingDir) && !Storage.removeDir(stagingDir)) {
-    outError = "Failed to prepare staging area";
-    return false;
-  }
-  if (!Storage.mkdir(stagingDir)) {
+  // Resumable staging: keep an existing __staging dir from a prior attempt so
+  // already-downloaded files can be reused (size + CRC validated per file).
+  if (!Storage.exists(stagingDir) && !Storage.mkdir(stagingDir)) {
     outError = "Failed to create staging area";
     return false;
   }
 
+  // The session is owned by the caller (handleFontInstall) so it can be
+  // reused across the manifest fetch and every family install in one batch.
   for (const auto& file : family.files) {
     esp_task_wdt_reset();
     yield();
-    delay(500);  // allow network stack to clean up sockets
 
     std::string localFilename = file.name;
     std::string familyPrefix = family.name + "/";
@@ -1695,9 +1703,32 @@ bool installRemoteFamily(const RemoteManifestFamily& family, const std::string& 
     char stagedPath[128];
     int sn = snprintf(stagedPath, sizeof(stagedPath), "%s/%s", stagingDir, localFilename.c_str());
     if (sn < 0 || static_cast<size_t>(sn) >= sizeof(stagedPath)) {
+      // Path-length bugs are not resumable; nuke staging so we don't get stuck.
       Storage.removeDir(stagingDir);
       outError = std::string("File path too long: ") + localFilename;
       return false;
+    }
+
+    // Reuse a previously-downloaded file if it still matches the manifest.
+    if (Storage.exists(stagedPath)) {
+      FsFile f;
+      bool sizeOk = false;
+      if (Storage.openFileForRead("WEB", stagedPath, f)) {
+        sizeOk = (static_cast<size_t>(f.size()) == file.size);
+        f.close();
+      }
+      bool crcOk = !file.hasCrc32;
+      if (sizeOk && file.hasCrc32) {
+        uint32_t actualCrc = 0;
+        if (FontInstaller::computeFileCrc32(stagedPath, actualCrc)) {
+          crcOk = (actualCrc == file.crc32);
+        }
+      }
+      if (sizeOk && crcOk && installer.validateCpfontFile(stagedPath)) {
+        LOG_DBG("WEB", "Resuming: reusing %s", stagedPath);
+        continue;
+      }
+      Storage.remove(stagedPath);
     }
 
     // Ensure intermediate subdirectories exist inside stagingDir
@@ -1709,15 +1740,25 @@ bool installRemoteFamily(const RemoteManifestFamily& family, const std::string& 
 
     const std::string url = baseUrl + file.name;
 
-    auto result = HttpDownloader::downloadToFile(url, stagedPath, nullptr);
+    auto result = HttpDownloader::downloadToFile(session, url, stagedPath, nullptr);
     if (result != HttpDownloader::OK) {
-      Storage.removeDir(stagingDir);
+      // Drop just the failed file; keep already-downloaded siblings.
+      Storage.remove(stagedPath);
       outError = std::string("Download failed: ") + file.name;
       return false;
     }
 
+    if (file.hasCrc32) {
+      uint32_t actualCrc = 0;
+      if (!FontInstaller::computeFileCrc32(stagedPath, actualCrc) || actualCrc != file.crc32) {
+        Storage.remove(stagedPath);
+        outError = std::string("Checksum mismatch: ") + file.name;
+        return false;
+      }
+    }
+
     if (!installer.validateCpfontFile(stagedPath)) {
-      Storage.removeDir(stagingDir);
+      Storage.remove(stagedPath);
       outError = std::string("Invalid font file: ") + file.name;
       return false;
     }
@@ -1801,15 +1842,18 @@ void CrossPointWebServer::handleFontManifest() {
   std::vector<RemoteManifestFamily> families;
   std::string baseUrl;
   std::string error;
-  if (!fetchRemoteFontManifest(installer, families, baseUrl, error)) {
-    JsonDocument errDoc;
-    errDoc["ok"] = false;
-    errDoc["error"] = error;
-    String out;
-    serializeJson(errDoc, out);
-    server->send(500, "application/json", out);
-    return;
-  }
+  {
+    HttpDownloader::Session manifestSession;
+    if (!fetchRemoteFontManifest(manifestSession, installer, families, baseUrl, error)) {
+      JsonDocument errDoc;
+      errDoc["ok"] = false;
+      errDoc["error"] = error;
+      String out;
+      serializeJson(errDoc, out);
+      server->send(500, "application/json", out);
+      return;
+    }
+  }  // close TLS before the response JSON document is built
 
   JsonDocument doc;
   doc["ok"] = true;
@@ -1848,18 +1892,24 @@ void CrossPointWebServer::handleFontDownload() {
   FontInstaller installer(sdFontSystem.registry());
   installer.refreshRegistry();
 
+  // Manifest fetch uses a local session that closes before parse, so the
+  // ArduinoJson parse runs on a clean heap. A separate install session is
+  // opened below for the actual family downloads.
   std::vector<RemoteManifestFamily> families;
   std::string baseUrl;
   std::string error;
-  if (!fetchRemoteFontManifest(installer, families, baseUrl, error)) {
-    JsonDocument errDoc;
-    errDoc["ok"] = false;
-    errDoc["error"] = error;
-    String out;
-    serializeJson(errDoc, out);
-    server->send(500, "application/json", out);
-    return;
-  }
+  {
+    HttpDownloader::Session manifestSession;
+    if (!fetchRemoteFontManifest(manifestSession, installer, families, baseUrl, error)) {
+      JsonDocument errDoc;
+      errDoc["ok"] = false;
+      errDoc["error"] = error;
+      String out;
+      serializeJson(errDoc, out);
+      server->send(500, "application/json", out);
+      return;
+    }
+  }  // manifestSession destructor closes the TLS connection here
 
   std::vector<RemoteManifestFamily*> targets;
   if (installAll) {
@@ -1888,15 +1938,19 @@ void CrossPointWebServer::handleFontDownload() {
   families.clear();
   families.shrink_to_fit();
 
+  // One install session covers every family in this batch. TLS handshake
+  // happens once on the first file of the first family; subsequent files
+  // (within and across families) reuse the open keep-alive connection.
+  HttpDownloader::Session installSession;
+
   size_t installedCount = 0;
   for (auto& family : targetCopies) {
     esp_task_wdt_reset();
     yield();
-    delay(500);  // allow network stack to clean up sockets
 
     LOG_DBG("WEB", "Installing font family: %s", family.name.c_str());
 
-    if (!installRemoteFamily(family, baseUrl, installer, error)) {
+    if (!installRemoteFamily(installSession, family, baseUrl, installer, error)) {
       JsonDocument errDoc;
       errDoc["ok"] = false;
       errDoc["error"] = error;

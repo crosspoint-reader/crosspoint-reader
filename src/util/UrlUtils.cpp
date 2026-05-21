@@ -174,8 +174,6 @@ std::string normalizeJoinedPath(const std::string_view baseDir, const std::strin
 }
 }  // namespace
 
-bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
-
 std::string ensureProtocol(const std::string& url) {
   if (url.find("://") == std::string::npos) {
     return "http://" + url;

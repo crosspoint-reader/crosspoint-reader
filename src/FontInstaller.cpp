@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <esp_rom_crc.h>
 
 #include <cctype>
 #include <cstring>
@@ -24,6 +25,27 @@ bool FontInstaller::isValidFamilyName(const char* name) {
     char c = *p;
     if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') {
       return false;
+    }
+  }
+  return true;
+}
+
+bool FontInstaller::isValidFontFileName(const char* name) {
+  if (name == nullptr || name[0] == '\0') return false;
+  // Matches the cap used by the web-server manifest parser; the SD-side path buffer is 128
+  // bytes including the family prefix, so 60 leaves plenty of headroom.
+  static constexpr size_t MAX_FONT_FILE_NAME_LEN = 60;
+  const size_t nameLen = strlen(name);
+  if (nameLen > MAX_FONT_FILE_NAME_LEN) return false;
+  if (name[0] == '/') return false;
+  if (strchr(name, '\\') != nullptr) return false;
+  if (strstr(name, "..") != nullptr) return false;
+  // Reject multiple slashes or trailing slash to limit directory depth
+  int slashCount = 0;
+  for (const char* p = name; *p; ++p) {
+    if (*p == '/') {
+      ++slashCount;
+      if (slashCount > 1 || *(p + 1) == '\0' || *(p + 1) == '/') return false;
     }
   }
   return true;
@@ -88,6 +110,32 @@ bool FontInstaller::validateCpfontFile(const char* path) {
 
 void FontInstaller::buildFontPath(const char* family, const char* filename, char* outBuf, size_t outBufSize) {
   snprintf(outBuf, outBufSize, "%s/%s/%s", SdCardFontRegistry::FONTS_DIR, family, filename);
+}
+
+void FontInstaller::buildStagingDirPath(const char* family, char* outBuf, size_t outBufSize) {
+  snprintf(outBuf, outBufSize, "%s/%s__staging", SdCardFontRegistry::FONTS_DIR, family);
+}
+
+void FontInstaller::buildBackupDirPath(const char* family, char* outBuf, size_t outBufSize) {
+  snprintf(outBuf, outBufSize, "%s/%s__backup", SdCardFontRegistry::FONTS_DIR, family);
+}
+
+bool FontInstaller::computeFileCrc32(const char* path, uint32_t& outCrc) {
+  FsFile f;
+  if (!Storage.openFileForRead("FONT", path, f)) {
+    return false;
+  }
+  constexpr size_t BUF_SIZE = 128;
+  uint8_t buf[BUF_SIZE];
+  uint32_t crc = 0;
+  while (f.available()) {
+    const int n = f.read(buf, BUF_SIZE);
+    if (n <= 0) break;
+    crc = esp_rom_crc32_le(crc, buf, static_cast<uint32_t>(n));
+  }
+  f.close();
+  outCrc = crc;
+  return true;
 }
 
 FontInstaller::Error FontInstaller::deleteFamily(const char* familyName) {
