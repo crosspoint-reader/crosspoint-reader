@@ -136,6 +136,13 @@ class CrossPointSettings {
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, SHORT_PWRBTN_COUNT };
 
+  // Wake-up hold duration for power button
+  enum POWER_BUTTON_WAKE_DURATION { WAKE_SHORT = 0, WAKE_NORMAL = 1, WAKE_LONG = 2, POWER_BUTTON_WAKE_DURATION_COUNT };
+
+  static constexpr uint16_t POWER_BUTTON_SHORT_MS = 10;
+  static constexpr uint16_t POWER_BUTTON_NORMAL_MS = 400;
+  static constexpr uint16_t POWER_BUTTON_LONG_MS = POWER_BUTTON_NORMAL_MS * 2;
+
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
@@ -192,6 +199,8 @@ class CrossPointSettings {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Power button wake-up hold duration
+  uint8_t powerButtonWakeDuration = WAKE_NORMAL;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -262,9 +271,24 @@ class CrossPointSettings {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
-  uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
+  uint16_t getPowerButtonSleepDuration() const {
+    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? POWER_BUTTON_SHORT_MS : POWER_BUTTON_NORMAL_MS;
   }
+
+  uint16_t getPowerButtonWakeDuration() const {
+    switch (powerButtonWakeDuration) {
+      case WAKE_SHORT:
+        return POWER_BUTTON_SHORT_MS;
+      case WAKE_LONG:
+        return POWER_BUTTON_LONG_MS;
+      case WAKE_NORMAL:
+      default:
+        return POWER_BUTTON_NORMAL_MS;
+    }
+  }
+
+  bool isShortWakeAllowed() const { return powerButtonWakeDuration == WAKE_SHORT; }
+
   int getReaderFontId() const;
 
   // If count_only is true, returns the number of settings items that would be written.

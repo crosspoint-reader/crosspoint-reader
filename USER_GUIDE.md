@@ -63,7 +63,7 @@ Alternatively, while reading a book, press the **Confirm** button to open the re
 ### Power On / Off
 
 To turn the device on or off, **press and hold the Power button for approximately half a second**.
-In the **[Controls Settings](#363-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
+In the **[Controls Settings](#363-controls)** you can configure the power button sleep and wake duration independently.
 
 To reboot the device (for example after a firmware update or if it's frozen), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
@@ -210,6 +210,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
+- **Power Button Wake Duration**: Controls how long the power button must be held to wake the device:
+  - "Short" - Wake with a short press
+  - "Normal" (default) - Wake with a normal hold of about half a second
+  - "Long" - Wake with a longer hold, about twice the normal duration
 
 #### 3.6.4 System
 

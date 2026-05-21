@@ -176,6 +176,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_PWR_BTN_WAKE_DURATION, &CrossPointSettings::powerButtonWakeDuration,
+                          {StrId::STR_SHORT, StrId::STR_NORMAL, StrId::STR_LONG}, "powerButtonWakeDuration",
+                          StrId::STR_CAT_CONTROLS),
 
         // --- System ---
         SettingInfo::Enum(StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeout,
@@ -254,9 +257,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     };
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {
-      // Insert after the short power button setting (end of Controls section)
+      // Insert after the wake-duration setting (end of Controls section)
       for (auto it = v.begin(); it != v.end(); ++it) {
-        if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
+        if (it->nameId == StrId::STR_PWR_BTN_WAKE_DURATION) {
           v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                                              {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED},
                                              "tiltPageTurn", StrId::STR_CAT_CONTROLS));
