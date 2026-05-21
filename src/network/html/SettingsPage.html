@@ -314,6 +314,9 @@
   let originalValues = {};
   let preserveQuickResumeTimeoutOn = false;
   let quickResumeTimeoutAutoEnabled = false;
+  const SLEEP_SCREEN_MODE = {
+    QUICK_RESUME: 6
+  };
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -434,8 +437,19 @@
   function isQuickResumeSleepScreenSelected() {
     const sleepScreen = findSetting('sleepScreen');
     const sleepScreenValue = getControlValue('sleepScreen');
-    if (!sleepScreen || sleepScreenValue === undefined || !sleepScreen.options) return false;
-    return sleepScreen.options[sleepScreenValue] === 'Quick Resume';
+    if (!sleepScreen || sleepScreenValue === undefined || !Number.isFinite(sleepScreenValue)) return false;
+
+    let selectedValue = sleepScreenValue;
+    if (Array.isArray(sleepScreen.values)) {
+      selectedValue = Number(sleepScreen.values[sleepScreenValue]);
+    } else if (Array.isArray(sleepScreen.options)) {
+      const selectedOption = sleepScreen.options[sleepScreenValue];
+      if (selectedOption && typeof selectedOption === 'object' && 'value' in selectedOption) {
+        selectedValue = Number(selectedOption.value);
+      }
+    }
+
+    return selectedValue === SLEEP_SCREEN_MODE.QUICK_RESUME;
   }
 
   function syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged) {
