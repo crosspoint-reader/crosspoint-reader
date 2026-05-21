@@ -235,4 +235,3 @@ bool RecentBooksStore::loadFromFile() {
   }
   return false;
 }
-
