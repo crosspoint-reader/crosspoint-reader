@@ -593,11 +593,25 @@ void loop() {
   }
 
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
+  // Uses FULL_REFRESH (not HALF) so the strongest one-shot waveform runs and
+  // each press is naturally rate-limited by the ~700ms refresh duration.
+  // Additional debounce guards against rapid mashing: on X3, repeating a
+  // HALF/scrub waveform faster than the panel can fully resolve pixel state
+  // accumulates DC bias per pixel; over ~50+ presses this can brown out one
+  // gate-driver region and leave half the screen stuck at one rail.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
-    LOG_DBG("MAIN", "Manual screen refresh triggered");
-    RenderLock lock;
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    static unsigned long lastManualRefreshMs = 0;
+    constexpr unsigned long MANUAL_REFRESH_DEBOUNCE_MS = 1500;
+    const unsigned long now = millis();
+    if (now - lastManualRefreshMs >= MANUAL_REFRESH_DEBOUNCE_MS) {
+      LOG_DBG("MAIN", "Manual screen refresh triggered");
+      RenderLock lock;
+      renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+      lastManualRefreshMs = millis();
+    } else {
+      LOG_DBG("MAIN", "Manual refresh debounced (%lums since last)", now - lastManualRefreshMs);
+    }
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.
