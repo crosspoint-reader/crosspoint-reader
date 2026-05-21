@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -33,8 +34,10 @@ class ImageToFramebufferDecoder {
 
  protected:
   // Size validation helpers
-  static constexpr int MAX_SOURCE_PIXELS = 3145728;  // 2048 * 1536
+  static constexpr int64_t MAX_SOURCE_PIXELS = 3145728;           // 2048 * 1536
+  static constexpr int64_t MAX_STREAMED_SOURCE_PIXELS = 8388608;  // 4096 * 2048
 
-  bool validateImageDimensions(int width, int height, const std::string& format);
+  bool validateImageDimensions(int width, int height, const std::string& format,
+                               int64_t maxPixels = MAX_SOURCE_PIXELS);
   void warnUnsupportedFeature(const std::string& feature, const std::string& imagePath);
 };

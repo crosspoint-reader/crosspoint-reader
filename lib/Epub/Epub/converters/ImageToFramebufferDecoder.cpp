@@ -2,11 +2,12 @@
 
 #include <Logging.h>
 
-bool ImageToFramebufferDecoder::validateImageDimensions(int width, int height, const std::string& format) {
+bool ImageToFramebufferDecoder::validateImageDimensions(int width, int height, const std::string& format,
+                                                        int64_t maxPixels) {
   const int64_t totalPixels = static_cast<int64_t>(width) * static_cast<int64_t>(height);
-  if (totalPixels > MAX_SOURCE_PIXELS) {
-    LOG_ERR("IMG", "Image too large (%dx%d = %lld pixels %s), max supported: %d pixels", width, height,
-            static_cast<long long>(totalPixels), format.c_str(), MAX_SOURCE_PIXELS);
+  if (totalPixels > maxPixels) {
+    LOG_ERR("IMG", "Image too large (%dx%d = %lld pixels %s), max supported: %lld pixels", width, height,
+            static_cast<long long>(totalPixels), format.c_str(), static_cast<long long>(maxPixels));
     return false;
   }
   return true;

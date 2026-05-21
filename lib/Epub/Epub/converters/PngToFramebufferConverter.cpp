@@ -298,7 +298,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
 
-  if (!validateImageDimensions(png->getWidth(), png->getHeight(), "PNG")) {
+  if (!validateImageDimensions(png->getWidth(), png->getHeight(), "PNG", MAX_STREAMED_SOURCE_PIXELS)) {
     png->close();
     delete png;
     return false;

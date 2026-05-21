@@ -1,6 +1,8 @@
 #include "ImageDecoderFactory.h"
 
+#include <FsHelpers.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <memory>
 #include <string>
@@ -12,25 +14,24 @@ std::unique_ptr<JpegToFramebufferConverter> ImageDecoderFactory::jpegDecoder = n
 std::unique_ptr<PngToFramebufferConverter> ImageDecoderFactory::pngDecoder = nullptr;
 
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& imagePath) {
-  std::string ext = imagePath;
-  size_t dotPos = ext.rfind('.');
-  if (dotPos != std::string::npos) {
-    ext = ext.substr(dotPos);
-    for (auto& c : ext) {
-      c = tolower(c);
-    }
-  } else {
-    ext = "";
-  }
-
-  if (JpegToFramebufferConverter::supportsFormat(ext)) {
+  if (FsHelpers::hasJpgExtension(imagePath)) {
     if (!jpegDecoder) {
-      jpegDecoder.reset(new JpegToFramebufferConverter());
+      jpegDecoder = makeUniqueNoThrow<JpegToFramebufferConverter>();
+      if (!jpegDecoder) {
+        LOG_ERR("DEC", "OOM: failed to allocate JPEG decoder");
+        return nullptr;
+      }
     }
     return jpegDecoder.get();
-  } else if (PngToFramebufferConverter::supportsFormat(ext)) {
+  }
+
+  if (FsHelpers::hasPngExtension(imagePath)) {
     if (!pngDecoder) {
-      pngDecoder.reset(new PngToFramebufferConverter());
+      pngDecoder = makeUniqueNoThrow<PngToFramebufferConverter>();
+      if (!pngDecoder) {
+        LOG_ERR("DEC", "OOM: failed to allocate PNG decoder");
+        return nullptr;
+      }
     }
     return pngDecoder.get();
   }
@@ -39,4 +40,6 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
   return nullptr;
 }
 
-bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) { return getDecoder(imagePath) != nullptr; }
+bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) {
+  return FsHelpers::hasJpgExtension(imagePath) || FsHelpers::hasPngExtension(imagePath);
+}
