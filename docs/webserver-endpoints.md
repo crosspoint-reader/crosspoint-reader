@@ -204,40 +204,41 @@ Folder created: NewFolder
 
 ### POST `/delete` - Delete File or Folder
 
-Deletes a file or folder from the SD card.
+Deletes one or more files or empty folders from the SD card.
 
 **Request:**
 ```bash
 # Delete a file
-curl -X POST -d "path=/Books/mybook.epub&type=file" http://crosspoint.local/delete
+curl -X POST -d "path=/Books/mybook.epub" http://crosspoint.local/delete
 
 # Delete an empty folder
-curl -X POST -d "path=/OldFolder&type=folder" http://crosspoint.local/delete
+curl -X POST -d "path=/OldFolder" http://crosspoint.local/delete
+
+# Delete multiple items
+curl -X POST -d 'paths=["/Books/old.epub","/OldFolder"]' http://crosspoint.local/delete
 ```
 
 **Form Parameters:**
 
-| Parameter | Required | Default | Description                      |
-| --------- | -------- | ------- | -------------------------------- |
-| `path`    | Yes      | -       | Path to the item to delete       |
-| `type`    | No       | `file`  | Type of item: `file` or `folder` |
+| Parameter | Required | Default | Description |
+| --------- | -------- | ------- | ----------- |
+| `path`    | Yes, unless `paths` is provided | - | Path to one item to delete |
+| `paths`   | Yes, unless `path` is provided | - | JSON array of paths to delete |
 
 **Response (200 OK):**
-```
-Deleted successfully
+```text
+All items deleted successfully
 ```
 
 **Error Responses:**
 
-| Status | Body                                          | Cause                         |
-| ------ | --------------------------------------------- | ----------------------------- |
-| 400    | `Missing path`                                | `path` parameter not provided |
-| 400    | `Cannot delete root directory`                | Attempted to delete `/`       |
-| 400    | `Folder is not empty. Delete contents first.` | Non-empty folder              |
-| 403    | `Cannot delete system files`                  | Hidden file (starts with `.`) |
-| 403    | `Cannot delete protected items`               | Protected system folder       |
-| 404    | `Item not found`                              | Path does not exist           |
-| 500    | `Failed to delete item`                       | SD card error                 |
+| Status | Body                                        | Cause                              |
+| ------ | ------------------------------------------- | ---------------------------------- |
+| 400    | `Missing "path" or "paths" argument`        | Neither parameter was provided     |
+| 400    | `Provide either 'path' or 'paths', not both` | Both delete parameters were sent   |
+| 400    | `Invalid paths format`                      | `paths` was not valid JSON         |
+| 400    | `No paths provided`                         | `paths` was an empty JSON array    |
+| 500    | `Failed to delete some items: ...`          | One or more paths could not be deleted |
 
 **Protected Items:**
 - Files/folders starting with `.`

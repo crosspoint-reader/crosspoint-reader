@@ -110,8 +110,16 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       if (self->inEntry) {
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
-          self->currentEntry.type = OpdsEntryType::BOOK;
-          self->currentEntry.href = href;
+          // Prefer plain EPUB links over derived formats when multiple
+          // acquisition links are present for one entry.
+          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
+          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
+                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
+                                            self->currentEntry.href.find("/epub/") != std::string::npos);
+          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
+            self->currentEntry.type = OpdsEntryType::BOOK;
+            self->currentEntry.href = href;
+          }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
             self->currentEntry.type = OpdsEntryType::NAVIGATION;

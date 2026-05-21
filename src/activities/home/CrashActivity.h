@@ -1,5 +1,5 @@
 #pragma once
-#include "../Activity.h"
+#include "activities/Activity.h"
 
 class CrashActivity final : public Activity {
   std::string panicMessage;

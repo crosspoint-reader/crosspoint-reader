@@ -1,18 +1,11 @@
 #include "I18n.h"
 
-#include <HalStorage.h>
-#include <Logging.h>
-#include <Serialization.h>
-
-#include <string>
+#include <cstddef>
+#include <cstring>
 
 #include "I18nStrings.h"
 
 using namespace i18n_strings;
-
-// Settings file path
-static constexpr const char* SETTINGS_FILE = "/.crosspoint/language.bin";
-static constexpr uint8_t SETTINGS_VERSION = 2;
 
 I18n& I18n::getInstance() {
   static I18n instance;
@@ -27,7 +20,11 @@ const char* I18n::get(StrId id) const {
 
   // Use generated helper function - no hardcoded switch needed!
   const LangStrings lang = getLanguageStrings(_language);
-  return lang.data + lang.offsets[index];
+
+  // If bit 15 of the offset is set, apply the offset to the English lookup table
+  const uint16_t off = lang.offsets[index];
+  if (off & 0x8000) return STRINGS_EN_DATA + (off & 0x7FFF);
+  return lang.data + off;
 }
 
 void I18n::setLanguage(Language lang) {
@@ -35,7 +32,6 @@ void I18n::setLanguage(Language lang) {
     return;
   }
   _language = lang;
-  saveSettings();
 }
 
 const char* I18n::getLanguageName(Language lang) const {
@@ -46,66 +42,11 @@ const char* I18n::getLanguageName(Language lang) const {
   return LANGUAGE_NAMES[index];
 }
 
-const char* I18n::getLanguageCode(Language lang) const {
-  const auto index = static_cast<size_t>(lang);
-  if (index >= static_cast<size_t>(Language::_COUNT)) {
-    return LANGUAGE_CODES[0];
+Language I18n::languageFromCode(const char* code) {
+  for (uint8_t i = 0; i < getLanguageCount(); i++) {
+    if (strcmp(code, LANGUAGE_CODES[i]) == 0) return static_cast<Language>(i);
   }
-  return LANGUAGE_CODES[index];
-}
-
-void I18n::saveSettings() {
-  Storage.mkdir("/.crosspoint");
-
-  FsFile file;
-  if (!Storage.openFileForWrite("I18N", SETTINGS_FILE, file)) {
-    LOG_ERR("I18N", "Failed to save settings");
-    return;
-  }
-
-  serialization::writePod(file, SETTINGS_VERSION);
-
-  const char* code = getLanguageCode(_language);
-  serialization::writeString(file, code);
-
-  LOG_DBG("I18N", "Settings saved: code=%s", code);
-}
-
-void I18n::loadSettings() {
-  FsFile file;
-  if (!Storage.openFileForRead("I18N", SETTINGS_FILE, file)) {
-    LOG_DBG("I18N", "No settings file, using default");
-    return;
-  }
-
-  uint8_t version;
-  serialization::readPod(file, version);
-
-  if (version == SETTINGS_VERSION) {
-    std::string code;
-    serialization::readString(file, code);
-
-    for (uint8_t i = 0; i < getLanguageCount(); i++) {
-      if (code == LANGUAGE_CODES[i]) {
-        _language = static_cast<Language>(i);
-        LOG_DBG("I18N", "Loaded language: %s", code.c_str());
-        return;
-      }
-    }
-
-    LOG_ERR("I18N", "Unknown language code: %s", code.c_str());
-    return;
-  }
-
-  if (version == 1) {
-    uint8_t lang;
-    serialization::readPod(file, lang);
-    if (lang < static_cast<size_t>(Language::_COUNT)) {
-      _language = static_cast<Language>(lang);
-      saveSettings();
-      LOG_INF("I18N", "Migrated v1 language setting");
-    }
-  }
+  return Language::EN;
 }
 
 // Generate character set for a specific language
