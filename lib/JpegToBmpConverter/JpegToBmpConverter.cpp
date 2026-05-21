@@ -403,8 +403,14 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   const int srcWidth = jpeg->getWidth();
   const int srcHeight = jpeg->getHeight();
+  const bool progressiveDecode = (jpeg->getJPEGType() == JPEG_MODE_PROGRESSIVE);
+  const int decodedSrcWidth = progressiveDecode ? ((srcWidth + 7) >> 3) : srcWidth;
+  const int decodedSrcHeight = progressiveDecode ? ((srcHeight + 7) >> 3) : srcHeight;
 
   LOG_DBG("JPG", "JPEG dimensions: %dx%d", srcWidth, srcHeight);
+  if (progressiveDecode) {
+    LOG_DBG("JPG", "Progressive JPEG decode uses 1/8 source: %dx%d", decodedSrcWidth, decodedSrcHeight);
+  }
 
   constexpr int MAX_IMAGE_WIDTH = 2048;
   constexpr int MAX_IMAGE_HEIGHT = 3072;
@@ -418,6 +424,15 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // Calculate output dimensions (pre-scale to fit display exactly)
   int outWidth = srcWidth;
   int outHeight = srcHeight;
+  if (targetWidth <= 0 || targetHeight <= 0) {
+    // Without an explicit target, keep decoder-native dimensions.
+    outWidth = decodedSrcWidth;
+    outHeight = decodedSrcHeight;
+  }
+
+  const int scaleSrcWidth = decodedSrcWidth;
+  const int scaleSrcHeight = decodedSrcHeight;
+
   uint32_t scaleX_fp = 65536;  // 1.0 in 16.16 fixed point
   uint32_t scaleY_fp = 65536;
   bool needsScaling = false;
@@ -437,12 +452,14 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
 
-    scaleX_fp = (static_cast<uint32_t>(srcWidth) << 16) / outWidth;
-    scaleY_fp = (static_cast<uint32_t>(srcHeight) << 16) / outHeight;
-    needsScaling = true;
-
     LOG_DBG("JPG", "Scaling %dx%d -> %dx%d (target %dx%d)", srcWidth, srcHeight, outWidth, outHeight, targetWidth,
             targetHeight);
+  }
+
+  if (scaleSrcWidth != outWidth || scaleSrcHeight != outHeight) {
+    scaleX_fp = (static_cast<uint32_t>(scaleSrcWidth) << 16) / outWidth;
+    scaleY_fp = (static_cast<uint32_t>(scaleSrcHeight) << 16) / outHeight;
+    needsScaling = true;
   }
 
   // Write BMP header with output dimensions
@@ -460,8 +477,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   BmpConvertCtx ctx = {};
   ctx.bmpOut = &bmpOut;
-  ctx.srcWidth = srcWidth;
-  ctx.srcHeight = srcHeight;
+  ctx.srcWidth = scaleSrcWidth;
+  ctx.srcHeight = scaleSrcHeight;
   ctx.outWidth = outWidth;
   ctx.outHeight = outHeight;
   ctx.oneBit = oneBit;
@@ -474,10 +491,10 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // MCU row buffer: MAX_MCU_HEIGHT rows × srcWidth columns of grayscale
   ctx.mcuBuf = makeUniqueNoThrow<uint8_t[]>(MAX_MCU_HEIGHT * srcWidth);
   if (!ctx.mcuBuf) {
-    LOG_ERR("JPG", "OOM: MCU buffer (%d bytes)", MAX_MCU_HEIGHT * srcWidth);
+    LOG_ERR("JPG", "OOM: MCU buffer (%d bytes)", MAX_MCU_HEIGHT * ctx.srcWidth);
     return false;
   }
-  memset(ctx.mcuBuf.get(), 0, MAX_MCU_HEIGHT * srcWidth);
+  memset(ctx.mcuBuf.get(), 0, MAX_MCU_HEIGHT * ctx.srcWidth);
 
   ctx.bmpRow = makeUniqueNoThrow<uint8_t[]>(bytesPerRow);
   if (!ctx.bmpRow) {
