@@ -535,13 +535,19 @@ void XtcReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION a
       }
       break;
     case BA::BTN_PAGE_FORWARD_10:
+      const uint32_t prevPage = currentPage;
       currentPage = (currentPage + 10 < pageCount) ? currentPage + 10 : pageCount - 1;
-      globalReadingSessionTracker().onPageTurn();
+      if (currentPage != prevPage) {
+        globalReadingSessionTracker().onPageTurn();
+      }
       requestUpdate();
       break;
     case BA::BTN_PAGE_BACK_10:
+      const uint32_t prevPage = currentPage;
       currentPage = (currentPage >= 10) ? currentPage - 10 : 0;
-      globalReadingSessionTracker().onPageTurn();
+      if (currentPage != prevPage) {
+        globalReadingSessionTracker().onPageTurn();
+      }
       requestUpdate();
       break;
     case BA::BTN_NEXT_SECTION:
