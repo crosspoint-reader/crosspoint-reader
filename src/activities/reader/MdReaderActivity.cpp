@@ -16,10 +16,12 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "FinishedBookActivity.h"
+#include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "MdReaderTocSelectionActivity.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
+#include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -59,6 +61,9 @@ void MdReaderActivity::onEnter() {
   const std::string txtSidecar = ReaderActivity::sidecarCoverPath(filePath);
   const std::string txtCover = txtSidecar.empty() ? txt->getThumbBmpPath() : txtSidecar;
   RECENT_BOOKS.addBook(filePath, fileName, "", "", txtCover);
+
+  // Start the stats session.
+  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(filePath), fileName, "");
 
   requestUpdate();
 }
@@ -218,6 +223,9 @@ void MdReaderActivity::scanHeadings() {
 void MdReaderActivity::onExit() {
   Activity::onExit();
 
+  // Flush the stats session before tearing down the reader.
+  globalReadingSessionTracker().end();
+
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   pageOffsets.clear();
@@ -269,6 +277,7 @@ void MdReaderActivity::loop() {
       if (currentPage > 0) {
         currentPage--;
         currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       return;
@@ -279,6 +288,7 @@ void MdReaderActivity::loop() {
       if (currentPage < totalPages - 1) {
         currentPage++;
         currentHeadingIndex = getHeadingIndexForOffset(pageOffsets[currentPage]);
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       } else {
         saveProgress();
@@ -292,6 +302,7 @@ void MdReaderActivity::loop() {
                 requestUpdate();
                 return;
               }
+              globalReadingSessionTracker().markFinished();
               const auto& menuResult = std::get<MenuResult>(result.data);
               if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
                 if (SETTINGS.moveFinishedBooksToCompleted) {
@@ -914,6 +925,7 @@ void MdReaderActivity::saveProgress() const {
     // 7-byte format matching TxtReaderActivity: page(2 bytes LE) + file offset(4 bytes LE) + overallPercent(1 byte)
     const size_t offset =
         (currentPage >= 0 && currentPage < static_cast<int>(pageOffsets.size())) ? pageOffsets[currentPage] : 0;
+    const uint8_t percent = ReaderUtils::pageProgressPercentByte(currentPage, totalPages);
     uint8_t data[7];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
@@ -921,9 +933,10 @@ void MdReaderActivity::saveProgress() const {
     data[3] = (offset >> 8) & 0xFF;
     data[4] = (offset >> 16) & 0xFF;
     data[5] = (offset >> 24) & 0xFF;
-    data[6] = ReaderUtils::pageProgressPercentByte(currentPage, totalPages);
+    data[6] = percent;
     f.write(data, 7);
     f.close();
+    globalReadingSessionTracker().updateProgress(percent);
   }
 }
 
@@ -1082,6 +1095,7 @@ void MdReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION ac
       if (currentPage < totalPages - 1) {
         currentPage++;
         currentHeadingIndex = pageOffsets.empty() ? -1 : getHeadingIndexForOffset(pageOffsets[currentPage]);
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       break;
@@ -1089,6 +1103,7 @@ void MdReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION ac
       if (currentPage > 0) {
         currentPage--;
         currentHeadingIndex = pageOffsets.empty() ? -1 : getHeadingIndexForOffset(pageOffsets[currentPage]);
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       break;

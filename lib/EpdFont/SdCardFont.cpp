@@ -1331,6 +1331,12 @@ void SdCardFont::clearAccumulation() {
 // --- Stats ---
 
 void SdCardFont::logStats(const char* label) {
+  // Suppress when this font wasn't touched this phase — FontCacheManager iterates every
+  // registered SD font, but only the active one for the page will have non-zero stats.
+  if (stats_.prewarmTotalMs == 0 && stats_.sdReadTimeMs == 0 && stats_.seekCount == 0 && stats_.uniqueGlyphs == 0 &&
+      stats_.bitmapBytes == 0) {
+    return;
+  }
   LOG_DBG("SDCF", "[%s] total=%ums sd_read=%ums seeks=%u glyphs=%u bitmap=%u bytes", label, stats_.prewarmTotalMs,
           stats_.sdReadTimeMs, stats_.seekCount, stats_.uniqueGlyphs, stats_.bitmapBytes);
 }

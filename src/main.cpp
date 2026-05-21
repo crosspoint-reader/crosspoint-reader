@@ -28,6 +28,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -384,6 +385,7 @@ void setup() {
   HalClock::restore();
   RECENT_BOOKS.loadFromFile();
   GLOBAL_BOOKMARKS.load();
+  READING_STATS.loadFromFile();
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.

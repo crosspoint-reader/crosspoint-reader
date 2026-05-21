@@ -15,9 +15,11 @@
 #include "CrossPointState.h"
 #include "FinishedBookActivity.h"
 #include "GlobalBookmarkIndex.h"
+#include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
+#include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
 #include "StarredPagesActivity.h"
 #include "components/UITheme.h"
@@ -124,12 +126,20 @@ void TxtReaderActivity::onEnter() {
   const std::string txtCover = txtSidecar.empty() ? txt->getThumbBmpPath() : txtSidecar;
   RECENT_BOOKS.addBook(filePath, fileName, "", "", txtCover);
 
+  // Start reading-stats session. Same filename-hash policy as EPUB so renamed
+  // files start fresh; author is unknown for plain TXT.
+  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(filePath), fileName, "");
+
   // Trigger first update
   requestUpdate();
 }
 
 void TxtReaderActivity::onExit() {
   Activity::onExit();
+
+  // Flush the stats session before tearing down the txt — same pattern as
+  // EpubReaderActivity::onExit().
+  globalReadingSessionTracker().end();
 
   // Save bookmarks before exit
   bookmarkStore.save();
@@ -195,6 +205,7 @@ void TxtReaderActivity::loop() {
         ev.type == ButtonEventManager::PressType::Short) {
       if (currentPage > 0) {
         currentPage--;
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       return;
@@ -204,6 +215,7 @@ void TxtReaderActivity::loop() {
         ev.type == ButtonEventManager::PressType::Short) {
       if (currentPage < totalPages - 1) {
         currentPage++;
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       } else {
         launchFinishedBookFlow();
@@ -220,11 +232,13 @@ void TxtReaderActivity::loop() {
   if (prevTriggered) {
     if (currentPage > 0) {
       currentPage--;
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
     }
   } else if (nextTriggered) {
     if (currentPage < totalPages - 1) {
       currentPage++;
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
     } else {
       launchFinishedBookFlow();
@@ -243,6 +257,7 @@ void TxtReaderActivity::launchFinishedBookFlow() {
                              requestUpdate();
                              return;
                            }
+                           globalReadingSessionTracker().markFinished();
                            const auto& menuResult = std::get<MenuResult>(result.data);
                            if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
                              if (SETTINGS.moveFinishedBooksToCompleted) {
@@ -515,6 +530,7 @@ void TxtReaderActivity::saveProgress() const {
     // 7-byte format: page(2 bytes LE) + file offset(4 bytes LE) + overallPercent(1 byte)
     // The offset lets drawCurrentPageToBuffer render without requiring index.bin.
     const size_t offset = (currentPage < static_cast<int>(pageOffsets.size())) ? pageOffsets[currentPage] : 0;
+    const uint8_t percent = ReaderUtils::pageProgressPercentByte(currentPage, totalPages);
     uint8_t data[7];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
@@ -522,9 +538,10 @@ void TxtReaderActivity::saveProgress() const {
     data[3] = (offset >> 8) & 0xFF;
     data[4] = (offset >> 16) & 0xFF;
     data[5] = (offset >> 24) & 0xFF;
-    data[6] = ReaderUtils::pageProgressPercentByte(currentPage, totalPages);
+    data[6] = percent;
     f.write(data, 7);
     f.close();
+    globalReadingSessionTracker().updateProgress(percent);
   }
 }
 
@@ -888,23 +905,27 @@ void TxtReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION a
     case BA::BTN_PAGE_FORWARD:
       if (currentPage < totalPages - 1) {
         currentPage++;
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       break;
     case BA::BTN_PAGE_BACK:
       if (currentPage > 0) {
         currentPage--;
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       break;
     case BA::BTN_PAGE_FORWARD_10:
       currentPage += 10;
       clampPage();
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
       break;
     case BA::BTN_PAGE_BACK_10:
       currentPage -= 10;
       clampPage();
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
       break;
     case BA::BTN_STAR_PAGE:

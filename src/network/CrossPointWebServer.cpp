@@ -17,6 +17,7 @@
 #include "FontInstaller.h"
 #include "HttpFileStreamer.h"
 #include "OpdsServerStore.h"
+#include "ReadingStats.h"
 #include "SdCardFontGlobals.h"
 #include "SdCardFontRegistry.h"
 #include "SettingsList.h"
@@ -27,6 +28,7 @@
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/StatsPageHtml.generated.h"
 #include "html/WelcomePageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "network/HttpDownloader.h"
@@ -219,6 +221,10 @@ void CrossPointWebServer::begin() {
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
 
   // Font management endpoints
+  server->on("/stats", HTTP_GET, [this] { handleStatsPage(); });
+  server->on("/api/stats", HTTP_GET, [this] { handleStatsApi(); });
+  server->on("/api/stats/export", HTTP_GET, [this] { handleStatsExport(); });
+
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
   server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
   server->on("/api/fonts/manifest", HTTP_GET, [this] { handleFontManifest(); });
@@ -417,6 +423,95 @@ void CrossPointWebServer::handleSystemInfoPage() const {
   sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
   int32_t t1 = millis();
   LOG_DBG("WEB", "Served system info page in %d ms", t1 - t0);
+}
+
+void CrossPointWebServer::handleStatsPage() const {
+  int32_t t0 = millis();
+  sendHtmlContent(server.get(), StatsPageHtml, sizeof(StatsPageHtml));
+  int32_t t1 = millis();
+  LOG_DBG("WEB", "Served stats page in %d ms", t1 - t0);
+}
+
+void CrossPointWebServer::handleStatsApi() const {
+  // Wire the same data the on-device screens use into a JSON payload the
+  // browser dashboard can consume. We pre-compute streaks and todayDayIndex
+  // here so the browser doesn't have to recreate the day-index math; the day
+  // arrays still go across untouched so the browser can render the sparkline.
+  const auto& store = READING_STATS;
+  const uint16_t today = currentLocalDayIndex();
+  const bool haveStreak = today != 0 && !store.getGlobalDays().empty();
+
+  JsonDocument doc;
+  doc["totalSeconds"] = store.getGlobalTotalSeconds();
+  doc["totalSessions"] = store.getGlobalTotalSessions();
+  doc["totalPagesTurned"] = store.getGlobalTotalPagesTurned();
+  doc["bookCount"] = static_cast<uint32_t>(store.getBookCount());
+  doc["finishedBookCount"] = static_cast<uint32_t>(store.getFinishedBookCount());
+  doc["todayDayIndex"] = today;
+  // Global reading pace (seconds per book progress percent) — exposed so the
+  // dashboard can render fallback ETAs for books that don't yet have enough
+  // personal data to estimate from.
+  doc["globalSecondsPerPercent"] = store.globalAvgSecondsPerPercent();
+  if (haveStreak) {
+    doc["currentStreak"] = store.computeCurrentStreak(today);
+    doc["longestStreak"] = store.computeLongestStreak();
+  }
+
+  // Day buckets as [[dayIndex, seconds], …] — same compact shape as on disk
+  // so the browser code can treat the export and the live API identically.
+  JsonArray globalDays = doc["globalDays"].to<JsonArray>();
+  for (const auto& d : store.getGlobalDays()) {
+    JsonArray pair = globalDays.add<JsonArray>();
+    pair.add(d.dayIndex);
+    pair.add(d.seconds);
+  }
+
+  JsonArray booksArr = doc["books"].to<JsonArray>();
+  for (const auto& book : store.getBooks()) {
+    JsonObject obj = booksArr.add<JsonObject>();
+    obj["docId"] = book.docId;
+    obj["title"] = book.title;
+    obj["author"] = book.author;
+    obj["totalSeconds"] = book.totalSeconds;
+    obj["pagesTurned"] = book.pagesTurned;
+    obj["sessions"] = book.sessions;
+    obj["firstReadEpoch"] = static_cast<int64_t>(book.firstReadEpoch);
+    obj["lastReadEpoch"] = static_cast<int64_t>(book.lastReadEpoch);
+    obj["progress"] = book.progress;
+    obj["finishedCount"] = book.finishedCount;
+    obj["lastFinishedEpoch"] = static_cast<int64_t>(book.lastFinishedEpoch);
+    // Keep the legacy bool so the existing dashboard JS keeps working.
+    obj["finished"] = book.finishedCount > 0;
+    // Estimated seconds to finish the book at the user's pace. 0 = unknown
+    // (no rate available yet, or the book is already at 100%).
+    const float remainingPercent = book.progress < 100 ? (100.0f - static_cast<float>(book.progress)) : 0.0f;
+    obj["etaSeconds"] = store.estimateRemainingSeconds(book.docId, remainingPercent);
+    obj["secondsPerPercent"] = store.avgSecondsPerPercent(book.docId);
+    JsonArray days = obj["days"].to<JsonArray>();
+    for (const auto& d : book.days) {
+      JsonArray pair = days.add<JsonArray>();
+      pair.add(d.dayIndex);
+      pair.add(d.seconds);
+    }
+  }
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleStatsExport() const {
+  // Stream the raw stats file straight from SD — this is the same shape the
+  // device writes and reads, so it round-trips cleanly through external
+  // tooling without us having to maintain a second schema.
+  constexpr const char* kStatsFile = "/.crosspoint/reading-stats.json";
+  if (!Storage.exists(kStatsFile)) {
+    server->send(404, "application/json", "{}");
+    return;
+  }
+  String content = Storage.readFile(kStatsFile);
+  server->sendHeader("Content-Disposition", "attachment; filename=\"reading-stats.json\"");
+  server->send(200, "application/json", content);
 }
 
 void CrossPointWebServer::handleJszip() const {

@@ -30,13 +30,16 @@
 #include "FinishedBookActivity.h"
 #include "GlobalBookmarkIndex.h"
 #include "KOReaderCredentialStore.h"
+#include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
+#include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontGlobals.h"
 #include "StarredPagesActivity.h"
+#include "activities/settings/ReadingStatsBookDetailActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
@@ -324,6 +327,13 @@ void EpubReaderActivity::onEnter() {
   bookParagraphAlignmentOverride = currentBook.paragraphAlignmentOverride;
   logReaderMemSnapshot("onEnter_after_recent_books");
 
+  // Start a reading-stats session. We use the cheap filename-based hash here:
+  // computing the content hash would re-read the file on every reader open,
+  // and a renamed book getting a new stats entry is acceptable — it'll still
+  // accumulate going forward.
+  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(epub->getPath()), epub->getTitle(),
+                                      epub->getAuthor());
+
   // Trigger first update
   logReaderMemSnapshot("onEnter_before_request_update");
   requestUpdate();
@@ -334,6 +344,10 @@ void EpubReaderActivity::onExit() {
   Activity::onExit();
   logReaderMemSnapshot("onExit_before_release");
 
+  // Flush the reading-stats session before tearing down the epub: end() needs
+  // no live epub reference and persists the JSON. Sleep paths that bypass
+  // onExit() still end up here on resume because the activity is recreated.
+  globalReadingSessionTracker().end();
   // If a pre-render left the next page in the frame buffer, redraw the current page so the
   // next activity (notably SleepActivity's OVERLAY mode) sees what the user was looking at.
   // Must run before section.reset() and the orientation reset below.
@@ -495,6 +509,9 @@ void EpubReaderActivity::loop() {
               requestUpdate();
               return;
             }
+            // User confirmed they're done with this book — credit a finish
+            // to the in-flight session before any tear-down side effects.
+            globalReadingSessionTracker().markFinished();
             const auto& menuResult = std::get<MenuResult>(result.data);
             if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
               if (SETTINGS.moveFinishedBooksToCompleted) {
@@ -714,6 +731,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       onGoHome();
       return;
     }
+    case EpubReaderMenuActivity::MenuAction::READING_STATS: {
+      // Jump to this book's detail screen using the same filename-hash docId
+      // the session was opened with. The in-flight session's time isn't
+      // visible here — it lands in the store only when end() runs on reader
+      // exit. For a brand-new book that's never been finished a session yet
+      // the screen will show "no data"; that's accurate.
+      if (!epub) break;
+      startActivityForResult(std::make_unique<ReadingStatsBookDetailActivity>(
+                                 renderer, mappedInput, KOReaderDocumentId::calculateFromFilename(epub->getPath())),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::MARK_AS_READ: {
       if (!epub) {
         break;
@@ -743,6 +772,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                 requestUpdate();
                 return;
               }
+              globalReadingSessionTracker().markFinished();
               const auto& menuResult = std::get<MenuResult>(result.data);
               if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
                 if (SETTINGS.moveFinishedBooksToCompleted) {
@@ -1542,6 +1572,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     preRenderedPage.ready = false;
     usePreRenderedBuffer = true;
     sessionPagesAdvanced++;
+    globalReadingSessionTracker().onPageTurn();
     lastPageTurnTime = millis();
     requestUpdate();
     return;
@@ -1551,6 +1582,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     return;
   }
   sessionPagesAdvanced++;
+  globalReadingSessionTracker().onPageTurn();
   preRenderedPage.ready = false;
   requestUpdate();
 }
@@ -1594,6 +1626,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
               requestUpdate();
               return;
             }
+            globalReadingSessionTracker().markFinished();
             const auto& menuResult = std::get<MenuResult>(result.data);
             if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
               if (SETTINGS.moveFinishedBooksToCompleted) {
@@ -1926,6 +1959,7 @@ void EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
     LOG_ERR("ERS", "Could not save progress!");
     return;
   }
+  globalReadingSessionTracker().updateProgress(percent);
   LOG_DBG("ERS", "Progress saved: Chapter %d, Page %d (%d%%)", spineIndex, currentPage, percent);
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,

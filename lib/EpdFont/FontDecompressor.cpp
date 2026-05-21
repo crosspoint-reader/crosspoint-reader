@@ -567,6 +567,12 @@ void FontDecompressor::resetStats() { stats = Stats{}; }
 
 void FontDecompressor::logStats(const char* label) {
   const uint32_t total = stats.cacheHits + stats.cacheMisses;
+  // Suppress the block entirely when the decompressor was untouched this phase
+  // (e.g. an SD-card font page — FontCacheManager early-returns before invoking us).
+  if (total == 0 && stats.pageBufferBytes == 0 && stats.decompressTimeMs == 0 && stats.getBitmapCalls == 0) {
+    resetStats();
+    return;
+  }
   LOG_DBG("FDC", "[%s] hits=%lu misses=%lu (%.1f%% hit rate)", label, stats.cacheHits, stats.cacheMisses,
           total > 0 ? 100.0f * stats.cacheHits / total : 0.0f);
   LOG_DBG("FDC", "[%s] decompress=%lums groups_accessed=%u", label, stats.decompressTimeMs, stats.uniqueGroupsAccessed);

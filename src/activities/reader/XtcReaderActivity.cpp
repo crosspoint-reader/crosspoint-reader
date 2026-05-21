@@ -17,9 +17,11 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "FinishedBookActivity.h"
+#include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
+#include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
@@ -48,12 +50,20 @@ void XtcReaderActivity::onEnter() {
   const std::string xtcCover = xtcSidecar.empty() ? xtc->getThumbBmpPath() : xtcSidecar;
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), "", xtcCover);
 
+  // Start the reading-stats session. XTC has real title/author from the
+  // file header so the per-book screen will look nicer than TXT/MD.
+  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(xtc->getPath()), xtc->getTitle(),
+                                      xtc->getAuthor());
+
   // Trigger first update
   requestUpdate();
 }
 
 void XtcReaderActivity::onExit() {
   Activity::onExit();
+
+  // Flush stats session before tearing down the XTC reader.
+  globalReadingSessionTracker().end();
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -146,6 +156,7 @@ void XtcReaderActivity::loop() {
               requestUpdate();
               return;
             }
+            globalReadingSessionTracker().markFinished();
             const auto& menuResult = std::get<MenuResult>(result.data);
             if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
               if (SETTINGS.moveFinishedBooksToCompleted) {
@@ -182,10 +193,12 @@ void XtcReaderActivity::loop() {
   if (prevTriggered) {
     if (currentPage > 0) {
       currentPage--;
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
     }
   } else if (nextTriggered) {
     currentPage++;
+    globalReadingSessionTracker().onPageTurn();
     requestUpdate();
   }
 }
@@ -393,15 +406,17 @@ void XtcReaderActivity::renderPage() {
 void XtcReaderActivity::saveProgress() const {
   FsFile f;
   if (Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+    const uint8_t percent =
+        ReaderUtils::pageProgressPercentByte(static_cast<int>(currentPage), static_cast<int>(xtc->getPageCount()));
     uint8_t data[5];
     data[0] = currentPage & 0xFF;
     data[1] = (currentPage >> 8) & 0xFF;
     data[2] = (currentPage >> 16) & 0xFF;
     data[3] = (currentPage >> 24) & 0xFF;
-    data[4] =
-        ReaderUtils::pageProgressPercentByte(static_cast<int>(currentPage), static_cast<int>(xtc->getPageCount()));
+    data[4] = percent;
     f.write(data, 5);
     f.close();
+    globalReadingSessionTracker().updateProgress(percent);
   }
 }
 
@@ -508,21 +523,25 @@ void XtcReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION a
     case BA::BTN_PAGE_FORWARD:
       if (currentPage + 1 < pageCount) {
         currentPage++;
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       break;
     case BA::BTN_PAGE_BACK:
       if (currentPage > 0) {
         currentPage--;
+        globalReadingSessionTracker().onPageTurn();
         requestUpdate();
       }
       break;
     case BA::BTN_PAGE_FORWARD_10:
       currentPage = (currentPage + 10 < pageCount) ? currentPage + 10 : pageCount - 1;
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
       break;
     case BA::BTN_PAGE_BACK_10:
       currentPage = (currentPage >= 10) ? currentPage - 10 : 0;
+      globalReadingSessionTracker().onPageTurn();
       requestUpdate();
       break;
     case BA::BTN_NEXT_SECTION:
@@ -532,6 +551,7 @@ void XtcReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION a
                                      [this](const auto& ch) { return ch.startPage > currentPage; });
         if (it != chapters.end()) {
           currentPage = it->startPage;
+          globalReadingSessionTracker().onPageTurn();
           requestUpdate();
         }
       }
@@ -544,6 +564,7 @@ void XtcReaderActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION a
 
         if (prevChapter != chapters.rend()) {
           currentPage = prevChapter->startPage;
+          globalReadingSessionTracker().onPageTurn();
           requestUpdate();
         }
       }

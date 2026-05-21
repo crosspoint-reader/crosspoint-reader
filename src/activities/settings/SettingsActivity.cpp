@@ -173,6 +173,9 @@ void SettingsActivity::onEnter() {
   addToMoved(systemSettings, lastSystemSub,
              std::move(SettingInfo::Action(StrId::STR_SYSTEM_INFO, SettingAction::SystemInfo)
                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+  addToMoved(systemSettings, lastSystemSub,
+             std::move(SettingInfo::Action(StrId::STR_READING_STATS, SettingAction::ReadingStats)
+                           .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
 
   SettingInfo::prepareSubmenus(displaySettings, submenuData);
   SettingInfo::prepareSubmenus(readerSettings, submenuData);
