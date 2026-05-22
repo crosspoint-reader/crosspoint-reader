@@ -16,7 +16,15 @@ namespace {
 const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
 
 bool shouldLogMissingGlyph(const uint32_t cp) {
+  static constexpr size_t kMaxTrackedCodepoints = 256;
   static std::unordered_set<uint32_t> loggedMissingGlyphs;
+
+  if (loggedMissingGlyphs.find(cp) == loggedMissingGlyphs.end() &&
+      loggedMissingGlyphs.size() >= kMaxTrackedCodepoints) {
+    loggedMissingGlyphs.clear();
+    LOG_DBG("GFX", "Reset missing-glyph dedup cache after %u entries", static_cast<unsigned>(kMaxTrackedCodepoints));
+  }
+
   return loggedMissingGlyphs.insert(cp).second;
 }
 
@@ -361,13 +369,21 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);               // snap 12.4 fixed-point to nearest pixel
     }
 
-    lastBaseLeft = glyph ? glyph->left : 0;
-    lastBaseWidth = glyph ? glyph->width : 0;
-    lastBaseTop = glyph ? glyph->top : 0;
-    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
+    if (glyph) {
+      lastBaseLeft = glyph->left;
+      lastBaseWidth = glyph->width;
+      lastBaseTop = glyph->top;
+      prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
+      prevCp = resolvedCp;
+    } else {
+      lastBaseLeft = 0;
+      lastBaseWidth = 0;
+      lastBaseTop = 0;
+      prevAdvanceFP = 0;
+      prevCp = 0;
+    }
 
     renderCharImpl<TextRotation::None>(*this, renderMode, font, resolvedCp, lastBaseX, yPos, black, style);
-    prevCp = resolvedCp;
   }
 }
 
@@ -1308,8 +1324,13 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       widthPx += fp4::toPixel(prevAdvanceFP + kernFP);                 // snap 12.4 fixed-point to nearest pixel
     }
 
-    prevAdvanceFP = glyph ? glyph->advanceX : 0;
-    prevCp = resolvedCp;
+    if (glyph) {
+      prevAdvanceFP = glyph->advanceX;
+      prevCp = resolvedCp;
+    } else {
+      prevAdvanceFP = 0;
+      prevCp = 0;
+    }
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
   return widthPx;
@@ -1391,13 +1412,21 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);               // snap 12.4 fixed-point to nearest pixel
     }
 
-    lastBaseLeft = glyph ? glyph->left : 0;
-    lastBaseWidth = glyph ? glyph->width : 0;
-    lastBaseTop = glyph ? glyph->top : 0;
-    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
+    if (glyph) {
+      lastBaseLeft = glyph->left;
+      lastBaseWidth = glyph->width;
+      lastBaseTop = glyph->top;
+      prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
+      prevCp = resolvedCp;
+    } else {
+      lastBaseLeft = 0;
+      lastBaseWidth = 0;
+      lastBaseTop = 0;
+      prevAdvanceFP = 0;
+      prevCp = 0;
+    }
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, resolvedCp, x, lastBaseY, black, style);
-    prevCp = resolvedCp;
   }
 }
 

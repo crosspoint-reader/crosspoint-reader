@@ -22,6 +22,7 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 namespace {
 
 constexpr uint8_t kDecodeFailureSkipThreshold = 2;
+constexpr size_t kDecodeFailureCacheMaxEntries = 128;
 std::unordered_map<std::string, uint8_t> gDecodeFailureCounts;
 
 std::string getCachePath(const std::string& imagePath) {
@@ -41,6 +42,13 @@ bool shouldSkipDecode(const std::string& imagePath) {
 void clearDecodeFailure(const std::string& imagePath) { gDecodeFailureCounts.erase(imagePath); }
 
 void registerDecodeFailure(const std::string& imagePath) {
+  if (gDecodeFailureCounts.find(imagePath) == gDecodeFailureCounts.end() &&
+      gDecodeFailureCounts.size() >= kDecodeFailureCacheMaxEntries) {
+    gDecodeFailureCounts.clear();
+    LOG_DBG("IMG", "Reset decode failure cache after reaching %u entries",
+            static_cast<unsigned>(kDecodeFailureCacheMaxEntries));
+  }
+
   uint8_t& failCount = gDecodeFailureCounts[imagePath];
   if (failCount < 255) {
     failCount++;

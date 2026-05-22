@@ -74,7 +74,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               showingLoading = true;
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
-            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
+            GUI.fillPopupProgress(renderer, popupRect, 10 + (progress * 90) / recentBooks.size());
             success = epub.generateThumbBmp(coverHeight);
           } else {
             LOG_DBG("HOME", "Skipping thumb generation, EPUB cache unavailable: %s", book.path.c_str());
@@ -95,7 +95,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               showingLoading = true;
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
-            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
+            GUI.fillPopupProgress(renderer, popupRect, 10 + (progress * 90) / recentBooks.size());
             bool success = xtc.generateThumbBmp(coverHeight);
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
