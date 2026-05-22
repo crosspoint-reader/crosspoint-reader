@@ -1305,7 +1305,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
       const auto kernFP = font.getKerning(prevCp, resolvedCp, style);  // 4.4 fixed-point kern
-      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);         // snap 12.4 fixed-point to nearest pixel
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);                 // snap 12.4 fixed-point to nearest pixel
     }
 
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
