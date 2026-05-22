@@ -5,12 +5,12 @@
 #include <HalStorage.h>
 #include <JPEGDEC.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdlib>
 #include <memory>
 #include <new>
 
-#include "../../../Memory/Memory.h"
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
@@ -356,11 +356,11 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   }
 
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, nullptr);
+  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
   if (rc != 1) {
     LOG_ERR("JPG", "Failed to open JPEG for dimensions (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
     return false;
   }
-  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
 
   out.width = jpeg->getWidth();
   out.height = jpeg->getHeight();
@@ -392,11 +392,11 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   ctx.screenHeight = renderer.getScreenHeight();
 
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegDrawCallback);
+  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
   if (rc != 1) {
     LOG_ERR("JPG", "Failed to open JPEG (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
     return false;
   }
-  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
 
   int srcWidth = jpeg->getWidth();
   int srcHeight = jpeg->getHeight();

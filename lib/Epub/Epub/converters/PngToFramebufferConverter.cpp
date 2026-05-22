@@ -4,13 +4,13 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PNGdec.h>
 
 #include <cstdlib>
 #include <memory>
 #include <new>
 
-#include "../../../Memory/Memory.h"
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
@@ -254,12 +254,12 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
 
   int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
                      nullptr);
+  const ScopedCleanup cleanup{[&png]() { png->close(); }};
 
   if (rc != 0) {
     LOG_ERR("PNG", "Failed to open PNG for dimensions: %d", rc);
     return false;
   }
-  const ScopedCleanup cleanup{[&png]() { png->close(); }};
 
   out.width = png->getWidth();
   out.height = png->getHeight();
@@ -292,11 +292,11 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
                      pngDrawCallback);
+  const ScopedCleanup cleanup{[&png]() { png->close(); }};
   if (rc != PNG_SUCCESS) {
     LOG_ERR("PNG", "Failed to open PNG: %d", rc);
     return false;
   }
-  const ScopedCleanup cleanup{[&png]() { png->close(); }};
 
   if (!validateImageDimensions(png->getWidth(), png->getHeight(), "PNG")) {
     return false;
