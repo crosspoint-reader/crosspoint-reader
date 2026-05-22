@@ -312,6 +312,11 @@
 <script>
   let allSettings = [];
   let originalValues = {};
+  let preserveQuickResumeTimeoutOn = false;
+  let quickResumeTimeoutAutoEnabled = false;
+  const SLEEP_SCREEN_MODE = {
+    QUICK_RESUME: 6
+  };
 
   function escapeHtml(unsafe) {
     return unsafe
@@ -336,12 +341,12 @@
     if (setting.type === 'toggle') {
       const checked = setting.value ? 'checked' : '';
       return '<label class="toggle-switch">' +
-        '<input type="checkbox" id="' + id + '" ' + checked + ' onchange="markChanged()">' +
+        '<input type="checkbox" id="' + id + '" ' + checked + ' onchange="handleSettingChanged(\'' + setting.key + '\')">' +
         '<span class="toggle-slider"></span></label>';
     }
 
     if (setting.type === 'enum') {
-      let html = '<select id="' + id + '" onchange="markChanged()">';
+      let html = '<select id="' + id + '" onchange="handleSettingChanged(\'' + setting.key + '\')">';
       setting.options.forEach(function(opt, idx) {
         const selected = idx === setting.value ? ' selected' : '';
         html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(opt) + '</option>';
@@ -353,14 +358,14 @@
     if (setting.type === 'value') {
       return '<input type="number" id="' + id + '" value="' + setting.value + '"' +
         ' min="' + setting.min + '" max="' + setting.max + '" step="' + setting.step + '"' +
-        ' onchange="markChanged()">';
+        ' onchange="handleSettingChanged(\'' + setting.key + '\')">';
     }
 
     if (setting.type === 'string') {
       const inputType = setting.name.toLowerCase().includes('password') ? 'password' : 'text';
       const val = setting.value || '';
       return '<input type="' + inputType + '" id="' + id + '" value="' + escapeHtml(val) + '"' +
-        ' oninput="markChanged()">';
+        ' oninput="handleSettingChanged(\'' + setting.key + '\')">';
     }
 
     return '';
@@ -387,6 +392,96 @@
 
   function markChanged() {
     document.getElementById('saveBtn').disabled = false;
+  }
+
+  function findSetting(key) {
+    return allSettings.find(function(s) { return s.key === key; });
+  }
+
+  function getControl(key) {
+    return document.getElementById('setting-' + key);
+  }
+
+  function getControlValue(key) {
+    const setting = findSetting(key);
+    const el = getControl(key);
+    if (!setting || !el) return undefined;
+
+    if (setting.type === 'toggle') {
+      return el.checked ? 1 : 0;
+    }
+    if (setting.type === 'enum' || setting.type === 'value') {
+      return parseInt(el.value, 10);
+    }
+    return el.value;
+  }
+
+  function setControlValue(key, value) {
+    const setting = findSetting(key);
+    const el = getControl(key);
+    if (!setting || !el) return false;
+
+    if (setting.type === 'toggle') {
+      const checked = !!value;
+      if (el.checked === checked) return false;
+      el.checked = checked;
+      return true;
+    }
+
+    const nextValue = String(value);
+    if (el.value === nextValue) return false;
+    el.value = nextValue;
+    return true;
+  }
+
+  function isQuickResumeSleepScreenSelected() {
+    const sleepScreen = findSetting('sleepScreen');
+    const sleepScreenValue = getControlValue('sleepScreen');
+    if (!sleepScreen || sleepScreenValue === undefined || !Number.isFinite(sleepScreenValue)) return false;
+
+    let selectedValue = sleepScreenValue;
+    if (Array.isArray(sleepScreen.values)) {
+      selectedValue = Number(sleepScreen.values[sleepScreenValue]);
+    } else if (Array.isArray(sleepScreen.options)) {
+      const selectedOption = sleepScreen.options[sleepScreenValue];
+      if (selectedOption && typeof selectedOption === 'object' && 'value' in selectedOption) {
+        selectedValue = Number(selectedOption.value);
+      }
+    }
+
+    return selectedValue === SLEEP_SCREEN_MODE.QUICK_RESUME;
+  }
+
+  function syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged) {
+    const timeoutValue = getControlValue('quickResumeSleepScreen');
+    if (timeoutValue === undefined) return false;
+
+    let changed = false;
+    if (quickResumeTimeoutChanged) {
+      preserveQuickResumeTimeoutOn = timeoutValue === 1;
+      quickResumeTimeoutAutoEnabled = false;
+    }
+
+    if (isQuickResumeSleepScreenSelected()) {
+      if (timeoutValue !== 1) {
+        changed = setControlValue('quickResumeSleepScreen', 1);
+        quickResumeTimeoutAutoEnabled = !preserveQuickResumeTimeoutOn;
+      } else if (sleepScreenChanged && !preserveQuickResumeTimeoutOn) {
+        quickResumeTimeoutAutoEnabled = true;
+      }
+      return changed;
+    }
+
+    if (sleepScreenChanged && quickResumeTimeoutAutoEnabled && !preserveQuickResumeTimeoutOn) {
+      changed = setControlValue('quickResumeSleepScreen', 0);
+      quickResumeTimeoutAutoEnabled = false;
+    }
+    return changed;
+  }
+
+  function handleSettingChanged(key) {
+    syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
+    markChanged();
   }
 
   async function loadSettings() {
@@ -427,6 +522,11 @@
       container.innerHTML = html;
       document.getElementById('save-container').style.display = '';
       document.getElementById('saveBtn').disabled = true;
+      preserveQuickResumeTimeoutOn = getControlValue('quickResumeSleepScreen') === 1;
+      quickResumeTimeoutAutoEnabled = false;
+      if (syncQuickResumeTimeoutForSleepScreen(true, false)) {
+        markChanged();
+      }
     } catch (e) {
       console.error(e);
       document.getElementById('settings-container').innerHTML =
