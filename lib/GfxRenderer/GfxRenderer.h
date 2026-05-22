@@ -230,6 +230,11 @@ class GfxRenderer {
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const;
   bool supportsStripGrayscale() const;
 
+  // X3-only: trade AA visual fidelity for ~2.2 s faster page-flip wall clock.
+  // No effect on X4 (its single grayscale LUT already runs at ~500 ms).
+  void setFastGrayscaleLut(bool fast) const { display.setFastGrayscaleLut(fast); }
+  bool getFastGrayscaleLut() const { return display.getFastGrayscaleLut(); }
+
   // Tiled grayscale strip target. While active, drawPixel(), clearScreen(),
   // fillPhysicalHSpanByte() and renderGlyphFast2Bit() operate on `scratch`
   // (panelWidthBytes * stripRows bytes, holding physical rows

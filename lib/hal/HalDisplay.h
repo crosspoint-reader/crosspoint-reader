@@ -61,6 +61,12 @@ class HalDisplay {
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
   bool supportsStripGrayscale() const;
 
+  // X3-only knob: pick between the OEM 53-frame grayscale LUT (default, slow
+  // and accurate) and the 7-frame community LUT (fast, slightly darker
+  // mid-tones). No effect on X4. See EInkDisplay::setFastGrayscaleLut.
+  void setFastGrayscaleLut(bool fast);
+  bool getFastGrayscaleLut() const;
+
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;
   uint16_t getDisplayHeight() const;

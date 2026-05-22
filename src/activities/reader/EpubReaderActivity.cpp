@@ -174,8 +174,14 @@ bool computePageDynamicYBand(const Page& page, const GfxRenderer& renderer, cons
 // renderCharImpl culls out-of-band glyphs before bitmap decode so the cost
 // stays close to one render. Only renderTextOnly() is called here, matching the
 // legacy AA pass — images and HRs do not participate in grayscale.
-bool runTiledGrayscalePass(GfxRenderer& renderer, Page& page, int fontId, int marginLeft, int contentTop) {
+bool runTiledGrayscalePass(GfxRenderer& renderer, Page& page, int fontId, int marginLeft, int contentTop, bool fastAA) {
   if (!renderer.supportsStripGrayscale()) return false;
+
+  // Push the SETTINGS toggle into the SDK before the AA refresh. No-op on X4;
+  // on X3 picks between OEM _gc (slow/accurate) and community _grayscale
+  // (fast/darker mid-tones). Re-applied per render so a settings change takes
+  // effect on the next page flip without rebooting.
+  renderer.setFastGrayscaleLut(fastAA);
 
   // Strip height trades scratch size for the number of re-renders. Each render
   // pays layout + glyph-cull overhead even when bitmap decode is skipped, so
@@ -2157,7 +2163,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   if (aaEnabledForThisRender) {
     logReaderMemSnapshot("tiled_gray_begin");
     const auto tTiledBegin = millis();
-    grayscaleDone = runTiledGrayscalePass(renderer, *page, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);
+    grayscaleDone = runTiledGrayscalePass(renderer, *page, getEffectiveReaderFontId(), orientedMarginLeft, contentTop,
+                                          SETTINGS.fastAntiAliasing);
     if (grayscaleDone) {
       tiledGrayMs = millis() - tTiledBegin;
       fcm->logStats("tiled_gray");
@@ -2219,6 +2226,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // grayscale rendering
     // TODO: Only do this if font supports it
     if (aaEnabledForThisRender && bwBufferStored) {
+      // Push fast-AA toggle into the SDK before the AA refresh (X3 only; no-op
+      // on X4). Mirrors what runTiledGrayscalePass() does.
+      renderer.setFastGrayscaleLut(SETTINGS.fastAntiAliasing);
       logReaderMemSnapshot("gray_lsb_begin");
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -2341,7 +2351,8 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
   const bool aaConfigured = SETTINGS.textAntiAliasing && !antiAliasingSuspendedLowMemory;
   if (aaConfigured) {
     Page& pageRef = const_cast<Page&>(page);
-    if (runTiledGrayscalePass(renderer, pageRef, getEffectiveReaderFontId(), orientedMarginLeft, contentTop)) {
+    if (runTiledGrayscalePass(renderer, pageRef, getEffectiveReaderFontId(), orientedMarginLeft, contentTop,
+                              SETTINGS.fastAntiAliasing)) {
       return;
     }
 
@@ -2360,6 +2371,7 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
       const int snapshotTop = contentTop + bandTop;
       const int snapshotHeight = std::max(0, bandBottom - bandTop);
       if (renderer.storeBwBufferRect(contentLeft, snapshotTop, contentRight - contentLeft, snapshotHeight)) {
+        renderer.setFastGrayscaleLut(SETTINGS.fastAntiAliasing);
         renderer.clearScreen(0x00);
         renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
         page.renderTextOnly(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);
