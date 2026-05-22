@@ -6,8 +6,9 @@
 #include <SdCardFont.h>
 #include <Utf8.h>
 
+#include <array>
 #include <algorithm>
-#include <unordered_set>
+#include <atomic>
 
 #include "FontCacheManager.h"
 
@@ -17,15 +18,39 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, int p
 
 bool shouldLogMissingGlyph(const uint32_t cp) {
   static constexpr size_t kMaxTrackedCodepoints = 256;
-  static std::unordered_set<uint32_t> loggedMissingGlyphs;
+  static std::array<uint32_t, kMaxTrackedCodepoints> loggedMissingGlyphs{};
+  static size_t trackedCount = 0;
+  static std::atomic_flag dedupLock = ATOMIC_FLAG_INIT;
 
-  if (loggedMissingGlyphs.find(cp) == loggedMissingGlyphs.end() &&
-      loggedMissingGlyphs.size() >= kMaxTrackedCodepoints) {
-    loggedMissingGlyphs.clear();
+  while (dedupLock.test_and_set(std::memory_order_acquire)) {
+  }
+
+  bool shouldLog = true;
+  bool didReset = false;
+
+  for (size_t i = 0; i < trackedCount; ++i) {
+    if (loggedMissingGlyphs[i] == cp) {
+      shouldLog = false;
+      break;
+    }
+  }
+
+  if (shouldLog) {
+    if (trackedCount >= kMaxTrackedCodepoints) {
+      trackedCount = 0;
+      didReset = true;
+    }
+
+    loggedMissingGlyphs[trackedCount++] = cp;
+  }
+
+  dedupLock.clear(std::memory_order_release);
+
+  if (didReset) {
     LOG_DBG("GFX", "Reset missing-glyph dedup cache after %u entries", static_cast<unsigned>(kMaxTrackedCodepoints));
   }
 
-  return loggedMissingGlyphs.insert(cp).second;
+  return shouldLog;
 }
 
 const EpdGlyph* resolveGlyphWithFallback(const EpdFontFamily& fontFamily, const uint32_t cp,
@@ -383,7 +408,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       prevCp = 0;
     }
 
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, resolvedCp, lastBaseX, yPos, black, style);
+    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
   }
 }
 
@@ -1426,7 +1451,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       prevCp = 0;
     }
 
-    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, resolvedCp, x, lastBaseY, black, style);
+    renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
   }
 }
 

@@ -23,7 +23,16 @@ namespace {
 
 constexpr uint8_t kDecodeFailureSkipThreshold = 2;
 constexpr size_t kDecodeFailureCacheMaxEntries = 128;
-std::unordered_map<std::string, uint8_t> gDecodeFailureCounts;
+constexpr uint8_t kInitialDecodeRetryBackoff = 8;
+constexpr uint8_t kMaxDecodeRetryBackoff = 64;
+
+struct DecodeFailureState {
+  uint8_t failureCount = 0;
+  uint8_t skipBudget = 0;
+  uint8_t backoffWindow = 0;
+};
+
+std::unordered_map<std::string, DecodeFailureState> gDecodeFailureStates;
 
 std::string getCachePath(const std::string& imagePath) {
   // Replace extension with .pxc (pixel cache)
@@ -35,27 +44,56 @@ std::string getCachePath(const std::string& imagePath) {
 }
 
 bool shouldSkipDecode(const std::string& imagePath) {
-  auto it = gDecodeFailureCounts.find(imagePath);
-  return it != gDecodeFailureCounts.end() && it->second >= kDecodeFailureSkipThreshold;
+  auto it = gDecodeFailureStates.find(imagePath);
+  if (it == gDecodeFailureStates.end()) {
+    return false;
+  }
+
+  DecodeFailureState& state = it->second;
+  if (state.failureCount < kDecodeFailureSkipThreshold) {
+    return false;
+  }
+
+  if (state.skipBudget > 0) {
+    state.skipBudget--;
+    return true;
+  }
+
+  return false;
 }
 
-void clearDecodeFailure(const std::string& imagePath) { gDecodeFailureCounts.erase(imagePath); }
+void clearDecodeFailure(const std::string& imagePath) { gDecodeFailureStates.erase(imagePath); }
 
 void registerDecodeFailure(const std::string& imagePath) {
-  if (gDecodeFailureCounts.find(imagePath) == gDecodeFailureCounts.end() &&
-      gDecodeFailureCounts.size() >= kDecodeFailureCacheMaxEntries) {
-    gDecodeFailureCounts.clear();
+  if (gDecodeFailureStates.find(imagePath) == gDecodeFailureStates.end() &&
+      gDecodeFailureStates.size() >= kDecodeFailureCacheMaxEntries) {
+    gDecodeFailureStates.clear();
     LOG_DBG("IMG", "Reset decode failure cache after reaching %u entries",
             static_cast<unsigned>(kDecodeFailureCacheMaxEntries));
   }
 
-  uint8_t& failCount = gDecodeFailureCounts[imagePath];
-  if (failCount < 255) {
-    failCount++;
+  DecodeFailureState& state = gDecodeFailureStates[imagePath];
+  if (state.failureCount < 255) {
+    state.failureCount++;
   }
 
-  if (failCount == kDecodeFailureSkipThreshold) {
-    LOG_DBG("IMG", "Suppressing further decode attempts for %s after %u failures", imagePath.c_str(), failCount);
+  if (state.failureCount >= kDecodeFailureSkipThreshold) {
+    if (state.backoffWindow == 0) {
+      state.backoffWindow = kInitialDecodeRetryBackoff;
+    } else if (state.backoffWindow < kMaxDecodeRetryBackoff) {
+      const uint16_t doubled = static_cast<uint16_t>(state.backoffWindow) * 2;
+      state.backoffWindow = static_cast<uint8_t>(doubled > kMaxDecodeRetryBackoff ? kMaxDecodeRetryBackoff : doubled);
+    }
+
+    state.skipBudget = state.backoffWindow;
+
+    if (state.failureCount == kDecodeFailureSkipThreshold) {
+      LOG_DBG("IMG", "Suppressing decode retries for %s after %u failures (retry in %u renders)", imagePath.c_str(),
+              state.failureCount, state.skipBudget);
+    } else {
+      LOG_DBG("IMG", "Decode retry failed for %s (failures=%u, next retry in %u renders)", imagePath.c_str(),
+              state.failureCount, state.skipBudget);
+    }
   }
 }
 

@@ -328,9 +328,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               if (decoder) {
                 gotDimensions = decoder->getDimensions(cachedImagePath, dims);
                 if (!gotDimensions) {
-                  // Retry once after a short delay to absorb transient SD timing issues
-                  // right after cache-file extraction.
-                  delay(20);
+                  // Retry once without blocking inside the XML callback.
                   gotDimensions = decoder->getDimensions(cachedImagePath, dims);
                   if (gotDimensions) {
                     LOG_DBG("EHP", "Recovered image dimension probe after retry: %s", cachedImagePath.c_str());
