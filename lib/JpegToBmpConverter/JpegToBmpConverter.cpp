@@ -488,8 +488,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   ctx.scaleY_fp = scaleY_fp;
   ctx.error = false;
 
-  // MCU row buffer: MAX_MCU_HEIGHT rows × srcWidth columns of grayscale
-  ctx.mcuBuf = makeUniqueNoThrow<uint8_t[]>(MAX_MCU_HEIGHT * srcWidth);
+  // MCU row buffer: MAX_MCU_HEIGHT rows × decoded srcWidth columns of grayscale
+  ctx.mcuBuf = makeUniqueNoThrow<uint8_t[]>(MAX_MCU_HEIGHT * ctx.srcWidth);
   if (!ctx.mcuBuf) {
     LOG_ERR("JPG", "OOM: MCU buffer (%d bytes)", MAX_MCU_HEIGHT * ctx.srcWidth);
     return false;
