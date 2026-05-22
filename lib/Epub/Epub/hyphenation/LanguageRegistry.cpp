@@ -9,6 +9,7 @@
 #include "generated/hyph-es.trie.h"
 #include "generated/hyph-fr.trie.h"
 #include "generated/hyph-it.trie.h"
+#include "generated/hyph-no.trie.h"
 #include "generated/hyph-pl.trie.h"
 #include "generated/hyph-ru.trie.h"
 #include "generated/hyph-sv.trie.h"
@@ -26,8 +27,10 @@ LanguageHyphenator italianHyphenator(it_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator swedishHyphenator(sv_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator ukrainianHyphenator(uk_patterns, isCyrillicLetter, toLowerCyrillic);
 LanguageHyphenator polishHyphenator(pl_patterns, isLatinLetter, toLowerLatin);
+// Single trie covers both Bokmål and Nynorsk (hyph-no.tex is the combined Norwegian pattern set).
+LanguageHyphenator norwegianHyphenator(no_patterns, isLatinLetter, toLowerLatin);
 
-using EntryArray = std::array<LanguageEntry, 9>;
+using EntryArray = std::array<LanguageEntry, 10>;
 
 const EntryArray& entries() {
   static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
@@ -38,6 +41,7 @@ const EntryArray& entries() {
                                        {"italian", "it", &italianHyphenator},
                                        {"polish", "pl", &polishHyphenator},
                                        {"swedish", "sv", &swedishHyphenator},
+                                       {"norwegian", "no", &norwegianHyphenator},
                                        {"ukrainian", "uk", &ukrainianHyphenator}}};
   return kEntries;
 }

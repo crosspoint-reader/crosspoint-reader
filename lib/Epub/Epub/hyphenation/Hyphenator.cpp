@@ -14,17 +14,20 @@ const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
 
 namespace {
 
-// Normalize ISO 639-2 (three-letter) codes to ISO 639-1 (two-letter) codes used by the
+// Normalize alternate language tags to the ISO 639-1 (two-letter) codes used by the
 // hyphenation registry.  EPUBs may use either form in their dc:language metadata (e.g.
 // "eng" instead of "en").  Both the bibliographic ("fre"/"ger") and terminological
-// ("fra"/"deu") ISO 639-2 variants are mapped.
+// ("fra"/"deu") ISO 639-2 variants are mapped.  Norwegian is special: Bokmål ("nb"/"nob")
+// and Nynorsk ("nn"/"nno"), plus the macrolanguage code "nor", all share the single
+// combined Norwegian trie registered under "no".
 struct Iso639Mapping {
-  const char* iso639_2;
+  const char* alternateTag;
   const char* iso639_1;
 };
-static constexpr Iso639Mapping kIso639Mappings[] = {{"eng", "en"}, {"fra", "fr"}, {"fre", "fr"}, {"deu", "de"},
-                                                    {"ger", "de"}, {"rus", "ru"}, {"spa", "es"}, {"ita", "it"},
-                                                    {"ukr", "uk"}, {"swe", "sv"}};
+static constexpr Iso639Mapping kIso639Mappings[] = {
+    {"eng", "en"}, {"fra", "fr"}, {"fre", "fr"}, {"deu", "de"}, {"ger", "de"}, {"rus", "ru"},
+    {"spa", "es"}, {"ita", "it"}, {"ukr", "uk"}, {"swe", "sv"}, {"nb", "no"},  {"nob", "no"},
+    {"nn", "no"},  {"nno", "no"}, {"nor", "no"}};
 
 // Maps a BCP-47 or ISO 639-2 language tag to a language-specific hyphenator.
 const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
@@ -40,9 +43,9 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   }
   if (primary.empty()) return nullptr;
 
-  // Normalize ISO 639-2 three-letter codes to two-letter equivalents.
+  // Normalize alternate language tags to their two-letter registry equivalents.
   for (const auto& mapping : kIso639Mappings) {
-    if (primary == mapping.iso639_2) {
+    if (primary == mapping.alternateTag) {
       primary = mapping.iso639_1;
       break;
     }
