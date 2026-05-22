@@ -221,6 +221,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
   if (hasGreyscale) {
+    renderer.storeBwBuffer();
+
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -234,6 +236,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();
+
+    renderer.restoreBwBuffer(); 
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }
