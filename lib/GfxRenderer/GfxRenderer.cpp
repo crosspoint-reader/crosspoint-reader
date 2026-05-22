@@ -1007,7 +1007,7 @@ void GfxRenderer::beginStripTarget(uint8_t* scratch, int stripY0, int stripRows)
   // Band is caller-guaranteed in-bounds (the reader's grayscale loop computes
   // it); assert catches future misuse in debug before it mis-renders or wraps
   // the downstream uint16_t cast in writeGrayscalePlaneStrip.
-  assert(scratch != nullptr && stripRows > 0 && stripY0 >= 0 && stripY0 + stripRows <= panelHeight);
+  assert(scratch != nullptr && stripRows > 0 && stripY0 >= 0 && stripY0 <= static_cast<int>(panelHeight) - stripRows);
   _stripBuf = scratch;
   _stripY0 = stripY0;
   _stripRows = stripRows;
@@ -1439,7 +1439,7 @@ void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFi
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.
-  assert(yStart >= 0 && numRows > 0 && yStart + numRows <= panelHeight);
+  assert(yStart >= 0 && numRows > 0 && yStart <= static_cast<int>(panelHeight) - numRows);
   display.writeGrayscalePlaneStrip(lsbPlane, scratch, static_cast<uint16_t>(yStart), static_cast<uint16_t>(numRows));
 }
 
