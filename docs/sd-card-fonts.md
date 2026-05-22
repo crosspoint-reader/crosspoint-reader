@@ -91,15 +91,35 @@ To convert your own TrueType/OpenType fonts:
 
 | Preset | Coverage |
 |--------|----------|
-| `ascii` | U+0020-U+007E (Basic Latin) |
-| `latin-ext` | European languages (Latin + Extended-A/B) |
+| `ascii` | U+0020–U+007E (Basic Latin) |
+| `latin1` | U+0080–U+00FF (Latin-1 Supplement) |
+| `latin-ext` | European languages (Latin + Extended-A/B + punctuation + ligatures) |
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
+| `georgian` | Georgian + Georgian Supplement |
+| `armenian` | Armenian |
+| `ethiopic` | Ethiopic + Extended |
+| `vietnamese` | Vietnamese subset (ơ/ư and combining marks) |
+| `punctuation` | General punctuation (U+2000–U+206F) |
 | `cjk` | CJK Unified Ideographs + Hiragana + Katakana + Fullwidth |
-| `hangul` | Korean Hangul syllables |
+| `hangul` | Korean Hangul syllables + Jamo + Compatibility Jamo |
+| `cherokee` | Cherokee (historic + supplement block) |
+| `tifinagh` | Tifinagh |
+| `symbols` | Math, currency, arrows, box-drawing, misc symbols, dingbats |
 | `reading` | Literary fiction coverage: Latin, Greek, Cyrillic, math/symbol blocks, supplemental punctuation, and CJK quote marks |
 | `builtin` | Matches built-in Bookerly coverage exactly |
 
 Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
+
+You can also specify arbitrary Unicode ranges directly:
+`--intervals latin-ext,(0x2100-0x214F)`
+
+To list all presets with codepoint counts:
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py --list-presets
+
+### Additional options
+
+`--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
 
 Install custom fonts via WiFi upload or manual SD card copy.
