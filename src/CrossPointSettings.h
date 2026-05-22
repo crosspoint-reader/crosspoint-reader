@@ -223,6 +223,11 @@ class CrossPointSettings {
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
+  // X3-only: when on, the AA refresh uses the 7-frame community grayscale LUT
+  // (~130 ms panel time) instead of the OEM 53-frame LUT (~2.4 s). Mid-tones
+  // run slightly darker than X4. Matches what papyrix-reader has shipped since
+  // 2025-11. Default off preserves OEM-fidelity grays. No effect on X4.
+  uint8_t fastAntiAliasing = 0;
   // Text darkness (0 = normal, 1 = dark, 2 = extra dark). Default 1 preserves
   // historical AA rendering (both grayscale shades drawn in the MSB pass).
   uint8_t textDarkness = DARKNESS_DARK;

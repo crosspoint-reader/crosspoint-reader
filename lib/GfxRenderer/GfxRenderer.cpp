@@ -8,6 +8,8 @@
 #include <esp_heap_caps.h>
 
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 
 #include "FontCacheManager.h"
 
@@ -611,15 +613,21 @@ static inline uint8_t build2BitColMask(const uint8_t* const bitmap, const int gl
 // inverted=false → Portrait (phyY counts down, phyBitPos counts up).
 // inverted=true  → PortraitInverted (phyY counts up, phyBitPos counts down).
 // Both template params are compile-time constants; all ternaries fold away.
+// `frameBuffer` may be a strip scratch covering only rows [fbOriginY, fbOriginY+fbRows);
+// the writer subtracts fbOriginY when indexing and drops rows outside the band.
+// In non-strip mode the caller passes fbOriginY=0, fbRows=displayHeight, so the
+// translation is a no-op and the existing absolute-row indexing is preserved.
 template <uint8_t drawMask, bool inverted>
 static void renderGlyphFast2BitPortrait(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
                                         const int glyphHeight, const int screenXBase, const int screenYBase,
                                         const bool writeState, const int displayWidth, const int displayHeight,
-                                        const int widthBytes) {
+                                        const int widthBytes, const int fbOriginY, const int fbRows) {
   for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
     const int phyY = inverted ? (screenXBase + glyphX) : (displayHeight - 1 - (screenXBase + glyphX));
     if (phyY < 0 || phyY >= displayHeight) continue;
-    uint8_t* const row = frameBuffer + phyY * widthBytes;
+    const int rowY = phyY - fbOriginY;
+    if (static_cast<unsigned>(rowY) >= static_cast<unsigned>(fbRows)) continue;
+    uint8_t* const row = frameBuffer + rowY * widthBytes;
     for (int glyphY = 0; glyphY < glyphHeight; glyphY += 8) {
       const int count = std::min(8, glyphHeight - glyphY);
       const uint8_t mask = build2BitColMask<drawMask>(bitmap, glyphWidth, glyphX, glyphY, count, inverted);
@@ -635,18 +643,25 @@ template <uint8_t drawMask>
 static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const bitmap, const int glyphWidth,
                                 const int glyphHeight, const int screenXBase, const int screenYBase,
                                 const bool pixelState, const GfxRenderer::Orientation orientation,
-                                const int displayWidth, const int displayHeight, const int widthBytes) {
+                                const int displayWidth, const int displayHeight, const int widthBytes,
+                                const int fbOriginY, const int fbRows) {
   // Non-rotated text fast path for 2-bit glyphs. Writes compact masks directly to framebuffer rows.
   // TextRotation::Rotated90CW keeps the legacy per-pixel fallback path for safety and readability.
   // BW (drawMask 0x0E) honors the caller's pixelState; grayscale passes always clear the bit.
+  //
+  // Tiled grayscale: `frameBuffer` may be a strip scratch with origin fbOriginY
+  // and fbRows; we subtract the origin when indexing and clip rows outside the
+  // band. The unsigned compare drops both off-band rows (strip mode) and any
+  // out-of-frame row (full-frame mode) in one branch.
   const bool writeState = (drawMask == 0x0E) ? pixelState : false;
 
   switch (orientation) {
     case GfxRenderer::LandscapeCounterClockwise: {
       for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
         const int phyY = screenYBase + glyphY;
-        if (phyY < 0 || phyY >= displayHeight) continue;
-        uint8_t* const row = frameBuffer + phyY * widthBytes;
+        const int rowY = phyY - fbOriginY;
+        if (static_cast<unsigned>(rowY) >= static_cast<unsigned>(fbRows)) continue;
+        uint8_t* const row = frameBuffer + rowY * widthBytes;
         const int rowStartPixel = glyphY * glyphWidth;
         for (int glyphX = 0; glyphX < glyphWidth; glyphX += 8) {
           const int count = std::min(8, glyphWidth - glyphX);
@@ -673,8 +688,9 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
       // within each row, which is more cache-friendly than the chunk-outer alternative.
       for (int glyphY = 0; glyphY < glyphHeight; glyphY++) {
         const int phyY = displayHeight - 1 - (screenYBase + glyphY);
-        if (phyY < 0 || phyY >= displayHeight) continue;
-        uint8_t* const row = frameBuffer + phyY * widthBytes;
+        const int rowY = phyY - fbOriginY;
+        if (static_cast<unsigned>(rowY) >= static_cast<unsigned>(fbRows)) continue;
+        uint8_t* const row = frameBuffer + rowY * widthBytes;
         const int rowStartPixel = glyphY * glyphWidth;
         for (int chunkEnd = glyphWidth - 1; chunkEnd >= 0; chunkEnd -= 8) {
           const int chunkStart = std::max(0, chunkEnd - 7);
@@ -698,12 +714,14 @@ static void renderGlyphFast2Bit(uint8_t* const frameBuffer, const uint8_t* const
 
     case GfxRenderer::Portrait:
       renderGlyphFast2BitPortrait<drawMask, false>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase,
-                                                   screenYBase, writeState, displayWidth, displayHeight, widthBytes);
+                                                   screenYBase, writeState, displayWidth, displayHeight, widthBytes,
+                                                   fbOriginY, fbRows);
       break;
 
     case GfxRenderer::PortraitInverted:
       renderGlyphFast2BitPortrait<drawMask, true>(frameBuffer, bitmap, glyphWidth, glyphHeight, screenXBase,
-                                                  screenYBase, writeState, displayWidth, displayHeight, widthBytes);
+                                                  screenYBase, writeState, displayWidth, displayHeight, widthBytes,
+                                                  fbOriginY, fbRows);
       break;
   }
 }
@@ -726,6 +744,23 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   const uint8_t height = glyph->height;
   const int left = glyph->left;
   const int top = glyph->top;
+
+  // Tiled-grayscale band culling: if this glyph's physical y-extent is entirely
+  // outside the active strip, skip it before the expensive bitmap decode. This
+  // is what makes per-band re-rendering cheap. No-op outside strip mode.
+  if constexpr (rotation == TextRotation::Rotated90CW) {
+    const int ob = cursorX + fontData->ascender - top;
+    const int ib = cursorY - left;
+    if (!renderer.glyphIntersectsStrip(ob, ib - (width - 1), ob + height - 1, ib)) {
+      return;
+    }
+  } else {
+    const int gx0 = cursorX + left;
+    const int gy0 = cursorY - top;
+    if (!renderer.glyphIntersectsStrip(gx0, gy0, gx0 + width - 1, gy0 + height - 1)) {
+      return;
+    }
+  }
 
   const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
 
@@ -752,26 +787,32 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 
       if constexpr (rotation == TextRotation::None) {
         // Fast path for normal text orientation. Handles all device orientations via renderGlyphFast2Bit.
+        // Strip-aware: getWriteTarget() returns the band scratch when a strip is active, otherwise
+        // the live framebuffer; the (fbOriginY, fbRows) pair tells the writer how to translate phyY
+        // and clip rows outside the band.
+        uint8_t* const fb = renderer.getWriteTarget();
+        const int fbOriginY = renderer.getWriteOriginY();
+        const int fbRows = renderer.getWriteRows();
         switch (drawMask) {
           case 0x0E:  // BW
-            renderGlyphFast2Bit<0x0E>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
-                                      pixelState, renderer.getOrientation(), renderer.getDisplayWidth(),
-                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes());
+            renderGlyphFast2Bit<0x0E>(fb, bitmap, width, height, innerBase, outerBase, pixelState,
+                                      renderer.getOrientation(), renderer.getDisplayWidth(),
+                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes(), fbOriginY, fbRows);
             break;
           case 0x06:  // raw {1,2}
-            renderGlyphFast2Bit<0x06>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
-                                      pixelState, renderer.getOrientation(), renderer.getDisplayWidth(),
-                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes());
+            renderGlyphFast2Bit<0x06>(fb, bitmap, width, height, innerBase, outerBase, pixelState,
+                                      renderer.getOrientation(), renderer.getDisplayWidth(),
+                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes(), fbOriginY, fbRows);
             break;
           case 0x04:  // raw {2}
-            renderGlyphFast2Bit<0x04>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
-                                      pixelState, renderer.getOrientation(), renderer.getDisplayWidth(),
-                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes());
+            renderGlyphFast2Bit<0x04>(fb, bitmap, width, height, innerBase, outerBase, pixelState,
+                                      renderer.getOrientation(), renderer.getDisplayWidth(),
+                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes(), fbOriginY, fbRows);
             break;
           case 0x02:  // raw {1}
-            renderGlyphFast2Bit<0x02>(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase,
-                                      pixelState, renderer.getOrientation(), renderer.getDisplayWidth(),
-                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes());
+            renderGlyphFast2Bit<0x02>(fb, bitmap, width, height, innerBase, outerBase, pixelState,
+                                      renderer.getOrientation(), renderer.getDisplayWidth(),
+                                      renderer.getDisplayHeight(), renderer.getDisplayWidthBytes(), fbOriginY, fbRows);
             break;
         }
         return;
@@ -808,8 +849,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
       }
     } else {
       // Fast path: 1-bit BW mode, non-rotated text — byte-level framebuffer writes, no drawPixel() per pixel.
+      // renderGlyphFastBW is NOT strip-aware (no fbOriginY/fbRows in its signature) and would
+      // mis-index into the strip scratch as if it were the full framebuffer. Today no caller
+      // activates a strip in BW mode, but route to the per-pixel fallback (drawPixel is
+      // strip-aware) if that ever changes so we never hand a strip buffer to the fast helper.
       if constexpr (rotation == TextRotation::None) {
-        if (renderMode == GfxRenderer::BW) {
+        if (renderMode == GfxRenderer::BW && !renderer.isStripActive()) {
           renderGlyphFastBW(renderer.getFrameBuffer(), bitmap, width, height, innerBase, outerBase, pixelState,
                             renderer.getOrientation(), renderer.getDisplayWidth(), renderer.getDisplayHeight(),
                             renderer.getDisplayWidthBytes());
@@ -921,14 +966,26 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     return;
   }
 
+  // Tiled grayscale: redirect writes to the strip scratch and clip to the
+  // current band. Single predictable branch on the hot per-pixel path.
+  uint8_t* target = frameBuffer;
+  uint32_t rowY = static_cast<uint32_t>(phyY);
+  if (stripActive_) {
+    if (phyY < stripY0_ || phyY >= stripY0_ + stripRows_) {
+      return;  // pixel outside the band currently being rendered
+    }
+    target = stripBuf_;
+    rowY = static_cast<uint32_t>(phyY - stripY0_);
+  }
+
   // Calculate byte position and bit position
-  const uint32_t byteIndex = static_cast<uint32_t>(phyY) * getDisplayWidthBytes() + (phyX / 8);
+  const uint32_t byteIndex = rowY * getDisplayWidthBytes() + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
 
   if (state) {
-    frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit
+    target[byteIndex] &= ~(1 << bitPosition);  // Clear bit
   } else {
-    frameBuffer[byteIndex] |= 1 << bitPosition;  // Set bit
+    target[byteIndex] |= 1 << bitPosition;  // Set bit
   }
 }
 
@@ -1237,7 +1294,17 @@ void GfxRenderer::fillPhysicalHSpanByte(const int phyY, const int phyX_start, co
   const int cX1 = std::min(phyX_end, (int)getDisplayWidth() - 1);
   if (cX0 > cX1 || phyY < 0 || phyY >= (int)getDisplayHeight()) return;
 
-  uint8_t* const row = frameBuffer + phyY * getDisplayWidthBytes();
+  // Tiled grayscale: redirect to the strip scratch and drop rows outside the
+  // active band. Off-band rows return cheaply before any bit-fiddling.
+  uint8_t* target = frameBuffer;
+  int rowY = phyY;
+  if (stripActive_) {
+    if (phyY < stripY0_ || phyY >= stripY0_ + stripRows_) return;
+    target = stripBuf_;
+    rowY = phyY - stripY0_;
+  }
+
+  uint8_t* const row = target + rowY * getDisplayWidthBytes();
   const int startByte = cX0 >> 3;
   const int endByte = cX1 >> 3;
   const int leftBits = cX0 & 7;   // first bit index within startByte
@@ -1862,8 +1929,53 @@ static bool start_ms_valid = false;
 void GfxRenderer::clearScreen(const uint8_t color) const {
   start_ms = millis();
   start_ms_valid = true;
+  if (stripActive_) {
+    // Clear only the active band's scratch, not the shared framebuffer.
+    memset(stripBuf_, color, static_cast<size_t>(panelWidthBytes) * stripRows_);
+    return;
+  }
   display.clearScreen(color);
 }
+
+void GfxRenderer::beginStripTarget(uint8_t* scratch, int stripY0, int stripRows) const {
+  // Band is caller-guaranteed in-bounds (the reader's grayscale loop computes
+  // it); assert catches future misuse in debug before it mis-renders.
+  assert(scratch != nullptr && stripRows > 0 && stripY0 >= 0 && stripY0 <= static_cast<int>(panelHeight) - stripRows);
+  stripBuf_ = scratch;
+  stripY0_ = stripY0;
+  stripRows_ = stripRows;
+  stripActive_ = true;
+}
+
+void GfxRenderer::endStripTarget() const {
+  stripActive_ = false;
+  stripBuf_ = nullptr;
+  stripY0_ = 0;
+  stripRows_ = 0;
+}
+
+bool GfxRenderer::glyphIntersectsStrip(int x0, int y0, int x1, int y1) const {
+  if (!stripActive_) {
+    return true;
+  }
+  // Rotate the two opposite bbox corners to physical coords. For 90-degree
+  // orientations the physical bbox stays axis-aligned, so min/max of the two
+  // rotated corners' Y bounds the glyph's physical y-extent.
+  int ax, ay, bx, by;
+  rotateCoordinates(getOrientation(), x0, y0, &ax, &ay, panelWidth, panelHeight);
+  rotateCoordinates(getOrientation(), x1, y1, &bx, &by, panelWidth, panelHeight);
+  const int minY = ay < by ? ay : by;
+  const int maxY = ay > by ? ay : by;
+  return !(maxY < stripY0_ || minY >= stripY0_ + stripRows_);
+}
+
+void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
+  // Guard the uint16_t casts below: a negative would wrap to a huge length.
+  assert(yStart >= 0 && numRows > 0 && yStart <= static_cast<int>(panelHeight) - numRows);
+  display.writeGrayscalePlaneStrip(lsbPlane, scratch, static_cast<uint16_t>(yStart), static_cast<uint16_t>(numRows));
+}
+
+bool GfxRenderer::supportsStripGrayscale() const { return display.supportsStripGrayscale(); }
 
 void GfxRenderer::invertScreen() const {
   for (uint32_t i = 0; i < frameBufferSize; i++) {

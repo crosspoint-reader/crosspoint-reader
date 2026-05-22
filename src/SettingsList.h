@@ -111,6 +111,14 @@ inline const std::vector<SettingInfo> list = {
     SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                         StrId::STR_CAT_READER)
         .withSubmenu(StrId::STR_MENU_READER_FONT),
+    // X3-only fast AA LUT toggle. Swaps the 53-frame OEM grayscale waveform
+    // (~2.4 s panel time, X4-accurate grays) for the 7-frame community LUT
+    // (~130 ms, mid-tones slightly darker). See open-x4-sdk
+    // EInkDisplay::setFastGrayscaleLut for trade-offs.
+    SettingInfo::Toggle(StrId::STR_FAST_AA, &CrossPointSettings::fastAntiAliasing, "fastAntiAliasing",
+                        StrId::STR_CAT_READER)
+        .withSubmenu(StrId::STR_MENU_READER_FONT)
+        .withDeviceTarget(SettingDeviceTarget::X3),
     SettingInfo::Enum(StrId::STR_TEXT_DARKNESS, &CrossPointSettings::textDarkness,
                       {StrId::STR_NORMAL, StrId::STR_DARK, StrId::STR_EXTRA_DARK, StrId::STR_MAX_DARK}, "textDarkness",
                       StrId::STR_CAT_READER)

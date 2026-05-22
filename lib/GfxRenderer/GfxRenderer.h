@@ -72,6 +72,19 @@ class GfxRenderer {
   mutable FontCacheManager* fontCacheManager_ = nullptr;
   mutable std::atomic<unsigned int> refreshOverride = REFRESH_OVERRIDE_NONE;
 
+  // Tiled grayscale strip target. When active, drawPixel(), clearScreen(),
+  // fillPhysicalHSpanByte() and renderGlyphFast2Bit() write into a caller-owned
+  // scratch holding one horizontal band of physical rows
+  // [_stripY0, _stripY0 + _stripRows) (panelWidthBytes wide) instead of the
+  // shared framebuffer; pixels outside the band are clipped. Lets grayscale
+  // planes render band-by-band straight to the controller without destroying
+  // the BW framebuffer (no storeBwBuffer). Mutable because the render path is
+  // const. See beginStripTarget()/endStripTarget().
+  mutable uint8_t* stripBuf_ = nullptr;
+  mutable int stripY0_ = 0;
+  mutable int stripRows_ = 0;
+  mutable bool stripActive_ = false;
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
@@ -209,6 +222,45 @@ class GfxRenderer {
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer() const;
+
+  // Tiled grayscale (X4 + X3): stream one band of a plane straight to
+  // controller RAM from `scratch` (panelWidthBytes * numRows, physical rows
+  // [yStart, yStart+numRows)), bypassing the framebuffer.
+  // supportsStripGrayscale() gates use.
+  void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const;
+  bool supportsStripGrayscale() const;
+
+  // X3-only: trade AA visual fidelity for ~2.2 s faster page-flip wall clock.
+  // No effect on X4 (its single grayscale LUT already runs at ~500 ms).
+  void setFastGrayscaleLut(bool fast) const { display.setFastGrayscaleLut(fast); }
+  bool getFastGrayscaleLut() const { return display.getFastGrayscaleLut(); }
+
+  // Tiled grayscale strip target. While active, drawPixel(), clearScreen(),
+  // fillPhysicalHSpanByte() and renderGlyphFast2Bit() operate on `scratch`
+  // (panelWidthBytes * stripRows bytes, holding physical rows
+  // [stripY0, stripY0 + stripRows)) instead of the framebuffer; pixels whose
+  // physical row falls outside the band are clipped. The clip is applied after
+  // the orientation rotate, so it is orientation-agnostic. Used to render
+  // grayscale planes band-by-band without a full second buffer.
+  void beginStripTarget(uint8_t* scratch, int stripY0, int stripRows) const;
+  void endStripTarget() const;
+
+  // Active pixel-write target for raw writers that bypass drawPixel for speed.
+  // When a strip target is active these return the band scratch plus its
+  // physical-row origin and extent; otherwise the full framebuffer ([0,
+  // panelHeight)). Writers subtract the origin and clip to the extent, so they
+  // honor tiled-grayscale banding without per-pixel method calls.
+  uint8_t* getWriteTarget() const { return stripActive_ ? stripBuf_ : frameBuffer; }
+  int getWriteOriginY() const { return stripActive_ ? stripY0_ : 0; }
+  int getWriteRows() const { return stripActive_ ? stripRows_ : static_cast<int>(panelHeight); }
+  bool isStripActive() const { return stripActive_; }
+
+  // Band culling. Takes a glyph bounding box in logical screen coords and
+  // returns false only when a strip is active AND the box's physical y-extent
+  // lies entirely outside the active band, letting callers skip expensive
+  // bitmap decode. Returns true when no strip is active.
+  bool glyphIntersectsStrip(int x0, int y0, int x1, int y1) const;
+
   bool storeBwBuffer();                                         // Returns true if buffer was stored successfully
   bool storeBwBufferRect(int x, int y, int width, int height);  // Store only rows intersecting logical rect
   void restoreBwBuffer();                                       // Restore and free the stored buffer
