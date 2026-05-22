@@ -6,8 +6,8 @@
 #include <SdCardFont.h>
 #include <Utf8.h>
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <atomic>
 
 #include "FontCacheManager.h"
