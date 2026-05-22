@@ -152,7 +152,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     flushPartWordBuffer();
   }
 
-  if (currentTextBlock && !currentTextBlock->isEmpty()) {
+  if (currentTextBlock) {
     const BlockStyle parentBlockStyle = currentTextBlock->getBlockStyle();
     startNewTextBlock(parentBlockStyle);
   }

@@ -163,6 +163,14 @@ struct PageLine {
   BlockStyle blockStyle;
 };
 
+struct PageImage {
+    s16 xPos;
+    s16 yPos;
+    String imagePath;
+    s16 width;
+    s16 height;
+};
+
 struct PageHorizontalRule {
     s16 xPos;
     s16 yPos;
@@ -174,7 +182,9 @@ struct PageElement {
     u8 pageElementType;
     if (pageElementType == 1) {
         PageLine pageLine [[inline]];
-    } else if (pageElementType == 4) {
+    } else if (pageElementType == 2) {
+        PageImage pageImage [[inline]];
+    } else if (pageElementType == 3) {
         PageHorizontalRule horizontalRule [[inline]];
     } else {
         std::error(std::format("Unknown page element type: {}", pageElementType));
