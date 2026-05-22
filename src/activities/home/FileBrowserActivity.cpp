@@ -159,6 +159,9 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
     dir.rewindDirectory();
     for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
       entry.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
+      if (strcmp(fileNameBuffer.get(), ".") == 0 || strcmp(fileNameBuffer.get(), "..") == 0) {
+        continue;
+      }
       std::string entryPath = currentPath;
       if (entryPath.back() != '/') {
         entryPath += "/";
