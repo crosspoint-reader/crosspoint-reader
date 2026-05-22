@@ -40,7 +40,7 @@ STR_JOIN_DESC: "Підключитися до існуючої мережі Wi-F
 STR_HOTSPOT_DESC: "Дозволити іншим підключення по Wi-Fi"
 STR_STARTING_HOTSPOT: "Запуск точки доступу..."
 STR_HOTSPOT_MODE: "Режим точки доступу"
-STR_CONNECT_WIFI_HINT: "Підключіть пристрій до Цієї мережі Wi-Fi"
+STR_CONNECT_WIFI_HINT: "Підключіть пристрій до цієї мережі Wi-Fi"
 STR_OPEN_URL_HINT: "Відкрийте посилання у своєму браузері"
 STR_OR_HTTP_PREFIX: "або http://"
 STR_SCAN_QR_HINT: "або відскануйте QR-код телефоном:"
