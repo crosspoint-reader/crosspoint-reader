@@ -33,8 +33,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   esp_http_client_config_t client_config = {
       .url = latestReleaseUrl,
       .event_handler = event_handler,
-      .buffer_size = 8192,
-      .buffer_size_tx = 8192,
+      // 4096 holds the API response headers; the 32KB body streams through the
+      // parser in chunks so RX needn't be larger. TX only carries our GET.
+      // Both free before installUpdate, so smaller leaves it less fragmentation.
+      .buffer_size = 4096,
+      .buffer_size_tx = 1024,
       .user_data = &releaseParser,
       .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
@@ -151,12 +154,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   esp_http_client_config_t client_config = {
       .url = otaUrl.c_str(),
       .timeout_ms = 15000,
-      /* Default HTTP client buffer size 512 byte only
-       * not sufficient to handle URL redirection cases or
-       * parsing of large HTTP headers.
-       */
-      .buffer_size = 8192,
-      .buffer_size_tx = 8192,
+      // 4096 holds the github->CDN redirect headers (the 512 default truncates
+      // them); TX only carries our GET. Both are contiguous blocks contending
+      // with the TLS handshake on a tight internal arena, so keep them minimal.
+      .buffer_size = 4096,
+      .buffer_size_tx = 1024,
       .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .keep_alive_enable = true,
@@ -176,10 +178,21 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     return INTERNAL_UPDATE_ERROR;
   }
 
+  int lastReportedPct = -1;
   do {
     esp_err = esp_https_ota_perform(ota_handle);
     processedSize = esp_https_ota_get_image_len_read(ota_handle);
-    if (onProgress) onProgress(ctx);
+    // Fire the callback only on whole-percent change. Without this it fired
+    // every ~100ms perform iteration, waking the render task whose framebuffer
+    // work contends with TLS on the same internal arena. E-ink can't repaint
+    // faster than a percent tick anyway.
+    if (onProgress && totalSize > 0) {
+      const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
+      if (pct != lastReportedPct) {
+        lastReportedPct = pct;
+        onProgress(ctx);
+      }
+    }
     delay(100);  // TODO: should we replace this with something better?
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 

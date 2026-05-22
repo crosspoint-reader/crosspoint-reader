@@ -5,14 +5,17 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr unsigned long GO_HOME_MS = 1000;
+// Hold threshold for the long-press "remove from list" action (firmware convention).
+constexpr unsigned long LONG_PRESS_MS = 1000;
 }  // namespace
 
 void RecentBooksActivity::loadRecentBooks() { recentBooks = RECENT_BOOKS.getBooks(); }
@@ -40,6 +43,25 @@ void RecentBooksActivity::onExit() {
 
 void RecentBooksActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
+
+  // After a long-press has fired, swallow input until Confirm is physically released
+  // (so the release doesn't also open the book; re-arm only once the button is up).
+  if (longPressFired) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      longPressFired = false;
+    }
+    return;
+  }
+
+  // Long-press Confirm on the selected book: prompt to remove it from the list.
+  // Fires when the hold times out while still held (firmware hold-to-act pattern,
+  // cf. FileBrowserActivity BACK long-press).
+  if (!recentBooks.empty() && selectorIndex < recentBooks.size() &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    longPressFired = true;
+    promptRemoveBook(recentBooks[selectorIndex].path, recentBooks[selectorIndex].title);
+    return;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
@@ -74,6 +96,29 @@ void RecentBooksActivity::loop() {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
+}
+
+void RecentBooksActivity::promptRemoveBook(const std::string& path, const std::string& title) {
+  auto handler = [this, path](const ActivityResult& res) {
+    if (res.isCancelled) {
+      LOG_DBG("RBA", "Remove from recents cancelled");
+      return;
+    }
+    if (RECENT_BOOKS.removeByPath(path)) {
+      LOG_DBG("RBA", "Removed from recents: %s", path.c_str());
+      loadRecentBooks();
+      if (recentBooks.empty()) {
+        selectorIndex = 0;
+      } else if (selectorIndex >= recentBooks.size()) {
+        selectorIndex = recentBooks.size() - 1;
+      }
+      requestUpdate(true);
+    }
+  };
+
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
+      std::move(handler));
 }
 
 void RecentBooksActivity::render(RenderLock&&) {

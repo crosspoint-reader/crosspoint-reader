@@ -190,10 +190,30 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Being on the "End of Book" screen (currentSpineIndex == spine count) means the book is
-  // finished. Arm the move here so ANY exit path (Back, Home, file browser) relocates the
-  // book in onExit(); paging back off the end screen disarms it (book not actually finished).
-  if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
+  // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
+  // finished. Two independent finished-book features key off this same condition.
+  const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
+
+  // Drop this book from the Recent Books list; if the reader then pages back into the book,
+  // re-add it. So removal only sticks if the reader leaves while still on the End-of-Book
+  // screen. Acts only on the transition (guarded by recentsEntryRemoved) — no per-frame writes.
+  if (SETTINGS.removeReadBooksFromRecents) {
+    if (atEndOfBook && !recentsEntryRemoved) {
+      // Only treat the book as "removed by us" if it was actually in the list, so the
+      // re-add branch below doesn't insert a book the feature never removed.
+      recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
+    } else if (!atEndOfBook && recentsEntryRemoved) {
+      // Re-add (goes to front of the list via addBook — accepted ordering side effect).
+      RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+      recentsEntryRemoved = false;
+    }
+  }
+
+  // Arm the move here so ANY exit path (Back, Home, file browser) relocates the book into
+  // /Read/ in onExit(); paging back off the end screen disarms it (book not actually
+  // finished). If removeReadBooksFromRecents also fired, RecentBooksStore::updatePath in the
+  // move path becomes a safe no-op since the entry was already removed.
+  if (atEndOfBook) {
     pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;

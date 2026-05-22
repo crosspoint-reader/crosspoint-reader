@@ -43,7 +43,30 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .keyboardVerticalOffset = -7,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 6};
+                                 .keyboardKeyCornerRadius = 6,
+                                 .keyboardFillUnselected = false,
+                                 .keyboardOutlineAllUnselected = false,
+                                 .keyboardDrawSpecialOutlineWhenUnselected = true,
+                                 .keyboardSecondaryLabelRightPadding = 1,
+                                 .keyboardSecondaryLabelTopPadding = 0,
+                                 .keyboardMinArrowHeadSize = 0,
+                                 .popupTopOffsetRatio = 0.165f,
+                                 .popupMarginX = 16,
+                                 .popupMarginY = 12,
+                                 .popupFrameThickness = 2,
+                                 .popupCornerRadius = 6,
+                                 .popupTextBold = false,
+                                 .popupTextInverted = false,
+                                 .popupTextBaselineOffsetY = -2,
+                                 .popupProgressBarHeight = 4,
+                                 .popupProgressDrawOutline = false,
+                                 .popupProgressClampPercent = false,
+                                 .popupProgressFillInverted = false,
+                                 .popupProgressOutlineInverted = false,
+                                 .textFieldHorizontalPadding = 6,
+                                 .textFieldNormalThickness = 1,
+                                 .textFieldCursorThickness = 3,
+                                 .textFieldLineEndOffset = 0};
 }
 
 class LyraTheme : public BaseTheme {
@@ -70,7 +93,5 @@ class LyraTheme : public BaseTheme {
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
   void drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) const;
-  Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
-  void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const override;
   bool showsFileIcons() const override { return true; }
 };

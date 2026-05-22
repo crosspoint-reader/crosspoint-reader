@@ -70,6 +70,31 @@ struct ThemeMetrics {
   int keyboardTextFieldWidthPercent;
   int keyboardWidthPercent;
   int keyboardKeyCornerRadius;
+  bool keyboardFillUnselected;
+  bool keyboardOutlineAllUnselected;
+  bool keyboardDrawSpecialOutlineWhenUnselected;
+  int keyboardSecondaryLabelRightPadding;
+  int keyboardSecondaryLabelTopPadding;
+  int keyboardMinArrowHeadSize;
+
+  float popupTopOffsetRatio;
+  int popupMarginX;
+  int popupMarginY;
+  int popupFrameThickness;
+  int popupCornerRadius;
+  bool popupTextBold;
+  bool popupTextInverted;
+  int popupTextBaselineOffsetY;
+  int popupProgressBarHeight;
+  bool popupProgressDrawOutline;
+  bool popupProgressClampPercent;
+  bool popupProgressFillInverted;
+  bool popupProgressOutlineInverted;
+
+  int textFieldHorizontalPadding;
+  int textFieldNormalThickness;
+  int textFieldCursorThickness;
+  int textFieldLineEndOffset;
 };
 
 enum UIIcon { Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot };
@@ -117,7 +142,30 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 0};
+                                 .keyboardKeyCornerRadius = 0,
+                                 .keyboardFillUnselected = false,
+                                 .keyboardOutlineAllUnselected = false,
+                                 .keyboardDrawSpecialOutlineWhenUnselected = true,
+                                 .keyboardSecondaryLabelRightPadding = 1,
+                                 .keyboardSecondaryLabelTopPadding = 0,
+                                 .keyboardMinArrowHeadSize = 0,
+                                 .popupTopOffsetRatio = 0.075f,
+                                 .popupMarginX = 15,
+                                 .popupMarginY = 15,
+                                 .popupFrameThickness = 2,
+                                 .popupCornerRadius = 0,
+                                 .popupTextBold = true,
+                                 .popupTextInverted = true,
+                                 .popupTextBaselineOffsetY = -2,
+                                 .popupProgressBarHeight = 4,
+                                 .popupProgressDrawOutline = false,
+                                 .popupProgressClampPercent = false,
+                                 .popupProgressFillInverted = true,
+                                 .popupProgressOutlineInverted = true,
+                                 .textFieldHorizontalPadding = 6,
+                                 .textFieldNormalThickness = 1,
+                                 .textFieldCursorThickness = 3,
+                                 .textFieldLineEndOffset = 0};
 }
 
 class BaseTheme {

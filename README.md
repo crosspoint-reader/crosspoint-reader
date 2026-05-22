@@ -1,5 +1,7 @@
 # CrossPoint Reader
 
+[![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
+
 CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
 
 **Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
@@ -118,6 +120,20 @@ Adjust `/dev/ttyACM0` to match your system.
 ### Manual
 
 See [Development quick start](#development-quick-start) below.
+
+---
+
+## Custom SD-card fonts
+
+Convert your own TTF/OTF files into `.cpfont` files that load from the SD card. No firmware reflash is needed.
+
+1. Go to https://crosspointreader.com/fonts and open the "SD-card font builder" form.
+2. Upload up to four styles (regular, bold, italic, bold-italic), set the family name, point sizes, and Unicode range.
+3. Download the generated `.cpfont` files.
+4. Copy them to your SD card under `/fonts/YourFont/` (or `/.fonts/YourFont/` to hide the folder).
+5. Select the font on the device from the font settings.
+
+Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` script unmodified, so output matches a local host build.
 
 ---
 

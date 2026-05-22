@@ -1,11 +1,11 @@
 #include "WebDAVHandler.h"
 
-#include <Arduino.h>
-#include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <esp_task_wdt.h>
+
+#include "util/BookCacheUtils.h"
 
 namespace {
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
@@ -413,7 +413,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
     return;
   }
 
-  clearEpubCacheIfNeeded(path);
+  clearBookCache(path.c_str());
   s.send(_putExisted ? 204 : 201);
   LOG_DBG("DAV", "PUT complete: %s", path.c_str());
   _putOk = false;
@@ -465,7 +465,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     }
   } else {
     file.close();
-    clearEpubCacheIfNeeded(path);
+    clearBookCache(path.c_str());
     if (Storage.remove(path.c_str())) {
       s.send(204);
     } else {
@@ -595,13 +595,13 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  clearEpubCacheIfNeeded(srcPath);
+  clearBookCache(srcPath.c_str());
   bool success = file.rename(dstPath.c_str());
   file.close();
 
   if (success) {
     FsHelpers::removeBackup(backupPath.c_str(), dstPath.c_str(), "DAV", "MOVE");
-    clearEpubCacheIfNeeded(dstPath);
+    clearBookCache(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     if (!backupPath.isEmpty()) {
@@ -741,7 +741,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
 
   if (renamed) {
     FsHelpers::removeBackup(backupPath.c_str(), dstPath.c_str(), "DAV", "COPY");
-    clearEpubCacheIfNeeded(dstPath);
+    clearBookCache(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     if (!backupPath.isEmpty()) {
@@ -899,13 +899,6 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
   String ow = s.header("Overwrite");
   if (ow == "F" || ow == "f") return false;
   return true;  // Default is T
-}
-
-void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
-  if (FsHelpers::hasEpubExtension(path)) {
-    Epub(path.c_str(), "/.crosspoint").clearCache();
-    LOG_DBG("DAV", "Cleared epub cache for: %s", path.c_str());
-  }
 }
 
 String WebDAVHandler::getMimeType(const String& path) const {

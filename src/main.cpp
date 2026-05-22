@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -12,6 +13,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -28,6 +30,7 @@
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -37,6 +40,7 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
+static unsigned long allowSleepAt = 0;
 
 // Fonts
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
@@ -138,18 +142,43 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 
+// How the device is coming back to life, resolved once at boot. Both resume
+// flows suppress the splash and leave the panel holding its pre-boot frame; a
+// plain boot shows the splash. See setup() for the resolution.
+enum class BootResume : uint8_t {
+  Splash,       // cold boot, flash, panic, or plain reboot
+  Silent,       // heap-defrag ESP.restart() (RTC flag; lost on power loss)
+  QuickResume,  // wake from a quick-resume deep sleep (SD flag; survives power loss)
+};
+
+// Latched true once enterDeepSleep() commits to sleeping, before it tears down
+// the current activity. WiFi activities call silentRestart() in onExit() to
+// clear heap fragmentation on the way out, but deep sleep is a full chip reset
+// on wake and already clears the heap, so rebooting here would just power the
+// device back up against the user's sleep gesture. Never cleared:
+// startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
+static bool deepSleepInProgress = false;
+
 void silentRestart() {
+  if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
   LOG_DBG("MAIN", "Silent restart (target=home)");
+  // E-ink retains the previous frame until Home's first paint lands (~2-3s).
+  // Without an overlay, users don't see the reboot and fire input through to
+  // Home. Select on the default selectorIndex=0 then opens the most-recent
+  // book, looking like a trampoline back to the reader they just exited.
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
   ESP.restart();
 }
 
 void silentRestartToReader() {
+  if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_READER;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
   LOG_DBG("MAIN", "Silent restart (target=reader)");
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
   ESP.restart();
 }
@@ -205,13 +234,57 @@ void waitForPowerRelease() {
   }
 }
 
+constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
+
+static void saveSleepFrameBuffer() {
+  FsFile file;
+  if (!Storage.openFileForWrite("SLP", SLEEP_FRAME_FILE, file)) return;
+  file.write(renderer.getFrameBuffer(), renderer.getBufferSize());
+  file.close();
+}
+
+static bool loadSleepFrameBuffer() {
+  FsFile file;
+  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
+  const size_t bufferSize = display.getBufferSize();
+  const size_t bytesRead = file.read(display.getFrameBuffer(), bufferSize);
+  file.close();
+  if (bytesRead != bufferSize) {
+    Storage.remove(SLEEP_FRAME_FILE);
+    return false;
+  }
+  Storage.remove(SLEEP_FRAME_FILE);
+  return true;
+}
+
 // Enter deep sleep mode
-void enterDeepSleep() {
+void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+
+  const bool isQuickResumeSleep =
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
+      (fromTimeout &&
+       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+  APP_STATE.showBootScreen = !isQuickResumeSleep;
+
   APP_STATE.saveToFile();
 
-  activityManager.goToSleep();
+  // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
+  // a WiFi activity would otherwise silentRestart() here and reboot instead.
+  deepSleepInProgress = true;
+  activityManager.goToSleep(fromTimeout);
+
+  if (isQuickResumeSleep) {
+    saveSleepFrameBuffer();
+  }
+
+  // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
+  // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+  }
 
   halTiltSensor.deepSleep();
   display.deepSleep();
@@ -220,8 +293,8 @@ void enterDeepSleep() {
   powerManager.startDeepSleep(gpio);
 }
 
-void setupDisplayAndFonts() {
-  display.begin();
+void setupDisplayAndFonts(bool seamless = false) {
+  display.begin(seamless);
   renderer.begin();
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
@@ -260,6 +333,17 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+#ifdef ENABLE_SERIAL_LOG
+  // Earliest possible Serial setup. The 250 ms stall before begin() lets the
+  // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
+  // enumeration before we touch the CDC state — otherwise cold boot races
+  // and the host has to be physically replugged for logs to flow. Warm reboot
+  // worked without the delay because USB was already enumerated.
+  delay(250);
+  Serial.begin(115200);
+  logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
+#endif
+
   HalSystem::begin();
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
@@ -273,16 +357,7 @@ void setup() {
   gpio.begin();
   powerManager.begin();
   halTiltSensor.begin();
-
-#ifdef ENABLE_SERIAL_LOG
-  if (gpio.isUsbConnected()) {
-    Serial.begin(115200);
-    const unsigned long start = millis();
-    while (!Serial && (millis() - start) < 500) {
-      delay(10);
-    }
-  }
-#endif
+  halClock.begin();
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
@@ -290,7 +365,7 @@ void setup() {
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    setupDisplayAndFonts();
+    setupDisplayAndFonts(isSilentReboot);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
@@ -298,6 +373,8 @@ void setup() {
   HalSystem::checkPanic();
 
   SETTINGS.loadFromFile();
+  APP_STATE.loadFromFile();
+  RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
@@ -345,16 +422,40 @@ void setup() {
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
-  setupDisplayAndFonts();
+  // Resolve the single boot-presentation decision. Skipping the splash also
+  // skips the panel-clearing pass and the X3 initial-full-sync arming (see
+  // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
+  // retained frame and input dispatches against a visible UI.
+  const BootResume resume = isSilentReboot              ? BootResume::Silent
+                            : !APP_STATE.showBootScreen ? BootResume::QuickResume
+                                                        : BootResume::Splash;
 
-  // First paint after silent reboot is HALF_REFRESH (SDK forces it after begin()'s
-  // panel reset); subsequent paints FAST.
-  if (!isSilentReboot) {
-    activityManager.goToBoot();
+  setupDisplayAndFonts(resume != BootResume::Splash);
+
+  switch (resume) {
+    case BootResume::Silent:
+      // Splash skipped: the routing block below picks the target activity; the
+      // panel keeps showing the pre-reboot popup until that first paint lands.
+      break;
+    case BootResume::QuickResume:
+      // One-shot flag: re-arm the splash for the next non-quick-resume boot. Save
+      // before any painting so a hang in the blocking paint path can't strand
+      // us in a quick-resume-with-no-frame loop on the next boot.
+      APP_STATE.showBootScreen = true;
+      APP_STATE.saveToFile();
+      if (loadSleepFrameBuffer()) {
+        // Frame restored: swap the sleep moon for the loading icon.
+        const auto pageHeight = renderer.getScreenHeight();
+        renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      } else {
+        activityManager.goToBoot();  // frame file missing, fall back to the splash
+      }
+      break;
+    case BootResume::Splash:
+      activityManager.goToBoot();
+      break;
   }
-
-  APP_STATE.loadFromFile();
-  RECENT_BOOKS.loadFromFile();
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
@@ -363,9 +464,10 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
-  } else if (isSilentReboot && snapshotTarget == SILENT_REBOOT_TARGET_READER && !APP_STATE.openEpubPath.empty()) {
+  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
+             !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
-  } else if (isSilentReboot) {
+  } else if (resume == BootResume::Silent) {
     // target == home (or reader with no open book): land on home — don't fall
     // through to the sleep-wake "resume reader" logic, which fires on stale
     // openEpubPath + lastSleepFromReader from a prior session.
@@ -384,8 +486,26 @@ void setup() {
     activityManager.goToReader(path);
   }
 
+  if (resume == BootResume::Silent) {
+    // Block until the first paint physically completes. refreshDisplay()
+    // waits on the panel BUSY pin so when this returns the user can see the
+    // new activity. Without the wait, an edge captured by gpio.update()
+    // during boot dispatches against an invisible Home and the default
+    // selectorIndex=0 opens the most-recent book.
+    activityManager.requestUpdateAndWait();
+    // Absorb any button held at this point into currentState as a non-edge:
+    // two gpio.update() calls separated by > InputManager's 5ms debounce
+    // transition the held bit through lastDebounceTime into currentState
+    // without setting pressedEvents, so the first loop()'s own gpio.update()
+    // sees state == currentState and emits nothing.
+    gpio.update();
+    delay(10);
+    gpio.update();
+  }
+
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
+  allowSleepAt = millis() + 2000;
 }
 
 void loop() {
@@ -456,12 +576,13 @@ void loop() {
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
-    enterDeepSleep();
+    enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
 
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;

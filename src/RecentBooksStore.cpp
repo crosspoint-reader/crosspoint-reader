@@ -9,6 +9,7 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <iterator>
 
 namespace {
 constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
@@ -54,6 +55,19 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+bool RecentBooksStore::removeByPath(const std::string& path) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return false;
+  }
+  recentBooks.erase(it);
+  if (!saveToFile()) {
+    LOG_ERR("RBS", "Failed to persist removal of recent book: %s", path.c_str());
+  }
+  return true;
 }
 
 void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath,

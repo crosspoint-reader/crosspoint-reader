@@ -5,6 +5,7 @@
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -66,11 +67,15 @@ void OtaUpdateActivity::onEnter() {
 void OtaUpdateActivity::onExit() {
   Activity::onExit();
 
-  // Turn off wifi
-  WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
-  delay(100);              // Allow disconnect frame to be sent
-  WiFi.mode(WIFI_OFF);
-  delay(100);  // Allow WiFi hardware to fully power down
+  // Success path reboots via the SHUTTING_DOWN state's plain ESP.restart()
+  // (loop() above) so the new firmware boots normally. Back-out paths land
+  // here with wifi still active; silent-restart to free the LWIP/mbedTLS
+  // fragmentation, same as the other wifi activities.
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {
