@@ -462,8 +462,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
 
-        LOG_DBG("JPG", "Scaling source %dx%d (decode grid %dx%d) -> %dx%d (target %dx%d)", srcWidth, srcHeight,
-          scaleSrcWidth, scaleSrcHeight, outWidth, outHeight, targetWidth, targetHeight);
+    LOG_DBG("JPG", "Scaling source %dx%d (decode grid %dx%d) -> %dx%d (target %dx%d)", srcWidth, srcHeight,
+            scaleSrcWidth, scaleSrcHeight, outWidth, outHeight, targetWidth, targetHeight);
   }
 
   if (scaleSrcWidth != outWidth || scaleSrcHeight != outHeight) {
