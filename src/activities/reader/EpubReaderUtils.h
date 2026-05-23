@@ -75,13 +75,16 @@ inline bool saveReturnPoint(Epub& epub, const ReturnPoint& point) {
 }
 
 inline std::optional<ReturnPoint> loadReturnPoint(const Epub& epub) {
+  const std::string path = epub.getCachePath() + RETURN_POINT_FILENAME;
   HalFile f;
-  if (!Storage.openFileForRead("ERS", epub.getCachePath() + RETURN_POINT_FILENAME, f)) {
+  if (!Storage.openFileForRead("ERS", path, f)) {
     return std::nullopt;
   }
   uint8_t data[6];
-  if (f.read(data, sizeof(data)) != sizeof(data)) {
-    LOG_DBG("ERS", "Return point file present but short read; ignoring");
+  const int bytesRead = f.read(data, sizeof(data));
+  if (bytesRead != static_cast<int>(sizeof(data))) {
+    const bool removed = Storage.remove(path.c_str());
+    LOG_DBG("ERS", "Return point file short read: %d/%u bytes; removed=%d", bytesRead, (unsigned)sizeof(data), removed);
     return std::nullopt;
   }
   ReturnPoint p;

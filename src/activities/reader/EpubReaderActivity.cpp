@@ -968,7 +968,13 @@ void EpubReaderActivity::captureReturnPointIfAbsent(int spineIndex, int pageNumb
     return;
   }
   returnPoint = EpubReaderUtils::ReturnPoint{spineIndex, pageNumber, pageCount};
-  EpubReaderUtils::saveReturnPoint(*epub, *returnPoint);
+  if (!EpubReaderUtils::saveReturnPoint(*epub, *returnPoint)) {
+    LOG_ERR("ERS", "Failed to save return point; disabling Explore return: spine=%d page=%d count=%d", spineIndex,
+            pageNumber, pageCount);
+    clearReturnPoint();
+    pendingSyncSaveError = true;
+    requestUpdate();
+  }
 }
 
 void EpubReaderActivity::clearReturnPoint() {
