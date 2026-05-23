@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "EpubReaderMenuActivity.h"
+#include "EpubReaderUtils.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
 
@@ -52,6 +53,10 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
+  // Captured at the first qualifying jump from the quick menu. Persisted to SD as
+  // returnPoint.bin so it survives sleep/reboot/reopen.
+  std::optional<EpubReaderUtils::ReturnPoint> returnPoint;
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
@@ -64,6 +69,10 @@ class EpubReaderActivity final : public Activity {
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void addBookmark();
+
+  void captureReturnPointIfAbsent(int spineIndex, int pageNumber, int pageCount);
+  void clearReturnPoint();
+  std::string exploreMenuLabel() const;
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
