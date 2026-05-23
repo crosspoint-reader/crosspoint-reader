@@ -15,7 +15,14 @@ The feature should support:
 - a Bluetooth Transfer entry in the File Transfer menu
 - a QR/link to `https://ble.xteink.lol/`
 
-The feature must not add package uploads, plugin support, package-state diagnostics, arbitrary SD-card reads, or arbitrary SD-card writes over BLE.
+## Explicit Non-goals
+
+This PR does not add package uploads, plugin support, package-state diagnostics, arbitrary SD-card reads, or arbitrary
+SD-card writes over BLE.
+
+That boundary is intentional. `SCOPE.md` and `GOVERNANCE.md` keep CrossPoint focused on reader-owned workflows rather
+than a package/plugin platform. Marginalia exists for the broader package/plugin model, so these operations are not
+deferred CrossPoint BLE work.
 
 ## Protocol
 

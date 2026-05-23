@@ -56,7 +56,14 @@ Supported download kinds:
 
 - `crash_report`: reads `/crash_report.txt`
 
-CrossPoint does not support BLE package upload, package-state download, arbitrary path reads, or arbitrary path writes.
+## Explicit Non-goals
+
+This protocol deliberately stays within CrossPoint Reader's project scope. CrossPoint does not support packages,
+plugins, or package-state diagnostics, so the BLE service does not add package uploads or package-state downloads. It
+also does not expose arbitrary SD-card browsing, arbitrary path reads, or arbitrary path writes.
+
+Those operations belong in Marginalia or other forks that choose a package/plugin model. They are not reserved for a
+later CrossPoint BLE iteration.
 
 ## Status Capabilities
 
