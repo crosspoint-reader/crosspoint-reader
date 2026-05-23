@@ -3,6 +3,7 @@
 class CrossPointSettings;
 class CrossPointState;
 class WifiCredentialStore;
+class BleTrustedHostStore;
 class RecentBooksStore;
 class OpdsServerStore;
 
@@ -19,6 +20,10 @@ bool loadState(CrossPointState& s, const char* json);
 // WifiCredentialStore
 bool saveWifi(const WifiCredentialStore& store, const char* path);
 bool loadWifi(WifiCredentialStore& store, const char* json, bool* needsResave = nullptr);
+
+// BleTrustedHostStore
+bool saveBleTrustedHosts(const BleTrustedHostStore& store, const char* path);
+bool loadBleTrustedHosts(BleTrustedHostStore& store, const char* json, bool* needsResave = nullptr);
 
 // RecentBooksStore
 bool saveRecentBooks(const RecentBooksStore& store, const char* path);

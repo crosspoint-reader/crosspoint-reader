@@ -27,7 +27,10 @@ Reuse the existing Xteink BLE transfer protocol version 1:
 - `status` read/notify characteristic
 - `data-out` notify characteristic
 
-The firmware accepts `hello`, `save_host`, `start_put`, `commit`, `cancel`, `start_get`, and `get_ack`. Upload frames and download frames use the same little-endian sequence header followed by payload bytes.
+The firmware accepts `hello`, `start_put`, `commit`, `cancel`, `start_get`, and `get_ack`. It receives trusted-host
+pairing material in the code-authenticated `hello` command and only prompts to save it after a successful authenticated
+upload. Standalone `save_host` is rejected. Upload frames and download frames use the same little-endian sequence header
+followed by payload bytes.
 
 Status JSON should include enough capability information for browser clients to hide unsupported features:
 
