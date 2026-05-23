@@ -77,7 +77,11 @@ def save_ble_config(config: dict[str, Any]) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2, sort_keys=True)
         handle.write("\n")
-        os.fchmod(handle.fileno(), 0o600)
+        if hasattr(os, "fchmod"):
+            try:
+                os.fchmod(handle.fileno(), 0o600)
+            except OSError:
+                pass
     tmp.replace(CONFIG_PATH)
     CONFIG_PATH.chmod(0o600)
 
@@ -97,6 +101,19 @@ def get_host_identity(config: dict[str, Any]) -> tuple[str, str]:
 def trusted_response(secret: str, device_nonce: str, host_id: str) -> str:
     message = f"{device_nonce}|{host_id}|1".encode("utf-8")
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def resolve_upload_chunk_size(client: BleakClient, requested: int, write_mode: str) -> int:
+    if write_mode == "response":
+        return requested
+    characteristic = client.services.get_characteristic(DATA_IN_UUID)
+    max_write = getattr(characteristic, "max_write_without_response_size", None) if characteristic else None
+    if not isinstance(max_write, int) or max_write <= DATA_FRAME_HEADER_BYTES:
+        return min(requested, 20 - DATA_FRAME_HEADER_BYTES)
+    max_payload = max_write - DATA_FRAME_HEADER_BYTES
+    if requested > max_payload:
+        print(f"Reducing BLE chunk size to {max_payload} bytes for this connection.")
+    return min(requested, max_payload)
 
 
 def remember_trusted_host(
@@ -357,12 +374,13 @@ async def put_file(args: argparse.Namespace, *, kind: str, suffix: str, success_
                 return 1
 
             transfer_started = True
+            chunk_size = resolve_upload_chunk_size(client, args.chunk_size, args.write_mode)
             sent = 0
             sequence = 0
             ack_floor = 0
             with source.open("rb") as handle:
                 while True:
-                    chunk = handle.read(args.chunk_size)
+                    chunk = handle.read(chunk_size)
                     if not chunk:
                         break
                     frame = struct.pack("<I", sequence) + chunk
@@ -452,6 +470,13 @@ async def get_crash_report(args: argparse.Namespace) -> int:
             data_error = str(exc)
             done.set()
 
+    pending_data_tasks: set[asyncio.Task[None]] = set()
+
+    def handle_data(char: Any, data: bytearray) -> None:
+        task = asyncio.create_task(on_data(char, data))
+        pending_data_tasks.add(task)
+        task.add_done_callback(pending_data_tasks.discard)
+
     client_ref: dict[str, BleakClient] = {}
     device = await find_device(args.scan_timeout)
     if not device:
@@ -462,7 +487,7 @@ async def get_crash_report(args: argparse.Namespace) -> int:
         async with BleakClient(device, timeout=args.connect_timeout) as client:
             client_ref["client"] = client
             await client.start_notify(STATUS_UUID, on_status)
-            await client.start_notify(DATA_OUT_UUID, lambda char, data: asyncio.create_task(on_data(char, data)))
+            await client.start_notify(DATA_OUT_UUID, handle_data)
             final_status = decode_status(await client.read_gatt_char(STATUS_UUID))
             status_version += 1
             status_event.set()
@@ -483,6 +508,8 @@ async def get_crash_report(args: argparse.Namespace) -> int:
             await write_json(client, {"op": "start_get", "kind": "crash_report", "chunk_size": args.chunk_size})
             try:
                 await asyncio.wait_for(done.wait(), timeout=args.download_timeout)
+                if pending_data_tasks:
+                    await asyncio.gather(*pending_data_tasks, return_exceptions=True)
             except asyncio.TimeoutError:
                 print("\nTimed out waiting for crash report.", file=sys.stderr)
                 return 1

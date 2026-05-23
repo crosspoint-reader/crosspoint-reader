@@ -1,9 +1,12 @@
 #pragma once
 
 #include <HalStorage.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <mbedtls/sha256.h>
 
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <string>
 
@@ -44,18 +47,25 @@ class BleTransferActivity final : public Activity {
            state_ == State::SENDING;
   }
 
-  void onBleConnected();
-  void onBleDisconnected();
-  void onControlWrite(const std::string& value);
-  void onDataWrite(const std::string& value);
+  void enqueueBleConnected();
+  void enqueueBleDisconnected();
+  void enqueueControlWrite(const std::string& value);
+  void enqueueDataWrite(const std::string& value);
 
  private:
   friend struct BleTransferRuntime;
+  enum class BleEventType { CONNECTED, DISCONNECTED, CONTROL, DATA };
+  struct BleEvent {
+    BleEventType type;
+    std::string value;
+  };
 
   State state_ = State::STARTING;
   std::unique_ptr<BleTransferRuntime> ble_;
   FsFile uploadFile_;
   FsFile downloadFile_;
+  SemaphoreHandle_t eventMutex_ = nullptr;
+  std::deque<BleEvent> bleEvents_;
 
   std::string sessionCode_;
   std::string fileName_;
@@ -101,6 +111,12 @@ class BleTransferActivity final : public Activity {
   mbedtls_sha256_context shaContext_;
   int promptSelection_ = 0;
 
+  void enqueueBleEvent(BleEvent event);
+  void processBleEvents();
+  void onBleConnected();
+  void onBleDisconnected();
+  void onControlWrite(const std::string& value);
+  void onDataWrite(const std::string& value);
   void processCommit();
   void startCrashReportDownload(size_t offset, size_t chunkSize);
   void pumpDownload();

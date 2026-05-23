@@ -7,6 +7,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "BleTrustedHostStore.h"
 #include "CrossPointSettings.h"
@@ -321,7 +322,6 @@ bool JsonSettingsIO::saveBleTrustedHosts(const BleTrustedHostStore& store, const
 
 bool JsonSettingsIO::loadBleTrustedHosts(BleTrustedHostStore& store, const char* json, bool* needsResave) {
   if (needsResave) *needsResave = false;
-  store.hosts.clear();
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
@@ -329,9 +329,10 @@ bool JsonSettingsIO::loadBleTrustedHosts(BleTrustedHostStore& store, const char*
     return false;
   }
 
+  std::vector<BleTrustedHost> hosts;
   JsonArray arr = doc["hosts"].as<JsonArray>();
   for (JsonObject obj : arr) {
-    if (store.hosts.size() >= store.MAX_HOSTS) break;
+    if (hosts.size() >= store.MAX_HOSTS) break;
     BleTrustedHost host;
     host.hostId = obj["hostId"] | std::string("");
     host.name = obj["name"] | std::string("");
@@ -341,9 +342,10 @@ bool JsonSettingsIO::loadBleTrustedHosts(BleTrustedHostStore& store, const char*
       host.secret = obj["secret"] | std::string("");
       if (!host.secret.empty() && needsResave) *needsResave = true;
     }
-    if (!host.hostId.empty() && !host.secret.empty()) store.hosts.push_back(host);
+    if (!host.hostId.empty() && !host.secret.empty()) hosts.push_back(host);
   }
 
+  store.hosts = hosts;
   LOG_DBG("BTH", "Loaded %zu BLE trusted host(s) from file", store.hosts.size());
   return true;
 }

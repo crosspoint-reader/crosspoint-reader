@@ -18,17 +18,25 @@ bool BleTrustedHostStore::saveToFile() const {
 }
 
 bool BleTrustedHostStore::loadFromFile() {
-  hosts.clear();
-  if (!Storage.exists(BLE_TRUSTED_HOSTS_FILE_JSON)) return false;
+  if (!Storage.exists(BLE_TRUSTED_HOSTS_FILE_JSON)) {
+    hosts.clear();
+    return false;
+  }
 
   String json = Storage.readFile(BLE_TRUSTED_HOSTS_FILE_JSON);
-  if (json.isEmpty()) return false;
+  if (json.isEmpty()) {
+    hosts.clear();
+    return false;
+  }
 
   bool resave = false;
   const bool result = JsonSettingsIO::loadBleTrustedHosts(*this, json.c_str(), &resave);
   if (result && resave) {
     LOG_DBG("BTH", "Resaving BLE trusted hosts with obfuscated secrets");
-    saveToFile();
+    if (!saveToFile()) {
+      LOG_ERR("BTH", "Failed to resave BLE trusted hosts");
+      return false;
+    }
   }
   return result;
 }
@@ -43,7 +51,7 @@ bool BleTrustedHostStore::addOrReplaceHost(const BleTrustedHost& host) {
     hosts = oldHosts;
     return false;
   }
-  LOG_DBG("BTH", "Saved BLE trusted host: %s", host.hostId.c_str());
+  LOG_DBG("BTH", "Saved BLE trusted host");
   return true;
 }
 

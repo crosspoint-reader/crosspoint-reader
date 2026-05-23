@@ -16,7 +16,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <limits>
+#include <utility>
 
 #include "BleTrustedHostStore.h"
 #include "MappedInputManager.h"
@@ -253,10 +255,10 @@ class ServerCallbacks final : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer* server, NimBLEConnInfo& connInfo) override {
     server->updateConnParams(connInfo.getConnHandle(), 6, 12, 0, 120);
     server->setDataLen(connInfo.getConnHandle(), 251);
-    activity_.onBleConnected();
+    activity_.enqueueBleConnected();
   }
 
-  void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { activity_.onBleDisconnected(); }
+  void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { activity_.enqueueBleDisconnected(); }
 
  private:
   BleTransferActivity& activity_;
@@ -267,7 +269,7 @@ class ControlCallbacks final : public NimBLECharacteristicCallbacks {
   explicit ControlCallbacks(BleTransferActivity& activity) : activity_(activity) {}
 
   void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo&) override {
-    activity_.onControlWrite(characteristic->getValue());
+    activity_.enqueueControlWrite(characteristic->getValue());
   }
 
  private:
@@ -279,7 +281,7 @@ class DataCallbacks final : public NimBLECharacteristicCallbacks {
   explicit DataCallbacks(BleTransferActivity& activity) : activity_(activity) {}
 
   void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo&) override {
-    activity_.onDataWrite(characteristic->getValue());
+    activity_.enqueueDataWrite(characteristic->getValue());
   }
 
  private:
@@ -357,9 +359,14 @@ struct BleTransferRuntime {
 };
 
 BleTransferActivity::BleTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("BleTransfer", renderer, mappedInput) {}
+    : Activity("BleTransfer", renderer, mappedInput), eventMutex_(xSemaphoreCreateMutex()) {}
 
-BleTransferActivity::~BleTransferActivity() = default;
+BleTransferActivity::~BleTransferActivity() {
+  if (eventMutex_) {
+    vSemaphoreDelete(eventMutex_);
+    eventMutex_ = nullptr;
+  }
+}
 
 void BleTransferActivity::onEnter() {
   Activity::onEnter();
@@ -394,6 +401,8 @@ void BleTransferActivity::onExit() {
 }
 
 void BleTransferActivity::loop() {
+  processBleEvents();
+
   if (state_ == State::FIRMWARE_CONFIRM) {
     handleFirmwareConfirm();
     return;
@@ -428,6 +437,55 @@ void BleTransferActivity::loop() {
     return;
   }
   if (statusDirty_) publishStatus();
+}
+
+void BleTransferActivity::enqueueBleEvent(BleEvent event) {
+  if (!eventMutex_) return;
+  xSemaphoreTake(eventMutex_, portMAX_DELAY);
+  bleEvents_.push_back(std::move(event));
+  xSemaphoreGive(eventMutex_);
+}
+
+void BleTransferActivity::enqueueBleConnected() { enqueueBleEvent({BleEventType::CONNECTED, {}}); }
+
+void BleTransferActivity::enqueueBleDisconnected() { enqueueBleEvent({BleEventType::DISCONNECTED, {}}); }
+
+void BleTransferActivity::enqueueControlWrite(const std::string& value) {
+  enqueueBleEvent({BleEventType::CONTROL, value});
+}
+
+void BleTransferActivity::enqueueDataWrite(const std::string& value) { enqueueBleEvent({BleEventType::DATA, value}); }
+
+void BleTransferActivity::processBleEvents() {
+  while (true) {
+    BleEvent event;
+    bool hasEvent = false;
+    if (eventMutex_) {
+      xSemaphoreTake(eventMutex_, portMAX_DELAY);
+      if (!bleEvents_.empty()) {
+        event = std::move(bleEvents_.front());
+        bleEvents_.pop_front();
+        hasEvent = true;
+      }
+      xSemaphoreGive(eventMutex_);
+    }
+    if (!hasEvent) return;
+
+    switch (event.type) {
+      case BleEventType::CONNECTED:
+        onBleConnected();
+        break;
+      case BleEventType::DISCONNECTED:
+        onBleDisconnected();
+        break;
+      case BleEventType::CONTROL:
+        onControlWrite(event.value);
+        break;
+      case BleEventType::DATA:
+        onDataWrite(event.value);
+        break;
+    }
+  }
 }
 
 void BleTransferActivity::onBleConnected() {
