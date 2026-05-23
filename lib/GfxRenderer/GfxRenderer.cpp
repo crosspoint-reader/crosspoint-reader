@@ -1278,6 +1278,29 @@ static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, in
   return true;
 }
 
+void GfxRenderer::invertRect(const int x, const int y, const int width, const int height) const {
+  int x0, y0, x1, y1;
+  if (!logicalRectToPhysicalBounds(orientation, x, y, width, height, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
+    return;
+  }
+  for (int py = y0; py <= y1; py++) {
+    const uint32_t rowBase = static_cast<uint32_t>(py) * panelWidthBytes;
+    const int firstByte = x0 / 8;
+    const int lastByte = x1 / 8;
+    if (firstByte == lastByte) {
+      const uint8_t mask = static_cast<uint8_t>(0xFF >> (x0 % 8)) &
+                           static_cast<uint8_t>(0xFF << (7 - x1 % 8));
+      frameBuffer[rowBase + firstByte] ^= mask;
+    } else {
+      frameBuffer[rowBase + firstByte] ^= static_cast<uint8_t>(0xFF >> (x0 % 8));
+      for (int b = firstByte + 1; b < lastByte; b++) {
+        frameBuffer[rowBase + b] ^= 0xFF;
+      }
+      frameBuffer[rowBase + lastByte] ^= static_cast<uint8_t>(0xFF << (7 - x1 % 8));
+    }
+  }
+}
+
 size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
