@@ -13,12 +13,11 @@
 // path, which itself short-circuits when nothing changed.
 class QuickOverridesActivity final : public MenuListActivity {
  public:
-  QuickOverridesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                         int8_t initialEmbeddedStyleOverride, int8_t initialImageRenderingOverride,
-                         int8_t initialFontFamilyOverride, const std::string& initialSdFontFamilyOverride,
-                         int8_t initialFontSizeOverride, int8_t initialBionicReadingOverride,
-                         int8_t initialParagraphAlignmentOverride, int8_t initialTextAntiAliasingOverride,
-                         int8_t initialHyphenationOverride);
+  QuickOverridesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int8_t initialEmbeddedStyleOverride,
+                         int8_t initialImageRenderingOverride, int8_t initialFontFamilyOverride,
+                         const std::string& initialSdFontFamilyOverride, int8_t initialFontSizeOverride,
+                         int8_t initialBionicReadingOverride, int8_t initialParagraphAlignmentOverride,
+                         int8_t initialTextAntiAliasingOverride, int8_t initialHyphenationOverride);
 
   void onEnter() override;
   void render(RenderLock&&) override;

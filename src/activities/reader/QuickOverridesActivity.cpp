@@ -57,7 +57,8 @@ void QuickOverridesActivity::buildMenuItems() {
   menuItems.push_back(SettingInfo::DynamicEnumCtx(
       StrId::STR_EMBEDDED_STYLE, {StrId::STR_DEFAULT_VALUE, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, self,
       [](const void* ctx) -> uint8_t {
-        return threeStateSlotFromOverride(static_cast<const QuickOverridesActivity*>(ctx)->pendingEmbeddedStyleOverride);
+        return threeStateSlotFromOverride(
+            static_cast<const QuickOverridesActivity*>(ctx)->pendingEmbeddedStyleOverride);
       },
       [](void* ctx, uint8_t v) {
         static_cast<QuickOverridesActivity*>(ctx)->pendingEmbeddedStyleOverride = threeStateOverrideFromSlot(v);
@@ -114,7 +115,8 @@ void QuickOverridesActivity::buildMenuItems() {
   menuItems.push_back(SettingInfo::DynamicEnumCtx(
       StrId::STR_BIONIC_READING, {StrId::STR_DEFAULT_VALUE, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, self,
       [](const void* ctx) -> uint8_t {
-        return threeStateSlotFromOverride(static_cast<const QuickOverridesActivity*>(ctx)->pendingBionicReadingOverride);
+        return threeStateSlotFromOverride(
+            static_cast<const QuickOverridesActivity*>(ctx)->pendingBionicReadingOverride);
       },
       [](void* ctx, uint8_t v) {
         static_cast<QuickOverridesActivity*>(ctx)->pendingBionicReadingOverride = threeStateOverrideFromSlot(v);
@@ -128,8 +130,9 @@ void QuickOverridesActivity::buildMenuItems() {
       self,
       [](const void* ctx) -> uint8_t {
         const auto* s = static_cast<const QuickOverridesActivity*>(ctx);
-        return (s->pendingParagraphAlignmentOverride < 0) ? 0
-                                                          : static_cast<uint8_t>(s->pendingParagraphAlignmentOverride + 1);
+        return (s->pendingParagraphAlignmentOverride < 0)
+                   ? 0
+                   : static_cast<uint8_t>(s->pendingParagraphAlignmentOverride + 1);
       },
       [](void* ctx, uint8_t v) {
         auto* s = static_cast<QuickOverridesActivity*>(ctx);
@@ -172,9 +175,7 @@ void QuickOverridesActivity::onSettingToggled(int /*index*/) {
   renderer.setNextDisplayRefreshMode(HalDisplay::FAST_REFRESH);
 }
 
-void QuickOverridesActivity::onBackPressed() {
-  finishWithResult(/*cancelled=*/false);
-}
+void QuickOverridesActivity::onBackPressed() { finishWithResult(/*cancelled=*/false); }
 
 void QuickOverridesActivity::finishWithResult(bool cancelled) {
   ActivityResult result;
@@ -201,8 +202,8 @@ void QuickOverridesActivity::render(RenderLock&&) {
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
   const std::string title = tr(STR_QUICK_OVERRIDES);
-  const int titleX =
-      contentRect.x + (contentRect.width - renderer.getTextWidth(UI_12_FONT_ID, title.c_str(), EpdFontFamily::BOLD)) / 2;
+  const int titleX = contentRect.x +
+                     (contentRect.width - renderer.getTextWidth(UI_12_FONT_ID, title.c_str(), EpdFontFamily::BOLD)) / 2;
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentRect.y, title.c_str(), true, EpdFontFamily::BOLD);
 
   const int startY = 50 + contentRect.y;
