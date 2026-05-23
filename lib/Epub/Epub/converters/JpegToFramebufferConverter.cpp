@@ -459,8 +459,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   if (!validateImageDimensions(scaledSrcWidth, scaledSrcHeight, "JPEG")) {
     LOG_ERR("JPG", "Effective JPEG size too large after 1/%d scaling: %dx%d (source %dx%d)", jpegScaleDenom,
             scaledSrcWidth, scaledSrcHeight, srcWidth, srcHeight);
-    jpeg->close();
-    delete jpeg;
     return false;
   }
 
