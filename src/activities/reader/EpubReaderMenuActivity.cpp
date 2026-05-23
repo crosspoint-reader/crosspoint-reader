@@ -27,7 +27,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.reserve(13);
   if (hasReturnPoint) {
     items.push_back({MenuAction::RETURN_TO_PREVIOUS, StrId::STR_RETURN_TO_PREVIOUS});
-    items.push_back({MenuAction::CANCEL_RETURN, StrId::STR_CANCEL_RETURN});
+    items.push_back({MenuAction::STAY_HERE, StrId::STR_STAY_HERE});
   }
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
