@@ -79,12 +79,6 @@ void CrossPointSettings::validateFrontButtonMapping(CrossPointSettings& settings
   }
 }
 
-void CrossPointSettings::normalizeDependentSettings(CrossPointSettings& settings) {
-  if (settings.sleepScreen == SLEEP_SCREEN_MODE::QUICK_RESUME) {
-    settings.quickResumeSleepScreen = QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
-  }
-}
-
 bool CrossPointSettings::saveToFile() const {
   Storage.mkdir("/.crosspoint");
   return JsonSettingsIO::saveSettings(*this, SETTINGS_FILE_JSON);
