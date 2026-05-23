@@ -5,6 +5,8 @@
 #include <Serialization.h>
 #include <XmlParserUtils.h>
 
+#include <cctype>
+
 #include "Epub/BookMetadataCache.h"
 
 namespace {
@@ -20,10 +22,7 @@ bool startsWithImageMediaType(const std::string& mediaType) {
   }
 
   for (size_t i = 0; i < prefixLen; ++i) {
-    char c = mediaType[i];
-    if (c >= 'A' && c <= 'Z') {
-      c = static_cast<char>(c - 'A' + 'a');
-    }
+    const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(mediaType[i])));
     if (c != MEDIA_TYPE_IMAGE_PREFIX[i]) {
       return false;
     }
