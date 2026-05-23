@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -225,9 +226,19 @@ std::string stateName(BleTransferActivity::State state) {
 }
 
 uint32_t readLe32(const std::string& value) {
+  assert(value.size() >= sizeof(uint32_t));
   const auto* b = reinterpret_cast<const uint8_t*>(value.data());
   return static_cast<uint32_t>(b[0]) | (static_cast<uint32_t>(b[1]) << 8) | (static_cast<uint32_t>(b[2]) << 16) |
          (static_cast<uint32_t>(b[3]) << 24);
+}
+
+bool constantTimeEquals(const std::string& left, const std::string& right) {
+  if (left.size() != right.size()) return false;
+  uint8_t diff = 0;
+  for (size_t i = 0; i < left.size(); i++) {
+    diff |= static_cast<uint8_t>(left[i]) ^ static_cast<uint8_t>(right[i]);
+  }
+  return diff == 0;
 }
 
 bool hashExistingPrefix(const std::string& path, size_t bytes, mbedtls_sha256_context& context) {
@@ -582,7 +593,7 @@ void BleTransferActivity::onControlWrite(const std::string& value) {
         return;
       }
       const std::string expected = hmacSha256Hex(host->secret, trustedHostMessage(deviceNonce_, hostId));
-      if (expected.empty() || expected != response) {
+      if (expected.empty() || !constantTimeEquals(expected, response)) {
         setError("invalid trusted host auth");
         return;
       }
