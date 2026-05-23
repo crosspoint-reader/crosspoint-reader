@@ -96,6 +96,40 @@ void XMLCALL TocNcxParser::startElement(void* userData, const XML_Char* name, co
     return;
   }
 
+  // <pageList> is a sibling of <navMap> and contains <pageTarget> elements that map
+  // printed page numbers to spine locations (e.g. "OEBPS/c9_split_000.xhtml#page_3").
+  if (self->state == IN_NCX && strcmp(name, "pageList") == 0) {
+    self->state = IN_PAGE_LIST;
+    return;
+  }
+
+  if (self->state == IN_PAGE_LIST && strcmp(name, "pageTarget") == 0) {
+    self->state = IN_PAGE_TARGET;
+    self->currentPageLabel.clear();
+    self->currentPageSrc.clear();
+    return;
+  }
+
+  if (self->state == IN_PAGE_TARGET && strcmp(name, "navLabel") == 0) {
+    self->state = IN_PAGE_TARGET_LABEL;
+    return;
+  }
+
+  if (self->state == IN_PAGE_TARGET_LABEL && strcmp(name, "text") == 0) {
+    self->state = IN_PAGE_TARGET_LABEL_TEXT;
+    return;
+  }
+
+  if (self->state == IN_PAGE_TARGET && strcmp(name, "content") == 0) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "src") == 0) {
+        self->currentPageSrc = atts[i + 1];
+        break;
+      }
+    }
+    return;
+  }
+
   // Handles both top-level and nested navPoints
   if ((self->state == IN_NAV_MAP || self->state == IN_NAV_POINT) && strcmp(name, "navPoint") == 0) {
     self->state = IN_NAV_POINT;
@@ -131,6 +165,8 @@ void XMLCALL TocNcxParser::characterData(void* userData, const XML_Char* s, cons
   auto* self = static_cast<TocNcxParser*>(userData);
   if (self->state == IN_NAV_LABEL_TEXT) {
     self->currentLabel.append(s, len);
+  } else if (self->state == IN_PAGE_TARGET_LABEL_TEXT) {
+    self->currentPageLabel.append(s, len);
   }
 }
 
@@ -177,5 +213,39 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
       self->currentLabel.clear();
       self->currentSrc.clear();
     }
+    return;
+  }
+
+  // <pageList> closing handlers
+  if (self->state == IN_PAGE_TARGET_LABEL_TEXT && strcmp(name, "text") == 0) {
+    self->state = IN_PAGE_TARGET_LABEL;
+    return;
+  }
+
+  if (self->state == IN_PAGE_TARGET_LABEL && strcmp(name, "navLabel") == 0) {
+    self->state = IN_PAGE_TARGET;
+    return;
+  }
+
+  if (self->state == IN_PAGE_TARGET && strcmp(name, "pageTarget") == 0) {
+    if (!self->currentPageLabel.empty() && !self->currentPageSrc.empty()) {
+      std::string href = FsHelpers::normalisePath(self->baseContentPath + self->currentPageSrc);
+      std::string anchor;
+      const size_t pos = href.find('#');
+      if (pos != std::string::npos) {
+        anchor = href.substr(pos + 1);
+        href = href.substr(0, pos);
+      }
+      self->pageList.push_back({std::move(href), std::move(anchor), self->currentPageLabel});
+    }
+    self->currentPageLabel.clear();
+    self->currentPageSrc.clear();
+    self->state = IN_PAGE_LIST;
+    return;
+  }
+
+  if (self->state == IN_PAGE_LIST && strcmp(name, "pageList") == 0) {
+    self->state = IN_NCX;
+    return;
   }
 }

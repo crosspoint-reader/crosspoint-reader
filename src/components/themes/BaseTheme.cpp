@@ -764,8 +764,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom,
-                              const bool isStarred) const {
+                              const int pageCount, std::string title, const int paddingBottom, const bool isStarred,
+                              const std::string& printedPageLabel) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -794,7 +794,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const bool hasProgressText = SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount;
   const bool hasStatusItems = hasProgressText || SETTINGS.statusBarBattery || !title.empty() ||
                               SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
-                              (SETTINGS.useClock && SETTINGS.statusBarClock);
+                              (SETTINGS.useClock && SETTINGS.statusBarClock) || !printedPageLabel.empty();
   if (!hasStatusItems) {
     return;
   }
@@ -812,9 +812,14 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                                      : screenHeight - orientedMarginBottom - paddingBottom - adjacentProgressHeight -
                                            statusItemsHeight + 4;
   int progressTextWidth = 0;
+  const int printedLabelWidth =
+      printedPageLabel.empty() ? 0 : renderer.getTextWidth(SMALL_FONT_ID, printedPageLabel.c_str());
+  const int printedLabelGap = printedLabelWidth > 0 && hasProgressText ? 8 : 0;
 
   if (hasProgressText) {
-    // Right aligned text for progress counter
+    // Right-aligned device page counter / progress percentage. The printed-page label, if any,
+    // is drawn to the LEFT of this counter as a parenthesised hint — the device counter on the
+    // right always reflects spine pagination.
     char progressStr[32];
 
     if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
@@ -825,10 +830,18 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
     }
 
-    progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    renderer.drawText(SMALL_FONT_ID,
-                      screenWidth - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth, textY,
-                      progressStr);
+    const int progressStrWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
+    progressTextWidth = progressStrWidth + printedLabelGap + printedLabelWidth;
+
+    const int textX = screenWidth - metrics.statusBarHorizontalMargin - orientedMarginRight - progressStrWidth;
+    renderer.drawText(SMALL_FONT_ID, textX, textY, progressStr);
+    if (printedLabelWidth > 0) {
+      renderer.drawText(SMALL_FONT_ID, textX - printedLabelGap - printedLabelWidth, textY, printedPageLabel.c_str());
+    }
+  } else if (printedLabelWidth > 0) {
+    progressTextWidth = printedLabelWidth;
+    const int textX = screenWidth - metrics.statusBarHorizontalMargin - orientedMarginRight - printedLabelWidth;
+    renderer.drawText(SMALL_FONT_ID, textX, textY, printedPageLabel.c_str());
   }
 
   // Draw Battery

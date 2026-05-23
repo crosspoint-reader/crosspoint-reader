@@ -17,6 +17,8 @@ class Epub {
   std::string tocNcxItem;
   // the nav file (EPUB 3)
   std::string tocNavItem;
+  // the page-map.xml file (EPUB 2.01 printed page list, separate from NCX <pageList>)
+  std::string pageMapItem;
   // where is the EPUBfile?
   std::string filepath;
   // the base path for items in the EPUB file
@@ -38,6 +40,7 @@ class Epub {
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCacheMode cacheMode);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
+  bool parsePageMapFile() const;
   void parseCssFiles() const;
 
  public:
@@ -86,4 +89,15 @@ class Epub {
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
   CssParser* getCssParser() const { return cssParser.get(); }
   int resolveHrefToSpineIndex(const std::string& href) const;
+
+  // Printed-page list (from NCX <pageList> / EPUB 3 nav page-list / EPUB 2.01 page-map.xml).
+  // One entry per printed-page anchor: spine href + fragment id + visible label.
+  struct PrintedPageEntry {
+    std::string href;
+    std::string anchor;
+    std::string label;
+  };
+  // Reads <cachePath>/pagelist.bin. Returns empty vector when the book has no printed-page data.
+  // Inexpensive — only invoked from menu paths, not page-turn hot paths.
+  std::vector<PrintedPageEntry> loadPrintedPageList() const;
 };

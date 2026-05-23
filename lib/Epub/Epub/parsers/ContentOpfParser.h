@@ -80,7 +80,8 @@ class ContentOpfParser final : public Print {
   std::string series;
   std::string seriesIndex;
   std::string tocNcxPath;
-  std::string tocNavPath;  // EPUB 3 nav document path
+  std::string tocNavPath;   // EPUB 3 nav document path
+  std::string pageMapPath;  // EPUB 2.01 page-map.xml document path
   std::string coverItemHref;
   std::string guideCoverPageHref;  // Guide reference with type="cover" or "cover-page" (points to XHTML wrapper)
   std::string textReferenceHref;

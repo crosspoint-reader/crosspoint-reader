@@ -159,6 +159,59 @@ When `startNewTextBlock` reuses an empty text block (the early-return path), `wo
 
 `scripts/generate_spine_toc_edges_epub.py` generates `test/epubs/test_spine_toc_edges.epub`, a purpose-built epub that exercises spine/TOC relationship patterns. See the script header for the full list of edge cases covered.
 
+## Printed-page labels (status bar hint)
+
+The status bar can show the printed-book page number for the current rendered page in addition to the device-relative `currentPage/pageCount` counter, e.g. `(42) 137/305  18%`. The printed-page label is sourced from the EPUB itself; the device counter remains authoritative for spine pagination.
+
+### Three input formats
+
+The reader accepts printed-page data from three places, in priority order:
+
+1. **Inline `doc-pagebreak` markers** in the XHTML (EPUB 3 accessibility convention): any element with `role="doc-pagebreak"` or `epub:type="pagebreak"`. The visible label is read from `aria-label`, falling back to `title`, falling back to the NCX/nav/page-map label if cross-referenced.
+2. **EPUB 3 `<nav epub:type="page-list">`** in the nav document (`TocNavParser`).
+3. **NCX `<pageList>`** (EPUB 2 extension) and **`page-map.xml`** (EPUB 2.01, a separate top-level manifest item with media-type `application/oebps-page-map+xml`), both parsed by `TocNcxParser` / `PageMapParser`.
+
+Only one of (2), (3a), or (3b) writes the cache file `<book-cache>/pagelist.bin`. The nav parser runs first; the NCX page-list is written only if the nav parser found nothing. The page-map parser runs last and is skipped if `pagelist.bin` already exists. Inline `doc-pagebreak` markers always take effect in addition to the cache file (they are matched at chapter parse time, independent of the cache).
+
+### pagelist.bin format
+
+Written once per book at index time; consumed once per section build. Format:
+
+```text
+[uint16_t entryCount]
+[String href][String anchor][String label]    // repeated entryCount times
+```
+
+`href` is the normalised spine href (e.g. `OEBPS/c9_split_000.xhtml`). `anchor` is the fragment id (empty for "start of file"). `label` is the visible printed-page label (e.g. `"42"`, `"iv"`).
+
+### Section parse path
+
+When `Section::createSectionFile` runs for a chapter, it streams `pagelist.bin`, filters to entries whose `href` matches the current spine item, and passes the resulting `(anchor → label)` pairs to `ChapterHtmlSlimParser::setExternalPageBreakAnchors`. During parsing, an element whose `id=` matches a known external anchor is treated as if it carried an inline `doc-pagebreak` marker — the existing `recordPageBreakLabel()` path is reused. The NCX/nav/page-map "start of file" entries (empty anchor) emit their label on the very first element of the chapter.
+
+### Section cache storage
+
+The section cache file (`section.bin`) gained a `pageBreakMap` block: `uint16_t count`, then for each entry `uint16_t pageIndex` + `String label`. The header carries a `pageBreakMapOffset` between `anchorMapOffset` and `paragraphLutOffset`. On reload, `Section::buildPageBreakLabelsFromFile` populates `pageBreakLabels` for status-bar queries.
+
+### Status bar lookup
+
+`Section::getPrintedPageLabelForPage(devicePage)` returns the parenthesised label (e.g. `"(42)"`) for the rendered device page if one or more printed-page anchors land on it. When several labels co-occur on a single device page (short page contains both `page_7` and `page_8`), the result collapses to `"(7/8)"`. Returns `nullopt` when no printed-page anchor falls on this exact device page — in that case the status bar shows only the device counter.
+
+### Sleep overlay lookup
+
+`Section::getPrintedPageLabelFromCache(sectionsDir, spineIndex, page)` is a standalone helper used by `SleepActivity` — it reads the printed-page label directly from `section.bin`'s page-break map without instantiating a `Section` or supplying render parameters. It walks the sections cache directory, finds any cache variant for `spineIndex` (all variants share the same printed-page anchors since those are content-derived), reads its `pageBreakMap` block, and returns the same `"(42)"` formatting as the in-memory query. The function is version-guarded against `SECTION_FILE_VERSION` so a cache from a different layout is skipped silently. Cost: one extra `section.bin` open per sleep entry, skipped when no cache exists.
+
+### "Jump to printed page" navigation
+
+The reader menu exposes a `STR_GO_TO_PRINTED_PAGE` entry, gated on the book having at least one integer-parseable label in `pagelist.bin` (roman-only or empty page lists hide the menu item). Selecting it opens `EpubReaderPrintedPageInputActivity`, a numeric input dialog:
+
+- Up/Down adjust the digit under the cursor by ±1 (with carry). PageBack/PageForward mirror Up/Down so the physical page-turn buttons still work.
+- Left/Right move the cursor between digits.
+- Confirm returns a `PrintedPageResult { std::string label }`; Back cancels.
+- Pre-fills with the printed-page label currently shown on the status bar (stripped of parens), falling back to the lowest integer label in the book.
+- Shows the valid integer range underneath ("Range: 1 - 305") and a step hint.
+
+On confirmation, `EpubReaderActivity` resolves the typed label by linear scan through the loaded `pagelist.bin` entries to recover `(href, anchor)`, calls `Epub::resolveHrefToSpineIndex` to get the target spine, and sets `navTarget = NavigationTarget::makeAnchor(anchor)` (or `makePage(0)` for top-of-file entries). The existing anchor-jump infrastructure in the renderer then handles the actual page-resolution and section load. Labels that exist in the dialog's integer range but skip in the book's `pagelist.bin` (e.g. publisher omitted page 17) are logged at DBG and the reader stays put — no navigation happens.
+
 ## Performance characteristics
 
 - **Per page turn**: All in-memory. `getTocIndexForPage` (binary search on 1-3 entries), `getTocItem` for title (one file seek to BookMetadataCache -- noted as a future optimization opportunity).

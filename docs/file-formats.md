@@ -109,6 +109,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Current version
+
+`SECTION_FILE_VERSION = 28`. The on-disk layout has evolved past the v21 pattern shown below; the ImHex pattern is preserved for archeology but no longer reflects all fields. Changes since v21 (read `lib/Epub/Epub/Section.cpp` `header::*` constants for the authoritative layout):
+
+- `parseComplete` (`bool`) inserted before `pageCount` so a truncated parse can be detected on reload.
+- `paragraphLutOffset` extended: each per-page entry is now `u32 xhtmlByteOffset + u16 paragraphIndex + u16 listItemIndex` (added the running `<li>` count for KOReader list-item XPath sync).
+- `pageBreakMapOffset` (`u32`) added in the header between `anchorMapOffset` and `paragraphLutOffset`. The block at that offset stores printed-page labels: `u16 count`, then per entry `u16 pageIndex + String label`. Populated from inline `doc-pagebreak` markers and from the per-book `pagelist.bin` (NCX `<pageList>` / EPUB 3 `<nav epub:type="page-list">` / EPUB 2.01 `page-map.xml`). See `docs/epub-toc-navigation.md` for the source-format selection rules.
+
 ### Version 21
 
 ImHex Pattern:
@@ -251,3 +259,24 @@ if (parsedSize != fileSize) {
     std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
 }
 ```
+
+## `pagelist.bin`
+
+Per-book cache file produced at index time from one of the EPUB printed-page sources (NCX `<pageList>`, EPUB 3 nav `<nav epub:type="page-list">`, or EPUB 2.01 `page-map.xml`). Consumed once per section build by `Section::createSectionFile`. Absent for books that have no printed-page data.
+
+```text
+u16 entryCount
+struct PageListEntry {
+    String href;    // normalised spine href, e.g. "OEBPS/c9_split_000.xhtml"
+    String anchor;  // fragment id; empty means "start of file"
+    String label;   // printed-page label, e.g. "42" or "iv"
+}
+PageListEntry entries[entryCount];
+```
+
+Selection rules (see `docs/epub-toc-navigation.md`):
+
+- The EPUB 3 nav page-list parser runs first.
+- The NCX `<pageList>` writer runs only if the nav writer produced nothing.
+- The EPUB 2.01 `page-map.xml` writer runs only if `pagelist.bin` doesn't already exist on disk.
+- Inline `doc-pagebreak` markers in XHTML are matched at chapter parse time and don't need the cache file; they coexist with whichever source above won.

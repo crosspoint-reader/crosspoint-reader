@@ -30,9 +30,11 @@ class Section {
     uint16_t startPage = 0;
   };
   std::vector<TocBoundary> tocBoundaries;
+  std::vector<std::pair<uint16_t, std::string>> pageBreakLabels;
 
   void buildTocBoundaries(const std::vector<std::pair<std::string, uint16_t>>& anchors);
   void buildTocBoundariesFromFile(FsFile& f);
+  void buildPageBreakLabelsFromFile(FsFile& f);
 
   // Open the section file and seek to the first paragraph LUT entry, validating the header
   // and LUT bounds against fileSize. On success, returns true with `outLutStart` set to the
@@ -88,6 +90,23 @@ class Section {
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
+  // Returns the printed-page label for a rendered page, wrapped in parens (e.g. "(42)"), if
+  // one or more EPUB pagebreak markers / NCX <pageList> / page-map entries land on it.
+  // Returns nullopt when no printed-page anchor falls on this exact page.
+  std::optional<std::string> getPrintedPageLabelForPage(uint16_t page) const;
+  // Like getPrintedPageLabelForPage but returns the most recent printed-page label at or
+  // before `page` (raw label, no parens). Useful for pre-filling jump-to-page dialogs when
+  // the current rendered page doesn't itself carry an anchor. Returns nullopt when no
+  // printed-page anchor exists on this or any earlier page in the section.
+  std::optional<std::string> getNearestPrintedPageLabelAtOrBefore(uint16_t page) const;
+
+  // Standalone lookup that doesn't require a loaded Section. Walks the book's sections cache
+  // directory, finds any cache variant for `spineIndex`, reads its printed-page label map,
+  // and returns the parenthesised label for `page` if one is recorded. Returns nullopt when
+  // no cache exists or the page carries no printed-page anchor. Used by SleepActivity to
+  // augment the overlay without instantiating a full Section + render parameters.
+  static std::optional<std::string> getPrintedPageLabelFromCache(const std::string& sectionsDir, int spineIndex,
+                                                                 uint16_t page);
 
   // Look up the page number for a paragraph index (1-based, from XPath p[N]).
   // Uses the per-page paragraph LUT stored in the section cache.

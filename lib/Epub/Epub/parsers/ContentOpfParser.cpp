@@ -9,6 +9,7 @@
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
+constexpr char MEDIA_TYPE_PAGEMAP[] = "application/oebps-page-map+xml";
 constexpr char itemCacheFile[] = "/.items.bin";
 constexpr size_t MAX_DESCRIPTION_LENGTH = 1024;
 
@@ -337,6 +338,16 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         self->tocNcxPath = href;
       } else {
         LOG_DBG("COF", "Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s", href.c_str());
+      }
+    }
+
+    // EPUB 2.01 page-map.xml — separate top-level file mapping printed page numbers to spine
+    // locations (e.g. <page name="1" href="OEBPS/c9_split_000.xhtml"/>). Spine references it
+    // via <spine page-map="..."> but only the manifest item carries the canonical href.
+    if (mediaType == MEDIA_TYPE_PAGEMAP) {
+      if (self->pageMapPath.empty()) {
+        self->pageMapPath = href;
+        LOG_DBG("COF", "Found EPUB 2.01 page-map: %s", href.c_str());
       }
     }
 

@@ -40,7 +40,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const int8_t initialEmbeddedStyleOverride, const int8_t initialImageRenderingOverride,
     const int8_t initialFontFamilyOverride, const std::string& initialSdFontFamilyOverride,
     const int8_t initialFontSizeOverride, const uint8_t initialTextDarkness, const bool initialBionicReadingOverride,
-    const int8_t initialParagraphAlignmentOverride, const bool hasStarredPages, const bool isCurrentPageStarred)
+    const int8_t initialParagraphAlignmentOverride, const bool hasStarredPages, const bool isCurrentPageStarred,
+    const bool hasPrintedPages)
     : MenuListActivity("EpubReaderMenu", renderer, mappedInput),
       currentPageStarred(isCurrentPageStarred),
       pendingOrientation(currentOrientation),
@@ -56,16 +57,19 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
-  buildMenuItems(hasFootnotes, hasStarredPages);
+  buildMenuItems(hasFootnotes, hasStarredPages, hasPrintedPages);
 }
 
-void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPages) {
+void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPages, bool hasPrintedPages) {
   menuItems.reserve(20);
 
   // --- Navigation ---
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_NAVIGATION));
   menuItems.push_back(SettingInfo::Action(StrId::STR_SELECT_CHAPTER, SettingAction::None));
   menuItems.push_back(SettingInfo::Action(StrId::STR_GO_TO_PERCENT, SettingAction::None));
+  if (hasPrintedPages) {
+    menuItems.push_back(SettingInfo::Action(StrId::STR_GO_TO_PRINTED_PAGE, SettingAction::None));
+  }
 
   // Bookmarks, footnotes
   menuItems.push_back(SettingInfo::Separator(StrId::STR_READER_BOOKMARKS));
@@ -277,6 +281,8 @@ EpubReaderMenuActivity::MenuAction EpubReaderMenuActivity::actionForNameId(StrId
       return MenuAction::SELECT_CHAPTER;
     case StrId::STR_GO_TO_PERCENT:
       return MenuAction::GO_TO_PERCENT;
+    case StrId::STR_GO_TO_PRINTED_PAGE:
+      return MenuAction::GO_TO_PRINTED_PAGE;
     case StrId::STR_STARRED_PAGES:
       return MenuAction::STARRED_PAGES;
     case StrId::STR_STAR_PAGE:

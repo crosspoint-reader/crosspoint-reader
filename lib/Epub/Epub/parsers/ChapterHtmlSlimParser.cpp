@@ -338,6 +338,33 @@ void ChapterHtmlSlimParser::emitPage(uint32_t xhtmlByteOffset) {
   currentPageNextY = 0;
 }
 
+void ChapterHtmlSlimParser::recordPageBreakLabel(const std::string& label) {
+  if (label.empty()) {
+    return;
+  }
+
+  // Record the printed page label for the current rendered section page.
+  // Do not alter pagination; the reader keeps its own page breaks.
+  pageBreakLabels.emplace_back(static_cast<uint16_t>(completedPageCount), label);
+}
+
+void ChapterHtmlSlimParser::setExternalPageBreakAnchors(std::vector<std::pair<std::string, std::string>> anchors) {
+  externalPageBreakAnchors.clear();
+  topOfFilePageLabel.clear();
+  topOfFilePageLabelEmitted = false;
+  for (auto& [id, label] : anchors) {
+    if (id.empty()) {
+      // NCX pageTarget with no fragment (e.g. "OEBPS/c9_split_000.xhtml") — applies to the
+      // first rendered page of this chapter. Keep only the first such entry if multiple.
+      if (topOfFilePageLabel.empty()) {
+        topOfFilePageLabel = std::move(label);
+      }
+    } else {
+      externalPageBreakAnchors.emplace_back(std::move(id), std::move(label));
+    }
+  }
+}
+
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
@@ -424,9 +451,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Extract class, style, and id attributes
+  // Extract class, style, id, and pagebreak metadata attributes
   std::string classAttr;
   std::string styleAttr;
+  std::string idAttr;
+  std::string ariaLabel;
+  std::string titleAttr;
+  bool isPageBreakMarker = false;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
@@ -434,11 +465,56 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        // Defer both anchor recording and TOC page breaks until startNewTextBlock,
-        // after the previous block is flushed to pages via makePages().
-        self->pendingAnchorId = atts[i + 1];
+        idAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "aria-label") == 0) {
+        ariaLabel = atts[i + 1];
+      } else if (strcmp(atts[i], "title") == 0) {
+        titleAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0) {
+        isPageBreakMarker = true;
+      } else if (strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0) {
+        isPageBreakMarker = true;
       }
     }
+  }
+
+  // Emit any "top-of-file" printed-page label as soon as we see real markup. NCX entries
+  // without a fragment refer to the start of this XHTML; record now so the label lands on
+  // page 0 (completedPageCount is still 0 until the first emitPage()).
+  if (!self->topOfFilePageLabelEmitted && !self->topOfFilePageLabel.empty()) {
+    self->recordPageBreakLabel(self->topOfFilePageLabel);
+    self->topOfFilePageLabelEmitted = true;
+  }
+
+  // Match id against NCX-supplied pagebreak anchors (printed page list). If matched,
+  // treat this element as if it carried an inline doc-pagebreak marker.
+  std::string externalLabel;
+  if (!isPageBreakMarker && !idAttr.empty() && !self->externalPageBreakAnchors.empty()) {
+    for (const auto& [extId, extLabel] : self->externalPageBreakAnchors) {
+      if (extId == idAttr) {
+        externalLabel = extLabel;
+        isPageBreakMarker = true;
+        break;
+      }
+    }
+  }
+
+  if (isPageBreakMarker) {
+    std::string label = !ariaLabel.empty() ? ariaLabel : titleAttr;
+    if (label.empty()) {
+      label = std::move(externalLabel);
+    }
+    self->recordPageBreakLabel(label);
+    if (!idAttr.empty()) {
+      self->anchorData.emplace_back(idAttr, static_cast<uint16_t>(self->completedPageCount));
+      self->pendingAnchorId = idAttr;
+    }
+  }
+
+  // Defer generic anchor recording until startNewTextBlock, after the previous block
+  // is flushed to pages via makePages(). Skip pagebreak anchors since they were already recorded.
+  if (!isPageBreakMarker && !idAttr.empty()) {
+    self->pendingAnchorId = idAttr;
   }
 
   auto centeredBlockStyle = BlockStyle();

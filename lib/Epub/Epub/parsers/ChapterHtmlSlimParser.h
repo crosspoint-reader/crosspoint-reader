@@ -108,6 +108,20 @@ class ChapterHtmlSlimParser final : public Print {
   std::string pendingAnchorId;  // deferred until after previous text block is flushed
   std::vector<std::string> tocAnchors;
 
+  // External printed-page labels sourced from NCX <pageList> or EPUB 3 nav page-list.
+  // Keyed by HTML id (anchor fragment). When the parser encounters an element whose id
+  // matches one of these, it records the label as if the element were an inline
+  // doc-pagebreak marker. Anchors already labeled this way are not re-recorded if the
+  // same element also carries an inline pagebreak attribute.
+  std::vector<std::pair<std::string, std::string>> externalPageBreakAnchors;
+  // Optional label for the start of this XHTML file (NCX entries with no fragment).
+  std::string topOfFilePageLabel;
+  bool topOfFilePageLabelEmitted = false;
+
+  // Page break label mapping: stores the printed page label from EPUB pagebreak markers
+  // and the section page index where that printed page begins.
+  std::vector<std::pair<uint16_t, std::string>> pageBreakLabels;
+
   // Paragraph index tracking for XPath-to-page lookup table.
   // Counts <p> sibling indices (1-based, matching XPath convention) during page building.
   // Stored per page in the section cache so that XPath p[N] can be resolved to a page
@@ -173,6 +187,7 @@ class ChapterHtmlSlimParser final : public Print {
   // in lockstep. Every page break MUST go through this helper; open-coded completePageFn
   // calls risk desynchronising paragraphLutPerPage and failing the size check in Section.cpp.
   void emitPage(uint32_t xhtmlByteOffset);
+  void recordPageBreakLabel(const std::string& label);
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
@@ -227,5 +242,10 @@ class ChapterHtmlSlimParser final : public Print {
   ParsedText::LineProcessResult addLineToPage(std::shared_ptr<TextBlock> line, bool lineEndsWithHyphenatedWord,
                                               bool suppressHyphenationRetry);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::vector<std::pair<uint16_t, std::string>>& getPageBreakLabels() const { return pageBreakLabels; }
   const std::vector<ParagraphLutEntry>& getParagraphLutPerPage() const { return paragraphLutPerPage; }
+
+  // Supplies printed-page labels from NCX <pageList> for this chapter. `anchors` maps
+  // HTML id -> label; an entry with an empty id applies to the first page of this file.
+  void setExternalPageBreakAnchors(std::vector<std::pair<std::string, std::string>> anchors);
 };

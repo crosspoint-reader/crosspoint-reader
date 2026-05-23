@@ -6,6 +6,7 @@
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 #include <PngToBmpConverter.h>
+#include <Serialization.h>
 #include <ZipFile.h>
 
 #include <cctype>
@@ -13,10 +14,37 @@
 
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
+#include "Epub/parsers/PageMapParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
 namespace {
+
+// Serialise a list of printed-page entries (href, anchor, label) to pagelist.bin in the
+// book cache. Templated on the parser's entry type so both NCX <pageList> and EPUB 3
+// <nav epub:type="page-list"> share the same writer.
+template <typename Entry>
+void writePageListBin(const std::string& cachePath, const std::vector<Entry>& pageList) {
+  const auto pageListPath = cachePath + "/pagelist.bin";
+  if (pageList.empty()) {
+    Storage.remove(pageListPath.c_str());
+    return;
+  }
+  FsFile pageListFile;
+  if (!Storage.openFileForWrite("EBP", pageListPath, pageListFile)) {
+    LOG_ERR("EBP", "Could not write pagelist.bin");
+    return;
+  }
+  serialization::writePod(pageListFile, static_cast<uint16_t>(pageList.size()));
+  for (const auto& entry : pageList) {
+    serialization::writeString(pageListFile, entry.href);
+    serialization::writeString(pageListFile, entry.anchor);
+    serialization::writeString(pageListFile, entry.label);
+  }
+  pageListFile.flush();
+  pageListFile.close();
+  LOG_DBG("EBP", "Wrote pagelist.bin with %u entries", static_cast<unsigned>(pageList.size()));
+}
 
 enum class CoverImageFormat { Unknown, Jpeg, Png };
 
@@ -311,6 +339,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
     tocNavItem = opfParser.tocNavPath;
   }
 
+  if (!opfParser.pageMapPath.empty()) {
+    pageMapItem = opfParser.pageMapPath;
+  }
+
   if (!opfParser.cssFiles.empty()) {
     cssFiles = opfParser.cssFiles;
   }
@@ -373,6 +405,12 @@ bool Epub::parseTocNcxFile() const {
   tempNcxFile.close();
   Storage.remove(tmpNcxPath.c_str());
 
+  // Persist the printed-page list (NCX <pageList>) to a small cache file so the
+  // section builder can stamp printed-page labels onto rendered pages without
+  // re-parsing the NCX. Format: u16 count, then per entry: writeString(href),
+  // writeString(anchor), writeString(label).
+  writePageListBin(getCachePath(), ncxParser.getPageList());
+
   LOG_DBG("EBP", "Parsed TOC items");
   return true;
 }
@@ -430,7 +468,71 @@ bool Epub::parseTocNavFile() const {
   tempNavFile.close();
   Storage.remove(tmpNavPath.c_str());
 
+  // Persist EPUB 3 <nav epub:type="page-list"> entries to pagelist.bin (same format
+  // as the NCX writer); the section builder consumes either source uniformly.
+  writePageListBin(getCachePath(), navParser.getPageList());
+
   LOG_DBG("EBP", "Parsed TOC nav items");
+  return true;
+}
+
+bool Epub::parsePageMapFile() const {
+  // EPUB 2.01 page-map.xml: a separate top-level manifest item with media-type
+  // "application/oebps-page-map+xml". Structure is a flat list of <page name="..." href="..."/>.
+  if (pageMapItem.empty()) {
+    LOG_DBG("EBP", "No page-map file specified");
+    return false;
+  }
+
+  LOG_DBG("EBP", "Parsing page-map file: %s", pageMapItem.c_str());
+
+  const auto tmpPageMapPath = getCachePath() + "/page-map.xml";
+  FsFile tempPageMapFile;
+  if (!Storage.openFileForWrite("EBP", tmpPageMapPath, tempPageMapFile)) {
+    return false;
+  }
+  readItemContentsToStream(pageMapItem, tempPageMapFile, 1024);
+  tempPageMapFile.close();
+  if (!Storage.openFileForRead("EBP", tmpPageMapPath, tempPageMapFile)) {
+    return false;
+  }
+  const auto pageMapSize = tempPageMapFile.size();
+
+  // page-map hrefs are relative to the page-map file itself (typically content.opf's dir).
+  const std::string pageMapBasePath = pageMapItem.substr(0, pageMapItem.find_last_of('/') + 1);
+  PageMapParser pageMapParser(pageMapBasePath, pageMapSize);
+
+  if (!pageMapParser.setup()) {
+    LOG_ERR("EBP", "Could not setup page-map parser");
+    tempPageMapFile.close();
+    return false;
+  }
+
+  const auto pageMapBuffer = static_cast<uint8_t*>(malloc(1024));
+  if (!pageMapBuffer) {
+    LOG_ERR("EBP", "Could not allocate memory for page-map parser");
+    tempPageMapFile.close();
+    return false;
+  }
+
+  while (tempPageMapFile.available()) {
+    const auto readSize = tempPageMapFile.read(pageMapBuffer, 1024);
+    if (readSize == 0) break;
+    const auto processedSize = pageMapParser.write(pageMapBuffer, readSize);
+    if (processedSize != readSize) {
+      LOG_ERR("EBP", "Could not process all page-map data");
+      free(pageMapBuffer);
+      tempPageMapFile.close();
+      return false;
+    }
+  }
+
+  free(pageMapBuffer);
+  tempPageMapFile.close();
+  Storage.remove(tmpPageMapPath.c_str());
+
+  writePageListBin(getCachePath(), pageMapParser.getPageList());
+  LOG_DBG("EBP", "Parsed page-map entries");
   return true;
 }
 
@@ -605,6 +707,15 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (!tocParsed) {
     LOG_ERR("EBP", "Warning: Could not parse any TOC format");
     // Continue anyway - book will work without TOC
+  }
+
+  // EPUB 2.01 page-map.xml — only parse if neither NCX <pageList> nor nav page-list
+  // wrote a pagelist.bin already (so an explicit NCX/nav printed-page list always wins).
+  if (!pageMapItem.empty()) {
+    const auto pageListPath = getCachePath() + "/pagelist.bin";
+    if (!Storage.exists(pageListPath.c_str())) {
+      parsePageMapFile();
+    }
   }
 
   if (!bookMetadataCache->endTocPass()) {
@@ -1187,6 +1298,30 @@ float Epub::calculateProgress(const int currentSpineIndex, const float currentSp
   const float sectionProgSize = currentSpineRead * static_cast<float>(curChapterSize);
   const float totalProgress = static_cast<float>(prevChapterSize) + sectionProgSize;
   return totalProgress / static_cast<float>(bookSize);
+}
+
+std::vector<Epub::PrintedPageEntry> Epub::loadPrintedPageList() const {
+  std::vector<PrintedPageEntry> entries;
+  const auto pageListPath = getCachePath() + "/pagelist.bin";
+  if (!Storage.exists(pageListPath.c_str())) {
+    return entries;
+  }
+  FsFile f;
+  if (!Storage.openFileForRead("EBP", pageListPath, f)) {
+    return entries;
+  }
+  uint16_t count = 0;
+  serialization::readPod(f, count);
+  entries.reserve(count);
+  for (uint16_t i = 0; i < count; i++) {
+    PrintedPageEntry e;
+    serialization::readString(f, e.href);
+    serialization::readString(f, e.anchor);
+    serialization::readString(f, e.label);
+    entries.push_back(std::move(e));
+  }
+  f.close();
+  return entries;
 }
 
 int Epub::resolveHrefToSpineIndex(const std::string& href) const {

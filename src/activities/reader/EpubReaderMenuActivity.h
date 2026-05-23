@@ -19,6 +19,7 @@ class EpubReaderMenuActivity final : public MenuListActivity {
     IMAGE_RENDERING,
     TEXT_DARKNESS,
     GO_TO_PERCENT,
+    GO_TO_PRINTED_PAGE,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     SCREENSHOT,
@@ -42,13 +43,13 @@ class EpubReaderMenuActivity final : public MenuListActivity {
                                   const std::string& initialSdFontFamilyOverride, const int8_t initialFontSizeOverride,
                                   const uint8_t initialTextDarkness, const bool initialBionicReadingOverride,
                                   const int8_t initialParagraphAlignmentOverride, const bool hasStarredPages,
-                                  const bool isCurrentPageStarred);
+                                  const bool isCurrentPageStarred, const bool hasPrintedPages);
 
   void onEnter() override;
   void render(RenderLock&&) override;
 
  private:
-  void buildMenuItems(bool hasFootnotes, bool hasStarredPages);
+  void buildMenuItems(bool hasFootnotes, bool hasStarredPages, bool hasPrintedPages);
 
   bool currentPageStarred = false;
   void finishWithAction(MenuAction action);

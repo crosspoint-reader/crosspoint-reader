@@ -1,6 +1,7 @@
 #include "SleepActivity.h"
 
 #include <Epub.h>
+#include <Epub/Section.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -553,6 +554,16 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
             float chapterProgress = static_cast<float>(currentPage) / static_cast<float>(pageCount);
             float bookProgress = epub.calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
 
+            // Pull the printed-page label (NCX <pageList> / EPUB 3 nav page-list /
+            // EPUB 2.01 page-map / inline doc-pagebreak) directly from the section
+            // cache so the sleep overlay can show e.g. "(42)" without instantiating
+            // a Section + render parameters.
+            std::string printedPagePrefix;
+            if (const auto label = Section::getPrintedPageLabelFromCache(
+                    epub.getCachePath() + "/sections", currentSpineIndex, static_cast<uint16_t>(currentPage))) {
+              printedPagePrefix = *label + " ";
+            }
+
             const int tocIndex = epub.getTocIndexForSpineIndex(currentSpineIndex);
             if (tocIndex != -1) {
               const auto tocItem = epub.getTocItem(tocIndex);
@@ -560,13 +571,13 @@ BookOverlayInfo SleepActivity::getBookOverlayInfo(const std::string& bookPath) c
               char suffix[64];
               snprintf(suffix, sizeof(suffix), tr(STR_OVERLAY_CHAPTER_PAGE_SUFFIX), currentPage + 1, pageCount,
                        bookProgress);
-              info.progressSuffix = suffix;
+              info.progressSuffix = printedPagePrefix + suffix;
               info.progressText = info.chapterName + info.progressSuffix;
             } else {
               char buf[80];
               snprintf(buf, sizeof(buf), tr(STR_OVERLAY_READING_PROGRESS), (unsigned long)currentPage + 1,
                        (unsigned)pageCount, bookProgress);
-              info.progressText = buf;
+              info.progressText = printedPagePrefix + buf;
             }
           } else {
             char buf[64];

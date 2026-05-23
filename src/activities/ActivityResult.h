@@ -42,6 +42,10 @@ struct PercentResult {
   int percent = 0;
 };
 
+struct PrintedPageResult {
+  std::string label;
+};
+
 struct PageResult {
   uint32_t page = 0;
 };
@@ -76,7 +80,7 @@ struct StarredPageResult {
 
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, PageResult,
-                 SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, StarredPageResult>;
+                 SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, StarredPageResult, PrintedPageResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

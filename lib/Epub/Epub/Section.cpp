@@ -32,7 +32,8 @@ constexpr uint32_t kParseComplete = kImageRendering + sizeof(uint8_t);
 constexpr uint32_t kPageCount = kParseComplete + sizeof(bool);
 constexpr uint32_t kPageLut = kPageCount + sizeof(uint16_t);
 constexpr uint32_t kAnchorMap = kPageLut + sizeof(uint32_t);
-constexpr uint32_t kParagraphLut = kAnchorMap + sizeof(uint32_t);
+constexpr uint32_t kPageBreakMap = kAnchorMap + sizeof(uint32_t);
+constexpr uint32_t kParagraphLut = kPageBreakMap + sizeof(uint32_t);
 constexpr uint32_t kSize = kParagraphLut + sizeof(uint32_t);
 }  // namespace header
 
@@ -211,7 +212,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                      sizeof(viewportWidth) + sizeof(viewportHeight) + sizeof(hyphenationEnabled) +
                                      sizeof(embeddedStyle) + sizeof(bionicReadingEnabled) + sizeof(imageRendering) +
                                      sizeof(bool) + sizeof(pageCount) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                     sizeof(uint32_t),
+                                     sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
@@ -228,6 +229,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
+  serialization::writePod(file,
+                          static_cast<uint32_t>(0));  // Placeholder for page break label map offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for paragraph LUT offset (patched later)
 }
 
@@ -339,6 +342,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   // Build TOC boundaries by scanning anchor data from the still-open file,
   // matching only the TOC anchors we need (avoids loading all anchors into memory).
   buildTocBoundariesFromFile(file);
+  buildPageBreakLabelsFromFile(file);
 
   // File is intentionally left open; subsequent loadPageFromSectionFile() calls
   // seek within this handle instead of re-opening the file each time.
@@ -456,11 +460,35 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
   }
 
+  // Load printed-page list entries (NCX <pageList> or EPUB 3 nav page-list) for this
+  // chapter's href, if any. Format: u16 count, then per entry: writeString(href),
+  // writeString(anchor), writeString(label).
+  std::vector<std::pair<std::string, std::string>> externalPageBreakAnchors;
+  {
+    const auto pageListPath = epub->getCachePath() + "/pagelist.bin";
+    FsFile pageListFile;
+    if (Storage.exists(pageListPath.c_str()) && Storage.openFileForRead("SCT", pageListPath, pageListFile)) {
+      uint16_t count = 0;
+      serialization::readPod(pageListFile, count);
+      for (uint16_t i = 0; i < count; i++) {
+        std::string href, anchor, label;
+        serialization::readString(pageListFile, href);
+        serialization::readString(pageListFile, anchor);
+        serialization::readString(pageListFile, label);
+        if (href == localPath) {
+          externalPageBreakAnchors.emplace_back(std::move(anchor), std::move(label));
+        }
+      }
+      pageListFile.close();
+    }
+  }
+
   ChapterHtmlSlimParser visitor(
       epub, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
       hyphenationEnabled, bionicReadingEnabled,
       [this, &lut](std::unique_ptr<Page> page) { lut.emplace_back(this->onPageComplete(std::move(page))); },
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), progressFn, cssParser);
+  visitor.setExternalPageBreakAnchors(std::move(externalPageBreakAnchors));
   Hyphenator::setPreferredLanguage(epub->getLanguage());
 
   if (!visitor.setup(inflatedSize)) {
@@ -551,6 +579,15 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     serialization::writePod(file, page);
   }
 
+  // Write printed page label map for EPUB pagebreak markers.
+  const uint32_t pageBreakMapOffset = file.position();
+  const auto& pageBreakLabels = visitor.getPageBreakLabels();
+  serialization::writePod(file, static_cast<uint16_t>(pageBreakLabels.size()));
+  for (const auto& [page, label] : pageBreakLabels) {
+    serialization::writePod(file, page);
+    serialization::writeString(file, label);
+  }
+
   // Write per-page paragraph LUT: count + array of {xhtmlByteOffset(u32), paragraphIndex(u16)}.
   // The byte offset lets findXPathForParagraph seek near the target paragraph without scanning
   // from the beginning of the XHTML file, reducing SD reads on large chapters.
@@ -582,11 +619,13 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   serialization::writePod(file, anchorMapOffset);
+  serialization::writePod(file, pageBreakMapOffset);
   serialization::writePod(file, paragraphLutOffset);
   file.flush();
 
   const size_t expectedHeaderPatchEnd = headerPatchStart + sizeof(parseComplete) + sizeof(pageCount) +
-                                        sizeof(lutOffset) + sizeof(anchorMapOffset) + sizeof(paragraphLutOffset);
+                                        sizeof(lutOffset) + sizeof(anchorMapOffset) + sizeof(pageBreakMapOffset) +
+                                        sizeof(paragraphLutOffset);
   if (file.position() != expectedHeaderPatchEnd) {
     LOG_ERR("SCT", "Section header patch write failed: wrote %u bytes at offset %u",
             static_cast<unsigned>(file.position() - headerPatchStart), static_cast<unsigned>(headerPatchStart));
@@ -600,6 +639,14 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   buildTocBoundaries(anchors);
+
+  // Populate in-memory pageBreakLabels from the just-completed parse so the status bar
+  // can show printed-page labels without having to reload the section cache from disk.
+  // Without this, labels only appear after a subsequent open (via buildPageBreakLabelsFromFile).
+  this->pageBreakLabels.clear();
+  for (const auto& entry : visitor.getPageBreakLabels()) {
+    this->pageBreakLabels.emplace_back(entry.first, entry.second);
+  }
 
   file.close();
 
@@ -758,6 +805,27 @@ void Section::buildTocBoundariesFromFile(FsFile& f) {
             [](const TocBoundary& a, const TocBoundary& b) { return a.startPage < b.startPage; });
 }
 
+void Section::buildPageBreakLabelsFromFile(FsFile& f) {
+  pageBreakLabels.clear();
+  f.seek(header::kPageBreakMap);
+  uint32_t pageBreakMapOffset;
+  serialization::readPod(f, pageBreakMapOffset);
+  if (pageBreakMapOffset == 0 || pageBreakMapOffset >= f.size()) {
+    return;
+  }
+
+  f.seek(pageBreakMapOffset);
+  uint16_t count;
+  serialization::readPod(f, count);
+  for (uint16_t i = 0; i < count; i++) {
+    uint16_t page;
+    std::string label;
+    serialization::readPod(f, page);
+    serialization::readString(f, label);
+    pageBreakLabels.emplace_back(page, std::move(label));
+  }
+}
+
 int Section::getTocIndexForPage(const int page) const {
   if (tocBoundaries.empty()) {
     return epub->getTocIndexForSpineIndex(spineIndex);
@@ -823,6 +891,108 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
 
   f.close();
   return std::nullopt;
+}
+
+std::optional<std::string> Section::getPrintedPageLabelFromCache(const std::string& sectionsDir, int spineIndex,
+                                                                 uint16_t page) {
+  // Find any cache variant for spineIndex. Filename format: "<spineIndex>_<hash>.bin".
+  // We pick the first match — all variants for the same spine share the same printed-page
+  // anchors (those are content-derived, not render-parameter-derived).
+  char prefix[16];
+  snprintf(prefix, sizeof(prefix), "%d_", spineIndex);
+  const auto files = Storage.listFiles(sectionsDir.c_str(), 50);
+  std::string match;
+  for (const auto& f : files) {
+    if (f.startsWith(prefix) && f.endsWith(".bin")) {
+      match = f.c_str();
+      break;
+    }
+  }
+  if (match.empty()) {
+    return std::nullopt;
+  }
+
+  FsFile file;
+  if (!Storage.openFileForRead("SCT", sectionsDir + "/" + match, file)) {
+    return std::nullopt;
+  }
+
+  // Header version guard — refuse to read a cache written by a different layout.
+  uint8_t version = 0;
+  file.seek(header::kVersion);
+  serialization::readPod(file, version);
+  if (version != SECTION_FILE_VERSION) {
+    file.close();
+    return std::nullopt;
+  }
+
+  file.seek(header::kPageBreakMap);
+  uint32_t pageBreakMapOffset = 0;
+  serialization::readPod(file, pageBreakMapOffset);
+  if (pageBreakMapOffset == 0 || pageBreakMapOffset >= file.size()) {
+    file.close();
+    return std::nullopt;
+  }
+
+  file.seek(pageBreakMapOffset);
+  uint16_t count = 0;
+  serialization::readPod(file, count);
+  std::vector<std::string> labelsOnPage;
+  for (uint16_t i = 0; i < count; i++) {
+    uint16_t entryPage = 0;
+    std::string label;
+    serialization::readPod(file, entryPage);
+    serialization::readString(file, label);
+    if (entryPage == page) {
+      labelsOnPage.push_back(std::move(label));
+    } else if (entryPage > page) {
+      break;
+    }
+  }
+  file.close();
+
+  if (labelsOnPage.empty()) {
+    return std::nullopt;
+  }
+  if (labelsOnPage.size() == 1 || labelsOnPage.front() == labelsOnPage.back()) {
+    return std::string("(") + labelsOnPage.front() + ")";
+  }
+  return std::string("(") + labelsOnPage.front() + "/" + labelsOnPage.back() + ")";
+}
+
+std::optional<std::string> Section::getNearestPrintedPageLabelAtOrBefore(uint16_t page) const {
+  // pageBreakLabels is built in document order (i.e. ascending pageIndex), so the last
+  // entry whose page is <= `page` is the "you're currently reading at or after this
+  // printed page" hint. Returns the raw label (no parens, no slash-collapsing).
+  std::optional<std::string> best;
+  for (const auto& [labelPage, label] : pageBreakLabels) {
+    if (labelPage > page) break;
+    best = label;
+  }
+  return best;
+}
+
+std::optional<std::string> Section::getPrintedPageLabelForPage(uint16_t page) const {
+  // Collect every printed-page label whose anchor lands on this exact rendered page.
+  // Multiple labels can co-occur when a short device page contains more than one EPUB
+  // pagebreak marker (e.g. printed pages 7 and 8 both starting within the same device page).
+  // pageBreakLabels is recorded in document order, so we can short-circuit once we pass `page`.
+  std::vector<std::string> labels;
+  for (const auto& [labelPage, label] : pageBreakLabels) {
+    if (labelPage == page) {
+      labels.push_back(label);
+    } else if (labelPage > page) {
+      break;
+    }
+  }
+
+  if (labels.empty()) {
+    return std::nullopt;
+  }
+  if (labels.size() == 1 || labels.front() == labels.back()) {
+    return std::string("(") + labels.front() + ")";
+  }
+  return std::string("(") + labels.front() + "/" + labels.back() + ")";
 }
 
 bool Section::readParagraphLutHeader(FsFile& outFile, uint16_t& outCount, uint32_t& outLutStart) const {
