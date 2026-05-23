@@ -46,9 +46,15 @@ class EpubReaderActivity final : public Activity {
     };
     std::string anchorStr;  // Kind::Anchor; empty for all others
     // Cross-font rescaling: page count of this spine at save time.
-    // Non-zero only for Kind::Page when loaded from progress.bin or written during reflow.
+    // Non-zero for Kind::Page when loaded from progress.bin or written during reflow.
+    // Also set for Kind::Paragraph / Kind::ListItem / Kind::Anchor so a LUT miss
+    // still rescales the estimated fallbackPage instead of stranding at 0.
     int cachedPageCount = 0;
     int cachedSpineIdx = 0;
+    // Estimated page used as a baseline before LUT/anchor lookup, and as a fallback
+    // when the lookup misses. Only meaningful for Kind::Paragraph / Kind::ListItem /
+    // Kind::Anchor — for Kind::Page the `page` field is the baseline.
+    int fallbackPage = 0;
 
     NavigationTarget() : kind(Kind::Page), page(0) {}
 
@@ -64,11 +70,12 @@ class EpubReaderActivity final : public Activity {
       t.page = 0;
       return t;
     }
-    static NavigationTarget makeAnchor(std::string a) {
+    static NavigationTarget makeAnchor(std::string a, int fallback = 0) {
       NavigationTarget t;
       t.kind = Kind::Anchor;
       t.page = 0;
       t.anchorStr = std::move(a);
+      t.fallbackPage = fallback;
       return t;
     }
     static NavigationTarget makeTocIndex(int idx) {
@@ -83,16 +90,18 @@ class EpubReaderActivity final : public Activity {
       t.spineProgress = sp;
       return t;
     }
-    static NavigationTarget makeParagraph(uint16_t i) {
+    static NavigationTarget makeParagraph(uint16_t i, int fallback = 0) {
       NavigationTarget t;
       t.kind = Kind::Paragraph;
       t.lutIndex = i;
+      t.fallbackPage = fallback;
       return t;
     }
-    static NavigationTarget makeListItem(uint16_t i) {
+    static NavigationTarget makeListItem(uint16_t i, int fallback = 0) {
       NavigationTarget t;
       t.kind = Kind::ListItem;
       t.lutIndex = i;
+      t.fallbackPage = fallback;
       return t;
     }
 

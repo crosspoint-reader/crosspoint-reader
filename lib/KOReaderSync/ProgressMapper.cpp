@@ -43,6 +43,60 @@ bool resolveFromPercentage(const std::shared_ptr<Epub>& epub, const float percen
 
   return true;
 }
+
+// Compute intra-spine progress from KOReader's book percentage, assuming the target
+// spine is known. This is the constrained version of resolveFromPercentage that
+// honors an XPath-derived spine index even when the heavy XPath resolver couldn't
+// run (typically because heap was too fragmented to inflate the chapter at sync time).
+//
+// The math is identical to the per-spine portion of resolveFromPercentage. Returns 0
+// when the percentage maps to bytes before the spine's start (the position lives
+// inside the spine by assumption, so clamp to 0) and 1 when it overshoots the end.
+float intraSpineFromPercentage(const std::shared_ptr<Epub>& epub, const int spineIndex, const float percentage) {
+  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount() || !std::isfinite(percentage)) {
+    return 0.0f;
+  }
+  const size_t bookSize = epub->getBookSize();
+  if (bookSize == 0) {
+    return 0.0f;
+  }
+  const float sanitized = std::clamp(percentage, 0.0f, 1.0f);
+  const size_t targetBytes = static_cast<size_t>(bookSize * sanitized);
+  const size_t prevCumSize = (spineIndex > 0) ? epub->getCumulativeSpineItemSize(spineIndex - 1) : 0;
+  const size_t currentCumSize = epub->getCumulativeSpineItemSize(spineIndex);
+  const size_t spineSize = currentCumSize - prevCumSize;
+  if (spineSize == 0) {
+    return 0.0f;
+  }
+  if (targetBytes <= prevCumSize) {
+    return 0.0f;
+  }
+  const size_t bytesIntoSpine = targetBytes - prevCumSize;
+  return std::clamp(static_cast<float>(bytesIntoSpine) / static_cast<float>(spineSize), 0.0f, 1.0f);
+}
+
+// KOReader emits chapter-start XPaths as ".../body/<wrapper>.0" or just
+// ".../body/text()[1].0" — there's no paragraph segment, and the character offset is 0.
+// These unambiguously denote "the start of the spine"; we can pin intra=0 without
+// inflating the chapter. Catches the common case of starting a new chapter on
+// another device, which previously round-tripped through book-percentage byte math
+// and landed several pages into the chapter due to byte-vs-page-density skew.
+bool isChapterStartXPath(const std::string& xpath) {
+  // Reject anything with a paragraph or list-item predicate — those carry real
+  // position information that can't be flattened to "start of spine".
+  if (xpath.find("/p[") != std::string::npos) return false;
+  if (xpath.find("/li[") != std::string::npos) return false;
+  // The path must end with a ".0" text-point segment. The reverse mapper already
+  // strips text() suffixes for matching, but here we look at the raw form: either
+  // "<tag>.0" (cursor at start of element) or "text()[1].0" / similar (cursor at
+  // start of the first text node) with no following character offset.
+  const size_t dotPos = xpath.rfind('.');
+  if (dotPos == std::string::npos || dotPos + 1 >= xpath.size()) return false;
+  for (size_t i = dotPos + 1; i < xpath.size(); i++) {
+    if (xpath[i] != '0') return false;
+  }
+  return true;
+}
 }  // namespace
 
 KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
@@ -101,9 +155,14 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   bool usedXPathMapping = false;
   bool usedPercentageReconcile = false;
 
+  // Mapping source used for the final log line; updated as we narrow down the path
+  // actually taken (xpath / xpath+percentage / xpath-spine+percentage / percentage).
+  const char* mappingSource = "percentage";
+
   int xpathSpineIndex = -1;
-  if (ChapterXPathIndexer::tryExtractSpineIndexFromXPath(koPos.xpath, xpathSpineIndex) && xpathSpineIndex >= 0 &&
-      xpathSpineIndex < spineCount) {
+  const bool haveXPathSpine = ChapterXPathIndexer::tryExtractSpineIndexFromXPath(koPos.xpath, xpathSpineIndex) &&
+                              xpathSpineIndex >= 0 && xpathSpineIndex < spineCount;
+  if (haveXPathSpine) {
     float intraFromXPath = 0.0f;
     uint16_t liIndexFromXPath = 0;
     if (ChapterXPathIndexer::findProgressForXPath(epub, xpathSpineIndex, koPos.xpath, intraFromXPath, xpathExactMatch,
@@ -139,8 +198,12 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
           }
         }
       }
+      mappingSource = usedPercentageReconcile ? "xpath+percentage" : "xpath";
     }
-    // Extract paragraph index from XPath for direct page lookup via section cache
+    // Extract paragraph index from XPath for direct page lookup via section cache.
+    // Done regardless of whether the heavy XPath resolver succeeded — the paragraph
+    // LUT lookup later (in EpubReaderActivity::NavigationTarget::resolveInto) snaps
+    // to the precise page, so even without intra resolution we get an exact landing.
     uint16_t pIndex = 0;
     if (ChapterXPathIndexer::tryExtractParagraphIndexFromXPath(koPos.xpath, pIndex)) {
       result.paragraphIndex = pIndex;
@@ -149,14 +212,39 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   }
 
   if (!usedXPathMapping) {
-    int percentageSpineIndex = -1;
-    float percentageIntraSpine = -1.0f;
-    if (!resolveFromPercentage(epub, koPos.percentage, spineCount, percentageSpineIndex, percentageIntraSpine)) {
-      return result;
+    // Heavy XPath resolution failed (typically because heap was too fragmented to
+    // inflate the spine at sync time). Salvage as much as we can:
+    //   1) Trust the spine index extracted from the XPath itself — it's purely
+    //      string-derived and always correct when present. Using it preserves
+    //      cross-chapter syncs even when chapter content can't be re-parsed.
+    //   2) For chapter-start XPaths (ending in ".0" with no paragraph predicate),
+    //      pin intra=0. KOReader's percentage carries small per-DOM rounding that
+    //      would otherwise leak into a spurious intra > 0 via byte-fraction math.
+    //   3) Otherwise compute intra-spine from KOReader's percentage relative to
+    //      the XPath-derived spine. Falls back to global percentage spine selection
+    //      only when no XPath spine is available.
+    if (haveXPathSpine) {
+      result.spineIndex = xpathSpineIndex;
+      if (isChapterStartXPath(koPos.xpath)) {
+        resolvedIntraSpineProgress = 0.0f;
+        mappingSource = "xpath-spine+chapter-start";
+        LOG_DBG("ProgressMapper", "Chapter-start XPath '%s' on spine=%d, pinning intra=0", koPos.xpath.c_str(),
+                xpathSpineIndex);
+      } else {
+        resolvedIntraSpineProgress = intraSpineFromPercentage(epub, xpathSpineIndex, koPos.percentage);
+        mappingSource = "xpath-spine+percentage";
+        LOG_DBG("ProgressMapper", "XPath resolve unavailable for spine=%d; intra from pct=%.3f -> %.3f",
+                xpathSpineIndex, koPos.percentage, resolvedIntraSpineProgress);
+      }
+    } else {
+      int percentageSpineIndex = -1;
+      float percentageIntraSpine = -1.0f;
+      if (!resolveFromPercentage(epub, koPos.percentage, spineCount, percentageSpineIndex, percentageIntraSpine)) {
+        return result;
+      }
+      result.spineIndex = percentageSpineIndex;
+      resolvedIntraSpineProgress = percentageIntraSpine;
     }
-
-    result.spineIndex = percentageSpineIndex;
-    resolvedIntraSpineProgress = percentageIntraSpine;
   }
 
   // Estimate page number within the selected spine item
@@ -207,8 +295,6 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
           result.spineIndex, resolvedIntraSpineProgress, result.hasParagraphIndex ? "yes" : "no", result.paragraphIndex,
           result.hasListItemIndex ? "yes" : "no", result.listItemIndex);
 
-  const char* mappingSource =
-      usedXPathMapping ? (usedPercentageReconcile ? "xpath+percentage" : "xpath") : "percentage";
   LOG_DBG("ProgressMapper", "KOReader -> CrossPoint: %.2f%% at %s -> spine=%d, page=%d (%s, exact=%s)",
           koPos.percentage * 100, koPos.xpath.c_str(), result.spineIndex, result.pageNumber, mappingSource,
           xpathExactMatch ? "yes" : "no");

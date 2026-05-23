@@ -16,6 +16,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 
 #include <cstring>
