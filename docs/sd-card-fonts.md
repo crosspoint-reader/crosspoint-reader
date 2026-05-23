@@ -97,6 +97,7 @@ To convert your own TrueType/OpenType fonts:
 | `cyrillic` | Cyrillic + Supplement |
 | `cjk` | CJK Unified Ideographs + Hiragana + Katakana + Fullwidth |
 | `hangul` | Korean Hangul syllables |
+| `reading` | Literary fiction coverage: Latin, Greek, Cyrillic, math/symbol blocks, supplemental punctuation, and CJK quote marks |
 | `builtin` | Matches built-in Bookerly coverage exactly |
 
 Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
