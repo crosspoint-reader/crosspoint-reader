@@ -66,6 +66,8 @@ class BleTransferActivity final : public Activity {
   FsFile downloadFile_;
   SemaphoreHandle_t eventMutex_ = nullptr;
   std::deque<BleEvent> bleEvents_;
+  size_t queuedBleEventBytes_ = 0;
+  bool bleEventOverflow_ = false;
 
   std::string sessionCode_;
   std::string fileName_;

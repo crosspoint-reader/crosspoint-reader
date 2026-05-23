@@ -61,6 +61,8 @@ constexpr size_t BLE_PROGRESS_DISPLAY_INTERVAL_BYTES = 128UL * 1024UL;
 constexpr size_t BLE_FIRMWARE_PROGRESS_DISPLAY_INTERVAL_BYTES = 1024UL * 1024UL;
 constexpr size_t BLE_UPLOAD_ACK_BYTES_MIN = 20;
 constexpr size_t BLE_UPLOAD_ACK_BYTES_MAX = 64UL * 1024UL;
+constexpr size_t MAX_QUEUED_BLE_EVENTS = 64;
+constexpr size_t MAX_QUEUED_BLE_EVENT_BYTES = 8UL * 1024UL;
 constexpr size_t EPUB_SUFFIX_LEN = 5;
 constexpr size_t BMP_SUFFIX_LEN = 4;
 constexpr size_t BIN_SUFFIX_LEN = 4;
@@ -441,8 +443,17 @@ void BleTransferActivity::loop() {
 
 void BleTransferActivity::enqueueBleEvent(BleEvent event) {
   if (!eventMutex_) return;
+  const size_t eventBytes = event.value.size();
   xSemaphoreTake(eventMutex_, portMAX_DELAY);
-  bleEvents_.push_back(std::move(event));
+  if (bleEventOverflow_ || bleEvents_.size() >= MAX_QUEUED_BLE_EVENTS ||
+      queuedBleEventBytes_ + eventBytes > MAX_QUEUED_BLE_EVENT_BYTES) {
+    bleEventOverflow_ = true;
+    queuedBleEventBytes_ = 0;
+    bleEvents_.clear();
+  } else {
+    queuedBleEventBytes_ += eventBytes;
+    bleEvents_.push_back(std::move(event));
+  }
   xSemaphoreGive(eventMutex_);
 }
 
@@ -460,14 +471,27 @@ void BleTransferActivity::processBleEvents() {
   while (true) {
     BleEvent event;
     bool hasEvent = false;
+    bool hasOverflow = false;
     if (eventMutex_) {
       xSemaphoreTake(eventMutex_, portMAX_DELAY);
+      if (bleEventOverflow_) {
+        bleEventOverflow_ = false;
+        queuedBleEventBytes_ = 0;
+        bleEvents_.clear();
+        hasOverflow = true;
+      }
       if (!bleEvents_.empty()) {
         event = std::move(bleEvents_.front());
+        queuedBleEventBytes_ -= event.value.size();
         bleEvents_.pop_front();
         hasEvent = true;
       }
       xSemaphoreGive(eventMutex_);
+    }
+    if (hasOverflow) {
+      resetTransfer(true);
+      setError("BLE event queue overflow");
+      return;
     }
     if (!hasEvent) return;
 
