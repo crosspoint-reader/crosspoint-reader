@@ -103,7 +103,16 @@ def trusted_response(secret: str, device_nonce: str, host_id: str) -> str:
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
 def resolve_upload_chunk_size(client: BleakClient, requested: int, write_mode: str) -> int:
+    if requested <= 0:
+        raise ValueError("chunk size must be > 0")
     if write_mode == "response":
         return requested
     characteristic = client.services.get_characteristic(DATA_IN_UUID)
@@ -477,6 +486,13 @@ async def get_crash_report(args: argparse.Namespace) -> int:
         pending_data_tasks.add(task)
         task.add_done_callback(pending_data_tasks.discard)
 
+    async def drain_data_tasks() -> None:
+        while True:
+            await asyncio.sleep(0)
+            if not pending_data_tasks:
+                return
+            await asyncio.gather(*pending_data_tasks, return_exceptions=True)
+
     client_ref: dict[str, BleakClient] = {}
     device = await find_device(args.scan_timeout)
     if not device:
@@ -508,8 +524,7 @@ async def get_crash_report(args: argparse.Namespace) -> int:
             await write_json(client, {"op": "start_get", "kind": "crash_report", "chunk_size": args.chunk_size})
             try:
                 await asyncio.wait_for(done.wait(), timeout=args.download_timeout)
-                if pending_data_tasks:
-                    await asyncio.gather(*pending_data_tasks, return_exceptions=True)
+                await drain_data_tasks()
             except asyncio.TimeoutError:
                 print("\nTimed out waiting for crash report.", file=sys.stderr)
                 return 1
@@ -548,7 +563,11 @@ def add_common(parser: argparse.ArgumentParser) -> None:
 
 def add_upload_common(parser: argparse.ArgumentParser, *, firmware: bool = False) -> None:
     add_common(parser)
-    parser.add_argument("--chunk-size", type=int, default=DEFAULT_FIRMWARE_UPLOAD_CHUNK_BYTES if firmware else DEFAULT_UPLOAD_CHUNK_BYTES)
+    parser.add_argument(
+        "--chunk-size",
+        type=positive_int,
+        default=DEFAULT_FIRMWARE_UPLOAD_CHUNK_BYTES if firmware else DEFAULT_UPLOAD_CHUNK_BYTES,
+    )
     parser.add_argument("--ack-bytes", type=int, default=DEFAULT_FIRMWARE_WINDOW_BYTES if firmware else DEFAULT_WINDOW_BYTES)
     parser.add_argument("--write-mode", choices=["response", "no-response"], default="no-response")
     parser.add_argument("--data-timeout", type=float, default=20.0)
@@ -574,7 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
     get_crash = sub.add_parser("get-crash-report", help="Download /crash_report.txt")
     get_crash.add_argument("output")
     add_common(get_crash)
-    get_crash.add_argument("--chunk-size", type=int, default=DEFAULT_DOWNLOAD_CHUNK_BYTES)
+    get_crash.add_argument("--chunk-size", type=positive_int, default=DEFAULT_DOWNLOAD_CHUNK_BYTES)
     get_crash.add_argument("--download-timeout", type=float, default=90.0)
 
     return parser
