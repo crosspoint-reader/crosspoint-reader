@@ -1087,7 +1087,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                         : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+        [self](const std::shared_ptr<TextBlock>& textBlock, const size_t preHyphenWords) {
+          self->addLineToPage(textBlock, preHyphenWords);
+        },
+        false);
   }
 }
 
@@ -1160,8 +1163,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
-      int wordIndex =
-          self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
+      int wordIndex = self->wordsExtractedInBlock +
+                      (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->preHyphenWordCount()) : 0);
       self->pendingFootnotes.push_back({wordIndex, entry});
     }
     self->insideFootnoteLink = false;
@@ -1324,7 +1327,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return true;
 }
 
-void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
+void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const size_t preHyphenWordCount) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
@@ -1339,8 +1342,10 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
-  wordsExtractedInBlock += line->wordCount();
+  // Track cumulative pre-hyphenation words to assign footnotes to the correct page.
+  // Using the pre-hyphenation count keeps this in the same coordinate system as the
+  // wordIndex stored in pendingFootnotes (computed before layout/hyphenation).
+  wordsExtractedInBlock += static_cast<int>(preHyphenWordCount);
   auto footnoteIt = pendingFootnotes.begin();
   while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
     currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
@@ -1383,7 +1388,9 @@ void ChapterHtmlSlimParser::makePages() {
 
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+      [this](const std::shared_ptr<TextBlock>& textBlock, const size_t preHyphenWords) {
+        addLineToPage(textBlock, preHyphenWords);
+      });
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

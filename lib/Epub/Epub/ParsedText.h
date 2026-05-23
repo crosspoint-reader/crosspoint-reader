@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
@@ -15,8 +16,9 @@ class GfxRenderer;
 class ParsedText {
   std::vector<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<bool> wordContinues;      // true = word attaches to previous (no space before it)
-  std::vector<bool> wordIsFocusSuffix;  // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordContinues;          // true = word attaches to previous (no space before it)
+  std::vector<bool> wordIsFocusSuffix;      // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordIsHyphenRemainder;  // true = token was inserted by hyphenation (not an original word)
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
@@ -40,8 +42,8 @@ class ParsedText {
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
-                   const std::function<void(std::shared_ptr<TextBlock>)>& processLine, const GfxRenderer& renderer,
-                   int fontId);
+                   const std::function<void(std::shared_ptr<TextBlock>, size_t)>& processLine,
+                   const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
@@ -60,7 +62,10 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  size_t preHyphenWordCount() const {
+    return static_cast<size_t>(std::count(wordIsHyphenRemainder.begin(), wordIsHyphenRemainder.end(), false));
+  }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                             const std::function<void(std::shared_ptr<TextBlock>, size_t)>& processLine,
                              bool includeLastLine = true);
 };
