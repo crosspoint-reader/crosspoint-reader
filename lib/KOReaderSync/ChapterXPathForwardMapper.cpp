@@ -19,14 +19,24 @@ namespace {
 // Strategy:
 // 1) Count total visible text bytes in chapter.
 // 2) Stream parse again and stop when target byte offset is reached.
-// 3) Emit /text()[N].M relative to the deepest open element so KOReader can
-//    place the cursor at character precision regardless of nesting depth.
+// 3) Emit either /text()[N].M when the cursor is at a direct text child of
+//    <body>, or the bare element path otherwise.
 //
-// Text-node counting matches KOReader/crengine: the Nth XML text node within
-// an element, including whitespace-only nodes (those are still real DOM text
-// nodes). Empty (len=0) text isn't emitted by expat at all, which mirrors
-// KOReader's behavior of skipping the empty text nodes that bare
-// <a id="anchor"/> elements would otherwise produce.
+// Why body-level only (and not deep nested /p[i]/span[j]/text()[k].M):
+//   KOReader's crengine normalises the DOM differently than expat — it merges
+//   adjacent inline elements, drops empty wrappers, and renumbers text nodes
+//   inside <p>/<span>/<em>. A deep XPath we emit (e.g. /p[17]/span[1]/text()[1].26)
+//   often fails to match crengine's tree, and KOReader stores a degraded
+//   fallback position (start-of-wrapper-div or off-by-N text node) that
+//   round-trips back to the wrong page on pull. Body-level text-point XPaths
+//   have a much higher round-trip success rate even though they sacrifice
+//   character-precision inside paragraphs. The Section paragraph LUT then
+//   snaps the pulled position to the correct page anyway, so the precision
+//   loss is invisible to users.
+//
+// This matches the 1.42 behavior. The pre-1.43 forward mapper only emitted
+// text-point XPaths when the cursor was a direct text child of <body>; the
+// 1.43 change to deep emission is the regression we're undoing here.
 
 struct ForwardState : StackState {
   int spineIndex;
@@ -35,32 +45,24 @@ struct ForwardState : StackState {
   bool found = false;
   XML_Parser parser = nullptr;
 
-  // Per-element text-node bookkeeping. Mirrors `stack` 1:1 — every push/pop
-  // appends/removes a counter so the top of the stack always refers to the
-  // currently open element. `pendingTextNode` is set after every element
-  // boundary so the next char data starts a fresh text node within whatever
-  // element is currently on top.
-  std::vector<int> textNodeIndexStack;
-  std::vector<size_t> codepointsInTextNodeStack;
-  bool pendingTextNode = true;
+  // Body-level text-node bookkeeping: only counts text nodes that are direct
+  // children of <body>. Inline-element text contributes to totalTextBytes via
+  // the StackState base, but does not advance bodyTextNodeCount because
+  // KOReader can't round-trip a deep text-node XPath reliably.
+  int bodyTextNodeCount = 0;
+  size_t codepointsInBodyTextNode = 0;
+  bool inBodyTextNode = false;
 
-  ForwardState(const int spineIndex, const size_t targetOffset) : spineIndex(spineIndex), targetOffset(targetOffset) {
-    textNodeIndexStack.reserve(32);
-    codepointsInTextNodeStack.reserve(32);
-  }
+  ForwardState(const int spineIndex, const size_t targetOffset) : spineIndex(spineIndex), targetOffset(targetOffset) {}
 
   void onStartElement(const XML_Char* rawName) {
+    inBodyTextNode = false;
     pushElement(rawName);
-    textNodeIndexStack.push_back(0);
-    codepointsInTextNodeStack.push_back(0);
-    pendingTextNode = true;
   }
 
   void onEndElement() {
+    inBodyTextNode = false;
     popElement();
-    if (!textNodeIndexStack.empty()) textNodeIndexStack.pop_back();
-    if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.pop_back();
-    pendingTextNode = true;
   }
 
   void onCharData(const XML_Char* text, const int len) {
@@ -68,30 +70,34 @@ struct ForwardState : StackState {
       return;
     }
 
-    if (pendingTextNode) {
-      if (!textNodeIndexStack.empty()) textNodeIndexStack.back()++;
-      if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.back() = 0;
-      pendingTextNode = false;
+    const bool atBodyLevel = bodyIdx() + 1 == static_cast<int>(stack.size());
+    if (atBodyLevel && !inBodyTextNode) {
+      inBodyTextNode = true;
+      bodyTextNodeCount++;
+      codepointsInBodyTextNode = 0;
     }
 
-    const size_t cpCount = countUtf8Codepoints(text, len);
-
     if (isWhitespaceOnly(text, len)) {
-      if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.back() += cpCount;
+      if (atBodyLevel) {
+        codepointsInBodyTextNode += countUtf8Codepoints(text, len);
+      }
       return;
     }
 
     const size_t visible = countVisibleBytes(text, len);
     if (totalTextBytes + visible >= targetOffset) {
-      const int textNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
-      const size_t cpsInNode = codepointsInTextNodeStack.empty() ? 0 : codepointsInTextNodeStack.back();
-      // KOReader/crengine text-point semantics use codepoint offsets.
-      const size_t targetVisibleByteInChunk = targetOffset - totalTextBytes;
-      const size_t cpInChunk = codepointAtVisibleByte(text, len, targetVisibleByteInChunk);
-      const size_t charOff = cpsInNode + cpInChunk;
-      if (textNode > 0) {
-        result = currentXPath(spineIndex) + "/text()[" + std::to_string(textNode) + "]." + std::to_string(charOff);
+      if (atBodyLevel && bodyTextNodeCount > 0) {
+        // KOReader/crengine text-point semantics use codepoint offsets.
+        const size_t targetVisibleByteInChunk = targetOffset - totalTextBytes;
+        const size_t cpInChunk = codepointAtVisibleByte(text, len, targetVisibleByteInChunk);
+        const size_t charOff = codepointsInBodyTextNode + cpInChunk;
+        result =
+            currentXPath(spineIndex) + "/text()[" + std::to_string(bodyTextNodeCount) + "]." + std::to_string(charOff);
       } else {
+        // Cursor is inside a nested element. Emit the element path without a
+        // text-point suffix — KOReader will treat this as a position at the
+        // start of the named element, which is good enough for paragraph-level
+        // accuracy. Don't emit a deep text() index here: see header comment.
         result = currentXPath(spineIndex);
       }
       found = true;
@@ -102,7 +108,9 @@ struct ForwardState : StackState {
     }
 
     totalTextBytes += visible;
-    if (!codepointsInTextNodeStack.empty()) codepointsInTextNodeStack.back() += cpCount;
+    if (atBodyLevel) {
+      codepointsInBodyTextNode += countUtf8Codepoints(text, len);
+    }
   }
 };
 

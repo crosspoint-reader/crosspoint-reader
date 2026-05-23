@@ -104,6 +104,30 @@ void logReaderMemSnapshot(const char* stage) {
 inline void logReaderMemSnapshot(const char*) {}
 #endif
 
+// Integrity bisector. Logs at every probe site (unconditional, not gated) and
+// fires an ERR when integrity transitions from ok -> fail so we can pinpoint
+// which render phase corrupts the heap. Free/contig included so we can see if
+// the corruption coincides with a specific allocation pattern. Calling
+// heap_caps_check_integrity_all is ~O(blocks) — not free but fine at phase
+// boundaries during onEnter / first render.
+void logIntegrityProbe(const char* stage) {
+  static bool sLastOk = true;
+  const bool ok = heap_caps_check_integrity_all(true);
+  const uint32_t freeHeap = esp_get_free_heap_size();
+  const uint32_t contigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
+  if (ok != sLastOk) {
+    if (ok) {
+      LOG_DBG("INTG", "[%s] integrity recovered (free=%lu contig=%lu)", stage, freeHeap, contigHeap);
+    } else {
+      LOG_ERR("INTG", "[%s] integrity FAIL — corruption introduced here (free=%lu contig=%lu)", stage, freeHeap,
+              contigHeap);
+    }
+    sLastOk = ok;
+  } else {
+    LOG_DBG("INTG", "[%s] %s free=%lu contig=%lu", stage, ok ? "ok" : "fail", freeHeap, contigHeap);
+  }
+}
+
 // Tiled grayscale: render each plane band-by-band into a small scratch and
 // stream straight to the controller, leaving the BW framebuffer intact so no
 // storeBwBuffer / restoreBwBuffer is needed. Controller RAM is re-synced from
@@ -156,15 +180,20 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, int fontId, 
     }
   };
 
+  logIntegrityProbe("tiledGray_after_scratchAlloc");
   renderPlane(GfxRenderer::GRAYSCALE_LSB, true);
+  logIntegrityProbe("tiledGray_after_lsbPlane");
   renderPlane(GfxRenderer::GRAYSCALE_MSB, false);
+  logIntegrityProbe("tiledGray_after_msbPlane");
 
   renderer.setRenderMode(GfxRenderer::BW);
   renderer.displayGrayBuffer();
+  logIntegrityProbe("tiledGray_after_displayGrayBuffer");
 
   // BW framebuffer is intact; re-sync controller RAM for the next differential
   // page turn directly from it.
   renderer.cleanupGrayscaleWithFrameBuffer();
+  logIntegrityProbe("tiledGray_after_cleanup");
   return true;
 }
 
@@ -253,6 +282,7 @@ int getImageOnlyPageYOffset(const Page& page, const int viewportHeight) {
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
   logReaderMemSnapshot("onEnter_begin");
+  logIntegrityProbe("onEnter_begin");
 
   // Drop any input events that arrived from the activity that launched us (e.g. a wake-up power
   // button hold) before they reach detectPageTurn() — see ReaderUtils::InputDrainGuard.
@@ -272,10 +302,13 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
   logReaderMemSnapshot("onEnter_after_setupCacheDir");
-  applyPendingSyncSession();
-  applyPendingBookmarkJump();
-  logReaderMemSnapshot("onEnter_after_pending_sync");
 
+  // Load the persistent baseline (progress.bin) first. Pending session state
+  // (sync result, bookmark jump) is then overlaid on top — this is the only order
+  // that lets a Kind::Paragraph / Kind::ListItem navTarget set by applyPendingSyncSession
+  // survive into render(). The previous order (apply then load) clobbered the LUT
+  // target with Kind::Page from progress.bin, which is why XPath-precision sync
+  // silently degraded to the rough page estimate.
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
@@ -299,6 +332,10 @@ void EpubReaderActivity::onEnter() {
     currentSpineIndex = 0;
     navTarget = NavigationTarget::makePage(0);
   }
+
+  applyPendingSyncSession();
+  applyPendingBookmarkJump();
+  logReaderMemSnapshot("onEnter_after_pending_sync");
 
   if (currentSpineIndex == 0) {
     int textSpineIndex = epub->getSpineIndexForTextReference();
@@ -1185,7 +1222,9 @@ void EpubReaderActivity::applyPendingSyncSession() {
     restorePage = 0;
   }
 
-  // Build the navigation target from the sync result.
+  // Build the navigation target from the sync result. For LUT-anchored targets the
+  // estimated restorePage is plumbed through as fallbackPage so a LUT miss in the
+  // target spine still lands the user on a sensible page rather than page 0.
   NavigationTarget restoreTarget;
   if (sync.outcome == KOReaderSyncOutcomeState::APPLIED_REMOTE) {
     const int spineCount = epub->getSpineItemsCount();
@@ -1198,11 +1237,11 @@ void EpubReaderActivity::applyPendingSyncSession() {
       restorePage = sync.resultPage;
     }
     if (sync.resultHasListItemIndex) {
-      restoreTarget = NavigationTarget::makeListItem(sync.resultListItemIndex);
+      restoreTarget = NavigationTarget::makeListItem(sync.resultListItemIndex, restorePage);
       LOG_DBG("ERS", "Applied synced remote position: spine=%d page=%d li[%u]", restoreSpineIndex, restorePage,
               sync.resultListItemIndex);
     } else if (sync.resultHasParagraphIndex) {
-      restoreTarget = NavigationTarget::makeParagraph(sync.resultParagraphIndex);
+      restoreTarget = NavigationTarget::makeParagraph(sync.resultParagraphIndex, restorePage);
       LOG_DBG("ERS", "Applied synced remote position: spine=%d page=%d p[%u]", restoreSpineIndex, restorePage,
               sync.resultParagraphIndex);
     } else {
@@ -1216,21 +1255,26 @@ void EpubReaderActivity::applyPendingSyncSession() {
 
   // sync.totalPagesInSpine is the page count of the local spine at launch time.
   // When the restore targets a different spine, that count is meaningless for
-  // rescaling. Store 0 to disable rescaling; the LUT lookup handles precise positioning.
+  // rescaling the fallbackPage estimate (which was estimated from cross-spine
+  // density anyway). Store 0 to disable rescaling — the LUT lookup is the precise
+  // path, and the cross-spine fallback can't usefully be rescaled here.
   const int restorePageCount = (restoreSpineIndex == sync.spineIndex) ? sync.totalPagesInSpine : 0;
   restoreTarget.cachedPageCount = restorePageCount;
   restoreTarget.cachedSpineIdx = restoreSpineIndex;
 
-  // Transient write — the next render's saveProgress() supplies the real percent before the user
-  // can return to the home screen, so a placeholder 0 here is harmless.
-  if (writeReaderProgressCache(epub->getCachePath(), restoreSpineIndex, restorePage, restorePageCount, 0)) {
-    navTarget = restoreTarget;
+  // Seed live state directly — the previous write-then-reload-from-disk pattern relied
+  // on progress.bin being read after this function ran, which clobbered the LUT target.
+  // Live-state seeding is authoritative; the persistent write below is just for crash
+  // recovery so a power loss before the next saveProgress() doesn't lose the synced
+  // spine/page. The next render's saveProgress() supplies the real percent before
+  // the user can return to the home screen.
+  currentSpineIndex = restoreSpineIndex;
+  navTarget = restoreTarget;
+  if (!writeReaderProgressCache(epub->getCachePath(), restoreSpineIndex, restorePage, restorePageCount, 0)) {
+    LOG_ERR("ERS", "Failed to persist sync restore to progress.bin; live state still seeded");
+  } else {
     LOG_DBG("ERS", "Prepared progress.bin for sync restore: spine=%d page=%d/%d", restoreSpineIndex, restorePage,
             sync.totalPagesInSpine);
-  } else {
-    // Fall back to directly seeding live state if cache write fails.
-    currentSpineIndex = restoreSpineIndex;
-    navTarget = restoreTarget;
   }
 
   sync.clear();
@@ -1249,14 +1293,13 @@ void EpubReaderActivity::applyPendingBookmarkJump() {
     jump.spineIndex = 0;
     jump.pageNumber = 0;
   }
-  // Transient write before initializeReader; saveProgress() overwrites with the real percent.
-  if (writeReaderProgressCache(epub->getCachePath(), jump.spineIndex, jump.pageNumber, 0, 0)) {
-    navTarget = NavigationTarget::makePage(jump.pageNumber);
-    navTarget.cachedSpineIdx = jump.spineIndex;
-  } else {
-    currentSpineIndex = jump.spineIndex;
-    navTarget = NavigationTarget::makePage(jump.pageNumber);
-    navTarget.cachedSpineIdx = jump.spineIndex;
+  // Seed live state directly; the persistent write is for crash recovery only.
+  // saveProgress() on the next render overwrites with the real percent.
+  currentSpineIndex = jump.spineIndex;
+  navTarget = NavigationTarget::makePage(jump.pageNumber);
+  navTarget.cachedSpineIdx = jump.spineIndex;
+  if (!writeReaderProgressCache(epub->getCachePath(), jump.spineIndex, jump.pageNumber, 0, 0)) {
+    LOG_ERR("ERS", "Failed to persist bookmark jump to progress.bin; live state still seeded");
   }
   jump.clear();
   APP_STATE.saveToFile();
@@ -1467,58 +1510,95 @@ int EpubReaderActivity::getEffectiveReaderFontId() const {
 }
 
 void EpubReaderActivity::NavigationTarget::resolveInto(Section& sec, int spineIndex) const {
-  if (kind == Kind::LastPage) {
-    sec.currentPage = (sec.pageCount > 0) ? sec.pageCount - 1 : 0;
-    return;
-  }
-  if (kind == Kind::TocIndex) {
-    if (const auto p = sec.getPageForTocIndex(tocIndex)) sec.currentPage = *p;
-    return;
-  }
-  if (kind == Kind::Anchor) {
-    if (const auto p = sec.getPageForAnchor(anchorStr)) {
-      sec.currentPage = *p;
-      LOG_DBG("ERS", "Resolved anchor '%s' -> page %d", anchorStr.c_str(), *p);
-    } else {
-      LOG_DBG("ERS", "Anchor '%s' not found in section", anchorStr.c_str());
+  // Resolve to a baseline page first. Each branch records whether it produced a
+  // precise page (LUT/anchor hit, percent jump, explicit page) or only an estimate.
+  // The estimate path runs cross-spine rescale + clamp at the end; the precise path
+  // skips both because LUT pages are already in the target spine's coordinate system.
+  bool isEstimate = false;
+
+  switch (kind) {
+    case Kind::LastPage: {
+      sec.currentPage = (sec.pageCount > 0) ? sec.pageCount - 1 : 0;
+      break;
     }
-    return;
-  }
-  if (kind == Kind::ListItem) {
-    if (const auto p = sec.getPageForListItemIndex(lutIndex)) {
-      sec.currentPage = *p;
-      LOG_DBG("ERS", "Resolved li[%u] -> page %d", lutIndex, *p);
-    } else {
-      LOG_DBG("ERS", "Li index %u not found in section LUT", lutIndex);
+
+    case Kind::TocIndex: {
+      if (const auto p = sec.getPageForTocIndex(tocIndex)) {
+        sec.currentPage = *p;
+      }
+      break;
     }
-    return;
-  }
-  if (kind == Kind::Paragraph) {
-    if (const auto p = sec.getPageForParagraphIndex(lutIndex)) {
-      sec.currentPage = *p;
-      LOG_DBG("ERS", "Resolved p[%u] -> page %d", lutIndex, *p);
-    } else {
-      LOG_DBG("ERS", "Paragraph LUT miss, using page %d", sec.currentPage);
+
+    case Kind::Anchor: {
+      if (const auto p = sec.getPageForAnchor(anchorStr)) {
+        sec.currentPage = *p;
+        LOG_DBG("ERS", "Resolved anchor '%s' -> page %d", anchorStr.c_str(), *p);
+      } else {
+        LOG_DBG("ERS", "Anchor '%s' not found; using fallback page %d", anchorStr.c_str(), fallbackPage);
+        sec.currentPage = fallbackPage;
+        isEstimate = true;
+      }
+      break;
     }
-    return;
-  }
-  if (kind == Kind::Percent) {
-    if (sec.pageCount > 0) {
-      int newPage = static_cast<int>(spineProgress * static_cast<float>(sec.pageCount));
-      if (newPage >= sec.pageCount) newPage = sec.pageCount - 1;
-      sec.currentPage = newPage;
+
+    case Kind::ListItem: {
+      if (const auto p = sec.getPageForListItemIndex(lutIndex)) {
+        sec.currentPage = *p;
+        LOG_DBG("ERS", "Resolved li[%u] -> page %d", lutIndex, *p);
+      } else if (const auto pp = sec.getPageForParagraphIndex(lutIndex)) {
+        // Some <li>-anchored XPaths land in books where the LI LUT is empty (no <li>
+        // inside <body>'s direct children, or all <li>s skipped). Fall back to the
+        // paragraph LUT — the running indices coincide often enough to help, and
+        // it's strictly better than dropping back to the estimate.
+        sec.currentPage = *pp;
+        LOG_DBG("ERS", "Li LUT miss for li[%u]; paragraph LUT -> page %d", lutIndex, *pp);
+      } else {
+        LOG_DBG("ERS", "Li[%u] not in LUT; using fallback page %d", lutIndex, fallbackPage);
+        sec.currentPage = fallbackPage;
+        isEstimate = true;
+      }
+      break;
     }
-    return;
-  }
-  // Kind::Page — apply baseline, then cross-font rescale if we have a cached page count.
-  sec.currentPage = page;
-  if (cachedPageCount > 0 && cachedSpineIdx == spineIndex) {
-    if (sec.pageCount != cachedPageCount) {
-      const float progress = static_cast<float>(sec.currentPage) / static_cast<float>(cachedPageCount);
-      sec.currentPage = static_cast<int>(progress * static_cast<float>(sec.pageCount));
+
+    case Kind::Paragraph: {
+      if (const auto p = sec.getPageForParagraphIndex(lutIndex)) {
+        sec.currentPage = *p;
+        LOG_DBG("ERS", "Resolved p[%u] -> page %d", lutIndex, *p);
+      } else {
+        LOG_DBG("ERS", "Paragraph LUT miss for p[%u]; using fallback page %d", lutIndex, fallbackPage);
+        sec.currentPage = fallbackPage;
+        isEstimate = true;
+      }
+      break;
+    }
+
+    case Kind::Percent: {
+      if (sec.pageCount > 0) {
+        int newPage = static_cast<int>(spineProgress * static_cast<float>(sec.pageCount));
+        if (newPage >= sec.pageCount) newPage = sec.pageCount - 1;
+        sec.currentPage = newPage;
+      }
+      break;
+    }
+
+    case Kind::Page: {
+      sec.currentPage = page;
+      isEstimate = true;
+      break;
     }
   }
-  // Safety clamp.
+
+  // Cross-font / cross-spine rescaling: only for estimated pages. cachedPageCount
+  // is the page count at the time the estimate was made — when it disagrees with
+  // the section's current page count (reflow / different spine entirely), rescale
+  // the estimate proportionally before clamping.
+  if (isEstimate && cachedPageCount > 0 && cachedSpineIdx == spineIndex && sec.pageCount != cachedPageCount) {
+    const float progress = static_cast<float>(sec.currentPage) / static_cast<float>(cachedPageCount);
+    sec.currentPage = static_cast<int>(progress * static_cast<float>(sec.pageCount));
+  }
+
+  // Safety clamp for all paths — a LUT-derived page is also defensively clamped in
+  // case the cache is somehow stale.
   if (sec.currentPage < 0) {
     LOG_DBG("ERS", "Clamping negative page %d to 0 (spine=%d cachedPageCount=%d)", sec.currentPage, spineIndex,
             cachedPageCount);
@@ -1600,6 +1680,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
   }
+  logIntegrityProbe("render_entry");
 
   const int spineCount = epub->getSpineItemsCount();
   if (spineCount <= 0) {
@@ -1744,11 +1825,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           auto p = section->loadPageFromSectionFile();
           section->currentPage = savedPage;
           if (p && !p->hasImages()) {
+            logIntegrityProbe("preRender_before_renderPageContentOnly");
             section->currentPage = nextPage;
             renderPageContentOnly(*p, orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
             section->currentPage = savedPage;
             preRenderedPage = {true, currentSpineIndex, nextPage};
             LOG_DBG("ERS", "Pre-rendered page %d/%d", nextPage, section->pageCount - 1);
+            logIntegrityProbe("preRender_after_renderPageContentOnly");
           }
         }
       }
@@ -1831,6 +1914,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       LOG_DBG("ERS", "Cache found, skipping build...");
     }
     lastRenderStats.sectionLoadMs = millis() - sectionStart;
+    logIntegrityProbe("render_after_sectionLoad");
 
     if (section->isTruncatedCache() && currentSpineIndex != lastWarnedTruncatedSpineIndex) {
       lastWarnedTruncatedSpineIndex = currentSpineIndex;
@@ -1868,6 +1952,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const unsigned long pageLoadStart = millis();
     auto p = section->loadPageFromSectionFile();
     lastRenderStats.pageLoadMs = millis() - pageLoadStart;
+    logIntegrityProbe("render_after_pageLoad");
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       section->clearCache();
@@ -1894,8 +1979,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       truncatedSectionHintRendersRemaining--;
     }
     LOG_DBG("ERS", "Rendered page in %dms", lastRenderStats.requestRenderMs);
+    logIntegrityProbe("render_after_renderContents");
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
+  logIntegrityProbe("render_after_silentIndex");
   pendingProgressSave.spineIndex = currentSpineIndex;
   pendingProgressSave.page = section->currentPage;
   pendingProgressSave.pageCount = section->pageCount;
@@ -1975,6 +2062,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
   logReaderMemSnapshot("render_start");
+  logIntegrityProbe("renderContents_entry");
   auto* fcm = renderer.getFontCacheManager();
   fcm->resetStats();
 
@@ -1990,6 +2078,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool warmForceLoad = forceLoadLargeImages || !SETTINGS.largeImagePlaceholder;
   page->warmImageCaches(renderer, orientedMarginLeft, contentTop, warmForceLoad);
   renderer.clearScreen();
+  logIntegrityProbe("renderContents_after_warmImages");
 
   logReaderMemSnapshot("prewarm_begin");
 
@@ -2009,6 +2098,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   LOG_DBG("ERS", "Heap: before=%lu (contig=%lu) after=%lu (contig=%lu) delta=%ld", heapBefore, contigBefore, heapAfter,
           contigAfter, (int32_t)heapAfter - (int32_t)heapBefore);
   logReaderMemSnapshot("prewarm_end");
+  logIntegrityProbe("renderContents_after_fontPrewarm");
 
   const bool aaConfigured = SETTINGS.textAntiAliasing;
   bool aaEnabledForThisRender = aaConfigured;
@@ -2060,6 +2150,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   fcm->logStats("bw_render");
   const auto tBwRender = millis();
   logReaderMemSnapshot("after_bw_render");
+  logIntegrityProbe("renderContents_after_bwRender");
 
   if (imagePageWithAA) {
     // Double FAST_REFRESH with selective image blanking (pablohc's technique):
@@ -2107,6 +2198,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   uint32_t tiledGrayMs = 0;
   if (aaEnabledForThisRender) {
     logReaderMemSnapshot("tiled_gray_begin");
+    logIntegrityProbe("renderContents_before_tiledGray");
     const auto tTiledBegin = millis();
     grayscaleDone = runTiledGrayscalePass(renderer, *page, getEffectiveReaderFontId(), orientedMarginLeft, contentTop,
                                           SETTINGS.fastAntiAliasing);
@@ -2114,6 +2206,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       tiledGrayMs = millis() - tTiledBegin;
       fcm->logStats("tiled_gray");
       logReaderMemSnapshot("tiled_gray_end");
+      logIntegrityProbe("renderContents_after_tiledGray");
     }
   }
 

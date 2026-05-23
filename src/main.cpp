@@ -16,6 +16,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 
 #include <cstring>
@@ -152,6 +153,33 @@ enum class BootResume : uint8_t {
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
+
+// Heap-integrity probe. Scoped to MALLOC_CAP_8BIT|MALLOC_CAP_DEFAULT so we
+// only inspect the user-app heap, not ROM/BLE/WiFi reserved DRAM regions that
+// `heap_caps_check_integrity_all` would also walk (those report spurious
+// canary mismatches because the user-heap allocator never stamped canaries
+// there — the address 0x3fcdc710 we kept seeing FAIL on is outside our
+// dram0_0_seg, in a system-reserved area). A fail here genuinely means user
+// code overwrote a heap canary. Transition is loud (ERR), steady-state is DBG.
+void runHeapIntegrityProbe(const char* stage) {
+  const bool integrityOk = heap_caps_check_integrity(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT, true);
+  static bool lastIntegrityOk = true;
+  static bool firstIntegrityProbe = true;
+  const uint32_t freeHeap = esp_get_free_heap_size();
+  const uint32_t contigHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
+  if (firstIntegrityProbe || integrityOk != lastIntegrityOk) {
+    if (integrityOk) {
+      LOG_INF("MEM", "[%s] integrity ok (uptime %lu ms, free=%lu contig=%lu)", stage, millis(), freeHeap, contigHeap);
+    } else {
+      LOG_ERR("MEM", "[%s] integrity FAIL (uptime %lu ms, free=%lu contig=%lu) — corruption introduced here", stage,
+              millis(), freeHeap, contigHeap);
+    }
+    lastIntegrityOk = integrityOk;
+    firstIntegrityProbe = false;
+  } else {
+    LOG_DBG("MEM", "[%s] integrity %s (free=%lu contig=%lu)", stage, integrityOk ? "ok" : "fail", freeHeap, contigHeap);
+  }
+}
 
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
@@ -347,6 +375,7 @@ void ensureSdFontLoadedForPath(const char* path) {
 }
 
 void setup() {
+  runHeapIntegrityProbe("setup_entry");
   {
     esp_ota_img_states_t otaState;
     const esp_partition_t* running = esp_ota_get_running_partition();
@@ -354,6 +383,7 @@ void setup() {
       esp_ota_mark_app_valid_cancel_rollback();
     }
   }
+  runHeapIntegrityProbe("setup_after_otaCheck");
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
@@ -363,13 +393,20 @@ void setup() {
   silentRebootMagic = 0;
   silentRebootTarget = 0;
 
+  runHeapIntegrityProbe("setup_before_HalSystem_begin");
   HalSystem::begin();
+  runHeapIntegrityProbe("setup_after_HalSystem_begin");
   gpio.begin();
+  runHeapIntegrityProbe("setup_after_gpio_begin");
   powerManager.begin();
+  runHeapIntegrityProbe("setup_after_powerManager_begin");
   halTiltSensor.begin();
+  runHeapIntegrityProbe("setup_after_halTiltSensor_begin");
   gpio_deep_sleep_hold_dis();  // Release deep sleep GPIO hold state from previous sleep cycle
+  runHeapIntegrityProbe("setup_after_deepSleepHoldDis");
 
   const auto wakeupReason = gpio.getWakeupReason();
+  runHeapIntegrityProbe("setup_after_getWakeupReason");
 
   if (wakeupReason == HalGPIO::WakeupReason::AfterUSBPower) {
     // If USB power caused a cold boot, go back to sleep immediately without initializing subsystems
@@ -392,6 +429,7 @@ void setup() {
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
   LOG_DBG("MAIN", "Wakeup reason: %d, millis=%lu, rawPowerPin=%d", static_cast<int>(wakeupReason), millis(),
           digitalRead(InputManager::POWER_BUTTON_PIN) == LOW);
+  runHeapIntegrityProbe("setup_after_hwInit");
 
   // Load just the settings we need *before* initializing the SD card to speed up and reduce power on unverified wakes
   SETTINGS.loadStartupFromNvs();
@@ -469,7 +507,9 @@ void setup() {
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
 
+  runHeapIntegrityProbe("setup_before_displayAndFonts");
   setupDisplayAndFonts(resume != BootResume::Splash);
+  runHeapIntegrityProbe("setup_after_displayAndFonts");
 
   switch (resume) {
     case BootResume::Silent:
@@ -500,10 +540,12 @@ void setup() {
       break;
   }
 
+  runHeapIntegrityProbe("setup_after_initialPaint");
   HalClock::restore();
   RECENT_BOOKS.loadFromFile();
   GLOBAL_BOOKMARKS.load();
   READING_STATS.loadFromFile();
+  runHeapIntegrityProbe("setup_after_userStoresLoaded");
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
@@ -563,6 +605,7 @@ void loop() {
   if (Serial && millis() - lastMemPrint >= 10000) {
     LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
             ESP.getHeapSize(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    runHeapIntegrityProbe("MEM_periodic");
     lastMemPrint = millis();
   }
 

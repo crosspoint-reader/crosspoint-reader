@@ -163,8 +163,10 @@ void KOReaderSyncActivity::performFetchAndCompare() {
   // avoid a second TLS handshake under fragmented heap.
   KOReaderSyncClient::beginPersistentSession();
 
+  logSyncMemSnapshot("before_getProgress");
   // Fetch remote progress
   const auto result = KOReaderSyncClient::getProgress(documentHash, remoteProgress);
+  logSyncMemSnapshot("after_getProgress");
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
     if (syncIntent == KOReaderSyncIntentState::PULL_REMOTE) {
@@ -278,7 +280,16 @@ void KOReaderSyncActivity::performFetchAndCompare() {
   // still useful for manual conflict decisions.
   // Pre-map remote progress now so compare UI always shows concrete chapter/
   // page data. The mapped result is cached and reused if Apply is chosen.
-  if (!ensureRemotePositionMapped(false)) {
+  // closeSessionBeforeMapping=true tears down the warmed TLS session before
+  // reverse XPath mapping so the 32 KB inflate ring buffer can allocate.
+  // Trade-off: if the user later picks Upload, we eat one extra TLS handshake
+  // (~1.7s). That's the less-common choice — Apply is what users usually want —
+  // and silent inflate failures here previously caused syncs to land on the
+  // wrong page. See logSyncMemSnapshot("after_getProgress") for the heap drop
+  // a held-open session causes (~36 KB contig consumed by esp_http_client
+  // state and response buffer that aren't released until cleanup).
+  logSyncMemSnapshot("before_compare_map");
+  if (!ensureRemotePositionMapped(true)) {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -704,11 +715,19 @@ bool KOReaderSyncActivity::ensureRemotePositionMapped(const bool closeSessionBef
     return true;
   }
 
+  // Diagnostic snapshots around each phase of remote->local mapping. The reverse
+  // XPath mapper needs a 32 KB contiguous block for the inflate ring buffer; if
+  // that allocation fails we silently degrade to percentage-only mapping and
+  // round-trip accuracy suffers. Snapshots here let us see exactly which phase
+  // fragments the heap so the fix can target the actual culprit.
+  logSyncMemSnapshot("ensureRemoteMap_entry");
+
   // Mapping remote->local can trigger EPUB inflate work. For apply/pull paths,
   // release HTTP/TLS first to maximize heap headroom. Compare pre-map keeps
   // the warmed session alive so Upload can reuse it without a fresh handshake.
   if (closeSessionBeforeMapping) {
     KOReaderSyncClient::endPersistentSession();
+    logSyncMemSnapshot("ensureRemoteMap_after_endSession");
   }
 
   {
@@ -716,12 +735,17 @@ bool KOReaderSyncActivity::ensureRemotePositionMapped(const bool closeSessionBef
     statusMessage = tr(STR_MAPPING_REMOTE);
   }
   requestUpdateAndWait();
+  logSyncMemSnapshot("ensureRemoteMap_after_statusUpdate");
 
   KOReaderPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   if (!ensureEpubLoadedForMapping()) {
     return false;
   }
+  logSyncMemSnapshot("ensureRemoteMap_after_epubLoad");
+
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, currentSpineIndex, totalPagesInSpine);
+  logSyncMemSnapshot("ensureRemoteMap_after_toCrossPoint");
+
   computeRemoteChapter();
   releaseEpubForMapping();
   hasRemoteProgress = true;
