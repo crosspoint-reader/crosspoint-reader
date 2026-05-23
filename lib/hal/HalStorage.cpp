@@ -77,7 +77,17 @@ class HalFile::Impl {
 
 HalFile::HalFile() = default;
 HalFile::HalFile(std::unique_ptr<Impl> impl) : impl(std::move(impl)) {}
-HalFile::~HalFile() = default;
+
+HalFile::~HalFile() {
+  // DESTRUCTOR_CLOSES_FILE=1 makes ~FsFile() touch SdFat's shared state; serialize it with
+  // storageMutex like every HAL_FILE_WRAPPED_CALL would. Reset under the lock so the implicit
+  // member destruction afterwards runs on a null unique_ptr (no-op).
+  if (impl) {
+    HalStorage::StorageLock lock;
+    impl.reset();
+  }
+}
+
 HalFile::HalFile(HalFile&&) = default;
 HalFile& HalFile::operator=(HalFile&&) = default;
 
