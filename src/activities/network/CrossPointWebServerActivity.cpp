@@ -274,7 +274,7 @@ void CrossPointWebServerActivity::loop() {
     }
 
     // STA mode: Monitor WiFi connection health
-    if (!isApMode && webServer && webServer->isRunning()) {
+    if (!isApMode && webServer) {
       static unsigned long lastWifiCheck = 0;
       if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
         lastWifiCheck = millis();
@@ -290,6 +290,11 @@ void CrossPointWebServerActivity::loop() {
           consecutiveDisconnects++;
           LOG_DBG("WEBACT", "WiFi not connected (status=%d, consecutive=%d, total=%lu ms)", wifiStatus,
                   consecutiveDisconnects, millis() - firstDisconnectAt);
+          if (webServer->isRunning()) {
+            LOG_DBG("WEBACT", "Stopping web server while STA reconnects");
+            webServer->stop();
+            lastHandleClientTime = 0;
+          }
           if (millis() - firstDisconnectAt > WIFI_ABANDON_MS) {
             LOG_DBG("WEBACT", "WiFi unavailable for >%lu s; returning to network selection", WIFI_ABANDON_MS / 1000UL);
             state = WebServerActivityState::SHUTTING_DOWN;
@@ -301,6 +306,14 @@ void CrossPointWebServerActivity::loop() {
             LOG_DBG("WEBACT", "WiFi recovered after %d failed checks (%lu ms)", consecutiveDisconnects,
                     millis() - firstDisconnectAt);
             repaint = true;
+          }
+          if (!webServer->isRunning() && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+            connectedIP = WiFi.localIP().toString().c_str();
+            LOG_DBG("WEBACT", "Restarting web server after STA reconnect: %s", connectedIP.c_str());
+            consecutiveDisconnects = 0;
+            firstDisconnectAt = 0;
+            startWebServer();
+            return;
           }
           consecutiveDisconnects = 0;
           firstDisconnectAt = 0;
