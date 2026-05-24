@@ -133,7 +133,69 @@ enum class TextRotation { None, Rotated90CW };
 
 // Shared glyph rendering logic for normal and rotated text.
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
-template <TextRotation rotation>
+// Render a glyph at 50% scale via nearest-neighbor sampling. Used for SUP/SUB style bits.
+//
+// Nearest-neighbor is chosen deliberately: at 50% every source pixel maps cleanly to one
+// destination pixel (srcX = dstX*2, srcY = dstY*2), so there is no blending and no new
+// gray levels are introduced — important for 1-bit BW rendering.
+//
+// For 2-bit (anti-aliased) fonts only raw values >= 2 (dark-gray and black) are drawn.
+// Dropping the light-gray level keeps small glyphs crisp rather than muddy.
+//
+// The advance width is also halved in drawText() so layout reserves exactly the right
+// horizontal space for the scaled glyph.
+static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
+                             const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
+                             const bool pixelState, const EpdFontFamily::Style style) {
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) return;
+
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  if (!bitmap) return;
+
+  const int srcW = glyph->width;
+  const int srcH = glyph->height;
+  const int dstW = (srcW + 1) / 2;  // ceil so odd-width glyphs aren't clipped
+  const int dstH = (srcH + 1) / 2;
+  // Scale the glyph bearing by the same factor so the scaled glyph sits at the correct
+  // pixel offset from the (already-shifted) cursor position.
+  const int baseX = cursorX + glyph->left / 2;
+  const int baseY = cursorY - glyph->top / 2;
+
+  if (fontData->is2Bit) {
+    // 2-bit packed format: 4 pixels per byte, MSB first, 2 bits per pixel.
+    // raw value: 0=white, 1=light-gray, 2=dark-gray, 3=black.
+    for (int dstY = 0; dstY < dstH; dstY++) {
+      const int srcY = dstY * 2;
+      for (int dstX = 0; dstX < dstW; dstX++) {
+        const int srcX = dstX * 2;
+        const int pos = srcY * srcW + srcX;
+        const uint8_t byte = bitmap[pos >> 2];
+        const uint8_t raw = (byte >> ((3 - (pos & 3)) * 2)) & 0x3;
+        if (raw >= 2) {  // threshold: skip light-gray, draw dark-gray and black
+          renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
+        }
+      }
+    }
+  } else {
+    // 1-bit packed format: 8 pixels per byte, MSB first.
+    for (int dstY = 0; dstY < dstH; dstY++) {
+      const int srcY = dstY * 2;
+      for (int dstX = 0; dstX < dstW; dstX++) {
+        const int srcX = dstX * 2;
+        const int pos = srcY * srcW + srcX;
+        const uint8_t byte = bitmap[pos >> 3];
+        const uint8_t bit = 7 - (pos & 7);
+        if ((byte >> bit) & 1) {
+          renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
+        }
+      }
+    }
+  }
+}
+
+template <TextRotation rotation = TextRotation::None>
 static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
@@ -325,7 +387,19 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     lastBaseTop = glyph ? glyph->top : 0;
     prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+    if (isSupSub) {
+      // Halve the advance so the cursor advances by the same amount the scaled glyph
+      // actually occupies, keeping spacing correct without needing a separate smaller font.
+      prevAdvanceFP = (prevAdvanceFP + 1) / 2;
+    }
+
+    if (isSupSub) {
+      // yPos already carries the vertical offset applied by TextBlock::render().
+      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    } else {
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    }
     prevCp = cp;
   }
 }
@@ -1266,6 +1340,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
+    if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+      prevAdvanceFP = (prevAdvanceFP + 1) / 2;
+    }
     prevCp = cp;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance

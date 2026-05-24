@@ -74,6 +74,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
   effectiveUnderline =
       currentCssStyle.hasTextDecoration() && currentCssStyle.textDecoration == CssTextDecoration::Underline;
+  effectiveSup = false;
+  effectiveSub = false;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -85,6 +87,14 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     }
     if (entry.hasUnderline) {
       effectiveUnderline = entry.underline;
+    }
+    if (entry.hasSup) {
+      effectiveSup = entry.sup;
+      if (entry.sup) effectiveSub = false;
+    }
+    if (entry.hasSub) {
+      effectiveSub = entry.sub;
+      if (entry.sub) effectiveSup = false;
     }
   }
 }
@@ -106,6 +116,11 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   }
   if (isUnderline) {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::UNDERLINE);
+  }
+  if (effectiveSup) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::SUP);
+  } else if (effectiveSub) {
+    fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::SUB);
   }
 
   // flush the buffer
@@ -783,6 +798,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (cssStyle.hasTextDecoration()) {
       entry.hasUnderline = true;
       entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
+    }
+    self->inlineStyleStack.push_back(entry);
+    self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
+    StyleStackEntry entry;
+    entry.depth = self->depth;
+    if (strcmp(name, "sup") == 0) {
+      entry.hasSup = true;
+      entry.sup = true;
+    } else {
+      entry.hasSub = true;
+      entry.sub = true;
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
