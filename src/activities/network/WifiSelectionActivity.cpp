@@ -549,6 +549,13 @@ void WifiSelectionActivity::checkConnectionStatus() {
     LOG_DBG("WIFI", "Hint attempt did not connect (%s after %lu ms), retrying with full scan",
             hintHardFail ? "hard fail" : "timeout", millis() - connectionStartTime);
     hintFallbackDone = true;
+    // Wipe the stale cache before retrying. If the fallback succeeds, the success
+    // path writes a fresh cache (one extra SD write). If it fails or is interrupted,
+    // we won't carry a known-bad hint into the next session.
+    {
+      RenderLock lock(*this);
+      WIFI_STORE.clearConnectionCache(selectedSSID);
+    }
     WiFi.disconnect(true, false);
     connectionStartTime = millis();
     issueWifiBegin(/*useHint=*/false);

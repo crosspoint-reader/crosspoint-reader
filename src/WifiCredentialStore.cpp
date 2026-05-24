@@ -95,8 +95,16 @@ bool WifiCredentialStore::updateConnectionCache(const std::string& ssid, const u
   const bool sameHint = (channel == cred->channel) && std::memcmp(bssid, cred->bssid, 6) == 0;
   const bool sameIp = std::memcmp(ip, cred->ip, 4) == 0 && std::memcmp(gateway, cred->gateway, 4) == 0 &&
                       std::memcmp(mask, cred->mask, 4) == 0 && std::memcmp(dns, cred->dns, 4) == 0;
-  // Timestamp updates are not worth a write on their own; only persist when topology changed.
   if (sameHint && sameIp) {
+    // Refresh the TTL only if the cache is older than half the TTL window — otherwise
+    // a long-running device that reconnects daily would let its 7-day TTL expire even
+    // though the topology hasn't changed. Half-TTL avoids an SD write on every connect.
+    constexpr uint32_t REFRESH_THRESHOLD_SECONDS = (7 * 24 * 60 * 60) / 2;
+    const int64_t elapsed = static_cast<int64_t>(cacheTimestamp) - static_cast<int64_t>(cred->cacheTimestamp);
+    if (cacheTimestamp != 0 && cred->cacheTimestamp != 0 && elapsed > REFRESH_THRESHOLD_SECONDS) {
+      cred->cacheTimestamp = cacheTimestamp;
+      return saveToFile();
+    }
     return true;
   }
   std::memcpy(cred->bssid, bssid, 6);

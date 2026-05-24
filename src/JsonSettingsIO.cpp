@@ -507,7 +507,11 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
     }
     const auto parseQuad = [](const std::string& s, uint8_t out[4]) -> bool {
       unsigned int a = 0, b = 0, c = 0, d = 0;
-      if (sscanf(s.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) return false;
+      int consumed = 0;
+      // %n stores characters consumed; require it to equal full string length so we
+      // reject inputs with trailing garbage like "192.168.1.10xyz".
+      if (sscanf(s.c_str(), "%u.%u.%u.%u%n", &a, &b, &c, &d, &consumed) != 4) return false;
+      if (consumed < 0 || static_cast<size_t>(consumed) != s.size()) return false;
       if (a > 255 || b > 255 || c > 255 || d > 255) return false;
       out[0] = a;
       out[1] = b;
