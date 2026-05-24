@@ -121,7 +121,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
-                           StrId::STR_PAGES_30, StrId::STR_PAGES_50, StrId::STR_PAGES_100, StrId::STR_PAGES_NEVER},
+                           StrId::STR_PAGES_30, StrId::STR_PAGES_100, StrId::STR_PAGES_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
                           {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,

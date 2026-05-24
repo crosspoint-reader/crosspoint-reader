@@ -334,8 +334,6 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
-    case REFRESH_50:
-      return 50;
     case REFRESH_100:
       return 100;
     case REFRESH_NEVER:
