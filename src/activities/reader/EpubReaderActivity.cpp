@@ -1134,10 +1134,13 @@ void EpubReaderActivity::addBookmark() {
     LOG_DBG("ERS", "No existing bookmark file, starting with empty bookmark list");
   }
   bookmarks.insert(bookmarks.begin(), entry);
-  LOG_DBG("ERS", "Saving bookmark to file: %s", path);
-  const bool ok = JsonSettingsIO::saveBookmarks(bookmarks, path.c_str());
-  LOG_DBG("ERS", "Bookmark %s: %s", ok ? "saved" : "failed to save", path);
-  showBookmarkMessage = true;
+  LOG_DBG("ERS", "Saving bookmark to file: %s", path.c_str());
+   const bool ok = JsonSettingsIO::saveBookmarks(bookmarks, path.c_str());
+  if (ok) {
+    showBookmarkMessage = true;
+  } else {
+    LOG_ERR("ERS", "Failed to save bookmark to: %s", path.c_str());
+  }
 
   requestUpdate();
 }
