@@ -552,7 +552,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           localPos.paragraphIndex = *paragraphIndex;
           localPos.hasParagraphIndex = true;
         }
-        KOReaderPosition localKoPos = ProgressMapper::toKOReader(epub, localPos);
+        SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
         const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
         std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
         const std::string savedEpubPath = epub->getPath();

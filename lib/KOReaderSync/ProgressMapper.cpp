@@ -9,6 +9,8 @@
 #include "ChapterXPathResolver.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
+#include "Epub/Section.h"
+#include <GfxRenderer.h>
 
 namespace {
 int parseIndex(const std::string& xpath, const char* prefix, bool last = false) {
@@ -506,8 +508,8 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStr
 }
 }  // namespace
 
-KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
-  KOReaderPosition result;
+SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
+  SavedProgressPosition result;
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
@@ -525,7 +527,7 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   return result;
 }
 
-CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
+CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos, GfxRenderer& renderer,
                                                 int currentSpineIndex, int totalPagesInCurrentSpine) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
@@ -615,6 +617,60 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
   LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
+
+  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
+  if (result.hasLiIndex || result.xpathAnchorId[0] != '\0' || result.hasParagraphIndex) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    bool refined = false;
+    if (result.hasLiIndex) {
+      const auto liPage = tempSection.getPageForListItemIndex(result.liIndex);
+      if (liPage.has_value()) {
+        LOG_DBG("KOSync", "Li index %u -> page %d (was %d)", result.liIndex, *liPage,
+                result.pageNumber);
+        result.pageNumber = *liPage;
+        refined = true;
+      } else {
+        LOG_DBG("KOSync", "Li index %u not found in section LUT", result.liIndex);
+      }
+    }
+    if (!refined && result.xpathAnchorId[0] != '\0') {
+      const auto anchorPage = tempSection.getPageForAnchor(std::string(result.xpathAnchorId));
+      if (anchorPage.has_value()) {
+        LOG_DBG("KOSync", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage,
+                result.pageNumber);
+        result.pageNumber = *anchorPage;
+        refined = true;
+      } else {
+        LOG_DBG("KOSync", "Anchor '%s' not found in section cache", result.xpathAnchorId);
+      }
+    }
+    if (!refined && result.hasParagraphIndex) {
+      const auto paragraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex);
+      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex + 1);
+      if (paragraphPage.has_value()) {
+        int refinedPage = std::max(result.pageNumber, static_cast<int>(*paragraphPage));
+        if (nextParagraphPage.has_value()) {
+          const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
+          // occupies different pages than at build time).
+          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+            refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+          }
+        }
+        char nextParaBuf[8];
+        if (nextParagraphPage.has_value())
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+        else
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
+        LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
+                result.paragraphIndex, *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
+        result.pageNumber = refinedPage;
+      } else {
+        LOG_DBG("KOSync", "Paragraph %u not found in section LUT", result.paragraphIndex);
+      }
+    }
+  }
   return result;
 }
 
