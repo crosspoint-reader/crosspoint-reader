@@ -14,6 +14,15 @@
 #include "util/UrlUtils.h"
 
 namespace {
+class BundleNetworkClientSecure final : public NetworkClientSecure {
+ public:
+  void useDefaultCACertBundle() {
+    attach_ssl_certificate_bundle(sslclient.get(), true);
+    _use_ca_bundle = true;
+    _use_insecure = false;
+  }
+};
+
 class FileWriteStream final : public Stream {
  public:
   FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress, bool* cancelFlag)
@@ -60,8 +69,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
                               const std::string& password) {
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
-    secureClient->setInsecure();
+    auto* secureClient = new BundleNetworkClientSecure();
+    secureClient->useDefaultCACertBundle();
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
@@ -110,8 +119,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              const std::string& username, const std::string& password) {
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
-    secureClient->setInsecure();
+    auto* secureClient = new BundleNetworkClientSecure();
+    secureClient->useDefaultCACertBundle();
     client.reset(secureClient);
   } else {
     client.reset(new NetworkClient());
