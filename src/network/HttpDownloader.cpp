@@ -14,6 +14,26 @@
 #include "util/UrlUtils.h"
 
 namespace {
+constexpr uint32_t MIN_HEAP_FOR_HTTPS = 55000;
+
+bool ensureHttpsHeap(const char* operation, const std::string& url) {
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  LOG_DBG("HTTP", "HTTPS %s heap before request: free=%u min=%u maxAlloc=%u", operation, (unsigned)freeHeap,
+          (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+  if (freeHeap >= MIN_HEAP_FOR_HTTPS) {
+    return true;
+  }
+
+  LOG_ERR("HTTP", "Insufficient heap for HTTPS %s: %u bytes free (need %u): %s", operation, (unsigned)freeHeap,
+          (unsigned)MIN_HEAP_FOR_HTTPS, url.c_str());
+  return false;
+}
+
+void logHttpsHeapAfter(const char* operation) {
+  LOG_DBG("HTTP", "HTTPS %s heap after request: free=%u min=%u maxAlloc=%u", operation, (unsigned)ESP.getFreeHeap(),
+          (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+}
+
 class BundleNetworkClientSecure final : public NetworkClientSecure {
  public:
   void useDefaultCACertBundle() {
@@ -68,7 +88,11 @@ class FileWriteStream final : public Stream {
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
                               const std::string& password) {
   std::unique_ptr<NetworkClient> client;
-  if (UrlUtils::isHttpsUrl(url)) {
+  const bool isHttps = UrlUtils::isHttpsUrl(url);
+  if (isHttps) {
+    if (!ensureHttpsHeap("fetch", url)) {
+      return false;
+    }
     auto* secureClient = new BundleNetworkClientSecure();
     secureClient->useDefaultCACertBundle();
     client.reset(secureClient);
@@ -93,6 +117,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Fetch failed: %d", httpCode);
     http.end();
+    if (isHttps) {
+      logHttpsHeapAfter("fetch");
+    }
     return false;
   }
 
@@ -100,6 +127,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
 
   http.end();
 
+  if (isHttps) {
+    logHttpsHeapAfter("fetch");
+  }
   LOG_DBG("HTTP", "Fetch success");
   return true;
 }
@@ -118,7 +148,11 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password) {
   std::unique_ptr<NetworkClient> client;
-  if (UrlUtils::isHttpsUrl(url)) {
+  const bool isHttps = UrlUtils::isHttpsUrl(url);
+  if (isHttps) {
+    if (!ensureHttpsHeap("download", url)) {
+      return HTTP_ERROR;
+    }
     auto* secureClient = new BundleNetworkClientSecure();
     secureClient->useDefaultCACertBundle();
     client.reset(secureClient);
@@ -144,6 +178,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (httpCode != HTTP_CODE_OK) {
     LOG_ERR("HTTP", "Download failed: %d", httpCode);
     http.end();
+    if (isHttps) {
+      logHttpsHeapAfter("download");
+    }
     return HTTP_ERROR;
   }
 
@@ -165,6 +202,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
     LOG_ERR("HTTP", "Failed to open file for writing");
     http.end();
+    if (isHttps) {
+      logHttpsHeapAfter("download");
+    }
     return FILE_ERROR;
   }
 
@@ -174,6 +214,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   file.close();
   http.end();
+  if (isHttps) {
+    logHttpsHeapAfter("download");
+  }
 
   if (cancelFlag && *cancelFlag) {
     Storage.remove(destPath.c_str());
