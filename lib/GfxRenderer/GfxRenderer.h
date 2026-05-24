@@ -303,6 +303,18 @@ class GfxRenderer {
   bool storeBwBuffer();                                         // Returns true if buffer was stored successfully
   bool storeBwBufferRect(int x, int y, int width, int height);  // Store only rows intersecting logical rect
   void restoreBwBuffer();                                       // Restore and free the stored buffer
+  // Re-syncs the controller's RED RAM from the current BW framebuffer so the
+  // next differential page turn has a clean baseline. Called after the tiled
+  // grayscale path, which leaves the panel's gray planes loaded but the BW
+  // framebuffer untouched.
+  //
+  // const-correctness caveat: on X3 the underlying display call (see
+  // EInkDisplay::cleanupGrayscaleBuffers) performs an in-place Y-flip of the
+  // framebuffer bytes, sends them, and flips back. The framebuffer's logical
+  // contents are identical before and after, but during the call the bytes
+  // are transiently reordered. The method stays `const` because the renderer's
+  // observable state doesn't change; callers must not race a framebuffer
+  // reader against this call.
   void cleanupGrayscaleWithFrameBuffer() const;
 
   // Font helpers

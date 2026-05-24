@@ -624,7 +624,9 @@ static void renderGlyphFast2BitPortrait(uint8_t* const frameBuffer, const uint8_
                                         const int widthBytes, const int fbOriginY, const int fbRows) {
   for (int glyphX = 0; glyphX < glyphWidth; glyphX++) {
     const int phyY = inverted ? (screenXBase + glyphX) : (displayHeight - 1 - (screenXBase + glyphX));
-    if (phyY < 0 || phyY >= displayHeight) continue;
+    // Single unsigned compare drops both off-band rows (strip mode) and any
+    // out-of-frame row (full-frame mode: fbOriginY=0, fbRows=displayHeight),
+    // matching what the Landscape* cases above do.
     const int rowY = phyY - fbOriginY;
     if (static_cast<unsigned>(rowY) >= static_cast<unsigned>(fbRows)) continue;
     uint8_t* const row = frameBuffer + rowY * widthBytes;
@@ -2656,10 +2658,11 @@ void GfxRenderer::restoreBwBuffer() {
   bwSnapshotRowEnd = 0;
 }
 
-/**
- * Cleanup grayscale buffers using the current frame buffer.
- * Use this when BW buffer was re-rendered instead of stored/restored.
- */
+// Cleanup grayscale buffers using the current frame buffer.
+// Use this when BW buffer was re-rendered instead of stored/restored.
+// On X3 the display call transiently Y-flips frameBuffer in place and flips
+// it back before returning; the logical contents are unchanged but callers
+// must not race a framebuffer reader against this call. See the header.
 void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   if (frameBuffer) {
     display.cleanupGrayscaleBuffers(frameBuffer);
