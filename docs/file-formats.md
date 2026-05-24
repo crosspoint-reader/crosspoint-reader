@@ -2,7 +2,7 @@
 
 ## `book.bin`
 
-### Version 3
+### Version 6
 
 ImHex Pattern:
 
@@ -12,7 +12,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 3
+#define EXPECTED_VERSION 6
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -34,7 +34,9 @@ fn format_string(String s) {
 struct Metadata {
     String title [[comment("Book title")]];
     String author [[comment("Book author")]];
+    String language [[comment("Book language")]];
     String coverItemHref [[comment("Path to cover image")]];
+    String coverPageHref [[comment("Path to cover XHTML wrapper")]];
     String textReferenceHref [[comment("Path to guided first text reference")]];
 } [[comment("Book metadata information")]];
 

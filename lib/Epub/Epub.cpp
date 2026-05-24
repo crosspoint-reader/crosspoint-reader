@@ -7,10 +7,34 @@
 #include <PngToBmpConverter.h>
 #include <ZipFile.h>
 
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
+
+namespace {
+constexpr size_t COVER_WRAPPER_PROBE_MAX_BYTES = 16 * 1024;
+
+std::string filenameFromHref(const std::string& href) {
+  const size_t hashPos = href.find('#');
+  const std::string path = hashPos == std::string::npos ? href : href.substr(0, hashPos);
+  const size_t slashPos = path.find_last_of('/');
+  return slashPos == std::string::npos ? path : path.substr(slashPos + 1);
+}
+
+bool containsBytes(const uint8_t* haystack, const size_t haystackLen, const std::string& needle) {
+  if (!haystack || needle.empty() || needle.size() > haystackLen) {
+    return false;
+  }
+  const auto* begin = reinterpret_cast<const char*>(haystack);
+  const auto* end = begin + haystackLen;
+  return std::search(begin, end, needle.begin(), needle.end()) != end;
+}
+}  // namespace
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
@@ -77,6 +101,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
+  bookMetadata.coverPageHref = opfParser.guideCoverPageHref;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -97,7 +122,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
 
       // Search for image references: xlink:href="..." (SVG) and src="..." (img)
       std::string imageRef;
-      for (const char* pattern : {"xlink:href=\"", "src=\""}) {
+      for (const char* pattern : {"xlink:href=\"", "href=\"", "src=\""}) {
         auto pos = coverPageHtml.find(pattern);
         while (pos != std::string::npos) {
           pos += strlen(pattern);
@@ -844,6 +869,73 @@ int Epub::getSpineIndexForTextReference() const {
   }
   // This should not happen, as we checked for empty textReferenceHref earlier
   LOG_DBG("EBP", "Section not found for text reference");
+  return 0;
+}
+
+bool Epub::isCoverWrapperSpine(const int spineIndex) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return false;
+  }
+  if (spineIndex < 0 || spineIndex >= getSpineItemsCount()) {
+    return false;
+  }
+
+  const std::string& coverItemHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverItemHref.empty()) {
+    return false;
+  }
+
+  const auto spineHref = getSpineItem(spineIndex).href;
+  size_t spineSize = 0;
+  if (!getItemSize(spineHref, &spineSize) || spineSize == 0 || spineSize > COVER_WRAPPER_PROBE_MAX_BYTES) {
+    return false;
+  }
+
+  size_t pageSize = 0;
+  uint8_t* pageData = readItemContentsToBytes(spineHref, &pageSize, true);
+  if (!pageData) {
+    return false;
+  }
+
+  const std::string coverFilename = filenameFromHref(coverItemHref);
+  const bool foundCover =
+      containsBytes(pageData, pageSize, coverItemHref) || containsBytes(pageData, pageSize, coverFilename);
+  free(pageData);
+  return foundCover;
+}
+
+int Epub::getFreshEntrySpineIndex(bool skipCoverOnBookEntry) const {
+  if (!skipCoverOnBookEntry) {
+    LOG_DBG("EBP", "Fresh entry spine: 0 (cover skip disabled)");
+    return 0;
+  }
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_DBG("EBP", "Fresh entry spine: 0 (metadata cache unavailable)");
+    return 0;
+  }
+  if (getSpineItemsCount() <= 1) {
+    LOG_DBG("EBP", "Fresh entry spine: 0 (single-spine book)");
+    return 0;
+  }
+
+  const int textSpineIndex = getSpineIndexForTextReference();
+  if (textSpineIndex > 0) {
+    LOG_DBG("EBP", "Fresh entry spine: %d (text/start reference)", textSpineIndex);
+    return textSpineIndex;
+  }
+
+  const int coverPageSpineIndex = resolveHrefToSpineIndex(bookMetadataCache->coreMetadata.coverPageHref);
+  if (coverPageSpineIndex == 0) {
+    LOG_DBG("EBP", "Fresh entry spine: 1 (Cover page at spine 0; skipping to spine 1)");
+    return 1;
+  }
+
+  if (isCoverWrapperSpine(0)) {
+    LOG_DBG("EBP", "Fresh entry spine: 1 (Cover wrapper at spine 0; skipping to spine 1)");
+    return 1;
+  }
+
+  LOG_DBG("EBP", "Fresh entry spine: 0 (no cover skip candidate)");
   return 0;
 }
 

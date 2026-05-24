@@ -124,12 +124,16 @@ void EpubReaderActivity::onEnter() {
   epub->setupCacheDir();
 
   FsFile f;
+  bool loadedSavedProgress = false;
+  bool savedProgressAtBookStart = false;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
     int dataSize = f.read(data, 6);
     if (dataSize == 4 || dataSize == 6) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
+      loadedSavedProgress = true;
+      savedProgressAtBookStart = currentSpineIndex == 0 && nextPageNumber == 0;
       if (nextPageNumber == UINT16_MAX) {
         // UINT16_MAX is an in-memory navigation sentinel for "open previous
         // chapter on its last page". It should never be treated as persisted
@@ -144,13 +148,18 @@ void EpubReaderActivity::onEnter() {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
     }
   }
-  // We may want a better condition to detect if we are opening for the first time.
-  // This will trigger if the book is re-opened at Chapter 0.
-  if (currentSpineIndex == 0) {
-    int textSpineIndex = epub->getSpineIndexForTextReference();
-    if (textSpineIndex != 0) {
-      currentSpineIndex = textSpineIndex;
-      LOG_DBG("ERS", "Opened for first time, navigating to text reference at index %d", textSpineIndex);
+  const bool freshBookEntry = !loadedSavedProgress || savedProgressAtBookStart;
+  if (SETTINGS.skipCoverOnBookEntry && freshBookEntry) {
+    const int freshEntrySpineIndex = epub->getFreshEntrySpineIndex(SETTINGS.skipCoverOnBookEntry);
+    if (freshEntrySpineIndex != currentSpineIndex) {
+      if (loadedSavedProgress) {
+        LOG_DBG("ERS", "Treating saved 0,0 progress as cover-start progress; skipping to index %d",
+                freshEntrySpineIndex);
+      }
+      currentSpineIndex = freshEntrySpineIndex;
+      nextPageNumber = 0;
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = 0;
     }
   }
 

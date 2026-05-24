@@ -35,6 +35,7 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void parseCssFiles() const;
+  bool isCoverWrapperSpine(int spineIndex) const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -68,6 +69,7 @@ class Epub {
   int getTocIndexForSpineIndex(int spineIndex) const;
   size_t getCumulativeSpineItemSize(int spineIndex) const;
   int getSpineIndexForTextReference() const;
+  int getFreshEntrySpineIndex(bool skipCoverOnBookEntry) const;
 
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;

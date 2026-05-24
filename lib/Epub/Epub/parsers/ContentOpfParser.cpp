@@ -293,7 +293,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
     if (!guideHref.empty()) {
-      if (type == "text" || (type == "start" && !self->textReferenceHref.empty())) {
+      if (type == "text" || (type == "start" && self->textReferenceHref.empty())) {
         LOG_DBG("COF", "Found %s reference in guide: %s", type.c_str(), guideHref.c_str());
         self->textReferenceHref = guideHref;
       } else if ((type == "cover" || type == "cover-page") && self->guideCoverPageHref.empty()) {

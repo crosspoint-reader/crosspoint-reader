@@ -245,6 +245,8 @@ class CrossPointSettings {
   uint8_t moveFinishedToReadFolder = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Skip EPUB cover/front-matter sections when opening a book with no saved progress
+  uint8_t skipCoverOnBookEntry = 1;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
   // Language setting (Language enum index, default 0 = EN)
