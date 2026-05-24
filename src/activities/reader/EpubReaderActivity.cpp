@@ -1092,25 +1092,27 @@ void EpubReaderActivity::addBookmark() {
   LOG_DBG("ERS", "Adding bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
   float chapterProgress;
   int currentPage;
+  int pageCount;
   {
     RenderLock lock(*this);
-    chapterProgress = section->pageCount > 0
-                          ? static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount)
-                          : 0.0f;
+    pageCount = section->pageCount;
     currentPage = section->currentPage;
+    chapterProgress = pageCount > 0
+                          ? static_cast<float>(currentPage) / static_cast<float>(pageCount)
+                          : 0.0f;
   }
 
   const int bookPercent =
       clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
 
   std::string pageText;
-  if (section->currentPage >= 0 && section->currentPage < section->pageCount) {
+  if (currentPage >= 0 && currentPage < pageCount) {
     pageText = section->getTextFromSectionFile();
   }
 
   BookmarkEntry entry;
   entry.bookPercent = static_cast<uint8_t>(bookPercent);
-  entry.chapterPageCount = static_cast<uint16_t>(section->pageCount);
+  entry.chapterPageCount = static_cast<uint16_t>(pageCount);
   entry.chapterProgress = static_cast<uint16_t>(currentPage + 1);
   entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
   entry.pageIndex = static_cast<uint16_t>(currentPage);
