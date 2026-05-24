@@ -6,6 +6,8 @@
 #include <ObfuscationUtils.h>
 #include <Serialization.h>
 
+#include <cstring>
+
 // Initialize the static instance
 WifiCredentialStore WifiCredentialStore::instance;
 
@@ -149,6 +151,54 @@ const WifiCredential* WifiCredentialStore::findCredential(const std::string& ssi
 }
 
 bool WifiCredentialStore::hasSavedCredential(const std::string& ssid) const { return findCredential(ssid) != nullptr; }
+
+bool WifiCredentialStore::updateConnectionCache(const std::string& ssid, const uint8_t bssid[6], uint8_t channel,
+                                                const uint8_t ip[4], const uint8_t gateway[4], const uint8_t mask[4],
+                                                const uint8_t dns[4], uint32_t cacheTimestamp) {
+  const auto cred =
+      find_if(credentials.begin(), credentials.end(), [&ssid](const WifiCredential& c) { return c.ssid == ssid; });
+  if (cred == credentials.end()) {
+    return false;
+  }
+  const bool sameHint = (channel == cred->channel) && std::memcmp(bssid, cred->bssid, 6) == 0;
+  const bool sameIp = std::memcmp(ip, cred->ip, 4) == 0 && std::memcmp(gateway, cred->gateway, 4) == 0 &&
+                      std::memcmp(mask, cred->mask, 4) == 0 && std::memcmp(dns, cred->dns, 4) == 0;
+  // Timestamp updates are not worth a write on their own; only persist when topology changed.
+  if (sameHint && sameIp) {
+    return true;
+  }
+  std::memcpy(cred->bssid, bssid, 6);
+  cred->channel = channel;
+  std::memcpy(cred->ip, ip, 4);
+  std::memcpy(cred->gateway, gateway, 4);
+  std::memcpy(cred->mask, mask, 4);
+  std::memcpy(cred->dns, dns, 4);
+  cred->cacheTimestamp = cacheTimestamp;
+  return saveToFile();
+}
+
+bool WifiCredentialStore::clearConnectionCache(const std::string& ssid) {
+  const auto cred =
+      find_if(credentials.begin(), credentials.end(), [&ssid](const WifiCredential& c) { return c.ssid == ssid; });
+  if (cred == credentials.end()) {
+    return false;
+  }
+  bool empty = (cred->channel == 0) && (cred->ip[0] == 0);
+  for (int i = 0; i < 6 && empty; i++) {
+    if (cred->bssid[i] != 0) empty = false;
+  }
+  if (empty) {
+    return true;
+  }
+  std::memset(cred->bssid, 0, 6);
+  cred->channel = 0;
+  std::memset(cred->ip, 0, 4);
+  std::memset(cred->gateway, 0, 4);
+  std::memset(cred->mask, 0, 4);
+  std::memset(cred->dns, 0, 4);
+  cred->cacheTimestamp = 0;
+  return saveToFile();
+}
 
 void WifiCredentialStore::setLastConnectedSsid(const std::string& ssid) {
   if (lastConnectedSsid != ssid) {

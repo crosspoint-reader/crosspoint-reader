@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <WiFi.h>
 
+#include <cstring>
 #include <map>
 
 #include "CrossPointSettings.h"
@@ -17,6 +18,20 @@
 
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
+
+  // Timing instrumentation: split total connect time into association vs DHCP.
+  // STA_CONNECTED = association (auth + 4-way handshake done).
+  // STA_GOT_IP    = DHCP done (or static config applied).
+  evtIdConnected = WiFi.onEvent(
+      [this](WiFiEvent_t /*event*/, WiFiEventInfo_t /*info*/) {
+        LOG_DBG("WIFI", "EVT associated at %lu ms", millis() - connectionStartTime);
+      },
+      ARDUINO_EVENT_WIFI_STA_CONNECTED);
+  evtIdGotIp = WiFi.onEvent(
+      [this](WiFiEvent_t /*event*/, WiFiEventInfo_t /*info*/) {
+        LOG_DBG("WIFI", "EVT got_ip at %lu ms", millis() - connectionStartTime);
+      },
+      ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
   // Load saved WiFi credentials - SD card operations need lock as we use SPI
   // for both
@@ -74,6 +89,15 @@ void WifiSelectionActivity::onEnter() {
 
 void WifiSelectionActivity::onExit() {
   Activity::onExit();
+
+  if (evtIdConnected != 0) {
+    WiFi.removeEvent(evtIdConnected);
+    evtIdConnected = 0;
+  }
+  if (evtIdGotIp != 0) {
+    WiFi.removeEvent(evtIdGotIp);
+    evtIdGotIp = 0;
+  }
 
   LOG_DBG("WIFI", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
@@ -215,23 +239,85 @@ void WifiSelectionActivity::attemptConnection() {
   connectionStartTime = millis();
   connectedIP.clear();
   connectionError.clear();
+  hintFallbackDone = false;
   requestUpdate();
 
+  prepareForConnect();
+  issueWifiBegin(/*useHint=*/true);
+}
+
+void WifiSelectionActivity::prepareForConnect() {
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
-  delay(100);
+
+  // Only switch mode if we're not already STA — the mode setter touches the netif and
+  // can take 50+ ms even when "no change" semantically.
+  if (WiFi.getMode() != WIFI_STA) {
+    WiFi.mode(WIFI_STA);
+  }
+
+  // Only do the heavy disconnect(true,true) — which erases NVS and tears down the WPA
+  // state machine — when there's actually something to tear down. From a fresh/idle
+  // state it's a pure cost (~50–80 ms on this SoC).
+  const wl_status_t status = WiFi.status();
+  const bool needsReset = (status == WL_CONNECTED) || (status == WL_CONNECT_FAILED) || (status == WL_CONNECTION_LOST) ||
+                          (status == WL_NO_SSID_AVAIL);
+  if (needsReset) {
+    WiFi.disconnect(true, true);
+  }
 
   // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
   String mac = WiFi.macAddress();
   mac.replace(":", "");
   String hostname = "CrossPoint-Reader-" + mac;
   WiFi.setHostname(hostname.c_str());
+}
 
-  if (selectedRequiresPassword && !enteredPassword.empty()) {
-    WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
+void WifiSelectionActivity::issueWifiBegin(bool useHint) {
+  std::memset(currentAttemptBssid, 0, 6);
+  currentAttemptChannel = 0;
+  bool appliedStaticIp = false;
+
+  if (useHint) {
+    const auto* cred = WIFI_STORE.findCredential(selectedSSID);
+    if (cred && cred->channel != 0) {
+      std::memcpy(currentAttemptBssid, cred->bssid, 6);
+      currentAttemptChannel = cred->channel;
+
+      // Apply cached static IP when present. Cache is keyed to BSSID; if the AP/router
+      // subnet changes the next hint attempt will either fail (BSSID mismatch surfaces
+      // as hint-attempt timeout, then we silently retry without hint+IP) or the new
+      // ground truth is captured on the success path.
+      if (cred->ip[0] != 0) {
+        IPAddress ip(cred->ip[0], cred->ip[1], cred->ip[2], cred->ip[3]);
+        IPAddress gw(cred->gateway[0], cred->gateway[1], cred->gateway[2], cred->gateway[3]);
+        IPAddress mask(cred->mask[0], cred->mask[1], cred->mask[2], cred->mask[3]);
+        IPAddress dns(cred->dns[0], cred->dns[1], cred->dns[2], cred->dns[3]);
+        WiFi.config(ip, gw, mask, dns);
+        appliedStaticIp = true;
+      }
+    }
+  }
+
+  if (!appliedStaticIp) {
+    // Reset to DHCP in case a previous attempt left a static config behind.
+    WiFi.config(IPAddress(), IPAddress(), IPAddress(), IPAddress());
+  }
+
+  const char* pwd = (selectedRequiresPassword && !enteredPassword.empty()) ? enteredPassword.c_str() : nullptr;
+  const unsigned long preBeginMs = millis() - connectionStartTime;
+  if (currentAttemptChannel != 0) {
+    LOG_DBG("WIFI", "WiFi.begin -> %s ch=%d bssid=%02x:%02x:%02x:%02x:%02x:%02x staticIp=%s (pre-begin %lu ms)",
+            selectedSSID.c_str(), currentAttemptChannel, currentAttemptBssid[0], currentAttemptBssid[1],
+            currentAttemptBssid[2], currentAttemptBssid[3], currentAttemptBssid[4], currentAttemptBssid[5],
+            appliedStaticIp ? "yes" : "no", preBeginMs);
+    WiFi.begin(selectedSSID.c_str(), pwd, currentAttemptChannel, currentAttemptBssid, true);
   } else {
-    WiFi.begin(selectedSSID.c_str());
+    LOG_DBG("WIFI", "WiFi.begin -> %s (no hint, pre-begin %lu ms)", selectedSSID.c_str(), preBeginMs);
+    if (pwd) {
+      WiFi.begin(selectedSSID.c_str(), pwd);
+    } else {
+      WiFi.begin(selectedSSID.c_str());
+    }
   }
 }
 
@@ -250,6 +336,10 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
+    LOG_DBG("WIFI", "Connected to %s in %lu ms (rssi=%d ch=%d ip=%s, hint=%s)", selectedSSID.c_str(),
+            millis() - connectionStartTime, WiFi.RSSI(), WiFi.channel(), ipStr,
+            currentAttemptChannel != 0 ? "yes" : "no");
+
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
     // Settings > Customise Status Bar > Sync clock now.
@@ -260,11 +350,25 @@ void WifiSelectionActivity::checkConnectionStatus() {
       }
     }
 
-    // Save this as the last connected network - SD card operations need lock as
-    // we use SPI for both
+    // Save this as the last connected network and cache the full connection profile
+    // (BSSID/channel + IP/gw/mask/dns) so the next reconnect can skip both channel
+    // scanning and DHCP. SD card operations need lock as we use SPI for both.
     {
       RenderLock lock(*this);
       WIFI_STORE.setLastConnectedSsid(selectedSSID);
+      const uint8_t* actualBssid = WiFi.BSSID();
+      const int actualChannel = WiFi.channel();
+      if (actualBssid && actualChannel > 0 && actualChannel <= 255) {
+        const IPAddress gw = WiFi.gatewayIP();
+        const IPAddress mask = WiFi.subnetMask();
+        const IPAddress dns = WiFi.dnsIP();
+        const uint8_t ipBytes[4] = {ip[0], ip[1], ip[2], ip[3]};
+        const uint8_t gwBytes[4] = {gw[0], gw[1], gw[2], gw[3]};
+        const uint8_t maskBytes[4] = {mask[0], mask[1], mask[2], mask[3]};
+        const uint8_t dnsBytes[4] = {dns[0], dns[1], dns[2], dns[3]};
+        WIFI_STORE.updateConnectionCache(selectedSSID, actualBssid, static_cast<uint8_t>(actualChannel), ipBytes,
+                                         gwBytes, maskBytes, dnsBytes, 0u);
+      }
     }
 
     // If we entered a new password, ask if user wants to save it
@@ -280,6 +384,31 @@ void WifiSelectionActivity::checkConnectionStatus() {
               "completing immediately");
       onComplete(true);
     }
+    return;
+  }
+
+  // If this attempt used a hint and the hint hasn't paid off (channel may have changed
+  // because the AP is part of a mesh / roamed), retry once with a full scan before
+  // surfacing failure. Triggered on either a hard failure status or a short timeout.
+  const bool usingHint = currentAttemptChannel != 0;
+  const bool hintHardFail =
+      usingHint && !hintFallbackDone && (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL);
+  const bool hintTimedOut =
+      usingHint && !hintFallbackDone && (millis() - connectionStartTime > HINT_ATTEMPT_TIMEOUT_MS);
+  if (hintHardFail || hintTimedOut) {
+    LOG_DBG("WIFI", "Hint attempt did not connect (%s after %lu ms), retrying with full scan",
+            hintHardFail ? "hard fail" : "timeout", millis() - connectionStartTime);
+    hintFallbackDone = true;
+    // Wipe the stale cache before retrying. If the fallback succeeds, the success
+    // path writes a fresh cache. If it fails or is interrupted, we won't carry a
+    // known-bad hint into the next session.
+    {
+      RenderLock lock(*this);
+      WIFI_STORE.clearConnectionCache(selectedSSID);
+    }
+    WiFi.disconnect(true, false);
+    connectionStartTime = millis();
+    issueWifiBegin(/*useHint=*/false);
     return;
   }
 

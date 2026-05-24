@@ -263,6 +263,29 @@ bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path
     JsonObject obj = arr.add<JsonObject>();
     obj["ssid"] = cred.ssid;
     obj["password_obf"] = obfuscation::obfuscateToBase64(cred.password);
+    bool hasHint = cred.channel != 0;
+    for (int i = 0; i < 6 && !hasHint; i++) {
+      if (cred.bssid[i] != 0) hasHint = true;
+    }
+    if (hasHint) {
+      char bssidHex[13];
+      snprintf(bssidHex, sizeof(bssidHex), "%02x%02x%02x%02x%02x%02x", cred.bssid[0], cred.bssid[1], cred.bssid[2],
+               cred.bssid[3], cred.bssid[4], cred.bssid[5]);
+      obj["bssid"] = bssidHex;
+      obj["channel"] = cred.channel;
+    }
+    if (cred.ip[0] != 0) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%d.%d.%d.%d", cred.ip[0], cred.ip[1], cred.ip[2], cred.ip[3]);
+      obj["ip"] = buf;
+      snprintf(buf, sizeof(buf), "%d.%d.%d.%d", cred.gateway[0], cred.gateway[1], cred.gateway[2], cred.gateway[3]);
+      obj["gw"] = buf;
+      snprintf(buf, sizeof(buf), "%d.%d.%d.%d", cred.mask[0], cred.mask[1], cred.mask[2], cred.mask[3]);
+      obj["mask"] = buf;
+      snprintf(buf, sizeof(buf), "%d.%d.%d.%d", cred.dns[0], cred.dns[1], cred.dns[2], cred.dns[3]);
+      obj["dns"] = buf;
+      obj["ts"] = cred.cacheTimestamp;
+    }
   }
 
   String json;
@@ -292,6 +315,52 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
     if (!ok || cred.password.empty()) {
       cred.password = obj["password"] | std::string("");
       if (!cred.password.empty() && needsResave) *needsResave = true;
+    }
+    const std::string bssidHex = obj["bssid"] | std::string("");
+    const int channel = obj["channel"] | 0;
+    if (bssidHex.size() == 12 && channel > 0 && channel <= 14) {
+      bool parseOk = true;
+      uint8_t parsed[6] = {0};
+      for (int i = 0; i < 6 && parseOk; i++) {
+        unsigned int byte = 0;
+        if (sscanf(bssidHex.c_str() + i * 2, "%2x", &byte) != 1) {
+          parseOk = false;
+        } else {
+          parsed[i] = static_cast<uint8_t>(byte);
+        }
+      }
+      if (parseOk) {
+        std::memcpy(cred.bssid, parsed, 6);
+        cred.channel = static_cast<uint8_t>(channel);
+      }
+    }
+    const auto parseQuad = [](const std::string& s, uint8_t out[4]) -> bool {
+      unsigned int a = 0, b = 0, c = 0, d = 0;
+      int consumed = 0;
+      // %n stores characters consumed; require it to equal full string length so we
+      // reject inputs with trailing garbage like "192.168.1.10xyz".
+      if (sscanf(s.c_str(), "%u.%u.%u.%u%n", &a, &b, &c, &d, &consumed) != 4) return false;
+      if (consumed < 0 || static_cast<size_t>(consumed) != s.size()) return false;
+      if (a > 255 || b > 255 || c > 255 || d > 255) return false;
+      out[0] = a;
+      out[1] = b;
+      out[2] = c;
+      out[3] = d;
+      return true;
+    };
+    const std::string ipStr = obj["ip"] | std::string("");
+    const std::string gwStr = obj["gw"] | std::string("");
+    const std::string maskStr = obj["mask"] | std::string("");
+    const std::string dnsStr = obj["dns"] | std::string("");
+    if (!ipStr.empty()) {
+      uint8_t ip[4], gw[4], mask[4], dns[4];
+      if (parseQuad(ipStr, ip) && parseQuad(gwStr, gw) && parseQuad(maskStr, mask) && parseQuad(dnsStr, dns)) {
+        std::memcpy(cred.ip, ip, 4);
+        std::memcpy(cred.gateway, gw, 4);
+        std::memcpy(cred.mask, mask, 4);
+        std::memcpy(cred.dns, dns, 4);
+        cred.cacheTimestamp = obj["ts"] | 0u;
+      }
     }
     store.credentials.push_back(cred);
   }

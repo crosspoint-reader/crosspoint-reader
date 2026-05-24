@@ -1,10 +1,24 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
 struct WifiCredential {
   std::string ssid;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  // Connection hint cached on successful connect. All-zero BSSID or channel==0 means
+  // "no hint, do a full scan". Used to skip channel scanning on reconnect.
+  uint8_t bssid[6] = {0, 0, 0, 0, 0, 0};
+  uint8_t channel = 0;
+
+  // Cached IP configuration to skip DHCP on reconnect. Valid only when ip[0] != 0 AND
+  // we connect to the same BSSID (cached above). cacheTimestamp is epoch seconds at
+  // capture; 0 means "unknown time, no TTL enforced".
+  uint8_t ip[4] = {0, 0, 0, 0};
+  uint8_t gateway[4] = {0, 0, 0, 0};
+  uint8_t mask[4] = {0, 0, 0, 0};
+  uint8_t dns[4] = {0, 0, 0, 0};
+  uint32_t cacheTimestamp = 0;
 };
 
 class WifiCredentialStore;
@@ -51,6 +65,16 @@ class WifiCredentialStore {
   bool addCredential(const std::string& ssid, const std::string& password);
   bool removeCredential(const std::string& ssid);
   const WifiCredential* findCredential(const std::string& ssid) const;
+
+  // Update cached BSSID/channel hint AND IP configuration in one write. ip/gw/mask/dns
+  // may be all-zero to mean "no IP cache". cacheTimestamp is epoch seconds (0 if unsynced).
+  // Persists only if anything changed.
+  bool updateConnectionCache(const std::string& ssid, const uint8_t bssid[6], uint8_t channel, const uint8_t ip[4],
+                             const uint8_t gateway[4], const uint8_t mask[4], const uint8_t dns[4],
+                             uint32_t cacheTimestamp);
+  // Clear all cached hint + IP for this credential (after a hint-based connect failed
+  // and we want the next attempt to start fresh with full scan + DHCP).
+  bool clearConnectionCache(const std::string& ssid);
 
   // Get all stored credentials (for UI display)
   const std::vector<WifiCredential>& getCredentials() const { return credentials; }
