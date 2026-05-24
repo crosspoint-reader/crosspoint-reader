@@ -9,9 +9,9 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "ProgressMapper.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "ProgressMapper.h"
 
 namespace {
 constexpr int ENTER_DELETE_MODE_MS = 700;
@@ -100,7 +100,8 @@ void EpubReaderBookmarksActivity::loop() {
       return;
     }
     auto bookmark = bookmarks.at(selectorIndex);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
+    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer, -1, 0,
+                                                          bookmark.cachedChapterPageCount);
     setResult(ProgressChangeResult{pos.spineIndex, pos.pageNumber});
     finish();
     return;
@@ -176,7 +177,8 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   };
   const auto getBookmarkSubtitle = [this](int index) {
     auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
+    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer, -1, 0,
+                                                          bookmark.cachedChapterPageCount);
     auto tocIndex = epub->getTocIndexForSpineIndex(pos.spineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
     return std::to_string((int)bookmark.percentage) + "% - " + std::to_string(bookmark.cachedChapterProgress) + "/" +

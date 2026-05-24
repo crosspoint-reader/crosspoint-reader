@@ -1,5 +1,6 @@
 #include "ProgressMapper.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -7,10 +8,9 @@
 #include <cstring>
 
 #include "ChapterXPathResolver.h"
+#include "Epub/Section.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
-#include "Epub/Section.h"
-#include <GfxRenderer.h>
 
 namespace {
 int parseIndex(const std::string& xpath, const char* prefix, bool last = false) {
@@ -508,7 +508,8 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStr
 }
 }  // namespace
 
-SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
+SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub>& epub,
+                                                      const CrossPointPosition& pos) {
   SavedProgressPosition result;
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
@@ -527,8 +528,9 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   return result;
 }
 
-CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos, GfxRenderer& renderer,
-                                                int currentSpineIndex, int totalPagesInCurrentSpine) {
+CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
+                                                GfxRenderer& renderer, int currentSpineIndex,
+                                                int totalPagesInCurrentSpine, int fallbackTotalPages) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) return result;
@@ -570,6 +572,17 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     if (cs > 0)
       result.totalPages = std::max(
           1, static_cast<int>(totalPagesInCurrentSpine * static_cast<float>(spineSize) / static_cast<float>(cs)));
+  }
+
+  if (result.totalPages <= 0) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    if (auto cachedCount = tempSection.getCachedPageCount()) {
+      result.totalPages = *cachedCount;
+    } else if (fallbackTotalPages > 0) {
+      result.totalPages = fallbackTotalPages;
+    } else {
+      result.totalPages = 1;  // Prevent division by zero and give a fallback
+    }
   }
 
   float intra = 0.0f;
@@ -623,8 +636,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     if (result.hasLiIndex) {
       const auto liPage = tempSection.getPageForListItemIndex(result.liIndex);
       if (liPage.has_value()) {
-        LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage,
-                result.pageNumber);
+        LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage, result.pageNumber);
         result.pageNumber = *liPage;
         refined = true;
       } else {
@@ -634,8 +646,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     if (!refined && result.xpathAnchorId[0] != '\0') {
       const auto anchorPage = tempSection.getPageForAnchor(std::string(result.xpathAnchorId));
       if (anchorPage.has_value()) {
-        LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage,
-                result.pageNumber);
+        LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage, result.pageNumber);
         result.pageNumber = *anchorPage;
         refined = true;
       } else {
@@ -661,8 +672,8 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
           snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
         else
           snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
-        LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
-                result.paragraphIndex, *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
+        LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d", result.paragraphIndex,
+                *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
         result.pageNumber = refinedPage;
       } else {
         LOG_DBG("PM", "Paragraph %u not found in section LUT", result.paragraphIndex);

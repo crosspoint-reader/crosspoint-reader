@@ -6,8 +6,8 @@
 #include <optional>
 
 #include "EpubReaderMenuActivity.h"
-#include "activities/Activity.h"
 #include "ProgressMapper.h"
+#include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;

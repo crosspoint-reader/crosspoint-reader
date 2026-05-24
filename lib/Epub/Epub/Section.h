@@ -45,6 +45,9 @@ class Section {
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
 
+  // Get the page count from the section cache file without fully loading it.
+  std::optional<uint16_t> getCachedPageCount() const;
+
   // Look up the page number for a synthetic paragraph index from XPath p[N].
   std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;
 

@@ -61,8 +61,9 @@ class ProgressMapper {
    * @param totalPagesInCurrentSpine Total pages in the current spine item (for density estimation)
    * @return CrossPoint position
    */
-  static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& savedPos, GfxRenderer& renderer,
-                                         int currentSpineIndex = -1, int totalPagesInCurrentSpine = 0);
+  static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& savedPos,
+                                         GfxRenderer& renderer, int currentSpineIndex = -1,
+                                         int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
 
  private:
   /**

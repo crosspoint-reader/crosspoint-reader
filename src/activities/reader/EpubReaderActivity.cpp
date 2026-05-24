@@ -1125,7 +1125,7 @@ void EpubReaderActivity::addBookmark() {
   }
   bookmarks.insert(bookmarks.begin(), entry);
   LOG_DBG("ERS", "Saving bookmark to file: %s", path.c_str());
-   const bool ok = JsonSettingsIO::saveBookmarks(bookmarks, path.c_str());
+  const bool ok = JsonSettingsIO::saveBookmarks(bookmarks, path.c_str());
   if (ok) {
     showBookmarkMessage = true;
   } else {

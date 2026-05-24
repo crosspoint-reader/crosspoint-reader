@@ -336,6 +336,23 @@ std::string Section::getTextFromSectionFile() {
   return fullText;
 }
 
+std::optional<uint16_t> Section::getCachedPageCount() const {
+  FsFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  const uint32_t fileSize = f.size();
+  if (fileSize < HEADER_SIZE) {
+    return std::nullopt;
+  }
+
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(uint16_t));
+  uint16_t count;
+  serialization::readPod(f, count);
+  return count;
+}
+
 std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
   FsFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
