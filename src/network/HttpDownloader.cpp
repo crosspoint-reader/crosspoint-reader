@@ -14,6 +14,10 @@
 #include "util/UrlUtils.h"
 
 namespace {
+constexpr int32_t HTTP_CONNECT_TIMEOUT_MS = 10000;
+constexpr uint16_t HTTP_READ_TIMEOUT_MS = 15000;
+constexpr size_t MAX_FETCH_BYTES = 1024 * 1024;
+
 class FileWriteStream final : public Stream {
  public:
   FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress, bool* cancelFlag)
@@ -54,6 +58,52 @@ class FileWriteStream final : public Stream {
   HttpDownloader::ProgressCallback progress_;
   bool* cancelFlag_;
 };
+
+class LimitedWriteStream final : public Stream {
+ public:
+  LimitedWriteStream(Stream& out, size_t maxBytes) : out_(out), maxBytes_(maxBytes) {}
+
+  size_t write(uint8_t byte) override { return write(&byte, 1); }
+
+  size_t write(const uint8_t* buffer, size_t size) override {
+    if (exceeded_) {
+      setWriteError();
+      return 0;
+    }
+
+    const size_t remaining = maxBytes_ - written_;
+    if (size > remaining) {
+      exceeded_ = true;
+      setWriteError();
+      if (remaining == 0) {
+        return 0;
+      }
+      const size_t written = out_.write(buffer, remaining);
+      written_ += written;
+      return written;
+    }
+
+    const size_t written = out_.write(buffer, size);
+    written_ += written;
+    if (written != size) {
+      setWriteError();
+    }
+    return written;
+  }
+
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
+  void flush() override { out_.flush(); }
+
+  bool exceeded() const { return exceeded_; }
+
+ private:
+  Stream& out_;
+  size_t maxBytes_;
+  size_t written_ = 0;
+  bool exceeded_ = false;
+};
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
@@ -71,6 +121,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
 
   http.begin(*client, url.c_str());
+  http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+  http.setTimeout(HTTP_READ_TIMEOUT_MS);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
@@ -87,7 +139,20 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
     return false;
   }
 
-  http.writeToStream(&outContent);
+  const int64_t reportedLength = http.getSize();
+  if (reportedLength > static_cast<int64_t>(MAX_FETCH_BYTES)) {
+    LOG_ERR("HTTP", "Fetch too large: %zu bytes", static_cast<size_t>(reportedLength));
+    http.end();
+    return false;
+  }
+
+  LimitedWriteStream limitedStream(outContent, MAX_FETCH_BYTES);
+  const int writeResult = http.writeToStream(&limitedStream);
+  if (writeResult < 0 || limitedStream.exceeded()) {
+    LOG_ERR("HTTP", "Fetch stream failed: result=%d, exceeded=%d", writeResult, limitedStream.exceeded());
+    http.end();
+    return false;
+  }
 
   http.end();
 
@@ -122,6 +187,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
 
   http.begin(*client, url.c_str());
+  http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+  http.setTimeout(HTTP_READ_TIMEOUT_MS);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
