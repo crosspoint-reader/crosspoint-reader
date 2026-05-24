@@ -522,7 +522,7 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   if (result.xpath.empty()) {
     result.xpath = generateXPath(epub, pos.spineIndex, intra);
   }
-  LOG_DBG("PM", "-> KO: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
+  LOG_DBG("PM", "-> Progress: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
           result.percentage * 100, result.xpath.c_str());
   return result;
 }
@@ -558,7 +558,6 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       }
     }
   }
-  if (result.spineIndex >= spineCount) return result;
 
   const size_t prevCum = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
   const size_t spineSize = epub->getCumulativeSpineItemSize(result.spineIndex) - prevCum;
@@ -572,7 +571,6 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       result.totalPages = std::max(
           1, static_cast<int>(totalPagesInCurrentSpine * static_cast<float>(spineSize) / static_cast<float>(cs)));
   }
-  if (spineSize == 0 || result.totalPages == 0) return result;
 
   float intra = 0.0f;
   if (useAncestry) {
@@ -615,7 +613,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
   result.pageNumber = std::max(
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
-  LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
+  LOG_DBG("PM", "<- Progress: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
 
   // Refine page using section cache LUTs: li index, anchor, or paragraph index.
@@ -625,23 +623,23 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     if (result.hasLiIndex) {
       const auto liPage = tempSection.getPageForListItemIndex(result.liIndex);
       if (liPage.has_value()) {
-        LOG_DBG("KOSync", "Li index %u -> page %d (was %d)", result.liIndex, *liPage,
+        LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage,
                 result.pageNumber);
         result.pageNumber = *liPage;
         refined = true;
       } else {
-        LOG_DBG("KOSync", "Li index %u not found in section LUT", result.liIndex);
+        LOG_DBG("PM", "Li index %u not found in section LUT", result.liIndex);
       }
     }
     if (!refined && result.xpathAnchorId[0] != '\0') {
       const auto anchorPage = tempSection.getPageForAnchor(std::string(result.xpathAnchorId));
       if (anchorPage.has_value()) {
-        LOG_DBG("KOSync", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage,
+        LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage,
                 result.pageNumber);
         result.pageNumber = *anchorPage;
         refined = true;
       } else {
-        LOG_DBG("KOSync", "Anchor '%s' not found in section cache", result.xpathAnchorId);
+        LOG_DBG("PM", "Anchor '%s' not found in section cache", result.xpathAnchorId);
       }
     }
     if (!refined && result.hasParagraphIndex) {
@@ -663,11 +661,11 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
           snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
         else
           snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
-        LOG_DBG("KOSync", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
+        LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d",
                 result.paragraphIndex, *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
         result.pageNumber = refinedPage;
       } else {
-        LOG_DBG("KOSync", "Paragraph %u not found in section LUT", result.paragraphIndex);
+        LOG_DBG("PM", "Paragraph %u not found in section LUT", result.paragraphIndex);
       }
     }
   }

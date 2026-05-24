@@ -547,11 +547,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         }
 
         // Pre-compute local KO position and chapter name while Epub is still in RAM.
-        CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
-        if (paragraphIndex.has_value()) {
-          localPos.paragraphIndex = *paragraphIndex;
-          localPos.hasParagraphIndex = true;
-        }
+        CrossPointPosition localPos = getCurrentPosition();
         SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
         const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
         std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
@@ -1090,32 +1086,26 @@ void EpubReaderActivity::addBookmark() {
     return;
   }
   LOG_DBG("ERS", "Adding bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
-  float chapterProgress;
   int currentPage;
   int pageCount;
   {
     RenderLock lock(*this);
     pageCount = section->pageCount;
     currentPage = section->currentPage;
-    chapterProgress = pageCount > 0
-                          ? static_cast<float>(currentPage) / static_cast<float>(pageCount)
-                          : 0.0f;
   }
-
-  const int bookPercent =
-      clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
 
   std::string pageText;
   if (currentPage >= 0 && currentPage < pageCount) {
     pageText = section->getTextFromSectionFile();
   }
 
+  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+
   BookmarkEntry entry;
-  entry.bookPercent = static_cast<uint8_t>(bookPercent);
-  entry.chapterPageCount = static_cast<uint16_t>(pageCount);
-  entry.chapterProgress = static_cast<uint16_t>(currentPage + 1);
-  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
-  entry.pageIndex = static_cast<uint16_t>(currentPage);
+  entry.percentage = progress.percentage;
+  entry.xpath = progress.xpath;
+  entry.cachedChapterPageCount = pageCount;
+  entry.cachedChapterProgress = currentPage + 1;
   entry.summary = BookmarkUtil::sanitizeBookmarkSummary(pageText);
 
   // Add bookmark
@@ -1164,4 +1154,24 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
     }
   }
   return info;
+}
+
+CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
+  std::optional<uint16_t> paragraphIndex;
+  if (section && currentPage >= 0 && currentPage < section->pageCount) {
+    const uint16_t paragraphPage =
+        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
+    if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
+      paragraphIndex = *pIdx;
+    }
+  }
+
+  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
+  if (paragraphIndex.has_value()) {
+    localPos.paragraphIndex = *paragraphIndex;
+    localPos.hasParagraphIndex = true;
+  }
+  return localPos;
 }
