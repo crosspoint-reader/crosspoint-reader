@@ -68,6 +68,13 @@ unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(
 
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {
+  // Swap previous/next labels to match the page turn direction swap in INVERTED and LANDSCAPE_CCW.
+  const bool swapLabels =
+      SETTINGS.frontButtonFollowOrientation && (SETTINGS.orientation == CrossPointSettings::INVERTED ||
+                                                SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW);
+  const char* leftLabel = swapLabels ? next : previous;
+  const char* rightLabel = swapLabels ? previous : next;
+
   // Build the label order based on the configured hardware mapping.
   auto labelForHardware = [&](uint8_t hw) -> const char* {
     // Compare against configured logical roles and return the matching label.
@@ -78,10 +85,10 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
       return confirm;
     }
     if (hw == SETTINGS.frontButtonLeft) {
-      return previous;
+      return leftLabel;
     }
     if (hw == SETTINGS.frontButtonRight) {
-      return next;
+      return rightLabel;
     }
     return "";
   };

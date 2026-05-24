@@ -5,8 +5,9 @@
 #include <string>
 
 /**
- * HTTP client utility for fetching content and downloading files.
- * Wraps NetworkClientSecure and HTTPClient for HTTPS requests.
+ * HTTP client utility for fetching content and downloading files. Built on
+ * esp_http_client: https is verified against the CA bundle, plain http is
+ * used for local servers (transport is chosen from the URL scheme).
  */
 class HttpDownloader {
  public:
