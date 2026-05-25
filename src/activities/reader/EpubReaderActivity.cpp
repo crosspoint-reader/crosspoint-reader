@@ -460,22 +460,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
-      // If inside a footnote, anchor the return point to the pre-footnote reading
-      // position (bottom of back stack) so "Back to..." skips the footnote detour.
-      const int snapshotSpine = (footnoteDepth > 0) ? savedPositions[0].spineIndex : currentSpineIndex;
-      const int snapshotPage =
-          (footnoteDepth > 0) ? savedPositions[0].pageNumber : (section ? section->currentPage : nextPageNumber);
-      const int snapshotPageCount =
-          (footnoteDepth > 0) ? 0 : (section ? section->pageCount : cachedChapterTotalPageCount);
+      const auto snapshot = computePreJumpSnapshot();
       startActivityForResult(
           std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, path, spineIdx),
-          [this, snapshotSpine, snapshotPage, snapshotPageCount](const ActivityResult& result) {
+          [this, snapshot](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& chapterResult = std::get<ChapterResult>(result.data);
               std::optional<EpubReaderUtils::ReturnPoint> toPersist;
               {
                 RenderLock lock(*this);
-                toPersist = captureReturnPointIfAbsent(snapshotSpine, snapshotPage, snapshotPageCount);
+                toPersist = captureReturnPointIfAbsent(snapshot.spineIndex, snapshot.pageNumber, snapshot.pageCount);
                 footnoteDepth = 0;
 
                 currentSpineIndex = chapterResult.spineIndex;
@@ -511,17 +505,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
       }
       const int initialPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-      const int snapshotSpine = currentSpineIndex;
-      const int snapshotPage = section ? section->currentPage : nextPageNumber;
-      const int snapshotPageCount = section ? section->pageCount : cachedChapterTotalPageCount;
+      const auto snapshot = computePreJumpSnapshot();
       startActivityForResult(
           std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
-          [this, snapshotSpine, snapshotPage, snapshotPageCount](const ActivityResult& result) {
+          [this, snapshot](const ActivityResult& result) {
             if (!result.isCancelled) {
               std::optional<EpubReaderUtils::ReturnPoint> toPersist;
               {
                 RenderLock lock(*this);
-                toPersist = captureReturnPointIfAbsent(snapshotSpine, snapshotPage, snapshotPageCount);
+                toPersist = captureReturnPointIfAbsent(snapshot.spineIndex, snapshot.pageNumber, snapshot.pageCount);
               }
               if (toPersist) persistReturnPointToSd(*toPersist);
               jumpToPercent(std::get<PercentResult>(result.data).percent);
@@ -956,6 +948,17 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+}
+
+EpubReaderUtils::ReturnPoint EpubReaderActivity::computePreJumpSnapshot() const {
+  // pageCount=0 in the footnote path disables proportional remap on return,
+  // which is acceptable for short footnote detours (savedPositions stores
+  // only spine/page, not the pre-footnote section's pageCount).
+  const int spine = (footnoteDepth > 0) ? savedPositions[0].spineIndex : currentSpineIndex;
+  const int page =
+      (footnoteDepth > 0) ? savedPositions[0].pageNumber : (section ? section->currentPage : nextPageNumber);
+  const int pageCount = (footnoteDepth > 0) ? 0 : (section ? section->pageCount : cachedChapterTotalPageCount);
+  return EpubReaderUtils::ReturnPoint{spine, page, pageCount};
 }
 
 std::optional<EpubReaderUtils::ReturnPoint> EpubReaderActivity::captureReturnPointIfAbsent(int spineIndex,
