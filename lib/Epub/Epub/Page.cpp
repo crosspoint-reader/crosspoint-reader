@@ -98,6 +98,14 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, co
   }
 }
 
+void Page::renderTextOnly(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  for (auto& element : elements) {
+    if (element->getTag() == TAG_PageLine) {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
+  }
+}
+
 bool Page::serialize(FsFile& file) const {
   const uint16_t count = elements.size();
   serialization::writePod(file, count);

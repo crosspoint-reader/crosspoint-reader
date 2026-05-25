@@ -874,7 +874,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
+  page->renderTextOnly(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
@@ -918,14 +918,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   if (SETTINGS.textAntiAliasing) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    page->renderTextOnly(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleLsbBuffers();
     const auto tGrayLsb = millis();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+    page->renderTextOnly(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
     renderer.copyGrayscaleMsbBuffers();
     const auto tGrayMsb = millis();
 
