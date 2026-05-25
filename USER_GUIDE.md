@@ -520,11 +520,44 @@ If an issue or crash is encountered while using Crosspoint, feel free to raise a
 
 **Crash reports on SD card:** After a crash, CrossPoint automatically saves a crash report to the SD card (no USB connection needed). Check the root of the SD card for a crash log file and include it with any bug report.
 
-**Serial monitor logs:** For more detailed debugging, connect the device to a computer and start a serial monitor. Either [Serial Monitor](https://www.serialmonitor.org/) or the following command can be used:
+**Serial monitor logs:** For more detailed debugging, connect the device to a computer and run the custom debugging monitor script (requires Python 3 with `pyserial`, `colorama`, and `matplotlib`; install via `pip3 install pyserial colorama matplotlib`):
 
 ```
-pio device monitor
+python3 scripts/debugging_monitor.py
 ```
+
+The script auto-detects the serial port. You can also specify one explicitly:
+
+```
+python3 scripts/debugging_monitor.py /dev/ttyACM0        # Linux
+python3 scripts/debugging_monitor.py /dev/tty.usbmodem1  # macOS
+python3 scripts/debugging_monitor.py COM7                # Windows
+```
+
+**Features:**
+- Color-coded log output by category (errors, memory, display, EPUB parsing, etc.)
+- Live memory usage graph (free RAM, total RAM, max contiguous allocation) updated every second
+- Interactive command prompt — type a command and press Enter to send it to the device
+- Screenshot capture — saves the current display to `screenshot.bmp` when triggered by the device
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--baud RATE` | Baud rate (default: 115200) |
+| `--filter KEYWORD` | Show only lines containing the keyword (case-insensitive) |
+| `--suppress KEYWORD` | Hide lines containing the keyword (case-insensitive) |
+
+**Examples:**
+```
+# Show only memory-related log lines
+python3 scripts/debugging_monitor.py --filter MEM
+
+# Hide noisy SD card log lines
+python3 scripts/debugging_monitor.py --suppress "[SD]"
+```
+
+Press **Ctrl-C** or close the graph window to exit.
 
 If the device is stuck in a bootloop, press and release the Reset button. Then, press and hold on to the configured Back button and the Power Button to boot to the Home Screen.
 
