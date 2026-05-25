@@ -155,6 +155,21 @@ bool Txt::generateCoverBmp() const {
   return false;
 }
 
+bool Txt::clearCache() const {
+  if (!Storage.exists(cachePath.c_str())) {
+    LOG_DBG("TXT", "Cache does not exist, no action needed");
+    return true;
+  }
+
+  if (!Storage.removeDir(cachePath.c_str())) {
+    LOG_ERR("TXT", "Failed to clear cache");
+    return false;
+  }
+
+  LOG_DBG("TXT", "Cache cleared successfully");
+  return true;
+}
+
 bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
   if (!loaded) {
     return false;
