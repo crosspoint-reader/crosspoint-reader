@@ -662,18 +662,10 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     return;
   }
 
+  // Preserve current reading position so we can restore after reflow.
   {
     RenderLock lock(*this);
-    // Explore Mode takes priority: jump back to the return point before reflowing so the
-    // return point isn't lost and user isn't abandoned at page they were just exploring
-    if (returnPoint.has_value()) {
-      const auto target = *returnPoint;
-      clearReturnPoint();
-      currentSpineIndex = target.spineIndex;
-      cachedSpineIndex = target.spineIndex;
-      cachedChapterTotalPageCount = target.pageCount;
-      nextPageNumber = target.pageNumber;
-    } else if (section) {
+    if (section) {
       cachedSpineIndex = currentSpineIndex;
       cachedChapterTotalPageCount = section->pageCount;
       nextPageNumber = section->currentPage;
