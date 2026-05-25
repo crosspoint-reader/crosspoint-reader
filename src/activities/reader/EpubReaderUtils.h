@@ -91,6 +91,13 @@ inline std::optional<ReturnPoint> loadReturnPoint(const Epub& epub) {
   p.spineIndex = data[0] | (data[1] << 8);
   p.pageNumber = data[2] | (data[3] << 8);
   p.pageCount = data[4] | (data[5] << 8);
+  const int spineCount = epub.getSpineItemsCount();
+  if (p.spineIndex < 0 || p.spineIndex >= spineCount) {
+    LOG_DBG("ERS", "Return point spine %d out of range [0,%d); discarding", p.spineIndex, spineCount);
+    const bool removed = Storage.remove(path.c_str());
+    LOG_DBG("ERS", "Stale return point removed=%d", removed);
+    return std::nullopt;
+  }
   LOG_DBG("ERS", "Return point loaded: spine=%d page=%d", p.spineIndex, p.pageNumber);
   return p;
 }
