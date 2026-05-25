@@ -290,6 +290,9 @@ TEST(ReleaseJsonParser, ChunkedFeedingVariousChunkSizes) {
     EXPECT_TRUE(p.foundTag()) << "chunkSize=" << chunkSize;
     EXPECT_TRUE(p.foundFirmware()) << "chunkSize=" << chunkSize;
     EXPECT_STREQ(p.getTagName(), "v2.4.1") << "chunkSize=" << chunkSize;
+    EXPECT_STREQ(p.getFirmwareUrl(),
+                 "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin")
+        << "chunkSize=" << chunkSize;
     EXPECT_EQ(p.getFirmwareSize(), 1572864u) << "chunkSize=" << chunkSize;
   }
 }
