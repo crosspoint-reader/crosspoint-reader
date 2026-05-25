@@ -67,7 +67,7 @@ bool WifiCredentialStore::loadFromFile() {
 }
 
 bool WifiCredentialStore::loadFromBinaryFile() {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("WCS", WIFI_FILE_BIN, file)) {
     return false;
   }

@@ -29,7 +29,8 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
   constexpr size_t chunkSize = 1024;
 
   while (remaining > 0) {
-    void* const buf = XML_GetBuffer(parser, chunkSize);
+    const size_t toRead = remaining < chunkSize ? remaining : chunkSize;
+    void* const buf = XML_GetBuffer(parser, toRead);
     if (!buf) {
       errorOccured = true;
       LOG_DBG("OPDS", "Couldn't allocate memory for buffer");
@@ -37,7 +38,6 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
       return length;
     }
 
-    const size_t toRead = remaining < chunkSize ? remaining : chunkSize;
     memcpy(buf, currentPos, toRead);
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), 0) == XML_STATUS_ERROR) {

@@ -179,7 +179,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (Storage.exists(destPath.c_str())) {
     Storage.remove(destPath.c_str());
   }
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
     LOG_ERR("HTTP", "Failed to open file for writing");
     return FILE_ERROR;
