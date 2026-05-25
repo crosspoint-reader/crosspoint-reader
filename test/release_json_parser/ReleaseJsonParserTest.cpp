@@ -153,6 +153,11 @@ TEST(ReleaseJsonParser, PrettyAndMinifiedAgree) {
   ReleaseJsonParser minified;
   minified.feed(kRealisticMinified, strlen(kRealisticMinified));
 
+  ASSERT_TRUE(pretty.foundTag());
+  ASSERT_TRUE(pretty.foundFirmware());
+  ASSERT_TRUE(minified.foundTag());
+  ASSERT_TRUE(minified.foundFirmware());
+
   EXPECT_STREQ(pretty.getTagName(), minified.getTagName());
   EXPECT_STREQ(pretty.getFirmwareUrl(), minified.getFirmwareUrl());
   EXPECT_EQ(pretty.getFirmwareSize(), minified.getFirmwareSize());
