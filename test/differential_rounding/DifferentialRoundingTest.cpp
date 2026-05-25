@@ -177,10 +177,10 @@ TEST(EpdFont, KernLookup) {
 }
 
 TEST(EpdFont, GlyphLookup) {
-  EXPECT_NE(testFont().getGlyph('T'), nullptr);
-  EXPECT_NE(testFont().getGlyph('a'), nullptr);
-  EXPECT_NE(testFont().getGlyph('o'), nullptr);
-  EXPECT_NE(testFont().getGlyph('x'), nullptr);
+  ASSERT_NE(testFont().getGlyph('T'), nullptr);
+  ASSERT_NE(testFont().getGlyph('a'), nullptr);
+  ASSERT_NE(testFont().getGlyph('o'), nullptr);
+  ASSERT_NE(testFont().getGlyph('x'), nullptr);
   EXPECT_EQ(testFont().getGlyph('T')->advanceX, 137);
   EXPECT_EQ(testFont().getGlyph('a')->advanceX, 130);
   EXPECT_EQ(testFont().getGlyph('o')->advanceX, 145);
