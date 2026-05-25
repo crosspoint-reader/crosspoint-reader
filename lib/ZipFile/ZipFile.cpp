@@ -559,3 +559,14 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   LOG_ERR("ZIP", "Unsupported compression method");
   return false;
 }
+
+std::vector<std::string> ZipFile::getFilePaths() const {
+  std::vector<std::string> files;
+  files.reserve(fileStatSlimCache.size());
+
+  for (const auto& entry : fileStatSlimCache) {
+    files.push_back(entry.first);
+  }
+
+  return files;
+}
