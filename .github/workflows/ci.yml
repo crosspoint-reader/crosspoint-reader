@@ -118,7 +118,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/test/_deps/googletest-src
-          key: ${{ runner.os }}-googletest-v1.15.2
+          key: ${{ runner.os }}-googletest-${{ hashFiles('test/CMakeLists.txt') }}
 
       - name: Configure
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
