@@ -116,11 +116,11 @@ class CrossPointSettings {
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
     SLEEP_1_MIN = 0,
-    SLEEP_5_MIN = 1,
-    SLEEP_10_MIN = 2,
-    SLEEP_15_MIN = 3,
-    SLEEP_30_MIN = 4,
-    SLEEP_3_MIN = 5,
+    SLEEP_3_MIN = 1,
+    SLEEP_5_MIN = 2,
+    SLEEP_10_MIN = 3,
+    SLEEP_15_MIN = 4,
+    SLEEP_30_MIN = 5,
     SLEEP_TIMEOUT_COUNT
   };
 
