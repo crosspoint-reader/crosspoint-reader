@@ -70,7 +70,10 @@ class EpubReaderActivity final : public Activity {
   void pageTurn(bool isForwardTurn);
   void addBookmark();
 
-  void captureReturnPointIfAbsent(int spineIndex, int pageNumber, int pageCount);
+  // Caller must hold RenderLock.
+  std::optional<EpubReaderUtils::ReturnPoint> captureReturnPointIfAbsent(int spineIndex, int pageNumber, int pageCount);
+  // Caller must NOT hold RenderLock.
+  void persistReturnPointToSd(const EpubReaderUtils::ReturnPoint& point);
   void clearReturnPoint();
   std::string exploreMenuLabel() const;
 
