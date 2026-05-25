@@ -129,7 +129,8 @@ TEST(ReleaseJsonParser, RealisticPrettyPrinted) {
   EXPECT_TRUE(p.foundTag());
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
-  EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+  EXPECT_STREQ(p.getFirmwareUrl(),
+               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -140,7 +141,8 @@ TEST(ReleaseJsonParser, RealisticMinified) {
   EXPECT_TRUE(p.foundTag());
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
-  EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+  EXPECT_STREQ(p.getFirmwareUrl(),
+               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -260,7 +262,8 @@ TEST(ReleaseJsonParser, ChunkedFeedingSmallChunks) {
   EXPECT_TRUE(p.foundTag());
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
-  EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+  EXPECT_STREQ(p.getFirmwareUrl(),
+               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
