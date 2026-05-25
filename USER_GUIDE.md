@@ -480,14 +480,16 @@ Press **Confirm** while reading to open the Reader Menu. From here you can acces
 
 Available options include:
 
-- **Chapters** – Open the chapter/table of contents list to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
-- **Go to Position** – Jump to a specific position in the book by percentage.
-- **Auto Page Turn** – Enable or configure automatic page turning.
-- **Quick Rotate** – Change screen orientation without leaving the reader.
-- **Take Screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
+- **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
+- **Footnotes** – Navigate to the footnotes for the current section *(only shown in books that contain footnotes)*.
+- **Reading Orientation** – Cycle through screen orientations without leaving the reader.
+- **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
+- **Go to %** – Jump to a specific position in the book by percentage.
+- **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
+- **Show page as QR** – Display a QR code encoding the current reading position.
+- **Go Home** – Close the book and return to the Home screen.
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
-- **QR Code** – Display a QR code encoding the current reading position.
-- **Delete Cache** – Clear the cached layout data for the current book, forcing a re-index.
+- **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
 
 Press **Back** at any time to close the menu and return to your current page.
 
