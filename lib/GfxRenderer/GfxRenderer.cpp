@@ -12,8 +12,6 @@
 
 namespace {
 
-const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
-
 /**
  * Resolves the requested style to the best available style in the given SD card font.
  * Falls back gracefully when the font lacks the requested variant.

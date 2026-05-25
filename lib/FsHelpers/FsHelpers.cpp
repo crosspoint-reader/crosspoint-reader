@@ -59,8 +59,6 @@ void sortFileList(std::vector<std::string>& strs) {
       // Check if both are at the start of a number
       if (isdigit(*s1) && isdigit(*s2)) {
         // Skip leading zeros and track them
-        const char* start1 = s1;
-        const char* start2 = s2;
         while (*s1 == '0') s1++;
         while (*s2 == '0') s2++;
 
