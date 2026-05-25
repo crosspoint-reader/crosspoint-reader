@@ -387,6 +387,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
           LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
           // continue anyway - book will work without CSS and we'll still load any inline style CSS
+        } else {
+          // Handle case where CSS files are not listed in OPF manifest
+          // but are still referenced by HTML files - discover and parse them too
+          discoverCssFilesFromZip();
         }
         parseCssFiles();
         // Invalidate section caches so they are rebuilt with the new CSS
