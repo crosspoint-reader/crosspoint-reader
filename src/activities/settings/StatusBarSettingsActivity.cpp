@@ -22,7 +22,6 @@ enum MenuItem {
   ITEM_BOOK_PROGRESS_PERCENTAGE,
   ITEM_PROGRESS_BAR,
   ITEM_PROGRESS_BAR_THICKNESS,
-  ITEM_PROGRESS_BAR_FILL_BEZEL,
   ITEM_TITLE,
   ITEM_BATTERY,
   ITEM_XTC_STATUS_BAR,
@@ -41,7 +40,6 @@ const StrId menuNames[FULL_MENU_ITEMS] = {
     StrId::STR_BOOK_PROGRESS_PERCENTAGE,
     StrId::STR_PROGRESS_BAR,
     StrId::STR_PROGRESS_BAR_THICKNESS,
-    StrId::STR_PROGRESS_BAR_FILL_BEZEL,
     StrId::STR_TITLE,
     StrId::STR_BATTERY,
     StrId::STR_XTC_STATUS_BAR,
@@ -168,9 +166,6 @@ void StatusBarSettingsActivity::handleSelection() {
       SETTINGS.statusBarProgressBarThickness =
           (SETTINGS.statusBarProgressBarThickness + 1) % PROGRESS_BAR_THICKNESS_ITEMS;
       break;
-    case ITEM_PROGRESS_BAR_FILL_BEZEL:
-      SETTINGS.statusBarProgressBarFillBezel = (SETTINGS.statusBarProgressBarFillBezel + 1) % 2;
-      break;
     case ITEM_TITLE:
       SETTINGS.statusBarTitle = (SETTINGS.statusBarTitle + 1) % TITLE_ITEMS;
       break;
@@ -223,8 +218,6 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
             return I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
           case ITEM_PROGRESS_BAR_THICKNESS:
             return I18N.get(progressBarThicknessNames[SETTINGS.statusBarProgressBarThickness]);
-          case ITEM_PROGRESS_BAR_FILL_BEZEL:
-            return SETTINGS.statusBarProgressBarFillBezel ? tr(STR_YES) : tr(STR_NO);
           case ITEM_TITLE:
             return I18N.get(titleNames[SETTINGS.statusBarTitle]);
           case ITEM_BATTERY:
@@ -258,7 +251,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
     title = tr(STR_EXAMPLE_CHAPTER);
   }
 
-  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding);
+  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding, 0, false);
 
   renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding,
                     renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() - verticalPreviewPadding -
