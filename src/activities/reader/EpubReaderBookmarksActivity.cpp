@@ -100,8 +100,7 @@ void EpubReaderBookmarksActivity::loop() {
       return;
     }
     auto bookmark = bookmarks.at(selectorIndex);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer, -1, 0,
-                                                          bookmark.cachedChapterPageCount);
+    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
     setResult(ProgressChangeResult{pos.spineIndex, pos.pageNumber});
     finish();
     return;
@@ -177,12 +176,11 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   };
   const auto getBookmarkSubtitle = [this](int index) {
     auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer, -1, 0,
-                                                          bookmark.cachedChapterPageCount);
+    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
     auto tocIndex = epub->getTocIndexForSpineIndex(pos.spineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-    return std::to_string((int)bookmark.percentage) + "% - " + std::to_string(bookmark.cachedChapterProgress) + "/" +
-           std::to_string(bookmark.cachedChapterPageCount) + " - " + tocTitle;
+    return std::to_string((int)bookmark.percentage) + "% - " + std::to_string(pos.pageNumber) + "/" +
+           std::to_string(pos.totalPages) + " - " + tocTitle;
   };
   const auto getBookmarkIcon = [isPortrait](int index) {
     // only enabled icon in portrait mode due to limitation with rotating icons for other orientations

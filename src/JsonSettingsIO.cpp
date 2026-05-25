@@ -406,8 +406,6 @@ bool JsonSettingsIO::saveBookmarks(const std::vector<BookmarkEntry>& bookmarks, 
     JsonObject obj = arr.add<JsonObject>();
     obj["xpath"] = bookmark.xpath;
     obj["percentage"] = bookmark.percentage;
-    obj["cachedChapterPageCount"] = bookmark.cachedChapterPageCount;
-    obj["cachedChapterProgress"] = bookmark.cachedChapterProgress;
     obj["summary"] = bookmark.summary;
   }
 
@@ -433,8 +431,6 @@ bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const 
     bookmark.xpath = obj["xpath"] | std::string("");
     bookmark.percentage = obj["percentage"] | static_cast<float>(0);
     bookmark.summary = obj["summary"] | std::string("");
-    bookmark.cachedChapterPageCount = obj["cachedChapterPageCount"] | static_cast<uint16_t>(0);
-    bookmark.cachedChapterProgress = obj["cachedChapterProgress"] | static_cast<uint16_t>(0);
   }
 
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
