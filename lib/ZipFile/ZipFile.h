@@ -39,7 +39,7 @@ class ZipFile {
 
  private:
   const std::string& filePath;
-  FsFile file;
+  HalFile file;
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
