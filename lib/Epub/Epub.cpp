@@ -254,6 +254,40 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
+void Epub::discoverCssFilesFromZip() {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "Cannot discover CSS from ZIP because book metadata cache is not loaded");
+    return;
+  }
+
+  ZipFile zf(filepath);
+
+  if (!zf.loadAllFileStatSlims()) {
+    LOG_ERR("EBP", "Failed to load ZIP file stat slims for CSS discovery");
+    return;
+  }
+
+  const auto allFiles = zf.getFilePaths();
+
+  size_t lastSlash = contentBasePath.find_last_of('/');
+
+  std::string opfDir = (lastSlash != std::string::npos) ? contentBasePath.substr(0, lastSlash + 1) : "";
+
+  for (const auto& filePath : allFiles) {
+    if (!opfDir.empty() && filePath.find(opfDir) != 0) {
+      continue;  // Skip files that are not in the same directory as content.opf, as CSS files are typically located
+                 // there or in subfolders
+    }
+
+    if (FsHelpers::hasCssExtension(filePath)) {
+      if (std::find(cssFiles.begin(), cssFiles.end(), filePath) == cssFiles.end()) {
+        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %s", filePath.c_str());
+        cssFiles.push_back(filePath);
+      }
+    }
+  }
+}
+
 void Epub::parseCssFiles() const {
   // Maximum CSS file size we'll attempt to parse (uncompressed)
   // Larger files risk memory exhaustion on ESP32
@@ -456,6 +490,9 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
 
   if (!skipLoadingCss) {
+    // Handle case where CSS files are not listed in OPF manifest
+    // but are still referenced by HTML files - discover and parse them too
+    discoverCssFilesFromZip();
     // Parse CSS files after cache reload
     parseCssFiles();
     Storage.removeDir((cachePath + "/sections").c_str());
