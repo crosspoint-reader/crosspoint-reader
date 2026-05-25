@@ -768,8 +768,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
-    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, ((SETTINGS.statusBarProgressBarThickness + 1) * 2),
-                      true);
+    const int barHeight = ((SETTINGS.statusBarProgressBarThickness + 1) * 2) +
+                          (SETTINGS.statusBarProgressBarFillBezel ? orientedMarginBottom : 0);
+    renderer.fillRect(orientedMarginLeft, progressBarY, barWidth, barHeight, true);
   }
 
   // Draw Battery
