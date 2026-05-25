@@ -113,7 +113,6 @@ A **WiFi signal strength indicator** (dBm) is displayed on-screen during web ser
 
 > [!TIP]
 > Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
-
 > [!TIP]
 > If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
 
