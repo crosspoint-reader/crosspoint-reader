@@ -161,6 +161,12 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 
 **Usage**: See example above. Uses `FsFile` (SdFat), NOT Arduino `File`. Do NOT add `file.close()` for local variables (see DESTRUCTOR_CLOSES_FILE above).
 
+**SdFat is not thread-safe; all SD access MUST go through HalStorage**:
+- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert (`tasks.c:5156, pxTCB == pxCurrentTCBs[0]`) and panics the system. See SdFat issue #518.
+- `HalStorage` serializes everything via `storageMutex`. Downstream code includes `<HalStorage.h>`, which transparently `using FsFile = HalFile;`; every method call (read, write, seek, close) takes the mutex. `HalFile`'s destructor also takes the mutex before letting the underlying SdFat `FsFile` close.
+- **Never** call into `SdFat` / `SdSpiCard` / `FsBaseFile` / `SDCardManager` directly. **Never** define `HAL_STORAGE_IMPL` outside `HalStorage.cpp`; that disables the `FsFile -> HalFile` typedef and you'll get a raw SdFat handle that bypasses the mutex.
+- If you're storing a raw `FsFile` in a place that won't transitively include `<HalStorage.h>` (rare), include the header explicitly so the typedef applies.
+
 ---
 
 ## Coding Standards
