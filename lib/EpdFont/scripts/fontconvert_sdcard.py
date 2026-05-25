@@ -59,12 +59,14 @@ INTERVAL_PRESETS = {
                     (0x2190, 0x21FF), (0x2200, 0x22FF), (0x2500, 0x257F),
                     (0x25A0, 0x25FF), (0x2600, 0x26FF), (0x2700, 0x27BF)],
     # Composite preset for English-language literary fiction including scifi/popsci.
-    # Greek for physics terms, math operators, miscellaneous symbols (♪♫♬), dingbats.
+    # Greek for physics terms, math operators, geometric shapes, uncommon
+    # dialogue punctuation, CJK quote marks, miscellaneous symbols (♪♫♬), dingbats.
     "reading":     [(0x0020, 0x024F), (0x0300, 0x036F), (0x0370, 0x03FF),
                     (0x0400, 0x04FF), (0x1E00, 0x1EFF), (0x2000, 0x206F),
                     (0x2070, 0x209F), (0x20A0, 0x20CF), (0x2150, 0x218F),
                     (0x2190, 0x21FF), (0x2200, 0x22FF), (0x2500, 0x257F),
                     (0x25A0, 0x25FF), (0x2600, 0x26FF), (0x2700, 0x27BF),
+                    (0x2900, 0x29FF), (0x2E00, 0x2E7F), (0x3000, 0x303F),
                     (0xFB00, 0xFB06)],
     # Matches the built-in font intervals from fontconvert.py exactly
     "builtin":     [(0x0000, 0x007F), (0x0080, 0x00FF), (0x0100, 0x017F),

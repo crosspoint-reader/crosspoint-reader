@@ -61,29 +61,29 @@ struct TocEntry {
 struct BookBin {
     // Header
     u8 version [[comment("Format version"), color("FFD93D")]];
-    
+
     // Version validation
     if (version != EXPECTED_VERSION) {
         std::error(std::format("Unsupported version: {} (expected {})", version, EXPECTED_VERSION));
     }
-    
+
     u32 lutOffset [[comment("Offset to lookup tables"), color("6BCB77")]];
     u16 spineCount [[comment("Number of spine entries"), color("4D96FF")]];
     u16 tocCount [[comment("Number of TOC entries"), color("FF6B9D")]];
-    
+
     // Metadata section
     Metadata metadata [[comment("Book metadata")]];
-    
+
     // Validate LUT offset alignment
     u32 currentOffset = $;
     if (currentOffset != lutOffset) {
         std::warning(std::format("LUT offset mismatch: expected 0x{:X}, got 0x{:X}", lutOffset, currentOffset));
     }
-    
+
     // Lookup Tables
     u32 spineLut[spineCount] [[comment("Spine entry offsets"), color("4D96FF")]];
     u32 tocLut[tocCount] [[comment("TOC entry offsets"), color("FF6B9D")]];
-    
+
     // Data Entries
     SpineEntry spines[spineCount] [[comment("Spine entries (reading order)")]];
     TocEntry toc[tocCount] [[comment("Table of contents entries")]];
@@ -104,7 +104,7 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 8
+### Version 24
 
 ImHex Pattern:
 
@@ -114,7 +114,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 8
+#define EXPECTED_VERSION 24
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -133,8 +133,10 @@ fn format_string(String s) {
 
 // === Page Structure ===
 
-enum StorageType : u8 {
-    PageLine = 1
+enum PageElementTag : u8 {
+    PageLine = 1,
+    PageImage = 2,
+    PageHorizontalRule = 3
 };
 
 enum WordStyle : u8 {
@@ -161,10 +163,29 @@ struct PageLine {
   BlockStyle blockStyle;
 };
 
+struct PageImage {
+    s16 xPos;
+    s16 yPos;
+    String imagePath;
+    s16 width;
+    s16 height;
+};
+
+struct PageHorizontalRule {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u8 thickness;
+};
+
 struct PageElement {
     u8 pageElementType;
     if (pageElementType == 1) {
         PageLine pageLine [[inline]];
+    } else if (pageElementType == 2) {
+        PageImage pageImage [[inline]];
+    } else if (pageElementType == 3) {
+        PageHorizontalRule horizontalRule [[inline]];
     } else {
         std::error(std::format("Unknown page element type: {}", pageElementType));
     }
@@ -180,12 +201,12 @@ struct Page {
 struct SectionBin {
     // Header
     u8 version [[comment("Format version"), color("FFD93D")]];
-    
+
     // Version validation
     if (version != EXPECTED_VERSION) {
         std::error(std::format("Unsupported version: {} (expected {})", version, EXPECTED_VERSION));
     }
-    
+
     // Cache busting parameters
     s32 fontId;
     float lineCompression;
@@ -194,15 +215,15 @@ struct SectionBin {
     u16 vieportHeight;
     u16 pageCount;
     u32 lutOffset;
-    
+
     Page page[pageCount];
-    
+
     // Validate LUT offset alignment
     u32 currentOffset = $;
     if (currentOffset != lutOffset) {
         std::warning(std::format("LUT offset mismatch: expected 0x{:X}, got 0x{:X}", lutOffset, currentOffset));
     }
-    
+
     // Lookup Tables
     u32 lut[pageCount];
 };

@@ -88,7 +88,12 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 
   // Display a border around the screen to indicate a screenshot was taken
   if (renderer.storeBwBuffer()) {
-    renderer.drawRect(6, 6, renderer.getDisplayHeight() - 12, renderer.getDisplayWidth() - 12, 2, true);
+    int marginTop, marginRight, marginBottom, marginLeft;
+    renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
+    int width = renderer.getScreenWidth() - marginLeft - marginRight - 1;
+    int height = renderer.getScreenHeight() - marginTop - marginBottom - 1;
+    // Add extra margin to the border to make it more visible
+    renderer.drawRect(marginLeft + 1, marginTop + 1, width - 2, height - 2, 2, true);
     renderer.displayBuffer();
     delay(1000);
     renderer.restoreBwBuffer();
