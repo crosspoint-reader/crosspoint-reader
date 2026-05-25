@@ -39,6 +39,14 @@ void EpubReaderBookmarksActivity::onEnter() {
       bookmarks.shrink_to_fit();
     } else {
       JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
+
+      // pre-compute bookmark page values for quicker rendering
+      for (auto& bookmark : bookmarks) {
+        CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
+        bookmark.computedSpineIndex = pos.spineIndex;
+        bookmark.computedChapterPageCount = pos.totalPages;
+        bookmark.computedChapterProgress = pos.pageNumber;
+      }
     }
   } else {
     LOG_DBG("EPB", "No bookmark file found at %s, starting with empty bookmarks", path.c_str());
@@ -176,11 +184,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   };
   const auto getBookmarkSubtitle = [this](int index) {
     auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
-    auto tocIndex = epub->getTocIndexForSpineIndex(pos.spineIndex);
+    auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.computedSpineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-    return std::to_string((int)bookmark.percentage) + "% - " + std::to_string(pos.pageNumber) + "/" +
-           std::to_string(pos.totalPages) + " - " + tocTitle;
+    return std::to_string((int)bookmark.percentage) + "% - " + std::to_string(bookmark.computedChapterProgress) + "/" +
+           std::to_string(bookmark.computedChapterPageCount) + " - " + tocTitle;
   };
   const auto getBookmarkIcon = [isPortrait](int index) {
     // only enabled icon in portrait mode due to limitation with rotating icons for other orientations
