@@ -556,6 +556,7 @@
 
     try {
       const response = await fetch('/api/settings', {
+        credentials: 'same-origin',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes)
@@ -632,7 +633,7 @@
 
   async function loadWifiNetworks() {
     try {
-      const resp = await fetch('/api/wifi');
+      const resp = await fetch('/api/wifi', { credentials: 'same-origin' });
       if (!resp.ok) throw new Error('Failed to load');
       wifiNetworks = await resp.json();
       renderWifiSection();
@@ -667,6 +668,7 @@
 
     try {
       const resp = await fetch('/api/wifi', {
+        credentials: 'same-origin',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
@@ -683,6 +685,7 @@
     if (!confirm('Delete this Wi-Fi network?')) return;
     try {
       const resp = await fetch('/api/wifi/delete', {
+        credentials: 'same-origin',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({index: idx})
@@ -748,7 +751,7 @@
 
   async function loadOpdsServers() {
     try {
-      const resp = await fetch('/api/opds');
+      const resp = await fetch('/api/opds', { credentials: 'same-origin' });
       if (!resp.ok) throw new Error('Failed to load');
       opdsServers = await resp.json();
       renderOpdsSection();
@@ -781,6 +784,7 @@
 
     try {
       const resp = await fetch('/api/opds', {
+        credentials: 'same-origin',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
@@ -797,6 +801,7 @@
     if (!confirm('Delete this OPDS server?')) return;
     try {
       const resp = await fetch('/api/opds/delete', {
+        credentials: 'same-origin',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({index: idx})

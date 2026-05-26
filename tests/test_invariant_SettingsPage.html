@@ -101,6 +101,11 @@ START_TEST(test_unauthenticated_requests_rejected)
      * Invariant: Every request to a protected API endpoint that lacks
      * valid authentication credentials MUST receive HTTP 401 or 403.
      * A 200 response means the endpoint is unprotected (CWE-287).
+     *
+     * NOTE: Only GET-capable endpoints are tested here. POST-only routes
+     * (e.g. /api/wifi/delete) are covered by
+     * test_write_endpoints_reject_unauthenticated_post to avoid false
+     * confidence from a 405 Method Not Allowed masking an auth bypass.
      */
 
     /* Pairs of { endpoint, Authorization header (empty string = omit) } */
@@ -112,13 +117,11 @@ START_TEST(test_unauthenticated_requests_rejected)
         /* --- No credentials at all --- */
         { "/api/settings",      "",                                          "no auth – /api/settings"           },
         { "/api/wifi",          "",                                          "no auth – /api/wifi"               },
-        { "/api/wifi/delete",   "",                                          "no auth – /api/wifi/delete"        },
         { "/api/files",         "",                                          "no auth – /api/files"              },
 
         /* --- Malformed / garbage tokens --- */
         { "/api/settings",      "Authorization: Bearer INVALID_TOKEN",       "bad bearer – /api/settings"        },
         { "/api/wifi",          "Authorization: Bearer !!GARBAGE!!",         "garbage bearer – /api/wifi"        },
-        { "/api/wifi/delete",   "Authorization: Bearer ",                    "empty bearer – /api/wifi/delete"   },
         { "/api/files",         "Authorization: Bearer null",                "null bearer – /api/files"          },
 
         /* --- Expired / obviously fake JWT-like tokens --- */
@@ -148,7 +151,6 @@ START_TEST(test_unauthenticated_requests_rejected)
         /* --- Cookie-based attack payloads (no valid session) --- */
         { "/api/settings",      "Cookie: session=",                          "empty session cookie – /api/settings" },
         { "/api/wifi",          "Cookie: session=FORGED_SESSION_ID",         "forged session – /api/wifi"           },
-        { "/api/wifi/delete",   "Cookie: session=../../../../etc/passwd",    "path-traversal session – /api/wifi/delete" },
 
         /* --- X-API-Key style attacks --- */
         { "/api/settings",      "X-API-Key: 00000000-0000-0000-0000-000000000000", "null UUID api key – /api/settings" },
@@ -156,6 +158,7 @@ START_TEST(test_unauthenticated_requests_rejected)
     };
 
     int num_cases = (int)(sizeof(cases) / sizeof(cases[0]));
+    int verified_cases = 0;
 
     for (int i = 0; i < num_cases; i++) {
         char request[BUFFER_SIZE];
@@ -182,6 +185,8 @@ START_TEST(test_unauthenticated_requests_rejected)
             continue;
         }
 
+        verified_cases++;
+
         fprintf(stderr,
                 "[INFO] %s  =>  HTTP %d\n",
                 cases[i].description, status);
@@ -205,6 +210,12 @@ START_TEST(test_unauthenticated_requests_rejected)
             cases[i].path, status, cases[i].description
         );
     }
+
+    ck_assert_msg(verified_cases > 0,
+        "SECURITY TEST INCONCLUSIVE: zero cases were verified "
+        "(server unreachable or all communications failed). "
+        "Run this test with the device accessible at %s:%d.",
+        SERVER_HOST, SERVER_PORT);
 }
 END_TEST
 
@@ -227,7 +238,7 @@ START_TEST(test_write_endpoints_reject_unauthenticated_post)
           "{\"ssid\":\"evil\",\"password\":\"evil123\"}",
           "POST /api/wifi no auth"                        },
         { "/api/wifi/delete",
-          "{\"ssid\":\"target_network\"}",
+          "{\"index\":0}",
           "POST /api/wifi/delete no auth"                 },
         { "/api/settings",
           "{\"admin_password\":\"hacked\"}",
@@ -238,6 +249,7 @@ START_TEST(test_write_endpoints_reject_unauthenticated_post)
     };
 
     int num_cases = (int)(sizeof(post_cases) / sizeof(post_cases[0]));
+    int verified_cases = 0;
 
     for (int i = 0; i < num_cases; i++) {
         char request[BUFFER_SIZE];
@@ -269,6 +281,8 @@ START_TEST(test_write_endpoints_reject_unauthenticated_post)
             continue;
         }
 
+        verified_cases++;
+
         fprintf(stderr,
                 "[INFO] %s  =>  HTTP %d\n",
                 post_cases[i].description, status);
@@ -281,6 +295,12 @@ START_TEST(test_write_endpoints_reject_unauthenticated_post)
             post_cases[i].path, status, post_cases[i].description
         );
     }
+
+    ck_assert_msg(verified_cases > 0,
+        "SECURITY TEST INCONCLUSIVE: zero cases were verified "
+        "(server unreachable or all communications failed). "
+        "Run this test with the device accessible at %s:%d.",
+        SERVER_HOST, SERVER_PORT);
 }
 END_TEST
 
