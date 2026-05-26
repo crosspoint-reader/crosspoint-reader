@@ -279,7 +279,7 @@ void Epub::discoverCssFilesFromZip() {
 
     if (FsHelpers::hasCssExtension(filePath)) {
       if (std::find(cssFiles.begin(), cssFiles.end(), filePath) == cssFiles.end()) {
-        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %s", filePath.data());
+        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %.*s", (int)filePath.size(), filePath.data());
         cssFiles.push_back(std::string{filePath});
       }
     }

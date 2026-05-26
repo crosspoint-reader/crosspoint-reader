@@ -559,9 +559,3 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   LOG_ERR("ZIP", "Unsupported compression method");
   return false;
 }
-
-void ZipFile::enumerateFilePaths(std::function<void(std::string_view)> callback) const {
-  for (const auto& entry : fileStatSlimCache) {
-    callback(entry.first);
-  }
-}
