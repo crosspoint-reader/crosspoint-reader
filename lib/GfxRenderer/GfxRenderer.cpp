@@ -133,14 +133,10 @@ enum class TextRotation { None, Rotated90CW };
 
 // Shared glyph rendering logic for normal and rotated text.
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
-// Render a glyph at 50% scale via nearest-neighbor sampling. Used for SUP/SUB style bits.
+// Render a glyph at 50% scale. Used for SUP/SUB style bits.
 //
-// Nearest-neighbor is chosen deliberately: at 50% every source pixel maps cleanly to one
-// destination pixel (srcX = dstX*2, srcY = dstY*2), so there is no blending and no new
-// gray levels are introduced — important for 1-bit BW rendering.
-//
-// For 2-bit (anti-aliased) fonts only raw values >= 2 (dark-gray and black) are drawn.
-// Dropping the light-gray level keeps small glyphs crisp rather than muddy.
+// Each destination pixel represents a 2x2 source block. Drawing when that block
+// contains ink preserves thin strokes that nearest-neighbor sampling can skip.
 //
 // The advance width is also halved in drawText() so layout reserves exactly the right
 // horizontal space for the scaled glyph.
@@ -170,10 +166,18 @@ static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMod
       const int srcY = dstY * 2;
       for (int dstX = 0; dstX < dstW; dstX++) {
         const int srcX = dstX * 2;
-        const int pos = srcY * srcW + srcX;
-        const uint8_t byte = bitmap[pos >> 2];
-        const uint8_t raw = (byte >> ((3 - (pos & 3)) * 2)) & 0x3;
-        if (raw >= 2) {  // threshold: skip light-gray, draw dark-gray and black
+        uint8_t coverage = 0;
+        uint8_t maxRaw = 0;
+        for (int sampleY = 0; sampleY < 2 && srcY + sampleY < srcH; sampleY++) {
+          for (int sampleX = 0; sampleX < 2 && srcX + sampleX < srcW; sampleX++) {
+            const int pos = (srcY + sampleY) * srcW + srcX + sampleX;
+            const uint8_t byte = bitmap[pos >> 2];
+            const uint8_t raw = (byte >> ((3 - (pos & 3)) * 2)) & 0x3;
+            coverage += raw;
+            if (raw > maxRaw) maxRaw = raw;
+          }
+        }
+        if (maxRaw >= 2 || coverage >= 2) {
           renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
         }
       }
@@ -184,10 +188,18 @@ static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMod
       const int srcY = dstY * 2;
       for (int dstX = 0; dstX < dstW; dstX++) {
         const int srcX = dstX * 2;
-        const int pos = srcY * srcW + srcX;
-        const uint8_t byte = bitmap[pos >> 3];
-        const uint8_t bit = 7 - (pos & 7);
-        if ((byte >> bit) & 1) {
+        bool hasInk = false;
+        for (int sampleY = 0; sampleY < 2 && srcY + sampleY < srcH; sampleY++) {
+          for (int sampleX = 0; sampleX < 2 && srcX + sampleX < srcW; sampleX++) {
+            const int pos = (srcY + sampleY) * srcW + srcX + sampleX;
+            const uint8_t byte = bitmap[pos >> 3];
+            const uint8_t bit = 7 - (pos & 7);
+            if ((byte >> bit) & 1) {
+              hasInk = true;
+            }
+          }
+        }
+        if (hasInk) {
           renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
         }
       }
