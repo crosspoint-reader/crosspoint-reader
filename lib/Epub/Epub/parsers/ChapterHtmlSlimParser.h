@@ -79,6 +79,12 @@ class ChapterHtmlSlimParser {
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
+  // Set when an OOM during parsing leaves the parser in an unrecoverable state
+  // (e.g. startNewTextBlock couldn't allocate a ParsedText). XML callbacks short-
+  // circuit when set, and parseAndBuildPages() returns false instead of producing
+  // a partial document.
+  bool oomAborted = false;
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;

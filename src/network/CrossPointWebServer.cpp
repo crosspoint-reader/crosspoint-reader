@@ -197,17 +197,20 @@ void CrossPointWebServer::begin() {
 
   server->begin();
 
-  // Start WebSocket server for fast binary uploads
+  // Start WebSocket server for fast binary uploads. If allocation fails we leave
+  // wsServer null and keep HTTP serving alive — binary uploads silently unavailable
+  // until the next restart. Downstream sites (stop(), loop(), and the event
+  // handler — only reachable via wsServer->onEvent) already null-guard.
   LOG_DBG("WEB", "Starting WebSocket server on port %d...", wsPort);
   wsServer = makeUniqueNoThrow<WebSocketsServer>(wsPort);
-  if (!wsServer) {
-    LOG_ERR("WEB", "OOM: WebSocketsServer (binary uploads unavailable)");
-    return;
+  if (wsServer) {
+    wsInstance = const_cast<CrossPointWebServer*>(this);
+    wsServer->begin();
+    wsServer->onEvent(wsEventCallback);
+    LOG_DBG("WEB", "WebSocket server started");
+  } else {
+    LOG_ERR("WEB", "OOM: WebSocketsServer (binary uploads disabled, HTTP still up)");
   }
-  wsInstance = const_cast<CrossPointWebServer*>(this);
-  wsServer->begin();
-  wsServer->onEvent(wsEventCallback);
-  LOG_DBG("WEB", "WebSocket server started");
 
   udpActive = udp.begin(LOCAL_UDP_PORT);
   LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);

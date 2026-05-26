@@ -147,6 +147,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle);
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText (startNewTextBlock)");
+    oomAborted = true;
     return;
   }
   wordsExtractedInBlock = 0;
@@ -216,6 +217,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->oomAborted) return;
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
@@ -824,6 +826,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->oomAborted) return;
 
   // Skip content of nested table
   if (self->tableDepth > 1) {
@@ -1006,6 +1009,7 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->oomAborted) return;
 
   // Check if any style state will change after we decrement depth
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
@@ -1142,6 +1146,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   const auto align = rootBlockStyle.alignment;
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
+  if (oomAborted) {
+    LOG_ERR("EHP", "Aborting parse: initial ParsedText allocation failed");
+    return false;
+  }
 
   XML_Parser parser = XML_ParserCreate(nullptr);
   int done;
@@ -1199,11 +1207,16 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       file.close();
       return false;
     }
-  } while (!done);
+  } while (!done && !oomAborted);
   LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
 
   destroyXmlParser(parser);
   file.close();
+
+  if (oomAborted) {
+    LOG_ERR("EHP", "Aborting parse: OOM during XML processing");
+    return false;
+  }
 
   // Process last page if there is still text
   if (currentTextBlock) {
