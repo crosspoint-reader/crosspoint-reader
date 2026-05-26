@@ -184,7 +184,8 @@ def preprocess_callouts(text: str) -> str:
             title = kind.capitalize()
             body_lines = []
             i += 1
-            while i < len(lines) and lines[i].startswith('>'):
+            while i < len(lines) and lines[i].startswith('>') \
+                    and not re.match(r'^>\s*\[!', lines[i]):
                 body_lines.append(lines[i][1:].lstrip())
                 i += 1
             body = _html.escape('\n'.join(body_lines).strip())
