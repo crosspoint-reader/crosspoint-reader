@@ -119,6 +119,15 @@ bool isWordCharacter(uint32_t cp) {
   return true;
 }
 
+// Returns true if the last codepoint of a token is a hyphen or dash character,
+// indicating a valid break-after point even inside a focus-reading continuation group.
+// Recognized characters: ASCII hyphen '-', en-dash U+2013, em-dash U+2014, soft-hyphen U+00AD.
+bool endsWithBreakableHyphen(const std::string& token) {
+  if (token.empty()) return false;
+  const uint32_t cp = lastCodepoint(token);
+  return cp == '-' || cp == 0x2013 || cp == 0x2014 || cp == 0x00AD;
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -403,9 +412,13 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         break;
       }
 
-      // Cannot break after word j if the next word attaches to it (continuation group)
+      // Cannot break after word j if the next word attaches to it (continuation group).
+      // Exception: allow a break after tokens that end with a hyphen or dash (e.g. the "-"
+      // separators inside compound words split by Focus Reading like "Lord-Who-Is-Seen").
       if (j + 1 < totalWordCount && continuesVec[j + 1]) {
-        continue;
+        if (!focusReadingEnabled || !endsWithBreakableHyphen(words[j])) {
+          continue;
+        }
       }
 
       int cost;
@@ -536,7 +549,12 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
     // Don't break before a continuation word (e.g., orphaned "?" after "question").
     // Backtrack to the start of the continuation group so the whole group moves to the next line.
+    // Exception: stop backtracking at positions after a hyphen/dash token inside a focus group,
+    // since those are natural break points (e.g. "Lord-|Who-|Is-|Seen-|Within").
     while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() && continuesVec[currentIndex]) {
+      if (focusReadingEnabled && endsWithBreakableHyphen(words[currentIndex - 1])) {
+        break;
+      }
       --currentIndex;
     }
 
@@ -560,8 +578,22 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   const std::string& word = words[wordIndex];
   const auto style = wordStyles[wordIndex];
 
+  // When Focus Reading splits a word into bold-prefix + regular-suffix tokens (e.g. "cer" + "tainly"),
+  // the hyphenator would only see the suffix token in isolation, producing poor break points.
+  // Fix: reconstruct the full word for break-point analysis and then map offsets back to the suffix.
+  size_t focusPrefixBytes = 0;
+  std::string mergedWord;
+  if (focusReadingEnabled && wordIsFocusSuffix[wordIndex] && wordIndex > 0 &&
+      !wordIsFocusSuffix[wordIndex - 1]) {
+    // Merge the bold prefix (wordIndex-1) with this suffix to form the original word.
+    mergedWord = words[wordIndex - 1] + word;
+    focusPrefixBytes = words[wordIndex - 1].size();
+  }
+
+  const std::string& hyphenationSource = mergedWord.empty() ? word : mergedWord;
+
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
-  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  auto breakInfos = Hyphenator::breakOffsets(hyphenationSource, allowFallbackBreaks);
   if (breakInfos.empty()) {
     return false;
   }
@@ -573,18 +605,30 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
   for (const auto& info : breakInfos) {
     const size_t offset = info.byteOffset;
-    if (offset == 0 || offset >= word.size()) {
+    if (offset == 0 || offset >= hyphenationSource.size()) {
+      continue;
+    }
+
+    // When we merged a focus prefix, only consider break points that fall within the suffix
+    // portion (the prefix is already committed to the line).
+    if (focusPrefixBytes > 0 && offset <= focusPrefixBytes) {
+      continue;
+    }
+
+    // Map the offset back to the suffix-local position
+    const size_t localOffset = offset - focusPrefixBytes;
+    if (localOffset == 0 || localOffset >= word.size()) {
       continue;
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, offset), style, needsHyphen);
+    const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, localOffset), style, needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
     }
 
     chosenWidth = prefixWidth;
-    chosenOffset = offset;
+    chosenOffset = localOffset;
     chosenNeedsHyphen = needsHyphen;
   }
 
