@@ -583,8 +583,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Fix: reconstruct the full word for break-point analysis and then map offsets back to the suffix.
   size_t focusPrefixBytes = 0;
   std::string mergedWord;
-  if (focusReadingEnabled && wordIsFocusSuffix[wordIndex] && wordIndex > 0 &&
-      !wordIsFocusSuffix[wordIndex - 1]) {
+  if (focusReadingEnabled && wordIsFocusSuffix[wordIndex] && wordIndex > 0 && !wordIsFocusSuffix[wordIndex - 1]) {
     // Merge the bold prefix (wordIndex-1) with this suffix to form the original word.
     focusPrefixBytes = words[wordIndex - 1].size();
     mergedWord.reserve(focusPrefixBytes + word.size());
