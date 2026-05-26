@@ -187,7 +187,7 @@ def preprocess_callouts(text: str) -> str:
             while i < len(lines) and lines[i].startswith('>'):
                 body_lines.append(lines[i][1:].lstrip())
                 i += 1
-            body = '\n'.join(body_lines).strip()
+            body = _html.escape('\n'.join(body_lines).strip())
             out.append(
                 f'\n<div class="callout callout-{kind}">'
                 f'<div class="callout-title">{title}</div>'
