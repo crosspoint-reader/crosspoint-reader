@@ -586,8 +586,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   if (focusReadingEnabled && wordIsFocusSuffix[wordIndex] && wordIndex > 0 &&
       !wordIsFocusSuffix[wordIndex - 1]) {
     // Merge the bold prefix (wordIndex-1) with this suffix to form the original word.
-    mergedWord = words[wordIndex - 1] + word;
     focusPrefixBytes = words[wordIndex - 1].size();
+    mergedWord.reserve(focusPrefixBytes + word.size());
+    mergedWord.append(words[wordIndex - 1]);
+    mergedWord.append(word);
   }
 
   const std::string& hyphenationSource = mergedWord.empty() ? word : mergedWord;
