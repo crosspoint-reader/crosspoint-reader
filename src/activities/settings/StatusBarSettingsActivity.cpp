@@ -15,29 +15,30 @@
 #include "fontIds.h"
 
 namespace {
-// Menu items in their natural order. Clock entries are appended only when the
-// DS3231 RTC is present so X4 devices don't see them at all.
+// Menu items. Clock entries are appended only when the DS3231 RTC is present (X3).
 enum MenuItem {
   ITEM_CHAPTER_PAGE_COUNT = 0,
   ITEM_BOOK_PROGRESS_PERCENTAGE,
+  ITEM_STABLE_PAGES,
   ITEM_PROGRESS_BAR,
   ITEM_PROGRESS_BAR_THICKNESS,
   ITEM_TITLE,
   ITEM_BATTERY,
   ITEM_XTC_STATUS_BAR,
-  ITEM_CLOCK,             // X3 only
-  ITEM_CLOCK_FORMAT,      // X3 only
-  ITEM_CLOCK_UTC_OFFSET,  // X3 only, launches ClockOffsetActivity
-  ITEM_CLOCK_SYNC,        // X3 only, launches ClockSyncActivity
+  ITEM_CLOCK,
+  ITEM_CLOCK_FORMAT,
+  ITEM_CLOCK_UTC_OFFSET,
+  ITEM_CLOCK_SYNC,
   ITEM_COUNT
 };
 
-constexpr int BASE_MENU_ITEMS = ITEM_CLOCK;  // Items shown on every device
-constexpr int FULL_MENU_ITEMS = ITEM_COUNT;  // Items shown when RTC is available
+constexpr int BASE_MENU_ITEMS = ITEM_CLOCK;
+constexpr int FULL_MENU_ITEMS = ITEM_COUNT;
 
 const StrId menuNames[FULL_MENU_ITEMS] = {
     StrId::STR_CHAPTER_PAGE_COUNT,
     StrId::STR_BOOK_PROGRESS_PERCENTAGE,
+    StrId::STR_STABLE_PAGES,
     StrId::STR_PROGRESS_BAR,
     StrId::STR_PROGRESS_BAR_THICKNESS,
     StrId::STR_TITLE,
@@ -74,6 +75,10 @@ const StrId progressBarThicknessNames[PROGRESS_BAR_THICKNESS_ITEMS] = {
 constexpr int TITLE_ITEMS = 3;
 const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrId::STR_HIDE};
 
+constexpr int STABLE_PAGES_MODES = CrossPointSettings::STABLE_PAGES_MODE_COUNT;
+const StrId stablePagesValueNames[STABLE_PAGES_MODES] = {StrId::STR_HIDE, StrId::STR_STATUS_BAR_STABLE_IF_SET,
+                                                         StrId::STR_STATUS_BAR_STABLE_ELSE_PCT};
+
 constexpr int XTC_STATUS_BAR_ITEMS = 3;
 const StrId xtcStatusBarNames[XTC_STATUS_BAR_ITEMS] = {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP};
 
@@ -92,12 +97,16 @@ void StatusBarSettingsActivity::onEnter() {
     SETTINGS.statusBarProgressBar = CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   }
 
-  if (SETTINGS.statusBarTitle >= PROGRESS_BAR_THICKNESS_ITEMS) {
-    SETTINGS.statusBarTitle = CrossPointSettings::STATUS_BAR_PROGRESS_BAR_THICKNESS::PROGRESS_BAR_NORMAL;
+  if (SETTINGS.statusBarProgressBarThickness >= PROGRESS_BAR_THICKNESS_ITEMS) {
+    SETTINGS.statusBarProgressBarThickness = CrossPointSettings::STATUS_BAR_PROGRESS_BAR_THICKNESS::PROGRESS_BAR_NORMAL;
   }
 
   if (SETTINGS.statusBarTitle >= TITLE_ITEMS) {
     SETTINGS.statusBarTitle = CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE;
+  }
+
+  if (SETTINGS.statusBarStablePages >= STABLE_PAGES_MODES) {
+    SETTINGS.statusBarStablePages = CrossPointSettings::STABLE_PAGES_WHEN_SET;
   }
 
   if (SETTINGS.xtcStatusBarMode >= XTC_STATUS_BAR_ITEMS) {
@@ -159,6 +168,9 @@ void StatusBarSettingsActivity::handleSelection() {
     case ITEM_BOOK_PROGRESS_PERCENTAGE:
       SETTINGS.statusBarBookProgressPercentage = (SETTINGS.statusBarBookProgressPercentage + 1) % 2;
       break;
+    case ITEM_STABLE_PAGES:
+      SETTINGS.statusBarStablePages = (SETTINGS.statusBarStablePages + 1) % STABLE_PAGES_MODES;
+      break;
     case ITEM_PROGRESS_BAR:
       SETTINGS.statusBarProgressBar = (SETTINGS.statusBarProgressBar + 1) % PROGRESS_BAR_ITEMS;
       break;
@@ -182,7 +194,6 @@ void StatusBarSettingsActivity::handleSelection() {
       SETTINGS.clockFormat = (SETTINGS.clockFormat + 1) % CLOCK_FORMAT_ITEMS;
       break;
     case ITEM_CLOCK_UTC_OFFSET:
-      // Launch the dedicated offset picker. It saves on exit, no result handler needed.
       startActivityForResult(std::make_unique<ClockOffsetActivity>(renderer, mappedInput), nullptr);
       return;
     case ITEM_CLOCK_SYNC:
@@ -214,6 +225,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
             return SETTINGS.statusBarChapterPageCount ? tr(STR_SHOW) : tr(STR_HIDE);
           case ITEM_BOOK_PROGRESS_PERCENTAGE:
             return SETTINGS.statusBarBookProgressPercentage ? tr(STR_SHOW) : tr(STR_HIDE);
+          case ITEM_STABLE_PAGES:
+            return I18N.get(stablePagesValueNames[SETTINGS.statusBarStablePages]);
           case ITEM_PROGRESS_BAR:
             return I18N.get(progressBarNames[SETTINGS.statusBarProgressBar]);
           case ITEM_PROGRESS_BAR_THICKNESS:
@@ -251,12 +264,20 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
     title = tr(STR_EXAMPLE_CHAPTER);
   }
 
-  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding, 0, false);
+  const auto stablePreviewMode =
+      static_cast<CrossPointSettings::STATUS_BAR_STABLE_PAGES>(SETTINGS.statusBarStablePages);
+  // Sample totals whenever the mode can show stable pages when an index exists (same as reader).
+  // HIDE omits stable; FALLBACK_PERCENT would show % only without index — preview assumes index present.
+  const bool previewStableSample = stablePreviewMode != CrossPointSettings::STABLE_PAGES_HIDE;
+  const int previewStableCur = previewStableSample ? 400 : -1;
+  const int previewStableTot = previewStableSample ? 602 : -1;
+  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding, 0, /*fillMargin*/ false, previewStableCur,
+                    previewStableTot);
 
-  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding,
-                    renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() - verticalPreviewPadding -
-                        verticalPreviewTextPadding,
-                    tr(STR_PREVIEW));
+  const int previewLabelY = renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() -
+                            verticalPreviewPadding - verticalPreviewTextPadding;
+
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, previewLabelY, tr(STR_PREVIEW));
 
   renderer.displayBuffer();
 }

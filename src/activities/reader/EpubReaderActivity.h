@@ -1,9 +1,12 @@
 #pragma once
 #include <Epub.h>
+#include <Epub/BookSyntheticIndex.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "EpubReaderMenuActivity.h"
 #include "activities/Activity.h"
@@ -63,6 +66,16 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+
+  uint32_t stableCharsPerPage = 0;
+  BookSyntheticIndex::BuiltIndex stableSyntheticIndex;
+
+  void loadStablePagesSettings();
+  void saveStablePagesSettings();
+  bool ensureStableSyntheticIndex();
+  /** Optional spine-local synthetic page pair when chapterCurrent/chapterTotal non-null. */
+  void computeStablePageNumbers(int& stableCurrent, int& stableTotal, int* chapterCurrent = nullptr,
+                                int* chapterTotal = nullptr) const;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)

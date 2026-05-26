@@ -722,7 +722,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin) const {
+                              const bool fillMargin, const int stableBookPage, const int stableBookTotal,
+                              const int chapterSynthCur, const int chapterSynthTot) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -733,16 +734,37 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
   int progressTextWidth = 0;
 
-  if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
-    // Right aligned text for progress counter
-    char progressStr[32];
+  const bool showChapter = SETTINGS.statusBarChapterPageCount;
+  bool showStable = false;
+  bool showBookPct = false;
+  computeStatusBarBookDisplayFlags(SETTINGS.statusBarStablePages, SETTINGS.statusBarBookProgressPercentage != 0,
+                                   stableBookTotal, showStable, showBookPct);
+  const bool showAnyBookProgress = showBookPct || showStable;
+  const bool barStableFrac = statusBarBookBarUsesStableFraction(
+      SETTINGS.statusBarStablePages, SETTINGS.statusBarBookProgressPercentage != 0, stableBookTotal);
 
-    if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
-    } else if (SETTINGS.statusBarBookProgressPercentage) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
+  const bool chSynth = showChapter && chapterSynthCur >= 1 && chapterSynthTot > 0;
+  const int chapterDispCur = chSynth ? chapterSynthCur : currentPage;
+  const int chapterDispTot = chSynth ? chapterSynthTot : pageCount;
+
+  if (showChapter || showAnyBookProgress) {
+    char progressStr[72];
+    char bookPart[56] = "";
+
+    if (showStable && showBookPct) {
+      snprintf(bookPart, sizeof(bookPart), "%d/%d · %.0f%%", stableBookPage, stableBookTotal, bookProgress);
+    } else if (showStable) {
+      snprintf(bookPart, sizeof(bookPart), "%d/%d", stableBookPage, stableBookTotal);
+    } else if (showBookPct) {
+      snprintf(bookPart, sizeof(bookPart), "%.0f%%", bookProgress);
+    }
+
+    if (showChapter && showAnyBookProgress) {
+      snprintf(progressStr, sizeof(progressStr), "%d/%d  %s", chapterDispCur, chapterDispTot, bookPart);
+    } else if (showChapter) {
+      snprintf(progressStr, sizeof(progressStr), "%d/%d", chapterDispCur, chapterDispTot);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
+      snprintf(progressStr, sizeof(progressStr), "%s", bookPart);
     }
 
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
@@ -761,10 +783,16 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                              ((SETTINGS.statusBarProgressBarThickness + 1) * 2) - paddingBottom;
     size_t progress;
     if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
-      progress = static_cast<size_t>(bookProgress);
+      if (barStableFrac && SETTINGS.statusBarBookProgressPercentage == 0) {
+        progress =
+            static_cast<size_t>((100.0f * static_cast<float>(stableBookPage)) / static_cast<float>(stableBookTotal));
+        if (progress > 100) progress = 100;
+      } else {
+        progress = static_cast<size_t>(bookProgress);
+      }
     } else {
-      // Chapter progress
-      progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
+      // Chapter progress (synthetic intra-chapter when provided)
+      progress = (chapterDispTot > 0) ? (static_cast<float>(chapterDispCur) / chapterDispTot) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
     const int barHeight =
