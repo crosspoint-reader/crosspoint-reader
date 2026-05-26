@@ -486,7 +486,7 @@
 
   async function loadSettings() {
     try {
-      const response = await fetch('/api/settings');
+      const response = await fetch('/api/settings', { credentials: 'same-origin' });
       if (!response.ok) {
         throw new Error('Failed to load settings: ' + response.status);
       }
