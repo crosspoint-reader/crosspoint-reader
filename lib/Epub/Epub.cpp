@@ -267,25 +267,23 @@ void Epub::discoverCssFilesFromZip() {
     return;
   }
 
-  const auto allFiles = zf.getFilePaths();
-
   size_t lastSlash = contentBasePath.find_last_of('/');
 
   std::string opfDir = (lastSlash != std::string::npos) ? contentBasePath.substr(0, lastSlash + 1) : "";
 
-  for (const auto& filePath : allFiles) {
+  zf.enumerateFilePaths([&](std::string_view filePath) {
     if (!opfDir.empty() && filePath.find(opfDir) != 0) {
-      continue;  // Skip files that are not in the same directory as content.opf, as CSS files are typically located
+      return;  // Skip files that are not in the same directory as OPF manifest, as CSS files are typically located
                  // there or in subfolders
     }
 
     if (FsHelpers::hasCssExtension(filePath)) {
       if (std::find(cssFiles.begin(), cssFiles.end(), filePath) == cssFiles.end()) {
-        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %s", filePath.c_str());
-        cssFiles.push_back(filePath);
+        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %s", filePath.data());
+        cssFiles.push_back(std::string{filePath});
       }
     }
-  }
+  });
 }
 
 void Epub::parseCssFiles() const {

@@ -560,13 +560,8 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   return false;
 }
 
-std::vector<std::string> ZipFile::getFilePaths() const {
-  std::vector<std::string> files;
-  files.reserve(fileStatSlimCache.size());
-
+void ZipFile::enumerateFilePaths(std::function<void(std::string_view)> callback) const {
   for (const auto& entry : fileStatSlimCache) {
-    files.push_back(entry.first);
+    callback(entry.first);
   }
-
-  return files;
 }
