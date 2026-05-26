@@ -659,7 +659,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     if (chosenNeedsHyphen) {
       words[prefixIdx].push_back('-');
     }
-    // Detach the suffix: it starts fresh on the next line without focus-reading continuation.
+    // Detach the suffix completely: it starts fresh on the next line and should no longer be
+    // treated as the continuation of the focus-reading prefix from the previous line.
     wordContinues[wordIndex] = false;
     wordIsFocusSuffix[wordIndex] = false;
     // Update the prefix width to account for the added hyphen.
@@ -674,9 +675,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     words[wordIndex].push_back('-');
   }
 
-  // When hyphenating within the suffix of a focus-split word, keep the current suffix attached
-  // to the bold prefix so extractLine still merges them into one rendered word with no gap.
-  // Only the inserted remainder starts fresh on the next line without focus-reading continuation.
+  // When hyphenating within the suffix of a focus-split word, keep the hyphenated current-line
+  // fragment attached to the bold prefix so extractLine still merges them into one rendered word
+  // with no gap. Only the newly inserted remainder token starts fresh on the next line.
   if (focusPrefixBytes > 0) {
     wordIsFocusSuffix[wordIndex] = true;
     wordContinues[wordIndex] = true;
