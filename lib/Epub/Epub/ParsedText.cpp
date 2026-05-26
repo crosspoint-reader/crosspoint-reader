@@ -405,8 +405,11 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     }
   }
 
-  // Stores the index of the word that starts the next line (last_word_index + 1)
+  // Stores the index of the word that starts the next line (last_word_index + 1).
+  // Reserve ~ words/5 (typical English avg 5 words/line); doubling still kicks
+  // in past that. Bounded to a sane floor/ceiling to avoid tiny / huge allocs.
   std::vector<size_t> lineBreakIndices;
+  lineBreakIndices.reserve(std::clamp<size_t>(totalWordCount / 5, 8, 128));
   size_t currentWordIndex = 0;
 
   while (currentWordIndex < totalWordCount) {
@@ -454,6 +457,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
           : 0;
 
   std::vector<size_t> lineBreakIndices;
+  // Same heuristic as computeLineBreaks: ~ words/5 lines, bounded.
+  lineBreakIndices.reserve(std::clamp<size_t>(wordWidths.size() / 5, 8, 128));
   size_t currentIndex = 0;
   bool isFirstLine = true;
 

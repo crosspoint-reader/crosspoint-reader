@@ -72,6 +72,13 @@ class PageHorizontalRule final : public PageElement {
 
 class Page {
  public:
+  // Typical e-reader page holds ~15-25 lines (one PageLine each) plus the
+  // occasional PageImage / PageHorizontalRule. Pre-reserve to skip the
+  // doubling churn (per CLAUDE.md §"std::vector Pre-allocation"); doubling
+  // still kicks in past 24 for long pages.
+  static constexpr size_t INITIAL_ELEMENTS_CAPACITY = 24;
+  Page() { elements.reserve(INITIAL_ELEMENTS_CAPACITY); }
+
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
   std::vector<FootnoteEntry> footnotes;
