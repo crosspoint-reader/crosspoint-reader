@@ -32,6 +32,16 @@ def create_epub(filename, title, chapters):
             spine_items.append(f'<itemref idref="{chapter_id}"/>')
             epub.writestr(f'OEBPS/{chapter_id}.xhtml', content)
         
+        # Write stylesheet
+        epub.writestr('OEBPS/style.css', '''.super {
+  vertical-align: super;
+}
+.sub {
+  vertical-align: sub;
+}
+''')
+        manifest_items.append('<item id="style" href="style.css" media-type="text/css"/>')
+        
         # content.opf
         epub.writestr('OEBPS/content.opf', f'''<?xml version="1.0"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid">
@@ -77,6 +87,7 @@ def make_chapter(title, content):
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <title>{title}</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
 </head>
 <body>
   <h1>{title}</h1>
@@ -188,6 +199,31 @@ if __name__ == '__main__':
 
 <h2>Line Breaking</h2>
 <p>Long text with superscript at the end of a line to test wrapping behavior when the superscript might need to wrap to the next line<sup>1</sup> and continue here.</p>
+""")),
+        
+        ("CSS Style Tests", make_chapter("CSS Style Tests", """
+<h2>CSS Classes</h2>
+<p>This tests superscript via CSS class (.super): E = mc<span class="super">2</span>.</p>
+<p>This tests subscript via CSS class (.sub): Water is H<span class="sub">2</span>O.</p>
+
+<h2>CSS Inline Styles</h2>
+<p>This tests superscript via inline style: E = mc<span style="vertical-align: super;">2</span>.</p>
+<p>This tests subscript via inline style: Water is H<span style="vertical-align: sub;">2</span>O.</p>
+
+<h2>Comparison Side-by-Side</h2>
+<p>Tag `sup`: E = mc<sup>2</sup></p>
+<p>Class `super`: E = mc<span class="super">2</span></p>
+<p>Inline `super`: E = mc<span style="vertical-align: super;">2</span></p>
+<br/>
+<p>Tag `sub`: H<sub>2</sub>O</p>
+<p>Class `sub`: H<span class="sub">2</span>O</p>
+<p>Inline `sub`: H<span style="vertical-align: sub;">2</span>O</p>
+
+<h2>Mixed and Nested in CSS</h2>
+<p>CSS Class mixed: [H<span class="sub">3</span>O<span class="super">+</span>] = 10<span class="super">-7</span> mol/L.</p>
+<p>CSS Inline mixed: [H<span style="vertical-align: sub;">3</span>O<span style="vertical-align: super;">+</span>] = 10<span style="vertical-align: super;">-7</span> mol/L.</p>
+<p><b>Bold text with class H<span class="sub">2</span>O and E = mc<span class="super">2</span> inside.</b></p>
+<p><i>Italic text with inline H<span style="vertical-align: sub;">2</span>O and E = mc<span style="vertical-align: super;">2</span> inside.</i></p>
 """)),
     ]
     

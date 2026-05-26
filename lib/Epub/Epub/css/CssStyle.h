@@ -133,7 +133,7 @@ struct CssStyle {
   CssLength paddingRight;   // Padding right
   CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
   CssLength imageWidth;     // Width for img when both or only width set
-  CssDisplay display = CssDisplay::Block;  // display property (Block or None)
+  CssDisplay display = CssDisplay::Block;                       // display property (Block or None)
   CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align (super/sub positioning)
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
