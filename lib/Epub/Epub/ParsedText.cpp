@@ -602,6 +602,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   size_t chosenOffset = 0;
   int chosenWidth = -1;
   bool chosenNeedsHyphen = true;
+  bool chosenIsAtFocusBoundary = false;
 
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
   for (const auto& info : breakInfos) {
@@ -610,20 +611,31 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
       continue;
     }
 
-    // When we merged a focus prefix, only consider break points that fall within the suffix
-    // portion (the prefix is already committed to the line).
-    if (focusPrefixBytes > 0 && offset <= focusPrefixBytes) {
+    // When we merged a focus prefix, only consider break points at or after the focus boundary.
+    // Breaks strictly before it are skipped — the bold prefix is already committed to the line.
+    if (focusPrefixBytes > 0 && offset < focusPrefixBytes) {
       continue;
     }
 
+    const bool isAtBoundary = focusPrefixBytes > 0 && offset == focusPrefixBytes;
+
     // Map the offset back to the suffix-local position
     const size_t localOffset = offset - focusPrefixBytes;
-    if (localOffset == 0 || localOffset >= word.size()) {
+    if (!isAtBoundary && (localOffset == 0 || localOffset >= word.size())) {
       continue;
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, localOffset), style, needsHyphen);
+
+    // For a break at the focus boundary, the suffix contributes zero width to this line —
+    // the hyphen is appended to the bold prefix token already placed on the line.
+    // Width is 0 so any valid break within the suffix will be preferred (more text fits).
+    int prefixWidth;
+    if (isAtBoundary) {
+      prefixWidth = 0;
+    } else {
+      prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, localOffset), style, needsHyphen);
+    }
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
     }
@@ -631,6 +643,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     chosenWidth = prefixWidth;
     chosenOffset = localOffset;
     chosenNeedsHyphen = needsHyphen;
+    chosenIsAtFocusBoundary = isAtBoundary;
   }
 
   if (chosenWidth < 0) {
@@ -638,11 +651,41 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     return false;
   }
 
+  // Special handling: break at the focus reading boundary (e.g. "con" | "firms" → "con-" / "firms").
+  // The bold prefix token (wordIndex-1) gets a hyphen appended; the suffix detaches and moves to
+  // the next line without focus-reading bolding.
+  if (chosenIsAtFocusBoundary) {
+    const size_t prefixIdx = wordIndex - 1;
+    if (chosenNeedsHyphen) {
+      words[prefixIdx].push_back('-');
+    }
+    // Remove BOLD from the prefix so the appended hyphen renders in regular weight.
+    // At a line break the focus emphasis is visually disrupted anyway.
+    wordStyles[prefixIdx] = static_cast<EpdFontFamily::Style>(wordStyles[prefixIdx] & ~EpdFontFamily::BOLD);
+    // Detach the suffix: it starts fresh on the next line without focus-reading continuation.
+    wordContinues[wordIndex] = false;
+    wordIsFocusSuffix[wordIndex] = false;
+    // Update the prefix width to account for the added hyphen.
+    wordWidths[prefixIdx] = measureWordWidth(renderer, fontId, words[prefixIdx], wordStyles[prefixIdx]);
+    return false;  // Signal that nothing from the suffix fits on this line
+  }
+
   // Split the word at the selected breakpoint and append a hyphen if required.
   std::string remainder = word.substr(chosenOffset);
   words[wordIndex].resize(chosenOffset);
   if (chosenNeedsHyphen) {
     words[wordIndex].push_back('-');
+  }
+
+  // When hyphenating within the suffix of a focus-split word, strip the focus-suffix flag and
+  // remove BOLD from the prefix so the hyphenated fragment doesn't carry focus emphasis.
+  // The remainder on the next line also starts fresh without bolding.
+  if (focusPrefixBytes > 0) {
+    wordIsFocusSuffix[wordIndex] = false;
+    wordContinues[wordIndex] = false;
+    // Strip BOLD from the preceding focus prefix — focus emphasis is disrupted by hyphenation.
+    const size_t prefixIdx = wordIndex - 1;
+    wordStyles[prefixIdx] = static_cast<EpdFontFamily::Style>(wordStyles[prefixIdx] & ~EpdFontFamily::BOLD);
   }
 
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
