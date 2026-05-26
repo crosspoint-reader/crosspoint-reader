@@ -267,10 +267,10 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
             mid++;
           }
           if (mid >= hi) {
-            // No codepoint start found in [lo+1, hi) — remaining range is
-            // all continuation bytes, so lo is already the last valid break
-            // point. Collapse hi to terminate the search.
-            lo = hi;
+            // No codepoint start found in [lo+1, hi) — the entire range is
+            // continuation bytes of the codepoint starting at lo. lo is
+            // already the last measured-fitting break point; do not advance
+            // to hi (which is known-non-fitting).
             break;
           }
         }
