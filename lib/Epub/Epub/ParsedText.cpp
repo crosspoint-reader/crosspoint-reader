@@ -653,15 +653,12 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   // Special handling: break at the focus reading boundary (e.g. "con" | "firms" → "con-" / "firms").
   // The bold prefix token (wordIndex-1) gets a hyphen appended; the suffix detaches and moves to
-  // the next line without focus-reading bolding.
+  // the next line without focus-reading continuation.
   if (chosenIsAtFocusBoundary) {
     const size_t prefixIdx = wordIndex - 1;
     if (chosenNeedsHyphen) {
       words[prefixIdx].push_back('-');
     }
-    // Remove BOLD from the prefix so the appended hyphen renders in regular weight.
-    // At a line break the focus emphasis is visually disrupted anyway.
-    wordStyles[prefixIdx] = static_cast<EpdFontFamily::Style>(wordStyles[prefixIdx] & ~EpdFontFamily::BOLD);
     // Detach the suffix: it starts fresh on the next line without focus-reading continuation.
     wordContinues[wordIndex] = false;
     wordIsFocusSuffix[wordIndex] = false;
@@ -677,15 +674,12 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     words[wordIndex].push_back('-');
   }
 
-  // When hyphenating within the suffix of a focus-split word, strip the focus-suffix flag and
-  // remove BOLD from the prefix so the hyphenated fragment doesn't carry focus emphasis.
-  // The remainder on the next line also starts fresh without bolding.
+  // When hyphenating within the suffix of a focus-split word, keep the current suffix attached
+  // to the bold prefix so extractLine still merges them into one rendered word with no gap.
+  // Only the inserted remainder starts fresh on the next line without focus-reading continuation.
   if (focusPrefixBytes > 0) {
-    wordIsFocusSuffix[wordIndex] = false;
-    wordContinues[wordIndex] = false;
-    // Strip BOLD from the preceding focus prefix — focus emphasis is disrupted by hyphenation.
-    const size_t prefixIdx = wordIndex - 1;
-    wordStyles[prefixIdx] = static_cast<EpdFontFamily::Style>(wordStyles[prefixIdx] & ~EpdFontFamily::BOLD);
+    wordIsFocusSuffix[wordIndex] = true;
+    wordContinues[wordIndex] = true;
   }
 
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
