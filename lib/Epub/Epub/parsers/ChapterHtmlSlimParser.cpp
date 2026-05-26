@@ -1159,12 +1159,18 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
   // Pre-allocate the parser's growing vectors per CLAUDE.md §"std::vector
   // Pre-allocation": grow-on-push_back triggers operator new[] internally and
-  // aborts on OOM under -fno-exceptions. Sizes are conservative estimates;
-  // overflow still doubles (rare on a typical chapter).
+  // aborts on OOM under -fno-exceptions. Sizes calibrated against an EPUB
+  // corpus (~8k chapters):
+  //   anchorData       : p97 ~128; p99 = 177, p99.9 = 389, max = 532. 128
+  //                      covers the bulk; tail still doubles past it (rare).
+  //   pendingFootnotes : drained per page (cap MAX_FOOTNOTES_PER_PAGE = 16),
+  //                      so 16 matches the in-flight ceiling.
+  //   inlineStyleStack : HTML nesting depth, rarely > 8 (matches the existing
+  //                      blockStyleStack reserve above).
   inlineStyleStack.clear();
   inlineStyleStack.reserve(8);
   anchorData.clear();
-  anchorData.reserve(64);
+  anchorData.reserve(128);
   pendingFootnotes.clear();
   pendingFootnotes.reserve(16);
 
