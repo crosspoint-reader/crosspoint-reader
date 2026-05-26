@@ -269,11 +269,7 @@ void HomeActivity::render(RenderLock&&) {
 
   if (!firstRenderDone) {
     firstRenderDone = true;
-#if defined(CROSSPOINT_BOARD_MURPHY_M3) || defined(BOARD_MURPHY_M3)
-    recentsLoaded = true;
-#else
     requestUpdate();
-#endif
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);

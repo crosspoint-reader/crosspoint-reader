@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 
 #include <memory>
@@ -14,6 +15,70 @@
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
 
 UITheme UITheme::instance;
+
+namespace {
+constexpr ThemeMetrics MurphyLyraMetrics = {.batteryWidth = 16,
+                                            .batteryHeight = 12,
+                                            .topPadding = 3,
+                                            .batteryBarHeight = 24,
+                                            .headerHeight = 44,
+                                            .verticalSpacing = 8,
+                                            .contentSidePadding = 12,
+                                            .listRowHeight = 32,
+                                            .listWithSubtitleRowHeight = 48,
+                                            .menuRowHeight = 36,
+                                            .menuSpacing = 5,
+                                            .tabSpacing = 6,
+                                            .tabBarHeight = 32,
+                                            .scrollBarWidth = 3,
+                                            .scrollBarRightOffset = 3,
+                                            .homeTopPadding = 38,
+                                            .homeCoverHeight = 160,
+                                            .homeCoverTileHeight = 172,
+                                            .homeRecentBooksCount = 1,
+                                            .homeContinueReadingInMenu = false,
+                                            .homeMenuTopOffset = 8,
+                                            .buttonHintsHeight = 0,
+                                            .sideButtonHintsWidth = 0,
+                                            .progressBarHeight = 10,
+                                            .progressBarMarginTop = 1,
+                                            .statusBarHorizontalMargin = 4,
+                                            .statusBarVerticalMargin = 14,
+                                            .keyboardKeyWidth = 22,
+                                            .keyboardKeyHeight = 30,
+                                            .keyboardKeySpacing = 0,
+                                            .keyboardBottomKeyHeight = 28,
+                                            .keyboardBottomKeySpacing = 4,
+                                            .keyboardBottomAligned = true,
+                                            .keyboardCenteredText = false,
+                                            .keyboardVerticalOffset = -6,
+                                            .keyboardTextFieldWidthPercent = 88,
+                                            .keyboardWidthPercent = 94,
+                                            .keyboardKeyCornerRadius = 4,
+                                            .keyboardFillUnselected = false,
+                                            .keyboardOutlineAllUnselected = false,
+                                            .keyboardDrawSpecialOutlineWhenUnselected = true,
+                                            .keyboardSecondaryLabelRightPadding = 1,
+                                            .keyboardSecondaryLabelTopPadding = 0,
+                                            .keyboardMinArrowHeadSize = 0,
+                                            .popupTopOffsetRatio = 0.12f,
+                                            .popupMarginX = 10,
+                                            .popupMarginY = 8,
+                                            .popupFrameThickness = 1,
+                                            .popupCornerRadius = 4,
+                                            .popupTextBold = false,
+                                            .popupTextInverted = false,
+                                            .popupTextBaselineOffsetY = -2,
+                                            .popupProgressBarHeight = 3,
+                                            .popupProgressDrawOutline = false,
+                                            .popupProgressClampPercent = false,
+                                            .popupProgressFillInverted = false,
+                                            .popupProgressOutlineInverted = false,
+                                            .textFieldHorizontalPadding = 5,
+                                            .textFieldNormalThickness = 1,
+                                            .textFieldCursorThickness = 2,
+                                            .textFieldLineEndOffset = 0};
+}
 
 UITheme::UITheme() {
   auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
@@ -35,7 +100,7 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
     case CrossPointSettings::UI_THEME::LYRA:
       LOG_DBG("UI", "Using Lyra theme");
       currentTheme = std::make_unique<LyraTheme>();
-      currentMetrics = &LyraMetrics::values;
+      currentMetrics = gpio.deviceIsMurphyM3() ? &MurphyLyraMetrics : &LyraMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::ROUNDEDRAFF:
       LOG_DBG("UI", "Using RoundedRaff theme");
