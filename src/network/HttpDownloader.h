@@ -5,12 +5,16 @@
 #include <string>
 
 /**
- * HTTP client utility for fetching content and downloading files.
- * Wraps NetworkClientSecure and HTTPClient for HTTPS requests.
+ * HTTP client utility for fetching content and downloading files. Built on
+ * esp_http_client: https is verified against the CA bundle, plain http is
+ * used for local servers (transport is chosen from the URL scheme).
  */
 class HttpDownloader {
  public:
   using ProgressCallback = std::function<void(size_t downloaded, size_t total)>;
+  // Called with each body chunk as it arrives; return false to abort. Lets a
+  // streaming parser consume the response without buffering the whole body.
+  using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;
 
   enum DownloadError {
     OK = 0,
@@ -20,22 +24,24 @@ class HttpDownloader {
   };
 
   /**
-   * Fetch text content from a URL.
-   * @param url The URL to fetch
-   * @param outContent The fetched content (output)
-   * @return true if fetch succeeded, false on error
+   * Fetch text content from a URL with optional credentials.
    */
-  static bool fetchUrl(const std::string& url, std::string& outContent);
+  static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
+                       const std::string& password = "");
 
-  static bool fetchUrl(const std::string& url, Stream& stream);
+  static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
+                       const std::string& password = "");
 
   /**
-   * Download a file to the SD card.
-   * @param url The URL to download
-   * @param destPath The destination path on SD card
-   * @param progress Optional progress callback
-   * @return DownloadError indicating success or failure type
+   * Stream the response body to onData as it arrives, without buffering it.
+   */
+  static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
+                       const std::string& password = "");
+
+  /**
+   * Download a file to the SD card with optional credentials.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
-                                      ProgressCallback progress = nullptr);
+                                      ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
+                                      const std::string& username = "", const std::string& password = "");
 };

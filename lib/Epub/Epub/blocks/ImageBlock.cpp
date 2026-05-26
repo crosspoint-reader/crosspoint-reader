@@ -4,8 +4,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
-#include "../converters/DirectPixelWriter.h"
-#include "../converters/ImageDecoderFactory.h"
+#include "Epub/converters/DirectPixelWriter.h"
+#include "Epub/converters/ImageDecoderFactory.h"
 
 // Cache file format:
 // - uint16_t width
@@ -30,14 +30,13 @@ std::string getCachePath(const std::string& imagePath) {
 
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight) {
-  FsFile cacheFile;
+  HalFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
     return false;
   }
 
   uint16_t cachedWidth, cachedHeight;
   if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
-    cacheFile.close();
     return false;
   }
 
@@ -47,7 +46,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   if (widthDiff > 1 || heightDiff > 1) {
     LOG_ERR("IMG", "Cache dimension mismatch: %dx%d vs %dx%d", cachedWidth, cachedHeight, expectedWidth,
             expectedHeight);
-    cacheFile.close();
     return false;
   }
 
@@ -62,7 +60,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   uint8_t* rowBuffer = (uint8_t*)malloc(bytesPerRow);
   if (!rowBuffer) {
     LOG_ERR("IMG", "Failed to allocate row buffer");
-    cacheFile.close();
     return false;
   }
 
@@ -73,7 +70,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     if (cacheFile.read(rowBuffer, bytesPerRow) != bytesPerRow) {
       LOG_ERR("IMG", "Cache read error at row %d", row);
       free(rowBuffer);
-      cacheFile.close();
       return false;
     }
 
@@ -89,7 +85,6 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   }
 
   free(rowBuffer);
-  cacheFile.close();
   LOG_DBG("IMG", "Cache render complete");
   return true;
 }
@@ -117,7 +112,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   // No cache - need to decode the image
   // Check if image file exists
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
     LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
     return;
@@ -160,14 +155,14 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   LOG_DBG("IMG", "Decode successful");
 }
 
-bool ImageBlock::serialize(FsFile& file) {
+bool ImageBlock::serialize(HalFile& file) {
   serialization::writeString(file, imagePath);
   serialization::writePod(file, width);
   serialization::writePod(file, height);
   return true;
 }
 
-std::unique_ptr<ImageBlock> ImageBlock::deserialize(FsFile& file) {
+std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   std::string path;
   serialization::readString(file, path);
   int16_t w, h;

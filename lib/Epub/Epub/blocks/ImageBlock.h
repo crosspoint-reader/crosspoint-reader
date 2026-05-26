@@ -21,8 +21,8 @@ class ImageBlock final : public Block {
   bool isEmpty() override { return false; }
 
   void render(GfxRenderer& renderer, const int x, const int y);
-  bool serialize(FsFile& file);
-  static std::unique_ptr<ImageBlock> deserialize(FsFile& file);
+  bool serialize(HalFile& file);
+  static std::unique_ptr<ImageBlock> deserialize(HalFile& file);
 
  private:
   std::string imagePath;

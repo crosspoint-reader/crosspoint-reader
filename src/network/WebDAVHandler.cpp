@@ -1,14 +1,14 @@
 #include "WebDAVHandler.h"
 
-#include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <esp_task_wdt.h>
 
+#include "util/BookCacheUtils.h"
+
 namespace {
-const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
@@ -67,7 +67,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     _putExisted = Storage.exists(_putPath.c_str());
 
     if (_putExisted) {
-      FsFile existing = Storage.open(_putPath.c_str());
+      HalFile existing = Storage.open(_putPath.c_str());
       if (existing && existing.isDirectory()) {
         existing.close();
         _putOk = false;
@@ -96,7 +96,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     if (_putOk) {
       String tempPath = _putPath + ".davtmp";
       if (_putExisted) Storage.remove(_putPath.c_str());
-      FsFile tmp = Storage.open(tempPath.c_str());
+      HalFile tmp = Storage.open(tempPath.c_str());
       if (tmp) {
         _putOk = tmp.rename(_putPath.c_str());
         tmp.close();
@@ -182,7 +182,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
     return;
   }
 
-  FsFile root = Storage.open(path.c_str());
+  HalFile root = Storage.open(path.c_str());
   if (!root) {
     if (path == "/") {
       // Root should always work — send minimal response
@@ -221,7 +221,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   // If depth > 0 and it's a directory, list children
   if (depth > 0) {
-    FsFile file = root.openNextFile();
+    HalFile file = root.openNextFile();
     char name[500];
     while (file) {
       file.getName(name, sizeof(name));
@@ -230,8 +230,8 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       // Skip hidden/protected items
       bool shouldHide = fileName.startsWith(".");
       if (!shouldHide) {
-        for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-          if (fileName.equals(HIDDEN_ITEMS[i])) {
+        for (const auto* item : HIDDEN_ITEMS) {
+          if (fileName.equals(item)) {
             shouldHide = true;
             break;
           }
@@ -311,7 +311,7 @@ void WebDAVHandler::handleGet(WebServer& s) {
     return;
   }
 
-  FsFile file = Storage.open(path.c_str());
+  HalFile file = Storage.open(path.c_str());
   if (!file) {
     s.send(500, "text/plain", "Failed to open file");
     return;
@@ -348,7 +348,7 @@ void WebDAVHandler::handleHead(WebServer& s) {
     return;
   }
 
-  FsFile file = Storage.open(path.c_str());
+  HalFile file = Storage.open(path.c_str());
   if (!file) {
     s.send(500, "text/plain", "");
     return;
@@ -385,7 +385,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
     return;
   }
 
-  clearEpubCacheIfNeeded(path);
+  clearBookCache(path.c_str());
   s.send(_putExisted ? 204 : 201);
   LOG_DBG("DAV", "PUT complete: %s", path.c_str());
 }
@@ -411,7 +411,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     return;
   }
 
-  FsFile file = Storage.open(path.c_str());
+  HalFile file = Storage.open(path.c_str());
   if (!file) {
     s.send(500, "text/plain", "Failed to open");
     return;
@@ -419,7 +419,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
 
   if (file.isDirectory()) {
     // Check if directory is empty
-    FsFile entry = file.openNextFile();
+    HalFile entry = file.openNextFile();
     if (entry) {
       entry.close();
       file.close();
@@ -434,7 +434,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     }
   } else {
     file.close();
-    clearEpubCacheIfNeeded(path);
+    clearBookCache(path.c_str());
     if (Storage.remove(path.c_str())) {
       s.send(204);
     } else {
@@ -537,13 +537,13 @@ void WebDAVHandler::handleMove(WebServer& s) {
     Storage.remove(dstPath.c_str());
   }
 
-  FsFile file = Storage.open(srcPath.c_str());
+  HalFile file = Storage.open(srcPath.c_str());
   if (!file) {
     s.send(500, "text/plain", "Failed to open source");
     return;
   }
 
-  clearEpubCacheIfNeeded(srcPath);
+  clearBookCache(srcPath.c_str());
   bool success = file.rename(dstPath.c_str());
   file.close();
 
@@ -583,7 +583,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
-  FsFile srcFile = Storage.open(srcPath.c_str());
+  HalFile srcFile = Storage.open(srcPath.c_str());
   if (!srcFile) {
     s.send(500, "text/plain", "Failed to open source");
     return;
@@ -617,7 +617,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     Storage.remove(dstPath.c_str());
   }
 
-  FsFile dstFile;
+  HalFile dstFile;
   if (!Storage.openFileForWrite("DAV", dstPath, dstFile)) {
     srcFile.close();
     s.send(500, "text/plain", "Failed to create destination");
@@ -774,8 +774,8 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
 
     if (segment.startsWith(".")) return true;
 
-    for (size_t i = 0; i < HIDDEN_ITEMS_COUNT; i++) {
-      if (segment.equals(HIDDEN_ITEMS[i])) return true;
+    for (const auto* item : HIDDEN_ITEMS) {
+      if (segment.equals(item)) return true;
     }
 
     start = end + 1;
@@ -796,13 +796,6 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
   String ow = s.header("Overwrite");
   if (ow == "F" || ow == "f") return false;
   return true;  // Default is T
-}
-
-void WebDAVHandler::clearEpubCacheIfNeeded(const String& path) const {
-  if (FsHelpers::hasEpubExtension(path)) {
-    Epub(path.c_str(), "/.crosspoint").clearCache();
-    LOG_DBG("DAV", "Cleared epub cache for: %s", path.c_str());
-  }
 }
 
 String WebDAVHandler::getMimeType(const String& path) const {

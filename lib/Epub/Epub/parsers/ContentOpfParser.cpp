@@ -3,13 +3,33 @@
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <XmlParserUtils.h>
 
-#include "../BookMetadataCache.h"
+#include <cctype>
+
+#include "Epub/BookMetadataCache.h"
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
+constexpr char MEDIA_TYPE_IMAGE_PREFIX[] = "image/";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+bool startsWithImageMediaType(const std::string& mediaType) {
+  constexpr size_t prefixLen = sizeof(MEDIA_TYPE_IMAGE_PREFIX) - 1;
+  if (mediaType.size() < prefixLen) {
+    return false;
+  }
+
+  for (size_t i = 0; i < prefixLen; ++i) {
+    const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(mediaType[i])));
+    if (c != MEDIA_TYPE_IMAGE_PREFIX[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -26,13 +46,7 @@ bool ContentOpfParser::setup() {
 }
 
 ContentOpfParser::~ContentOpfParser() {
-  if (parser) {
-    XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-    XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-    XML_SetCharacterDataHandler(parser, nullptr);
-    XML_ParserFree(parser);
-    parser = nullptr;
-  }
+  destroyXmlParser(parser);
   if (tempItemStore) {
     tempItemStore.close();
   }
@@ -55,11 +69,7 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
 
     if (!buf) {
       LOG_ERR("COF", "Couldn't allocate memory for buffer");
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      destroyXmlParser(parser);
       return 0;
     }
 
@@ -69,11 +79,7 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
       LOG_DBG("COF", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
-      XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      destroyXmlParser(parser);
       return 0;
     }
 
@@ -202,7 +208,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     serialization::writeString(self->tempItemStore, href);
 
     if (itemId == self->coverItemId) {
-      self->coverItemHref = href;
+      // Some EPUBs set meta name="cover" to an XHTML wrapper item.
+      // Only treat it as a cover image when the manifest media-type is image/*.
+      if (startsWithImageMediaType(mediaType)) {
+        self->coverItemHref = href;
+      } else {
+        LOG_DBG("COF", "Ignoring meta cover item '%s' with non-image media type: %s", itemId.c_str(),
+                mediaType.c_str());
+      }
     }
 
     if (mediaType == MEDIA_TYPE_NCX) {

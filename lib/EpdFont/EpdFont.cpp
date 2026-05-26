@@ -16,10 +16,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   }
 
   int lastBaseX = startX;
-  int lastBaseAdvanceFP = 0;  // 12.4 fixed-point
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
   int lastBaseTop = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
-  constexpr int MIN_COMBINING_GAP_PX = 1;
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
@@ -31,26 +31,29 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
-      lastBaseX += fp4::toPixel(prevAdvanceFP);  // flush pending advance before resetting
-      prevCp = 0;
-      prevAdvanceFP = 0;
+      // Keep cursor movement stable when a base glyph is missing, but don't attach subsequent
+      // combining marks to stale base metrics.
+      if (!isCombining) {
+        lastBaseX += fp4::toPixel(prevAdvanceFP);  // flush pending advance before resetting
+        prevCp = 0;
+        prevAdvanceFP = 0;
+        lastBaseLeft = 0;
+        lastBaseWidth = 0;
+        lastBaseTop = 0;
+      }
       continue;
     }
 
-    int raiseBy = 0;
-    if (isCombining) {
-      const int currentGap = glyph->top - glyph->height - lastBaseTop;
-      if (currentGap < MIN_COMBINING_GAP_PX) {
-        raiseBy = MIN_COMBINING_GAP_PX - currentGap;
-      }
-    }
+    const int raiseBy = isCombining ? combiningMark::raiseAboveBase(glyph->top, glyph->height, lastBaseTop) : 0;
 
     if (!isCombining && prevCp != 0) {
       const auto kernFP = getKerning(prevCp, cp);  // 4.4 fixed-point kern
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
     }
 
-    const int glyphBaseX = isCombining ? (lastBaseX + fp4::toPixel(lastBaseAdvanceFP / 2)) : lastBaseX;
+    const int glyphBaseX =
+        isCombining ? combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, glyph->left, glyph->width)
+                    : lastBaseX;
     const int glyphBaseY = startY - raiseBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
@@ -59,9 +62,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     *maxY = std::max(*maxY, glyphBaseY + glyph->top);
 
     if (!isCombining) {
-      lastBaseAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
+      lastBaseLeft = glyph->left;
+      lastBaseWidth = glyph->width;
       lastBaseTop = glyph->top;
-      prevAdvanceFP = lastBaseAdvanceFP;
+      prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
       prevCp = cp;
     }
   }
@@ -149,22 +153,30 @@ uint32_t EpdFont::applyLigatures(uint32_t cp, const char*& text) const {
 
 const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
   const int count = data->intervalCount;
-  if (count == 0) return nullptr;
+  if (count == 0 && !data->glyphMissHandler) return nullptr;
 
-  const EpdUnicodeInterval* intervals = data->intervals;
-  const auto* end = intervals + count;
+  if (count > 0) {
+    const EpdUnicodeInterval* intervals = data->intervals;
+    const auto* end = intervals + count;
 
-  // upper_bound: range lookup. Finds the first interval with first > cp, so the
-  // interval just before it is the last one with first <= cp. That's the only
-  // candidate that could contain cp. Then we verify cp <= candidate.last.
-  const auto it = std::upper_bound(
-      intervals, end, cp, [](uint32_t value, const EpdUnicodeInterval& interval) { return value < interval.first; });
+    // upper_bound: range lookup. Finds the first interval with first > cp, so the
+    // interval just before it is the last one with first <= cp. That's the only
+    // candidate that could contain cp. Then we verify cp <= candidate.last.
+    const auto it = std::upper_bound(
+        intervals, end, cp, [](uint32_t value, const EpdUnicodeInterval& interval) { return value < interval.first; });
 
-  if (it != intervals) {
-    const auto& interval = *(it - 1);
-    if (cp <= interval.last) {
-      return &data->glyph[interval.offset + (cp - interval.first)];
+    if (it != intervals) {
+      const auto& interval = *(it - 1);
+      if (cp <= interval.last) {
+        return &data->glyph[interval.offset + (cp - interval.first)];
+      }
     }
+  }
+
+  // Codepoint not in interval table — try on-demand loading (SD card fonts).
+  if (data->glyphMissHandler) {
+    const EpdGlyph* loaded = data->glyphMissHandler(data->glyphMissCtx, cp);
+    if (loaded) return loaded;
   }
 
   if (cp != REPLACEMENT_GLYPH) {

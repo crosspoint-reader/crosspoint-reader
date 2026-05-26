@@ -76,7 +76,9 @@ class HalFile : public Print {
   size_t getName(char* name, size_t len);
   size_t size();
   size_t fileSize();
+  uint64_t fileSize64();
   bool seek(size_t pos);
+  bool seek64(uint64_t pos);
   bool seekCur(int64_t offset);
   bool seekSet(size_t offset);
   int available() const;
@@ -93,13 +95,6 @@ class HalFile : public Print {
   bool isOpen() const;
   operator bool() const;
 };
-
-// Only do renaming FsFile to HalFile if this header is included by downstream code
-// The renaming is to allow using the thread-safe HalFile instead of the raw FsFile, without needing to change the
-// downstream code
-#ifndef HAL_STORAGE_IMPL
-using FsFile = HalFile;
-#endif
 
 // Downstream code must use Storage instead of SdMan
 #ifdef SdMan

@@ -66,6 +66,15 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
     delay(50);
     gpio.update();
   }
+
+#ifdef ENABLE_SERIAL_LOG
+  // Tear down HWCDC so the host sees a clean disconnect and the peripheral
+  // doesn't hold power domains that interfere with USB-powered GPIO wake.
+  // logSerial is the raw HWCDC reference; Serial is the MySerialImpl proxy
+  // (which doesn't expose end()).
+  logSerial.end();
+#endif
+
   // Pre-sleep routines from the original firmware
   // GPIO13 is connected to battery latch MOSFET, we need to make sure it's low during sleep
   // Note that this means the MCU will be completely powered off during sleep, including RTC
@@ -113,8 +122,14 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
     return _batteryCachedPercent;
   }
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  _batteryCachedPercent = battery.readPercentage();
-  return _batteryCachedPercent;
+
+  // smooth the battery %.
+  if (_batteryCachedPercent == 0) {
+    _batteryCachedPercent = 10 * battery.readPercentage();
+  } else {
+    _batteryCachedPercent = (_batteryCachedPercent * 9 + battery.readPercentage() * 10) / 10;
+  }
+  return _batteryCachedPercent / 10;
 }
 
 HalPowerManager::Lock::Lock() {

@@ -137,9 +137,14 @@ Also includes:
 
 import io
 import os
+import sys
 import zipfile
 import uuid
 from datetime import datetime
+
+if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+    print(__doc__.strip())
+    sys.exit(0)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -149,15 +154,15 @@ except ImportError:
 
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_BOOKERLY_FONT = os.path.join(
+_NOTOSERIF_FONT = os.path.join(
     _PROJECT_ROOT, "lib", "EpdFont", "builtinFonts", "source",
-    "Bookerly", "Bookerly-Regular.ttf",
+    "NotoSerif", "NotoSerif-Regular.ttf",
 )
 
 
 def _get_font(size=20):
-    """Get the Bookerly font at the requested size, with system fallbacks."""
-    paths = [_BOOKERLY_FONT]
+    """Get the NotoSerif font at the requested size, with system fallbacks."""
+    paths = [_NOTOSERIF_FONT]
     for path in paths:
         try:
             return ImageFont.truetype(path, size)

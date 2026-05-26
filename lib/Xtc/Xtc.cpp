@@ -103,7 +103,7 @@ bool Xtc::hasChapters() const {
   return parser->hasChapters();
 }
 
-const std::vector<xtc::ChapterInfo>& Xtc::getChapters() const {
+const std::vector<xtc::ChapterInfo>& Xtc::getChapters() {
   static const std::vector<xtc::ChapterInfo> kEmpty;
   if (!loaded || !parser) {
     return kEmpty;
@@ -166,7 +166,7 @@ bool Xtc::generateCoverBmp() const {
   }
 
   // Create BMP file
-  FsFile coverBmp;
+  HalFile coverBmp;
   if (!Storage.openFileForWrite("XTC", getCoverBmpPath(), coverBmp)) {
     LOG_DBG("XTC", "Failed to create cover BMP file");
     free(pageBuffer);
@@ -199,7 +199,6 @@ bool Xtc::generateCoverBmp() const {
     uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(dstRowSize));
     if (!rowBuffer) {
       free(pageBuffer);
-      coverBmp.close();
       return false;
     }
 
@@ -255,7 +254,6 @@ bool Xtc::generateCoverBmp() const {
     }
   }
 
-  coverBmp.close();
   free(pageBuffer);
 
   LOG_DBG("XTC", "Generated cover BMP: %s", getCoverBmpPath().c_str());
@@ -308,7 +306,7 @@ bool Xtc::generateThumbBmp(int height) const {
     // Page is already small enough, just use cover.bmp
     // Copy cover.bmp to thumb.bmp
     if (generateCoverBmp()) {
-      FsFile src, dst;
+      HalFile src, dst;
       if (Storage.openFileForRead("XTC", getCoverBmpPath(), src)) {
         if (Storage.openFileForWrite("XTC", getThumbBmpPath(height), dst)) {
           uint8_t buffer[512];
@@ -316,9 +314,7 @@ bool Xtc::generateThumbBmp(int height) const {
             size_t bytesRead = src.read(buffer, sizeof(buffer));
             dst.write(buffer, bytesRead);
           }
-          dst.close();
         }
-        src.close();
       }
       LOG_DBG("XTC", "Copied cover to thumb (no scaling needed)");
       return Storage.exists(getThumbBmpPath(height).c_str());
@@ -354,7 +350,7 @@ bool Xtc::generateThumbBmp(int height) const {
   }
 
   // Create thumbnail BMP file - use 1-bit format for fast home screen rendering (no gray passes)
-  FsFile thumbBmp;
+  HalFile thumbBmp;
   if (!Storage.openFileForWrite("XTC", getThumbBmpPath(height), thumbBmp)) {
     LOG_DBG("XTC", "Failed to create thumb BMP file");
     free(pageBuffer);
@@ -372,7 +368,6 @@ bool Xtc::generateThumbBmp(int height) const {
   uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
   if (!rowBuffer) {
     free(pageBuffer);
-    thumbBmp.close();
     return false;
   }
 
@@ -479,7 +474,6 @@ bool Xtc::generateThumbBmp(int height) const {
   }
 
   free(rowBuffer);
-  thumbBmp.close();
   free(pageBuffer);
 
   LOG_DBG("XTC", "Generated thumb BMP (%dx%d): %s", thumbWidth, thumbHeight, getThumbBmpPath(height).c_str());

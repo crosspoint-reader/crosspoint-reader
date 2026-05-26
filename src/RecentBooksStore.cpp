@@ -9,6 +9,7 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <iterator>
 
 namespace {
 constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
@@ -22,6 +23,9 @@ RecentBooksStore RecentBooksStore::instance;
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& coverBmpPath) {
+  // Drop stale entries first so a new add can't evict a valid book in their stead.
+  pruneMissing();
+
   // Remove existing entry if present
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
@@ -51,6 +55,41 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+bool RecentBooksStore::removeByPath(const std::string& path) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return false;
+  }
+  recentBooks.erase(it);
+  if (!saveToFile()) {
+    LOG_ERR("RBS", "Failed to persist removal of recent book: %s", path.c_str());
+  }
+  return true;
+}
+
+void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath,
+                                  const std::string& oldCachePath, const std::string& newCachePath) {
+  auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
+                         [&](const RecentBook& book) { return book.path == oldPath; });
+  if (it == recentBooks.end()) {
+    return;
+  }
+  it->path = newPath;
+  if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
+    it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
+  }
+  saveToFile();
+}
+
+bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
+
+bool RecentBooksStore::pruneMissing() {
+  const size_t before = recentBooks.size();
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
+  return recentBooks.size() != before;
 }
 
 bool RecentBooksStore::saveToFile() const {
@@ -109,7 +148,7 @@ bool RecentBooksStore::loadFromFile() {
 }
 
 bool RecentBooksStore::loadFromBinaryFile() {
-  FsFile inputFile;
+  HalFile inputFile;
   if (!Storage.openFileForRead("RBS", RECENT_BOOKS_FILE_BIN, inputFile)) {
     return false;
   }
@@ -163,6 +202,7 @@ bool RecentBooksStore::loadFromBinaryFile() {
     }
 
     if (omitted > 0) {
+      // Explicitly close() file before saveToFile() rewrites the same file
       inputFile.close();
       saveToFile();
       LOG_DBG("RBS", "Omitted %u recent book(s) with missing title", omitted);
@@ -170,11 +210,9 @@ bool RecentBooksStore::loadFromBinaryFile() {
     }
   } else {
     LOG_ERR("RBS", "Deserialization failed: Unknown version %u", version);
-    inputFile.close();
     return false;
   }
 
-  inputFile.close();
   LOG_DBG("RBS", "Recent books loaded from binary file (%d entries)", static_cast<int>(recentBooks.size()));
   return true;
 }
