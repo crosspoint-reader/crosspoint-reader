@@ -552,6 +552,10 @@ void GfxRenderer::drawPixelDither<Color::White>(const int x, const int y) const 
 
 template <>
 void GfxRenderer::drawPixelDither<Color::LightGray>(const int x, const int y) const {
+  if (gpio.deviceIsMurphyM3()) {
+    drawPixel(x, y, (x + y) % 2 == 0);
+    return;
+  }
   drawPixel(x, y, x % 2 == 0 && y % 2 == 0);
 }
 
@@ -876,13 +880,93 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     isScaled = true;
   }
 
-  // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
     LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
+
+  if (isScaled && scale < 1.0f) {
+    const int srcWidth = bitmap.getWidth();
+    const int srcHeight = bitmap.getHeight();
+    const int dstWidth = std::max(1, static_cast<int>(std::floor(srcWidth * scale)));
+    const int dstHeight = std::max(1, static_cast<int>(std::floor(srcHeight * scale)));
+    std::vector<uint8_t> sourceBits((static_cast<size_t>(srcWidth) * srcHeight + 7) / 8, 0);
+
+    auto setSourceBlack = [&](const int sx, const int sy) {
+      const size_t index = static_cast<size_t>(sy) * srcWidth + sx;
+      sourceBits[index / 8] |= static_cast<uint8_t>(1 << (index % 8));
+    };
+    auto isSourceBlack = [&](const int sx, const int sy) {
+      const size_t index = static_cast<size_t>(sy) * srcWidth + sx;
+      return (sourceBits[index / 8] >> (index % 8)) & 0x01;
+    };
+
+    for (int bmpY = 0; bmpY < srcHeight; bmpY++) {
+      if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+        LOG_ERR("GFX", "Failed to read row %d from scaled 1-bit bitmap", bmpY);
+        free(outputRow);
+        free(rowBytes);
+        return;
+      }
+
+      const int sourceY = bitmap.isTopDown() ? bmpY : srcHeight - 1 - bmpY;
+      for (int bmpX = 0; bmpX < srcWidth; bmpX++) {
+        const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+        if (val < 3) {
+          setSourceBlack(bmpX, sourceY);
+        }
+      }
+    }
+
+    static constexpr uint8_t bayer4x4[4][4] = {
+        {0, 8, 2, 10},
+        {12, 4, 14, 6},
+        {3, 11, 1, 9},
+        {15, 7, 13, 5},
+    };
+
+    for (int dstY = 0; dstY < dstHeight; dstY++) {
+      const int screenY = y + dstY;
+      if (screenY < 0) continue;
+      if (screenY >= getScreenHeight()) break;
+
+      int srcY0 = static_cast<int>(std::floor(dstY / scale));
+      int srcY1 = static_cast<int>(std::floor((dstY + 1) / scale));
+      srcY0 = std::clamp(srcY0, 0, srcHeight - 1);
+      srcY1 = std::clamp(srcY1, srcY0 + 1, srcHeight);
+
+      for (int dstX = 0; dstX < dstWidth; dstX++) {
+        const int screenX = x + dstX;
+        if (screenX < 0) continue;
+        if (screenX >= getScreenWidth()) break;
+
+        int srcX0 = static_cast<int>(std::floor(dstX / scale));
+        int srcX1 = static_cast<int>(std::floor((dstX + 1) / scale));
+        srcX0 = std::clamp(srcX0, 0, srcWidth - 1);
+        srcX1 = std::clamp(srcX1, srcX0 + 1, srcWidth);
+
+        int blackCount = 0;
+        int totalCount = 0;
+        for (int srcY = srcY0; srcY < srcY1; srcY++) {
+          for (int srcX = srcX0; srcX < srcX1; srcX++) {
+            blackCount += isSourceBlack(srcX, srcY) ? 1 : 0;
+            totalCount++;
+          }
+        }
+
+        const int threshold = (static_cast<int>(bayer4x4[dstY & 0x03][dstX & 0x03]) * totalCount) / 16;
+        if (blackCount > threshold) {
+          drawPixel(screenX, screenY, true);
+        }
+      }
+    }
+
     free(outputRow);
     free(rowBytes);
     return;

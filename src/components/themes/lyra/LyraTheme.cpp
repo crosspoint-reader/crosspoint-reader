@@ -79,6 +79,24 @@ const uint8_t* iconForName(UIIcon icon, int size) {
   }
   return nullptr;
 }
+
+void drawScaledMonochromeIcon(const GfxRenderer& renderer, const uint8_t* bitmap, int x, int y, int srcSize,
+                              int dstSize, bool rotateClockwise = false) {
+  const int srcBytesPerRow = (srcSize + 7) / 8;
+  for (int dy = 0; dy < dstSize; dy++) {
+    for (int dx = 0; dx < dstSize; dx++) {
+      const int scaledX = dx * srcSize / dstSize;
+      const int scaledY = dy * srcSize / dstSize;
+      const int sx = rotateClockwise ? scaledY : scaledX;
+      const int sy = rotateClockwise ? (srcSize - 1 - scaledX) : scaledY;
+      const uint8_t byte = bitmap[sy * srcBytesPerRow + sx / 8];
+      const bool black = ((byte >> (7 - (sx % 8))) & 0x01) == 0;
+      if (black) {
+        renderer.drawPixel(x + dx, y + dy, true);
+      }
+    }
+  }
+}
 }  // namespace
 
 void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
@@ -425,14 +443,16 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       if (coverPath.empty()) {
         hasCover = false;
       } else {
-        const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, metrics.homeCoverHeight);
+        const int thumbHeight = gpio.deviceIsMurphyM3() ? metrics.homeCoverHeight * 2 : metrics.homeCoverHeight;
+        const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, thumbHeight);
 
         // First time: load cover from SD and render
         HalFile file;
         if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-            coverWidth = bitmap.getWidth();
+            coverWidth = bitmap.getHeight() > 0 ? (bitmap.getWidth() * metrics.homeCoverHeight) / bitmap.getHeight()
+                                                : static_cast<int>(metrics.homeCoverHeight * 0.6);
             renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth,
                                 metrics.homeCoverHeight);
           } else {
@@ -466,21 +486,16 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     int textWidth = tileWidth - 2 * hPaddingInSelection - metrics.verticalSpacing - coverWidth;
 
     if (bookSelected) {
-      if (gpio.deviceIsMurphyM3()) {
-        renderer.drawRoundedRect(tileX, tileY, tileWidth, metrics.homeCoverHeight + 2 * hPaddingInSelection, 2,
-                                 cornerRadius, true);
-      } else {
-        // Draw selection box
-        renderer.fillRoundedRect(tileX, tileY, tileWidth, hPaddingInSelection, cornerRadius, true, true, false, false,
-                                 Color::LightGray);
-        renderer.fillRectDither(tileX, tileY + hPaddingInSelection, hPaddingInSelection, metrics.homeCoverHeight,
-                                Color::LightGray);
-        renderer.fillRectDither(tileX + hPaddingInSelection + coverWidth, tileY + hPaddingInSelection,
-                                tileWidth - hPaddingInSelection - coverWidth, metrics.homeCoverHeight,
-                                Color::LightGray);
-        renderer.fillRoundedRect(tileX, tileY + metrics.homeCoverHeight + hPaddingInSelection, tileWidth,
-                                 hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
-      }
+      // Draw selection box
+      renderer.fillRoundedRect(tileX, tileY, tileWidth, hPaddingInSelection, cornerRadius, true, true, false, false,
+                               Color::LightGray);
+      renderer.fillRectDither(tileX, tileY + hPaddingInSelection, hPaddingInSelection, metrics.homeCoverHeight,
+                              Color::LightGray);
+      renderer.fillRectDither(tileX + hPaddingInSelection + coverWidth, tileY + hPaddingInSelection,
+                              tileWidth - hPaddingInSelection - coverWidth, metrics.homeCoverHeight,
+                              Color::LightGray);
+      renderer.fillRoundedRect(tileX, tileY + metrics.homeCoverHeight + hPaddingInSelection, tileWidth,
+                               hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
     }
 
     const int titleFont = gpio.deviceIsMurphyM3() ? UI_10_FONT_ID : UI_12_FONT_ID;
@@ -523,8 +538,8 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                                const std::function<UIIcon(int index)>& rowIcon) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int menuIconAssetSize = mainMenuIconSize;
-  const int menuIconDrawSize = menuIconAssetSize;
-  const int labelFont = gpio.deviceIsMurphyM3() ? UI_10_FONT_ID : UI_12_FONT_ID;
+  const int menuIconDrawSize = gpio.deviceIsMurphyM3() ? 22 : menuIconAssetSize;
+  const int labelFont = gpio.deviceIsMurphyM3() ? SMALL_FONT_ID : UI_12_FONT_ID;
   for (int i = 0; i < buttonCount; ++i) {
     int tileWidth = rect.width - metrics.contentSidePadding * 2;
     Rect tileRect = Rect{rect.x + metrics.contentSidePadding,
@@ -547,8 +562,13 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
       UIIcon icon = rowIcon(i);
       const uint8_t* iconBitmap = iconForName(icon, menuIconAssetSize);
       if (iconBitmap != nullptr) {
-        renderer.drawIcon(iconBitmap, textX, tileRect.y + (metrics.menuRowHeight - menuIconDrawSize) / 2,
-                          menuIconDrawSize, menuIconDrawSize);
+        const int iconY = tileRect.y + (metrics.menuRowHeight - menuIconDrawSize) / 2;
+        if (gpio.deviceIsMurphyM3()) {
+          drawScaledMonochromeIcon(renderer, iconBitmap, textX, iconY, menuIconAssetSize, menuIconDrawSize,
+                                   true);
+        } else {
+          renderer.drawIcon(iconBitmap, textX, iconY, menuIconDrawSize, menuIconDrawSize);
+        }
         textX += menuIconDrawSize + hPaddingInSelection + 2;
       }
     }
