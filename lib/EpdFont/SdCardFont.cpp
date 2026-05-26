@@ -168,7 +168,7 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     return true;
   }
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("SDCF", filePath_, file)) {
     LOG_ERR("SDCF", "Failed to open .cpfont for kern/lig: %s", filePath_);
     return false;
@@ -345,7 +345,7 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   // Step 6: read the full matrix's rows for each used left class, keep only
   // columns for used right classes. One SD seek + one read per used left class;
   // a row is kernRightClassCount bytes (~200 for Literata).
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("SDCF", filePath_, file)) {
     LOG_ERR("SDCF", "Failed to open .cpfont for mini kern: %s", filePath_);
     freeStyleMiniKern(s);
@@ -425,7 +425,7 @@ bool SdCardFont::load(const char* path) {
   strncpy(filePath_, path, sizeof(filePath_) - 1);
   filePath_[sizeof(filePath_) - 1] = '\0';
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("SDCF", path, file)) {
     LOG_ERR("SDCF", "Failed to open .cpfont: %s", path);
     return false;
@@ -798,7 +798,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   std::sort(readOrder, readOrder + validCount,
             [&](uint32_t a, uint32_t b) { return mappings[a].globalIndex < mappings[b].globalIndex; });
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("SDCF", filePath_, file)) {
     LOG_ERR("SDCF", "Failed to reopen .cpfont for prewarm (style %u)", styleIdx);
     delete[] readOrder;
@@ -1104,7 +1104,7 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
               [](const CpIdx& a, const CpIdx& b) { return a.glyphIndex < b.glyphIndex; });
 
     // Open file once and read advanceX for each needed glyph.
-    FsFile file;
+    HalFile file;
     if (!Storage.openFileForRead("SDCF", filePath_, file)) {
       LOG_ERR("SDCF", "buildAdvanceTable: failed to open .cpfont for style %u", si);
       continue;
@@ -1277,7 +1277,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   bool wasAtCapacity = (self->overflowCount_ == OVERFLOW_CAPACITY);
 
   // Read glyph metadata into temporary
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("SDCF", self->filePath_, file)) {
     LOG_ERR("SDCF", "Overflow: failed to open .cpfont");
     return nullptr;

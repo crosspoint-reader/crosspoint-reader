@@ -8,7 +8,7 @@
 
 struct ZipInflateCtx {
   InflateReader reader;  // Must be first — callback casts uzlib_uncomp* to ZipInflateCtx*
-  FsFile* file = nullptr;
+  HalFile* file = nullptr;
   size_t fileRemaining = 0;
   uint8_t* readBuf = nullptr;
   size_t readBufSize = 0;

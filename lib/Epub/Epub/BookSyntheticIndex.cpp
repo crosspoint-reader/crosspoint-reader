@@ -177,7 +177,7 @@ bool loadFromCache(const std::string& cachePath, const int spineCount, const uin
   out = {};
   if (spineCount <= 0) return false;
 
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("SYTP", (cachePath + "/book_synthetic_pages.bin").c_str(), f)) return false;
 
   auto rd32 = [&](uint32_t& v) { return f.read(reinterpret_cast<uint8_t*>(&v), sizeof(v)) == sizeof(v); };
@@ -243,7 +243,7 @@ bool buildAndSave(const Epub& epub, const uint32_t cpp, BuiltIndex& out, BuildPr
   out.totalTextCodepoints = st.totalProcessed;
   out.pageStartChar = std::move(st.pageStarts);
 
-  FsFile f;
+  HalFile f;
   const std::string path = epub.getCachePath() + "/book_synthetic_pages.bin";
   if (!Storage.openFileForWrite("SYTP", path.c_str(), f)) {
     LOG_ERR("SYTP", "Could not write %s", path.c_str());

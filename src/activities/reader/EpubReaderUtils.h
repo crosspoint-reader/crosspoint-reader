@@ -13,7 +13,7 @@ inline bool saveProgress(Epub& epub, int spineIndex, int pageNumber, int pageCou
     LOG_ERR("ERS", "Progress values out of range: spine=%d page=%d count=%d", spineIndex, pageNumber, pageCount);
     return false;
   }
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForWrite("ERS", epub.getCachePath() + "/progress.bin", f)) {
     LOG_ERR("ERS", "Could not open progress file for write!");
     return false;

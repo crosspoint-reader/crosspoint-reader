@@ -67,7 +67,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   }
 }
 
-bool TextBlock::serialize(FsFile& file) const {
+bool TextBlock::serialize(HalFile& file) const {
   // Focus annotations are optional; vectors are either empty (no splits in this block)
   // or sized in lockstep with words[].
   const bool hasFocus = !wordFocusBoundary.empty();
@@ -110,7 +110,7 @@ bool TextBlock::serialize(FsFile& file) const {
   return true;
 }
 
-std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
+std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint16_t wc;
   std::vector<std::string> words;
   std::vector<int16_t> wordXpos;

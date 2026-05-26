@@ -271,7 +271,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   const bool previewStableSample = stablePreviewMode != CrossPointSettings::STABLE_PAGES_HIDE;
   const int previewStableCur = previewStableSample ? 400 : -1;
   const int previewStableTot = previewStableSample ? 602 : -1;
-  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding, 0, previewStableCur, previewStableTot);
+  GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding, 0, /*fillMargin*/ false, previewStableCur,
+                    previewStableTot);
 
   const int previewLabelY = renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() -
                             verticalPreviewPadding - verticalPreviewTextPadding;

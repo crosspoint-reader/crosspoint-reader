@@ -14,7 +14,7 @@
 // Initialize the static instance
 CrossPointSettings CrossPointSettings::instance;
 
-void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
+void readAndValidate(HalFile& file, uint8_t& member, const uint8_t maxValue) {
   uint8_t tempValue;
   serialization::readPod(file, tempValue);
   if (tempValue < maxValue) {
@@ -127,7 +127,7 @@ bool CrossPointSettings::migrateLanguageBinaryFile() {
   // frozen enum order from 2f969a9.
   if (!Storage.exists(LANG_FILE_BIN)) return false;
 
-  FsFile f;
+  HalFile f;
   if (Storage.openFileForRead("CPS", LANG_FILE_BIN, f)) {
     uint8_t version;
     serialization::readPod(f, version);
@@ -146,7 +146,7 @@ bool CrossPointSettings::migrateLanguageBinaryFile() {
 }
 
 bool CrossPointSettings::loadFromBinaryFile() {
-  FsFile inputFile;
+  HalFile inputFile;
   if (!Storage.openFileForRead("CPS", SETTINGS_FILE_BIN, inputFile)) {
     return false;
   }
@@ -312,12 +312,13 @@ unsigned long CrossPointSettings::getSleepTimeoutMs() const {
     case SLEEP_5_MIN:
       return 5UL * 60 * 1000;
     case SLEEP_10_MIN:
-    default:
       return 10UL * 60 * 1000;
     case SLEEP_15_MIN:
       return 15UL * 60 * 1000;
     case SLEEP_30_MIN:
       return 30UL * 60 * 1000;
+    default:
+      return 10UL * 60 * 1000;
   }
 }
 

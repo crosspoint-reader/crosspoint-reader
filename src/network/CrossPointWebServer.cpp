@@ -35,7 +35,7 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 CrossPointWebServer* wsInstance = nullptr;
 
 // WebSocket upload state
-FsFile wsUploadFile;
+HalFile wsUploadFile;
 String wsUploadFileName;
 String wsUploadPath;
 size_t wsUploadSize = 0;
@@ -374,7 +374,7 @@ void CrossPointWebServer::handleStatus() const {
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
-  FsFile root = Storage.open(path);
+  HalFile root = Storage.open(path);
   if (!root) {
     LOG_DBG("WEB", "Failed to open directory: %s", path);
     return;
@@ -388,7 +388,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
   LOG_DBG("WEB", "Scanning files in: %s", path);
 
-  FsFile file = root.openNextFile();
+  HalFile file = root.openNextFile();
   char name[500];
   while (file) {
     file.getName(name, sizeof(name));
@@ -519,7 +519,7 @@ void CrossPointWebServer::handleDownload() const {
     return;
   }
 
-  FsFile file = Storage.open(itemPath.c_str());
+  HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -842,7 +842,7 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  FsFile file = Storage.open(itemPath.c_str());
+  HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -918,7 +918,7 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  FsFile file = Storage.open(itemPath.c_str());
+  HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -934,7 +934,7 @@ void CrossPointWebServer::handleMove() const {
     server->send(404, "text/plain", "Destination not found");
     return;
   }
-  FsFile destDir = Storage.open(destPath.c_str());
+  HalFile destDir = Storage.open(destPath.c_str());
   if (!destDir || !destDir.isDirectory()) {
     if (destDir) {
       destDir.close();
@@ -1064,10 +1064,10 @@ void CrossPointWebServer::handleDelete() const {
 
     // Decide whether it's a directory or file by opening it
     bool success = false;
-    FsFile f = Storage.open(itemPath.c_str());
+    HalFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
       // For folders, ensure empty before removing
-      FsFile entry = f.openNextFile();
+      HalFile entry = f.openNextFile();
       if (entry) {
         entry.close();
         f.close();
@@ -1741,7 +1741,7 @@ void CrossPointWebServer::handleFontList() const {
       fileObj["name"] = name ? name + 1 : file.path.c_str();
 
       // Stat the file for size
-      FsFile f;
+      HalFile f;
       if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
         fileObj["size"] = static_cast<unsigned long>(f.size());
         f.close();
@@ -1848,7 +1848,9 @@ void CrossPointWebServer::handleFontUploadData() {
         fontUpload.bytesWritten += fontUpload.bufferPos;
         fontUpload.bufferPos = 0;
       }
-      fontUpload.file.close();
+      if (fontUpload.file) {
+        fontUpload.file.close();
+      }
 
       if (!fontUpload.valid && !fontUpload.filePath.empty()) {
         Storage.remove(fontUpload.filePath.c_str());
@@ -1859,7 +1861,9 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_ABORTED: {
-      fontUpload.file.close();
+      if (fontUpload.file) {
+        fontUpload.file.close();
+      }
       if (!fontUpload.filePath.empty()) {
         Storage.remove(fontUpload.filePath.c_str());
       }
