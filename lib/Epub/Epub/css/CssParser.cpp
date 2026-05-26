@@ -466,6 +466,12 @@ bool CssParser::loadFromStream(HalFile& source) {
     return false;
   }
 
+  // Pre-size the rules map per CLAUDE.md §"std::vector Pre-allocation" — the
+  // same logic applies to unordered_map. Sized from an EPUB corpus (~150 books):
+  // p90 = 232, p95 = 278, p99 = 470 rules summed across a book's stylesheets.
+  // 256 covers ~p93 without rehash; growth past it still doubles. Cap is 1500.
+  rulesBySelector_.reserve(256);
+
   size_t totalRead = 0;
 
   // Use stack-allocated buffers for parsing to avoid heap reallocations
@@ -781,6 +787,9 @@ bool CssParser::loadFromCache() {
     rulesBySelector_.clear();
     return false;
   }
+
+  // Exact size known here — reserve so deserialize never rehashes.
+  rulesBySelector_.reserve(ruleCount);
 
   auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
     return static_cast<size_t>(file.available()) >= neededBytes;

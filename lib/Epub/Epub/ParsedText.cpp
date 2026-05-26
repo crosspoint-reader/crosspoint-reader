@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
 #include <limits>
 #include <vector>
 
@@ -238,10 +237,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   std::string_view segment(reinterpret_cast<const char*>(segmentStart), segmentLen);
   processSegment(segment, inWordSegment, isFirstSegment ? attachToPrevious : true);
 }
-// Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
-                                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
-                                       const bool includeLastLine) {
+// Consumes data to minimize memory usage. Takes a non-capturing function
+// pointer plus opaque ctx — the public templated wrapper in the header
+// adapts caller lambdas into this shape so no std::function closure heap
+// allocation happens.
+void ParsedText::layoutAndExtractLinesImpl(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
+                                           LineSink processLine, void* processLineCtx, const bool includeLastLine) {
   if (words.empty()) {
     return;
   }
@@ -279,7 +280,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, wordWidths, wordContinues, lineBreakIndices, processLine, renderer, fontId);
+    extractLine(i, pageWidth, wordWidths, wordContinues, lineBreakIndices, processLine, processLineCtx, renderer,
+                fontId);
   }
 
   // Remove consumed words so size() reflects only remaining words
@@ -606,8 +608,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
                              const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
-                             const GfxRenderer& renderer, const int fontId) {
+                             LineSink processLine, void* processLineCtx, const GfxRenderer& renderer,
+                             const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
@@ -727,7 +729,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   if (!lineHasFocusSplit) {
-    processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
+    processLine(processLineCtx,
+                std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
                                             std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle));
     return;
   }
@@ -772,6 +775,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
-                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle));
+  processLine(processLineCtx, std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
+                                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle));
 }
