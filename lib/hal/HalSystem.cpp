@@ -42,8 +42,12 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
     panicStack[i].sp = 0;
   }
 
-  // Copied from components/esp_system/port/arch/riscv/panic_arch.c
+  // Copied from the ESP-IDF panic handlers for the active CPU architecture.
+#if CONFIG_IDF_TARGET_ARCH_RISCV
   uint32_t sp = (uint32_t)((RvExcFrame*)frame)->sp;
+#else
+  uint32_t sp = (uint32_t)((XtExcFrame*)frame)->a1;
+#endif
   const int per_line = 8;
   int depth = 0;
   for (int x = 0; x < 1024; x += per_line * sizeof(uint32_t)) {

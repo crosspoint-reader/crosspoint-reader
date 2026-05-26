@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
+#include <HalBacklight.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
@@ -149,6 +150,7 @@ enum class BootResume : uint8_t {
   Splash,       // cold boot, flash, panic, or plain reboot
   Silent,       // heap-defrag ESP.restart() (RTC flag; lost on power loss)
   QuickResume,  // wake from a quick-resume deep sleep (SD flag; survives power loss)
+  HomeFirst,    // Murphy bring-up: skip splash, but do not run silent-resume repaint handling
 };
 
 // Latched true once enterDeepSleep() commits to sleeping, before it tears down
@@ -355,11 +357,23 @@ void setup() {
   silentRebootTarget = 0;
 
   gpio.begin();
+  halBacklight.begin();
   powerManager.begin();
   halTiltSensor.begin();
   halClock.begin();
 
-  LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
+  const char* detectedHardware = gpio.deviceIsMurphyM3() ? "Murphy M3" : (gpio.deviceIsX3() ? "X3" : "X4");
+  LOG_INF("MAIN", "Hardware detect: %s", detectedHardware);
+#if defined(CROSSPOINT_BOARD_MURPHY_M3) || defined(BOARD_MURPHY_M3)
+  LOG_INF("MAIN", "Murphy build marker: no-front-button-hints-20260526");
+#endif
+
+  const auto wakeupReason = gpio.getWakeupReason();
+  bool powerWakeReleased = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    waitForPowerRelease();
+    powerWakeReleased = true;
+  }
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -367,6 +381,7 @@ void setup() {
     LOG_ERR("MAIN", "SD card initialization failed");
     setupDisplayAndFonts(isSilentReboot);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
+    allowSleepAt = millis() + 2000;
     return;
   }
 
@@ -381,12 +396,13 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
-  const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying power button press duration");
-      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
-                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+      if (!powerWakeReleased) {
+        LOG_DBG("MAIN", "Verifying power button press duration");
+        gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
+                                     SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+      }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
@@ -426,9 +442,14 @@ void setup() {
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
-  const BootResume resume = isSilentReboot              ? BootResume::Silent
-                            : !APP_STATE.showBootScreen ? BootResume::QuickResume
-                                                        : BootResume::Splash;
+  const bool murphyHomeFirstPaint = gpio.deviceIsMurphyM3() && !isSilentReboot;
+  if (murphyHomeFirstPaint) {
+    LOG_INF("MAIN", "Murphy display bringup: skipping Boot splash so Home is first EPD frame");
+  }
+  const BootResume resume = isSilentReboot                ? BootResume::Silent
+                            : murphyHomeFirstPaint        ? BootResume::HomeFirst
+                            : !APP_STATE.showBootScreen   ? BootResume::QuickResume
+                                                          : BootResume::Splash;
 
   setupDisplayAndFonts(resume != BootResume::Splash);
 
@@ -455,6 +476,10 @@ void setup() {
     case BootResume::Splash:
       activityManager.goToBoot();
       break;
+    case BootResume::HomeFirst:
+      // Splash skipped only to keep Murphy's first EPD frame useful for display
+      // bring-up. Normal routing below still chooses Home/Reader.
+      break;
   }
 
   if (recoveryFirmwareMode) {
@@ -467,7 +492,7 @@ void setup() {
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
-  } else if (resume == BootResume::Silent) {
+  } else if (resume == BootResume::Silent || resume == BootResume::HomeFirst) {
     // target == home (or reader with no open book): land on home — don't fall
     // through to the sleep-wake "resume reader" logic, which fires on stale
     // openEpubPath + lastSleepFromReader from a prior session.

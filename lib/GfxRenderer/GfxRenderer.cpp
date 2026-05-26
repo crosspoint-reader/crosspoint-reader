@@ -243,6 +243,10 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  if (x < 0 || y < 0 || x >= getScreenWidth() || y >= getScreenHeight()) {
+    return;
+  }
+
   int phyX = 0;
   int phyY = 0;
 

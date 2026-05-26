@@ -15,6 +15,11 @@ void HalDisplay::begin(bool seamless) {
   if (gpio.deviceIsX3()) {
     einkDisplay.setDisplayX3();
   }
+#if defined(CROSSPOINT_BOARD_MURPHY_M3) || defined(BOARD_MURPHY_M3)
+  else if (gpio.deviceIsMurphyM3()) {
+    einkDisplay.setDisplayMurphyM3();
+  }
+#endif
 
   einkDisplay.begin();
 

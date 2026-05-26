@@ -148,6 +148,11 @@ HalGPIO::DeviceType nvsToDeviceType(NvsDeviceValue value) {
 }
 
 HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
+  if (BoardConfig::isMurphyM3()) {
+    LOG_INF("HW", "Build target: Murphy M3");
+    return HalGPIO::DeviceType::MurphyM3;
+  }
+
   // Explicit override for recovery/support:
   // 0 = auto, 1 = force X4, 2 = force X3
   const NvsDeviceValue overrideValue = readNvsDeviceValue(NVS_KEY_DEV_OVERRIDE, NvsDeviceValue::Unknown);
@@ -192,12 +197,18 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 
 void HalGPIO::begin() {
   inputMgr.begin();
-  SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
+  if (!BoardConfig::ACTIVE.sd.separateSpi) {
+    SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
+  } else {
+    SPI.begin(EPD_SCLK, -1, EPD_MOSI, EPD_CS);
+  }
 
   _deviceType = detectDeviceTypeWithFingerprint();
 
-  if (deviceIsX4()) {
+  if (deviceIsX4() && BAT_GPIO0 >= 0) {
     pinMode(BAT_GPIO0, INPUT);
+  }
+  if (deviceIsX4() && UART0_RXD >= 0) {
     pinMode(UART0_RXD, INPUT);
   }
 }
@@ -232,7 +243,11 @@ void HalGPIO::startDeepSleep() {
     inputMgr.update();
   }
   // Arm the wakeup trigger *after* the button is released
+#if defined(SOC_PM_SUPPORT_EXT1_WAKEUP) && SOC_PM_SUPPORT_EXT1_WAKEUP
+  esp_sleep_enable_ext1_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+#else
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+#endif
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
@@ -270,6 +285,10 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 }
 
 bool HalGPIO::isUsbConnected() const {
+  if (deviceIsMurphyM3() || UART0_RXD < 0) {
+    return false;
+  }
+
   if (deviceIsX3()) {
     // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
     // Positive current means charging.
@@ -292,6 +311,10 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
   const bool usbConnected = isUsbConnected();
 
+  if ((wakeupCause == ESP_SLEEP_WAKEUP_EXT1 || wakeupCause == ESP_SLEEP_WAKEUP_GPIO) &&
+      resetReason == ESP_RST_DEEPSLEEP) {
+    return WakeupReason::PowerButton;
+  }
   if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
     return WakeupReason::PowerButton;

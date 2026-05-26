@@ -250,20 +250,30 @@ void HomeActivity::render(RenderLock&&) {
       renderer,
       Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
+                         metrics.homeMenuTopOffset
+#if !defined(CROSSPOINT_BOARD_MURPHY_M3) && !defined(BOARD_MURPHY_M3)
+                         + metrics.buttonHintsHeight
+#endif
+                         )},
       static_cast<int>(menuItems.size()),
       metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
+#if !defined(CROSSPOINT_BOARD_MURPHY_M3) && !defined(BOARD_MURPHY_M3)
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+#endif
 
   renderer.displayBuffer();
 
   if (!firstRenderDone) {
     firstRenderDone = true;
+#if defined(CROSSPOINT_BOARD_MURPHY_M3) || defined(BOARD_MURPHY_M3)
+    recentsLoaded = true;
+#else
     requestUpdate();
+#endif
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);

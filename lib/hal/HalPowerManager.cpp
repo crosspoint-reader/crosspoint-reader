@@ -11,14 +11,18 @@
 HalPowerManager powerManager;  // Singleton instance
 
 void HalPowerManager::begin() {
-  if (gpio.deviceIsX3()) {
+  if (gpio.deviceIsMurphyM3()) {
+    _batteryUseI2C = false;
+  } else if (gpio.deviceIsX3()) {
     // X3 uses an I2C fuel gauge for battery monitoring.
     // I2C init must come AFTER gpio.begin() so early hardware detection/probes are finished.
     Wire.begin(X3_I2C_SDA, X3_I2C_SCL, X3_I2C_FREQ);
     Wire.setTimeOut(4);
     _batteryUseI2C = true;
   } else {
-    pinMode(BAT_GPIO0, INPUT);
+    if (BAT_GPIO0 >= 0) {
+      pinMode(BAT_GPIO0, INPUT);
+    }
   }
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
@@ -75,26 +79,39 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   logSerial.end();
 #endif
 
-  // Pre-sleep routines from the original firmware
-  // GPIO13 is connected to battery latch MOSFET, we need to make sure it's low during sleep
-  // Note that this means the MCU will be completely powered off during sleep, including RTC
-  constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
-  gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
-  gpio_set_level(GPIO_SPIWP, 0);
-  esp_sleep_config_gpio_isolate();
-  gpio_deep_sleep_hold_en();
-  gpio_hold_en(GPIO_SPIWP);
+  if (!gpio.deviceIsMurphyM3()) {
+    // Pre-sleep routines from the original firmware.
+    // On X4 GPIO13 is connected to the battery latch MOSFET and must be low
+    // during sleep. Murphy uses GPIO13 elsewhere, so do not hold it there.
+    constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
+    gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_SPIWP, 0);
+    esp_sleep_config_gpio_isolate();
+    gpio_deep_sleep_hold_en();
+    gpio_hold_en(GPIO_SPIWP);
+  } else if (BoardConfig::ACTIVE.frontlight.pin >= 0) {
+    pinMode(BoardConfig::ACTIVE.frontlight.pin, OUTPUT);
+    digitalWrite(BoardConfig::ACTIVE.frontlight.pin, BoardConfig::ACTIVE.frontlight.activeHigh ? LOW : HIGH);
+  }
   pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
   // Arm the wakeup trigger *after* the button is released
   // Note: this is only useful for waking up on USB power. On battery, the MCU will be completely powered off, so the
   // power button is hard-wired to briefly provide power to the MCU, waking it up regardless of the wakeup source
   // configuration
+#if defined(SOC_PM_SUPPORT_EXT1_WAKEUP) && SOC_PM_SUPPORT_EXT1_WAKEUP
+  esp_sleep_enable_ext1_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+#else
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+#endif
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
+  if (BAT_GPIO0 < 0 && !_batteryUseI2C) {
+    return 100;
+  }
+
   if (_batteryUseI2C) {
     const unsigned long now = millis();
     if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {

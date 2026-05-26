@@ -1,21 +1,22 @@
 #pragma once
 
 #include <Arduino.h>
+#include <BoardConfig.h>
 #include <InputManager.h>
 
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
-#define EPD_SCLK 8   // SPI Clock
-#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
-#define EPD_CS 21    // Chip Select
-#define EPD_DC 4     // Data/Command
-#define EPD_RST 5    // Reset
-#define EPD_BUSY 6   // Busy
+#define EPD_SCLK BoardConfig::ACTIVE.display.sclk
+#define EPD_MOSI BoardConfig::ACTIVE.display.mosi
+#define EPD_CS BoardConfig::ACTIVE.display.cs
+#define EPD_DC BoardConfig::ACTIVE.display.dc
+#define EPD_RST BoardConfig::ACTIVE.display.rst
+#define EPD_BUSY BoardConfig::ACTIVE.display.busy
 
-#define SPI_MISO 7  // SPI MISO, shared between SD card and display (Master In Slave Out)
+#define SPI_MISO BoardConfig::ACTIVE.sd.miso
 
-#define BAT_GPIO0 0  // Battery voltage
+#define BAT_GPIO0 BoardConfig::ACTIVE.batteryAdc
 
-#define UART0_RXD 20  // Used for USB connection detection
+#define UART0_RXD BoardConfig::ACTIVE.usbDetect
 
 // Xteink X3 Hardware
 #define X3_I2C_SDA 20
@@ -47,7 +48,7 @@ class HalGPIO {
   bool usbStateChanged = false;
 
  public:
-  enum class DeviceType : uint8_t { X4, X3 };
+  enum class DeviceType : uint8_t { X4, X3, MurphyM3 };
 
  private:
   DeviceType _deviceType = DeviceType::X4;
@@ -58,6 +59,7 @@ class HalGPIO {
   // Inline device type helpers for cleaner downstream checks
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
+  inline bool deviceIsMurphyM3() const { return _deviceType == DeviceType::MurphyM3; }
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
