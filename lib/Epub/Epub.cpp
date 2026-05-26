@@ -274,7 +274,7 @@ void Epub::discoverCssFilesFromZip() {
   zf.enumerateFilePaths([&](std::string_view filePath) {
     if (!opfDir.empty() && filePath.find(opfDir) != 0) {
       return;  // Skip files that are not in the same directory as OPF manifest, as CSS files are typically located
-                 // there or in subfolders
+               // there or in subfolders
     }
 
     if (FsHelpers::hasCssExtension(filePath)) {
