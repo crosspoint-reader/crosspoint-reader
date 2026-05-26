@@ -4,7 +4,6 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
@@ -15,6 +14,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceProfile.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
@@ -56,7 +56,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
   bool showingLoading = false;
   Rect popupRect;
-  const int thumbHeight = gpio.deviceIsMurphyM3() ? coverHeight * 2 : coverHeight;
+  const int thumbHeight = coverHeight * DeviceProfiles::current().coverThumbScale;
 
   int progress = 0;
   for (RecentBook& book : recentBooks) {

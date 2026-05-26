@@ -21,6 +21,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceProfile.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -362,7 +363,7 @@ void setup() {
   halTiltSensor.begin();
   halClock.begin();
 
-  const char* detectedHardware = gpio.deviceIsMurphyM3() ? "Murphy M3" : (gpio.deviceIsX3() ? "X3" : "X4");
+  const char* detectedHardware = DeviceProfiles::current().name;
   LOG_INF("MAIN", "Hardware detect: %s", detectedHardware);
 #if defined(CROSSPOINT_BOARD_MURPHY_M3) || defined(BOARD_MURPHY_M3)
   LOG_INF("MAIN", "Murphy build marker: no-front-button-hints-20260526");
@@ -442,12 +443,13 @@ void setup() {
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
-  const bool murphyHomeFirstPaint = gpio.deviceIsMurphyM3() && !isSilentReboot;
-  if (murphyHomeFirstPaint) {
-    LOG_INF("MAIN", "Murphy display bringup: skipping Boot splash so Home is first EPD frame");
+  const bool skipBootSplash = DeviceProfiles::current().skipBootSplash && !isSilentReboot;
+  if (skipBootSplash) {
+    LOG_INF("MAIN", "%s display bringup: skipping Boot splash so Home is first EPD frame",
+            DeviceProfiles::current().name);
   }
   const BootResume resume = isSilentReboot                ? BootResume::Silent
-                            : murphyHomeFirstPaint        ? BootResume::HomeFirst
+                            : skipBootSplash              ? BootResume::HomeFirst
                             : !APP_STATE.showBootScreen   ? BootResume::QuickResume
                                                           : BootResume::Splash;
 

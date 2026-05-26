@@ -13,6 +13,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "DeviceProfile.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -134,7 +135,7 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
-  if (gpio.deviceIsMurphyM3()) {
+  if (!DeviceProfiles::current().showButtonHints) {
     return;
   }
 

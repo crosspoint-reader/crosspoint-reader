@@ -8,8 +8,8 @@
 #include <cstring>
 #include <string>
 
+#include "DeviceProfile.h"
 #include "I18nKeys.h"
-#include "fontIds.h"
 
 // Initialize the static instance
 CrossPointSettings CrossPointSettings::instance;
@@ -339,50 +339,5 @@ int CrossPointSettings::getRefreshFrequency() const {
 }
 
 int CrossPointSettings::getReaderFontId() const {
-  // Check SD card font first
-  if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
-    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
-    if (id != 0) return id;
-    // Fall through to built-in if SD font not found
-  }
-
-  switch (fontFamily) {
-    case NOTOSERIF:
-    default:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSERIF_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSERIF_14_FONT_ID;
-        case LARGE:
-          return NOTOSERIF_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSERIF_18_FONT_ID;
-      }
-    case NOTOSANS:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSANS_14_FONT_ID;
-        case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
-      }
-    case OPENDYSLEXIC:
-      switch (fontSize) {
-        case SMALL:
-          return OPENDYSLEXIC_8_FONT_ID;
-        case MEDIUM:
-        default:
-          return OPENDYSLEXIC_10_FONT_ID;
-        case LARGE:
-          return OPENDYSLEXIC_12_FONT_ID;
-        case EXTRA_LARGE:
-          return OPENDYSLEXIC_14_FONT_ID;
-      }
-  }
+  return DeviceProfiles::readerFontId();
 }
