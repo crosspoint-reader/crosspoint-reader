@@ -59,7 +59,6 @@ class CrossPointWebServerActivity final : public Activity {
   void onWifiSelectionComplete(bool connected);
   void startAccessPoint();
   void startWebServer();
-  void stopWebServer();
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

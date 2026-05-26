@@ -11,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
+#include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
@@ -30,6 +31,23 @@ constexpr int QR_CODE_HEIGHT = 198;
 // DNS server for captive portal (redirects all DNS queries to our IP)
 DNSServer* dnsServer = nullptr;
 constexpr uint16_t DNS_PORT = 53;
+
+void stopDnsServer() {
+  if (!dnsServer) return;
+
+  dnsServer->stop();
+  delete dnsServer;
+  dnsServer = nullptr;
+}
+
+void restartMdns(const char* hostname, const char* tag) {
+  MDNS.end();
+  if (MDNS.begin(hostname)) {
+    LOG_DBG(tag, "mDNS started: http://%s.local/", hostname);
+  } else {
+    LOG_DBG(tag, "WARNING: mDNS failed to start");
+  }
+}
 
 // 0..4 bars from RSSI (dBm), with 3 dBm hysteresis on currentBars to suppress flicker.
 int barsForRssi(int rssi, int currentBars) {
@@ -74,37 +92,19 @@ void CrossPointWebServerActivity::onExit() {
   LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   state = WebServerActivityState::SHUTTING_DOWN;
-
-  // Stop the web server first (before disconnecting WiFi)
-  stopWebServer();
-
-  // Stop mDNS
+  stopDnsServer();
   MDNS.end();
 
-  // Stop DNS server if running (AP mode)
-  if (dnsServer) {
-    LOG_DBG("WEBACT", "Stopping DNS server...");
-    dnsServer->stop();
-    delete dnsServer;
-    dnsServer = nullptr;
+  // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    if (isApMode) {
+      WiFi.softAPdisconnect(true);
+    } else {
+      WiFi.disconnect(false);
+    }
+    delay(30);
+    silentRestart();
   }
-
-  // Brief wait for LWIP stack to flush pending packets
-  delay(50);
-
-  // Disconnect WiFi gracefully
-  if (isApMode) {
-    LOG_DBG("WEBACT", "Stopping WiFi AP...");
-    WiFi.softAPdisconnect(true);
-  } else {
-    LOG_DBG("WEBACT", "Disconnecting WiFi (graceful)...");
-    WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
-  }
-  delay(30);  // Allow disconnect frame to be sent
-
-  LOG_DBG("WEBACT", "Setting WiFi mode OFF...");
-  WiFi.mode(WIFI_OFF);
-  delay(30);  // Allow WiFi hardware to power down
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
@@ -170,9 +170,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     isApMode = false;
 
     // Start mDNS for hostname resolution
-    if (MDNS.begin(AP_HOSTNAME)) {
-      LOG_DBG("WEBACT", "mDNS started: http://%s.local/", AP_HOSTNAME);
-    }
+    restartMdns(AP_HOSTNAME, "WEBACT");
 
     // Start the web server
     startWebServer();
@@ -228,14 +226,11 @@ void CrossPointWebServerActivity::startAccessPoint() {
   LOG_DBG("WEBACT", "IP: %s", connectedIP.c_str());
 
   // Start mDNS for hostname resolution
-  if (MDNS.begin(AP_HOSTNAME)) {
-    LOG_DBG("WEBACT", "mDNS started: http://%s.local/", AP_HOSTNAME);
-  } else {
-    LOG_DBG("WEBACT", "WARNING: mDNS failed to start");
-  }
+  restartMdns(AP_HOSTNAME, "WEBACT");
 
   // Start DNS server for captive portal behavior
   // This redirects all DNS queries to our IP, making any domain typed resolve to us
+  stopDnsServer();
   dnsServer = new DNSServer();
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer->start(DNS_PORT, "*", apIP);
@@ -268,15 +263,6 @@ void CrossPointWebServerActivity::startWebServer() {
     // Go back on error
     onGoHome();
   }
-}
-
-void CrossPointWebServerActivity::stopWebServer() {
-  if (webServer && webServer->isRunning()) {
-    LOG_DBG("WEBACT", "Stopping web server...");
-    webServer->stop();
-    LOG_DBG("WEBACT", "Web server stopped");
-  }
-  webServer.reset();
 }
 
 void CrossPointWebServerActivity::loop() {

@@ -42,7 +42,7 @@ void ClipSelectionActivity::onEnter() {
 
   savedSectionPage = section.currentPage;
   savedBufferSize = renderer.getBufferSize();
-  savedBuffer = static_cast<uint8_t*>(malloc(savedBufferSize));
+  savedBuffer = makeUniqueNoThrow<uint8_t[]>(savedBufferSize);
   if (!savedBuffer) {
     LOG_ERR("CLIP", "malloc failed: %u bytes", savedBufferSize);
     ActivityResult result;
@@ -60,8 +60,7 @@ void ClipSelectionActivity::onEnter() {
 
 void ClipSelectionActivity::onExit() {
   section.currentPage = savedSectionPage;
-  free(savedBuffer);
-  savedBuffer = nullptr;
+  savedBuffer.reset();
   Activity::onExit();
 }
 
@@ -324,7 +323,7 @@ void ClipSelectionActivity::render(RenderLock&&) {
   }
 
   // Restore the saved page framebuffer, then draw highlights on top
-  memcpy(renderer.getFrameBuffer(), savedBuffer, savedBufferSize);
+  memcpy(renderer.getFrameBuffer(), savedBuffer.get(), savedBufferSize);
   drawHighlights();
 
   const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
@@ -348,7 +347,7 @@ void ClipSelectionActivity::switchToPage(int pageIdx) {
   renderer.clearScreen();
   page->render(renderer, fontId, marginLeft, marginTop);
   // displayBuffer is intentionally omitted here — render() always controls the final display call
-  memcpy(savedBuffer, renderer.getFrameBuffer(), savedBufferSize);
+  memcpy(savedBuffer.get(), renderer.getFrameBuffer(), savedBufferSize);
   currentDisplayPage = pageIdx;
 }
 

@@ -24,6 +24,7 @@ class CrossPointSettings {
     COVER = 3,
     BLANK = 4,
     COVER_CUSTOM = 5,
+    QUICK_RESUME = 6,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -93,9 +94,8 @@ class CrossPointSettings {
   };
 
   // Side button layout options
-  // Default: Previous, Next
-  // Swapped: Next, Previous
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
+  // Default: Up = Previous, Down = Next
+  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
@@ -115,10 +115,11 @@ class CrossPointSettings {
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
     SLEEP_1_MIN = 0,
-    SLEEP_5_MIN = 1,
-    SLEEP_10_MIN = 2,
-    SLEEP_15_MIN = 3,
-    SLEEP_30_MIN = 4,
+    SLEEP_3_MIN = 1,
+    SLEEP_5_MIN = 2,
+    SLEEP_10_MIN = 3,
+    SLEEP_15_MIN = 4,
+    SLEEP_30_MIN = 5,
     SLEEP_TIMEOUT_COUNT
   };
 
@@ -159,6 +160,13 @@ class CrossPointSettings {
   enum CLIP_NAV_MODE : uint8_t { CLIP_NAV_DIRECTIONAL = 0, CLIP_NAV_CONTINUOUS = 1, CLIP_NAV_MODE_COUNT };
   // Annotation underline visibility
   enum ANNOTATION_VISIBILITY : uint8_t { ANNOT_VISIBLE = 0, ANNOT_HIDDEN = 1, ANNOTATION_VISIBILITY_COUNT };
+
+  enum QUICK_RESUME_SLEEP_SCREEN {
+    QUICK_RESUME_NEVER = 0,
+    QUICK_RESUME_AFTER_TIMEOUT = 1,
+    QUICK_RESUME_SLEEP_SCREEN_COUNT
+  };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -174,6 +182,17 @@ class CrossPointSettings {
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
+  // Clock display in status bar (X3 only, requires DS3231 RTC)
+  uint8_t statusBarClock = 0;
+  // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
+  // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
+  // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
+  uint8_t clockUtcOffsetQ = 48;
+  // Clock display format: 0 = 24-hour, 1 = 12-hour
+  uint8_t clockFormat = 0;
+  // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
+  // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
+  uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
@@ -185,6 +204,7 @@ class CrossPointSettings {
   // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;
+  uint8_t frontButtonFollowOrientation = 0;
   // Front button remap (logical -> hardware)
   // Used by MappedInputManager to translate logical buttons into physical front buttons.
   uint8_t frontButtonBack = FRONT_HW_BACK;
@@ -224,6 +244,10 @@ class CrossPointSettings {
   char sdFontFamilyName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
+  uint8_t removeReadBooksFromRecents = 0;
+  // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
+  uint8_t moveFinishedToReadFolder = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
@@ -234,6 +258,9 @@ class CrossPointSettings {
   uint8_t clippingStorage = SINGLE_FILE;
   uint8_t clipNavMode = CLIP_NAV_DIRECTIONAL;
   uint8_t annotationVisibility = ANNOT_VISIBLE;
+  // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
+  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+
   ~CrossPointSettings() = default;
 
   // Get singleton instance
@@ -251,7 +278,7 @@ class CrossPointSettings {
   int getReaderFontId() const;
 
   // If count_only is true, returns the number of settings items that would be written.
-  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
+  uint8_t writeSettings(HalFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();

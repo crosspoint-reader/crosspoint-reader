@@ -3,7 +3,9 @@
 #include <EpdFontFamily.h>
 #include <Epub/Page.h>
 #include <Epub/Section.h>
+#include <Memory.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -43,7 +45,7 @@ class ClipSelectionActivity final : public Activity {
   int marginTop;
   int marginLeft;
 
-  uint8_t* savedBuffer = nullptr;
+  std::unique_ptr<uint8_t[]> savedBuffer;
   size_t savedBufferSize = 0;
   int currentDisplayPage = 0;
   int savedSectionPage = 0;

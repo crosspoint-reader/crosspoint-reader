@@ -1,8 +1,8 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
-#include <Epub.h>
 #include <FsHelpers.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -22,6 +22,7 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -34,7 +35,7 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 CrossPointWebServer* wsInstance = nullptr;
 
 // WebSocket upload state
-FsFile wsUploadFile;
+HalFile wsUploadFile;
 String wsUploadFileName;
 String wsUploadPath;
 size_t wsUploadSize = 0;
@@ -46,15 +47,6 @@ size_t wsLastProgressSent = 0;
 String wsLastCompleteName;
 size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
-
-// Helper function to clear epub cache after upload
-void clearEpubCacheIfNeeded(const String& filePath) {
-  // Only clear cache for .epub files
-  if (FsHelpers::hasEpubExtension(filePath)) {
-    Epub(filePath.c_str(), "/.crosspoint").clearCache();
-    LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
-  }
-}
 
 String normalizeWebPath(const String& inputPath) {
   if (inputPath.isEmpty() || inputPath == "/") {
@@ -374,6 +366,7 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+  doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
 
   String json;
   serializeJson(doc, json);
@@ -381,7 +374,7 @@ void CrossPointWebServer::handleStatus() const {
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
-  FsFile root = Storage.open(path);
+  HalFile root = Storage.open(path);
   if (!root) {
     LOG_DBG("WEB", "Failed to open directory: %s", path);
     return;
@@ -395,7 +388,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
   LOG_DBG("WEB", "Scanning files in: %s", path);
 
-  FsFile file = root.openNextFile();
+  HalFile file = root.openNextFile();
   char name[500];
   while (file) {
     file.getName(name, sizeof(name));
@@ -526,7 +519,7 @@ void CrossPointWebServer::handleDownload() const {
     return;
   }
 
-  FsFile file = Storage.open(itemPath.c_str());
+  HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -730,7 +723,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCache(filePath.c_str());
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -849,7 +842,7 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  FsFile file = Storage.open(itemPath.c_str());
+  HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -876,7 +869,7 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  clearEpubCacheIfNeeded(itemPath);
+  clearBookCache(itemPath.c_str());
   const bool success = file.rename(newPath.c_str());
   file.close();
 
@@ -925,7 +918,7 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  FsFile file = Storage.open(itemPath.c_str());
+  HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
     server->send(500, "text/plain", "Failed to open file");
     return;
@@ -941,7 +934,7 @@ void CrossPointWebServer::handleMove() const {
     server->send(404, "text/plain", "Destination not found");
     return;
   }
-  FsFile destDir = Storage.open(destPath.c_str());
+  HalFile destDir = Storage.open(destPath.c_str());
   if (!destDir || !destDir.isDirectory()) {
     if (destDir) {
       destDir.close();
@@ -969,7 +962,7 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  clearEpubCacheIfNeeded(itemPath);
+  clearBookCache(itemPath.c_str());
   const bool success = file.rename(newPath.c_str());
   file.close();
 
@@ -1071,10 +1064,10 @@ void CrossPointWebServer::handleDelete() const {
 
     // Decide whether it's a directory or file by opening it
     bool success = false;
-    FsFile f = Storage.open(itemPath.c_str());
+    HalFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
       // For folders, ensure empty before removing
-      FsFile entry = f.openNextFile();
+      HalFile entry = f.openNextFile();
       if (entry) {
         entry.close();
         f.close();
@@ -1088,7 +1081,7 @@ void CrossPointWebServer::handleDelete() const {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
       success = Storage.remove(itemPath.c_str());
-      clearEpubCacheIfNeeded(itemPath);
+      clearBookCache(itemPath.c_str());
     }
 
     if (!success) {
@@ -1633,7 +1626,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
-            clearEpubCacheIfNeeded(filePath);
+            clearBookCache(filePath.c_str());
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -1702,7 +1695,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        clearEpubCacheIfNeeded(filePath);
+        clearBookCache(filePath.c_str());
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
@@ -1748,7 +1741,7 @@ void CrossPointWebServer::handleFontList() const {
       fileObj["name"] = name ? name + 1 : file.path.c_str();
 
       // Stat the file for size
-      FsFile f;
+      HalFile f;
       if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
         fileObj["size"] = static_cast<unsigned long>(f.size());
         f.close();
@@ -1855,7 +1848,9 @@ void CrossPointWebServer::handleFontUploadData() {
         fontUpload.bytesWritten += fontUpload.bufferPos;
         fontUpload.bufferPos = 0;
       }
-      fontUpload.file.close();
+      if (fontUpload.file) {
+        fontUpload.file.close();
+      }
 
       if (!fontUpload.valid && !fontUpload.filePath.empty()) {
         Storage.remove(fontUpload.filePath.c_str());
@@ -1866,7 +1861,9 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_ABORTED: {
-      fontUpload.file.close();
+      if (fontUpload.file) {
+        fontUpload.file.close();
+      }
       if (!fontUpload.filePath.empty()) {
         Storage.remove(fontUpload.filePath.c_str());
       }

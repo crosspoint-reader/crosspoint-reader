@@ -58,6 +58,7 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 6. `constexpr` First: Compile-time constants and lookup tables must be `constexpr`, not just `static const`. This moves computation to compile time, enables dead-branch elimination, and guarantees flash placement. Use `static constexpr` for class-level constants.
 7. `std::vector` Pre-allocation: Always call `.reserve(N)` before any `push_back()` loop. Each growth event allocates a new block (2×), copies all elements, then frees the old one — three heap operations that fragment DRAM. When the final size is unknown, estimate conservatively.
 8. SPIFFS Write Throttling: Never write a settings file on every user interaction. Guard all writes with a value-change check (`if (newVal == _current) return;`). Progress saves during reading must be debounced — write on activity exit or every N page turns, not on every turn. SPIFFS sectors have a finite erase cycle limit.
+9. `new` is not nothrow on ESP32: With `-fno-exceptions`, bare `new` that fails calls `abort()` — it does NOT return `nullptr`. Always use `new (std::nothrow)` and null-check the result, or use `makeUniqueNoThrow<T>()` from `lib/Memory/Memory.h`. Never write bare `new` for any fallible allocation.
 
 ---
 
@@ -151,14 +152,19 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 #include <HalStorage.h>
 
 // Use Storage singleton (defined via macro)
-FsFile file;
+HalFile file;
 if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
   // Read from file
   // No file.close() needed — DESTRUCTOR_CLOSES_FILE=1 handles it at scope exit
 }
 ```
 
-**Usage**: See example above. Uses `FsFile` (SdFat), NOT Arduino `File`. Do NOT add `file.close()` for local variables (see DESTRUCTOR_CLOSES_FILE above).
+**Usage**: Use `HalFile` (the mutex-wrapping handle), NOT raw SdFat `FsFile` or Arduino `File`. Do NOT add `file.close()` for local variables (see DESTRUCTOR_CLOSES_FILE above).
+
+**SdFat is not thread-safe; all SD access MUST go through HalStorage**:
+- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert (`tasks.c:5156, pxTCB == pxCurrentTCBs[0]`) and panics the system. See SdFat issue #518.
+- `HalStorage` serializes everything via `storageMutex`. Downstream code uses `HalFile` (declared in `<HalStorage.h>`); every method call (read, write, seek, close) takes the mutex. `HalFile`'s destructor also takes the mutex before letting the underlying SdFat `FsFile` close.
+- **Never** call into `SdFat` / `SdSpiCard` / `FsBaseFile` / `SDCardManager` / raw `FsFile` directly — that bypasses the mutex.
 
 ---
 
@@ -266,43 +272,78 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 **Rules**: NO exceptions, NO abort(), ALWAYS log before error return
 
-### Acceptable malloc/free Patterns
+### Heap Buffer Allocation
 
-**Source**: [src/activities/home/HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp), [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+**Prefer `makeUniqueNoThrow` over `malloc`.** Both are nothrow (return `nullptr` on OOM rather than calling `abort()`), but `malloc` requires a manual `free` on every return path — a common source of leaks. `makeUniqueNoThrow<uint8_t[]>(size)` from `lib/Memory/Memory.h` frees automatically when it goes out of scope.
 
-Despite "prefer stack allocation," malloc is acceptable for:
-1. **Large temporary buffers** (> 256 bytes, won't fit on stack)
-2. **One-time allocations** during activity initialization
-3. **Bitmap rendering buffers** (variable size, used briefly)
-
-**Pattern**:
+**Preferred pattern**:
 ```cpp
-// Allocate
-auto* buffer = static_cast<uint8_t*>(malloc(bufferSize));
+#include <Memory.h>
+
+auto buffer = makeUniqueNoThrow<uint8_t[]>(bufferSize);
 if (!buffer) {
-  LOG_ERR("MODULE", "malloc failed: %d bytes", bufferSize);
-  return false;  // Handle allocation failure
+  LOG_ERR("MODULE", "OOM: %d bytes", bufferSize);
+  return false;
 }
 
-// Use buffer
-processData(buffer, bufferSize);
+processData(buffer.get(), bufferSize);
+// freed automatically — no manual free needed, no leak on early return
+```
 
-// Free immediately after use
-free(buffer);
-buffer = nullptr;
+**`malloc` or `new (std::nothrow)` are still acceptable** when the buffer must be passed to a C API that takes ownership and frees it itself (e.g., certain SDK callbacks). In that case follow the manual pattern:
+```cpp
+auto* buffer = static_cast<uint8_t*>(malloc(bufferSize));  // or new (std::nothrow) uint8_t[bufferSize]
+if (!buffer) {
+  LOG_ERR("MODULE", "OOM: %d bytes", bufferSize);
+  return false;
+}
+sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 ```
 
 **Rules**:
-- **ALWAYS check for nullptr** after malloc
-- **Free immediately** after use (don't hold across multiple operations)
-- **Set to nullptr** after free (avoid use-after-free)
-- **Document size**: Comment why stack allocation was rejected
+- **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
+- **ALWAYS check for nullptr** after any allocation and `LOG_ERR` before returning false
+- **Raw allocation only** when a C API takes ownership; document why in a comment
 
 **Examples in codebase**:
+- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
 - Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
-- Text chunk buffers: [TxtReaderActivity.cpp:259](../src/activities/reader/TxtReaderActivity.cpp)
 - Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
-- OTA update buffer: [OtaUpdater.cpp:40](../src/network/OtaUpdater.cpp)
+
+### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
+
+**CRITICAL**: With `-fno-exceptions`, bare `new` on OOM calls `abort()` — it does NOT return `nullptr`. Always use `makeUniqueNoThrow` from `lib/Memory/Memory.h`, which wraps `new (std::nothrow)` and returns a `std::unique_ptr` that is null on OOM and automatically frees on scope exit.
+
+**Preferred pattern**:
+```cpp
+#include <Memory.h>
+
+auto obj = makeUniqueNoThrow<MyClass>(args);
+if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
+
+auto buf = makeUniqueNoThrow<uint8_t[]>(size);
+if (!buf) { LOG_ERR("MOD", "OOM: %d bytes", size); return false; }
+
+// Pass to C APIs via .get(); unique_ptr frees automatically on return
+someApi(buf.get(), size);
+```
+
+**`new (std::nothrow)` directly is acceptable** when the object must be passed to a C API that takes ownership and calls `delete` itself:
+```cpp
+auto* obj = new (std::nothrow) MyClass(args);
+if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
+sdkApiThatTakesOwnership(obj);  // SDK calls delete
+```
+
+**Rules**:
+- **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
+- **NEVER use bare `new`** — always `makeUniqueNoThrow` or `new (std::nothrow)`
+- **ALWAYS `LOG_ERR` before returning false** on OOM
+- **Use `.get()`** to pass the raw pointer to C-style APIs; ownership stays with the `unique_ptr`
+- **`new (std::nothrow)` directly only** when a C API takes ownership; document why in a comment
+
+**Examples in codebase**:
+- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
 
 ---
 
