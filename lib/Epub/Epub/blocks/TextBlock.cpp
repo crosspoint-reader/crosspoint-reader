@@ -48,7 +48,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const std::string& w = words[i];
       const int fullWordWidth = !wordWidths.empty() && i < wordWidths.size()
                                     ? wordWidths[i]
-                                    : renderer.getTextWidth(fontId, w.c_str(), currentStyle);
+                                    : renderer.getTextAdvanceX(fontId, w.c_str(), currentStyle);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
       const int underlineY = y + renderer.getFontAscenderSize(fontId) + 2;
 
