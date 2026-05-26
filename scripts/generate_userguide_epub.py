@@ -223,11 +223,18 @@ def split_chapters(html: str):
     if intro_html:
         chapters.append(('intro', 'Introduction', intro_html))
 
+    seen_anchors = {c[0] for c in chapters}  # seed with 'intro' if present
     for idx, (start, tag, raw_title) in enumerate(positions):
         end = positions[idx + 1][0] if idx + 1 < len(positions) else len(html)
         fragment = html[start:end].strip()
         title = _html.unescape(re.sub(r'<[^>]+>', '', raw_title).strip())
-        anchor = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+        base = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+        anchor = base
+        n = 1
+        while anchor in seen_anchors:
+            anchor = f'{base}-{n}'
+            n += 1
+        seen_anchors.add(anchor)
         chapters.append((anchor, title, fragment))
 
     return chapters
