@@ -167,6 +167,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     currentPage = makeUniqueNoThrow<Page>();
     if (!currentPage) {
       LOG_ERR("EHP", "OOM: Page (horizontal rule)");
+      oomAborted = true;
       return;
     }
     currentPageNextY = 0;
@@ -193,6 +194,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     currentPage = makeUniqueNoThrow<Page>();
     if (!currentPage) {
       LOG_ERR("EHP", "OOM: Page (post horizontal-rule break)");
+      oomAborted = true;
       return;
     }
     currentPageNextY = 0;
@@ -536,6 +538,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPage = makeUniqueNoThrow<Page>();
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "OOM: Page (image, post page-break)");
+                    self->oomAborted = true;
                     return;
                   }
                   self->currentPageNextY = 0;
@@ -543,6 +546,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPage = makeUniqueNoThrow<Page>();
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "OOM: Page (image, initial)");
+                    self->oomAborted = true;
                     return;
                   }
                   self->currentPageNextY = 0;
@@ -551,16 +555,21 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // Apply top margin from container block
                 self->currentPageNextY += imageMarginTop;
 
-                // Create ImageBlock and add to page
-                auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
+                // Create ImageBlock and add to page. std::make_shared aborts on
+                // OOM under -fno-exceptions, so use new (std::nothrow) and wrap.
+                auto imageBlock = std::shared_ptr<ImageBlock>(
+                    new (std::nothrow) ImageBlock(cachedImagePath, displayWidth, displayHeight));
                 if (!imageBlock) {
-                  LOG_ERR("EHP", "Failed to create ImageBlock");
+                  LOG_ERR("EHP", "OOM: ImageBlock");
+                  self->oomAborted = true;
                   return;
                 }
                 int xPos = (self->viewportWidth - displayWidth) / 2;
-                auto pageImage = std::make_shared<PageImage>(imageBlock, xPos, self->currentPageNextY);
+                auto pageImage =
+                    std::shared_ptr<PageImage>(new (std::nothrow) PageImage(imageBlock, xPos, self->currentPageNextY));
                 if (!pageImage) {
-                  LOG_ERR("EHP", "Failed to create PageImage");
+                  LOG_ERR("EHP", "OOM: PageImage");
+                  self->oomAborted = true;
                   return;
                 }
                 self->currentPage->elements.push_back(pageImage);
@@ -1228,6 +1237,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
+    if (oomAborted || !currentPage) {
+      LOG_ERR("EHP", "Aborting final flush: OOM in makePages or no page allocated");
+      return false;
+    }
     if (!pendingAnchorId.empty()) {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
@@ -1248,6 +1261,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPage = makeUniqueNoThrow<Page>();
     if (!currentPage) {
       LOG_ERR("EHP", "OOM: Page (addLineToPage, initial)");
+      oomAborted = true;
       return;
     }
     currentPageNextY = 0;
@@ -1259,6 +1273,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPage = makeUniqueNoThrow<Page>();
     if (!currentPage) {
       LOG_ERR("EHP", "OOM: Page (addLineToPage, post-break)");
+      oomAborted = true;
       return;
     }
     currentPageNextY = 0;
@@ -1273,9 +1288,16 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
   pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
 
-  // Apply horizontal left inset (margin + padding) as x position offset
+  // Apply horizontal left inset (margin + padding) as x position offset.
+  // std::make_shared aborts on OOM under -fno-exceptions; use new (std::nothrow).
   const int16_t xOffset = line->getBlockStyle().leftInset();
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
+  auto pageLine = std::shared_ptr<PageLine>(new (std::nothrow) PageLine(line, xOffset, currentPageNextY));
+  if (!pageLine) {
+    LOG_ERR("EHP", "OOM: PageLine (addLineToPage)");
+    oomAborted = true;
+    return;
+  }
+  currentPage->elements.push_back(std::move(pageLine));
   currentPageNextY += lineHeight;
 }
 
@@ -1289,6 +1311,7 @@ void ChapterHtmlSlimParser::makePages() {
     currentPage = makeUniqueNoThrow<Page>();
     if (!currentPage) {
       LOG_ERR("EHP", "OOM: Page (makePages)");
+      oomAborted = true;
       return;
     }
     currentPageNextY = 0;
