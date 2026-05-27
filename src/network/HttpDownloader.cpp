@@ -42,7 +42,23 @@ bool isRedirect(int status) {
 HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
                                      Sink& sink);
 
-bool isHttpsUrl(const std::string& url) { return url.rfind("https://", 0) == 0; }
+bool isHttpsUrl(const std::string& url) {
+  constexpr char HTTPS_SCHEME[] = "https://";
+  constexpr size_t HTTPS_SCHEME_LEN = sizeof(HTTPS_SCHEME) - 1;
+  if (url.size() < HTTPS_SCHEME_LEN) {
+    return false;
+  }
+
+  for (size_t i = 0; i < HTTPS_SCHEME_LEN; ++i) {
+    const char actual = url[i];
+    const char expected = HTTPS_SCHEME[i];
+    const char normalized = (actual >= 'A' && actual <= 'Z') ? static_cast<char>(actual + ('a' - 'A')) : actual;
+    if (normalized != expected) {
+      return false;
+    }
+  }
+  return true;
+}
 
 bool ensureHttpsHeap(const char* operation, const std::string& url) {
   const uint32_t freeHeap = ESP.getFreeHeap();
