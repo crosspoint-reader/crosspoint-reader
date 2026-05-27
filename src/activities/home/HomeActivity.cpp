@@ -14,6 +14,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "HabitTrackerActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
@@ -21,7 +22,7 @@
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 5;  // File Browser, Recents, File transfer, Habit Tracker, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -197,6 +198,9 @@ void HomeActivity::loop() {
         case HomeMenuItem::FILE_TRANSFER:
           onFileTransferOpen();
           break;
+        case HomeMenuItem::HABIT_TRACKER:
+          onHabitTrackerOpen();
+          break;
         case HomeMenuItem::SETTINGS_MENU:
           onSettingsOpen();
           break;
@@ -232,8 +236,8 @@ void HomeActivity::render(RenderLock&&) {
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+                                        tr(STR_HABIT_TRACKER), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Recent, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
@@ -279,5 +283,9 @@ void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
+
+void HomeActivity::onHabitTrackerOpen() {
+  startActivityForResult(std::make_unique<HabitTrackerActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+}
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
