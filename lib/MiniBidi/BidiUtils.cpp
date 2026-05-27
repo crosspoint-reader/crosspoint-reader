@@ -68,8 +68,8 @@ int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int ma
   return fallbackLevel & 1;
 }
 
-std::string applyBidiVisual(const char* utf8, int paragraphLevel) {
-  if (!utf8 || !*utf8) return {};
+bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
+  if (!utf8 || !*utf8) return false;
 
   static bidi_char line[BIDI_MAX_LINE];
   int count = 0;
@@ -77,7 +77,7 @@ std::string applyBidiVisual(const char* utf8, int paragraphLevel) {
   while (*p) {
     if (count >= BIDI_MAX_LINE) {
       LOG_DBG("BIDI", "applyBidiVisual: input exceeds BIDI_MAX_LINE (%d chars), returning unprocessed", BIDI_MAX_LINE);
-      return utf8;
+      return false;
     }
 
     const uint32_t cp = utf8NextCodepoint(&p);
@@ -86,18 +86,18 @@ std::string applyBidiVisual(const char* utf8, int paragraphLevel) {
     line[count].index = static_cast<uint16_t>(count);
     count++;
   }
-  if (!count) return {};
+  if (!count) return false;
 
   const bool autodir = (paragraphLevel < 0);
   const int level = autodir ? 0 : (paragraphLevel & 1);
   do_bidi(autodir, level, line, count);
 
-  std::string out;
+  out.clear();
   out.reserve(std::strlen(utf8));
   for (int i = 0; i < count; i++) {
     utf8AppendCodepoint(line[i].wc, out);
   }
-  return out;
+  return true;
 }
 
 bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragraphIsRtl,

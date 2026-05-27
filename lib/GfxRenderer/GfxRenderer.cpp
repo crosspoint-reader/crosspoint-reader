@@ -485,8 +485,10 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
     if (!hasRtlBytes) return text;
   }
 
-  visualBuffer = BidiUtils::applyBidiVisual(text, paragraphLevel);
-  return visualBuffer.empty() ? text : visualBuffer.c_str();
+  if (BidiUtils::applyBidiVisual(text, visualBuffer, paragraphLevel) && !visualBuffer.empty()) {
+    return visualBuffer.c_str();
+  }
+  return text;
 }
 }  // namespace
 

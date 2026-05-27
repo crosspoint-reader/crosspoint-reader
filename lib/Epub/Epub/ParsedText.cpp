@@ -703,12 +703,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                : 0;
 
   // BiDi processing: reorder words with UAX#9 in full-line context.
-  std::vector<uint16_t> visualOrder;
-  visualOrder.reserve(lineWords.size());
+  visualOrderScratch.clear();
+  visualOrderScratch.reserve(lineWordCount);
   // Skip expensive visual-order resolution for pure LTR paragraphs that have no RTL words.
   const bool shouldResolveVisualOrder = blockStyle.isRtl || hasRtlWord;
   const bool willReorder =
-      shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrder);
+      shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
 
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
@@ -719,14 +719,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     reorderedWidthsScratch.clear();
     reorderedContinuesScratch.clear();
     reorderedFocusSuffixScratch.clear();
-    reorderedWordsScratch.reserve(visualOrder.size());
-    reorderedStylesScratch.reserve(visualOrder.size());
-    reorderedWidthsScratch.reserve(visualOrder.size());
-    reorderedContinuesScratch.reserve(visualOrder.size());
-    reorderedFocusSuffixScratch.reserve(visualOrder.size());
+    reorderedWordsScratch.reserve(visualOrderScratch.size());
+    reorderedStylesScratch.reserve(visualOrderScratch.size());
+    reorderedWidthsScratch.reserve(visualOrderScratch.size());
+    reorderedContinuesScratch.reserve(visualOrderScratch.size());
+    reorderedFocusSuffixScratch.reserve(visualOrderScratch.size());
 
-    for (size_t i = 0; i < visualOrder.size(); ++i) {
-      const uint16_t src = visualOrder[i];
+    for (size_t i = 0; i < visualOrderScratch.size(); ++i) {
+      const uint16_t src = visualOrderScratch[i];
       reorderedWordsScratch.push_back(std::move(lineWords[src]));
       reorderedStylesScratch.push_back(lineWordStyles[src]);
       reorderedWidthsScratch.push_back(wordWidths[lastBreakAt + src]);
@@ -737,7 +737,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       // as either (prev -> curr) or (curr -> prev) in visual order; preserve both.
       bool continues = false;
       if (i > 0) {
-        const size_t prevSrc = visualOrder[i - 1];
+        const size_t prevSrc = visualOrderScratch[i - 1];
         const size_t currSrc = src;
         const bool forwardAdjacent = currSrc == prevSrc + 1;
         const bool reverseAdjacent = prevSrc == currSrc + 1;

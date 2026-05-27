@@ -28,6 +28,7 @@ class ParsedText {
   std::vector<uint16_t> reorderedWidthsScratch;
   std::vector<bool> reorderedContinuesScratch;
   std::vector<bool> reorderedFocusSuffixScratch;
+  std::vector<uint16_t> visualOrderScratch;
 
   void applyParagraphIndent();
   int resolveFirstLineIndent(bool isFirstLine) const;
