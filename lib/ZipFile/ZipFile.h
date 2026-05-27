@@ -3,6 +3,7 @@
 
 #include <deque>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 class ZipFile {
@@ -39,7 +40,7 @@ class ZipFile {
 
  private:
   const std::string& filePath;
-  FsFile file;
+  HalFile file;
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
@@ -69,4 +70,11 @@ class ZipFile {
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
   bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
+
+  template <typename F>
+  void enumerateFilePaths(F&& callback) const {
+    for (const auto& entry : fileStatSlimCache) {
+      callback(std::string_view{entry.first});
+    }
+  }
 };

@@ -82,7 +82,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   }
 
   // HTTP client is now closed — TLS buffers freed. Parse JSON from file.
-  FsFile manifestFile;
+  HalFile manifestFile;
   if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
     LOG_ERR("FONT", "Failed to open temp manifest");
     Storage.remove(MANIFEST_TMP);
@@ -149,7 +149,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       for (const auto& file : family.files) {
         char path[128];
         FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), path, sizeof(path));
-        FsFile f;
+        HalFile f;
         if (Storage.openFileForRead("FONT", path, f)) {
           size_t actual = f.fileSize();
           f.close();
@@ -248,7 +248,7 @@ size_t FontDownloadActivity::totalUpdateSize() const {
 
 // Standard CRC32 matching zlib/Python zlib.crc32().
 bool FontDownloadActivity::computeFileCrc32(const char* path, uint32_t& outCrc) {
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("FONT", path, f)) {
     return false;
   }
