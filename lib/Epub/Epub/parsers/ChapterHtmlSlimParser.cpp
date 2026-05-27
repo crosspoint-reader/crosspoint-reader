@@ -9,6 +9,7 @@
 #include <expat.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 #include <new>
 
@@ -21,9 +22,11 @@
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
+constexpr float DEFAULT_LIST_CONTAINER_INDENT_EM = 1.0f;
+constexpr float MAX_LIST_ITEM_VERTICAL_SPACING_EM = 0.25f;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
-constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
+constexpr const char* BLOCK_TAGS[] = {"p", "li", "ul", "ol", "div", "br", "blockquote"};
 constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
@@ -252,6 +255,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
   if (strcmp(name, "li") == 0) {
     self->xpathListItemIndex++;
+    self->listItemDepth++;
+  }
+  if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
+    if (self->listDepth < ChapterHtmlSlimParser::MAX_LIST_DEPTH) {
+      self->listStack[self->listDepth++] = {strcmp(name, "ol") == 0, 1};
+    } else {
+      self->skippedListDepth++;
+      LOG_DBG("EHP", "List nesting limit reached");
+    }
   }
 
   // Extract class, style, and id attributes
@@ -740,14 +752,43 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(self->blockStyleStack.back().withoutBottom());
     } else {
       self->currentCssStyle = cssStyle;
-      const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle,
-                                                                                  BlockStyle::CombineAxis::Horizontal);
+      auto blockStyle = userAlignmentBlockStyle;
+      if ((strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) && !cssStyle.hasMarginLeft() &&
+          !cssStyle.hasPaddingLeft()) {
+        blockStyle.paddingLeft =
+            static_cast<int16_t>(blockStyle.paddingLeft + emSize * DEFAULT_LIST_CONTAINER_INDENT_EM);
+      }
+      if (self->listItemDepth > 0 && (strcmp(name, "li") == 0 || strcmp(name, "p") == 0)) {
+        const auto maxListItemSpacing = static_cast<int16_t>(emSize * MAX_LIST_ITEM_VERTICAL_SPACING_EM);
+        blockStyle.marginTop = std::min(blockStyle.marginTop, maxListItemSpacing);
+        blockStyle.marginBottom = std::min(blockStyle.marginBottom, maxListItemSpacing);
+        blockStyle.paddingTop = std::min(blockStyle.paddingTop, maxListItemSpacing);
+        blockStyle.paddingBottom = std::min(blockStyle.paddingBottom, maxListItemSpacing);
+      }
+      const auto accumulated =
+          self->blockStyleStack.back().getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Horizontal);
       self->blockStyleStack.push_back(accumulated);
       self->startNewTextBlock(accumulated.withoutBottom());
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        if (self->listDepth > 0 && self->listStack[self->listDepth - 1].ordered) {
+          snprintf(self->pendingListMarker, sizeof(self->pendingListMarker), "%u.",
+                   self->listStack[self->listDepth - 1].nextOrdinal++);
+        } else {
+          snprintf(self->pendingListMarker, sizeof(self->pendingListMarker), "\xe2\x80\xa2");
+        }
+        if (!cssStyle.hasTextIndent()) {
+          auto listItemStyle = self->currentTextBlock->getBlockStyle();
+          listItemStyle.textIndent = static_cast<int16_t>(
+              -(self->renderer.getTextAdvanceX(self->fontId, self->pendingListMarker, EpdFontFamily::REGULAR) +
+                self->renderer.getSpaceWidth(self->fontId, EpdFontFamily::REGULAR)));
+          listItemStyle.textIndentDefined = true;
+          self->currentTextBlock->setBlockStyle(listItemStyle);
+          self->blockStyleStack.back().textIndent = listItemStyle.textIndent;
+          self->blockStyleStack.back().textIndentDefined = true;
+        }
+        self->hasPendingListMarker = true;
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -916,6 +957,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   for (int i = 0; i < len; i++) {
     if (isWhitespace(s[i])) {
+      // Leading whitespace inside a list item should not force the marker into its own block.
+      // Wait until the first non-whitespace content token before emitting the marker.
+      if (self->hasPendingListMarker && self->partWordBufferIndex == 0) {
+        continue;
+      }
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -924,6 +970,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->nextWordContinues = false;
       // Skip the whitespace char
       continue;
+    }
+
+    if (self->hasPendingListMarker) {
+      self->currentTextBlock->addWord(self->pendingListMarker, EpdFontFamily::REGULAR);
+      self->pendingListMarker[0] = '\0';
+      self->hasPendingListMarker = false;
+      self->nextWordContinues = false;
     }
 
     // Detect U+00A0 (non-breaking space, UTF-8: 0xC2 0xA0) or
@@ -1155,6 +1208,20 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (!self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth) {
     self->inlineStyleStack.pop_back();
     self->updateEffectiveInlineStyle();
+  }
+
+  if (strcmp(name, "li") == 0) {
+    self->pendingListMarker[0] = '\0';
+    self->hasPendingListMarker = false;
+    if (self->listItemDepth > 0) {
+      self->listItemDepth--;
+    }
+  } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
+    if (self->skippedListDepth > 0) {
+      self->skippedListDepth--;
+    } else if (self->listDepth > 0) {
+      self->listDepth--;
+    }
   }
 
   // Clear block style when leaving header or block elements

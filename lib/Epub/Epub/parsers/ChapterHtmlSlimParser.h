@@ -66,6 +66,21 @@ class ChapterHtmlSlimParser {
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
+
+  // ordered/unordered lists
+  static constexpr uint8_t MAX_LIST_DEPTH = 4;
+  static constexpr uint8_t MAX_LIST_MARKER_LEN = 8;
+  struct ListContext {
+    bool ordered = false;
+    uint16_t nextOrdinal = 1;
+  };
+  ListContext listStack[MAX_LIST_DEPTH] = {};
+  uint8_t listDepth = 0;
+  uint8_t skippedListDepth = 0;
+  uint8_t listItemDepth = 0;
+  char pendingListMarker[MAX_LIST_MARKER_LEN] = {};
+  bool hasPendingListMarker = false;
+
   CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;
