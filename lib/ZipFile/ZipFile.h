@@ -77,4 +77,50 @@ class ZipFile {
       callback(std::string_view{entry.first});
     }
   }
+
+  // Stream file paths from the ZIP central directory without caching all entries in memory.
+  // Calls callback(std::string_view) for each file path found. Returns false on open/read failure.
+  template <typename F>
+  bool streamFilePaths(F&& callback) {
+    if (!isOpen()) {
+      if (!open()) return false;
+      bool result = streamFilePathsImpl(std::forward<F>(callback));
+      close();
+      return result;
+    }
+    return streamFilePathsImpl(std::forward<F>(callback));
+  }
+
+ private:
+  template <typename F>
+  bool streamFilePathsImpl(F&& callback) {
+    if (!loadZipDetails()) return false;
+
+    file.seek(zipDetails.centralDirOffset);
+
+    uint32_t sig;
+    char itemName[256];
+
+    while (file.available()) {
+      if (file.read(&sig, 4) != 4 || sig != 0x02014b50) break;
+
+      file.seekCur(22);
+      uint16_t nameLen, m, k;
+      file.read(&nameLen, 2);
+      file.read(&m, 2);
+      file.read(&k, 2);
+      file.seekCur(12);
+
+      if (nameLen < sizeof(itemName)) {
+        file.read(itemName, nameLen);
+        itemName[nameLen] = '\0';
+        callback(std::string_view{itemName, nameLen});
+      } else {
+        file.seekCur(nameLen);
+      }
+
+      file.seekCur(m + k);
+    }
+    return true;
+  }
 };
