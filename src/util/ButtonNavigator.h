@@ -1,9 +1,12 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <vector>
 
 #include "MappedInputManager.h"
+
+struct Rect;
 
 class ButtonNavigator final {
   using Callback = std::function<void()>;
@@ -43,6 +46,9 @@ class ButtonNavigator final {
 
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
+  [[nodiscard]] static int touchedListIndex(const Rect& rect, int itemCount, int selectedIndex, int rowHeight);
+  [[nodiscard]] static int touchedHorizontalIndex(const Rect& rect, int itemCount);
+  [[nodiscard]] static bool hasFreshTouch(uint32_t maxAgeMs = 1000);
 
   [[nodiscard]] static Buttons getNextButtons() {
     return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};

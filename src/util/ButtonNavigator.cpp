@@ -1,6 +1,13 @@
 #include "ButtonNavigator.h"
 
+#include <algorithm>
+
+#include "components/themes/BaseTheme.h"
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
+namespace {
+unsigned long lastConsumedTouchListAt = 0;
+}
 
 void ButtonNavigator::onNext(const Callback& callback) {
   onNextPress(callback);
@@ -121,4 +128,71 @@ int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalIt
   }
 
   return lastPageIndex * itemsPerPage;
+}
+
+int ButtonNavigator::touchedListIndex(const Rect& rect, const int itemCount, const int selectedIndex,
+                                      const int rowHeight) {
+  if (!mappedInput || !mappedInput->hasTouch() || itemCount <= 0 || rowHeight <= 0) {
+    return -1;
+  }
+
+  const auto touchPoint = mappedInput->getTouchPoint();
+  if (!touchPoint.valid || touchPoint.timestamp == lastConsumedTouchListAt || millis() - touchPoint.timestamp > 1000) {
+    return -1;
+  }
+
+  const int x = touchPoint.x;
+  const int y = touchPoint.y;
+  if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) {
+    return -1;
+  }
+
+  const int pageItems = std::max(1, rect.height / rowHeight);
+  const int pageStartIndex = std::max(0, selectedIndex / pageItems) * pageItems;
+  const int row = (y - rect.y) / rowHeight;
+  if (row < 0 || row >= pageItems) {
+    return -1;
+  }
+
+  const int index = pageStartIndex + row;
+  if (index < 0 || index >= itemCount) {
+    return -1;
+  }
+
+  lastConsumedTouchListAt = touchPoint.timestamp;
+  return index;
+}
+
+int ButtonNavigator::touchedHorizontalIndex(const Rect& rect, const int itemCount) {
+  if (!mappedInput || !mappedInput->hasTouch() || itemCount <= 0 || rect.width <= 0 || rect.height <= 0) {
+    return -1;
+  }
+
+  const auto touchPoint = mappedInput->getTouchPoint();
+  if (!touchPoint.valid || touchPoint.timestamp == lastConsumedTouchListAt || millis() - touchPoint.timestamp > 1000) {
+    return -1;
+  }
+
+  const int x = touchPoint.x;
+  const int y = touchPoint.y;
+  if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) {
+    return -1;
+  }
+
+  const int index = ((x - rect.x) * itemCount) / rect.width;
+  if (index < 0 || index >= itemCount) {
+    return -1;
+  }
+
+  lastConsumedTouchListAt = touchPoint.timestamp;
+  return index;
+}
+
+bool ButtonNavigator::hasFreshTouch(const uint32_t maxAgeMs) {
+  if (!mappedInput || !mappedInput->hasTouch()) {
+    return false;
+  }
+
+  const auto touchPoint = mappedInput->getTouchPoint();
+  return touchPoint.valid && millis() - touchPoint.timestamp <= maxAgeMs;
 }
