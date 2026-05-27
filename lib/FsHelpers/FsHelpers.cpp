@@ -83,7 +83,7 @@ String makeTempPath(const String& targetPath, const char* prefix, bool timestamp
 }
 
 bool pathIsDirectory(const char* path) {
-  FsFile file = Storage.open(path);
+  HalFile file = Storage.open(path);
   if (!file) return false;
   const bool isDirectory = file.isDirectory();
   file.close();
@@ -102,7 +102,7 @@ bool commitTempFile(const char* tempPath, const char* targetPath, bool existed, 
   std::string backupPath;
   if (existed) {
     backupPath = makeTempPath(std::string(targetPath), backupPrefix, timestampHex);
-    FsFile existing = Storage.open(targetPath);
+    HalFile existing = Storage.open(targetPath);
     if (backupPath.empty() || !existing || !existing.rename(backupPath.c_str())) {
       if (existing) existing.close();
       return false;
@@ -110,7 +110,7 @@ bool commitTempFile(const char* tempPath, const char* targetPath, bool existed, 
     existing.close();
   }
 
-  FsFile tempFile = Storage.open(tempPath);
+  HalFile tempFile = Storage.open(tempPath);
   const bool renamed = tempFile && tempFile.rename(targetPath);
   if (tempFile) tempFile.close();
 
@@ -120,7 +120,7 @@ bool commitTempFile(const char* tempPath, const char* targetPath, bool existed, 
   }
 
   if (!backupPath.empty()) {
-    FsFile backup = Storage.open(backupPath.c_str());
+    HalFile backup = Storage.open(backupPath.c_str());
     if (backup) {
       if (!backup.rename(targetPath)) {
         LOG_ERR(moduleName, "Rollback failed; original file remains at %s instead of %s", backupPath.c_str(),
@@ -135,7 +135,7 @@ bool commitTempFile(const char* tempPath, const char* targetPath, bool existed, 
 }
 
 void restoreBackup(const char* backupPath, const char* targetPath, const char* moduleName, const char* operation) {
-  FsFile backup = Storage.open(backupPath);
+  HalFile backup = Storage.open(backupPath);
   if (backup) {
     if (!backup.rename(targetPath)) {
       LOG_ERR(moduleName, "%s rollback failed; original file remains at %s instead of %s", operation, backupPath,
