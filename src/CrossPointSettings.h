@@ -246,6 +246,8 @@ class CrossPointSettings {
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
+  // Screenshot shortcut (Power + Down buttons) enabled (1) or disabled (0)
+  uint8_t screenshotShortcutEnabled = 1;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
