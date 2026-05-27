@@ -13,7 +13,7 @@ class WebDAVHandler : public RequestHandler {
 
  private:
   // PUT streaming state (raw() is called in chunks)
-  FsFile _putFile;
+  HalFile _putFile;
   String _putPath;
   bool _putOk = false;
   bool _putExisted = false;
@@ -38,7 +38,6 @@ class WebDAVHandler : public RequestHandler {
   bool isProtectedPath(const String& path) const;
   int getDepth(WebServer& s) const;
   bool getOverwrite(WebServer& s) const;
-  void clearEpubCacheIfNeeded(const String& path) const;
   void sendPropEntry(WebServer& s, const String& href, bool isDir, size_t size, const String& lastModified) const;
   String getMimeType(const String& path) const;
 };

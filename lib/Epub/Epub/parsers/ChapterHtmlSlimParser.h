@@ -63,6 +63,8 @@ class ChapterHtmlSlimParser {
     bool hasUnderline = false, underline = false;
     bool hasDirection = false;
     CssTextDirection direction = CssTextDirection::Ltr;
+    bool hasSup = false, sup = false;
+    bool hasSub = false, sub = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
@@ -72,6 +74,8 @@ class ChapterHtmlSlimParser {
   bool effectiveUnderline = false;
   bool effectiveDirectionDefined = false;
   CssTextDirection effectiveDirection = CssTextDirection::Ltr;
+  bool effectiveSup = false;
+  bool effectiveSub = false;
   int tableDepth = 0;
   int tableRowIndex = 0;
   int tableColIndex = 0;
@@ -79,7 +83,8 @@ class ChapterHtmlSlimParser {
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
-  std::string pendingAnchorId;  // deferred until after previous text block is flushed
+  std::string pendingAnchorId;          // deferred until after previous text block is flushed
+  std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
@@ -93,9 +98,11 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  void flushPendingAnchor();
   void flushPartWordBuffer();
   void makePages();
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
+  void emitHorizontalRule(const BlockStyle& blockStyle);
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
@@ -111,6 +118,7 @@ class ChapterHtmlSlimParser {
                                  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
+                                 std::vector<std::string> tocAnchors = {},
                                  const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),
@@ -130,7 +138,8 @@ class ChapterHtmlSlimParser {
         embeddedStyle(embeddedStyle),
         imageRendering(imageRendering),
         contentBase(contentBase),
-        imageBasePath(imageBasePath) {}
+        imageBasePath(imageBasePath),
+        tocAnchors(std::move(tocAnchors)) {}
 
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();

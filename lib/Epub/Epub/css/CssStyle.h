@@ -58,6 +58,9 @@ enum class CssTextDecoration : uint8_t { None = 0, Underline = 1 };
 // Display options - only None and Block are relevant for e-ink rendering
 enum class CssDisplay : uint8_t { Block = 0, None = 1 };
 
+// Vertical alignment options for inline elements (e.g. superscript/subscript)
+enum class CssVerticalAlign : uint8_t { Baseline = 0, Super = 1, Sub = 2 };
+
 // Bitmask for tracking which properties have been explicitly set
 struct CssPropertyFlags {
   uint16_t textAlign : 1;
@@ -77,6 +80,7 @@ struct CssPropertyFlags {
   uint16_t imageWidth : 1;
   uint16_t display : 1;
   uint16_t direction : 1;
+  uint16_t verticalAlign : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -95,23 +99,24 @@ struct CssPropertyFlags {
         imageHeight(0),
         imageWidth(0),
         display(0),
-        direction(0) {}
+        direction(0),
+        verticalAlign(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
-           imageWidth || display || direction;
+           imageWidth || display || direction || verticalAlign;
   }
 
   void clearAll() {
     textAlign = fontStyle = fontWeight = textDecoration = textIndent = 0;
     marginTop = marginBottom = marginLeft = marginRight = 0;
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
-    imageHeight = imageWidth = display = direction = 0;
+    imageHeight = imageWidth = display = direction = verticalAlign = 0;
   }
 };
 
-// Cache serializes defined flags as uint32_t with bit indices 0..16.
+// Cache serializes defined flags as uint32_t with bit indices 0..17.
 static_assert(sizeof(CssPropertyFlags) <= sizeof(uint32_t),
               "CssPropertyFlags exceeds 32 bits; update cache read/write in CssParser.cpp");
 
@@ -136,7 +141,8 @@ struct CssStyle {
   CssLength paddingRight;   // Padding right
   CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
   CssLength imageWidth;     // Width for img when both or only width set
-  CssDisplay display = CssDisplay::Block;  // display property (Block or None)
+  CssDisplay display = CssDisplay::Block;                       // display property (Block or None)
+  CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align (super/sub positioning)
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
@@ -211,6 +217,10 @@ struct CssStyle {
       direction = base.direction;
       defined.direction = 1;
     }
+    if (base.hasVerticalAlign()) {
+      verticalAlign = base.verticalAlign;
+      defined.verticalAlign = 1;
+    }
   }
 
   [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
@@ -230,6 +240,7 @@ struct CssStyle {
   [[nodiscard]] bool hasImageWidth() const { return defined.imageWidth; }
   [[nodiscard]] bool hasDisplay() const { return defined.display; }
   [[nodiscard]] bool hasDirection() const { return defined.direction; }
+  [[nodiscard]] bool hasVerticalAlign() const { return defined.verticalAlign; }
 
   void reset() {
     textAlign = CssTextAlign::Left;
@@ -242,6 +253,7 @@ struct CssStyle {
     paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
     imageHeight = imageWidth = CssLength{};
     display = CssDisplay::Block;
+    verticalAlign = CssVerticalAlign::Baseline;
     defined.clearAll();
   }
 };

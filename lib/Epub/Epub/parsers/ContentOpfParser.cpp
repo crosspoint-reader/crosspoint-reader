@@ -5,12 +5,31 @@
 #include <Serialization.h>
 #include <XmlParserUtils.h>
 
+#include <cctype>
+
 #include "Epub/BookMetadataCache.h"
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
+constexpr char MEDIA_TYPE_IMAGE_PREFIX[] = "image/";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+bool startsWithImageMediaType(const std::string& mediaType) {
+  constexpr size_t prefixLen = sizeof(MEDIA_TYPE_IMAGE_PREFIX) - 1;
+  if (mediaType.size() < prefixLen) {
+    return false;
+  }
+
+  for (size_t i = 0; i < prefixLen; ++i) {
+    const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(mediaType[i])));
+    if (c != MEDIA_TYPE_IMAGE_PREFIX[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -189,7 +208,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     serialization::writeString(self->tempItemStore, href);
 
     if (itemId == self->coverItemId) {
-      self->coverItemHref = href;
+      // Some EPUBs set meta name="cover" to an XHTML wrapper item.
+      // Only treat it as a cover image when the manifest media-type is image/*.
+      if (startsWithImageMediaType(mediaType)) {
+        self->coverItemHref = href;
+      } else {
+        LOG_DBG("COF", "Ignoring meta cover item '%s' with non-image media type: %s", itemId.c_str(),
+                mediaType.c_str());
+      }
     }
 
     if (mediaType == MEDIA_TYPE_NCX) {
