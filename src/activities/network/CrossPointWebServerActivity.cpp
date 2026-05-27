@@ -10,6 +10,7 @@
 #include <cstddef>
 
 #include "MappedInputManager.h"
+#include "Memory.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
@@ -246,7 +247,14 @@ void CrossPointWebServerActivity::startWebServer() {
   LOG_DBG("WEBACT", "Starting web server...");
 
   // Create the web server instance
-  webServer.reset(new CrossPointWebServer());
+  auto nextWebServer = makeUniqueNoThrow<CrossPointWebServer>();
+  if (!nextWebServer) {
+    LOG_ERR("WEBACT", "ERROR: Failed to allocate web server!");
+    onGoHome();
+    return;
+  }
+
+  webServer = std::move(nextWebServer);
   webServer->begin();
 
   if (webServer->isRunning()) {
