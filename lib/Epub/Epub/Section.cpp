@@ -350,7 +350,7 @@ std::string Section::getTextFromSectionFile() {
 }
 
 std::optional<uint16_t> Section::getCachedPageCount() const {
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
   }
