@@ -1,11 +1,15 @@
+Host-side gtest unit tests for crosspoint-reader.
 
-This directory is intended for PlatformIO Test Runner and project tests.
+Build and run:
 
-Unit Testing is a software testing method by which individual units of
-source code, sets of one or more MCU program modules together with associated
-control data, usage procedures, and operating procedures, are tested to
-determine whether they are fit for use. Unit testing finds problems early
-in the development cycle.
+  cmake -S test -B build/test
+  cmake --build build/test
+  ctest --test-dir build/test --output-on-failure -j
 
-More information about PlatformIO Unit Testing:
-- https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+Run a single suite directly:
+
+  cmake --build build/test --target StreamingJsonParserTest
+  build/test/streaming_json_parser/StreamingJsonParserTest --gtest_filter='*'
+
+Google Test is fetched via CMake FetchContent on first configure; the pinned
+version lives in test/CMakeLists.txt.
