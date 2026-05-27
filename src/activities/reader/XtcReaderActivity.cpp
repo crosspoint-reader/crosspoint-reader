@@ -53,8 +53,18 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
+  if (ReaderUtils::consumeTopLeftTouchBack(mappedInput)) {
+    onGoHome();
+    return;
+  }
+
+  const auto touchPoint = mappedInput.getTouchPoint();
+  const bool suppressTouchConfirm =
+      touchPoint.valid && millis() - touchPoint.timestamp < 1000 && mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  const bool centerTouchHold = ReaderUtils::consumeCenterTouchHold(mappedInput);
+
   // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (centerTouchHold || (!suppressTouchConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
       startActivityForResult(
           std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
@@ -295,46 +305,51 @@ void XtcReaderActivity::renderPage() {
 
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
-    // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
-    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
-    renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) == 1) {  // Dark grey only
-          renderer.drawPixel(x, y, false);
+    // Grayscale AA overlay passes (2-4). Skip on devices whose panel can't
+    // sustain 4-level grayscale — Pass 1 above already shows the BW frame,
+    // which is the best we can do there.
+    if (ReaderUtils::effectiveAntiAlias()) {
+      // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
+      // In LUT: 0 bit = apply gray effect, 1 bit = untouched
+      renderer.clearScreen(0x00);
+      for (uint16_t y = 0; y < pageHeight; y++) {
+        for (uint16_t x = 0; x < pageWidth; x++) {
+          if (getPixelValue(x, y) == 1) {  // Dark grey only
+            renderer.drawPixel(x, y, false);
+          }
         }
       }
-    }
-    renderer.copyGrayscaleLsbBuffers();
+      renderer.copyGrayscaleLsbBuffers();
 
-    // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
-    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
-    renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        const uint8_t pv = getPixelValue(x, y);
-        if (pv == 1 || pv == 2) {  // Dark grey or Light grey
-          renderer.drawPixel(x, y, false);
+      // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
+      // In LUT: 0 bit = apply gray effect, 1 bit = untouched
+      renderer.clearScreen(0x00);
+      for (uint16_t y = 0; y < pageHeight; y++) {
+        for (uint16_t x = 0; x < pageWidth; x++) {
+          const uint8_t pv = getPixelValue(x, y);
+          if (pv == 1 || pv == 2) {  // Dark grey or Light grey
+            renderer.drawPixel(x, y, false);
+          }
         }
       }
-    }
-    renderer.copyGrayscaleMsbBuffers();
+      renderer.copyGrayscaleMsbBuffers();
 
-    // Display grayscale overlay
-    renderer.displayGrayBuffer();
+      // Display grayscale overlay
+      renderer.displayGrayBuffer();
 
-    // Pass 4: Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
-    renderer.clearScreen();
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) >= 1) {
-          renderer.drawPixel(x, y, true);
+      // Pass 4: Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
+      renderer.clearScreen();
+      for (uint16_t y = 0; y < pageHeight; y++) {
+        for (uint16_t x = 0; x < pageWidth; x++) {
+          if (getPixelValue(x, y) >= 1) {
+            renderer.drawPixel(x, y, true);
+          }
         }
       }
-    }
 
-    // Cleanup grayscale buffers with current frame buffer
-    renderer.cleanupGrayscaleWithFrameBuffer();
+      // Cleanup grayscale buffers with current frame buffer
+      renderer.cleanupGrayscaleWithFrameBuffer();
+    }
 
     free(pageBuffer);
 

@@ -246,41 +246,22 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (mappedInput.wasTouchPressed()) {
-    const auto touchPoint = mappedInput.getTouchPoint();
-    if (touchPoint.valid) {
-      const bool nextTriggered = touchPoint.x >= renderer.getScreenWidth() / 2;
-      const bool prevTriggered = !nextTriggered;
-
-      // At end of the book, forward touch goes home and back touch returns to the last page.
-      if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-        if (nextTriggered) {
-          onGoHome();
-        } else {
-          currentSpineIndex = epub->getSpineItemsCount() - 1;
-          nextPageNumber = 0;
-          pendingPageJump = std::numeric_limits<uint16_t>::max();
-          requestUpdate();
-        }
-        return;
-      }
-
-      if (!section) {
-        requestUpdate();
-        return;
-      }
-
-      if (prevTriggered) {
-        pageTurn(false);
-      } else {
-        pageTurn(true);
-      }
-      return;
+  if (ReaderUtils::consumeTopLeftTouchBack(mappedInput)) {
+    if (footnoteDepth > 0) {
+      restoreSavedPosition();
+    } else {
+      onGoHome();
     }
+    return;
   }
 
+  const auto touchPoint = mappedInput.getTouchPoint();
+  const bool suppressTouchConfirm =
+      touchPoint.valid && millis() - touchPoint.timestamp < 1000 && mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  const bool centerTouchHold = ReaderUtils::consumeCenterTouchHold(mappedInput);
+
   // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (centerTouchHold || (!suppressTouchConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     const int currentPage = section ? section->currentPage + 1 : 0;
     const int totalPages = section ? section->pageCount : 0;
     float bookProgress = 0.0f;
@@ -913,7 +894,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto tPrewarm = millis();
 
   // Force special handling for pages with images when anti-aliasing is on
-  bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
+  bool imagePageWithAA = page->hasImages() && ReaderUtils::effectiveAntiAlias();
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
@@ -950,7 +931,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // per plane, but renderCharImpl culls out-of-band glyphs before decode so the
   // cost stays close to one render. Both text (drawPixel) and images
   // (DirectPixelWriter) honor the active strip target.
-  if (SETTINGS.textAntiAliasing && renderer.supportsStripGrayscale()) {
+  if (ReaderUtils::effectiveAntiAlias() && renderer.supportsStripGrayscale()) {
     constexpr int STRIP_ROWS = 80;
     const int gh = renderer.getDisplayHeight();
     const int gwBytes = renderer.getDisplayWidthBytes();
@@ -1003,7 +984,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   } else {
     // Fallback path for a controller without strip support. grayscale rendering
     // TODO: Only do this if font supports it
-    if (SETTINGS.textAntiAliasing) {
+    if (ReaderUtils::effectiveAntiAlias()) {
       // Save the BW frame before the grayscale passes overwrite it, restore
       // after. Only needed when grayscale actually renders.
       renderer.storeBwBuffer();

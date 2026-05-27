@@ -151,7 +151,6 @@ enum class BootResume : uint8_t {
   Splash,       // cold boot, flash, panic, or plain reboot
   Silent,       // heap-defrag ESP.restart() (RTC flag; lost on power loss)
   QuickResume,  // wake from a quick-resume deep sleep (SD flag; survives power loss)
-  HomeFirst,    // Murphy bring-up: skip splash, but do not run silent-resume repaint handling
 };
 
 // Latched true once enterDeepSleep() commits to sleeping, before it tears down
@@ -439,17 +438,7 @@ void setup() {
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
-  // Resolve the single boot-presentation decision. Skipping the splash also
-  // skips the panel-clearing pass and the X3 initial-full-sync arming (see
-  // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
-  // retained frame and input dispatches against a visible UI.
-  const bool skipBootSplash = DeviceProfiles::current().skipBootSplash && !isSilentReboot;
-  if (skipBootSplash) {
-    LOG_INF("MAIN", "%s display bringup: skipping Boot splash so Home is first EPD frame",
-            DeviceProfiles::current().name);
-  }
   const BootResume resume = isSilentReboot                ? BootResume::Silent
-                            : skipBootSplash              ? BootResume::HomeFirst
                             : !APP_STATE.showBootScreen   ? BootResume::QuickResume
                                                           : BootResume::Splash;
 
@@ -478,10 +467,6 @@ void setup() {
     case BootResume::Splash:
       activityManager.goToBoot();
       break;
-    case BootResume::HomeFirst:
-      // Splash skipped only to keep Murphy's first EPD frame useful for display
-      // bring-up. Normal routing below still chooses Home/Reader.
-      break;
   }
 
   if (recoveryFirmwareMode) {
@@ -494,7 +479,7 @@ void setup() {
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
-  } else if (resume == BootResume::Silent || resume == BootResume::HomeFirst) {
+  } else if (resume == BootResume::Silent) {
     // target == home (or reader with no open book): land on home — don't fall
     // through to the sleep-wake "resume reader" logic, which fires on stale
     // openEpubPath + lastSleepFromReader from a prior session.

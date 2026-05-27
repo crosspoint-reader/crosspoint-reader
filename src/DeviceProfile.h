@@ -8,8 +8,12 @@ struct DeviceProfile {
   const char* name;
   bool touchPrimary;
   bool showButtonHints;
-  bool skipBootSplash;
   bool denseLightGrayDither;
+  // Two-pass grayscale anti-aliasing requires hardware that can hold 4
+  // distinct intensity levels via the LSB/MSB plane scheme. Murphy's
+  // UC8253 panel has asymmetric drive rails and only produces clean
+  // results in B/W mode — skip the AA pass and render in 1-bit instead.
+  bool supportsGrayscaleAntiAlias;
 
   const ThemeMetrics* lyraMetrics;
 

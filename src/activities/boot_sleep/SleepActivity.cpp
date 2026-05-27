@@ -220,7 +220,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
-  if (hasGreyscale) {
+  // Cover-art grayscale overlay — only attempt it on devices whose panel
+  // can sustain 4-level grayscale. Murphy etc. fall back to the BW-only
+  // cover that displayBuffer() above already drew.
+  if (hasGreyscale && DeviceProfiles::current().supportsGrayscaleAntiAlias) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);

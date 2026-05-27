@@ -1,16 +1,72 @@
 #pragma once
 
 #include <CrossPointSettings.h>
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalTiltSensor.h>
 #include <Logging.h>
 
+#include "DeviceProfile.h"
 #include "MappedInputManager.h"
 
 namespace ReaderUtils {
 
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr unsigned long SKIP_HOLD_MS = 700;
+
+// True iff the user enabled AA AND the current device's panel can actually
+// produce usable grayscale. On devices like Murphy (UC8253 with asymmetric
+// drive rails) the AA pipeline produces inverted/flashing artefacts, so we
+// treat AA as disabled even if the user setting is on.
+inline bool effectiveAntiAlias() {
+  return SETTINGS.textAntiAliasing && DeviceProfiles::current().supportsGrayscaleAntiAlias;
+}
+
+inline int touchWidth() {
+  return BoardConfig::ACTIVE.displayWidth > BoardConfig::ACTIVE.displayHeight ? BoardConfig::ACTIVE.displayWidth
+                                                                              : BoardConfig::ACTIVE.displayHeight;
+}
+
+inline int touchHeight() {
+  return BoardConfig::ACTIVE.displayWidth > BoardConfig::ACTIVE.displayHeight ? BoardConfig::ACTIVE.displayHeight
+                                                                              : BoardConfig::ACTIVE.displayWidth;
+}
+
+inline bool consumeTopLeftTouchBack(const MappedInputManager& input) {
+  static unsigned long lastConsumedTouchBackAt = 0;
+  const auto touchPoint = input.getTouchPoint();
+  if (!touchPoint.valid || touchPoint.timestamp == lastConsumedTouchBackAt || millis() - touchPoint.timestamp >= 1500) {
+    return false;
+  }
+
+  if (touchPoint.x >= touchWidth() / 3 || touchPoint.y >= touchHeight() / 3) {
+    return false;
+  }
+
+  lastConsumedTouchBackAt = touchPoint.timestamp;
+  LOG_DBG("TOUCH", "reader top-left back x=%u y=%u", touchPoint.x, touchPoint.y);
+  return true;
+}
+
+inline bool consumeCenterTouchHold(const MappedInputManager& input, const unsigned long holdMs = 450) {
+  static unsigned long lastConsumedCenterHoldAt = 0;
+  const auto touchPoint = input.getTouchPoint();
+  if (!touchPoint.valid || touchPoint.timestamp == lastConsumedCenterHoldAt || !input.isTouchPressed() ||
+      millis() - touchPoint.timestamp < holdMs) {
+    return false;
+  }
+
+  const int width = touchWidth();
+  const int height = touchHeight();
+  if (touchPoint.x < width / 3 || touchPoint.x >= (width * 2) / 3 || touchPoint.y < height / 3 ||
+      touchPoint.y >= (height * 2) / 3) {
+    return false;
+  }
+
+  lastConsumedCenterHoldAt = touchPoint.timestamp;
+  LOG_DBG("TOUCH", "reader center hold x=%u y=%u", touchPoint.x, touchPoint.y);
+  return true;
+}
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {
@@ -75,6 +131,16 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
 template <typename RenderFn>
 void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
+  // Devices whose panel can't sustain 4-level grayscale (Murphy's UC8253
+  // with asymmetric drive rails — see Murphy_M3 findings) skip the AA
+  // pass entirely. The B/W base frame the caller already produced is
+  // already on the panel; rendering an AA layer over it with our gray
+  // pipeline produces inverted/flashing artefacts. Returning here leaves
+  // the panel showing the clean B/W render.
+  if (!DeviceProfiles::current().supportsGrayscaleAntiAlias) {
+    return;
+  }
+
   if (!renderer.storeBwBuffer()) {
     LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
     return;

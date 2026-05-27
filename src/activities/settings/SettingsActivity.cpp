@@ -6,6 +6,7 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "DeviceProfile.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -34,8 +35,14 @@ void SettingsActivity::rebuildSettingsLists() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
+  const bool hideAntiAlias = !DeviceProfiles::current().supportsGrayscaleAntiAlias;
   for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
+    // Hide AA toggle on devices that can't render grayscale (Murphy etc.).
+    // The setting still exists in CrossPointSettings; it just isn't user-
+    // facing because effectiveAntiAlias() already gates it to false on
+    // those panels.
+    if (hideAntiAlias && setting.valuePtr == &CrossPointSettings::textAntiAliasing) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {

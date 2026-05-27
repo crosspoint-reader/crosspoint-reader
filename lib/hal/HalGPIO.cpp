@@ -272,7 +272,7 @@ InputManager::TouchPoint HalGPIO::getTouchPoint() const {
 #if CROSSPOINT_EMULATED == 0
   return inputMgr.getTouchPoint();
 #else
-  return {false, 0, 0};
+  return {false, 0, 0, 0};
 #endif
 }
 

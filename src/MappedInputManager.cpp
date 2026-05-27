@@ -1,6 +1,39 @@
 #include "MappedInputManager.h"
 
 #include "CrossPointSettings.h"
+#include "Logging.h"
+
+namespace {
+unsigned long lastConsumedTouchPageTurnAt = 0;
+
+bool touchPageTurnFor(const HalGPIO& gpio, const MappedInputManager::Button button) {
+  if (button != MappedInputManager::Button::PageBack && button != MappedInputManager::Button::PageForward) {
+    return false;
+  }
+
+  const auto touchPoint = gpio.getTouchPoint();
+  if (!touchPoint.valid || touchPoint.timestamp == lastConsumedTouchPageTurnAt ||
+      millis() - touchPoint.timestamp >= 1500) {
+    return false;
+  }
+
+  const int touchWidth =
+      BoardConfig::ACTIVE.displayWidth > BoardConfig::ACTIVE.displayHeight ? BoardConfig::ACTIVE.displayWidth
+                                                                           : BoardConfig::ACTIVE.displayHeight;
+  const bool prev = touchPoint.x < touchWidth / 3;
+  const bool next = touchPoint.x >= (touchWidth * 2) / 3;
+  const bool matched = (button == MappedInputManager::Button::PageBack && prev) ||
+                       (button == MappedInputManager::Button::PageForward && next);
+  if (!matched) {
+    return false;
+  }
+
+  lastConsumedTouchPageTurnAt = touchPoint.timestamp;
+  LOG_DBG("TOUCH", "reader side-touch x=%u y=%u width=%d button=%s", touchPoint.x, touchPoint.y, touchWidth,
+          button == MappedInputManager::Button::PageBack ? "back" : "forward");
+  return true;
+}
+}  // namespace
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = SETTINGS.sideButtonLayout;
@@ -54,9 +87,13 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+bool MappedInputManager::wasPressed(const Button button) const {
+  return touchPageTurnFor(gpio, button) || mapButton(button, &HalGPIO::wasPressed);
+}
 
-bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+bool MappedInputManager::wasReleased(const Button button) const {
+  return touchPageTurnFor(gpio, button) || mapButton(button, &HalGPIO::wasReleased);
+}
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 

@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "DeviceProfile.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
@@ -1107,6 +1108,7 @@ void CrossPointWebServer::handleGetSettings() const {
   // includes SD-resident families — otherwise the web API only exposes the
   // three built-in fonts.
   const auto& settings = getSettingsList(&sdFontSystem.registry());
+  const bool hideAntiAlias = !DeviceProfiles::current().supportsGrayscaleAntiAlias;
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1119,6 +1121,9 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
+    // Hide AA toggle on devices that can't render grayscale (mirrors the
+    // on-device SettingsActivity filter).
+    if (hideAntiAlias && s.valuePtr == &CrossPointSettings::textAntiAliasing) continue;
 
     doc.clear();
     doc["key"] = s.key;
