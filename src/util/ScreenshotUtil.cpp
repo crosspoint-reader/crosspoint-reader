@@ -121,7 +121,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     }
   }
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForWrite("SCR", filename, file)) {
     LOG_ERR("SCR", "Failed to save screenshot");
     return false;

@@ -31,7 +31,7 @@ class CrossPointWebServer {
 
   // Used by POST upload handler
   struct UploadState {
-    FsFile file;
+    HalFile file;
     String fileName;
     String path = "/";
     String targetPath;
@@ -120,7 +120,7 @@ class CrossPointWebServer {
 
   // Font upload state
   struct FontUploadState {
-    FsFile file;
+    HalFile file;
     std::string familyName;
     std::string filePath;
     std::string tempPath;

@@ -10,7 +10,7 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 23;
+constexpr uint8_t SECTION_FILE_VERSION = 24;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
@@ -176,7 +176,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       Storage.remove(tmpHtmlPath.c_str());
     }
 
-    FsFile tmpHtml;
+    HalFile tmpHtml;
     if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
       continue;
     }
@@ -221,13 +221,26 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
   }
 
+  // Collect TOC anchors for this spine so the parser can insert page breaks at chapter boundaries
+  std::vector<std::string> tocAnchors;
+  const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+  if (startTocIndex >= 0) {
+    for (int i = startTocIndex; i < epub->getTocItemsCount(); i++) {
+      auto entry = epub->getTocItem(i);
+      if (entry.spineIndex != spineIndex) break;
+      if (!entry.anchor.empty()) {
+        tocAnchors.push_back(std::move(entry.anchor));
+      }
+    }
+  }
+
   ChapterHtmlSlimParser visitor(
       epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled, focusReadingEnabled,
       [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
       },
-      embeddedStyle, contentBase, imageBasePath, imageRendering, popupFn, cssParser);
+      embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   success = visitor.parseAndBuildPages();
 
@@ -316,8 +329,45 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   return page;
 }
 
+std::string Section::getTextFromSectionFile() {
+  std::string fullText;
+  auto p = this->loadPageFromSectionFile();
+  if (p) {
+    for (const auto& el : p->elements) {
+      if (el->getTag() == TAG_PageLine) {
+        const auto& line = static_cast<const PageLine&>(*el);
+        if (line.getBlock()) {
+          const auto& words = line.getBlock()->getWords();
+          for (const auto& w : words) {
+            if (!fullText.empty()) fullText += " ";
+            fullText += w;
+          }
+        }
+      }
+    }
+  }
+  return fullText;
+}
+
+std::optional<uint16_t> Section::getCachedPageCount() const {
+  HalFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  const uint32_t fileSize = f.size();
+  if (fileSize < HEADER_SIZE) {
+    return std::nullopt;
+  }
+
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(uint16_t));
+  uint16_t count;
+  serialization::readPod(f, count);
+  return count;
+}
+
 std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
   }
@@ -347,7 +397,7 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
 }
 
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
   }
@@ -386,7 +436,7 @@ std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex)
 }
 
 std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) const {
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
   }
@@ -418,7 +468,7 @@ std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) c
 }
 
 std::optional<uint16_t> Section::getPageForListItemIndex(const uint16_t liIndex) const {
-  FsFile f;
+  HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
   }

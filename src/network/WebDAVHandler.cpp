@@ -69,7 +69,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     _putExisted = Storage.exists(_putPath.c_str());
 
     if (_putExisted) {
-      FsFile existing = Storage.open(_putPath.c_str());
+      HalFile existing = Storage.open(_putPath.c_str());
       if (existing && existing.isDirectory()) {
         existing.close();
         return;
@@ -100,7 +100,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     if (_putOk) {
       if (_putExisted) {
         backupPath = FsHelpers::makeTempPath(_putPath, "davtmp");
-        FsFile existing = Storage.open(_putPath.c_str());
+        HalFile existing = Storage.open(_putPath.c_str());
         if (backupPath.isEmpty() || !existing || !existing.rename(backupPath.c_str())) {
           if (existing) existing.close();
           _putOk = false;
@@ -110,7 +110,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
       }
     }
     if (_putOk) {
-      FsFile tmp = Storage.open(_putTempPath.c_str());
+      HalFile tmp = Storage.open(_putTempPath.c_str());
       if (tmp) {
         _putOk = tmp.rename(_putPath.c_str());
         tmp.close();
@@ -209,7 +209,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
     return;
   }
 
-  FsFile root = Storage.open(path.c_str());
+  HalFile root = Storage.open(path.c_str());
   if (!root) {
     if (path == "/") {
       // Root should always work — send minimal response
@@ -248,7 +248,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   // If depth > 0 and it's a directory, list children
   if (depth > 0) {
-    FsFile file = root.openNextFile();
+    HalFile file = root.openNextFile();
     char name[500];
     while (file) {
       file.getName(name, sizeof(name));
@@ -338,7 +338,7 @@ void WebDAVHandler::handleGet(WebServer& s) {
     return;
   }
 
-  FsFile file = Storage.open(path.c_str());
+  HalFile file = Storage.open(path.c_str());
   if (!file) {
     s.send(500, "text/plain", "Failed to open file");
     return;
@@ -375,7 +375,7 @@ void WebDAVHandler::handleHead(WebServer& s) {
     return;
   }
 
-  FsFile file = Storage.open(path.c_str());
+  HalFile file = Storage.open(path.c_str());
   if (!file) {
     s.send(500, "text/plain", "");
     return;
@@ -442,7 +442,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     return;
   }
 
-  FsFile file = Storage.open(path.c_str());
+  HalFile file = Storage.open(path.c_str());
   if (!file) {
     s.send(500, "text/plain", "Failed to open");
     return;
@@ -450,7 +450,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
 
   if (file.isDirectory()) {
     // Check if directory is empty
-    FsFile entry = file.openNextFile();
+    HalFile entry = file.openNextFile();
     if (entry) {
       entry.close();
       file.close();
@@ -566,7 +566,7 @@ void WebDAVHandler::handleMove(WebServer& s) {
 
   String backupPath;
   if (dstExists) {
-    FsFile existing = Storage.open(dstPath.c_str());
+    HalFile existing = Storage.open(dstPath.c_str());
     if (existing && existing.isDirectory()) {
       existing.close();
       s.send(403, "text/plain", "Cannot overwrite directory");
@@ -586,7 +586,7 @@ void WebDAVHandler::handleMove(WebServer& s) {
     existing.close();
   }
 
-  FsFile file = Storage.open(srcPath.c_str());
+  HalFile file = Storage.open(srcPath.c_str());
   if (!file) {
     if (!backupPath.isEmpty()) {
       FsHelpers::restoreBackup(backupPath.c_str(), dstPath.c_str(), "DAV", "MOVE");
@@ -640,7 +640,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
-  FsFile srcFile = Storage.open(srcPath.c_str());
+  HalFile srcFile = Storage.open(srcPath.c_str());
   if (!srcFile) {
     s.send(500, "text/plain", "Failed to open source");
     return;
@@ -671,7 +671,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   if (dstExists) {
-    FsFile existing = Storage.open(dstPath.c_str());
+    HalFile existing = Storage.open(dstPath.c_str());
     if (existing && existing.isDirectory()) {
       existing.close();
       srcFile.close();
@@ -681,7 +681,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     if (existing) existing.close();
   }
 
-  FsFile dstFile;
+  HalFile dstFile;
   const String tempPath = FsHelpers::makeTempPath(dstPath, "davtmp");
   if (tempPath.isEmpty() || !Storage.openFileForWrite("DAV", tempPath, dstFile)) {
     srcFile.close();
@@ -725,7 +725,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
       return;
     }
 
-    FsFile existing = Storage.open(dstPath.c_str());
+    HalFile existing = Storage.open(dstPath.c_str());
     if (!existing || !existing.rename(backupPath.c_str())) {
       if (existing) existing.close();
       Storage.remove(tempPath.c_str());
@@ -735,7 +735,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     existing.close();
   }
 
-  FsFile tmp = Storage.open(tempPath.c_str());
+  HalFile tmp = Storage.open(tempPath.c_str());
   const bool renamed = tmp && tmp.rename(dstPath.c_str());
   if (tmp) tmp.close();
 
