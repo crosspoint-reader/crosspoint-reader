@@ -63,7 +63,7 @@ bool CrossPointState::loadFromFile() {
 }
 
 bool CrossPointState::loadFromBinaryFile() {
-  FsFile inputFile;
+  HalFile inputFile;
   if (!Storage.openFileForRead("CPS", STATE_FILE_BIN, inputFile)) {
     return false;
   }
