@@ -66,6 +66,19 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
+ public:
+  // Text rendering strategy. Declared here (above the private member that
+  // uses it) so the compiler sees the type before the member declaration;
+  // the setter/getter further down operate on the same enum.
+  enum class TextRenderMode : uint8_t { ThresholdBw, Grayscale, DitherBw };
+
+ private:
+  // Current text-render strategy. Selected by callers via setTextRenderMode();
+  // the AA glyph blit dispatches between drawPixelMulti and drawPixelDither
+  // (or the threshold drawPixel) per this value. Default matches the legacy
+  // textAntiAliasing-off behavior so calls without a setter behave as before.
+  mutable TextRenderMode _textRenderMode = TextRenderMode::ThresholdBw;
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
@@ -153,6 +166,30 @@ class GfxRenderer {
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
+  // Unified intensity-aware pixel write. Used by intensity-decoding sites
+  // (BMP grayscale rendering, AA text glyph blit) so one source pixel becomes
+  // simultaneous writes to every active plane in `_bwPlaneBuf`/`_lsbPlaneBuf`/
+  // `_msbPlaneBuf`. `val` follows the existing 4-level convention
+  // (0=darkest..3=white in the bitmap path; both intensity-aware call sites
+  // already harmonize their values to that scale before passing in). Falls
+  // through to single-plane drawPixel when multi-plane mode is not active.
+  void drawPixelMulti(int x, int y, uint8_t val) const;
+  // Bayer-4x4 ordered-dithered BW write. Same `val` convention as
+  // drawPixelMulti. Lets a glyph or bitmap blit map 4-level alpha onto a
+  // BW-only output without going through the grayscale planes — the textured
+  // mid-grays approximate AA edges with a single render pass per page. The
+  // dither pattern is keyed to physical pixel coordinates so it stays
+  // consistent across orientation changes.
+  void drawPixelDither(int x, int y, uint8_t val) const;
+
+  // Text rendering mode. AA glyphs (2-bit alpha) need a per-pixel decision
+  // about how to map their grayscale values onto the BW + optional grayscale
+  // planes; the TextRenderMode enum (declared up top with the private state)
+  // selects the strategy. ThresholdBw is the legacy textAntiAliasing-off
+  // behavior; Grayscale is the current AA-on behavior; DitherBw writes
+  // BW-only with blue-noise ordered dither (Fast Mode).
+  void setTextRenderMode(TextRenderMode mode) { _textRenderMode = mode; }
+  TextRenderMode getTextRenderMode() const { return _textRenderMode; }
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
   void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "BlueNoise64.h"
 #include "FontCacheManager.h"
 
 namespace {
@@ -274,17 +275,23 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
           // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
           const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
 
-          if (renderMode == GfxRenderer::BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            renderer.drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
-            renderer.drawPixel(screenX, screenY, false);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
-            renderer.drawPixel(screenX, screenY, false);
+          // Three text-render dispatches:
+          // - ThresholdBw: write any non-white pixel as ink (the legacy
+          //   textAntiAliasing-off behavior). Falls through to drawPixel.
+          // - Grayscale: write 4-level into BW + LSB + MSB via drawPixelMulti.
+          // - DitherBw: write BW only, with blue-noise ordered dither so the
+          //   2-bit alpha approximates AA edges at half the cost.
+          switch (renderer.getTextRenderMode()) {
+            case GfxRenderer::TextRenderMode::ThresholdBw:
+              if (bmpVal < 3) renderer.drawPixel(screenX, screenY, pixelState);
+              break;
+            case GfxRenderer::TextRenderMode::DitherBw:
+              renderer.drawPixelDither(screenX, screenY, bmpVal);
+              break;
+            case GfxRenderer::TextRenderMode::Grayscale:
+            default:
+              renderer.drawPixelMulti(screenX, screenY, bmpVal);
+              break;
           }
         }
       }
@@ -875,18 +882,21 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   }
   LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
 
-  // Calculate output row size (2 bits per pixel, packed into bytes)
-  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
-  const int outputRowSize = (bitmap.getWidth() + 3) / 4;
+  // 2-bit packed output. DitherBw routes per-pixel through drawPixelDither
+  // (64x64 blue-noise) so Fast Mode bitmaps match the JPEG/PNG hot path;
+  // Grayscale + ThresholdBw go through drawPixelMulti.
+  const int bmpWidth = bitmap.getWidth();
+  const int outputRowSize = (bmpWidth + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
 
-  if (!outputRow || !rowBytes) {
+  if (!rowBytes || !outputRow) {
     LOG_ERR("GFX", "!! Failed to allocate BMP row buffers");
     free(outputRow);
     free(rowBytes);
     return;
   }
+  const bool useDither = _textRenderMode == TextRenderMode::DitherBw;
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
@@ -900,7 +910,8 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       break;
     }
 
-    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+    const BmpReaderError readErr = bitmap.readNextRow(outputRow, rowBytes);
+    if (readErr != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
       free(outputRow);
       free(rowBytes);
@@ -916,7 +927,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       continue;
     }
 
-    for (int bmpX = cropPixX; bmpX < bitmap.getWidth() - cropPixX; bmpX++) {
+    for (int bmpX = cropPixX; bmpX < bmpWidth - cropPixX; bmpX++) {
       int screenX = bmpX - cropPixX;
       if (isScaled) {
         screenX = std::floor(screenX * scale);
@@ -930,13 +941,10 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
-
-      if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+      if (useDither) {
+        drawPixelDither(screenX, screenY, val);
+      } else {
+        drawPixelMulti(screenX, screenY, val);
       }
     }
   }
@@ -1103,6 +1111,61 @@ void GfxRenderer::endStripTarget() const {
   _stripBuf = nullptr;
   _stripY0 = 0;
   _stripRows = 0;
+}
+
+namespace {
+
+// Per-glyph-alpha ink probability against the 64x64 blue-noise table, used for
+// EpubReader text in Fast Mode. val=0/1 ink unconditionally so glyph bodies
+// keep their full nominal weight; val=2 keeps the noise texture as a soft
+// halo on the outermost edge pixels; val=3 never inks. The 64x64 table places
+// texture above the eye's contrast-sensitivity peak so it reads as fine grain
+// rather than a pattern.
+inline bool ditherInk(uint8_t val, int phyX, int phyY) {
+  static constexpr uint8_t kInkThreshold[4] = {255, 255, 96, 0};
+  return BLUE_NOISE_64[phyY & 63][phyX & 63] < kInkThreshold[val];
+}
+
+}  // namespace
+
+// Intensity-aware pixel write. Dispatches on the active renderMode so the
+// AA glyph blit and bitmap render can both pass the 4-level alpha straight
+// in: BW threshold-collapses val<3, GRAYSCALE_LSB only inks val==1,
+// GRAYSCALE_MSB inks val==1 or 2.
+void GfxRenderer::drawPixelMulti(const int x, const int y, const uint8_t val) const {
+  if (renderMode == BW) {
+    if (val < 3) drawPixel(x, y);
+  } else if (renderMode == GRAYSCALE_MSB) {
+    if (val == 1 || val == 2) drawPixel(x, y, false);
+  } else if (renderMode == GRAYSCALE_LSB) {
+    if (val == 1) drawPixel(x, y, false);
+  }
+}
+
+void GfxRenderer::drawPixelDither(const int x, const int y, const uint8_t val) const {
+  int phyX = 0;
+  int phyY = 0;
+  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+  if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) return;
+  if (!ditherInk(val, phyX, phyY)) return;
+
+  // BW ink: clear the bit on whichever BW target is active. In strip mode
+  // (beginStripTarget) the strip scratch is the target; otherwise the
+  // resident framebuffer.
+  uint8_t* target = nullptr;
+  uint32_t rowY = static_cast<uint32_t>(phyY);
+  if (_stripActive) {
+    if (phyY < _stripY0 || phyY >= _stripY0 + _stripRows) return;
+    target = _stripBuf;
+    rowY = static_cast<uint32_t>(phyY - _stripY0);
+  } else {
+    target = frameBuffer;
+  }
+  if (!target) return;
+
+  const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
+  const uint8_t bitMask = 1 << (7 - (phyX % 8));
+  target[byteIndex] &= ~bitMask;  // ink (1=white initial, clearing draws ink)
 }
 
 bool GfxRenderer::glyphIntersectsStrip(int x0, int y0, int x1, int y1) const {

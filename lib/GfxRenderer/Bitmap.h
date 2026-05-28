@@ -99,5 +99,4 @@ class Bitmap {
   mutable int prevRowY = -1;  // Track row progression for error propagation
 
   mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
-  mutable FloydSteinbergDitherer* fsDitherer = nullptr;
 };

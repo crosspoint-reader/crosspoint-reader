@@ -10,7 +10,6 @@
 // 2-bit (4-level) grayscale. Images whose palette entries all map to native
 // gray levels (0, 85, 170, 255 ±21) are mapped directly without dithering.
 // For cover images, dithering is done in JpegToBmpConverter.cpp instead.
-constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-Steinberg
 // ============================================================================
 
 Bitmap::~Bitmap() {
@@ -18,7 +17,6 @@ Bitmap::~Bitmap() {
   delete[] errorNextRow;
 
   delete atkinsonDitherer;
-  delete fsDitherer;
 }
 
 uint16_t Bitmap::readLE16(HalFile& f) {
@@ -161,17 +159,13 @@ BmpReaderError Bitmap::parseHeaders() {
     }
   }
 
-  // Decide pixel processing strategy:
-  //  - Native palette → direct mapping, no processing needed
-  //  - High-color + dithering enabled → error-diffusion dithering (Atkinson or Floyd-Steinberg)
-  //  - High-color + dithering disabled → simple quantization (no error diffusion)
+  // Pixel processing strategy:
+  //  - Native palette: direct mapping, no processing needed
+  //  - High-color + dithering enabled: Atkinson error diffusion
+  //  - High-color + dithering disabled: simple quantization
   const bool highColor = !nativePalette;
   if (highColor && dithering) {
-    if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width);
-    } else {
-      fsDitherer = new FloydSteinbergDitherer(width);
-    }
+    atkinsonDitherer = new AtkinsonDitherer(width);
   }
 
   return BmpReaderError::Ok;
@@ -194,8 +188,6 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     uint8_t color;
     if (atkinsonDitherer) {
       color = atkinsonDitherer->processPixel(adjustPixel(lum), currentX);
-    } else if (fsDitherer) {
-      color = fsDitherer->processPixel(adjustPixel(lum), currentX);
     } else {
       if (nativePalette) {
         // Palette matches native gray levels: direct mapping (still apply brightness/contrast/gamma)
@@ -271,10 +263,7 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       return BmpReaderError::UnsupportedBpp;
   }
 
-  if (atkinsonDitherer)
-    atkinsonDitherer->nextRow();
-  else if (fsDitherer)
-    fsDitherer->nextRow();
+  if (atkinsonDitherer) atkinsonDitherer->nextRow();
 
   // Flush remaining bits if width is not a multiple of 4
   if (bitShift != 6) *outPtr = currentOutByte;
@@ -287,8 +276,6 @@ BmpReaderError Bitmap::rewindToData() const {
     return BmpReaderError::SeekPixelDataFailed;
   }
 
-  // Reset dithering when rewinding
-  if (fsDitherer) fsDitherer->reset();
   if (atkinsonDitherer) atkinsonDitherer->reset();
 
   return BmpReaderError::Ok;

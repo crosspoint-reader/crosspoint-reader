@@ -1,22 +1,24 @@
 #pragma once
 
+#include <BlueNoise64.h>
 #include <stdint.h>
 
-// 4x4 Bayer matrix for ordered dithering
-inline const uint8_t bayer4x4[4][4] = {
-    {0, 8, 2, 10},
-    {12, 4, 14, 6},
-    {3, 11, 1, 9},
-    {15, 7, 13, 5},
-};
-
-// Apply Bayer dithering and quantize to 4 levels (0-3)
-// Stateless - works correctly with any pixel processing order
-inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
-  int bayer = bayer4x4[y & 3][x & 3];
-  int dither = (bayer - 8) * 5;  // Scale to +/-40 (half of quantization step 85)
-
-  int adjusted = gray + dither;
+// 4-level dither (0-3) for the JPEG/PNG converters writing into the grayscale
+// planes (AA-on path: Sleep image, XTC, EpubReader with AA on). Stateless:
+// any pixel iteration order produces the same output.
+//
+// The 64x64 blue-noise table places dither texture above the eye's
+// contrast-sensitivity peak so smooth gradients read as fine grain rather than
+// the regular crosshatch a 4x4 Bayer matrix would produce. Perturbation
+// magnitude is +/-42, roughly half the 85-step quantization quantum, so a
+// pixel within one quantum of a boundary can shift into the neighbor level.
+inline uint8_t applyBlueNoiseDither4Level(uint8_t gray, int x, int y) {
+  const int noise = BLUE_NOISE_64[y & 63][x & 63];  // 0..255
+  // Perturbation in [-43, 42]: ((noise - 128) * 85) >> 8 ~= (noise - 128) / 3.
+  // Hand-rolled to avoid the per-pixel DIV (~35 cycles on RV32IM); a full
+  // 800x480 decode hits this 384k times so the shift form saves ~80ms.
+  const int dither = ((noise - 128) * 85) >> 8;
+  int adjusted = static_cast<int>(gray) + dither;
   if (adjusted < 0) adjusted = 0;
   if (adjusted > 255) adjusted = 255;
 

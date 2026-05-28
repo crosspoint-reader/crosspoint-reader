@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BlueNoise64.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <stdint.h>
@@ -23,6 +24,17 @@ struct DirectPixelWriter {
   int originY;
   int clipRows;
 
+  // Multi-plane targets. When `multi` is true, writePixel fans the source
+  // Ordered-dither mode for inline reader images. When `dither` is true,
+  // writePixel ignores `mode` and does an ordered-dither threshold decision
+  // against the source pixel's 0..3 value, writing ink to `fb` (the current
+  // BW target) only when the threshold passes. Lets a single image decode
+  // produce a BW-only output that's visually competitive with the 2-bit
+  // grayscale path at half the cost. Set by init() when the renderer's
+  // TextRenderMode is DitherBw. Always uses the 64x64 blue-noise table
+  // (BlueNoise64.h) for high-frequency texture.
+  bool dither;
+
   // Orientation is collapsed into a linear transform:
   //   phyX = phyXBase + x * phyXStepX + y * phyXStepY
   //   phyY = phyYBase + x * phyYStepX + y * phyYStepY
@@ -39,6 +51,11 @@ struct DirectPixelWriter {
     clipRows = renderer.getWriteRows();
     mode = renderer.getRenderMode();
     displayWidthBytes = renderer.getDisplayWidthBytes();
+
+    // DitherBw text mode also routes image decoding through ordered dither,
+    // since the goal of that mode is "no grayscale planes anywhere." The
+    // image writes go to the same BW target `fb` already points at.
+    dither = (renderer.getTextRenderMode() == GfxRenderer::TextRenderMode::DitherBw);
 
     const int phyW = renderer.getDisplayWidth();
     const int phyH = renderer.getDisplayHeight();
@@ -103,7 +120,36 @@ struct DirectPixelWriter {
   // Must be called after beginRow() for the current row.
   // No bounds checking — caller guarantees coordinates are valid.
   inline void writePixel(int logicalX, uint8_t pixelValue) const {
-    // Determine whether to draw based on render mode
+    const int phyX = rowPhyXBase + logicalX * phyXStepX;
+    const int phyY = rowPhyYBase + logicalX * phyYStepX;
+
+    // Band-local row. The unsigned compare drops both off-band pixels (strip
+    // mode) and any out-of-frame row (full-frame mode) in one branch.
+    const int sy = phyY - originY;
+    if (static_cast<unsigned>(sy) >= static_cast<unsigned>(clipRows)) return;
+
+    const uint16_t byteIndex = static_cast<uint16_t>(sy * displayWidthBytes + (phyX >> 3));
+    const uint8_t bitMask = 1 << (7 - (phyX & 7));
+
+    if (dither) {
+      // BW ordered-dither write against the 64x64 blue-noise table. Thresholds
+      // 160/48 (~63% / ~19% ink) for val=1/2 brighten midtones; images that
+      // were already quantized to 4 levels collapsed darker than intended
+      // once the native grayscale path stopped putting a gray waveform behind
+      // val=1/2.
+      if (pixelValue == 0) {
+        fb[byteIndex] &= ~bitMask;
+      } else if (pixelValue != 3) {
+        const uint8_t threshold = (pixelValue == 1) ? 160 : 48;
+        if (BLUE_NOISE_64[phyY & 63][phyX & 63] < threshold) {
+          fb[byteIndex] &= ~bitMask;
+        }
+      }
+      return;
+    }
+
+    // Single-plane path. Determine whether to draw + what bit polarity
+    // based on render mode.
     bool draw;
     bool state;
     switch (mode) {
@@ -124,17 +170,6 @@ struct DirectPixelWriter {
     }
 
     if (!draw) return;
-
-    const int phyX = rowPhyXBase + logicalX * phyXStepX;
-    const int phyY = rowPhyYBase + logicalX * phyYStepX;
-
-    // Band-local row. The unsigned compare drops both off-band pixels (strip
-    // mode) and any out-of-frame row (full-frame mode) in one branch.
-    const int sy = phyY - originY;
-    if (static_cast<unsigned>(sy) >= static_cast<unsigned>(clipRows)) return;
-
-    const uint16_t byteIndex = static_cast<uint16_t>(sy * displayWidthBytes + (phyX >> 3));
-    const uint8_t bitMask = 1 << (7 - (phyX & 7));
 
     if (state) {
       fb[byteIndex] &= ~bitMask;  // Clear bit (draw black)
