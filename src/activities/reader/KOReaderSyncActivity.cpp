@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 
 #include "Epub/Section.h"
 #include "EpubReaderUtils.h"
@@ -84,6 +85,21 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
 
 void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
 
+bool KOReaderSyncActivity::smartSyncEnabled() const {
+  return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
+}
+
+void KOReaderSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
+
+void KOReaderSyncActivity::completeAlreadySynced() {
+  {
+    RenderLock lock(*this);
+    state = SYNC_COMPLETE;
+  }
+  markAutoReturn();
+  requestUpdate(true);
+}
+
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_DBG("KOSync", "WiFi connection failed, exiting");
@@ -141,6 +157,11 @@ void KOReaderSyncActivity::performSync() {
   const auto result = KOReaderSyncClient::getProgress(documentHash, remoteProgress);
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
+    if (smartSyncEnabled()) {
+      performUpload();
+      return;
+    }
+
     // No remote progress - offer to upload
     {
       RenderLock lock(*this);
@@ -176,6 +197,23 @@ void KOReaderSyncActivity::performSync() {
 
   SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
   remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+
+  if (smartSyncEnabled()) {
+    static constexpr float SAME_PROGRESS_EPSILON = 0.001f;  // 0.1 percentage points
+    const float delta = localProgress.percentage - remoteProgress.percentage;
+    if (std::fabs(delta) <= SAME_PROGRESS_EPSILON) {
+      completeAlreadySynced();
+      return;
+    }
+
+    if (delta > 0) {
+      performUpload();
+      return;
+    }
+
+    saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+    return;
+  }
 
   // localProgress was pre-computed in EpubReaderActivity before the Epub was released.
   {
@@ -225,6 +263,7 @@ void KOReaderSyncActivity::performUpload() {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;
   }
+  markAutoReturn();
   requestUpdate(true);
 }
 
@@ -368,10 +407,12 @@ void KOReaderSyncActivity::render(RenderLock&&) {
     return;
   }
 
-  if (state == UPLOAD_COMPLETE) {
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_UPLOAD_SUCCESS), true, EpdFontFamily::BOLD);
+  if (state == UPLOAD_COMPLETE || state == SYNC_COMPLETE) {
+    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top,
+                              state == UPLOAD_COMPLETE ? tr(STR_UPLOAD_SUCCESS) : tr(STR_ALREADY_SYNCED), true,
+                              EpdFontFamily::BOLD);
 
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -389,8 +430,13 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
-  if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE || state == SYNC_COMPLETE) {
+    if (autoReturnAt != 0 && millis() >= autoReturnAt) {
+      returnToReader();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       returnToReader();
     }
     return;

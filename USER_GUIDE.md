@@ -217,7 +217,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
 - **WiFi Networks**: Connect to WiFi networks for file transfers and firmware updates.
-- **KOReader Sync**: Options for setting up KOReader for syncing book progress.
+- **KOReader Sync**: Options for setting up KOReader for syncing book progress. By default, **Smart sync** auto-resolves simple push/pull decisions; you can switch Sync Behavior to **Ask every time** if you prefer manual confirmation.
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 - **Clear Reading Cache**: Clear the internal SD card cache.
 - **Check for updates**: Check for Crosspoint firmware updates over WiFi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
@@ -295,8 +295,8 @@ When this returns `HTTP 402` with `{"code":2002,"message":"Username is already r
    - Run **Authenticate**.
 
 3. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
-   - Choose **Apply Remote** to jump to remote progress.
-   - Choose **Upload Local** to push current progress.
+   - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
+   - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, do nothing when already synced, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
 ##### Option B: Self-Hosted Server (Docker Compose)
 
@@ -368,8 +368,8 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
 If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
 
 5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
-   - Choose **Apply Remote** to jump to remote progress.
-   - Choose **Upload Local** to push current progress.
+   - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
+   - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, do nothing when already synced, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
 ### 3.7 Sleep Screen
 
