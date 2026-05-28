@@ -339,12 +339,8 @@ int CrossPointSettings::getRefreshFrequency() const {
 }
 
 int CrossPointSettings::getDefinitionFontId() const {
-  // Resolve effective family and size (GLOBAL = fall back to reader setting)
-  const FONT_FAMILY effFamily = (dictionaryFontFamily == DICT_FONT_GLOBAL)
-                                    ? static_cast<FONT_FAMILY>(fontFamily)
-                                    : static_cast<FONT_FAMILY>(dictionaryFontFamily - 1);
-  const FONT_SIZE effSize = (dictionaryFontSize == DICT_SIZE_GLOBAL) ? static_cast<FONT_SIZE>(fontSize)
-                                                                     : static_cast<FONT_SIZE>(dictionaryFontSize - 1);
+  const FONT_FAMILY effFamily = static_cast<FONT_FAMILY>(dictionaryFontFamily);
+  const FONT_SIZE effSize = static_cast<FONT_SIZE>(dictionaryFontSize);
   switch (effFamily) {
     case NOTOSERIF:
     default:
@@ -387,9 +383,7 @@ int CrossPointSettings::getDefinitionFontId() const {
 }
 
 float CrossPointSettings::getDefinitionLineCompression() const {
-  const FONT_FAMILY effFamily = (dictionaryFontFamily == DICT_FONT_GLOBAL)
-                                    ? static_cast<FONT_FAMILY>(fontFamily)
-                                    : static_cast<FONT_FAMILY>(dictionaryFontFamily - 1);
+  const FONT_FAMILY effFamily = static_cast<FONT_FAMILY>(dictionaryFontFamily);
   switch (effFamily) {
     case NOTOSERIF:
     default:
