@@ -202,6 +202,14 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     applyLegacyStatusBarSettings(s);
   }
 
+  // Transparent sleep overlay existed on the legacy transparent branch before Quick Resume was merged upstream.
+  // That branch stored sleepScreen=6 for Transparent and had no quickResumeSleepScreen key.
+  // After Quick Resume landed, value 6 became QUICK_RESUME, so remap that legacy combination explicitly.
+  const bool legacyTransparentSleepScreen =
+      doc["quickResumeSleepScreen"].isNull() &&
+      (doc["sleepScreen"] | static_cast<uint8_t>(UINT8_MAX)) ==
+          static_cast<uint8_t>(CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME);
+
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
@@ -254,6 +262,13 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     s.sleepTimeoutMinutes = CrossPointSettings::sleepTimeoutEnumToMinutes(legacyValue);
     if (needsResave) *needsResave = true;
   }
+
+  if (legacyTransparentSleepScreen &&
+      s.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) {
+    s.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+    if (needsResave) *needsResave = true;
+  }
+
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   using S = CrossPointSettings;
   s.frontButtonBack =
