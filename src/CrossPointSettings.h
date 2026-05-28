@@ -251,6 +251,13 @@ class CrossPointSettings {
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 
+  // Fast Mode: swap EpubReader from 4-level grayscale to BW + blue-noise
+  // dither, and turn on next-page prerender. Sleep and XTC keep grayscale
+  // regardless. Mutually exclusive with textAntiAliasing (enforced in the
+  // settings menu). Stored as uint8_t so the SettingInfo::Toggle
+  // pointer-to-member type matches the picker.
+  uint8_t fastMode = 0;
+
   ~CrossPointSettings() = default;
 
   // Get singleton instance

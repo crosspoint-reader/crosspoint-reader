@@ -19,6 +19,13 @@
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
+  // Sleep imagery is always grayscale. The renderer's TextRenderMode persists
+  // across activity transitions, so EpubReader's Fast Mode (DitherBw) would
+  // otherwise leak into DirectPixelWriter when the sleep cover image decodes
+  // and route the bitmap through the BW dither path instead of the 4-level
+  // grayscale planes.
+  renderer.setTextRenderMode(GfxRenderer::TextRenderMode::Grayscale);
+
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
       (fromTimeout &&

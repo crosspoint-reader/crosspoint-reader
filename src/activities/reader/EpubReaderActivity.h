@@ -1,8 +1,10 @@
 #pragma once
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/Page.h>
 #include <Epub/Section.h>
 
+#include <memory>
 #include <optional>
 
 #include "EpubReaderMenuActivity.h"
@@ -52,8 +54,32 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
-  void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
-                      int orientedMarginBottom, int orientedMarginLeft);
+  // Next page staged into the framebuffer at the tail of a render, layout cached here. A forward
+  // turn then skips the SD load and BW raster and goes straight to flush. Touched only under
+  // RenderLock: prerenderNextPage() writes it, pageTurn() reads it.
+  struct PreRenderedPage {
+    bool ready = false;
+    int spineIndex = -1;
+    int pageIndex = -1;
+    std::unique_ptr<Page> page;  // reused by the consume path's grayscale pass
+  };
+  PreRenderedPage preRendered;
+  // Set by pageTurn()'s fast path; tells render() the framebuffer already holds the next page's
+  // BW content, so it only adds the status bar, flushes, and runs grayscale.
+  bool useFastDisplay = false;
+
+  // Paint one page to the panel: optional prewarm + BW raster, status bar, flush, grayscale pass.
+  // contentAlreadyInFb skips the BW raster (the framebuffer already holds it, a consumed
+  // pre-render); the prewarm still runs under AA because the gray pass re-renders the glyphs.
+  void paintPage(Page& page, int orientedMarginTop, int orientedMarginLeft, bool contentAlreadyInFb);
+  // Rasterize a page's BW content into the framebuffer (prewarm + render), no status bar, no
+  // flush. Used by prerenderNextPage to stage the next page while the reader is idle.
+  void renderPageContentOnly(const Page& page, int orientedMarginTop, int orientedMarginLeft);
+  // Stage the next text page into the framebuffer so the next forward turn is a flush only. No-op
+  // when there is no next page, it has images, heap headroom is low, or it is already staged.
+  void prerenderNextPage(int orientedMarginTop, int orientedMarginLeft);
+  // Drop any staged pre-render. Call on every navigation that is not a simple forward turn.
+  void invalidatePreRender();
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);

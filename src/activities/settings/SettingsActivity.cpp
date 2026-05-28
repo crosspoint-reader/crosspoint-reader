@@ -260,6 +260,16 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+
+  // textAntiAliasing and fastMode are mutually exclusive: enabling one
+  // disables the other so the menu reflects the runtime constraint that AA
+  // suppresses Fast Mode.
+  if (setting.valuePtr == &CrossPointSettings::textAntiAliasing && SETTINGS.textAntiAliasing) {
+    SETTINGS.fastMode = 0;
+  } else if (setting.valuePtr == &CrossPointSettings::fastMode && SETTINGS.fastMode) {
+    SETTINGS.textAntiAliasing = 0;
+  }
+
   SETTINGS.saveToFile();
 }
 

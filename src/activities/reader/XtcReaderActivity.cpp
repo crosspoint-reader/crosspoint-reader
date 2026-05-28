@@ -26,6 +26,11 @@
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
 
+  // XTC is always grayscale. Force the renderer's text mode so a stale
+  // DitherBw from EpubReader's Fast Mode doesn't bleed into image decoding
+  // via DirectPixelWriter.
+  renderer.setTextRenderMode(GfxRenderer::TextRenderMode::Grayscale);
+
   if (!xtc) {
     return;
   }
