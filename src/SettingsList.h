@@ -242,6 +242,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koSendMetadata", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicEnum(
+            StrId::STR_SYNC_BEHAVIOR, {StrId::STR_ASK_EVERY_TIME, StrId::STR_SMART_SYNC},
+            [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncBehavior()); },
+            [](uint8_t v) {
+              KOREADER_STORE.setSyncBehavior(static_cast<KOReaderSyncBehavior>(v));
+              KOREADER_STORE.saveToFile();
+            },
+            "koSyncBehavior", StrId::STR_KOREADER_SYNC),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),
