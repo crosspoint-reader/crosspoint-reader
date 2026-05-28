@@ -48,7 +48,7 @@ struct OverlayBmpInfo {
   uint32_t rowBytes = 0;
 };
 
-uint16_t readLE16(FsFile& file) {
+uint16_t readLE16(HalFile& file) {
   const int c0 = file.read();
   const int c1 = file.read();
   const auto b0 = static_cast<uint8_t>(c0 < 0 ? 0 : c0);
@@ -56,7 +56,7 @@ uint16_t readLE16(FsFile& file) {
   return static_cast<uint16_t>(b0) | (static_cast<uint16_t>(b1) << 8);
 }
 
-uint32_t readLE32(FsFile& file) {
+uint32_t readLE32(HalFile& file) {
   const int c0 = file.read();
   const int c1 = file.read();
   const int c2 = file.read();
@@ -101,7 +101,7 @@ BitmapPlacement calculateBitmapPlacement(const int bitmapWidth, const int bitmap
   return placement;
 }
 
-bool parseOverlayBmpHeader(FsFile& file, OverlayBmpInfo& info, const bool logErrors) {
+bool parseOverlayBmpHeader(HalFile& file, OverlayBmpInfo& info, const bool logErrors) {
   if (!file) return false;
   if (!file.seek(0)) return false;
 
@@ -170,7 +170,7 @@ uint8_t quantizeOverlayLum(const uint8_t lum) {
   return lum >> 6;
 }
 
-bool renderTransparentOverlayPass(FsFile& file, const OverlayBmpInfo& info, const BitmapPlacement& placement,
+bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, const BitmapPlacement& placement,
                                   const GfxRenderer& renderer, uint8_t* row, const TransparentOverlayPass pass) {
   if (!file.seek(info.dataOffset)) {
     LOG_ERR("SLP", "Failed to seek transparent overlay pixel data");
@@ -240,7 +240,7 @@ bool renderTransparentOverlayPass(FsFile& file, const OverlayBmpInfo& info, cons
   return true;
 }
 
-bool renderTransparentOverlayBmp(FsFile& file, GfxRenderer& renderer, const char* pathForLog) {
+bool renderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const char* pathForLog) {
   OverlayBmpInfo info;
   if (!parseOverlayBmpHeader(file, info, true)) return false;
 
@@ -278,11 +278,11 @@ bool renderTransparentOverlayBmp(FsFile& file, GfxRenderer& renderer, const char
   return true;
 }
 
-using SleepFileValidator = bool (*)(FsFile& file, const char* name);
+using SleepFileValidator = bool (*)(HalFile& file, const char* name);
 
 enum class SleepRecentKind : uint8_t { Standard, Overlay };
 
-bool validateCustomSleepBmp(FsFile& file, const char* name) {
+bool validateCustomSleepBmp(HalFile& file, const char* name) {
   Bitmap bitmap(file);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) {
     LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
@@ -291,7 +291,7 @@ bool validateCustomSleepBmp(FsFile& file, const char* name) {
   return true;
 }
 
-bool validateTransparentSleepBmp(FsFile& file, const char* name) {
+bool validateTransparentSleepBmp(HalFile& file, const char* name) {
   OverlayBmpInfo info;
   if (!parseOverlayBmpHeader(file, info, false)) {
     LOG_DBG("SLP", "Skipping invalid transparent overlay BMP: %s", name);
@@ -448,7 +448,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   if (!selectedPath.empty()) {
-    FsFile randFile;
+    HalFile randFile;
     if (Storage.openFileForRead("SLP", selectedPath, randFile)) {
       LOG_DBG("SLP", "Randomly loading: %s", selectedPath.c_str());
       delay(100);
@@ -526,7 +526,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
 
 void SleepActivity::renderTransparentCustomSleepScreen() const {
   {
-    FsFile rootFile;
+    HalFile rootFile;
     if (Storage.openFileForRead("SLP", TRANSPARENT_SLEEP_ROOT, rootFile)) {
       if (renderTransparentOverlayBmp(rootFile, renderer, TRANSPARENT_SLEEP_ROOT)) return;
     }
@@ -540,7 +540,7 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   }
 
   if (!selectedPath.empty()) {
-    FsFile overlayFile;
+    HalFile overlayFile;
     if (Storage.openFileForRead("SLP", selectedPath, overlayFile) &&
         renderTransparentOverlayBmp(overlayFile, renderer, selectedPath.c_str())) {
       return;
