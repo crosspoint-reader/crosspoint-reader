@@ -31,6 +31,8 @@ CrossPoint Reader includes a built-in web server that allows you to:
 
 ### Viewing Available Networks
 
+If you have saved Wi-Fi credentials, CrossPoint first tries the last connected network and then any visible saved networks automatically. Press **Back** to cancel or **Confirm** to stop auto-connect and show the available network list.
+
 Once the scan completes, you'll see a list of available WiFi networks with the following indicators:
 
 - **Signal strength bars** (`||||`, `|||`, `||`, `|`) - Shows connection quality
