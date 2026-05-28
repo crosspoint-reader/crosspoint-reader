@@ -15,6 +15,7 @@ bool save(const KOReaderCredentialStore& store, const char* path) {
   doc["password_obf"] = obfuscation::obfuscateToBase64(store.getPassword());
   doc["serverUrl"] = store.getServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(store.getMatchMethod());
+  doc["syncBehavior"] = static_cast<uint8_t>(store.getSyncBehavior());
 
   String json;
   serializeJson(doc, json);
@@ -44,6 +45,13 @@ bool load(KOReaderCredentialStore& store, const char* json, bool* needsResave) {
 
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
   store.setMatchMethod(static_cast<DocumentMatchMethod>(method));
+
+  uint8_t behavior = doc["syncBehavior"] | static_cast<uint8_t>(KOReaderSyncBehavior::SMART);
+  if (behavior > static_cast<uint8_t>(KOReaderSyncBehavior::SMART)) {
+    behavior = static_cast<uint8_t>(KOReaderSyncBehavior::ASK_EVERY_TIME);
+    if (needsResave) *needsResave = true;
+  }
+  store.setSyncBehavior(static_cast<KOReaderSyncBehavior>(behavior));
 
   return true;
 }
