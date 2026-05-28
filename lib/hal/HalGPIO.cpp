@@ -200,10 +200,56 @@ void HalGPIO::begin() {
     pinMode(BAT_GPIO0, INPUT);
     pinMode(UART0_RXD, INPUT);
   }
+
+  // Dedicated input poll task. Priority 2 sits one above the Arduino main
+  // task (priority 1) so it preempts when the main task is mid-stepBuild,
+  // mid-extract, mid-render-prep. Stack 2048 bytes is enough; the body only
+  // does one analogRead pair via InputManager and OR-into-atomic, no SD or
+  // heap. pollOnce() fans inputMgr.update()'s edge events into our sticky
+  // atomic bitmasks so consumer reads survive cross-task races and gaps
+  // where no main-loop iter consumed in between.
+  TaskHandle_t handle = nullptr;
+  xTaskCreate(&HalGPIO::pollTaskTrampoline, "InputPoll", 2048, this, /*priority=*/2, &handle);
+  pollTaskHandle_ = handle;
 }
 
+void HalGPIO::pollTaskTrampoline(void* arg) {
+  auto* self = static_cast<HalGPIO*>(arg);
+  LOG_INF("INP", "InputPoll task started; priority=2, cadence=5ms");
+  for (;;) {
+    self->pollOnce();
+    vTaskDelay(pdMS_TO_TICKS(5));  // 5 ms < InputManager debounce window
+  }
+}
+
+void HalGPIO::pollOnce() {
+  uint8_t newPressed = 0;
+  uint8_t newReleased = 0;
+  {
+    std::lock_guard<std::mutex> lock(inputMgrMutex_);
+    inputMgr.update();
+    static constexpr uint8_t kBtns[] = {BTN_BACK, BTN_CONFIRM, BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_POWER};
+    for (uint8_t btn : kBtns) {
+      if (inputMgr.wasPressed(btn)) newPressed |= (1u << btn);
+      if (inputMgr.wasReleased(btn)) newReleased |= (1u << btn);
+    }
+  }
+  if (newPressed) pressedPending_.fetch_or(newPressed, std::memory_order_release);
+  if (newReleased) releasedPending_.fetch_or(newReleased, std::memory_order_release);
+}
+
+// Snapshot pending edges into the per-frame fields. Activity-loop consumers
+// then peek the frame state non-destructively (matches InputManager's
+// original "events cleared by the next update() call" contract). Anything
+// the poll task captures after this exchange is held in pending_ for the
+// next frame, so no edges are lost across the boundary.
 void HalGPIO::update() {
-  inputMgr.update();
+  pressedFrame_ = pressedPending_.exchange(0, std::memory_order_acq_rel);
+  releasedFrame_ = releasedPending_.exchange(0, std::memory_order_acq_rel);
+
+  // USB-cable state lives on the main task; the events are rare (one per
+  // cable event) so 200 Hz polling from the input task is overkill, and the
+  // plain-bool reader/writer would race across tasks if both touched them.
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -211,25 +257,41 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+  std::lock_guard<std::mutex> lock(inputMgrMutex_);
+  return inputMgr.isPressed(buttonIndex);
+}
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return (pressedFrame_ & (1u << buttonIndex)) != 0; }
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const { return pressedFrame_ != 0; }
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return (releasedFrame_ & (1u << buttonIndex)) != 0; }
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const { return releasedFrame_ != 0; }
 
-unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
+unsigned long HalGPIO::getHeldTime() const {
+  std::lock_guard<std::mutex> lock(inputMgrMutex_);
+  return inputMgr.getHeldTime();
+}
 
-unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
+unsigned long HalGPIO::getPowerButtonHeldTime() const {
+  std::lock_guard<std::mutex> lock(inputMgrMutex_);
+  return inputMgr.getPowerButtonHeldTime();
+}
 
 void HalGPIO::startDeepSleep() {
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  while (inputMgr.isPressed(BTN_POWER)) {
+  for (;;) {
+    {
+      std::lock_guard<std::mutex> lock(inputMgrMutex_);
+      if (!inputMgr.isPressed(BTN_POWER)) break;
+    }
     delay(50);
-    inputMgr.update();
+    {
+      std::lock_guard<std::mutex> lock(inputMgrMutex_);
+      inputMgr.update();
+    }
   }
   // Arm the wakeup trigger *after* the button is released
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
@@ -250,18 +312,31 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
   const uint16_t calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
 
   const auto start = millis();
-  inputMgr.update();
-  // inputMgr.isPressed() may take up to ~500ms to return correct state
-  while (!inputMgr.isPressed(BTN_POWER) && millis() - start < 1000) {
-    delay(10);
+  const auto lockedUpdate = [this]() {
+    std::lock_guard<std::mutex> lock(inputMgrMutex_);
     inputMgr.update();
+  };
+  const auto lockedIsPowerPressed = [this]() {
+    std::lock_guard<std::mutex> lock(inputMgrMutex_);
+    return inputMgr.isPressed(BTN_POWER);
+  };
+  const auto lockedHeldTime = [this]() {
+    std::lock_guard<std::mutex> lock(inputMgrMutex_);
+    return inputMgr.getPowerButtonHeldTime();
+  };
+
+  lockedUpdate();
+  // inputMgr.isPressed() may take up to ~500ms to return correct state
+  while (!lockedIsPowerPressed() && millis() - start < 1000) {
+    delay(10);
+    lockedUpdate();
   }
-  if (inputMgr.isPressed(BTN_POWER)) {
+  if (lockedIsPowerPressed()) {
     do {
       delay(10);
-      inputMgr.update();
-    } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getPowerButtonHeldTime() < calibratedDuration);
-    if (inputMgr.getPowerButtonHeldTime() < calibratedDuration) {
+      lockedUpdate();
+    } while (lockedIsPowerPressed() && lockedHeldTime() < calibratedDuration);
+    if (lockedHeldTime() < calibratedDuration) {
       startDeepSleep();
     }
   } else {

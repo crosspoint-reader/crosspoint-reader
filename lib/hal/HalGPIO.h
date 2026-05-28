@@ -3,6 +3,9 @@
 #include <Arduino.h>
 #include <InputManager.h>
 
+#include <atomic>
+#include <mutex>
+
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
 #define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
@@ -45,6 +48,26 @@ class HalGPIO {
 
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
+
+  // Background poll task ORs press/release edges into the `pending_` atomics
+  // (bit `i` = edge for button index `i`). The main task calls update() once
+  // per loop iter, which exchange()s pending into a stable `frame_` snapshot
+  // for that iter; all consumer reads on the `was*` API are non-destructive
+  // peeks against the snapshot. This matches the original InputManager
+  // semantics ("event cleared by the next update() call") while letting
+  // input poll cadence (5 ms) run independently of activity-loop work.
+  std::atomic<uint8_t> pressedPending_{0};
+  std::atomic<uint8_t> releasedPending_{0};
+  uint8_t pressedFrame_ = 0;
+  uint8_t releasedFrame_ = 0;
+  void* pollTaskHandle_ = nullptr;
+  // Serializes every call into `inputMgr`. InputManager mutates internal
+  // counters and timestamps on update(); without this mutex the poll task
+  // and main task race on isPressed() / getHeldTime() reads and update()
+  // writes, producing sliced timestamps and missed long-press events.
+  mutable std::mutex inputMgrMutex_;
+  static void pollTaskTrampoline(void* arg);
+  void pollOnce();
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
