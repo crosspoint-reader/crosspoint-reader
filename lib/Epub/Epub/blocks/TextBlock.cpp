@@ -23,7 +23,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
-    const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));
+    const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(
+        BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));
     const uint8_t boundary = hasFocus ? wordFocusBoundary[i] : 0;
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
