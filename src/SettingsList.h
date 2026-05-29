@@ -106,7 +106,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // --- Display ---
         SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                           {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
-                           StrId::STR_COVER_CUSTOM, StrId::STR_QUICK_RESUME},
+                           StrId::STR_COVER_CUSTOM, StrId::STR_QUICK_RESUME, StrId::STR_REMINDERS},
                           "sleepScreen", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                           {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
@@ -251,6 +251,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // on next WiFi connect, which is useful when crossing time zones.
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
+        // --- Reminders (Taskpoint) ---
+        SettingInfo::Toggle(StrId::STR_REMINDERS_ENABLED, &CrossPointSettings::remindersEnabled, "remindersEnabled",
+                            StrId::STR_CAT_DISPLAY),
+        SettingInfo::Value(StrId::STR_REMINDERS_SYNC_INTERVAL, &CrossPointSettings::remindersSyncIntervalH, {1, 24, 1},
+                           "remindersSyncIntervalH", StrId::STR_CAT_DISPLAY),
     };
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {
