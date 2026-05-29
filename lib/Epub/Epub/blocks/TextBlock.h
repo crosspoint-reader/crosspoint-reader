@@ -26,17 +26,22 @@ class TextBlock final : public Block {
   // Eliminates getTextAdvanceX from the render path. 0 when boundary == 0.
   // Empty in lockstep with wordFocusBoundary.
   std::vector<uint16_t> wordFocusSuffixX;
+  // Layout-time word widths, stored only for lines with underlined text so render()
+  // does not need to remeasure every link word on each page flip.
+  std::vector<uint16_t> wordWidths;
   BlockStyle blockStyle;
 
  public:
   explicit TextBlock(std::vector<std::string> words, std::vector<int16_t> word_xpos,
                      std::vector<EpdFontFamily::Style> word_styles, std::vector<uint8_t> focus_boundary,
-                     std::vector<uint16_t> focus_suffix_x, const BlockStyle& blockStyle = BlockStyle())
+                     std::vector<uint16_t> focus_suffix_x, const BlockStyle& blockStyle = BlockStyle(),
+                     std::vector<uint16_t> word_widths = {})
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
         wordFocusBoundary(std::move(focus_boundary)),
         wordFocusSuffixX(std::move(focus_suffix_x)),
+        wordWidths(std::move(word_widths)),
         blockStyle(blockStyle) {}
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }

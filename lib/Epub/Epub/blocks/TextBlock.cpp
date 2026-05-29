@@ -11,10 +11,11 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !wordFocusBoundary.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
-      (hasFocus && (words.size() != wordFocusBoundary.size() || words.size() != wordFocusSuffixX.size()))) {
-    LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)\n",
+      (hasFocus && (words.size() != wordFocusBoundary.size() || words.size() != wordFocusSuffixX.size())) ||
+      (!wordWidths.empty() && words.size() != wordWidths.size())) {
+    LOG_ERR("TXB", "Render skipped: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u, widths=%u)\n",
             (uint32_t)words.size(), (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size(),
-            (uint32_t)wordFocusBoundary.size(), (uint32_t)wordFocusSuffixX.size());
+            (uint32_t)wordFocusBoundary.size(), (uint32_t)wordFocusSuffixX.size(), (uint32_t)wordWidths.size());
     return;
   }
 
@@ -57,7 +58,9 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = words[i];
-      const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
+      const int fullWordWidth = !wordWidths.empty() && i < wordWidths.size()
+                                    ? wordWidths[i]
+                                    : renderer.getTextAdvanceX(fontId, w.c_str(), currentStyle);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
       const int underlineY = wordY + ascender + 2;
 
@@ -84,11 +87,13 @@ bool TextBlock::serialize(HalFile& file) const {
   // or sized in lockstep with words[].
   const bool hasFocus = !wordFocusBoundary.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
-      (hasFocus && (words.size() != wordFocusBoundary.size() || words.size() != wordFocusSuffixX.size()))) {
-    LOG_ERR("TXB", "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)\n",
+      (hasFocus && (words.size() != wordFocusBoundary.size() || words.size() != wordFocusSuffixX.size())) ||
+      (!wordWidths.empty() && words.size() != wordWidths.size())) {
+    LOG_ERR("TXB",
+            "Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u, widths=%u)\n",
             static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
             static_cast<uint32_t>(wordStyles.size()), static_cast<uint32_t>(wordFocusBoundary.size()),
-            static_cast<uint32_t>(wordFocusSuffixX.size()));
+            static_cast<uint32_t>(wordFocusSuffixX.size()), static_cast<uint32_t>(wordWidths.size()));
     return false;
   }
 
@@ -103,6 +108,10 @@ bool TextBlock::serialize(HalFile& file) const {
   if (hasFocus) {
     for (auto b : wordFocusBoundary) serialization::writePod(file, b);
     for (auto sx : wordFocusSuffixX) serialization::writePod(file, sx);
+  }
+  serialization::writePod(file, static_cast<uint8_t>(wordWidths.empty() ? 0 : 1));
+  if (!wordWidths.empty()) {
+    for (auto width : wordWidths) serialization::writePod(file, width);
   }
 
   // Style (alignment + margins/padding/indent)
@@ -157,6 +166,13 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
     for (auto& b : wordFocusBoundary) serialization::readPod(file, b);
     for (auto& sx : wordFocusSuffixX) serialization::readPod(file, sx);
   }
+  uint8_t hasWordWidths = 0;
+  serialization::readPod(file, hasWordWidths);
+  std::vector<uint16_t> wordWidths;
+  if (hasWordWidths) {
+    wordWidths.resize(wc);
+    for (auto& width : wordWidths) serialization::readPod(file, width);
+  }
 
   // Style (alignment + margins/padding/indent)
   serialization::readPod(file, blockStyle.alignment);
@@ -173,6 +189,6 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
 
   return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
-                                                  std::move(wordFocusBoundary), std::move(wordFocusSuffixX),
-                                                  blockStyle));
+                                                  std::move(wordFocusBoundary), std::move(wordFocusSuffixX), blockStyle,
+                                                  std::move(wordWidths)));
 }

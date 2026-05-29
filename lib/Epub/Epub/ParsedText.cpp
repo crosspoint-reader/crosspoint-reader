@@ -708,10 +708,19 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   std::vector<std::string> lineWords(std::make_move_iterator(words.begin() + lastBreakAt),
                                      std::make_move_iterator(words.begin() + lineBreak));
   std::vector<EpdFontFamily::Style> lineWordStyles(wordStyles.begin() + lastBreakAt, wordStyles.begin() + lineBreak);
+  std::vector<uint16_t> lineWordWidths(wordWidths.begin() + lastBreakAt, wordWidths.begin() + lineBreak);
 
   for (auto& word : lineWords) {
     if (containsSoftHyphen(word)) {
       stripSoftHyphensInPlace(word);
+    }
+  }
+
+  bool lineHasUnderline = false;
+  for (auto style : lineWordStyles) {
+    if ((style & EpdFontFamily::UNDERLINE) != 0) {
+      lineHasUnderline = true;
+      break;
     }
   }
 
@@ -728,7 +737,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit) {
     processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
-                                            std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle));
+                                            std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle,
+                                            lineHasUnderline ? std::move(lineWordWidths) : std::vector<uint16_t>{}));
     return;
   }
 
@@ -737,11 +747,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // applied at render time, cutting the token count significantly when the feature is active.
   std::vector<std::string> outWords;
   std::vector<int16_t> outXPos;
+  std::vector<uint16_t> outWidths;
   std::vector<EpdFontFamily::Style> outStyles;
   std::vector<uint8_t> outBoundaries;
   std::vector<uint16_t> outSuffixX;
   outWords.reserve(lineWordCount);
   outXPos.reserve(lineWordCount);
+  outWidths.reserve(lineWordCount);
   outStyles.reserve(lineWordCount);
   outBoundaries.reserve(lineWordCount);
   outSuffixX.reserve(lineWordCount);
@@ -750,6 +762,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     if (wordIsFocusSuffix[lastBreakAt + i] && !outWords.empty()) {
       // Focus suffix: merge string into the preceding bold-prefix entry.
       outWords.back() += lineWords[i];
+      outWidths.back() =
+          static_cast<uint16_t>(std::min<int>(UINT16_MAX, lineXPos[i] - outXPos.back() + lineWordWidths[i]));
     } else {
       // Normal word: check for a following focus suffix to record the byte boundary.
       uint8_t boundary = 0;
@@ -761,6 +775,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
       outWords.push_back(std::move(lineWords[i]));
       outXPos.push_back(lineXPos[i]);
+      outWidths.push_back(lineWordWidths[i]);
       // For focus entries with a suffix, strip BOLD from the stored style.
       // Render re-applies it to the prefix portion only, via the boundary field.
       const EpdFontFamily::Style storedStyle =
@@ -773,5 +788,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   processLine(std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
-                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle));
+                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle,
+                                          lineHasUnderline ? std::move(outWidths) : std::vector<uint16_t>{}));
 }
