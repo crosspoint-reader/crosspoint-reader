@@ -166,7 +166,7 @@ void ClockOffsetActivity::render(RenderLock&&) {
   const int signBoxW = std::max(widthOf("+"), widthOf("-")) + fieldPaddingX * 2;
   const int hoursBoxW = std::max(widthOf("14"), widthOf("12")) + fieldPaddingX * 2;
   const int colonWidth = widthOf(":");
-  const int minutesBoxW = widthOf("00") + fieldPaddingX * 2;
+  const int minutesBoxW = std::max({widthOf("00"), widthOf("15"), widthOf("30"), widthOf("45")}) + fieldPaddingX * 2;
   const int totalWidth =
       labelWidth + labelGap + signBoxW + fieldGap + hoursBoxW + colonGap + colonWidth + colonGap + minutesBoxW;
 
