@@ -11,6 +11,8 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
+#include "activities/reminders/RemindersRenderer.h"
+#include "activities/reminders/RemindersState.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
@@ -44,6 +46,8 @@ void SleepActivity::onEnter() {
       return renderCustomSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::REMINDERS):
+      return renderRemindersSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       if (APP_STATE.lastSleepFromReader) {
         return renderCoverSleepScreen();
@@ -326,4 +330,17 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+void SleepActivity::renderRemindersSleepScreen() const {
+  // The list usually lives in RAM already (RemindersActivity just exited). If
+  // not — e.g. after a cold boot — fall back to the SD cache. With neither, drop
+  // to the default sleep screen so we never show an empty frame.
+  if (gRemindersData.count == 0 && gRemindersData.synced_epoch == 0) {
+    if (!gRemindersData.loadFromFile()) {
+      LOG_DBG("SLP", "No reminders to render; using default sleep screen");
+      return renderDefaultSleepScreen();
+    }
+  }
+  RemindersRenderer::renderFull(renderer, gRemindersData);
 }

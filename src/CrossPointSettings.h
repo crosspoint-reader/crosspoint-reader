@@ -25,6 +25,7 @@ class CrossPointSettings {
     BLANK = 4,
     COVER_CUSTOM = 5,
     QUICK_RESUME = 6,
+    REMINDERS = 7,  // Taskpoint: render the cached countdown task list as the sleep screen
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -250,6 +251,12 @@ class CrossPointSettings {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+
+  // Reminders (Taskpoint): when enabled, a double power-press launches RemindersActivity
+  // to sync Google Calendar + Tasks. Default off so the double-press is inert otherwise.
+  uint8_t remindersEnabled = 0;
+  // Reserved: hours between background reminder syncs (1..24). Not yet auto-scheduled.
+  uint8_t remindersSyncIntervalH = 1;
 
   ~CrossPointSettings() = default;
 

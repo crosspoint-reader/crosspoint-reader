@@ -27,6 +27,7 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/reminders/RemindersActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -404,18 +405,36 @@ void setup() {
   // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
   // flashing has been locked down (e.g. recent X3 firmware).
   bool recoveryFirmwareMode = false;
+  // Taskpoint: a second quick power tap during the wake settle window launches
+  // RemindersActivity straight from sleep (Condition B). Guarded by the setting
+  // so the wake path is unchanged for users who never enable Reminders.
+  bool launchRemindersFromWake = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
     // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
     // settle window even if the loop body takes longer than expected on slow boots.
+    // The window is extended slightly when Reminders is enabled to catch the release+re-press of
+    // the second tap.
+    bool sawPowerRelease = false;
+    const unsigned long settleWindow = SETTINGS.remindersEnabled ? 800 : 500;
     const unsigned long settleStart = millis();
-    while (millis() - settleStart < 500) {
+    while (millis() - settleStart < settleWindow) {
       gpio.update();
+      if (SETTINGS.remindersEnabled) {
+        if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
+          sawPowerRelease = true;
+        } else if (sawPowerRelease && gpio.wasPressed(HalGPIO::BTN_POWER)) {
+          launchRemindersFromWake = true;
+        }
+      }
       delay(10);
     }
     if (gpio.isPressed(HalGPIO::BTN_UP)) {
       recoveryFirmwareMode = true;
       LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+    }
+    if (launchRemindersFromWake) {
+      LOG_INF("MAIN", "Reminders launch (double power-press from sleep)");
     }
   }
 
@@ -484,6 +503,12 @@ void setup() {
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
     activityManager.goToReader(path);
+  }
+
+  // Taskpoint: override the normal landing activity when woken specifically to
+  // show Reminders. Recovery mode still wins (critical brick-recovery path).
+  if (launchRemindersFromWake && !recoveryFirmwareMode) {
+    activityManager.replaceActivity(std::make_unique<RemindersActivity>(renderer, mappedInputManager));
   }
 
   if (resume == BootResume::Silent) {
@@ -571,6 +596,23 @@ void loop() {
     }
     screenshotButtonsReleased = true;
     screenshotComboActive = false;
+  }
+
+  // Taskpoint: double power-press while awake (Condition A) replaces the current
+  // activity with RemindersActivity. replaceActivity() runs the outgoing
+  // activity's onExit() first, freeing reader buffers before the HTTPS sync.
+  // Two short power taps within DOUBLE_PRESS_MS; a long hold still sleeps below.
+  static unsigned long lastPowerTapMs = 0;
+  if (SETTINGS.remindersEnabled && mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    constexpr unsigned long DOUBLE_PRESS_MS = 500;
+    const unsigned long nowMs = millis();
+    if (lastPowerTapMs != 0 && nowMs - lastPowerTapMs <= DOUBLE_PRESS_MS) {
+      lastPowerTapMs = 0;
+      LOG_INF("MAIN", "Reminders launch (double power-press)");
+      activityManager.replaceActivity(std::make_unique<RemindersActivity>(renderer, mappedInputManager));
+      return;
+    }
+    lastPowerTapMs = nowMs;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
