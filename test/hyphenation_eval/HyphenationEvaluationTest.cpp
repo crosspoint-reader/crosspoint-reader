@@ -231,4 +231,7 @@ TEST(HyphenationEval, Russian) { runLanguageEval("russian", "ru", "russian_hyphe
 TEST(HyphenationEval, Spanish) { runLanguageEval("spanish", "es", "spanish_hyphenation_tests.txt", 98.02); }
 TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphenation_tests.txt", 98.99); }
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
+TEST(HyphenationEval, Portuguese) {
+  runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.30);
+}
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
