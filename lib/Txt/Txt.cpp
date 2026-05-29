@@ -21,7 +21,7 @@ bool Txt::load() {
     return false;
   }
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("TXT", filepath, file)) {
     LOG_ERR("TXT", "Failed to open file: %s", filepath.c_str());
     return false;
@@ -115,7 +115,7 @@ bool Txt::generateCoverBmp() const {
   if (FsHelpers::hasBmpExtension(coverImagePath)) {
     // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
-    FsFile src, dst;
+    HalFile src, dst;
     if (!Storage.openFileForRead("TXT", coverImagePath, src)) {
       return false;
     }
@@ -132,7 +132,7 @@ bool Txt::generateCoverBmp() const {
   } else if (FsHelpers::hasJpgExtension(coverImagePath)) {
     // Convert JPG/JPEG to BMP (same approach as Epub)
     LOG_DBG("TXT", "Generating BMP from JPG cover image");
-    FsFile coverJpg, coverBmp;
+    HalFile coverJpg, coverBmp;
     if (!Storage.openFileForRead("TXT", coverImagePath, coverJpg)) {
       return false;
     }
@@ -155,12 +155,27 @@ bool Txt::generateCoverBmp() const {
   return false;
 }
 
+bool Txt::clearCache() const {
+  if (!Storage.exists(cachePath.c_str())) {
+    LOG_DBG("TXT", "Cache does not exist, no action needed");
+    return true;
+  }
+
+  if (!Storage.removeDir(cachePath.c_str())) {
+    LOG_ERR("TXT", "Failed to clear cache");
+    return false;
+  }
+
+  LOG_DBG("TXT", "Cache cleared successfully");
+  return true;
+}
+
 bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
   if (!loaded) {
     return false;
   }
 
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("TXT", filepath, file)) {
     return false;
   }

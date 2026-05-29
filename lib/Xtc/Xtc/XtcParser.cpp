@@ -530,7 +530,7 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
 }
 
 bool XtcParser::isValidXtcFile(const char* filepath) {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("XTC", filepath, file)) {
     return false;
   }
