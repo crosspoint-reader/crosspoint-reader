@@ -104,7 +104,7 @@ class ZipFile {
     while (file.available()) {
       if (file.read(&sig, 4) != 4 || sig != 0x02014b50) break;
 
-      file.seekCur(22);
+      file.seekCur(24);
       uint16_t nameLen, m, k;
       file.read(&nameLen, 2);
       file.read(&m, 2);
