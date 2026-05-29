@@ -57,6 +57,16 @@ class RemindersActivity final : public Activity {
   bool tickRefresh = false;  // render() uses FAST_REFRESH when set
   bool staleReached = false;
 
+  // Pagination (Up/Down page through the list instead of truncating). pageStart
+  // is the first item index on the current page; pageHistory records the start
+  // of each previous page so Up can step back through variable-height pages.
+  // lastNextIndex is written by render() (start of the next page) and read by
+  // loop() to know whether a next page exists.
+  uint8_t pageStart = 0;
+  uint8_t pageHistory[REMINDERS_MAX_ITEMS] = {};
+  uint8_t pageDepth = 0;
+  volatile uint8_t lastNextIndex = 0;
+
   // Double-tap Confirm detection (400 ms window) for manual re-sync.
   unsigned long lastConfirmMs = 0;
 

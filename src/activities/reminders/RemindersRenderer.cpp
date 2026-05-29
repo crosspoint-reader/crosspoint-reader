@@ -1,11 +1,14 @@
 #include "RemindersRenderer.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "fontIds.h"
@@ -17,6 +20,8 @@ constexpr int TITLE_FONT = NOTOSANS_14_FONT_ID;
 constexpr int SUB_FONT = NOTOSANS_12_FONT_ID;
 constexpr int DETAIL_FONT = UI_10_FONT_ID;
 constexpr int BAR_HEIGHT = 22;
+constexpr int STALE_BAR_H = 18;  // tightened banner height
+constexpr int FOOTER_HINT_LINES = 2;
 
 // Sanity floor for the system clock: 2023-11-14. Below this the clock is unset
 // (deep-sleep wake resets it), so countdowns are meaningless and are suppressed.
@@ -83,9 +88,109 @@ void dottedBorder(const GfxRenderer& r, int x, int y, int w, int h) {
   dottedVLine(r, x, y, h);
   dottedVLine(r, x + w - 1, y, h);
 }
+
+// Pixel height of one item block, matching exactly what drawItem() advances.
+int blockHeight(const CalItem& it, int titleLine, int subLine, int detailLine) {
+  int h = titleLine;
+  h += it.note_count * subLine;
+  if (it.start_epoch != 0) h += it.all_day ? detailLine : (BAR_HEIGHT + 4);
+  if (it.location[0] != '\0') h += detailLine;
+  h += 4 + subLine;  // per-item dotted divider + spacing
+  return h;
+}
+
+// Draw one item starting at top `y`; returns the new y below the block.
+int drawItem(GfxRenderer& renderer, const CalItem& it, uint8_t number, int y, int contentLeft, int contentRight,
+             int contentWidth, time_t now, bool clockValid, int titleLine, int subLine, int detailLine) {
+  // Numbered title.
+  char titleBuf[96];
+  snprintf(titleBuf, sizeof(titleBuf), "#%02u %s", number, it.title);
+  const std::string title = renderer.truncatedText(TITLE_FONT, titleBuf, contentWidth);
+  renderer.drawText(TITLE_FONT, contentLeft, y, title.c_str());
+  y += titleLine;
+
+  // Sub-items (task notes), indented with a turnstile glyph.
+  for (uint8_t n = 0; n < it.note_count; n++) {
+    char noteBuf[80];
+    snprintf(noteBuf, sizeof(noteBuf), "  > %s", it.notes[n]);
+    const std::string note = renderer.truncatedText(SUB_FONT, noteBuf, contentWidth - 12);
+    renderer.drawText(SUB_FONT, contentLeft + 12, y, note.c_str());
+    y += subLine;
+  }
+
+  if (it.all_day && it.start_epoch != 0) {
+    // All-day event / dated task: a plain date label, never a countdown.
+    char dateBuf[24];
+    formatDateUtc(it.start_epoch, dateBuf, sizeof(dateBuf));
+    char line[48];
+    snprintf(line, sizeof(line), "%s %s", it.is_calendar ? tr(STR_REMINDERS_ALL_DAY) : tr(STR_REMINDERS_DUE), dateBuf);
+    renderer.drawText(DETAIL_FONT, contentLeft, y, line, true, EpdFontFamily::BOLD);
+    y += detailLine;
+  } else if (it.start_epoch != 0) {
+    // Timed item: inverted black bar with white text.
+    const int barY = y;
+    renderer.fillRect(contentLeft, barY, contentWidth, BAR_HEIGHT, true);
+
+    char clockBuf[16];
+    formatClock12(it.start_epoch, clockBuf, sizeof(clockBuf));
+    char leftLabel[40];
+    // Calendar events with travel time say "LEAVE BY"; everything else shows the start time.
+    if (it.is_calendar && it.travel_secs > 0) {
+      char depBuf[16];
+      formatClock12(it.start_epoch - it.travel_secs, depBuf, sizeof(depBuf));
+      snprintf(leftLabel, sizeof(leftLabel), "%s %s", tr(STR_REMINDERS_LEAVE_BY), depBuf);
+    } else {
+      snprintf(leftLabel, sizeof(leftLabel), "%s", clockBuf);
+    }
+
+    const int textTop = centeredTextTop(renderer, DETAIL_FONT, barY, BAR_HEIGHT);
+    renderer.drawText(DETAIL_FONT, contentLeft + 6, textTop, leftLabel, false, EpdFontFamily::BOLD);
+    // The countdown is only meaningful with a valid clock.
+    if (clockValid) {
+      char cd[16];
+      formatCountdown(static_cast<long>(it.start_epoch - now), cd, sizeof(cd));
+      char rightLabel[24];
+      snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
+      const int rw = renderer.getTextWidth(DETAIL_FONT, rightLabel, EpdFontFamily::BOLD);
+      renderer.drawText(DETAIL_FONT, contentRight - 6 - rw, textTop, rightLabel, false, EpdFontFamily::BOLD);
+    }
+    y += BAR_HEIGHT + 4;
+  }
+
+  // Destination row.
+  if (it.location[0] != '\0') {
+    char dest[96];
+    snprintf(dest, sizeof(dest), "%s %s", tr(STR_REMINDERS_DEST), it.location);
+    const std::string destStr = renderer.truncatedText(DETAIL_FONT, dest, contentWidth);
+    renderer.drawText(DETAIL_FONT, contentLeft, y, destStr.c_str());
+    y += detailLine;
+  }
+
+  // Per-item dotted divider.
+  y += 4;
+  dottedHLine(renderer, contentLeft, y, contentWidth);
+  y += subLine;
+  return y;
+}
+
+// Draw the tightened stale banner (inverted bar, white text) at `barTop`.
+void drawStaleBar(GfxRenderer& renderer, const RemindersData& data, int barTop, int contentLeft, int contentWidth) {
+  renderer.fillRect(contentLeft, barTop, contentWidth, STALE_BAR_H, true);
+  char banner[48];
+  if (data.synced_epoch > MIN_VALID_EPOCH) {
+    char clk[16];
+    formatClock12(data.synced_epoch, clk, sizeof(clk));
+    snprintf(banner, sizeof(banner), "%s %s - %s", tr(STR_REMINDERS_LAST_SYNCED), clk, tr(STR_REMINDERS_NOT_LIVE));
+  } else {
+    snprintf(banner, sizeof(banner), "%s", tr(STR_REMINDERS_NOT_LIVE));
+  }
+  const int tw = renderer.getTextWidth(DETAIL_FONT, banner, EpdFontFamily::BOLD);
+  renderer.drawText(DETAIL_FONT, contentLeft + (contentWidth - tw) / 2,
+                    centeredTextTop(renderer, DETAIL_FONT, barTop, STALE_BAR_H), banner, false, EpdFontFamily::BOLD);
+}
 }  // namespace
 
-void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data) {
+uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex) {
   // The layout is designed for the 480x800 portrait panel; force it so entering
   // from a landscape reader (which leaves the renderer rotated) can't skew it.
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -94,8 +199,6 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
   const int H = renderer.getScreenHeight();
 
   renderer.clearScreen(0xFF);  // white background
-
-  // Outer dotted frame.
   dottedBorder(renderer, 4, 4, W - 8, H - 8);
 
   const int contentLeft = MARGIN_X;
@@ -108,9 +211,14 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
   const bool clockValid = now > MIN_VALID_EPOCH;
   const time_t headerEpoch = clockValid ? now : data.synced_epoch;
 
-  // --- Header: "TASKS | FRI MAY 29 | N ITEMS" (date omitted if clock unknown) ---
+  const int titleLine = renderer.getLineHeight(TITLE_FONT);
+  const int subLine = renderer.getLineHeight(SUB_FONT);
+  const int detailLine = renderer.getLineHeight(DETAIL_FONT);
+  const int headerLine = renderer.getLineHeight(HEADER_FONT);
+
+  // --- Header: "TASKS | FRI MAY 29 | N ITEMS", wrapped to two lines (never truncated mid-screen). ---
   int y = 16;
-  char header[64];
+  char header[80];
   char itemsWord[24];
   snprintf(itemsWord, sizeof(itemsWord), "%u %s", data.count, tr(STR_REMINDERS_ITEMS));
   if (headerEpoch > MIN_VALID_EPOCH) {
@@ -121,145 +229,97 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
   } else {
     snprintf(header, sizeof(header), "%s | %s", tr(STR_REMINDERS_TASKS), itemsWord);
   }
-  renderer.drawText(HEADER_FONT, contentLeft,
-                    centeredTextTop(renderer, HEADER_FONT, y, renderer.getLineHeight(HEADER_FONT)), header, true,
-                    EpdFontFamily::BOLD);
-  y += renderer.getLineHeight(HEADER_FONT);
+  for (const auto& line : renderer.wrappedText(HEADER_FONT, header, contentWidth, 2, EpdFontFamily::BOLD)) {
+    renderer.drawText(HEADER_FONT, contentLeft, y, line.c_str(), true, EpdFontFamily::BOLD);
+    y += headerLine;
+  }
+  y += 4;
   dottedHLine(renderer, contentLeft, y, contentWidth);
   y += 8;
 
-  if (data.count == 0) {
-    renderer.drawCenteredText(TITLE_FONT, H / 2, tr(STR_REMINDERS_NO_TASKS));
+  // --- Footer geometry (computed up front so the item loop knows its bottom). ---
+  const int brandTop = H - 6 - detailLine;
+  const int infoTop = brandTop - detailLine;
+  const int hintTop = infoTop - FOOTER_HINT_LINES * detailLine;
+  const int footerDividerY = hintTop - 8;
+  int staleBarTop = 0;
+  int contentBottom;
+  if (data.is_stale) {
+    staleBarTop = footerDividerY - 6 - STALE_BAR_H;
+    contentBottom = staleBarTop - 6;
+  } else {
+    contentBottom = footerDividerY - 6;
   }
 
-  const int titleLine = renderer.getLineHeight(TITLE_FONT);
-  const int subLine = renderer.getLineHeight(SUB_FONT);
-  const int detailLine = renderer.getLineHeight(DETAIL_FONT);
-  const int footerReserve = 70;
+  if (data.count == 0) {
+    renderer.drawCenteredText(TITLE_FONT, (y + contentBottom) / 2, tr(STR_REMINDERS_NO_TASKS));
+  }
 
-  for (uint8_t i = 0; i < data.count; i++) {
+  // --- Item loop with pagination. Always draw the first item of the page, then
+  // stop before any item that would overflow the content area. ---
+  uint8_t i = startIndex;
+  while (i < data.count) {
     const CalItem& it = data.items[i];
+    const int h = blockHeight(it, titleLine, subLine, detailLine);
+    if (i != startIndex && y + h > contentBottom) break;
+    y = drawItem(renderer, it, static_cast<uint8_t>(i + 1), y, contentLeft, contentRight, contentWidth, now, clockValid,
+                 titleLine, subLine, detailLine);
+    i++;
+  }
+  const uint8_t nextIndex = i;
+  const bool hasPrev = startIndex > 0;
+  const bool hasMore = nextIndex < data.count;
 
-    // Stop if the next block would collide with the footer area.
-    if (y > H - footerReserve - titleLine) break;
-
-    // Numbered title (truncated to the content width).
-    char titleBuf[96];
-    snprintf(titleBuf, sizeof(titleBuf), "#%02d %s", i + 1, it.title);
-    const std::string title = renderer.truncatedText(TITLE_FONT, titleBuf, contentWidth);
-    renderer.drawText(TITLE_FONT, contentLeft, y, title.c_str());
-    y += titleLine;
-
-    // Sub-items (task notes), indented with a turnstile glyph.
-    for (uint8_t n = 0; n < it.note_count; n++) {
-      if (y > H - footerReserve - subLine) break;
-      char noteBuf[80];
-      snprintf(noteBuf, sizeof(noteBuf), "  > %s", it.notes[n]);
-      const std::string note = renderer.truncatedText(SUB_FONT, noteBuf, contentWidth - 12);
-      renderer.drawText(SUB_FONT, contentLeft + 12, y, note.c_str());
-      y += subLine;
-    }
-
-    if (it.all_day && it.start_epoch != 0) {
-      // All-day event / dated task: a plain date label, never a countdown.
-      char dateBuf[24];
-      formatDateUtc(it.start_epoch, dateBuf, sizeof(dateBuf));
-      char line[48];
-      snprintf(line, sizeof(line), "%s %s", it.is_calendar ? tr(STR_REMINDERS_ALL_DAY) : tr(STR_REMINDERS_DUE),
-               dateBuf);
-      renderer.drawText(DETAIL_FONT, contentLeft, y, line, true, EpdFontFamily::BOLD);
-      y += detailLine;
-    } else if (it.start_epoch != 0) {
-      // Timed item: inverted black bar with white text.
-      const int barY = y;
-      renderer.fillRect(contentLeft, barY, contentWidth, BAR_HEIGHT, true);
-
-      char clockBuf[16];
-      formatClock12(it.start_epoch, clockBuf, sizeof(clockBuf));
-      char leftLabel[40];
-      // Calendar events with travel time say "LEAVE BY"; everything else shows
-      // the start time directly.
-      if (it.is_calendar && it.travel_secs > 0) {
-        char depBuf[16];
-        formatClock12(it.start_epoch - it.travel_secs, depBuf, sizeof(depBuf));
-        snprintf(leftLabel, sizeof(leftLabel), "%s %s", tr(STR_REMINDERS_LEAVE_BY), depBuf);
-      } else {
-        snprintf(leftLabel, sizeof(leftLabel), "%s", clockBuf);
-      }
-
-      const int textTop = centeredTextTop(renderer, DETAIL_FONT, barY, BAR_HEIGHT);
-      renderer.drawText(DETAIL_FONT, contentLeft + 6, textTop, leftLabel, false, EpdFontFamily::BOLD);
-      // The countdown is only meaningful with a valid clock; otherwise show just
-      // the start time on the left and no "LEFT" figure.
-      if (clockValid) {
-        char cd[16];
-        formatCountdown(static_cast<long>(it.start_epoch - now), cd, sizeof(cd));
-        char rightLabel[24];
-        snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
-        const int rw = renderer.getTextWidth(DETAIL_FONT, rightLabel, EpdFontFamily::BOLD);
-        renderer.drawText(DETAIL_FONT, contentRight - 6 - rw, textTop, rightLabel, false, EpdFontFamily::BOLD);
-      }
-      y += BAR_HEIGHT + 4;
-    }
-
-    // Destination row.
-    if (it.location[0] != '\0') {
-      if (y <= H - footerReserve - detailLine) {
-        char dest[96];
-        snprintf(dest, sizeof(dest), "%s %s", tr(STR_REMINDERS_DEST), it.location);
-        const std::string destStr = renderer.truncatedText(DETAIL_FONT, dest, contentWidth);
-        renderer.drawText(DETAIL_FONT, contentLeft, y, destStr.c_str());
-        y += detailLine;
-      }
-    }
-
-    // Per-item dotted divider.
-    y += 4;
-    dottedHLine(renderer, contentLeft, y, contentWidth);
-    y += subLine;
+  // --- Stale banner (folded into the layout so it tracks the footer geometry). ---
+  if (data.is_stale) {
+    drawStaleBar(renderer, data, staleBarTop, contentLeft, contentWidth);
   }
 
   // --- Footer ---
-  const int footerY = H - 44;
-  dottedHLine(renderer, contentLeft, footerY - 6, contentWidth);
-  char footer[48];
-  snprintf(footer, sizeof(footer), "%s %u", tr(STR_REMINDERS_TOTAL), data.count);
-  renderer.drawText(DETAIL_FONT, contentLeft, footerY, footer, true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(DETAIL_FONT, footerY + detailLine, tr(STR_REMINDERS_FOOTER));
-}
+  dottedHLine(renderer, contentLeft, footerDividerY, contentWidth);
 
-void RemindersRenderer::drawStaleOverlay(GfxRenderer& renderer, const RemindersData& data) {
-  const int W = renderer.getScreenWidth();
-  const int H = renderer.getScreenHeight();
-  const int barH = 24;
-  const int barY = H - 44 - barH - 4;
-
-  renderer.fillRect(MARGIN_X, barY, W - 2 * MARGIN_X, barH, true);
-
-  char banner[48];
-  if (data.synced_epoch != 0) {
-    char clk[16];
-    formatClock12(data.synced_epoch, clk, sizeof(clk));
-    snprintf(banner, sizeof(banner), "%s %s - %s", tr(STR_REMINDERS_LAST_SYNCED), clk, tr(STR_REMINDERS_NOT_LIVE));
-  } else {
-    snprintf(banner, sizeof(banner), "%s", tr(STR_REMINDERS_NOT_LIVE));
+  // Controls hint (wrapped to two lines). Page nav is mentioned only when paging.
+  std::string hint;
+  if (hasPrev || hasMore) {
+    hint += tr(STR_REMINDERS_HINT_PAGE);
+    hint += "  ";
   }
-  const int tw = renderer.getTextWidth(DETAIL_FONT, banner, EpdFontFamily::BOLD);
-  const int tx = (W - tw) / 2;
-  const int ty = centeredTextTop(renderer, DETAIL_FONT, barY, barH);
-  renderer.drawText(DETAIL_FONT, tx, ty, banner, false, EpdFontFamily::BOLD);
+  hint += tr(STR_REMINDERS_HINT_SYNC);
+  hint += "  ";
+  hint += tr(STR_REMINDERS_HINT_EXIT);
+  int hy = hintTop;
+  for (const auto& line : renderer.wrappedText(DETAIL_FONT, hint.c_str(), contentWidth, FOOTER_HINT_LINES)) {
+    renderer.drawCenteredText(DETAIL_FONT, hy, line.c_str());
+    hy += detailLine;
+  }
+
+  // Info line: total when everything fits on one page, otherwise the visible range.
+  char info[40];
+  if (startIndex == 0 && !hasMore) {
+    snprintf(info, sizeof(info), "%s %u", tr(STR_REMINDERS_TOTAL), data.count);
+  } else {
+    snprintf(info, sizeof(info), "%u-%u / %u", startIndex + 1, nextIndex, data.count);
+  }
+  renderer.drawText(DETAIL_FONT, contentLeft, infoTop, info, true, EpdFontFamily::BOLD);
+
+  // Brand line, device-aware (X3 / X4).
+  char brand[48];
+  snprintf(brand, sizeof(brand), "* %s %s *", tr(STR_REMINDERS_FOOTER), gpio.deviceIsX3() ? "X3" : "X4");
+  renderer.drawCenteredText(DETAIL_FONT, brandTop, brand);
+
+  return nextIndex;
 }
 
-void RemindersRenderer::renderFull(GfxRenderer& renderer, const RemindersData& data) {
-  drawLayout(renderer, data);
-  if (data.is_stale) drawStaleOverlay(renderer, data);
+uint8_t RemindersRenderer::renderFull(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex) {
+  const uint8_t nextIndex = drawLayout(renderer, data, startIndex);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  return nextIndex;
 }
 
-bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data) {
+bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex) {
   // On a 1-bit full-frame panel there is no partial-region update, so rebuild
   // the whole frame but present it with the flash-free FAST_REFRESH waveform.
-  drawLayout(renderer, data);
+  drawLayout(renderer, data, startIndex);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
   // Signal a full refresh is warranted if any timed item has already started:
@@ -272,10 +332,4 @@ bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const Remind
     }
   }
   return true;
-}
-
-void RemindersRenderer::renderStaleBanner(GfxRenderer& renderer, const RemindersData& data) {
-  drawLayout(renderer, data);
-  drawStaleOverlay(renderer, data);
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }

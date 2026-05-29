@@ -259,7 +259,12 @@ bool connectWifi() {
     LOG_ERR("GOOG", "WiFi connect timed out");
     return false;
   }
-  WIFI_STORE.setLastConnectedSsid(ssid);
+  // Persist the network we actually connected to so it survives a reboot.
+  // Guard the write: only touch SPIFFS when it actually changed (write throttling).
+  if (WIFI_STORE.getLastConnectedSsid() != ssid) {
+    WIFI_STORE.setLastConnectedSsid(ssid);
+    WIFI_STORE.saveToFile();
+  }
   return true;
 }
 

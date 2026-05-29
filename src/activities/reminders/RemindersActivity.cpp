@@ -22,6 +22,9 @@ void RemindersActivity::onEnter() {
   staleReached = false;
   tickRefresh = false;
   tickCount = 0;
+  pageStart = 0;
+  pageDepth = 0;
+  lastNextIndex = 0;
   requestUpdate();
 }
 
@@ -62,6 +65,9 @@ void RemindersActivity::startSync() {
   staleReached = false;
   tickRefresh = false;
   tickCount = 0;
+  pageStart = 0;
+  pageDepth = 0;
+  lastNextIndex = 0;
   requestUpdate();
 }
 
@@ -134,6 +140,21 @@ void RemindersActivity::loop() {
         return;
       }
 
+      // Down: next page (if the list overflowed). Up: previous page.
+      if (mappedInput.wasPressed(MappedInputManager::Button::Down) && lastNextIndex < gRemindersData.count) {
+        if (pageDepth < REMINDERS_MAX_ITEMS) pageHistory[pageDepth++] = pageStart;
+        pageStart = lastNextIndex;
+        tickRefresh = false;
+        requestUpdate();
+        return;
+      }
+      if (mappedInput.wasPressed(MappedInputManager::Button::Up) && pageDepth > 0) {
+        pageStart = pageHistory[--pageDepth];
+        tickRefresh = false;
+        requestUpdate();
+        return;
+      }
+
       if (!staleReached && millis() - showStartMs >= TICK_MS * static_cast<unsigned long>(tickCount + 1)) {
         tickCount++;
         onMinuteTick();
@@ -184,14 +205,14 @@ void RemindersActivity::render(RenderLock&&) {
     }
     case State::Showing: {
       if (tickRefresh) {
-        const bool ok = RemindersRenderer::renderCountdownsOnly(renderer, gRemindersData);
+        const bool ok = RemindersRenderer::renderCountdownsOnly(renderer, gRemindersData, pageStart);
         tickRefresh = false;
         if (!ok) {
           // An item elapsed: clear ghosting with a full refresh.
-          RemindersRenderer::renderFull(renderer, gRemindersData);
+          lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart);
         }
       } else {
-        RemindersRenderer::renderFull(renderer, gRemindersData);
+        lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart);
       }
       return;
     }
