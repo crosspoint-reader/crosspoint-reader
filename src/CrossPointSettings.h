@@ -256,7 +256,8 @@ class CrossPointSettings {
   static CrossPointSettings& getInstance() { return instance; }
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
-  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = 30;
+  static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
+  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.

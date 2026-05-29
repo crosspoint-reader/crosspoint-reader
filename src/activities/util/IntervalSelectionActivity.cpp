@@ -62,7 +62,9 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, I18N.get(titleId), true, EpdFontFamily::BOLD);
 
   char formattedValue[32];
-  if (valueFormatId != StrId::STR_NONE_OPT) {
+  if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
+    snprintf(formattedValue, sizeof(formattedValue), "%s", I18N.get(maxBoundaryLabelId));
+  } else if (valueFormatId != StrId::STR_NONE_OPT) {
     snprintf(formattedValue, sizeof(formattedValue), I18N.get(valueFormatId), static_cast<unsigned int>(value));
   } else {
     snprintf(formattedValue, sizeof(formattedValue), "%d", value);

@@ -301,7 +301,8 @@ void SettingsActivity::openSleepTimeoutPicker() {
       std::make_unique<IntervalSelectionActivity>(
           renderer, mappedInput, "SleepTimeoutInterval", StrId::STR_TIME_TO_SLEEP, StrId::STR_SLEEP_TIMER_STEP_HINT,
           SETTINGS.sleepTimeoutMinutes, CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES,
-          CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT),
+          CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT, false, true,
+          StrId::STR_SLEEP_NEVER),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.sleepTimeoutMinutes = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
@@ -357,9 +358,13 @@ void SettingsActivity::render(RenderLock&&) {
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
             char valueBuffer[32];
-            snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
-                     static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
-            valueText = valueBuffer;
+            if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
+              valueText = tr(STR_SLEEP_NEVER);
+            } else {
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
+                       static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
+              valueText = valueBuffer;
+            }
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }
