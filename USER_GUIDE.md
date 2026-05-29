@@ -33,12 +33,11 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [Footnote Navigation](#footnote-navigation)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
-  - [5. Reader Menu](#5-reader-menu)
-    - [5.1 Chapter Selection](#51-chapter-selection)
-    - [5.2. Bookmarks](#52-bookmarks)
-  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
-
+- [5. Reader Menu](#5-reader-menu)
+  - [5.1 Chapter Selection](#51-chapter-selection)
+  - [5.2 Bookmarks](#52-bookmarks)
+- [6. Current Limitations & Roadmap](#6-current-limitations--roadmap)
+- [7. Troubleshooting Issues & Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
 ## 1. Hardware Overview
 
@@ -513,7 +512,7 @@ To open bookmarks, press **Confirm** while inside a book. Then navigate to the *
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
 
-## 7. Current Limitations & Roadmap
+## 6. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
@@ -525,7 +524,7 @@ Please note that this firmware is currently in active development. The following
 
 ---
 
-## 8. Troubleshooting Issues & Escaping Bootloop
+## 7. Troubleshooting Issues & Escaping Bootloop
 
 If an issue or crash is encountered while using Crosspoint, feel free to raise an issue ticket and attach the logs.
 
