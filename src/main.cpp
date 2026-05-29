@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
@@ -256,6 +257,47 @@ static bool loadSleepFrameBuffer() {
   }
   Storage.remove(SLEEP_FRAME_FILE);
   return true;
+}
+
+// Write Google OAuth credentials received over USB serial to the SD card.
+// Invoked by the "CMD:GOOGLE_CREDS {json}" console command so users can provision
+// /.crosspoint/google_creds.json without removing the SD card. The payload must
+// be single-line JSON with client_id, client_secret and refresh_token. The host
+// receives "GOOGLE_CREDS_OK" or "GOOGLE_CREDS_ERR:<reason>".
+static void handleGoogleCredsCommand(String json) {
+  json.trim();
+
+  // Validate before writing so a malformed paste can't leave a broken file that
+  // GoogleClient would then fail to parse on every sync.
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, json.c_str());
+  if (err) {
+    logSerial.printf("GOOGLE_CREDS_ERR:parse %s\n", err.c_str());
+    return;
+  }
+  const bool complete = doc["client_id"].is<const char*>() && doc["client_secret"].is<const char*>() &&
+                        doc["refresh_token"].is<const char*>();
+  if (!complete) {
+    logSerial.printf("GOOGLE_CREDS_ERR:missing client_id/client_secret/refresh_token\n");
+    return;
+  }
+
+  Storage.ensureDirectoryExists("/.crosspoint");
+  HalFile file;
+  if (!Storage.openFileForWrite("CRED", "/.crosspoint/google_creds.json", file)) {
+    logSerial.printf("GOOGLE_CREDS_ERR:open\n");
+    return;
+  }
+  // Persist the validated payload verbatim (extra keys are harmless; GoogleClient
+  // only reads the three it needs).
+  const size_t written = file.write(reinterpret_cast<const uint8_t*>(json.c_str()), json.length());
+  file.close();
+  if (written != json.length()) {
+    logSerial.printf("GOOGLE_CREDS_ERR:write\n");
+    return;
+  }
+  logSerial.printf("GOOGLE_CREDS_OK\n");
+  LOG_INF("CRED", "Google credentials written to /.crosspoint/google_creds.json");
 }
 
 // Enter deep sleep mode
@@ -562,6 +604,8 @@ void loop() {
         uint8_t* buf = display.getFrameBuffer();
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
+      } else if (cmd.startsWith("GOOGLE_CREDS ")) {
+        handleGoogleCredsCommand(cmd.substring(13));  // strlen("GOOGLE_CREDS ")
       }
     }
   }
