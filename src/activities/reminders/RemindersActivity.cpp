@@ -12,9 +12,13 @@
 
 void RemindersActivity::onEnter() {
   Activity::onEnter();
+  // Force portrait: we may arrive from a landscape reader, and the Syncing /
+  // Failed screens (and the renderer) assume the 480x800 portrait panel.
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   state = State::Syncing;
   syncStarted = false;
   syncDone = false;
+  syncCancel = false;
   staleReached = false;
   tickRefresh = false;
   tickCount = 0;
@@ -40,8 +44,10 @@ void RemindersActivity::syncTaskTrampoline(void* param) { static_cast<RemindersA
 void RemindersActivity::runSyncTask() {
   // Blocking: WiFi connect + NTP + two HTTPS calls. Runs off the main loop so a
   // ~15s sync can't trip the loop task. Writes straight into gRemindersData on
-  // success (render() only reads gRemindersData once state == Showing).
-  syncResult = GoogleClient::syncAll(gRemindersData);
+  // success (render() only reads gRemindersData once state == Showing). syncCancel
+  // is polled by GoogleClient at phase/IO boundaries so a Back press aborts promptly.
+  syncResult = GoogleClient::syncAll(gRemindersData, &syncCancel);
+  LOG_DBG("RMND", "Sync task stack high-water: %u bytes", uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t));
   syncDone = true;
   TaskHandle_t self = syncTask;
   syncTask = nullptr;
@@ -52,6 +58,7 @@ void RemindersActivity::startSync() {
   state = State::Syncing;
   syncStarted = false;
   syncDone = false;
+  syncCancel = false;
   staleReached = false;
   tickRefresh = false;
   tickCount = 0;
@@ -65,8 +72,7 @@ void RemindersActivity::loop() {
         // Paint the SYNCING screen before the (off-loop) sync begins.
         requestUpdateAndWait();
         syncStarted = true;
-        // 8KB stack: mbedtls TLS handshakes are stack-hungry.
-        if (xTaskCreate(&syncTaskTrampoline, "RmndSync", 8192, this, 1, &syncTask) != pdPASS) {
+        if (xTaskCreate(&syncTaskTrampoline, "RmndSync", SYNC_TASK_STACK, this, 1, &syncTask) != pdPASS) {
           LOG_ERR("RMND", "Failed to create sync task");
           syncTask = nullptr;
           syncResult = GoogleClient::Result::FetchFailed;
@@ -74,8 +80,22 @@ void RemindersActivity::loop() {
         }
         return;
       }
+      // Back aborts an in-flight sync; GoogleClient polls syncCancel and returns
+      // Cancelled, after which we exit cleanly (no mid-TLS task kill).
+      if (!syncCancel && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+        LOG_DBG("RMND", "Sync cancel requested");
+        syncCancel = true;
+      }
       if (syncDone) {
-        if (syncResult == GoogleClient::Result::OK || gRemindersData.count > 0) {
+        if (syncResult == GoogleClient::Result::Cancelled) {
+          finish();
+          return;
+        }
+        // A garbage clock makes every countdown meaningless, so never fall back
+        // to the cached list for it — surface the failure instead.
+        const bool usable = syncResult != GoogleClient::Result::ClockUnset &&
+                            (syncResult == GoogleClient::Result::OK || gRemindersData.count > 0);
+        if (usable) {
           // Fresh sync, or a usable cached list to fall back on.
           if (syncResult != GoogleClient::Result::OK) {
             LOG_INF("RMND", "Sync %s; showing cached list", GoogleClient::resultName(syncResult));

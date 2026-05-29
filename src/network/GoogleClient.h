@@ -21,14 +21,20 @@ class GoogleClient {
     OK,
     NoCredentials,  // google_creds.json missing or malformed
     WifiFailed,     // could not join the last-known network
+    ClockUnset,     // NTP failed and the system clock is implausible (countdowns would be garbage)
     AuthFailed,     // token endpoint rejected the refresh token
     FetchFailed,    // both Calendar and Tasks calls failed
+    Cancelled,      // caller requested abort via the cancel flag
   };
 
   // Connects WiFi, syncs the clock, fetches Calendar + Tasks, and tears WiFi
   // back down. On OK, `out` holds the merged, start-sorted item list and a fresh
   // synced_epoch. On failure `out` is left untouched so a cached list survives.
-  static Result syncAll(RemindersData& out);
+  //
+  // `cancel`, when non-null, is polled at phase boundaries and inside the WiFi
+  // wait and HTTP read loops; setting it true aborts the sync promptly with
+  // Result::Cancelled.
+  static Result syncAll(RemindersData& out, const volatile bool* cancel = nullptr);
 
   // Human-readable label for logging / UI.
   static const char* resultName(Result r);

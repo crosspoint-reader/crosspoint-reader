@@ -18,7 +18,23 @@ constexpr int SUB_FONT = NOTOSANS_12_FONT_ID;
 constexpr int DETAIL_FONT = UI_10_FONT_ID;
 constexpr int BAR_HEIGHT = 22;
 
+// Sanity floor for the system clock: 2023-11-14. Below this the clock is unset
+// (deep-sleep wake resets it), so countdowns are meaningless and are suppressed.
+constexpr time_t MIN_VALID_EPOCH = 1700000000;
+
+// English weekday / month abbreviations. These are calendar-format tokens rather
+// than UI chrome; kept ASCII to avoid a large per-locale string table.
+const char* const WDAY[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+const char* const MON[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+
 int localOffsetSecs() { return (static_cast<int>(SETTINGS.clockUtcOffsetQ) - 48) * 15 * 60; }
+
+// Top y for vertically centering one text line within a band of height `h`.
+// drawText() takes the cell top (it adds the ascender internally), and
+// getTextHeight() returns that ascender, so this centers the glyph cell.
+int centeredTextTop(const GfxRenderer& r, int font, int bandTop, int h) {
+  return bandTop + (h - r.getTextHeight(font)) / 2;
+}
 
 // Local civil time for a UTC epoch (system TZ is UTC0; we apply the user's
 // configured offset manually, same field the status-bar clock uses).
@@ -44,6 +60,14 @@ void formatCountdown(long secsLeft, char* buf, size_t len) {
   snprintf(buf, len, "%02ld:%02ld", h, m);
 }
 
+// "FRI MAY 29" from a date stored as that day's UTC midnight (no local offset —
+// all-day dates are calendar dates, not instants).
+void formatDateUtc(time_t epoch, char* buf, size_t len) {
+  struct tm t;
+  gmtime_r(&epoch, &t);
+  snprintf(buf, len, "%s %s %d", WDAY[t.tm_wday % 7], MON[t.tm_mon % 12], t.tm_mday);
+}
+
 // Dotted horizontal line (every other pixel) — the border/divider motif.
 void dottedHLine(const GfxRenderer& r, int x, int y, int w) {
   for (int i = 0; i < w; i += 2) r.drawPixel(x + i, y, true);
@@ -59,14 +83,13 @@ void dottedBorder(const GfxRenderer& r, int x, int y, int w, int h) {
   dottedVLine(r, x, y, h);
   dottedVLine(r, x + w - 1, y, h);
 }
-
-// English weekday / month abbreviations. These are calendar-format tokens rather
-// than UI chrome; kept ASCII to avoid a large per-locale string table.
-const char* const WDAY[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
-const char* const MON[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 }  // namespace
 
 void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data) {
+  // The layout is designed for the 480x800 portrait panel; force it so entering
+  // from a landscape reader (which leaves the renderer rotated) can't skew it.
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
   const int W = renderer.getScreenWidth();
   const int H = renderer.getScreenHeight();
 
@@ -79,20 +102,31 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
   const int contentRight = W - MARGIN_X;
   const int contentWidth = contentRight - contentLeft;
 
-  // --- Header: "TASKS | FRI, MAY 29 | N ITEMS" ---
-  int y = 18 + renderer.getFontAscenderSize(HEADER_FONT);
-  char header[64];
+  // When the clock is unset (e.g. on the sleep screen after a deep-sleep wake)
+  // we still show the list, but suppress live countdowns / today's date.
   const time_t now = time(nullptr);
-  struct tm nowTm;
-  localTm(now, nowTm);
+  const bool clockValid = now > MIN_VALID_EPOCH;
+  const time_t headerEpoch = clockValid ? now : data.synced_epoch;
+
+  // --- Header: "TASKS | FRI MAY 29 | N ITEMS" (date omitted if clock unknown) ---
+  int y = 16;
+  char header[64];
   char itemsWord[24];
   snprintf(itemsWord, sizeof(itemsWord), "%u %s", data.count, tr(STR_REMINDERS_ITEMS));
-  snprintf(header, sizeof(header), "%s | %s, %s %d | %s", tr(STR_REMINDERS_TASKS), WDAY[nowTm.tm_wday % 7],
-           MON[nowTm.tm_mon % 12], nowTm.tm_mday, itemsWord);
-  renderer.drawText(HEADER_FONT, contentLeft, y, header, true, EpdFontFamily::BOLD);
-  y += 10;
+  if (headerEpoch > MIN_VALID_EPOCH) {
+    struct tm hdrTm;
+    localTm(headerEpoch, hdrTm);
+    snprintf(header, sizeof(header), "%s | %s %s %d | %s", tr(STR_REMINDERS_TASKS), WDAY[hdrTm.tm_wday % 7],
+             MON[hdrTm.tm_mon % 12], hdrTm.tm_mday, itemsWord);
+  } else {
+    snprintf(header, sizeof(header), "%s | %s", tr(STR_REMINDERS_TASKS), itemsWord);
+  }
+  renderer.drawText(HEADER_FONT, contentLeft,
+                    centeredTextTop(renderer, HEADER_FONT, y, renderer.getLineHeight(HEADER_FONT)), header, true,
+                    EpdFontFamily::BOLD);
+  y += renderer.getLineHeight(HEADER_FONT);
   dottedHLine(renderer, contentLeft, y, contentWidth);
-  y += renderer.getLineHeight(SUB_FONT);
+  y += 8;
 
   if (data.count == 0) {
     renderer.drawCenteredText(TITLE_FONT, H / 2, tr(STR_REMINDERS_NO_TASKS));
@@ -113,7 +147,7 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
     char titleBuf[96];
     snprintf(titleBuf, sizeof(titleBuf), "#%02d %s", i + 1, it.title);
     const std::string title = renderer.truncatedText(TITLE_FONT, titleBuf, contentWidth);
-    renderer.drawText(TITLE_FONT, contentLeft, y + renderer.getFontAscenderSize(TITLE_FONT), title.c_str());
+    renderer.drawText(TITLE_FONT, contentLeft, y, title.c_str());
     y += titleLine;
 
     // Sub-items (task notes), indented with a turnstile glyph.
@@ -122,12 +156,21 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
       char noteBuf[80];
       snprintf(noteBuf, sizeof(noteBuf), "  > %s", it.notes[n]);
       const std::string note = renderer.truncatedText(SUB_FONT, noteBuf, contentWidth - 12);
-      renderer.drawText(SUB_FONT, contentLeft + 12, y + renderer.getFontAscenderSize(SUB_FONT), note.c_str());
+      renderer.drawText(SUB_FONT, contentLeft + 12, y, note.c_str());
       y += subLine;
     }
 
-    // Countdown bar for timed items: inverted black bar, white text.
-    if (it.start_epoch != 0) {
+    if (it.all_day && it.start_epoch != 0) {
+      // All-day event / dated task: a plain date label, never a countdown.
+      char dateBuf[24];
+      formatDateUtc(it.start_epoch, dateBuf, sizeof(dateBuf));
+      char line[48];
+      snprintf(line, sizeof(line), "%s %s", it.is_calendar ? tr(STR_REMINDERS_ALL_DAY) : tr(STR_REMINDERS_DUE),
+               dateBuf);
+      renderer.drawText(DETAIL_FONT, contentLeft, y, line, true, EpdFontFamily::BOLD);
+      y += detailLine;
+    } else if (it.start_epoch != 0) {
+      // Timed item: inverted black bar with white text.
       const int barY = y;
       renderer.fillRect(contentLeft, barY, contentWidth, BAR_HEIGHT, true);
 
@@ -144,15 +187,18 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
         snprintf(leftLabel, sizeof(leftLabel), "%s", clockBuf);
       }
 
-      char cd[16];
-      formatCountdown(static_cast<long>(it.start_epoch - now), cd, sizeof(cd));
-      char rightLabel[24];
-      snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
-
-      const int textY = barY + (BAR_HEIGHT + renderer.getFontAscenderSize(DETAIL_FONT)) / 2 - 1;
-      renderer.drawText(DETAIL_FONT, contentLeft + 6, textY, leftLabel, false, EpdFontFamily::BOLD);
-      const int rw = renderer.getTextWidth(DETAIL_FONT, rightLabel, EpdFontFamily::BOLD);
-      renderer.drawText(DETAIL_FONT, contentRight - 6 - rw, textY, rightLabel, false, EpdFontFamily::BOLD);
+      const int textTop = centeredTextTop(renderer, DETAIL_FONT, barY, BAR_HEIGHT);
+      renderer.drawText(DETAIL_FONT, contentLeft + 6, textTop, leftLabel, false, EpdFontFamily::BOLD);
+      // The countdown is only meaningful with a valid clock; otherwise show just
+      // the start time on the left and no "LEFT" figure.
+      if (clockValid) {
+        char cd[16];
+        formatCountdown(static_cast<long>(it.start_epoch - now), cd, sizeof(cd));
+        char rightLabel[24];
+        snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
+        const int rw = renderer.getTextWidth(DETAIL_FONT, rightLabel, EpdFontFamily::BOLD);
+        renderer.drawText(DETAIL_FONT, contentRight - 6 - rw, textTop, rightLabel, false, EpdFontFamily::BOLD);
+      }
       y += BAR_HEIGHT + 4;
     }
 
@@ -162,7 +208,7 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
         char dest[96];
         snprintf(dest, sizeof(dest), "%s %s", tr(STR_REMINDERS_DEST), it.location);
         const std::string destStr = renderer.truncatedText(DETAIL_FONT, dest, contentWidth);
-        renderer.drawText(DETAIL_FONT, contentLeft, y + renderer.getFontAscenderSize(DETAIL_FONT), destStr.c_str());
+        renderer.drawText(DETAIL_FONT, contentLeft, y, destStr.c_str());
         y += detailLine;
       }
     }
@@ -178,9 +224,8 @@ void RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& d
   dottedHLine(renderer, contentLeft, footerY - 6, contentWidth);
   char footer[48];
   snprintf(footer, sizeof(footer), "%s %u", tr(STR_REMINDERS_TOTAL), data.count);
-  renderer.drawText(DETAIL_FONT, contentLeft, footerY + renderer.getFontAscenderSize(DETAIL_FONT), footer, true,
-                    EpdFontFamily::BOLD);
-  renderer.drawCenteredText(DETAIL_FONT, footerY + 18, tr(STR_REMINDERS_FOOTER));
+  renderer.drawText(DETAIL_FONT, contentLeft, footerY, footer, true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(DETAIL_FONT, footerY + detailLine, tr(STR_REMINDERS_FOOTER));
 }
 
 void RemindersRenderer::drawStaleOverlay(GfxRenderer& renderer, const RemindersData& data) {
@@ -201,7 +246,7 @@ void RemindersRenderer::drawStaleOverlay(GfxRenderer& renderer, const RemindersD
   }
   const int tw = renderer.getTextWidth(DETAIL_FONT, banner, EpdFontFamily::BOLD);
   const int tx = (W - tw) / 2;
-  const int ty = barY + (barH + renderer.getFontAscenderSize(DETAIL_FONT)) / 2 - 1;
+  const int ty = centeredTextTop(renderer, DETAIL_FONT, barY, barH);
   renderer.drawText(DETAIL_FONT, tx, ty, banner, false, EpdFontFamily::BOLD);
 }
 
@@ -221,8 +266,8 @@ bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const Remind
   // its countdown just hit zero and FAST_REFRESH can leave ghosting.
   const time_t now = time(nullptr);
   for (uint8_t i = 0; i < data.count; i++) {
-    if (data.items[i].start_epoch != 0 && data.items[i].start_epoch <= now &&
-        data.items[i].start_epoch > data.synced_epoch) {
+    const CalItem& it = data.items[i];
+    if (!it.all_day && it.start_epoch != 0 && it.start_epoch <= now && it.start_epoch > data.synced_epoch) {
       return false;
     }
   }

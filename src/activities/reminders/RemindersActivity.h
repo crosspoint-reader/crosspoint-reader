@@ -43,8 +43,13 @@ class RemindersActivity final : public Activity {
   State state = State::Syncing;
   bool syncStarted = false;
   volatile bool syncDone = false;
+  volatile bool syncCancel = false;  // set by Back during a sync; polled by GoogleClient
   GoogleClient::Result syncResult = GoogleClient::Result::OK;
   TaskHandle_t syncTask = nullptr;
+
+  // mbedtls handshakes are stack-hungry; sized with headroom over the observed
+  // high-water mark (logged after each sync at LOG_DBG).
+  static constexpr uint32_t SYNC_TASK_STACK = 12288;
 
   // Per-minute live window bookkeeping.
   unsigned long showStartMs = 0;
