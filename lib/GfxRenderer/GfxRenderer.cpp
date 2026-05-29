@@ -23,7 +23,7 @@ uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style st
 }  // namespace
 
 namespace {
-const char* resolveVisualText(const char* text, std::string& visualBuffer, int paragraphLevel);
+const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir);
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -358,7 +358,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style,
-                              const int paragraphLevel) const {
+                              const BidiUtils::BidiBaseDir baseDir) const {
   if (text == nullptr || *text == '\0') {
     return 0;
   }
@@ -370,7 +370,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   }
 
   std::string visual;
-  const char* renderedText = resolveVisualText(text, visual, paragraphLevel);
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
 
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
@@ -378,20 +378,20 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style, const int paragraphLevel) const {
-  const int x = (getScreenWidth() - getTextWidth(fontId, text, style, paragraphLevel)) / 2;
-  drawText(fontId, x, y, text, black, style, paragraphLevel);
+                                   const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
+  const int x = (getScreenWidth() - getTextWidth(fontId, text, style, baseDir)) / 2;
+  drawText(fontId, x, y, text, black, style, baseDir);
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style, const int paragraphLevel) const {
+                           const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
   }
 
   std::string visual;
-  const char* renderedText = resolveVisualText(text, visual, paragraphLevel);
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
 
   const int yPos = y + getFontAscenderSize(fontId);
   int lastBaseX = x;
@@ -467,10 +467,10 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 namespace {
-const char* resolveVisualText(const char* text, std::string& visualBuffer, const int paragraphLevel) {
+const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
   if (!text || *text == '\0') return text;
 
-  if (paragraphLevel != 1) {
+  if (baseDir != BidiUtils::BidiBaseDir::RTL) {
     // Byte-level scan: skip BiDi when no RTL script lead bytes are present.
     // Hebrew UTF-8 lead bytes: 0xD6-0xD7; Arabic/Syriac: 0xD8-0xDB.
     // This covers all RTL content without false negatives and avoids triggering
@@ -485,7 +485,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
     if (!hasRtlBytes) return text;
   }
 
-  if (BidiUtils::applyBidiVisual(text, visualBuffer, paragraphLevel) && !visualBuffer.empty()) {
+  if (BidiUtils::applyBidiVisual(text, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
     return visualBuffer.c_str();
   }
   return text;
