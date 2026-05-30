@@ -427,7 +427,7 @@ void setup() {
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
-  const bool suppressBootSplash = gpio.deviceIsM5StackPaperColor();
+  const bool suppressBootSplash = false;
   const BootResume resume = isSilentReboot                            ? BootResume::Silent
                             : suppressBootSplash || !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                                               : BootResume::Splash;
