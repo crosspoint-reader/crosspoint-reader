@@ -100,7 +100,7 @@ int blockHeight(const CalItem& it, int titleLine, int subLine, int detailLine) {
 }
 
 // Draw one item starting at top `y`; returns the new y below the block.
-int drawItem(GfxRenderer& renderer, const CalItem& it, uint8_t number, int y, int contentLeft, int contentRight,
+int drawItem(const GfxRenderer& renderer, const CalItem& it, uint8_t number, int y, int contentLeft, int contentRight,
              int contentWidth, time_t now, bool clockValid, int titleLine, int subLine, int detailLine) {
   // Numbered title.
   char titleBuf[96];
@@ -174,7 +174,8 @@ int drawItem(GfxRenderer& renderer, const CalItem& it, uint8_t number, int y, in
 }
 
 // Draw the tightened stale banner (inverted bar, white text) at `barTop`.
-void drawStaleBar(GfxRenderer& renderer, const RemindersData& data, int barTop, int contentLeft, int contentWidth) {
+void drawStaleBar(const GfxRenderer& renderer, const RemindersData& data, int barTop, int contentLeft,
+                  int contentWidth) {
   renderer.fillRect(contentLeft, barTop, contentWidth, STALE_BAR_H, true);
   char banner[48];
   if (data.synced_epoch > MIN_VALID_EPOCH) {
