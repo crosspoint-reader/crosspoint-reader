@@ -38,6 +38,16 @@ constexpr int HTTP_TIMEOUT_MS = 20000;
 constexpr size_t READ_CHUNK = 1024;
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000;
 constexpr int CALENDAR_WINDOW_DAYS = 7;
+// Sanity floor for the system clock: 2023-11-14. Below this we assume NTP never
+// completed (deep-sleep wake resets the newlib clock), so the 7-day query window
+// and every countdown would be garbage.
+constexpr time_t MIN_VALID_EPOCH = 1700000000;
+
+// Set for the duration of a syncAll() call so the WiFi wait and HTTP read loops
+// can bail out promptly. Only one sync runs at a time, so a namespace-scope
+// pointer avoids threading a parameter through every helper.
+const volatile bool* g_cancelFlag = nullptr;
+bool cancelled() { return g_cancelFlag != nullptr && *g_cancelFlag; }
 
 struct Creds {
   std::string client_id;
@@ -171,6 +181,11 @@ bool httpExec(esp_http_client_method_t method, const std::string& url, const std
     return false;
   }
   while (true) {
+    if (cancelled()) {
+      LOG_INF("GOOG", "read aborted (cancel)");
+      esp_http_client_cleanup(client);
+      return false;
+    }
     const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
     if (read < 0) {
       LOG_ERR("GOOG", "read error");
@@ -234,13 +249,22 @@ bool connectWifi() {
 
   const unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {
+    if (cancelled()) {
+      LOG_INF("GOOG", "WiFi wait aborted (cancel)");
+      return false;
+    }
     delay(100);
   }
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("GOOG", "WiFi connect timed out");
     return false;
   }
-  WIFI_STORE.setLastConnectedSsid(ssid);
+  // Persist the network we actually connected to so it survives a reboot.
+  // Guard the write: only touch SPIFFS when it actually changed (write throttling).
+  if (WIFI_STORE.getLastConnectedSsid() != ssid) {
+    WIFI_STORE.setLastConnectedSsid(ssid);
+    WIFI_STORE.saveToFile();
+  }
   return true;
 }
 
@@ -339,12 +363,17 @@ bool fetchCalendar(const std::string& token, RemindersData& out) {
     snprintf(it.title, sizeof(it.title), "%s", ev["summary"] | "(no title)");
     copyLocationFirstField(ev["location"] | "", it.location, sizeof(it.location));
 
+    // An all-day event carries only "date" (no "dateTime"). Track that so the
+    // renderer shows "ALL DAY <date>" instead of a countdown to UTC midnight.
     JsonObject start = ev["start"];
-    const char* startStr = start["dateTime"] | start["date"] | (const char*)nullptr;
-    it.start_epoch = parseRfc3339(startStr);
+    const char* startTimed = start["dateTime"];
+    const char* startDate = start["date"];
+    it.all_day = (startTimed == nullptr) && (startDate != nullptr);
+    it.start_epoch = parseRfc3339(startTimed != nullptr ? startTimed : startDate);
     JsonObject end = ev["end"];
-    const char* endStr = end["dateTime"] | end["date"] | (const char*)nullptr;
-    it.end_epoch = parseRfc3339(endStr);
+    const char* endTimed = end["dateTime"];
+    const char* endDate = end["date"];
+    it.end_epoch = parseRfc3339(endTimed != nullptr ? endTimed : endDate);
 
     out.items[out.count++] = it;
   }
@@ -385,7 +414,11 @@ bool fetchTasks(const std::string& token, RemindersData& out) {
     it.is_calendar = false;
     it.completed = false;
     snprintf(it.title, sizeof(it.title), "%s", tk["title"] | "(untitled task)");
-    it.start_epoch = parseRfc3339(tk["due"] | (const char*)nullptr);
+    // Tasks only record a due *date* (time is always midnight and ignored), so
+    // treat any due as all-day: show the date, not a midnight-UTC countdown.
+    const char* due = tk["due"] | (const char*)nullptr;
+    it.start_epoch = parseRfc3339(due);
+    it.all_day = (due != nullptr);
 
     // Split notes on newlines into up to REMINDERS_MAX_NOTES sub-items.
     const char* notes = tk["notes"] | "";
@@ -410,19 +443,44 @@ bool fetchTasks(const std::string& token, RemindersData& out) {
 
 }  // namespace
 
-GoogleClient::Result GoogleClient::syncAll(RemindersData& out) {
+GoogleClient::Result GoogleClient::syncAll(RemindersData& out, const volatile bool* cancel) {
+  g_cancelFlag = cancel;
+  // Always clear the namespace flag on the way out, whatever path we take.
+  struct CancelGuard {
+    ~CancelGuard() { g_cancelFlag = nullptr; }
+  } cancelGuard;
+
   Creds creds;
   if (!loadCreds(creds)) return Result::NoCredentials;
 
-  if (!connectWifi()) return Result::WifiFailed;
+  if (cancelled()) return Result::Cancelled;
+  if (!connectWifi()) return cancelled() ? Result::Cancelled : Result::WifiFailed;
 
   syncClock();
 
-  std::string token;
-  if (!refreshAccessToken(creds, token)) {
+  // Tear WiFi down on every early exit below via this helper.
+  auto wifiOff = []() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
-    return Result::AuthFailed;
+  };
+
+  if (cancelled()) {
+    wifiOff();
+    return Result::Cancelled;
+  }
+
+  // Guard against an unset clock: countdowns and the query window depend on a
+  // real epoch (deep-sleep wake resets the system clock and NTP may have failed).
+  if (time(nullptr) < MIN_VALID_EPOCH) {
+    LOG_ERR("GOOG", "System clock not set; aborting sync");
+    wifiOff();
+    return Result::ClockUnset;
+  }
+
+  std::string token;
+  if (!refreshAccessToken(creds, token)) {
+    wifiOff();
+    return cancelled() ? Result::Cancelled : Result::AuthFailed;
   }
 
   // Accumulate into a local copy so a partial failure never clobbers the cached
@@ -433,11 +491,11 @@ GoogleClient::Result GoogleClient::syncAll(RemindersData& out) {
   // Sequential teardown is implicit: esp_http_client_cleanup() in httpExec frees
   // each TLS session before the next call, so only one TLS context is live at a
   // time (~35KB peak rather than two stacked).
-  const bool tasksOk = fetchTasks(token, fresh);
+  const bool tasksOk = cancelled() ? false : fetchTasks(token, fresh);
 
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  wifiOff();
 
+  if (cancelled()) return Result::Cancelled;
   if (!calOk && !tasksOk) return Result::FetchFailed;
 
   fresh.synced_epoch = time(nullptr);
@@ -458,10 +516,14 @@ const char* GoogleClient::resultName(Result r) {
       return "NoCredentials";
     case Result::WifiFailed:
       return "WifiFailed";
+    case Result::ClockUnset:
+      return "ClockUnset";
     case Result::AuthFailed:
       return "AuthFailed";
     case Result::FetchFailed:
       return "FetchFailed";
+    case Result::Cancelled:
+      return "Cancelled";
   }
   return "?";
 }

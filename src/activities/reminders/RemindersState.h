@@ -21,6 +21,7 @@ struct CalItem {
   int32_t travel_secs;  // 0 = unknown (reserved for future Maps integration)
   bool is_calendar;     // true = Calendar event, false = Google Task
   bool completed;
+  bool all_day;  // true = date-only (all-day event or dated task); start_epoch is that day's UTC midnight
 };
 
 struct RemindersData {

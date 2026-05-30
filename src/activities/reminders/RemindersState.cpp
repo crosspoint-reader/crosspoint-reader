@@ -53,6 +53,7 @@ bool RemindersData::saveToFile() const {
     o["travel"] = it.travel_secs;
     o["cal"] = it.is_calendar;
     o["done"] = it.completed;
+    o["allday"] = it.all_day;
     if (it.note_count > 0) {
       JsonArray notes = o["notes"].to<JsonArray>();
       for (uint8_t n = 0; n < it.note_count && n < REMINDERS_MAX_NOTES; n++) notes.add(it.notes[n]);
@@ -107,6 +108,7 @@ bool RemindersData::loadFromFile() {
     it.travel_secs = o["travel"] | 0;
     it.is_calendar = o["cal"] | false;
     it.completed = o["done"] | false;
+    it.all_day = o["allday"] | false;
     it.note_count = 0;
     for (JsonVariant n : o["notes"].as<JsonArray>()) {
       if (it.note_count >= REMINDERS_MAX_NOTES) break;
