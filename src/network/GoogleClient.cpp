@@ -436,7 +436,7 @@ bool fetchTasks(const std::string& token, RemindersData& out) {
     snprintf(it.title, sizeof(it.title), "%s", tk["title"] | "(untitled task)");
     // Tasks only record a due *date* (time is always midnight and ignored), so
     // treat any due as all-day: show the date, not a midnight-UTC countdown.
-    const char* due = tk["due"] | (const char*)nullptr;
+    const char* due = tk["due"] | (const char*)nullptr;  // cppcheck-suppress badBitmaskCheck
     it.start_epoch = parseRfc3339(due);
     it.all_day = (due != nullptr);
 

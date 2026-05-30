@@ -96,11 +96,12 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   const int actualCount = recentArr.isNull() ? 0
                                              : std::min(static_cast<int>(recentArr.size()),
                                                         static_cast<int>(CrossPointState::SLEEP_RECENT_COUNT));
-  for (int i = 0; i < actualCount; i++) s.recentSleepImages[i] = recentArr[i] | static_cast<uint16_t>(0);
-  s.recentSleepPos = doc["recentSleepPos"] | static_cast<uint8_t>(0);
+  for (int i = 0; i < actualCount; i++)
+    s.recentSleepImages[i] = recentArr[i] | static_cast<uint16_t>(0);  // cppcheck-suppress badBitmaskCheck
+  s.recentSleepPos = doc["recentSleepPos"] | static_cast<uint8_t>(0);  // cppcheck-suppress badBitmaskCheck
   if (s.recentSleepPos >= CrossPointState::SLEEP_RECENT_COUNT)
     s.recentSleepPos = actualCount > 0 ? s.recentSleepPos % CrossPointState::SLEEP_RECENT_COUNT : 0;
-  s.recentSleepFill = doc["recentSleepFill"] | static_cast<uint8_t>(0);
+  s.recentSleepFill = doc["recentSleepFill"] | static_cast<uint8_t>(0);  // cppcheck-suppress badBitmaskCheck
   s.recentSleepFill = static_cast<uint8_t>(std::min(static_cast<int>(s.recentSleepFill), actualCount));
   // Migrate legacy single-image field from old state.json (pre-recency-buffer).
   // Only seeds the buffer if the new buffer is empty (fresh migration, not a resave).
@@ -108,8 +109,9 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
     const uint8_t legacy = doc["lastSleepImage"] | static_cast<uint8_t>(UINT8_MAX);
     if (legacy != UINT8_MAX) s.pushRecentSleep(static_cast<uint16_t>(legacy));
   }
-  s.readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
-  s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
+  s.readerActivityLoadCount =
+      doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);  // cppcheck-suppress badBitmaskCheck
+  s.lastSleepFromReader = doc["lastSleepFromReader"] | false;    // cppcheck-suppress badBitmaskCheck
   s.showBootScreen = doc["showBootScreen"] | true;
   return true;
 }
@@ -125,7 +127,7 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
     if (!info.valuePtr && !info.stringOffset) continue;
 
     if (info.stringOffset) {
-      const char* strPtr = (const char*)&s + info.stringOffset;
+      const char* strPtr = (const char*)&s + info.stringOffset;  // cppcheck-suppress cstyleCast
       if (info.obfuscated) {
         doc[std::string(info.key) + "_obf"] = obfuscation::obfuscateToBase64(strPtr);
       } else {
@@ -147,10 +149,6 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
   }
-
-  // Language -- managed by LanguageSelectActivity, not in SettingsList.
-  // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
-  doc["language"] = (s.language < getLanguageCount()) ? LANGUAGE_CODES[s.language] : "EN";
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -184,8 +182,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     if (!info.valuePtr && !info.stringOffset) continue;
 
     if (info.stringOffset) {
-      const char* strPtr = (const char*)&s + info.stringOffset;
-      const std::string fieldDefault = strPtr;  // current buffer = struct-initializer default
+      const char* strPtr = (const char*)&s + info.stringOffset;  // cppcheck-suppress cstyleCast
+      const std::string fieldDefault = strPtr;                   // current buffer = struct-initializer default
       std::string val;
       if (info.obfuscated) {
         bool ok = false;
@@ -197,7 +195,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       } else {
         val = doc[info.key] | fieldDefault;
       }
-      char* destPtr = (char*)&s + info.stringOffset;
+      char* destPtr = (char*)&s + info.stringOffset;  // cppcheck-suppress cstyleCast
       if (info.stringMaxLen == 0) {
         LOG_ERR("CPS", "Misconfigured SettingInfo: stringMaxLen is 0 for key '%s'", info.key);
         destPtr[0] = '\0';
@@ -236,7 +234,8 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   CrossPointSettings::validateFrontButtonMapping(s);
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
-  s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)0, CrossPointSettings::BUILTIN_FONT_COUNT, 0);
+  s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)0, CrossPointSettings::BUILTIN_FONT_COUNT,
+                       0);  // cppcheck-suppress badBitmaskCheck
   // SD card font family name — not in SettingsList, load manually
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);

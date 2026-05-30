@@ -336,7 +336,7 @@ std::string getFileName(std::string filename) {
   return filename.substr(0, pos);
 }
 
-std::string getFileExtension(std::string filename) {
+std::string getFileExtension(const std::string& filename) {
   if (filename.back() == '/') {
     return "";
   }

@@ -605,6 +605,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     return;
   }
 
+  // cppcheck-suppress shadowVariable
   const HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
@@ -1553,7 +1554,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
     case WStype_TEXT: {
       // Parse control messages
-      String msg = String((char*)payload);
+      String msg = String((char*)payload);  // cppcheck-suppress cstyleCast
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
       if (msg.startsWith("START:")) {
@@ -1757,7 +1758,8 @@ void CrossPointWebServer::handleFontList() const {
 }
 
 void CrossPointWebServer::handleFontUploadData() {
-  HTTPUpload& upload = server->upload();
+  // cppcheck-suppress shadowVariable
+  const HTTPUpload& upload = server->upload();
 
   switch (upload.status) {
     case UPLOAD_FILE_START: {

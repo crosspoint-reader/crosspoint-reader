@@ -95,20 +95,20 @@ bool RemindersData::loadFromFile() {
   }
 
   clear();
-  synced_epoch = static_cast<time_t>(doc["synced_epoch"] | 0LL);
-  is_stale = doc["is_stale"] | false;
+  synced_epoch = static_cast<time_t>(doc["synced_epoch"] | 0LL);  // cppcheck-suppress badBitmaskCheck
+  is_stale = doc["is_stale"] | false;                             // cppcheck-suppress badBitmaskCheck
 
   for (JsonObject o : doc["items"].as<JsonArray>()) {
     if (count >= REMINDERS_MAX_ITEMS) break;
     CalItem it = {};
     snprintf(it.title, sizeof(it.title), "%s", o["title"] | "");
     snprintf(it.location, sizeof(it.location), "%s", o["location"] | "");
-    it.start_epoch = static_cast<time_t>(o["start"] | 0LL);
-    it.end_epoch = static_cast<time_t>(o["end"] | 0LL);
-    it.travel_secs = o["travel"] | 0;
-    it.is_calendar = o["cal"] | false;
-    it.completed = o["done"] | false;
-    it.all_day = o["allday"] | false;
+    it.start_epoch = static_cast<time_t>(o["start"] | 0LL);  // cppcheck-suppress badBitmaskCheck
+    it.end_epoch = static_cast<time_t>(o["end"] | 0LL);      // cppcheck-suppress badBitmaskCheck
+    it.travel_secs = o["travel"] | 0;                        // cppcheck-suppress badBitmaskCheck
+    it.is_calendar = o["cal"] | false;                       // cppcheck-suppress badBitmaskCheck
+    it.completed = o["done"] | false;                        // cppcheck-suppress badBitmaskCheck
+    it.all_day = o["allday"] | false;                        // cppcheck-suppress badBitmaskCheck
     it.note_count = 0;
     for (JsonVariant n : o["notes"].as<JsonArray>()) {
       if (it.note_count >= REMINDERS_MAX_NOTES) break;
