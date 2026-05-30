@@ -459,6 +459,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   if (!skipLoadingCss) {
     // Parse CSS before reloading book.bin to leave more heap for CSS rule-table growth.
+    bookMetadataCache.reset();
     parseCssFiles();
     Storage.removeDir((cachePath + "/sections").c_str());
   }
