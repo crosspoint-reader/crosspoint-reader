@@ -101,7 +101,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     return false;
   }
 
-  int version = doc["version"] | 0;
+  int version = doc["version"] | 0;  // cppcheck-suppress badBitmaskCheck
   if (version != FONTS_MANIFEST_VERSION) {
     LOG_ERR("FONT", "Unsupported manifest version: %d", version);
     errorMessage_ = "Unsupported manifest version";
@@ -128,7 +128,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
       ManifestFile file;
       file.name = fileObj["name"] | "";
-      file.size = fileObj["size"] | 0;
+      file.size = fileObj["size"] | 0;  // cppcheck-suppress badBitmaskCheck
 
       if (!fileObj["crc32"].is<uint32_t>()) {
         LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
@@ -203,6 +203,7 @@ void FontDownloadActivity::updateAll() {
 }
 
 bool FontDownloadActivity::showDownloadAllRow() const {
+  // cppcheck-suppress useStlAlgorithm
   for (const auto& f : families_) {
     if (!f.installed) return true;
   }
@@ -210,6 +211,7 @@ bool FontDownloadActivity::showDownloadAllRow() const {
 }
 
 bool FontDownloadActivity::showUpdateAllRow() const {
+  // cppcheck-suppress useStlAlgorithm
   for (const auto& f : families_) {
     if (f.hasUpdate) return true;
   }
@@ -233,7 +235,7 @@ int FontDownloadActivity::listItemCount() const {
 size_t FontDownloadActivity::totalDownloadSize() const {
   size_t total = 0;
   for (const auto& f : families_) {
-    if (!f.installed) total += f.totalSize;
+    if (!f.installed) total += f.totalSize;  // cppcheck-suppress useStlAlgorithm
   }
   return total;
 }
@@ -241,7 +243,7 @@ size_t FontDownloadActivity::totalDownloadSize() const {
 size_t FontDownloadActivity::totalUpdateSize() const {
   size_t total = 0;
   for (const auto& f : families_) {
-    if (f.hasUpdate) total += f.totalSize;
+    if (f.hasUpdate) total += f.totalSize;  // cppcheck-suppress useStlAlgorithm
   }
   return total;
 }
@@ -458,7 +460,7 @@ void FontDownloadActivity::loop() {
           currentFileIndex_ = 0;
           currentFileTotal_ = 0;
           for (const auto& f : families_) {
-            if (!f.installed) currentFileTotal_ += f.files.size();
+            if (!f.installed) currentFileTotal_ += f.files.size();  // cppcheck-suppress useStlAlgorithm
           }
 
           downloadAll();
@@ -466,7 +468,7 @@ void FontDownloadActivity::loop() {
           currentFileIndex_ = 0;
           currentFileTotal_ = 0;
           for (const auto& f : families_) {
-            if (f.hasUpdate) currentFileTotal_ += f.files.size();
+            if (f.hasUpdate) currentFileTotal_ += f.files.size();  // cppcheck-suppress useStlAlgorithm
           }
           updateAll();
         } else {

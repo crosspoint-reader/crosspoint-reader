@@ -298,7 +298,8 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
   if (startIndex == 0 && !hasMore) {
     snprintf(info, sizeof(info), "%s %u", tr(STR_REMINDERS_TOTAL), data.count);
   } else {
-    snprintf(info, sizeof(info), "%u-%u / %u", startIndex + 1, nextIndex, data.count);
+    snprintf(info, sizeof(info), "%u-%u / %u", static_cast<unsigned>(startIndex + 1), static_cast<unsigned>(nextIndex),
+             static_cast<unsigned>(data.count));
   }
   renderer.drawText(DETAIL_FONT, contentLeft, infoTop, info, true, EpdFontFamily::BOLD);
 

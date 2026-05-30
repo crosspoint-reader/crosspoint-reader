@@ -646,7 +646,7 @@ void loop() {
   // activity with RemindersActivity. replaceActivity() runs the outgoing
   // activity's onExit() first, freeing reader buffers before the HTTPS sync.
   // Two short power taps within DOUBLE_PRESS_MS; a long hold still sleeps below.
-  static unsigned long lastPowerTapMs = 0;
+  static unsigned long lastPowerTapMs = 0;  // cppcheck-suppress variableScope
   if (SETTINGS.remindersEnabled && mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     constexpr unsigned long DOUBLE_PRESS_MS = 500;
     const unsigned long nowMs = millis();

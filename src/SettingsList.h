@@ -103,6 +103,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v = {
+        // cppcheck-suppress unreadVariable
         // --- Display ---
         SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                           {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
