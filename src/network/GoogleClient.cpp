@@ -11,11 +11,13 @@
 #include <esp_http_client.h>
 #include <esp_sntp.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "WifiCredentialStore.h"
@@ -229,23 +231,11 @@ bool loadCreds(Creds& out) {
 
 // --- WiFi + NTP -------------------------------------------------------------
 
-bool connectWifi() {
-  if (WiFi.status() == WL_CONNECTED) return true;
-
-  const std::string ssid = WIFI_STORE.getLastConnectedSsid();
-  if (ssid.empty()) {
-    LOG_ERR("GOOG", "No last-connected SSID saved");
-    return false;
-  }
-  const WifiCredential* cred = WIFI_STORE.findCredential(ssid);
-  if (!cred) {
-    LOG_ERR("GOOG", "No saved credential for SSID");
-    return false;
-  }
-
+// Try to bring up WiFi against a single saved network. Returns true on connect,
+// false on timeout/cancel. Caller owns the candidate ordering.
+bool tryConnectSsid(const std::string& ssid, const std::string& password) {
   LOG_INF("GOOG", "Connecting WiFi to saved network");
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid.c_str(), cred->password.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
 
   const unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {
@@ -255,17 +245,47 @@ bool connectWifi() {
     }
     delay(100);
   }
-  if (WiFi.status() != WL_CONNECTED) {
-    LOG_ERR("GOOG", "WiFi connect timed out");
+  return WiFi.status() == WL_CONNECTED;
+}
+
+bool connectWifi() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+
+  // Build an ordered candidate list: the last-connected network first (fastest
+  // path for a configured device), then every other saved network. The fallback
+  // matters on a freshly flashed device that has saved credentials but has not
+  // recorded a "last connected" SSID yet — without it the first sync fails until
+  // the user manually connects once through Settings -> WiFi.
+  std::vector<std::string> candidates;
+  const std::string last = WIFI_STORE.getLastConnectedSsid();
+  if (!last.empty() && WIFI_STORE.findCredential(last) != nullptr) {
+    candidates.push_back(last);
+  }
+  for (const WifiCredential& c : WIFI_STORE.getCredentials()) {
+    if (std::find(candidates.begin(), candidates.end(), c.ssid) == candidates.end()) {
+      candidates.push_back(c.ssid);
+    }
+  }
+  if (candidates.empty()) {
+    LOG_ERR("GOOG", "No saved WiFi networks to connect to");
     return false;
   }
-  // Persist the network we actually connected to so it survives a reboot.
-  // Guard the write: only touch SPIFFS when it actually changed (write throttling).
-  if (WIFI_STORE.getLastConnectedSsid() != ssid) {
-    WIFI_STORE.setLastConnectedSsid(ssid);
-    WIFI_STORE.saveToFile();
+
+  WiFi.mode(WIFI_STA);
+  for (const std::string& ssid : candidates) {
+    if (cancelled()) return false;
+    const WifiCredential* cred = WIFI_STORE.findCredential(ssid);
+    if (!cred) continue;
+    if (tryConnectSsid(ssid, cred->password)) {
+      // Persist the network we actually connected to so the next sync takes the
+      // fast path. setLastConnectedSsid() guards + saves only on change.
+      WIFI_STORE.setLastConnectedSsid(ssid);
+      return true;
+    }
+    WiFi.disconnect();
   }
-  return true;
+  LOG_ERR("GOOG", "WiFi connect failed (tried %u saved network(s))", (unsigned)candidates.size());
+  return false;
 }
 
 void syncClock() {
