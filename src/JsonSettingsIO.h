@@ -8,6 +8,7 @@ class WifiCredentialStore;
 class RecentBooksStore;
 class OpdsServerStore;
 struct BookmarkEntry;
+struct HighlightEntry;
 
 namespace JsonSettingsIO {
 
@@ -34,5 +35,9 @@ bool loadOpds(OpdsServerStore& store, const char* json, bool* needsResave = null
 // Bookmarks
 bool saveBookmarks(const std::vector<BookmarkEntry>& bookmarks, const char* path);
 bool loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const char* json);
+
+// Highlights
+bool saveHighlights(const std::vector<HighlightEntry>& highlights, const char* path);
+bool loadHighlights(std::vector<HighlightEntry>& highlights, const char* json);
 
 }  // namespace JsonSettingsIO

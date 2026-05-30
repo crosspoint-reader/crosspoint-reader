@@ -10,6 +10,9 @@
 
 #include <algorithm>
 
+#include "../HighlightEntry.h"
+#include "../JsonSettingsIO.h"
+#include "../util/HighlightUtil.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
@@ -19,6 +22,7 @@
 #include "WifiCredentialStore.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
+#include "html/HighlightsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
@@ -169,6 +173,11 @@ void CrossPointWebServer::begin() {
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
   server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
   server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
+
+  // Highlights endpoints
+  server->on("/highlights", HTTP_GET, [this] { handleHighlightsPage(); });
+  server->on("/api/highlights", HTTP_GET, [this] { handleHighlightList(); });
+  server->on("/api/highlights/file", HTTP_GET, [this] { handleHighlightFile(); });
 
   // Wi-Fi credential endpoints
   server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
@@ -1713,6 +1722,92 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 void CrossPointWebServer::handleFontsPage() const {
   sendHtmlContent(server.get(), FontsPageHtml, sizeof(FontsPageHtml));
   LOG_DBG("WEB", "Served fonts page");
+}
+
+void CrossPointWebServer::handleHighlightsPage() const {
+  sendHtmlContent(server.get(), HighlightsPageHtml, sizeof(HighlightsPageHtml));
+  LOG_DBG("WEB", "Served highlights page");
+}
+
+void CrossPointWebServer::handleHighlightList() const {
+  // List the per-book highlight JSON files, reporting each file's highlight count.
+  const std::string dir = HighlightUtil::getHighlightsDir();
+  HalFile root = Storage.open(dir.c_str());
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("[");
+
+  if (root && root.isDirectory()) {
+    bool seenFirst = false;
+    HalFile file = root.openNextFile();
+    char nameBuf[256];
+    while (file) {
+      file.getName(nameBuf, sizeof(nameBuf));
+      String fileName(nameBuf);
+      const bool isDir = file.isDirectory();
+      file.close();
+
+      if (!isDir && fileName.endsWith(".json")) {
+        // Count highlights by loading the file (files are small, one per book).
+        const std::string fullPath = dir + fileName.c_str();
+        String json = Storage.readFile(fullPath.c_str());
+        std::vector<HighlightEntry> highlights;
+        if (!json.isEmpty()) {
+          JsonSettingsIO::loadHighlights(highlights, json.c_str());
+        }
+
+        // Strip the .json extension for display.
+        String displayName = fileName.substring(0, fileName.length() - 5);
+
+        JsonDocument doc;
+        doc["name"] = displayName.c_str();
+        doc["count"] = highlights.size();
+        String out;
+        serializeJson(doc, out);
+
+        if (seenFirst) {
+          server->sendContent(",");
+        } else {
+          seenFirst = true;
+        }
+        server->sendContent(out);
+      }
+
+      yield();
+      esp_task_wdt_reset();
+      file = root.openNextFile();
+    }
+  }
+  if (root) root.close();
+
+  server->sendContent("]");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served highlight list");
+}
+
+void CrossPointWebServer::handleHighlightFile() const {
+  if (!server->hasArg("name")) {
+    server->send(400, "text/plain", "Missing name");
+    return;
+  }
+
+  String name = server->arg("name");
+  // Reject path traversal: the name must be a bare file name.
+  if (name.isEmpty() || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || name.indexOf("..") >= 0) {
+    server->send(400, "text/plain", "Invalid name");
+    return;
+  }
+
+  const std::string path = HighlightUtil::getHighlightsDir() + name.c_str() + ".json";
+  if (!Storage.exists(path.c_str())) {
+    server->send(404, "text/plain", "Not found");
+    return;
+  }
+
+  String json = Storage.readFile(path.c_str());
+  server->send(200, "application/json", json);
+  LOG_DBG("WEB", "Served highlight file: %s", path.c_str());
 }
 
 void CrossPointWebServer::handleFontList() const {

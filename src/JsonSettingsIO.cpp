@@ -11,6 +11,7 @@
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "HighlightEntry.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
@@ -441,5 +442,62 @@ bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const 
   }
 
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
+  return true;
+}
+
+// ---- Highlights ----
+
+bool JsonSettingsIO::saveHighlights(const std::vector<HighlightEntry>& highlights, const char* path) {
+  JsonDocument doc;
+  JsonArray arr = doc["highlights"].to<JsonArray>();
+  LOG_DBG("HLT", "Saving %zu highlights to file", highlights.size());
+  for (const auto& h : highlights) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["text"] = h.text;
+    obj["xpath"] = h.xpath;
+    obj["percentage"] = h.percentage;
+    obj["spine"] = h.spineIndex;
+    obj["sp"] = h.startPage;
+    obj["se"] = h.startElement;
+    obj["sw"] = h.startWord;
+    obj["ep"] = h.endPage;
+    obj["ee"] = h.endElement;
+    obj["ew"] = h.endWord;
+    obj["cpc"] = h.chapterPageCount;
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadHighlights(std::vector<HighlightEntry>& highlights, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("HLT", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  JsonArray arr = doc["highlights"].as<JsonArray>();
+  highlights.clear();
+  highlights.reserve(arr.size());
+  for (JsonObject obj : arr) {
+    highlights.emplace_back();
+    auto& h = highlights.back();
+    h.text = obj["text"] | std::string("");
+    h.xpath = obj["xpath"] | std::string("");
+    h.percentage = obj["percentage"] | static_cast<float>(0);
+    h.spineIndex = obj["spine"] | static_cast<uint16_t>(0);
+    h.startPage = obj["sp"] | static_cast<uint16_t>(0);
+    h.startElement = obj["se"] | static_cast<uint16_t>(0);
+    h.startWord = obj["sw"] | static_cast<uint16_t>(0);
+    h.endPage = obj["ep"] | static_cast<uint16_t>(0);
+    h.endElement = obj["ee"] | static_cast<uint16_t>(0);
+    h.endWord = obj["ew"] | static_cast<uint16_t>(0);
+    h.chapterPageCount = obj["cpc"] | static_cast<uint16_t>(0);
+  }
+
+  LOG_DBG("HLT", "Loaded %zu highlights from file", highlights.size());
   return true;
 }

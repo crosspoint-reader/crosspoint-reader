@@ -25,6 +25,7 @@
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "HighlightEntry.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -35,6 +36,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
+#include "util/HighlightUtil.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -196,6 +198,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Selection mode hijacks all input until the user confirms or cancels.
+  if (selectionMode) {
+    handleSelectionInput();
+    return;
+  }
+
   // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
   // finished. Two independent finished-book features key off this same condition.
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
@@ -253,6 +261,11 @@ void EpubReaderActivity::loop() {
 
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showBookmarkMessage = false;
+    requestUpdate();
+  }
+
+  if (showHighlightMessage && (millis() - highlightMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showHighlightMessage = false;
     requestUpdate();
   }
 
@@ -532,6 +545,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       onGoHome();
       return;
+    }
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHT: {
+      enterSelectionMode();
+      break;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
       {
@@ -866,6 +883,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, tr(STR_BOOKMARK_ADDED));
   }
+
+  if (showHighlightMessage) {
+    GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_ADDED));
+  }
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
@@ -920,6 +941,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
+
+  // Highlight overlays (BW only). Stored highlights are underlined; in selection
+  // mode the word geometry is (re)built for this page and the cursor/selection
+  // overlay is drawn on top. Both use plain BW line/rect draws so they survive
+  // the differential refresh without grayscale handling.
+  loadSectionHighlights();
+  drawStoredHighlights(*page, orientedMarginLeft, orientedMarginTop);
+  if (selectionMode) {
+    buildSelectableWords(*page, orientedMarginLeft, orientedMarginTop);
+    // Resolve the "select last word" sentinel after a backward page spill.
+    if (selectionCursor < 0) {
+      selectionCursor = selectableWords.empty() ? 0 : static_cast<int>(selectableWords.size()) - 1;
+    }
+    if (selectionCursor >= static_cast<int>(selectableWords.size())) {
+      selectionCursor = selectableWords.empty() ? 0 : static_cast<int>(selectableWords.size()) - 1;
+    }
+    drawSelectionOverlay();
+  }
   const auto tBwRender = millis();
 
   if (imagePageWithAA) {
@@ -1194,6 +1233,296 @@ void EpubReaderActivity::addBookmark() {
   }
 
   requestUpdate();
+}
+
+// ---- Text highlighting ----
+
+void EpubReaderActivity::loadSectionHighlights() {
+  if (!epub) return;
+  if (sectionHighlightsLoaded && loadedHighlightsSpine == currentSpineIndex) return;
+
+  sectionHighlights.clear();
+  const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
+  if (Storage.exists(path.c_str())) {
+    std::vector<HighlightEntry> all;
+    String json = Storage.readFile(path.c_str());
+    if (!json.isEmpty() && JsonSettingsIO::loadHighlights(all, json.c_str())) {
+      // Keep only highlights for the current chapter to bound RAM.
+      for (auto& h : all) {
+        if (h.spineIndex == currentSpineIndex) {
+          sectionHighlights.push_back(std::move(h));
+        }
+      }
+    }
+  }
+  sectionHighlightsLoaded = true;
+  loadedHighlightsSpine = currentSpineIndex;
+}
+
+void EpubReaderActivity::buildSelectableWords(const Page& page, const int marginLeft, const int marginTop) {
+  selectableWords.clear();
+  // Rough upper bound to avoid repeated reallocation while scanning the page.
+  selectableWords.reserve(300);
+
+  const int fontId = SETTINGS.getReaderFontId();
+  const int lineHeight = renderer.getLineHeight(fontId);
+
+  for (uint16_t ei = 0; ei < page.elements.size(); ei++) {
+    const auto& el = page.elements[ei];
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const auto& block = line.getBlock();
+    if (!block) continue;
+    const auto& words = block->getWords();
+    const auto& xpos = block->getWordXpos();
+    const auto& styles = block->getWordStyles();
+    if (words.size() != xpos.size() || words.size() != styles.size()) continue;
+
+    const int lineX = line.xPos + marginLeft;
+    const int lineY = line.yPos + marginTop;
+    for (uint16_t wi = 0; wi < words.size(); wi++) {
+      const int w = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
+      if (w <= 0) continue;
+      SelectableWord sw;
+      sw.x = static_cast<int16_t>(xpos[wi] + lineX);
+      sw.y = static_cast<int16_t>(lineY);
+      sw.w = static_cast<int16_t>(w);
+      sw.h = static_cast<int16_t>(lineHeight);
+      sw.element = ei;
+      sw.word = wi;
+      selectableWords.push_back(sw);
+    }
+  }
+}
+
+void EpubReaderActivity::enterSelectionMode() {
+  if (!section || section->pageCount == 0) {
+    requestUpdate();
+    return;
+  }
+  selectionMode = true;
+  selectionAnchorSet = false;
+  selectionCursor = 0;
+  selectableWords.clear();
+  requestUpdate();  // render() rebuilds selectableWords for the current page
+}
+
+void EpubReaderActivity::exitSelectionMode() {
+  selectionMode = false;
+  selectionAnchorSet = false;
+  selectableWords.clear();
+  requestUpdate();
+}
+
+void EpubReaderActivity::handleSelectionInput() {
+  // Cancel selection.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    exitSelectionMode();
+    return;
+  }
+
+  // Confirm: first press sets the anchor, second press finalizes.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (selectableWords.empty()) return;
+    if (!selectionAnchorSet) {
+      const auto& sw = selectableWords[selectionCursor];
+      selectionAnchor = {static_cast<uint16_t>(section ? section->currentPage : 0), sw.element, sw.word};
+      selectionAnchorSet = true;
+      requestUpdate();
+    } else {
+      finalizeHighlight();
+    }
+    return;
+  }
+
+  // Cursor movement; reuse the reader's page-turn button detection.
+  const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  if (!prevTriggered && !nextTriggered) return;
+
+  if (nextTriggered) {
+    if (selectionCursor + 1 < static_cast<int>(selectableWords.size())) {
+      selectionCursor++;
+      requestUpdate();
+    } else if (section && section->currentPage < section->pageCount - 1) {
+      // Spill onto the next page; cursor resets to the first word there.
+      section->currentPage++;
+      selectionCursor = 0;
+      selectableWords.clear();  // rebuilt on next render
+      requestUpdate();
+    }
+  } else {  // prevTriggered
+    if (selectionCursor > 0) {
+      selectionCursor--;
+      requestUpdate();
+    } else if (section && section->currentPage > 0) {
+      section->currentPage--;
+      selectionCursor = -1;  // sentinel: select last word after rebuild
+      selectableWords.clear();
+      requestUpdate();
+    }
+  }
+}
+
+void EpubReaderActivity::finalizeHighlight() {
+  if (!epub || !section || selectableWords.empty()) {
+    exitSelectionMode();
+    return;
+  }
+
+  const uint16_t cursorPage = static_cast<uint16_t>(section->currentPage);
+  const auto& cursorSw = selectableWords[selectionCursor];
+  SelectionEndpoint cursorEp = {cursorPage, cursorSw.element, cursorSw.word};
+
+  // Order anchor and cursor into (start, end) by page, then element, then word.
+  auto less = [](const SelectionEndpoint& a, const SelectionEndpoint& b) {
+    if (a.page != b.page) return a.page < b.page;
+    if (a.element != b.element) return a.element < b.element;
+    return a.word < b.word;
+  };
+  SelectionEndpoint start = selectionAnchor;
+  SelectionEndpoint end = cursorEp;
+  if (less(end, start)) std::swap(start, end);
+
+  // Collect the selected text across the page range within this section.
+  std::string collected;
+  const int savedPage = section->currentPage;
+  const int fontId = SETTINGS.getReaderFontId();
+  (void)fontId;
+  for (uint16_t p = start.page; p <= end.page; p++) {
+    section->currentPage = p;
+    auto page = section->loadPageFromSectionFile();
+    if (!page) continue;
+    for (uint16_t ei = 0; ei < page->elements.size(); ei++) {
+      const auto& el = page->elements[ei];
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*el);
+      const auto& block = line.getBlock();
+      if (!block) continue;
+      const auto& words = block->getWords();
+      for (uint16_t wi = 0; wi < words.size(); wi++) {
+        // Skip words before the start endpoint on the first page.
+        if (p == start.page && (ei < start.element || (ei == start.element && wi < start.word))) continue;
+        // Skip words after the end endpoint on the last page.
+        if (p == end.page && (ei > end.element || (ei == end.element && wi > end.word))) continue;
+        if (!collected.empty()) collected += " ";
+        collected += words[wi];
+      }
+    }
+  }
+  section->currentPage = savedPage;
+
+  collected = HighlightUtil::sanitizeHighlightText(std::move(collected));
+  if (collected.empty()) {
+    exitSelectionMode();
+    return;
+  }
+
+  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+
+  HighlightEntry entry;
+  entry.text = collected;
+  entry.xpath = progress.xpath;
+  entry.percentage = progress.percentage;
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+  entry.startPage = start.page;
+  entry.startElement = start.element;
+  entry.startWord = start.word;
+  entry.endPage = end.page;
+  entry.endElement = end.element;
+  entry.endWord = end.word;
+  entry.chapterPageCount = section->pageCount;
+
+  // Append to the per-book JSON file (load existing, push_back, save).
+  const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
+  const std::string dir = HighlightUtil::getHighlightsDir();
+  Storage.mkdir(dir.c_str());
+  std::vector<HighlightEntry> highlights;
+  if (Storage.exists(path.c_str())) {
+    String json = Storage.readFile(path.c_str());
+    if (!json.isEmpty()) {
+      JsonSettingsIO::loadHighlights(highlights, json.c_str());
+    }
+  }
+  highlights.push_back(entry);
+  const bool ok = JsonSettingsIO::saveHighlights(highlights, path.c_str());
+  if (ok) {
+    showHighlightMessage = true;
+    highlightMessageTime = millis();
+    // Invalidate the section highlight cache so the new one re-displays.
+    sectionHighlightsLoaded = false;
+  } else {
+    LOG_ERR("ERS", "Failed to save highlight to: %s", path.c_str());
+  }
+
+  exitSelectionMode();
+}
+
+void EpubReaderActivity::drawStoredHighlights(const Page& page, const int marginLeft, const int marginTop) const {
+  if (sectionHighlights.empty()) return;
+  const int fontId = SETTINGS.getReaderFontId();
+  const int ascender = renderer.getFontAscenderSize(fontId);
+  const uint16_t curPage = static_cast<uint16_t>(section ? section->currentPage : 0);
+
+  for (const auto& h : sectionHighlights) {
+    // Geometry only valid when the cached layout still matches creation time.
+    if (h.chapterPageCount != (section ? section->pageCount : 0)) continue;
+    if (curPage < h.startPage || curPage > h.endPage) continue;
+
+    for (uint16_t ei = 0; ei < page.elements.size(); ei++) {
+      const auto& el = page.elements[ei];
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*el);
+      const auto& block = line.getBlock();
+      if (!block) continue;
+      const auto& words = block->getWords();
+      const auto& xpos = block->getWordXpos();
+      const auto& styles = block->getWordStyles();
+      if (words.size() != xpos.size() || words.size() != styles.size()) continue;
+
+      const int lineX = line.xPos + marginLeft;
+      const int underlineY = line.yPos + marginTop + ascender + 2;
+      for (uint16_t wi = 0; wi < words.size(); wi++) {
+        // Range test against (startPage,startElement,startWord)..(end...).
+        if (curPage == h.startPage && (ei < h.startElement || (ei == h.startElement && wi < h.startWord))) continue;
+        if (curPage == h.endPage && (ei > h.endElement || (ei == h.endElement && wi > h.endWord))) continue;
+        const int wx = xpos[wi] + lineX;
+        const int ww = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
+        if (ww <= 0) continue;
+        renderer.drawLine(wx, underlineY, wx + ww, underlineY, true);
+      }
+    }
+  }
+}
+
+void EpubReaderActivity::drawSelectionOverlay() const {
+  if (selectableWords.empty()) return;
+  const uint16_t curPage = static_cast<uint16_t>(section ? section->currentPage : 0);
+
+  // Provisional range underline when an anchor is set and on the same page span.
+  if (selectionAnchorSet && selectionCursor >= 0 && selectionCursor < static_cast<int>(selectableWords.size())) {
+    const auto& cursorSw = selectableWords[selectionCursor];
+    SelectionEndpoint cur = {curPage, cursorSw.element, cursorSw.word};
+    auto less = [](const SelectionEndpoint& a, const SelectionEndpoint& b) {
+      if (a.page != b.page) return a.page < b.page;
+      if (a.element != b.element) return a.element < b.element;
+      return a.word < b.word;
+    };
+    SelectionEndpoint s = selectionAnchor;
+    SelectionEndpoint e = cur;
+    if (less(e, s)) std::swap(s, e);
+    // Only underline the portion that lives on the current page.
+    for (const auto& sw : selectableWords) {
+      SelectionEndpoint w = {curPage, sw.element, sw.word};
+      if (less(w, s) || less(e, w)) continue;
+      renderer.drawLine(sw.x, sw.y + sw.h - 2, sw.x + sw.w, sw.y + sw.h - 2, true);
+    }
+  }
+
+  // Cursor box.
+  if (selectionCursor >= 0 && selectionCursor < static_cast<int>(selectableWords.size())) {
+    const auto& sw = selectableWords[selectionCursor];
+    renderer.drawRect(sw.x - 1, sw.y - 1, sw.w + 2, sw.h + 2, 2, true);
+  }
 }
 
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
