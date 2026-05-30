@@ -34,6 +34,7 @@ class Epub {
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
+  void discoverCssFilesFromZip();
   void parseCssFiles() const;
 
  public:
