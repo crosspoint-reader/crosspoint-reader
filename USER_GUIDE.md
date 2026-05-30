@@ -142,9 +142,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
-  - "Quick Resume" - Keep the current page visible with a moon icon and wake back to it quickly
   - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#37-sleep-screen) below for more information
-- **Quick Resume on Timeout**: When set to "ON", auto-sleep by inactivity uses Quick Resume even if another sleep screen mode is selected.
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
   - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
@@ -217,7 +215,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 #### 3.6.4 System
 
-- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep. The timer can be adjusted from 1 to 30 minutes in 1-minute steps, or set to **Never**. The default is 10 minutes.
+- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
 - **WiFi Networks**: Connect to WiFi networks for file transfers and firmware updates.
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress.
@@ -385,11 +383,8 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 | **Custom** | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found. |
 | **Cover** | The cover of the currently open book. Falls back to **Dark** if no book is open. |
 | **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
-| **Quick Resume** | Keeps the current page visible with a moon icon and restores it quickly on wake. |
 | **Transparent** | A 32-bit alpha BMP overlay drawn over the current screen. Transparent pixels leave the page visible; opaque white pixels erase text behind them. Falls back to **Dark** if no valid overlay image is found. |
 | **None** | A blank screen. |
-
-If **Quick Resume on Timeout** is **ON**, inactivity timeout uses Quick Resume even when another sleep-screen mode such as **Transparent** is selected.
 
 #### Cover settings
 
