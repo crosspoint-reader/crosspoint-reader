@@ -1,4 +1,5 @@
 #include <HalGPIO.h>
+#include <BoardConfig.h>
 #include <Logging.h>
 #include <Preferences.h>
 #include <SPI.h>
@@ -192,6 +193,13 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 
 void HalGPIO::begin() {
   inputMgr.begin();
+
+#if defined(CROSSPOINT_BOARD_M5STACK_PAPERCOLOR) || defined(BOARD_M5STACK_PAPERCOLOR)
+  _deviceType = DeviceType::M5StackPaperColor;
+  LOG_INF("HW", "Board config active: %s", BoardConfig::ACTIVE.name);
+  return;
+#endif
+
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
   _deviceType = detectDeviceTypeWithFingerprint();

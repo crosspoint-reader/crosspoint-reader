@@ -47,7 +47,7 @@ class HalGPIO {
   bool usbStateChanged = false;
 
  public:
-  enum class DeviceType : uint8_t { X4, X3 };
+  enum class DeviceType : uint8_t { X4, X3, M5StackPaperColor };
 
  private:
   DeviceType _deviceType = DeviceType::X4;
@@ -58,6 +58,18 @@ class HalGPIO {
   // Inline device type helpers for cleaner downstream checks
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
+  inline bool deviceIsM5StackPaperColor() const { return _deviceType == DeviceType::M5StackPaperColor; }
+  const char* deviceName() const {
+    switch (_deviceType) {
+      case DeviceType::X3:
+        return "X3";
+      case DeviceType::M5StackPaperColor:
+        return "M5Stack PaperColor";
+      case DeviceType::X4:
+      default:
+        return "X4";
+    }
+  }
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
