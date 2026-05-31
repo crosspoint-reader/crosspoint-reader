@@ -36,7 +36,7 @@ constexpr char TASKS_URL[] =
 // Distance Matrix: one origin (home) to many destinations in a single request.
 // duration_in_traffic needs a future departure_time, supplied per-call.
 constexpr char DISTANCE_MATRIX_URL[] =
-    "https://maps.googleapis.com/maps/api/distancematrix/json?mode=driving&units=metric";
+    "https://maps.googleapis.com/maps/api/distancematrix/json?mode=transit&units=metric";
 // Cap the destinations per request so the response stays within HTTP_RX_BUF and
 // the parsed document stays small. Comfortably above any one-page reminder list.
 constexpr int MAPS_MAX_DESTINATIONS = 10;
