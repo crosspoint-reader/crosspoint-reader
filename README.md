@@ -34,7 +34,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
   - OTA update checks and installs from GitHub releases
 
-- **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
+- **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
 - **Localization**: 22 UI languages and counting.
 
