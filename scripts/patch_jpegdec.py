@@ -18,6 +18,7 @@ Patches live in `scripts/jpegdec_patches/` as one-commit-per-fix files
 
 Import("env")  # noqa: F821 (SCons-injected global)
 import os
+import re
 import subprocess
 import sys
 
@@ -61,6 +62,9 @@ def _apply_one(jpeg_dir, patch_path):
     name = os.path.basename(patch_path)
     if _git_apply_succeeds(jpeg_dir, patch_path, reverse=True):
         return
+    if _patch_already_present(jpeg_dir, name):
+        print("JPEGDEC patch already present: %s" % name)
+        return
     if not _git_apply_succeeds(jpeg_dir, patch_path, reverse=False):
         # Not applied, not appliable -- the libdep source has diverged from
         # what the patch expects. Don't write a half-patched file.
@@ -87,6 +91,32 @@ def _git_apply_succeeds(jpeg_dir, patch_path, *, reverse):
     return subprocess.run(
         cmd, cwd=jpeg_dir, capture_output=True, text=True
     ).returncode == 0
+
+
+def _patch_already_present(jpeg_dir, patch_name):
+    jpeg_inl = os.path.join(jpeg_dir, "src", "jpeg.inl")
+    if not os.path.isfile(jpeg_inl):
+        return False
+
+    with open(jpeg_inl, "r", encoding="utf-8") as handle:
+        content = handle.read()
+
+    normalized = _normalize_whitespace(content)
+    if patch_name == "0001-redirect-pmcu-on-mcu-skip.patch":
+        return (
+            "signed short *pMCU = (iMCU < 0) ? pJPEG->sMCUs : &pJPEG->sMCUs[iMCU & 0xffffff];"
+            in normalized
+        )
+    if patch_name == "0002-guard-dc-writes-on-mcu-skip.patch":
+        return (
+            "if (iMCU >= 0) pMCU[0] |= iPositive;" in normalized
+            and "if (iMCU >= 0) pMCU[0] = (short)*iDCPredictor;" in normalized
+        )
+    return False
+
+
+def _normalize_whitespace(text):
+    return re.sub(r"\s+", " ", text)
 
 
 patch_jpegdec(env)  # noqa: F821

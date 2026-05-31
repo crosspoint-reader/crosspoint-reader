@@ -5,8 +5,8 @@
  * minibidi.h — standalone header for ESP32C3 BiDi calculations
  *
  * Derived from [mintty](https://github.com/mintty/mintty/) (Thomas Wolff, MIT licence).
- * Stripped of: Arabic shaping, box-drawing mirror, terminal dependencies,
- * GCC nested functions, VLAs, and non-Hebrew/English Unicode data.
+ * Stripped of: box-drawing mirror, terminal dependencies, GCC nested functions,
+ * VLAs, and most unused Unicode data outside CrossPoint's supported RTL/LTR paths.
  */
 
 #include <stdbool.h>
@@ -111,5 +111,13 @@ ucschar mirror(ucschar ch);
  *   truncated to BIDI_MAX_LINE before processing.
  */
 int do_bidi(bool autodir, int paragraphLevel, bidi_char* line, int count);
+
+/*
+ * do_shape(line, to, count)
+ *   Applies Arabic shaping to a logically ordered line before visual reordering.
+ *   The shaped result is written to `to`; entries consumed by Lam-Alef ligatures
+ *   are emitted as wc=0 so callers can skip them after do_bidi().
+ */
+int do_shape(const bidi_char* line, bidi_char* to, int count);
 
 #endif /* MINIBIDI_H */

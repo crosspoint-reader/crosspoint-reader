@@ -72,6 +72,7 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   if (!utf8 || !*utf8) return false;
 
   static bidi_char line[BIDI_MAX_LINE];
+  static bidi_char shaped[BIDI_MAX_LINE];
   int count = 0;
   auto* p = reinterpret_cast<const unsigned char*>(utf8);
   while (*p) {
@@ -88,14 +89,17 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   }
   if (!count) return false;
 
+  do_shape(line, shaped, count);
+
   const bool autodir = (paragraphLevel < 0);
   const int level = autodir ? 0 : (paragraphLevel & 1);
-  do_bidi(autodir, level, line, count);
+  do_bidi(autodir, level, shaped, count);
 
   out.clear();
   out.reserve(std::strlen(utf8));
   for (int i = 0; i < count; i++) {
-    utf8AppendCodepoint(line[i].wc, out);
+    if (shaped[i].wc == 0) continue;
+    utf8AppendCodepoint(shaped[i].wc, out);
   }
   return true;
 }

@@ -1,13 +1,13 @@
-/* bidiclasses.t — bidi class table for CrossPoint Hebrew/English epub.
+/* bidiclasses.t — bidi class table for CrossPoint RTL/LTR text rendering.
  *
  * Coverage rationale:
- *   Hebrew + English is the primary target. However, CrossPoint renders
+ *   Hebrew + Arabic + English are the primary RTL/LTR targets. However, CrossPoint renders
  *   Latin and Cyrillic scripts for many other languages, so these MUST be
  *   classified as L (not fall through to ON) to avoid regression when they
- *   appear adjacent to Hebrew runs.
+ *   appear adjacent to RTL runs.
  *
  *   Scripts NOT in this table fall through to ON — correct per UAX#9 for
- *   scripts CrossPoint's fonts don't support (CJK, Arabic, Devanagari, etc.)
+ *   scripts CrossPoint's fonts don't support (CJK, Devanagari, etc.)
  *   ON is the right class for "unknown" — it behaves neutrally.
  *
  * Entries sorted ascending by first (binary search requirement).
@@ -84,6 +84,37 @@
 {0x05D0, 0x05EA, R},    /* alef … tav */
 {0x05F0, 0x05F4, R},    /* alternative forms + geresh/gershayim */
 
+/* ── Arabic / Perso-Arabic core support ─────────────────────────────── */
+/* Covers Arabic letters, harakat, Arabic-Indic digits, Persian digits,
+   and the presentation-form inputs used by shaping-aware rendering. */
+{0x0600, 0x0605, AN},
+{0x0608, 0x0608, AL},
+{0x0609, 0x060A, ET},
+{0x060B, 0x060B, AL},
+{0x060C, 0x060C, CS},
+{0x060D, 0x060D, AL},
+{0x0610, 0x061A, NSM},
+{0x061B, 0x061C, AL},
+{0x061D, 0x061F, AL},
+{0x0620, 0x063F, AL},
+{0x0640, 0x064A, AL},
+{0x064B, 0x065F, NSM},
+{0x0660, 0x0669, AN},
+{0x066A, 0x066A, ET},
+{0x066B, 0x066C, AN},
+{0x066D, 0x066F, AL},
+{0x0670, 0x0670, NSM},
+{0x0671, 0x06D5, AL},
+{0x06D6, 0x06DC, NSM},
+{0x06DD, 0x06DD, AN},
+{0x06DF, 0x06E4, NSM},
+{0x06E5, 0x06E6, AL},
+{0x06E7, 0x06E8, NSM},
+{0x06EA, 0x06ED, NSM},
+{0x06EE, 0x06EF, AL},
+{0x06F0, 0x06F9, EN},
+{0x06FA, 0x06FF, AL},
+
 /* ── Latin Extended Additional (L) ─────────────────────────────────── */
 /* Covers accented chars for Vietnamese, Welsh, Romanian, etc.
    Not currently rendered by CrossPoint fonts, but costs only 2 table rows. */
@@ -109,6 +140,10 @@
 {0x2068, 0x2068, FSI},
 {0x2069, 0x2069, PDI},
 {0x206A, 0x206F, BN},
+
+/* ── Arabic presentation forms used by shaping ─────────────────────── */
+{0xFB50, 0xFB50, AL},
+{0xFE70, 0xFEFC, AL},
 
 
 /* ── Byte Order Mark ────────────────────────────────────────────────── */

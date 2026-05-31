@@ -75,6 +75,98 @@ static inline bool is_NI(uchar bc) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+ * Arabic shaping helpers
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+enum {
+  SHAPE_LEFT,
+  SHAPE_RIGHT,
+  SHAPE_DUAL,
+  SHAPE_NONE,
+  SHAPE_CAUSING,
+};
+
+typedef struct {
+  ucschar codepoint;
+  uchar type;
+  ucschar isolated;
+} arabic_shape_entry;
+
+static const arabic_shape_entry arabic_shapes[] = {
+    {0x0621, SHAPE_NONE, 0xFE80}, {0x0622, SHAPE_RIGHT, 0xFE81}, {0x0623, SHAPE_RIGHT, 0xFE83},
+    {0x0624, SHAPE_RIGHT, 0xFE85}, {0x0625, SHAPE_RIGHT, 0xFE87}, {0x0626, SHAPE_DUAL, 0xFE89},
+    {0x0627, SHAPE_RIGHT, 0xFE8D}, {0x0628, SHAPE_DUAL, 0xFE8F},  {0x0629, SHAPE_RIGHT, 0xFE93},
+    {0x062A, SHAPE_DUAL, 0xFE95},  {0x062B, SHAPE_DUAL, 0xFE99},  {0x062C, SHAPE_DUAL, 0xFE9D},
+    {0x062D, SHAPE_DUAL, 0xFEA1},  {0x062E, SHAPE_DUAL, 0xFEA5},  {0x062F, SHAPE_RIGHT, 0xFEA9},
+    {0x0630, SHAPE_RIGHT, 0xFEAB}, {0x0631, SHAPE_RIGHT, 0xFEAD}, {0x0632, SHAPE_RIGHT, 0xFEAF},
+    {0x0633, SHAPE_DUAL, 0xFEB1},  {0x0634, SHAPE_DUAL, 0xFEB5},  {0x0635, SHAPE_DUAL, 0xFEB9},
+    {0x0636, SHAPE_DUAL, 0xFEBD},  {0x0637, SHAPE_DUAL, 0xFEC1},  {0x0638, SHAPE_DUAL, 0xFEC5},
+    {0x0639, SHAPE_DUAL, 0xFEC9},  {0x063A, SHAPE_DUAL, 0xFECD},  {0x0640, SHAPE_CAUSING, 0x0000},
+    {0x0641, SHAPE_DUAL, 0xFED1},  {0x0642, SHAPE_DUAL, 0xFED5},  {0x0643, SHAPE_DUAL, 0xFED9},
+    {0x0644, SHAPE_DUAL, 0xFEDD},  {0x0645, SHAPE_DUAL, 0xFEE1},  {0x0646, SHAPE_DUAL, 0xFEE5},
+    {0x0647, SHAPE_DUAL, 0xFEE9},  {0x0648, SHAPE_RIGHT, 0xFEED}, {0x0649, SHAPE_RIGHT, 0xFEEF},
+    {0x064A, SHAPE_DUAL, 0xFEF1},  {0x0671, SHAPE_RIGHT, 0xFB50},
+};
+
+static const arabic_shape_entry* find_arabic_shape(ucschar c) {
+  int lo = 0;
+  int hi = lengthof(arabic_shapes) - 1;
+  while (lo <= hi) {
+    const int mid = lo + (hi - lo) / 2;
+    if (arabic_shapes[mid].codepoint == c) return &arabic_shapes[mid];
+    if (c < arabic_shapes[mid].codepoint)
+      hi = mid - 1;
+    else
+      lo = mid + 1;
+  }
+  return NULL;
+}
+
+static inline uchar arabic_shape_type(ucschar c) {
+  const arabic_shape_entry* entry = find_arabic_shape(c);
+  return entry ? entry->type : SHAPE_NONE;
+}
+
+static inline ucschar arabic_isolated_form(ucschar c) {
+  const arabic_shape_entry* entry = find_arabic_shape(c);
+  return entry ? entry->isolated : c;
+}
+
+static inline bool is_arabic_transparent(ucschar c) { return bidi_class(c) == NSM; }
+
+static inline bool can_join_left(uchar type) {
+  return type == SHAPE_RIGHT || type == SHAPE_DUAL || type == SHAPE_CAUSING;
+}
+
+static inline bool can_join_right(uchar type) {
+  return type == SHAPE_LEFT || type == SHAPE_DUAL || type == SHAPE_CAUSING;
+}
+
+static bool has_joining_left_neighbor(const bidi_char* line, int index) {
+  for (int i = index - 1; i >= 0; i--) {
+    const ucschar cp = line[i].wc;
+    if (cp == 0x200C) return false;
+    if (cp == 0x200D || cp == 0 || is_arabic_transparent(cp)) continue;
+    return can_join_right(arabic_shape_type(cp));
+  }
+  return false;
+}
+
+static bool has_joining_right_neighbor(const bidi_char* line, int index, int count) {
+  for (int i = index + 1; i < count; i++) {
+    const ucschar cp = line[i].wc;
+    if (cp == 0x200C) return false;
+    if (cp == 0x200D || cp == 0 || is_arabic_transparent(cp)) continue;
+    return can_join_left(arabic_shape_type(cp));
+  }
+  return false;
+}
+
+static inline ucschar arabic_final_form(ucschar isolated) { return isolated + 1; }
+static inline ucschar arabic_initial_form(ucschar isolated) { return isolated + 2; }
+static inline ucschar arabic_medial_form(ucschar isolated) { return isolated + 3; }
+
+/* ═══════════════════════════════════════════════════════════════════════
  * Unified bracket + mirror table (bidi_pairs.t)
  *
  * Replaces both brackets.t and mirroring.t.  canonical.t is dropped.
@@ -125,6 +217,53 @@ static ucschar bracket(ucschar c) {
 ucschar mirror(ucschar c) {
   const bidi_pair* p = find_pair(c);
   return p ? p->to : c;
+}
+
+int do_shape(const bidi_char* line, bidi_char* to, int count) {
+  if (!line || !to || count <= 0) return 0;
+
+  for (int i = 0; i < count; i++) {
+    to[i] = line[i];
+    const ucschar cp = line[i].wc;
+    const uchar shapeType = arabic_shape_type(cp);
+
+    if (shapeType == SHAPE_NONE || shapeType == SHAPE_CAUSING) continue;
+
+    const bool joinsLeft = has_joining_left_neighbor(line, i) && can_join_left(shapeType);
+    const bool joinsRight = has_joining_right_neighbor(line, i, count) && can_join_right(shapeType);
+
+    if ((cp == 0x0622 || cp == 0x0623 || cp == 0x0625 || cp == 0x0627) && i > 0) {
+      const ucschar prev = line[i - 1].wc;
+      if (prev == 0x0644) {
+        const bool ligatureJoinsLeft =
+            has_joining_left_neighbor(line, i - 1) && can_join_left(arabic_shape_type(prev));
+
+        if (cp == 0x0622)
+          to[i].wc = ligatureJoinsLeft ? 0xFEF6 : 0xFEF5;
+        else if (cp == 0x0623)
+          to[i].wc = ligatureJoinsLeft ? 0xFEF8 : 0xFEF7;
+        else if (cp == 0x0625)
+          to[i].wc = ligatureJoinsLeft ? 0xFEFA : 0xFEF9;
+        else
+          to[i].wc = ligatureJoinsLeft ? 0xFEFC : 0xFEFB;
+
+        to[i - 1].wc = 0;
+        continue;
+      }
+    }
+
+    const ucschar isolated = arabic_isolated_form(cp);
+    if (joinsLeft && joinsRight && shapeType == SHAPE_DUAL)
+      to[i].wc = arabic_medial_form(isolated);
+    else if (joinsLeft)
+      to[i].wc = arabic_final_form(isolated);
+    else if (joinsRight && shapeType == SHAPE_DUAL)
+      to[i].wc = arabic_initial_form(isolated);
+    else
+      to[i].wc = isolated;
+  }
+
+  return 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
