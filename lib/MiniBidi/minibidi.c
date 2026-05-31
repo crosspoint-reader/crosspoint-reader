@@ -93,7 +93,7 @@ typedef struct {
 } arabic_shape_entry;
 
 static const arabic_shape_entry arabic_shapes[] = {
-    {0x0621, SHAPE_NONE, 0xFE80}, {0x0622, SHAPE_RIGHT, 0xFE81}, {0x0623, SHAPE_RIGHT, 0xFE83},
+  {0x0621, SHAPE_NONE, 0xFE80},  {0x0622, SHAPE_RIGHT, 0xFE81}, {0x0623, SHAPE_RIGHT, 0xFE83},
     {0x0624, SHAPE_RIGHT, 0xFE85}, {0x0625, SHAPE_RIGHT, 0xFE87}, {0x0626, SHAPE_DUAL, 0xFE89},
     {0x0627, SHAPE_RIGHT, 0xFE8D}, {0x0628, SHAPE_DUAL, 0xFE8F},  {0x0629, SHAPE_RIGHT, 0xFE93},
     {0x062A, SHAPE_DUAL, 0xFE95},  {0x062B, SHAPE_DUAL, 0xFE99},  {0x062C, SHAPE_DUAL, 0xFE9D},
@@ -235,8 +235,7 @@ int do_shape(const bidi_char* line, bidi_char* to, int count) {
     if ((cp == 0x0622 || cp == 0x0623 || cp == 0x0625 || cp == 0x0627) && i > 0) {
       const ucschar prev = line[i - 1].wc;
       if (prev == 0x0644) {
-        const bool ligatureJoinsLeft =
-            has_joining_left_neighbor(line, i - 1) && can_join_left(arabic_shape_type(prev));
+        const bool ligatureJoinsLeft = has_joining_left_neighbor(line, i - 1) && can_join_left(arabic_shape_type(prev));
 
         if (cp == 0x0622)
           to[i].wc = ligatureJoinsLeft ? 0xFEF6 : 0xFEF5;
