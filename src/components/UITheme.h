@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "CrossPointSettings.h"
+#include "components/themes/SdCardThemeRegistry.h"
 #include "components/themes/BaseTheme.h"
 
 class UITheme {
@@ -18,6 +19,8 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() const { return *currentMetrics; }
   const BaseTheme& getTheme() const { return *currentTheme; }
+  SdCardThemeRegistry& registry() { return themeRegistry; }
+  void refreshRegistry();
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
@@ -34,6 +37,7 @@ class UITheme {
  private:
   const ThemeMetrics* currentMetrics;
   std::unique_ptr<BaseTheme> currentTheme;
+  SdCardThemeRegistry themeRegistry;
 };
 
 // Helper macro to access current theme

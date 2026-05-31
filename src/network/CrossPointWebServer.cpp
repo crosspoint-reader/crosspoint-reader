@@ -15,8 +15,10 @@
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
+#include "SilentRestart.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include "components/UITheme.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -1106,7 +1108,8 @@ void CrossPointWebServer::handleGetSettings() const {
   // Pass the SD font registry so the fontFamily setting's enumStringValues
   // includes SD-resident families — otherwise the web API only exposes the
   // three built-in fonts.
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
+  UITheme::getInstance().refreshRegistry();
+  const auto& settings = getSettingsList(&sdFontSystem.registry(), &UITheme::getInstance().registry());
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1208,8 +1211,10 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
+  UITheme::getInstance().refreshRegistry();
+  const auto& settings = getSettingsList(&sdFontSystem.registry(), &UITheme::getInstance().registry());
   int applied = 0;
+  bool themeChanged = false;
 
   for (const auto& s : settings) {
     if (!s.key) continue;
@@ -1233,6 +1238,9 @@ void CrossPointWebServer::handlePostSettings() {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
           } else if (s.valueSetter) {
             s.valueSetter(static_cast<uint8_t>(val));
+          }
+          if (strcmp(s.key, "uiTheme") == 0) {
+            themeChanged = true;
           }
           applied++;
         }
@@ -1268,6 +1276,12 @@ void CrossPointWebServer::handlePostSettings() {
   SETTINGS.saveToFile();
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
+  if (themeChanged) {
+    server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s); restarting");
+    delay(100);
+    silentRestart();
+    return;
+  }
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
 }
 

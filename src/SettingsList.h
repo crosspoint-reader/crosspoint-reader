@@ -13,12 +13,13 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
+#include "components/themes/SdCardThemeRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
 inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   // Built-in font labels (StrId)
-  std::vector<StrId> enumValues = {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC};
+  std::vector<StrId> enumValues = {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
   // Runtime string labels for SD card fonts
   std::vector<std::string> enumStringValues;
 
@@ -41,7 +42,6 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   if (sdFontCount > 0) {
     allStringValues.push_back(I18N.get(StrId::STR_NOTO_SERIF));
     allStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
-    allStringValues.push_back(I18N.get(StrId::STR_OPEN_DYSLEXIC));
     allStringValues.insert(allStringValues.end(), enumStringValues.begin(), enumStringValues.end());
   }
 
@@ -91,6 +91,57 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
+// Build the UI theme setting dynamically. Lyra is the only built-in base theme;
+// SD card themes are appended after it.
+inline SettingInfo buildUiThemeSetting(const SdCardThemeRegistry* registry) {
+  std::vector<std::string> allStringValues;
+  allStringValues.push_back(I18N.get(StrId::STR_THEME_LYRA));
+
+  std::vector<std::string> sdThemeIds;
+  if (registry) {
+    const auto& themes = registry->getThemes();
+    sdThemeIds.reserve(themes.size());
+    for (const auto& theme : themes) {
+      allStringValues.push_back(theme.name);
+      sdThemeIds.push_back(theme.id);
+    }
+  }
+
+  SettingInfo s;
+  s.nameId = StrId::STR_UI_THEME;
+  s.type = SettingType::ENUM;
+  s.enumStringValues = std::move(allStringValues);
+  s.key = "uiTheme";
+  s.category = StrId::STR_CAT_DISPLAY;
+
+  s.valueGetter = [sdThemeIds]() -> uint8_t {
+    if (SETTINGS.sdThemeName[0] != '\0') {
+      for (int i = 0; i < static_cast<int>(sdThemeIds.size()); i++) {
+        if (sdThemeIds[i] == SETTINGS.sdThemeName) {
+          return static_cast<uint8_t>(1 + i);
+        }
+      }
+    }
+    return 0;
+  };
+
+  s.valueSetter = [sdThemeIds](uint8_t v) {
+    SETTINGS.uiTheme = CrossPointSettings::UI_THEME::LYRA;
+    if (v == 0) {
+      SETTINGS.sdThemeName[0] = '\0';
+      return;
+    }
+
+    const int sdIdx = v - 1;
+    if (sdIdx >= 0 && sdIdx < static_cast<int>(sdThemeIds.size())) {
+      strncpy(SETTINGS.sdThemeName, sdThemeIds[sdIdx].c_str(), sizeof(SETTINGS.sdThemeName) - 1);
+      SETTINGS.sdThemeName[sizeof(SETTINGS.sdThemeName) - 1] = '\0';
+    }
+  };
+
+  return s;
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -100,7 +151,8 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // SdCardFontRegistry is supplied AND has SD card fonts installed, the
 // font-family entry is replaced in a per-call copy with a registry-aware
 // version. Callers without SD fonts pay only a vector copy.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* fontRegistry = nullptr,
+                                                const SdCardThemeRegistry* themeRegistry = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v = {
         // --- Display ---
@@ -124,9 +176,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
             "refreshFrequency", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
+                          {StrId::STR_THEME_LYRA}, "uiTheme", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 
@@ -134,8 +184,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // Built-in font-family entry. Replaced per-call with a registry-aware
         // version when SD fonts are installed.
         SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                          {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS, StrId::STR_OPEN_DYSLEXIC}, "fontFamily",
-                          StrId::STR_CAT_READER),
+                          {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS}, "fontFamily", StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                           {StrId::STR_SMALL, StrId::STR_MEDIUM, StrId::STR_LARGE, StrId::STR_X_LARGE}, "fontSize",
                           StrId::STR_CAT_READER),
@@ -268,10 +317,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
-  if (registry && registry->getFamilyCount() > 0) {
+  {
+    auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_UI_THEME; });
+    if (it != v.end()) {
+      *it = buildUiThemeSetting(themeRegistry);
+    }
+  }
+  if (fontRegistry && fontRegistry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
-      *it = buildFontFamilySetting(registry);
+      *it = buildFontFamilySetting(fontRegistry);
     }
   }
   return v;

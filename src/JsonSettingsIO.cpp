@@ -144,9 +144,15 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["frontButtonRight"] = s.frontButtonRight;
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   doc["fontFamily"] = s.fontFamily;
+  // UI theme — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  doc["uiTheme"] = s.uiTheme;
   // SD card font family name — not in SettingsList, save manually
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
+  }
+  // SD card UI theme id/name — dynamic setting, save manually.
+  if (s.sdThemeName[0] != '\0') {
+    doc["sdThemeName"] = s.sdThemeName;
   }
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
@@ -244,11 +250,31 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   CrossPointSettings::validateFrontButtonMapping(s);
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
-  s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)0, CrossPointSettings::BUILTIN_FONT_COUNT, 0);
+  const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
+  s.fontFamily = clamp(storedFontFamily, CrossPointSettings::BUILTIN_FONT_COUNT, 0);
+  // UI theme — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  s.uiTheme = clamp(doc["uiTheme"] | (uint8_t)CrossPointSettings::LYRA, (uint8_t)CrossPointSettings::UI_THEME_COUNT,
+                    (uint8_t)CrossPointSettings::LYRA);
+  if (s.uiTheme == CrossPointSettings::CLASSIC) {
+    s.uiTheme = CrossPointSettings::LYRA;
+    if (needsResave) *needsResave = true;
+  }
   // SD card font family name — not in SettingsList, load manually
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
+  if (storedFontFamily == CrossPointSettings::LEGACY_OPENDYSLEXIC && s.sdFontFamilyName[0] == '\0') {
+    s.fontFamily = CrossPointSettings::NOTOSERIF;
+    strncpy(s.sdFontFamilyName, "OpenDyslexic", sizeof(s.sdFontFamilyName) - 1);
+    s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
+    if (needsResave) *needsResave = true;
+  } else if (storedFontFamily >= CrossPointSettings::BUILTIN_FONT_COUNT) {
+    if (needsResave) *needsResave = true;
+  }
+  // SD card UI theme id/name — not in SettingsList, load manually.
+  const char* stn = doc["sdThemeName"] | "";
+  strncpy(s.sdThemeName, stn, sizeof(s.sdThemeName) - 1);
+  s.sdThemeName[sizeof(s.sdThemeName) - 1] = '\0';
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
