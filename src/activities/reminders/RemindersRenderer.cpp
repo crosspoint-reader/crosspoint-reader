@@ -315,12 +315,12 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
       // prefixed with the weekday when it isn't today. Right: "Leave in"/"Starts
       // in" plus a D/H/M countdown to that same time.
       const bool hasTravel = it.is_calendar && it.travel_secs > 0;
-      const time_t displayTime = hasTravel ? it.start_epoch - it.travel_secs : it.start_epoch;
+      const time_t countdownTarget = hasTravel ? it.start_epoch - it.travel_secs : it.start_epoch;
       char leftLabel[48], rightLabel[40];
-      formatTimeWithDay(displayTime, now, clockValid, leftLabel, sizeof(leftLabel));
+      formatTimeWithDay(it.start_epoch, now, clockValid, leftLabel, sizeof(leftLabel));
       if (clockValid) {
         char cd[24];
-        formatCountdownVerbose(static_cast<long>(displayTime - now), cd, sizeof(cd));
+        formatCountdownVerbose(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
         snprintf(rightLabel, sizeof(rightLabel), "%s %s",
                  hasTravel ? tr(STR_REMINDERS_LEAVE_IN) : tr(STR_REMINDERS_STARTS_IN), cd);
       } else {
