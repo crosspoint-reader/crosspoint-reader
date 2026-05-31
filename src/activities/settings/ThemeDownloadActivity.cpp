@@ -8,6 +8,8 @@
 #include <WiFi.h>
 #include <esp_rom_crc.h>
 
+#include <cstring>
+
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -96,6 +98,11 @@ bool ThemeDownloadActivity::fetchAndParseManifest() {
   }
 
   baseUrl_ = doc["baseUrl"] | "";
+  static constexpr const char* HTTPS_THEME_ASSETS = "https://crosspointreader.com/themes/";
+  static constexpr const char* HTTP_THEME_ASSETS = "http://crosspointreader.com/themes/";
+  if (baseUrl_.rfind(HTTPS_THEME_ASSETS, 0) == 0) {
+    baseUrl_.replace(0, strlen(HTTPS_THEME_ASSETS), HTTP_THEME_ASSETS);
+  }
   themes_.clear();
   themeInstaller_.refreshRegistry();
 

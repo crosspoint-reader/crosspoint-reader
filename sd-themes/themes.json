@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "baseUrl": "https://crosspointreader.com/themes/",
+  "baseUrl": "http://crosspointreader.com/themes/",
   "themes": [
     {
       "id": "carousel",
