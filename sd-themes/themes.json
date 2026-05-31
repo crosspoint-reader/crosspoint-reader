@@ -3,18 +3,212 @@
   "baseUrl": "https://crosspointreader.com/themes/",
   "themes": [
     {
+      "id": "carousel",
+      "name": "Carousel",
+      "description": "CrossInk-style carousel layout packaged as an SD theme.",
+      "files": [
+        {
+          "path": "icons/book.bmp",
+          "url": "carousel/icons/book.bmp",
+          "size": 190,
+          "crc32": 939213591
+        },
+        {
+          "path": "icons/book24.bmp",
+          "url": "carousel/icons/book24.bmp",
+          "size": 158,
+          "crc32": 3136537167
+        },
+        {
+          "path": "icons/bookmark.bmp",
+          "url": "carousel/icons/bookmark.bmp",
+          "size": 190,
+          "crc32": 2193579127
+        },
+        {
+          "path": "icons/cover.bmp",
+          "url": "carousel/icons/cover.bmp",
+          "size": 190,
+          "crc32": 527217687
+        },
+        {
+          "path": "icons/file24.bmp",
+          "url": "carousel/icons/file24.bmp",
+          "size": 158,
+          "crc32": 3724316440
+        },
+        {
+          "path": "icons/folder.bmp",
+          "url": "carousel/icons/folder.bmp",
+          "size": 190,
+          "crc32": 1995830056
+        },
+        {
+          "path": "icons/folder24.bmp",
+          "url": "carousel/icons/folder24.bmp",
+          "size": 158,
+          "crc32": 2075004590
+        },
+        {
+          "path": "icons/hotspot.bmp",
+          "url": "carousel/icons/hotspot.bmp",
+          "size": 190,
+          "crc32": 2492053982
+        },
+        {
+          "path": "icons/image24.bmp",
+          "url": "carousel/icons/image24.bmp",
+          "size": 158,
+          "crc32": 3177206939
+        },
+        {
+          "path": "icons/library.bmp",
+          "url": "carousel/icons/library.bmp",
+          "size": 190,
+          "crc32": 3503215600
+        },
+        {
+          "path": "icons/recent.bmp",
+          "url": "carousel/icons/recent.bmp",
+          "size": 190,
+          "crc32": 4255700187
+        },
+        {
+          "path": "icons/settings2.bmp",
+          "url": "carousel/icons/settings2.bmp",
+          "size": 190,
+          "crc32": 1928866383
+        },
+        {
+          "path": "icons/text24.bmp",
+          "url": "carousel/icons/text24.bmp",
+          "size": 158,
+          "crc32": 1855532546
+        },
+        {
+          "path": "icons/transfer.bmp",
+          "url": "carousel/icons/transfer.bmp",
+          "size": 190,
+          "crc32": 832893892
+        },
+        {
+          "path": "icons/wifi.bmp",
+          "url": "carousel/icons/wifi.bmp",
+          "size": 190,
+          "crc32": 715340950
+        },
+        {
+          "path": "theme.json",
+          "url": "carousel/theme.json",
+          "size": 2023,
+          "crc32": 3246899471
+        }
+      ],
+      "totalSize": 4713
+    },
+    {
       "id": "lyra-3-covers",
       "name": "Lyra 3 Covers",
       "description": "Lyra home layout with three recent cover slots.",
       "files": [
         {
+          "path": "icons/book.bmp",
+          "url": "lyra-3-covers/icons/book.bmp",
+          "size": 190,
+          "crc32": 939213591
+        },
+        {
+          "path": "icons/book24.bmp",
+          "url": "lyra-3-covers/icons/book24.bmp",
+          "size": 158,
+          "crc32": 3136537167
+        },
+        {
+          "path": "icons/bookmark.bmp",
+          "url": "lyra-3-covers/icons/bookmark.bmp",
+          "size": 190,
+          "crc32": 2193579127
+        },
+        {
+          "path": "icons/cover.bmp",
+          "url": "lyra-3-covers/icons/cover.bmp",
+          "size": 190,
+          "crc32": 527217687
+        },
+        {
+          "path": "icons/file24.bmp",
+          "url": "lyra-3-covers/icons/file24.bmp",
+          "size": 158,
+          "crc32": 3724316440
+        },
+        {
+          "path": "icons/folder.bmp",
+          "url": "lyra-3-covers/icons/folder.bmp",
+          "size": 190,
+          "crc32": 1995830056
+        },
+        {
+          "path": "icons/folder24.bmp",
+          "url": "lyra-3-covers/icons/folder24.bmp",
+          "size": 158,
+          "crc32": 2075004590
+        },
+        {
+          "path": "icons/hotspot.bmp",
+          "url": "lyra-3-covers/icons/hotspot.bmp",
+          "size": 190,
+          "crc32": 2492053982
+        },
+        {
+          "path": "icons/image24.bmp",
+          "url": "lyra-3-covers/icons/image24.bmp",
+          "size": 158,
+          "crc32": 3177206939
+        },
+        {
+          "path": "icons/library.bmp",
+          "url": "lyra-3-covers/icons/library.bmp",
+          "size": 190,
+          "crc32": 3503215600
+        },
+        {
+          "path": "icons/recent.bmp",
+          "url": "lyra-3-covers/icons/recent.bmp",
+          "size": 190,
+          "crc32": 4255700187
+        },
+        {
+          "path": "icons/settings2.bmp",
+          "url": "lyra-3-covers/icons/settings2.bmp",
+          "size": 190,
+          "crc32": 1928866383
+        },
+        {
+          "path": "icons/text24.bmp",
+          "url": "lyra-3-covers/icons/text24.bmp",
+          "size": 158,
+          "crc32": 1855532546
+        },
+        {
+          "path": "icons/transfer.bmp",
+          "url": "lyra-3-covers/icons/transfer.bmp",
+          "size": 190,
+          "crc32": 832893892
+        },
+        {
+          "path": "icons/wifi.bmp",
+          "url": "lyra-3-covers/icons/wifi.bmp",
+          "size": 190,
+          "crc32": 715340950
+        },
+        {
           "path": "theme.json",
           "url": "lyra-3-covers/theme.json",
-          "size": 618,
-          "crc32": 424524836
+          "size": 1210,
+          "crc32": 1452288321
         }
       ],
-      "totalSize": 618
+      "totalSize": 3900
     },
     {
       "id": "roundedraff",
@@ -22,13 +216,103 @@
       "description": "RoundedRaff layout packaged as an SD theme.",
       "files": [
         {
+          "path": "icons/book.bmp",
+          "url": "roundedraff/icons/book.bmp",
+          "size": 190,
+          "crc32": 939213591
+        },
+        {
+          "path": "icons/book24.bmp",
+          "url": "roundedraff/icons/book24.bmp",
+          "size": 158,
+          "crc32": 3136537167
+        },
+        {
+          "path": "icons/bookmark.bmp",
+          "url": "roundedraff/icons/bookmark.bmp",
+          "size": 190,
+          "crc32": 2193579127
+        },
+        {
+          "path": "icons/cover.bmp",
+          "url": "roundedraff/icons/cover.bmp",
+          "size": 190,
+          "crc32": 527217687
+        },
+        {
+          "path": "icons/file24.bmp",
+          "url": "roundedraff/icons/file24.bmp",
+          "size": 158,
+          "crc32": 3724316440
+        },
+        {
+          "path": "icons/folder.bmp",
+          "url": "roundedraff/icons/folder.bmp",
+          "size": 190,
+          "crc32": 1995830056
+        },
+        {
+          "path": "icons/folder24.bmp",
+          "url": "roundedraff/icons/folder24.bmp",
+          "size": 158,
+          "crc32": 2075004590
+        },
+        {
+          "path": "icons/hotspot.bmp",
+          "url": "roundedraff/icons/hotspot.bmp",
+          "size": 190,
+          "crc32": 2492053982
+        },
+        {
+          "path": "icons/image24.bmp",
+          "url": "roundedraff/icons/image24.bmp",
+          "size": 158,
+          "crc32": 3177206939
+        },
+        {
+          "path": "icons/library.bmp",
+          "url": "roundedraff/icons/library.bmp",
+          "size": 190,
+          "crc32": 3503215600
+        },
+        {
+          "path": "icons/recent.bmp",
+          "url": "roundedraff/icons/recent.bmp",
+          "size": 190,
+          "crc32": 4255700187
+        },
+        {
+          "path": "icons/settings2.bmp",
+          "url": "roundedraff/icons/settings2.bmp",
+          "size": 190,
+          "crc32": 1928866383
+        },
+        {
+          "path": "icons/text24.bmp",
+          "url": "roundedraff/icons/text24.bmp",
+          "size": 158,
+          "crc32": 1855532546
+        },
+        {
+          "path": "icons/transfer.bmp",
+          "url": "roundedraff/icons/transfer.bmp",
+          "size": 190,
+          "crc32": 832893892
+        },
+        {
+          "path": "icons/wifi.bmp",
+          "url": "roundedraff/icons/wifi.bmp",
+          "size": 190,
+          "crc32": 715340950
+        },
+        {
           "path": "theme.json",
           "url": "roundedraff/theme.json",
-          "size": 609,
-          "crc32": 3057095417
+          "size": 1201,
+          "crc32": 3566180373
         }
       ],
-      "totalSize": 609
+      "totalSize": 3891
     }
   ]
 }

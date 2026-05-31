@@ -1,13 +1,41 @@
 {
   "schema": 1,
-  "id": "roundedraff",
-  "name": "RoundedRaff",
-  "description": "RoundedRaff layout packaged as an SD theme.",
+  "id": "carousel",
+  "name": "Carousel",
+  "description": "CrossInk-style carousel layout packaged as an SD theme.",
   "inherits": "lyra",
+  "requires": {
+    "crosspoint": {
+      "schema": 1,
+      "modules": ["carousel"]
+    }
+  },
   "components": {
     "homeRecents": {
-      "module": "lyra",
-      "layout": "roundedraff"
+      "module": "carousel",
+      "centerCover": {
+        "maxWidth": 340,
+        "maxHeight": 540,
+        "visualInset": 10,
+        "cornerRadius": 6,
+        "selectionLineWidth": 3
+      },
+      "sideCovers": {
+        "enabled": true,
+        "nearWidthPercent": 26,
+        "farWidthPercent": 21,
+        "perspective": true
+      },
+      "title": {
+        "font": "ui12",
+        "style": "bold",
+        "maxLines": 2
+      },
+      "indicators": {
+        "type": "dots",
+        "size": 8,
+        "gap": 6
+      }
     }
   },
   "assets": {
@@ -36,6 +64,14 @@
         "screenHeight": 800,
         "frontButtons": 4,
         "sideButtons": "up-down"
+      },
+      "components": {
+        "homeRecents": {
+          "centerCover": {
+            "maxWidth": 320,
+            "maxHeight": 500
+          }
+        }
       }
     },
     "x4": {
@@ -45,6 +81,11 @@
         "frontButtons": 0,
         "sideButtons": "up-down"
       }
+    }
+  },
+  "extensions": {
+    "crossink": {
+      "readingStatsFooter": true
     }
   }
 }

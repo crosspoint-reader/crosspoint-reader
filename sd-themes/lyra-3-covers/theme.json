@@ -10,6 +10,25 @@
       "layout": "three-covers"
     }
   },
+  "assets": {
+    "icons": {
+      "book": "icons/book.bmp",
+      "book24": "icons/book24.bmp",
+      "bookmark": "icons/bookmark.bmp",
+      "cover": "icons/cover.bmp",
+      "file24": "icons/file24.bmp",
+      "folder": "icons/folder.bmp",
+      "folder24": "icons/folder24.bmp",
+      "hotspot": "icons/hotspot.bmp",
+      "image24": "icons/image24.bmp",
+      "library": "icons/library.bmp",
+      "recent": "icons/recent.bmp",
+      "settings": "icons/settings2.bmp",
+      "text24": "icons/text24.bmp",
+      "transfer": "icons/transfer.bmp",
+      "wifi": "icons/wifi.bmp"
+    }
+  },
   "devices": {
     "x3": {
       "constraints": {
