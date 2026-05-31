@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <esp_task_wdt.h>
 
+#include "SettingsList.h"
 #include "util/BookCacheUtils.h"
 
 namespace {
@@ -228,7 +229,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       String fileName(name);
 
       // Skip hidden/protected items
-      bool shouldHide = fileName.startsWith(".");
+      bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
       if (!shouldHide) {
         for (const auto* item : HIDDEN_ITEMS) {
           if (fileName.equals(item)) {
