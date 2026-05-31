@@ -9,17 +9,6 @@ NOTOSERIF_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
 OPENDYSLEXIC_FONT_SIZES=(8 10 12 14)
 
-reader_fallback_weight() {
-  case "$1" in
-    Bold|BoldItalic)
-      echo "Bold"
-      ;;
-    *)
-      echo "Regular"
-      ;;
-  esac
-}
-
 for size in ${NOTOSERIF_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="notoserif_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
@@ -35,19 +24,7 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    if [[ "$style" == "Regular" || "$style" == "Bold" ]]; then
-      fallback_weight=$(reader_fallback_weight "$style")
-      python fontconvert.py $font_name $size $font_path \
-        ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${fallback_weight}.ttf \
-        ../builtinFonts/source/NotoSansArabic/NotoSansArabic-${fallback_weight}.ttf \
-        --additional-intervals 0x05D0,0x05EA \
-        --additional-intervals 0x0600,0x06FF \
-        --additional-intervals 0xFB50,0xFB50 \
-        --additional-intervals 0xFE70,0xFEFC \
-        --2bit --compress --pnum > $output_path
-    else
-      python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
-    fi
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
     echo "Generated $output_path"
   done
 done
