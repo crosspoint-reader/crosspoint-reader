@@ -152,14 +152,19 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 #include <HalStorage.h>
 
 // Use Storage singleton (defined via macro)
-FsFile file;
+HalFile file;
 if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
   // Read from file
   // No file.close() needed — DESTRUCTOR_CLOSES_FILE=1 handles it at scope exit
 }
 ```
 
-**Usage**: See example above. Uses `FsFile` (SdFat), NOT Arduino `File`. Do NOT add `file.close()` for local variables (see DESTRUCTOR_CLOSES_FILE above).
+**Usage**: Use `HalFile` (the mutex-wrapping handle), NOT raw SdFat `FsFile` or Arduino `File`. Do NOT add `file.close()` for local variables (see DESTRUCTOR_CLOSES_FILE above).
+
+**SdFat is not thread-safe; all SD access MUST go through HalStorage**:
+- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert (`tasks.c:5156, pxTCB == pxCurrentTCBs[0]`) and panics the system. See SdFat issue #518.
+- `HalStorage` serializes everything via `storageMutex`. Downstream code uses `HalFile` (declared in `<HalStorage.h>`); every method call (read, write, seek, close) takes the mutex. `HalFile`'s destructor also takes the mutex before letting the underlying SdFat `FsFile` close.
+- **Never** call into `SdFat` / `SdSpiCard` / `FsBaseFile` / `SDCardManager` / raw `FsFile` directly — that bypasses the mutex.
 
 ---
 
@@ -893,7 +898,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 
 **Current Versions** (as of docs/file-formats.md):
 - `book.bin`: **Version 5** (metadata structure)
-- `section.bin`: **Version 12** (layout structure)
+- `section.bin`: **Version 24** (layout structure)
 
 **Version Increment Rules**:
 1. **ALWAYS increment version** BEFORE changing binary structure
@@ -903,7 +908,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Example** (incrementing section format version):
 ```cpp
 // lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 13;  // Was 12, now 13
+static constexpr uint8_t SECTION_FILE_VERSION = 25;  // Was 24, now 25
 
 // Add new field to structure
 struct PageLine {

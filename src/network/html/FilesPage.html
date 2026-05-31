@@ -735,6 +735,10 @@
       border-color: #9b59b6;
       background: rgba(155, 89, 182, 0.1);
     }
+    .image-item.crop-preview {
+      border-color: #16a085;
+      background: rgba(22, 160, 133, 0.1);
+    }
     .image-item.cover-locked {
       border-color: #e67e22;
       background: rgba(230, 126, 34, 0.1);
@@ -789,6 +793,9 @@
     }
     .state-3 .image-state-badge {
       background: #9b59b6;
+    }
+    .crop-preview .image-state-badge {
+      background: #16a085;
     }
     /* Preview Overlay (shown on hover) */
     .image-preview-overlay {
@@ -1574,6 +1581,19 @@
             </div>
           </div>
           -->
+          <!-- Auto-crop Margins -->
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">✂ Auto-crop Margins</div>
+              <div class="setting-desc">Trim uniform borders and scale image content to fit</div>
+            </div>
+            <div class="setting-controls">
+              <label class="toggle-switch">
+                <input type="checkbox" id="autoCropToggle" onchange="updateQualitySettings()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
           <!-- Target Device -->
           <div class="advanced-setting-row" id="deviceSettingRow">
             <div class="setting-title">📱 Target Device</div>
@@ -2039,6 +2059,7 @@
     // Clear image picker cache and reset layout
     epubImagesCache = [];
     imageStates = {};
+    autoCropProtectedPaths = new Set();
     document.getElementById('imagePickerSection').style.display = 'none';
     const imageGrid = document.getElementById('imageGrid');
     if (imageGrid) imageGrid.innerHTML = '';
@@ -2058,6 +2079,8 @@
     // Reset to defaults
     document.getElementById('qualitySlider').value = 85;
     document.getElementById('qualityInput').value = 85;
+    const autoCropToggle = document.getElementById('autoCropToggle');
+    if (autoCropToggle) autoCropToggle.checked = false;
     setHandedness('right');
     setOverlap(5);
     // Update converter variables
@@ -2147,9 +2170,7 @@
 
   function updateQualitySettings() {
     const quality = document.getElementById('qualitySlider').value;
-    // Check if grayscaleToggle exists (may be hidden for compatibility with other devices)
-    const grayscaleToggle = document.getElementById('grayscaleToggle');
-    const grayscale = grayscaleToggle ? grayscaleToggle.checked : true; // Default to true for e-ink
+    const autoCropToggle = document.getElementById('autoCropToggle');
 
     // Update displays (if element exists)
     const qualityDisplay = document.getElementById('qualityDisplaySimple');
@@ -2160,6 +2181,10 @@
     // Update converter variables (used by processImage and applyGrayscale)
     JPEG_QUALITY = parseInt(quality, 10);
     ENABLE_GRAYSCALE = true; // Always grayscale for e-ink
+    ENABLE_AUTO_CROP = autoCropToggle ? autoCropToggle.checked : false;
+    if (isImagePickerVisible()) {
+      renderImageGrid();
+    }
   }
 
   function setHandedness(value) {
@@ -2169,7 +2194,7 @@
     document.getElementById('rotationCCW').classList.remove('active');
     document.getElementById(value === 'right' ? 'rotationCW' : 'rotationCCW').classList.add('active');
     // Re-render grid to update rotation arrows
-    if (document.getElementById('imagePickerSection').style.display !== 'none') {
+    if (isImagePickerVisible()) {
       renderImageGrid();
     }
   }
@@ -2180,6 +2205,47 @@
     document.querySelectorAll('.overlap-btn').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.value) === value);
     });
+  }
+
+  function isImagePickerVisible() {
+    const pickerSection = document.getElementById('imagePickerSection');
+    return pickerSection && pickerSection.style.display !== 'none';
+  }
+
+  function loadPreviewImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Preview image load failed'));
+      img.src = dataUrl;
+    });
+  }
+
+  async function createAutoCropPreview(dataUrl, imagePath, width, height) {
+    const img = await loadPreviewImage(dataUrl);
+    const cropped = createAutoCroppedCanvas(img, imagePath, width, height, true);
+    if (!cropped.crop) return null;
+
+    const maxPreviewW = 220;
+    const maxPreviewH = 160;
+    const scale = Math.min(maxPreviewW / cropped.width, maxPreviewH / cropped.height, 1);
+    const previewW = Math.max(1, Math.round(cropped.width * scale));
+    const previewH = Math.max(1, Math.round(cropped.height * scale));
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.width = previewW;
+    previewCanvas.height = previewH;
+    const previewCtx = previewCanvas.getContext('2d');
+    previewCtx.imageSmoothingEnabled = true;
+    previewCtx.imageSmoothingQuality = 'high';
+    previewCtx.fillStyle = '#FFF';
+    previewCtx.fillRect(0, 0, previewW, previewH);
+    previewCtx.drawImage(cropped.canvas, 0, 0, previewW, previewH);
+
+    return {
+      dataUrl: previewCanvas.toDataURL('image/jpeg', 0.82),
+      width: cropped.width,
+      height: cropped.height
+    };
   }
 
   // ============================================================================
@@ -2385,6 +2451,15 @@
       
       // Tiny images (<200x200) are locked like separators
       const isTiny = (dims.width < 200 && dims.height < 200);
+      const isLockedImage = isCover || isSeparator || isTiny;
+      let autoCropPreview = null;
+      if (!isLockedImage) {
+        try {
+          autoCropPreview = await createAutoCropPreview(dataUrl, path, dims.width, dims.height);
+        } catch (e) {
+          console.warn('Auto-crop preview failed for', path, e);
+        }
+      }
       
       // Images that fit screen can only rotate, not split
       const fitsScreen = (dims.width <= MAX_WIDTH && dims.height <= MAX_HEIGHT);
@@ -2399,6 +2474,7 @@
         path: path,
         name: filename,
         dataUrl: dataUrl,
+        autoCropPreview: autoCropPreview,
         width: dims.width,
         height: dims.height,
         isCover: isCover,
@@ -2536,12 +2612,18 @@
     // Reset state
     imageStates = {};
     epubImagesCache = [];
+    autoCropProtectedPaths = new Set();
     pendingConversionFile = file;
 
     // Extract images
     try {
       const images = await extractImagesForPreview(file);
       epubImagesCache = images;
+      autoCropProtectedPaths = new Set(
+        images
+          .filter(img => img.isCover || img.isSeparator)
+          .map(img => img.path)
+      );
 
       // Initialize all states to 0 (Normal)
       images.forEach(img => {
@@ -2661,16 +2743,19 @@
         // Build tooltip
         const stateText = stateLabels[state] || 'Normal';
         const partsText = numParts > 1 ? ` (${numParts} parts)` : '';
+        const showCropPreview = ENABLE_AUTO_CROP && img.autoCropPreview;
+        const previewSrc = showCropPreview ? img.autoCropPreview.dataUrl : img.dataUrl;
+        const cropText = showCropPreview ? ` | Auto-crop: ${img.autoCropPreview.width}×${img.autoCropPreview.height}` : '';
         
-        item.className = `image-item ${stateClasses[state]} ${rotateClass}`.trim();
+        item.className = `image-item ${stateClasses[state]} ${rotateClass} ${showCropPreview ? 'crop-preview' : ''}`.trim();
         item.onclick = () => cycleImageState(img.path);
-        item.title = `${img.width}×${img.height} - ${stateText}${partsText}`;
+        item.title = `${img.width}×${img.height} - ${stateText}${partsText}${cropText}`;
         item.innerHTML = `
-          <span class="image-state-badge">${stateLabels[state] || '•'}</span>
+          <span class="image-state-badge">${showCropPreview ? '✂' : (stateLabels[state] || '•')}</span>
           <div class="image-preview-overlay">
             ${splitLinesHtml}
           </div>
-          <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
+          <img src="${previewSrc}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
       }
@@ -2909,6 +2994,7 @@
   function clearImagePicker() {
     epubImagesCache = [];
     imageStates = {};
+    autoCropProtectedPaths = new Set();
     const imageGrid = document.getElementById('imageGrid');
     if (imageGrid) imageGrid.innerHTML = '';
     const pickerSection = document.getElementById('imagePickerSection');
@@ -3017,6 +3103,16 @@ const DEFAULT_MAX_WIDTH = DEVICE_PROFILES[DEFAULT_DEVICE].width;
 const DEFAULT_MAX_HEIGHT = DEVICE_PROFILES[DEFAULT_DEVICE].height;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
+const DEFAULT_ENABLE_AUTO_CROP = false;
+// Auto-crop is opt-in because sparse title/logo pages can be zoomed aggressively.
+const CROP_WHITE_THRESHOLD = 245;
+const CROP_BACKGROUND_TOLERANCE = 28;
+const CROP_BACKGROUND_MAX_SPREAD = 24;
+const CROP_EDGE_SAMPLE_SIZE = 12;
+const CROP_PADDING_PX = 8;
+const MIN_CROP_SAVINGS_RATIO = 0.08;
+const MIN_COLOR_CROP_SAVINGS_RATIO = 0.20;
+const MIN_CROP_DIMENSION = 240;
 // Note: Overlap is now always centered distribution (min 5%)
 
 // Dynamic conversion settings (updated by UI)
@@ -3027,6 +3123,7 @@ let MAX_WIDTH = DEFAULT_MAX_WIDTH;
 let MAX_HEIGHT = DEFAULT_MAX_HEIGHT;
 let JPEG_QUALITY = DEFAULT_JPEG_QUALITY;
 let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
+let ENABLE_AUTO_CROP = DEFAULT_ENABLE_AUTO_CROP;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
 let OVERLAP_PERCENT = 5; // Minimum overlap percentage for splits (5%, 10%, 15%)
 
@@ -3036,6 +3133,7 @@ let OVERLAP_PERCENT = 5; // Minimum overlap percentage for splits (5%, 10%, 15%)
 
 let imageStates = {};        // Map: imagePath -> state (0=Normal, 1=H-Split, 2=V-Split, 3=Rotate)
 let epubImagesCache = [];    // Cache of extracted images for preview
+let autoCropProtectedPaths = new Set(); // Picker-locked covers/separators should never be auto-cropped
 let pendingConversionFile = null;  // File awaiting conversion after image selection
 
 // ============================================================================
@@ -3921,6 +4019,161 @@ function applyGrayscale(ctx, width, height) {
   ctx.putImageData(imageData, 0, 0);
 }
 
+function shouldSkipAutoCrop(imagePath, width, height, ignoreToggle = false) {
+  if (!ignoreToggle && !ENABLE_AUTO_CROP) return true;
+  if (autoCropProtectedPaths.has(imagePath)) return true;
+  if (width < MIN_CROP_DIMENSION || height < MIN_CROP_DIMENSION) return true;
+  return /(^|\/)(cover|thumbnail|thumb|icon)[^/]*\.(jpe?g|png|gif|webp|bmp)$/i.test(imagePath || '');
+}
+
+function blendedPixel(data, i) {
+  const alpha = data[i + 3] / 255;
+  return {
+    r: data[i] * alpha + 255 * (1 - alpha),
+    g: data[i + 1] * alpha + 255 * (1 - alpha),
+    b: data[i + 2] * alpha + 255 * (1 - alpha)
+  };
+}
+
+function estimateCropBackground(data, width, height) {
+  const sampleSize = Math.min(CROP_EDGE_SAMPLE_SIZE, Math.floor(width / 8), Math.floor(height / 8));
+  if (sampleSize < 2) return null;
+
+  // Use corners plus edge midpoints so colored margins work without trimming full-bleed art.
+  const samples = [];
+  const points = [
+    [0, 0],
+    [width - sampleSize, 0],
+    [0, height - sampleSize],
+    [width - sampleSize, height - sampleSize],
+    [Math.floor((width - sampleSize) / 2), 0],
+    [Math.floor((width - sampleSize) / 2), height - sampleSize],
+    [0, Math.floor((height - sampleSize) / 2)],
+    [width - sampleSize, Math.floor((height - sampleSize) / 2)]
+  ];
+
+  for (const [startX, startY] of points) {
+    let r = 0, g = 0, b = 0, count = 0;
+    for (let y = startY; y < startY + sampleSize; y++) {
+      const row = y * width * 4;
+      for (let x = startX; x < startX + sampleSize; x++) {
+        const px = blendedPixel(data, row + x * 4);
+        r += px.r; g += px.g; b += px.b; count++;
+      }
+    }
+    samples.push({ r: r / count, g: g / count, b: b / count });
+  }
+
+  const avg = samples.reduce((sum, px) => ({
+    r: sum.r + px.r,
+    g: sum.g + px.g,
+    b: sum.b + px.b
+  }), { r: 0, g: 0, b: 0 });
+  avg.r /= samples.length;
+  avg.g /= samples.length;
+  avg.b /= samples.length;
+
+  const maxSpread = samples.reduce((spread, px) => Math.max(
+    spread,
+    Math.abs(px.r - avg.r),
+    Math.abs(px.g - avg.g),
+    Math.abs(px.b - avg.b)
+  ), 0);
+
+  if (maxSpread > CROP_BACKGROUND_MAX_SPREAD) return null;
+  return avg;
+}
+
+function isCropContentPixel(px, background) {
+  if (background) {
+    return Math.abs(px.r - background.r) > CROP_BACKGROUND_TOLERANCE ||
+           Math.abs(px.g - background.g) > CROP_BACKGROUND_TOLERANCE ||
+           Math.abs(px.b - background.b) > CROP_BACKGROUND_TOLERANCE;
+  }
+  return px.r < CROP_WHITE_THRESHOLD || px.g < CROP_WHITE_THRESHOLD || px.b < CROP_WHITE_THRESHOLD;
+}
+
+function isNearWhiteBackground(background) {
+  return background &&
+         background.r >= CROP_WHITE_THRESHOLD &&
+         background.g >= CROP_WHITE_THRESHOLD &&
+         background.b >= CROP_WHITE_THRESHOLD;
+}
+
+function findNonWhiteBounds(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const background = estimateCropBackground(data, width, height);
+  let left = width, top = height, right = -1, bottom = -1;
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4;
+    for (let x = 0; x < width; x++) {
+      const i = row + x * 4;
+      const px = blendedPixel(data, i);
+
+      if (isCropContentPixel(px, background)) {
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+      }
+    }
+  }
+
+  if (right < left || bottom < top) return null;
+
+  left = Math.max(0, left - CROP_PADDING_PX);
+  top = Math.max(0, top - CROP_PADDING_PX);
+  right = Math.min(width - 1, right + CROP_PADDING_PX);
+  bottom = Math.min(height - 1, bottom + CROP_PADDING_PX);
+
+  const cropW = right - left + 1;
+  const cropH = bottom - top + 1;
+  const savedRatio = 1 - ((cropW * cropH) / (width * height));
+  // Colored-background crops need a bigger win to avoid shaving illustrated pages.
+  const minSavedRatio = background && !isNearWhiteBackground(background)
+    ? MIN_COLOR_CROP_SAVINGS_RATIO
+    : MIN_CROP_SAVINGS_RATIO;
+  if (savedRatio < minSavedRatio) return null;
+
+  return { x: left, y: top, width: cropW, height: cropH };
+}
+
+function createAutoCroppedCanvas(img, imagePath, width, height, ignoreToggle = false) {
+  // Build a white-backed source canvas, detect the uniform page/background color
+  // from its edges, crop to pixels that differ from that background, then let the
+  // normal resize/rotate/split pipeline fit that cropped content to the device.
+  // If the image is a cover/icon/small asset, the edges are not uniform, or the
+  // crop would save too little, return the original canvas unchanged.
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = width;
+  sourceCanvas.height = height;
+  const sourceCtx = sourceCanvas.getContext('2d');
+  sourceCtx.fillStyle = '#FFF';
+  sourceCtx.fillRect(0, 0, width, height);
+  sourceCtx.drawImage(img, 0, 0);
+
+  if (shouldSkipAutoCrop(imagePath, width, height, ignoreToggle)) {
+    return { canvas: sourceCanvas, width, height };
+  }
+
+  const crop = findNonWhiteBounds(sourceCtx, width, height);
+  if (!crop) {
+    return { canvas: sourceCanvas, width, height };
+  }
+
+  const croppedCanvas = document.createElement('canvas');
+  croppedCanvas.width = crop.width;
+  croppedCanvas.height = crop.height;
+  const croppedCtx = croppedCanvas.getContext('2d');
+  croppedCtx.fillStyle = '#FFF';
+  croppedCtx.fillRect(0, 0, crop.width, crop.height);
+  croppedCtx.drawImage(sourceCanvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+
+  return { canvas: croppedCanvas, width: crop.width, height: crop.height, crop };
+}
+
 // Process single image - returns array of {data, suffix} objects
 const IMAGE_LOAD_TIMEOUT_MS = 30000; // 30 second timeout for image loading
 async function processImage(data, imageState = 0, imagePath = '') {
@@ -3938,6 +4191,11 @@ async function processImage(data, imageState = 0, imagePath = '') {
       clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       const origW = img.width, origH = img.height;
+      const source = createAutoCroppedCanvas(img, imagePath, origW, origH);
+      const sourceCanvas = source.canvas;
+      const sourceW = source.width;
+      const sourceH = source.height;
+      const sourceWasCropped = !!source.crop;
 
       // imageState: 0=Normal, 1=H-Split (CW/CCW), 2=V-Split, 3=Rotate & Fit
       // ========================================================================
@@ -3948,9 +4206,9 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // ========================================================================
       if (imageState === 1) {
         // Step 1: Scale WIDTH to 800 (this is the key difference!)
-        const scale = MAX_HEIGHT / origW;  // 800 / origW
+        const scale = MAX_HEIGHT / sourceW;  // 800 / sourceW
         const scaledW = MAX_HEIGHT;  // 800
-        const scaledH = Math.round(origH * scale);
+        const scaledH = Math.round(sourceH * scale);
 
         const scaledCanvas = document.createElement('canvas');
         scaledCanvas.width = scaledW;
@@ -3960,7 +4218,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
         scaledCtx.imageSmoothingQuality = 'high';
         scaledCtx.fillStyle = '#FFF';
         scaledCtx.fillRect(0, 0, scaledW, scaledH);
-        scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
+        scaledCtx.drawImage(sourceCanvas, 0, 0, sourceW, sourceH, 0, 0, scaledW, scaledH);
 
         // Step 2: Rotate 90° CW or CCW
         const rotW = scaledH;
@@ -4073,8 +4331,8 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // ========================================================================
       else if (imageState === 2) {
         // ALWAYS scale height to 800 (up or down)
-        const scale = MAX_HEIGHT / origH;  // 800 / origH
-        const scaledW = Math.round(origW * scale);
+        const scale = MAX_HEIGHT / sourceH;  // 800 / sourceH
+        const scaledW = Math.round(sourceW * scale);
         const scaledH = MAX_HEIGHT;  // Always 800
 
         const scaledCanvas = document.createElement('canvas');
@@ -4085,7 +4343,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
         scaledCtx.imageSmoothingQuality = 'high';
         scaledCtx.fillStyle = '#FFF';
         scaledCtx.fillRect(0, 0, scaledW, scaledH);
-        scaledCtx.drawImage(img, 0, 0, origW, origH, 0, 0, scaledW, scaledH);
+        scaledCtx.drawImage(sourceCanvas, 0, 0, sourceW, sourceH, 0, 0, scaledW, scaledH);
         applyGrayscale(scaledCtx, scaledW, scaledH);
 
         // Check if split needed
@@ -4159,8 +4417,8 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // ========================================================================
       else if (imageState === 3) {
         // Step 1: Rotate 90° based on handedness
-        const rotW = origH;
-        const rotH = origW;
+        const rotW = sourceH;
+        const rotH = sourceW;
 
         const rotCanvas = document.createElement('canvas');
         rotCanvas.width = rotW;
@@ -4177,13 +4435,13 @@ async function processImage(data, imageState = 0, imagePath = '') {
           rotCtx.translate(0, rotH);
           rotCtx.rotate(-Math.PI / 2);
         }
-        rotCtx.drawImage(img, 0, 0);
+        rotCtx.drawImage(sourceCanvas, 0, 0);
         rotCtx.setTransform(1, 0, 0, 1, 0, 0);
 
         // Step 2: Scale to fit 480x800 (if needed)
         const fitsInScreen = rotW <= MAX_WIDTH && rotH <= MAX_HEIGHT;
         
-        if (fitsInScreen) {
+        if (fitsInScreen && !sourceWasCropped) {
           // Already fits after rotation - just apply grayscale
           applyGrayscale(rotCtx, rotW, rotH);
           const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
@@ -4222,30 +4480,30 @@ async function processImage(data, imageState = 0, imagePath = '') {
       // ========================================================================
       else {
         // Normal processing: check if scaling is needed
-        const fitsInScreen = origW <= MAX_WIDTH && origH <= MAX_HEIGHT;
+        const fitsInScreen = sourceW <= MAX_WIDTH && sourceH <= MAX_HEIGHT;
 
-        if (fitsInScreen) {
+        if (fitsInScreen && !sourceWasCropped) {
           // Image already fits - just convert to JPEG with grayscale
           const c = document.createElement('canvas');
-          c.width = origW;
-          c.height = origH;
+          c.width = sourceW;
+          c.height = sourceH;
           const ctx = c.getContext('2d');
           ctx.fillStyle = '#FFF';
-          ctx.fillRect(0, 0, origW, origH);
-          ctx.drawImage(img, 0, 0);
-          applyGrayscale(ctx, origW, origH);
+          ctx.fillRect(0, 0, sourceW, sourceH);
+          ctx.drawImage(sourceCanvas, 0, 0);
+          applyGrayscale(ctx, sourceW, sourceH);
 
           const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
           const arrBuf = await blob.arrayBuffer();
           resolve({
-            parts: [{ data: arrBuf, suffix: '', width: origW, height: origH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: origW, finalH: origH, finalSize: arrBuf.byteLength, imageState: 0 }
+            parts: [{ data: arrBuf, suffix: '', width: sourceW, height: sourceH, size: arrBuf.byteLength }],
+            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: sourceW, finalH: sourceH, finalSize: arrBuf.byteLength, imageState: 0 }
           });
         } else {
           // Scale to fit 480x800
-          const scale = Math.min(MAX_WIDTH / origW, MAX_HEIGHT / origH);
-          const newW = Math.round(origW * scale);
-          const newH = Math.round(origH * scale);
+          const scale = Math.min(MAX_WIDTH / sourceW, MAX_HEIGHT / sourceH);
+          const newW = Math.round(sourceW * scale);
+          const newH = Math.round(sourceH * scale);
 
           const c = document.createElement('canvas');
           c.width = newW;
@@ -4255,7 +4513,7 @@ async function processImage(data, imageState = 0, imagePath = '') {
           ctx.imageSmoothingQuality = 'high';
           ctx.fillStyle = '#FFF';
           ctx.fillRect(0, 0, newW, newH);
-          ctx.drawImage(img, 0, 0, newW, newH);
+          ctx.drawImage(sourceCanvas, 0, 0, newW, newH);
           applyGrayscale(ctx, newW, newH);
 
           const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
@@ -4285,7 +4543,7 @@ async function convertEpubFile(file, progressCallback) {
   clearLog();
   showLog();
   log(`<strong>${file.name}</strong> <span class="log-detail">(${formatBytes(originalSize)})</span>`, '', 'INFO');
-  log(`Quality: ${JPEG_QUALITY}% | Overlap: ${OVERLAP_PERCENT}% | Rotation: ${HANDEDNESS === 'right' ? 'CW' : 'CCW'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
+  log(`Quality: ${JPEG_QUALITY}% | Overlap: ${OVERLAP_PERCENT}% | Rotation: ${HANDEDNESS === 'right' ? 'CW' : 'CCW'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'} | Auto-crop: ${ENABLE_AUTO_CROP ? 'ON' : 'OFF'}`, '', 'INFO');
 
   const zip = await JSZip.loadAsync(file);
   const renamed = {};

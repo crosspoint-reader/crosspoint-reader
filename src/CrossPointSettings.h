@@ -24,6 +24,7 @@ class CrossPointSettings {
     COVER = 3,
     BLANK = 4,
     COVER_CUSTOM = 5,
+    QUICK_RESUME = 6,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -93,9 +94,8 @@ class CrossPointSettings {
   };
 
   // Side button layout options
-  // Default: Previous, Next
-  // Swapped: Next, Previous
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTON_LAYOUT_COUNT };
+  // Default: Up = Previous, Down = Next
+  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, OPENDYSLEXIC = 2, FONT_FAMILY_COUNT };
@@ -119,7 +119,6 @@ class CrossPointSettings {
     SLEEP_10_MIN = 2,
     SLEEP_15_MIN = 3,
     SLEEP_30_MIN = 4,
-    SLEEP_3_MIN = 5,
     SLEEP_TIMEOUT_COUNT
   };
 
@@ -140,7 +139,12 @@ class CrossPointSettings {
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
   // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
   // stored indices shift and existing saves are silently misinterpreted.
-  enum LONG_PRESS_MENU_FUNCTION { LP_MENU_KOSYNC = 0, LP_MENU_DISABLED = 1, LONG_PRESS_MENU_FUNCTION_COUNT };
+  enum LONG_PRESS_MENU_FUNCTION {
+    LP_MENU_KOSYNC = 0,
+    LP_MENU_DISABLED = 1,
+    LP_MENU_BOOKMARK = 2,
+    LONG_PRESS_MENU_FUNCTION_COUNT
+  };
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -161,11 +165,10 @@ class CrossPointSettings {
 
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
-  enum SEAMLESS_SLEEP_SCREEN {
-    SEAMLESS_NEVER = 0,
-    SEAMLESS_AFTER_TIMEOUT = 1,
-    SEAMLESS_ALWAYS = 2,
-    SEAMLESS_SLEEP_SCREEN_COUNT
+  enum QUICK_RESUME_SLEEP_SCREEN {
+    QUICK_RESUME_NEVER = 0,
+    QUICK_RESUME_AFTER_TIMEOUT = 1,
+    QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
   // Sleep screen settings
@@ -217,8 +220,8 @@ class CrossPointSettings {
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
-  // Auto-sleep timeout setting (default 10 minutes)
-  uint8_t sleepTimeout = SLEEP_10_MIN;
+  // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
+  uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
@@ -233,8 +236,9 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
   uint8_t longPressButtonBehavior = OFF;
-  // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values)
-  uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
+  // Defaults to Bookmark to preserve the upstream long-press-Confirm-adds-bookmark behavior.
+  uint8_t longPressMenuFunction = LP_MENU_BOOKMARK;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
@@ -257,13 +261,17 @@ class CrossPointSettings {
   uint8_t tiltPageTurn = TILT_OFF;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
-  // Seamless sleep: keep current content visible with moon icon instead of showing sleep screen
-  uint8_t seamlessSleepScreen = SEAMLESS_NEVER;
+  // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
+  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 
   ~CrossPointSettings() = default;
 
   // Get singleton instance
   static CrossPointSettings& getInstance() { return instance; }
+
+  static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
+  static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
+  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.
@@ -277,12 +285,13 @@ class CrossPointSettings {
   int getReaderFontId() const;
 
   // If count_only is true, returns the number of settings items that would be written.
-  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
+  uint8_t writeSettings(HalFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
+  static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
 
  private:
   bool loadFromBinaryFile();

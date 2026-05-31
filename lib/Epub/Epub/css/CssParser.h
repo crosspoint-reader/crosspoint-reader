@@ -31,7 +31,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 4;
+  static constexpr uint8_t CSS_CACHE_VERSION = 6;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -46,7 +46,7 @@ class CssParser {
    * @param source Open file handle to read from
    * @return true if parsing completed (even if no rules found)
    */
-  bool loadFromStream(FsFile& source);
+  bool loadFromStream(HalFile& source);
 
   /**
    * Look up the style for an HTML element, considering tag name and class attributes.

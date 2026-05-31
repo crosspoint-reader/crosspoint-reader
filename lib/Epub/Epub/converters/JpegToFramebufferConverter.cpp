@@ -5,8 +5,10 @@
 #include <HalStorage.h>
 #include <JPEGDEC.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdlib>
+#include <memory>
 #include <new>
 
 #include "DirectPixelWriter.h"
@@ -17,7 +19,7 @@ namespace {
 
 // Context struct passed through JPEGDEC callbacks to avoid global mutable state.
 // The draw callback receives this via pDraw->pUser (set by setUserPointer()).
-// The file I/O callbacks receive the FsFile* via pFile->fHandle (set by jpegOpen()).
+// The file I/O callbacks receive the HalFile* via pFile->fHandle (set by jpegOpen()).
 struct JpegContext {
   GfxRenderer* renderer{nullptr};
   const RenderConfig* config{nullptr};
@@ -46,10 +48,10 @@ struct JpegContext {
   bool caching{false};
 };
 
-// File I/O callbacks use pFile->fHandle to access the FsFile*,
+// File I/O callbacks use pFile->fHandle to access the HalFile*,
 // avoiding the need for global file state.
 void* jpegOpen(const char* filename, int32_t* size) {
-  FsFile* f = new FsFile();
+  HalFile* f = new HalFile();
   if (!Storage.openFileForRead("JPG", std::string(filename), *f)) {
     delete f;
     return nullptr;
@@ -59,7 +61,7 @@ void* jpegOpen(const char* filename, int32_t* size) {
 }
 
 void jpegClose(void* handle) {
-  FsFile* f = reinterpret_cast<FsFile*>(handle);
+  HalFile* f = reinterpret_cast<HalFile*>(handle);
   if (f) {
     f->close();
     delete f;
@@ -71,7 +73,7 @@ void jpegClose(void* handle) {
 // MUST maintain iPos to match the actual file position, otherwise progressive
 // JPEGs with large headers fail during parsing.
 int32_t jpegRead(JPEGFILE* pFile, uint8_t* pBuf, int32_t len) {
-  FsFile* f = reinterpret_cast<FsFile*>(pFile->fHandle);
+  HalFile* f = reinterpret_cast<HalFile*>(pFile->fHandle);
   if (!f) return 0;
   int32_t bytesRead = f->read(pBuf, len);
   if (bytesRead < 0) return 0;
@@ -80,7 +82,7 @@ int32_t jpegRead(JPEGFILE* pFile, uint8_t* pBuf, int32_t len) {
 }
 
 int32_t jpegSeek(JPEGFILE* pFile, int32_t pos) {
-  FsFile* f = reinterpret_cast<FsFile*>(pFile->fHandle);
+  HalFile* f = reinterpret_cast<HalFile*>(pFile->fHandle);
   if (!f) return -1;
   if (!f->seek(pos)) return -1;
   pFile->iPos = pos;
@@ -347,16 +349,16 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
     return false;
   }
 
-  JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
+  std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
   if (!jpeg) {
     LOG_ERR("JPG", "Failed to allocate JPEG decoder for dimensions");
     return false;
   }
 
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, nullptr);
+  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
   if (rc != 1) {
     LOG_ERR("JPG", "Failed to open JPEG for dimensions (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
-    delete jpeg;
     return false;
   }
 
@@ -364,8 +366,6 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   out.height = jpeg->getHeight();
   LOG_DBG("JPG", "Image dimensions: %dx%d", out.width, out.height);
 
-  jpeg->close();
-  delete jpeg;
   return true;
 }
 
@@ -379,7 +379,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
+  std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
   if (!jpeg) {
     LOG_ERR("JPG", "Failed to allocate JPEG decoder");
     return false;
@@ -392,9 +392,9 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   ctx.screenHeight = renderer.getScreenHeight();
 
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegDrawCallback);
+  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
   if (rc != 1) {
     LOG_ERR("JPG", "Failed to open JPEG (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
-    delete jpeg;
     return false;
   }
 
@@ -403,14 +403,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   if (srcWidth <= 0 || srcHeight <= 0) {
     LOG_ERR("JPG", "Invalid JPEG dimensions: %dx%d", srcWidth, srcHeight);
-    jpeg->close();
-    delete jpeg;
     return false;
   }
 
   if (!validateImageDimensions(srcWidth, srcHeight, "JPEG")) {
-    jpeg->close();
-    delete jpeg;
     return false;
   }
 
@@ -453,8 +449,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   if (destWidth <= 0 || destHeight <= 0) {
     LOG_ERR("JPG", "Degenerate output dimensions %dx%d for %s, skipping render", destWidth, destHeight,
             imagePath.c_str());
-    jpeg->close();
-    delete jpeg;
     return false;
   }
 
@@ -490,13 +484,9 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   if (rc != 1) {
     LOG_ERR("JPG", "Decode failed (rc=%d, lastError=%d)", rc, jpeg->getLastError());
-    jpeg->close();
-    delete jpeg;
     return false;
   }
 
-  jpeg->close();
-  delete jpeg;
   LOG_DBG("JPG", "JPEG decoding complete - render time: %lu ms", decodeTime);
 
   // Write cache file if caching was enabled

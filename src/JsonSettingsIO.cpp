@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 
+#include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
@@ -223,6 +224,13 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     }
   }
 
+  if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
+    const uint8_t legacyValue =
+        clamp(doc["sleepTimeout"] | (uint8_t)CrossPointSettings::SLEEP_10_MIN, CrossPointSettings::SLEEP_TIMEOUT_COUNT,
+              (uint8_t)CrossPointSettings::SLEEP_10_MIN);
+    s.sleepTimeoutMinutes = CrossPointSettings::sleepTimeoutEnumToMinutes(legacyValue);
+    if (needsResave) *needsResave = true;
+  }
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   using S = CrossPointSettings;
   s.frontButtonBack =
@@ -392,5 +400,46 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   }
 
   LOG_DBG("OPS", "Loaded %zu OPDS servers from file", store.servers.size());
+  return true;
+}
+
+// ---- Bookmarks ----
+
+bool JsonSettingsIO::saveBookmarks(const std::vector<BookmarkEntry>& bookmarks, const char* path) {
+  JsonDocument doc;
+  JsonArray arr = doc["bookmarks"].to<JsonArray>();
+  LOG_DBG("BKM", "Saving %zu bookmarks to file", bookmarks.size());
+  for (const auto& bookmark : bookmarks) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["xpath"] = bookmark.xpath;
+    obj["percentage"] = bookmark.percentage;
+    obj["summary"] = bookmark.summary;
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("BKM", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  JsonArray arr = doc["bookmarks"].as<JsonArray>();
+  bookmarks.clear();
+  bookmarks.reserve(arr.size());
+  for (JsonObject obj : arr) {
+    bookmarks.emplace_back();
+    auto& bookmark = bookmarks.back();
+    bookmark.xpath = obj["xpath"] | std::string("");
+    bookmark.percentage = obj["percentage"] | static_cast<float>(0);
+    bookmark.summary = obj["summary"] | std::string("");
+  }
+
+  LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
   return true;
 }
