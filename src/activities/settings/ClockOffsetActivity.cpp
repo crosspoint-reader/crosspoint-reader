@@ -4,6 +4,7 @@
 #include <HalClock.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
@@ -146,72 +147,54 @@ void ClockOffsetActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_UTC_OFFSET));
 
-  // Build the offset string. Use a generous font and centre it.
-  char offsetBuf[16];
-  snprintf(offsetBuf, sizeof(offsetBuf), "UTC %c %d:%02d", sign == 1 ? '-' : '+', hours,
-           minutesQuarter * MINUTES_PER_QUARTER);
-
   const int centreY = pageHeight / 2 - 40;
-  renderer.drawCenteredText(UI_12_FONT_ID, centreY, offsetBuf, true, EpdFontFamily::BOLD);
+  auto widthOf = [&](const char* s) { return renderer.getTextWidth(UI_12_FONT_ID, s, EpdFontFamily::BOLD); };
+  constexpr int fieldPaddingX = 6;
+  constexpr int labelGap = 16;
+  constexpr int fieldGap = 12;
+  constexpr int colonGap = 5;
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int fieldHeight = lineHeight + 2;
 
-  // Underline / caret under the active field. Compute positions by measuring substrings of the
-  // formatted string so the caret follows the font glyph widths exactly.
-  // Field substrings:
-  //   "UTC "        -> prefix
-  //   "{+/-}"       -> sign
-  //   " "
-  //   "{hours}"     -> hours
-  //   ":"
-  //   "{mm}"        -> minutes
-  auto widthOf = [&](const char* s) { return renderer.getTextWidth(UI_12_FONT_ID, s); };
-  const int totalWidth = widthOf(offsetBuf);
-  const int leftEdge = (pageWidth - totalWidth) / 2;
-
-  // Locate each field by reformatting prefixes.
-  char prefixSign[16];
-  snprintf(prefixSign, sizeof(prefixSign), "UTC ");
-  const int signX = leftEdge + widthOf(prefixSign);
-
-  char prefixHours[16];
-  snprintf(prefixHours, sizeof(prefixHours), "UTC %c ", sign == 1 ? '-' : '+');
-  const int hoursX = leftEdge + widthOf(prefixHours);
-
-  char prefixMinutes[16];
-  snprintf(prefixMinutes, sizeof(prefixMinutes), "UTC %c %d:", sign == 1 ? '-' : '+', hours);
-  const int minutesX = leftEdge + widthOf(prefixMinutes);
-
-  // Width of each field substring for the caret span.
-  const int signW = widthOf(sign == 1 ? "-" : "+");
+  char signStr[2] = {sign == 1 ? '-' : '+', '\0'};
   char hoursStr[8];
   snprintf(hoursStr, sizeof(hoursStr), "%d", hours);
-  const int hoursW = widthOf(hoursStr);
   char minutesStr[8];
   snprintf(minutesStr, sizeof(minutesStr), "%02d", minutesQuarter * MINUTES_PER_QUARTER);
-  const int minutesW = widthOf(minutesStr);
 
-  int caretX = 0;
-  int caretW = 0;
-  switch (activeField) {
-    case FIELD_SIGN:
-      caretX = signX;
-      caretW = signW;
-      break;
-    case FIELD_HOURS:
-      caretX = hoursX;
-      caretW = hoursW;
-      break;
-    case FIELD_MINUTES:
-      caretX = minutesX;
-      caretW = minutesW;
-      break;
-    default:
-      break;
-  }
-  // Caret drawn as a short bar below the active field.
-  const int caretY = centreY + 10;
-  for (int dy = 0; dy < 2; dy++) {
-    renderer.drawLine(caretX, caretY + dy, caretX + caretW, caretY + dy);
-  }
+  const int labelWidth = widthOf("UTC");
+  const int signBoxW = std::max(widthOf("+"), widthOf("-")) + fieldPaddingX * 2;
+  const int hoursBoxW = std::max(widthOf("14"), widthOf("12")) + fieldPaddingX * 2;
+  const int colonWidth = widthOf(":");
+  const int minutesBoxW = std::max({widthOf("00"), widthOf("15"), widthOf("30"), widthOf("45")}) + fieldPaddingX * 2;
+  const int totalWidth =
+      labelWidth + labelGap + signBoxW + fieldGap + hoursBoxW + colonGap + colonWidth + colonGap + minutesBoxW;
+
+  int x = (pageWidth - totalWidth) / 2;
+  renderer.drawText(UI_12_FONT_ID, x, centreY, "UTC", true, EpdFontFamily::BOLD);
+  x += labelWidth + labelGap;
+
+  auto drawField = [&](const char* text, const int boxX, const int boxWidth, const Field field) {
+    const bool selected = activeField == field;
+    renderer.fillRectDither(boxX, centreY, boxWidth, fieldHeight, selected ? Color::LightGray : Color::White);
+    renderer.drawRect(boxX, centreY, boxWidth, fieldHeight, true);
+    if (selected) {
+      renderer.drawRect(boxX + 1, centreY + 1, boxWidth - 2, fieldHeight - 2, true);
+    }
+    const int textX = boxX + (boxWidth - widthOf(text)) / 2;
+    renderer.drawText(UI_12_FONT_ID, textX, centreY, text, true, EpdFontFamily::BOLD);
+  };
+
+  drawField(signStr, x, signBoxW, FIELD_SIGN);
+  x += signBoxW + fieldGap;
+
+  drawField(hoursStr, x, hoursBoxW, FIELD_HOURS);
+  x += hoursBoxW + colonGap;
+
+  renderer.drawText(UI_12_FONT_ID, x, centreY, ":", true, EpdFontFamily::BOLD);
+  x += colonWidth + colonGap;
+
+  drawField(minutesStr, x, minutesBoxW, FIELD_MINUTES);
 
   // Live preview of the resulting wall-clock time, so users can verify against a watch.
   if (halClock.isAvailable()) {

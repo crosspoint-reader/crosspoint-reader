@@ -250,8 +250,6 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.
 
-- [crosspoint-reader (jpirnay)](https://github.com/jpirnay/crosspoint-reader) — Faster integration of functionality. Tracks upstream PRs and integrates the good ones ahead of the official merge.
-
 - [crosspoint-reader-cjk](https://github.com/aBER0724/crosspoint-reader-cjk) — Purpose-built for Chinese, Japanese, and Korean reading.
 
 - [inx](https://github.com/obijuankenobiii/inx) — Completely reimagines the user interface with tabbed navigation.

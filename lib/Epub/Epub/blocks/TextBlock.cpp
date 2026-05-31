@@ -1,5 +1,6 @@
 #include "TextBlock.h"
 
+#include <BidiUtils.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
@@ -22,6 +23,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
+    const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(
+        BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));
     const uint8_t boundary = hasFocus ? wordFocusBoundary[i] : 0;
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
@@ -48,16 +51,16 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const size_t boldLen = std::min<size_t>({static_cast<size_t>(boundary), words[i].size(), sizeof(boldBuf) - 1});
       memcpy(boldBuf, words[i].c_str(), boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle);
+      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle, baseDir);
       const int suffixX = wordX + wordFocusSuffixX[i];
-      renderer.drawText(fontId, suffixX, wordY, words[i].c_str() + boldLen, true, currentStyle);
+      renderer.drawText(fontId, suffixX, wordY, words[i].c_str() + boldLen, true, currentStyle, baseDir);
     } else {
-      renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle);
+      renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle, baseDir);
     }
 
     if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = words[i];
-      const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle);
+      const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle, baseDir);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
       const int underlineY = wordY + ascender + 2;
 
@@ -69,7 +72,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
           static_cast<uint8_t>(w[2]) == 0x83) {
         const char* visiblePtr = w.c_str() + 3;
         const int prefixWidth = renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
-        const int visibleWidth = renderer.getTextWidth(fontId, visiblePtr, currentStyle);
+        const int visibleWidth = renderer.getTextWidth(fontId, visiblePtr, currentStyle, baseDir);
         startX = wordX + prefixWidth;
         underlineWidth = visibleWidth;
       }
@@ -118,6 +121,8 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.paddingRight);
   serialization::writePod(file, blockStyle.textIndent);
   serialization::writePod(file, blockStyle.textIndentDefined);
+  serialization::writePod(file, blockStyle.isRtl);
+  serialization::writePod(file, blockStyle.directionDefined);
 
   return true;
 }
@@ -171,6 +176,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.paddingRight);
   serialization::readPod(file, blockStyle.textIndent);
   serialization::readPod(file, blockStyle.textIndentDefined);
+  serialization::readPod(file, blockStyle.isRtl);
+  serialization::readPod(file, blockStyle.directionDefined);
 
   return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
                                                   std::move(wordFocusBoundary), std::move(wordFocusSuffixX),
