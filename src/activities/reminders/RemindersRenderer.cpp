@@ -25,14 +25,17 @@ static constexpr int TEX_GAP = 8;
 static constexpr int TEX_PADV = 4;
 // Inner horizontal text indent inside the paper block.
 static constexpr int TEX_PADH = 9;
+// Extra left indent applied to item title text (e.g. "#01 Clean My Room"); the
+// white paper block hugs the text (fit-content) and texture fills the leftover.
+static constexpr int TITLE_INDENT = 8;
 // Solid-black LEAVE BY / time banner height.
 static constexpr int BAR_HEIGHT = 30;
 // Tightened stale-data banner height.
 static constexpr int STALE_BAR_H = 18;
 
 // ─── Font assignments ─────────────────────────────────────────────────────────
-// Dense halftone header + medium halftone titles share 16pt for visual weight.
-static constexpr int HEADER_FONT = NOTOSANS_16_FONT_ID;
+// Extra-small halftone header; medium halftone titles at 16pt for visual weight.
+static constexpr int HEADER_FONT = UI_10_FONT_ID;
 static constexpr int TITLE_FONT = NOTOSANS_16_FONT_ID;
 static constexpr int SUB_FONT = NOTOSANS_14_FONT_ID;
 static constexpr int DETAIL_FONT = NOTOSANS_12_FONT_ID;
@@ -164,6 +167,36 @@ int drawZone(const GfxRenderer& r, int font, const char* text, Tex tex, int y, i
   return y + TEX_GAP + paperH + TEX_GAP;
 }
 
+// Like drawZone, but the white "paper" block hugs the text (fit-content): the
+// texture pattern is painted across the whole band and a white box just wide
+// enough for the text (plus padding) is punched out around it, so the leftover
+// space to the right of the text is filled with texture instead of white.
+// `xIndent` shifts the text — and the white box's left edge — further right.
+int drawZoneFit(const GfxRenderer& r, int font, const char* text, Tex tex, int y, int W, int contentLeft,
+                int contentRight, int lineH, bool bold, int xIndent = 0) {
+  const int paperH = lineH + TEX_PADV * 2;
+  const int bandTop = y + TEX_GAP;
+  const auto fam = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  const int textX = contentLeft + TEX_PADH + xIndent;
+  const int textW = r.getTextWidth(font, text, fam);
+
+  // White paper box: from the indented left edge to one padding past the text,
+  // clamped to the content area so it never spills into the right margin.
+  const int boxLeft = contentLeft + xIndent;
+  int boxRight = textX + textW + TEX_PADH;
+  if (boxRight > contentRight) boxRight = contentRight;
+
+  // Texture the full band edge-to-edge first, then clear the white box so only
+  // the leftover (right of the text) keeps the pattern.
+  for (int py = bandTop; py < bandTop + paperH; py++)
+    for (int px = 0; px < W; px++)
+      if (texelAt(tex, px, py)) r.drawPixel(px, py, true);
+  r.fillRect(boxLeft, bandTop, boxRight - boxLeft, paperH, false);
+
+  r.drawText(font, textX, bandTop + TEX_PADV, text, true, fam);
+  return y + TEX_GAP + paperH + TEX_GAP;
+}
+
 // Solid-black inverted time banner (highest visual weight). Returns y after.
 int drawBanner(const GfxRenderer& r, const char* leftLabel, const char* rightLabel, int y, int W, int contentLeft,
                int contentRight, int contentWidth) {
@@ -215,12 +248,13 @@ int blockHeight(const CalItem& it, int titleH, int subH, int detailH) {
 
 int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int W, int contentLeft, int contentRight,
              int contentWidth, time_t now, bool clockValid, int titleH, int subH, int detailH) {
-  // ── Title — medium halftone ──────────────────────────────────────────────
+  // ── Title — medium halftone, fit-content paper with extra left indent ────
   {
     char buf[96];
     snprintf(buf, sizeof(buf), "#%02u  %s", number, it.title);
-    const std::string trunc = r.truncatedText(TITLE_FONT, buf, contentWidth - TEX_PADH * 2);
-    y = drawZone(r, TITLE_FONT, trunc.c_str(), Tex::Med, y, W, contentLeft, titleH, true, false);
+    const std::string trunc = r.truncatedText(TITLE_FONT, buf, contentWidth - TEX_PADH * 2 - TITLE_INDENT);
+    y = drawZoneFit(r, TITLE_FONT, trunc.c_str(), Tex::Med, y, W, contentLeft, contentRight, titleH, true,
+                    TITLE_INDENT);
   }
 
   // ── Sub-items — crosshatch, grouped on one paper block ───────────────────
