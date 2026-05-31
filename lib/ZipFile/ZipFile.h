@@ -103,7 +103,7 @@ class ZipFile {
         break;
       }
 
-      file.seekCur(20);
+      file.seekCur(24);
       uint16_t nameLen, m, k;
       file.read(&nameLen, 2);
       file.read(&m, 2);
