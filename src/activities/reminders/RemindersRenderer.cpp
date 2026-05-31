@@ -222,9 +222,9 @@ void drawStaleBar(const GfxRenderer& r, const RemindersData& data, int barTop, i
   } else {
     snprintf(banner, sizeof(banner), "%s", tr(STR_REMINDERS_NOT_LIVE));
   }
-  const int tw = r.getTextWidth(FOOTER_FONT, banner, EpdFontFamily::BOLD);
+  const int tw = r.getTextWidth(FOOTER_FONT, banner, EpdFontFamily::REGULAR);
   r.drawText(FOOTER_FONT, contentLeft + (contentWidth - tw) / 2, centeredTextTop(r, FOOTER_FONT, barTop, STALE_BAR_H),
-             banner, false, EpdFontFamily::BOLD);
+             banner, false, EpdFontFamily::REGULAR);
 }
 
 // ─── Item block height (for pagination) ───────────────────────────────────────
@@ -281,7 +281,7 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
       char line[48];
       snprintf(line, sizeof(line), "%s %s", it.is_calendar ? tr(STR_REMINDERS_ALL_DAY) : tr(STR_REMINDERS_DUE),
                dateBuf);
-      y = drawZone(r, DETAIL_FONT, line, Tex::Ruled, y, W, contentLeft, detailH, true, false);
+      y = drawZone(r, DETAIL_FONT, line, Tex::Ruled, y, W, contentLeft, detailH, false, false);
     } else {
       // Solid-black banner — highest visual weight.
       char leftLabel[48], rightLabel[32];
@@ -298,7 +298,9 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
       }
       if (clockValid) {
         char cd[16];
-        formatCountdown(static_cast<long>(it.start_epoch - now), cd, sizeof(cd));
+        const time_t countdownTarget =
+            (it.is_calendar && it.travel_secs > 0) ? it.start_epoch - it.travel_secs : it.start_epoch;
+        formatCountdown(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
         snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
       } else {
         rightLabel[0] = '\0';
@@ -368,7 +370,7 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
     } else {
       snprintf(header, sizeof(header), "%s", tr(STR_REMINDERS_TASKS));
     }
-    y = drawZone(renderer, HEADER_FONT, header, Tex::Dense, y, W, contentLeft, headerH, true, true);
+    y = drawZone(renderer, HEADER_FONT, header, Tex::Dense, y, W, contentLeft, headerH, false, true);
   }
 
   // ── Footer geometry — hints flush at the very bottom ────────────────────
