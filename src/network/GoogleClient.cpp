@@ -33,6 +33,13 @@ constexpr char CALENDAR_URL[] =
 constexpr char TASKS_URL[] =
     "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
     "?showCompleted=false&maxResults=25&fields=items(title,notes,due,status)";
+// Distance Matrix: one origin (home) to many destinations in a single request.
+// duration_in_traffic needs a future departure_time, supplied per-call.
+constexpr char DISTANCE_MATRIX_URL[] =
+    "https://maps.googleapis.com/maps/api/distancematrix/json?mode=driving&units=metric";
+// Cap the destinations per request so the response stays within HTTP_RX_BUF and
+// the parsed document stays small. Comfortably above any one-page reminder list.
+constexpr int MAPS_MAX_DESTINATIONS = 10;
 
 constexpr int HTTP_RX_BUF = 2048;
 constexpr int HTTP_TX_BUF = 1024;
@@ -443,6 +450,88 @@ bool fetchCalendar(const std::string& token, RemindersData& out) {
   return true;
 }
 
+// Populate travel_secs for timed calendar items that carry a destination, using
+// the Google Distance Matrix API (one origin = home address, many destinations
+// per request). No-op unless SETTINGS.mapsApiKey is set. Best-effort: any failure
+// here leaves travel_secs at 0 and never fails the overall sync — the renderer
+// then shows the plain start time instead of a "LEAVE BY" banner.
+void fetchTravelTimes(RemindersData& out) {
+  const std::string apiKey = SETTINGS.mapsApiKey;
+  const std::string origin = SETTINGS.homeAddress;
+  if (apiKey.empty() || origin.empty()) return;
+
+  const time_t now = time(nullptr);
+
+  // Indices of items needing a lookup: future, timed, calendar, with a location.
+  uint8_t pending[REMINDERS_MAX_ITEMS];
+  uint8_t nPending = 0;
+  for (uint8_t i = 0; i < out.count; i++) {
+    const CalItem& it = out.items[i];
+    if (it.is_calendar && !it.all_day && it.start_epoch > now && it.location[0] != '\0') {
+      pending[nPending++] = i;
+    }
+  }
+  if (nPending == 0) return;
+
+  char depBuf[16];
+  snprintf(depBuf, sizeof(depBuf), "%ld", static_cast<long>(now));
+
+  for (uint8_t base = 0; base < nPending; base += MAPS_MAX_DESTINATIONS) {
+    if (cancelled()) return;
+    const uint8_t chunk = static_cast<uint8_t>(std::min<int>(MAPS_MAX_DESTINATIONS, nPending - base));
+
+    // Destinations joined by '|' (Distance Matrix's multi-destination separator),
+    // then percent-encoded as a single query value.
+    std::string dests;
+    for (uint8_t j = 0; j < chunk; j++) {
+      if (j != 0) dests += "|";
+      dests += out.items[pending[base + j]].location;
+    }
+
+    const std::string url = std::string(DISTANCE_MATRIX_URL) + "&departure_time=" + depBuf +
+                            "&origins=" + urlEncode(origin) + "&destinations=" + urlEncode(dests) +
+                            "&key=" + urlEncode(apiKey);
+
+    std::string resp;
+    int status = 0;
+    // Maps uses the URL key, not a bearer token, so pass an empty bearer.
+    if (!httpExec(HTTP_METHOD_GET, url, "", "", resp, status) || status != 200) {
+      LOG_ERR("GOOG", "distance matrix status %d", status);
+      continue;  // best-effort: skip this chunk, keep the rest of the sync
+    }
+
+    // Filter to rows[].elements[].{status,duration,duration_in_traffic}.
+    JsonDocument filter;
+    JsonObject rowFi = filter["rows"].add<JsonObject>();
+    JsonObject elFi = rowFi["elements"].add<JsonObject>();
+    elFi["status"] = true;
+    elFi["duration"] = true;
+    elFi["duration_in_traffic"] = true;
+
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, resp, DeserializationOption::Filter(filter));
+    if (err) {
+      LOG_ERR("GOOG", "distance matrix parse error: %s", err.c_str());
+      continue;
+    }
+
+    // Single origin → results live in rows[0].elements, aligned with `dests`.
+    uint8_t j = 0;
+    for (JsonObject el : doc["rows"][0]["elements"].as<JsonArray>()) {
+      if (j >= chunk) break;
+      const char* st = el["status"] | "";
+      if (strcmp(st, "OK") == 0) {
+        // Prefer traffic-aware duration when the key/billing returns it.
+        int32_t secs = el["duration_in_traffic"]["value"] | 0;  // cppcheck-suppress badBitmaskCheck
+        if (secs <= 0) secs = el["duration"]["value"] | 0;      // cppcheck-suppress badBitmaskCheck
+        if (secs > 0) out.items[pending[base + j]].travel_secs = secs;
+      }
+      j++;
+    }
+  }
+  LOG_DBG("GOOG", "travel times: %u destinations queried", nPending);
+}
+
 bool fetchTasks(const std::string& token, RemindersData& out) {
   std::string resp;
   int status = 0;
@@ -550,6 +639,9 @@ GoogleClient::Result GoogleClient::syncAll(RemindersData& out, const volatile bo
   RemindersData fresh;
   fresh.clear();
   const bool calOk = fetchCalendar(token, fresh);
+  // Best-effort travel-time enrichment for located calendar events. Runs only
+  // when a Maps API key is configured; never affects the sync result.
+  if (calOk && !cancelled()) fetchTravelTimes(fresh);
   // Sequential teardown is implicit: esp_http_client_cleanup() in httpExec frees
   // each TLS session before the next call, so only one TLS context is live at a
   // time (~35KB peak rather than two stacked).

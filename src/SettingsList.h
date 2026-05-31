@@ -261,6 +261,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "gcalTimezoneSync", StrId::STR_CAT_DISPLAY),
         SettingInfo::String(StrId::STR_REMINDERS_HOME_ADDRESS, SETTINGS.homeAddress, sizeof(SETTINGS.homeAddress),
                             "homeAddress", StrId::STR_CAT_DISPLAY),
+        SettingInfo::String(StrId::STR_REMINDERS_MAPS_API_KEY, SETTINGS.mapsApiKey, sizeof(SETTINGS.mapsApiKey),
+                            "mapsApiKey", StrId::STR_CAT_DISPLAY),
     };
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {

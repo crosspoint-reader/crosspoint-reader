@@ -259,8 +259,13 @@ class CrossPointSettings {
   // When enabled, clockUtcOffsetQ is automatically updated from the Google Calendar timezone
   // on each successful sync (reads offset from the first timed event's RFC3339 dateTime).
   uint8_t gcalTimezoneSync = 1;
-  // Default home address used for travel-time estimation (Maps integration placeholder).
+  // Origin address for travel-time estimation (Google Distance Matrix). Sent as
+  // the "origins" parameter when a Maps API key is configured.
   char homeAddress[64] = "519463 SG";
+  // Google Maps API key for the Distance Matrix call. Empty disables travel-time
+  // lookup (the "LEAVE BY" banner falls back to the plain start time). Stored in
+  // settings.json / entered via the web UI — never compiled into firmware.
+  char mapsApiKey[80] = "";
 
   ~CrossPointSettings() = default;
 
