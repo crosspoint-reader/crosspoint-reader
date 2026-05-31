@@ -182,7 +182,7 @@ class CrossPointSettings {
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
-  uint8_t clockUtcOffsetQ = 48;
+  uint8_t clockUtcOffsetQ = 80;  // Default UTC+8 (Singapore/HKT/CST/AWST)
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
@@ -257,6 +257,11 @@ class CrossPointSettings {
   uint8_t remindersEnabled = 0;
   // Reserved: hours between background reminder syncs (1..24). Not yet auto-scheduled.
   uint8_t remindersSyncIntervalH = 1;
+  // When enabled, clockUtcOffsetQ is automatically updated from the Google Calendar timezone
+  // on each successful sync (reads offset from the first timed event's RFC3339 dateTime).
+  uint8_t gcalTimezoneSync = 1;
+  // Default home address used for travel-time estimation (Maps integration placeholder).
+  char homeAddress[64] = "519463 SG";
 
   ~CrossPointSettings() = default;
 

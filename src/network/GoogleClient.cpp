@@ -102,6 +102,33 @@ time_t parseRfc3339(const char* s) {
   return base;
 }
 
+// Extracts the UTC offset encoded in an RFC3339 dateTime string and converts it to the
+// clockUtcOffsetQ biased encoding (48 = UTC+0, 80 = UTC+8). Returns false if no explicit
+// offset is present (bare date or malformed). DST-correct since it reads the actual offset
+// baked into the timestamp rather than relying on an IANA timezone name lookup table.
+bool extractRfc3339OffsetQ(const char* s, uint8_t& offsetQ) {
+  if (!s || s[10] != 'T') return false;
+  const char* p = s + 11;
+  while (*p && *p != 'Z' && *p != '+' && !(p > s + 18 && *p == '-')) p++;
+  if (*p == 'Z') {
+    offsetQ = 48;
+    return true;
+  }
+  if (*p == '+' || *p == '-') {
+    int oh = 0, om = 0;
+    if (sscanf(p + 1, "%2d:%2d", &oh, &om) >= 1) {
+      int quarters = oh * 4 + om / 15;
+      if (*p == '-') quarters = -quarters;
+      const int biased = 48 + quarters;
+      if (biased >= 0 && biased <= 104) {
+        offsetQ = static_cast<uint8_t>(biased);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void formatRfc3339Utc(time_t epoch, char* buf, size_t len) {
   struct tm tmv;
   gmtime_r(&epoch, &tmv);
@@ -376,6 +403,7 @@ bool fetchCalendar(const std::string& token, RemindersData& out) {
     return false;
   }
 
+  bool tzSynced = false;
   for (JsonObject ev : doc["items"].as<JsonArray>()) {
     if (out.count >= REMINDERS_MAX_ITEMS) break;
     CalItem it = {};
@@ -394,6 +422,20 @@ bool fetchCalendar(const std::string& token, RemindersData& out) {
     const char* endTimed = end["dateTime"];
     const char* endDate = end["date"];
     it.end_epoch = parseRfc3339(endTimed != nullptr ? endTimed : endDate);
+
+    // Detect timezone from the first event that carries an explicit UTC offset in its
+    // dateTime. This is DST-correct (reads the actual baked-in offset, not an IANA name).
+    if (!tzSynced && SETTINGS.gcalTimezoneSync && startTimed) {
+      uint8_t offsetQ = 0;
+      if (extractRfc3339OffsetQ(startTimed, offsetQ)) {
+        if (offsetQ != SETTINGS.clockUtcOffsetQ) {
+          LOG_INF("GOOG", "Timezone from GCal offsetQ=%u (was %u)", offsetQ, SETTINGS.clockUtcOffsetQ);
+          SETTINGS.clockUtcOffsetQ = offsetQ;
+          SETTINGS.saveToFile();
+        }
+        tzSynced = true;
+      }
+    }
 
     out.items[out.count++] = it;
   }
