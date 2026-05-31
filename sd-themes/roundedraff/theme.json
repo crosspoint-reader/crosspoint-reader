@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "roundedraff",
+  "name": "RoundedRaff",
+  "description": "RoundedRaff layout packaged as an SD theme.",
+  "inherits": "lyra",
+  "components": {
+    "homeRecents": {
+      "module": "lyra",
+      "layout": "roundedraff"
+    }
+  },
+  "devices": {
+    "x3": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 4,
+        "sideButtons": "up-down"
+      }
+    },
+    "x4": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 0,
+        "sideButtons": "up-down"
+      }
+    }
+  }
+}

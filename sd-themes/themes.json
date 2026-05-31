@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "baseUrl": "https://crosspointreader.com/themes/",
+  "themes": [
+    {
+      "id": "lyra-3-covers",
+      "name": "Lyra 3 Covers",
+      "description": "Lyra home layout with three recent cover slots.",
+      "files": [
+        {
+          "path": "theme.json",
+          "url": "lyra-3-covers/theme.json",
+          "size": 618,
+          "crc32": 424524836
+        }
+      ],
+      "totalSize": 618
+    },
+    {
+      "id": "roundedraff",
+      "name": "RoundedRaff",
+      "description": "RoundedRaff layout packaged as an SD theme.",
+      "files": [
+        {
+          "path": "theme.json",
+          "url": "roundedraff/theme.json",
+          "size": 609,
+          "crc32": 3057095417
+        }
+      ],
+      "totalSize": 609
+    }
+  ]
+}

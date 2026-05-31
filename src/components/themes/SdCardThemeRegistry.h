@@ -33,6 +33,8 @@ class SdCardThemeRegistry {
   const std::vector<SdCardThemeInfo>& getThemes() const { return themes_; }
   const SdCardThemeInfo* findTheme(const std::string& id) const;
   int getThemeCount() const { return static_cast<int>(themes_.size()); }
+  static const char* findThemeRoot(const char* themeId);
+  static const char* defaultWriteRoot();
 
  private:
   std::vector<SdCardThemeInfo> themes_;

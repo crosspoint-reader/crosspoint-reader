@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "lyra-3-covers",
+  "name": "Lyra 3 Covers",
+  "description": "Lyra home layout with three recent cover slots.",
+  "inherits": "lyra",
+  "components": {
+    "homeRecents": {
+      "module": "lyra",
+      "layout": "three-covers"
+    }
+  },
+  "devices": {
+    "x3": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 4,
+        "sideButtons": "up-down"
+      }
+    },
+    "x4": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 0,
+        "sideButtons": "up-down"
+      }
+    }
+  }
+}

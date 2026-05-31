@@ -157,3 +157,21 @@ const SdCardThemeInfo* SdCardThemeRegistry::findTheme(const std::string& id) con
   });
   return it == themes_.end() ? nullptr : &*it;
 }
+
+const char* SdCardThemeRegistry::findThemeRoot(const char* themeId) {
+  if (!isSafeId(themeId)) return nullptr;
+  char path[180];
+  snprintf(path, sizeof(path), "%s/%s", THEMES_DIR_HIDDEN, themeId);
+  if (Storage.exists(path)) return THEMES_DIR_HIDDEN;
+  snprintf(path, sizeof(path), "%s/%s", THEMES_DIR_VISIBLE, themeId);
+  if (Storage.exists(path)) return THEMES_DIR_VISIBLE;
+  return nullptr;
+}
+
+const char* SdCardThemeRegistry::defaultWriteRoot() {
+  const bool hiddenExists = Storage.exists(THEMES_DIR_HIDDEN);
+  const bool visibleExists = Storage.exists(THEMES_DIR_VISIBLE);
+  if (hiddenExists) return THEMES_DIR_HIDDEN;
+  if (visibleExists) return THEMES_DIR_VISIBLE;
+  return THEMES_DIR_HIDDEN;
+}
