@@ -665,7 +665,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
 
   rc = jpeg->decode(0, 0, 0);
 
-  if (ctx.smoothUpscale && !ctx.error) {
+  if (rc == 1 && ctx.smoothUpscale && !ctx.error) {
     finishSmoothUpscale(&ctx);
   }
 
