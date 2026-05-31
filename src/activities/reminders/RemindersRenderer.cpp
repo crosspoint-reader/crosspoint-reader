@@ -37,6 +37,8 @@ static constexpr int STALE_BAR_H = 18;
 // Extra-small halftone header; medium halftone titles at 16pt for visual weight.
 static constexpr int HEADER_FONT = UI_10_FONT_ID;
 static constexpr int TITLE_FONT = NOTOSANS_16_FONT_ID;
+// Solid-black time banner: smaller font to fit "Tuesday 4:00PM  Leave in 2D 18H 12M".
+static constexpr int BANNER_FONT = NOTOSANS_12_FONT_ID;
 static constexpr int SUB_FONT = NOTOSANS_14_FONT_ID;
 static constexpr int DETAIL_FONT = NOTOSANS_12_FONT_ID;
 static constexpr int FOOTER_FONT = UI_10_FONT_ID;
@@ -46,6 +48,7 @@ static constexpr int FOOTER_FONT = UI_10_FONT_ID;
 static constexpr time_t MIN_VALID_EPOCH = 1700000000;
 
 static const char* const WDAY[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+static const char* const WDAY_FULL[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 static const char* const MON[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 
 // ─── Time helpers ─────────────────────────────────────────────────────────────
@@ -75,9 +78,33 @@ void formatClock12Upper(time_t epoch, char* buf, size_t len) {
   buf[i] = '\0';
 }
 
-void formatCountdown(long secsLeft, char* buf, size_t len) {
+// Verbose countdown, e.g. "01H 56M" or "2D 18H 12M" once the gap spans a day.
+void formatCountdownVerbose(long secsLeft, char* buf, size_t len) {
   if (secsLeft < 0) secsLeft = 0;
-  snprintf(buf, len, "%02ld:%02ld", secsLeft / 3600, (secsLeft % 3600) / 60);
+  const long days = secsLeft / 86400;
+  const long hours = (secsLeft % 86400) / 3600;
+  const long mins = (secsLeft % 3600) / 60;
+  if (days > 0)
+    snprintf(buf, len, "%ldD %02ldH %02ldM", days, hours, mins);
+  else
+    snprintf(buf, len, "%02ldH %02ldM", hours, mins);
+}
+
+// Uppercase 12-hour time, prefixed with the full weekday name when `epoch` falls
+// on a different local day than `now` (e.g. "Tuesday 4:00PM" vs "4:00PM").
+void formatTimeWithDay(time_t epoch, time_t now, bool clockValid, char* buf, size_t len) {
+  char clk[16];
+  formatClock12Upper(epoch, clk, sizeof(clk));
+  if (clockValid) {
+    struct tm et, nt;
+    localTm(epoch, et);
+    localTm(now, nt);
+    if (et.tm_year != nt.tm_year || et.tm_yday != nt.tm_yday) {
+      snprintf(buf, len, "%s %s", WDAY_FULL[et.tm_wday % 7], clk);
+      return;
+    }
+  }
+  snprintf(buf, len, "%s", clk);
 }
 
 void formatDateUtc(time_t epoch, char* buf, size_t len) {
@@ -202,11 +229,11 @@ int drawBanner(const GfxRenderer& r, const char* leftLabel, const char* rightLab
                int contentRight, int contentWidth) {
   const int bannerY = y + TEX_GAP;
   r.fillRect(contentLeft, bannerY, contentWidth, BAR_HEIGHT, true);
-  const int textTop = centeredTextTop(r, TITLE_FONT, bannerY, BAR_HEIGHT);
-  r.drawText(TITLE_FONT, contentLeft + 8, textTop, leftLabel, false, EpdFontFamily::BOLD);
+  const int textTop = centeredTextTop(r, BANNER_FONT, bannerY, BAR_HEIGHT);
+  r.drawText(BANNER_FONT, contentLeft + 8, textTop, leftLabel, false, EpdFontFamily::BOLD);
   if (rightLabel && rightLabel[0]) {
-    const int rw = r.getTextWidth(TITLE_FONT, rightLabel, EpdFontFamily::BOLD);
-    r.drawText(TITLE_FONT, contentRight - 8 - rw, textTop, rightLabel, false, EpdFontFamily::BOLD);
+    const int rw = r.getTextWidth(BANNER_FONT, rightLabel, EpdFontFamily::BOLD);
+    r.drawText(BANNER_FONT, contentRight - 8 - rw, textTop, rightLabel, false, EpdFontFamily::BOLD);
   }
   return y + TEX_GAP + BAR_HEIGHT + TEX_GAP;
 }
@@ -284,24 +311,18 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
       y = drawZone(r, DETAIL_FONT, line, Tex::Ruled, y, W, contentLeft, detailH, false, false);
     } else {
       // Solid-black banner — highest visual weight.
-      char leftLabel[48], rightLabel[32];
-      {
-        if (it.is_calendar && it.travel_secs > 0) {
-          char depBuf[16];
-          formatClock12(it.start_epoch - it.travel_secs, depBuf, sizeof(depBuf));
-          snprintf(leftLabel, sizeof(leftLabel), "%s %s", tr(STR_REMINDERS_LEAVE_BY), depBuf);
-        } else {
-          char clockBuf[16];
-          formatClock12Upper(it.start_epoch, clockBuf, sizeof(clockBuf));
-          snprintf(leftLabel, sizeof(leftLabel), "%s", clockBuf);
-        }
-      }
+      // Left: the actionable time (departure when travel is known, else start),
+      // prefixed with the weekday when it isn't today. Right: "Leave in"/"Starts
+      // in" plus a D/H/M countdown to that same time.
+      const bool hasTravel = it.is_calendar && it.travel_secs > 0;
+      const time_t countdownTarget = hasTravel ? it.start_epoch - it.travel_secs : it.start_epoch;
+      char leftLabel[48], rightLabel[40];
+      formatTimeWithDay(it.start_epoch, now, clockValid, leftLabel, sizeof(leftLabel));
       if (clockValid) {
-        char cd[16];
-        const time_t countdownTarget =
-            (it.is_calendar && it.travel_secs > 0) ? it.start_epoch - it.travel_secs : it.start_epoch;
-        formatCountdown(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
-        snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
+        char cd[24];
+        formatCountdownVerbose(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
+        snprintf(rightLabel, sizeof(rightLabel), "%s %s",
+                 hasTravel ? tr(STR_REMINDERS_LEAVE_IN) : tr(STR_REMINDERS_STARTS_IN), cd);
       } else {
         rightLabel[0] = '\0';
       }
