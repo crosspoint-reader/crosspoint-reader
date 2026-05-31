@@ -36,7 +36,7 @@ constexpr char TASKS_URL[] =
 // Distance Matrix: one origin (home) to many destinations in a single request.
 // duration_in_traffic needs a future departure_time, supplied per-call.
 constexpr char DISTANCE_MATRIX_URL[] =
-    "https://maps.googleapis.com/maps/api/distancematrix/json?mode=driving&units=metric";
+    "https://maps.googleapis.com/maps/api/distancematrix/json?mode=transit&units=metric";
 // Cap the destinations per request so the response stays within HTTP_RX_BUF and
 // the parsed document stays small. Comfortably above any one-page reminder list.
 constexpr int MAPS_MAX_DESTINATIONS = 10;
@@ -458,7 +458,14 @@ bool fetchCalendar(const std::string& token, RemindersData& out) {
 void fetchTravelTimes(RemindersData& out) {
   const std::string apiKey = SETTINGS.mapsApiKey;
   const std::string origin = SETTINGS.homeAddress;
-  if (apiKey.empty() || origin.empty()) return;
+  if (apiKey.empty()) {
+    LOG_DBG("GOOG", "travel times: mapsApiKey not set, skipping");
+    return;
+  }
+  if (origin.empty()) {
+    LOG_DBG("GOOG", "travel times: homeAddress not set, skipping");
+    return;
+  }
 
   const time_t now = time(nullptr);
 
@@ -467,11 +474,15 @@ void fetchTravelTimes(RemindersData& out) {
   uint8_t nPending = 0;
   for (uint8_t i = 0; i < out.count; i++) {
     const CalItem& it = out.items[i];
-    if (it.is_calendar && !it.all_day && it.start_epoch > now && it.location[0] != '\0') {
-      pending[nPending++] = i;
-    }
+    const bool qualifies = it.is_calendar && !it.all_day && it.start_epoch > now && it.location[0] != '\0';
+    LOG_DBG("GOOG", "item[%u] \"%s\" cal=%d allday=%d future=%d loc=\"%s\" -> %s", i, it.title, it.is_calendar,
+            it.all_day, it.start_epoch > now, it.location, qualifies ? "QUEUED" : "skip");
+    if (qualifies) pending[nPending++] = i;
   }
-  if (nPending == 0) return;
+  if (nPending == 0) {
+    LOG_DBG("GOOG", "travel times: no qualifying items (need future timed calendar event with location)");
+    return;
+  }
 
   char depBuf[16];
   snprintf(depBuf, sizeof(depBuf), "%ld", static_cast<long>(now));
@@ -495,8 +506,9 @@ void fetchTravelTimes(RemindersData& out) {
     std::string resp;
     int status = 0;
     // Maps uses the URL key, not a bearer token, so pass an empty bearer.
+    LOG_DBG("GOOG", "distance matrix: querying %u dest(s)", chunk);
     if (!httpExec(HTTP_METHOD_GET, url, "", "", resp, status) || status != 200) {
-      LOG_ERR("GOOG", "distance matrix status %d", status);
+      LOG_ERR("GOOG", "distance matrix HTTP status %d", status);
       continue;  // best-effort: skip this chunk, keep the rest of the sync
     }
 
@@ -524,7 +536,10 @@ void fetchTravelTimes(RemindersData& out) {
         // Prefer traffic-aware duration when the key/billing returns it.
         int32_t secs = el["duration_in_traffic"]["value"] | 0;  // cppcheck-suppress badBitmaskCheck
         if (secs <= 0) secs = el["duration"]["value"] | 0;      // cppcheck-suppress badBitmaskCheck
+        LOG_DBG("GOOG", "element[%u] OK, travel_secs=%ld", j, static_cast<long>(secs));
         if (secs > 0) out.items[pending[base + j]].travel_secs = secs;
+      } else {
+        LOG_ERR("GOOG", "element[%u] status=\"%s\" (REQUEST_DENIED=bad key/billing, NOT_FOUND=bad location)", j, st);
       }
       j++;
     }
