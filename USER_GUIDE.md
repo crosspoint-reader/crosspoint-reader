@@ -44,6 +44,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
 The device utilises the standard buttons on the Xteink X4 (in the same layout as the manufacturer firmware, by default):
 
 ### Button Layout
+
 | Location        | Buttons                                              |
 | --------------- | ---------------------------------------------------- |
 | **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right**           |
@@ -52,6 +53,7 @@ The device utilises the standard buttons on the Xteink X4 (in the same layout as
 Button layout can be customized in the **[Controls Settings](#363-controls)**.
 
 ### Taking a Screenshot
+
 When the Power Button and Volume Down button are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
 
 Alternatively, while reading a book, press the **Confirm** button to open the reader menu and select **Take screenshot**.
@@ -121,11 +123,17 @@ A **WiFi signal strength indicator** (dBm) is displayed on-screen during web ser
 CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
 
 1. Install the plugin in Calibre:
+   
    - Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
+   
    - Download the zip file.
+   
    - Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+
 2. On the device: File Transfer → Connect to Calibre → Join a network.
+
 3. Make sure your computer is on the same WiFi network.
+
 4. In Calibre, click "Send to device" to transfer books.
 
 ### 3.6 Settings
@@ -135,38 +143,51 @@ The Settings screen allows you to configure the device's behavior. There are a f
 #### 3.6.1 Display
 
 - **Sleep Screen**: Which sleep screen to display when the device sleeps:
+  
   - "Dark" (default) - The default dark Crosspoint logo sleep screen
   - "Light" - The same default sleep screen, on a white background
   - "Custom" - Custom images from the SD card; see [Sleep Screen](#37-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
+
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
+  
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
   - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
+
 - **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected:
+  
   - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
+
 - **Status Bar**: Configure the status bar displayed while reading:
+  
   - "None" - No status bar
   - "No Progress" - Show status bar without reading progress
   - "Full w/ Percentage" - Show status bar with book progress (as percentage)
   - "Full w/ Book Bar" - Show status bar with book progress (as bar)
   - "Book Bar Only" - Show book progress (as bar)
   - "Full w/ Chapter Bar" - Show status bar with chapter progress (as bar)
+
 - **Hide Battery %**: Configure where to suppress the battery percentage display in the status bar; the battery icon will still be shown:
+  
   - "Never" (default) - Always show battery percentage
   - "In Reader" - Show battery percentage everywhere except in reading mode
   - "Always" - Always hide battery percentage
+
 - **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting; options are every 1, 5, 10, 15, or 30 pages.
 
 - **UI Theme**: Set which UI theme to use:
+  
   - "Classic" - The original Crosspoint theme
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "RoundedRaff" - A rounded theme with additional visual styling
+
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
+  
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
 
@@ -174,38 +195,56 @@ The Settings screen allows you to configure the device's behavior. There are a f
 > A battery charging indicator is shown on the battery icon whenever the device is actively charging.
 
 #### 3.6.2 Reader
+
 - **Reader Font Family**: Choose the font used for reading:
+  
   - "Noto Serif" (default) - Google's serif font
   - "Noto Sans" - Google's sans-serif font
   - "Open Dyslexic" - Font designed for readers with dyslexia
+
 - **Reader Font Size**: Adjust the text size for reading; options are "Small", "Medium" (default), "Large", or "X Large".
 
 - **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
+
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
+
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
+
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
+
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
+
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
+  
   - "Portrait" (default) - Standard portrait orientation
   - "Landscape CW" - Landscape, rotated clockwise
   - "Inverted" - Portrait, upside down
   - "Landscape CCW" - Landscape, rotated counter-clockwise
+
 - **Extra Paragraph Spacing**: Set how to handle paragraph breaks:
+  
   - "ON" - Vertical space will be added between paragraphs in Reading Mode
   - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
+
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
+
 - **Images**: Whether to display embedded images (JPG/PNG) found in EPUB files; options are "ON" (default) or "OFF".
+
 - **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
 
 #### 3.6.3 Controls
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
+
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
+  
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
   - "Page Scroll" - Long-pressing scrolls a page up/down
+
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
+  
   - "Ignore" (default) - Require a long press to turn off the device
   - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
@@ -216,11 +255,17 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
 - **WiFi Networks**: Connect to WiFi networks for file transfers and firmware updates.
+
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress.
+
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
+
 - **Clear Reading Cache**: Clear the internal SD card cache.
+
 - **Check for updates**: Check for Crosspoint firmware updates over WiFi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
+
 - **Language**: Set the UI language. CrossPoint supports 22 languages including English, Spanish, French, German, Czech, Portuguese, Russian, Swedish, Turkish, Danish, Finnish, Polish, Dutch, Belarusian, Italian, Ukrainian, Romanian, Catalan, Vietnamese, Kazakh, Slovenian, and more.
+
 - **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
 
 #### 3.6.5 OPDS Servers (Multiple Libraries)
@@ -228,11 +273,17 @@ The Settings screen allows you to configure the device's behavior. There are a f
 CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs.
 
 1. Open **Settings -> System -> OPDS Servers**.
+
 2. Select **Add Server** to create a new entry, or select an existing server to edit it.
+
 3. Configure these fields:
-  - **Server Name**: Optional display name (for example, "Home Calibre" or "Public Catalog").
-  - **OPDS Server URL**: Full catalog root URL (for Calibre Content Server, usually ends with `/opds`).
-  - **Username / Password**: Optional credentials for authenticated servers.
+   
+   - **Server Name**: Optional display name (for example, "Home Calibre" or "Public Catalog").
+   
+   - **OPDS Server URL**: Full catalog root URL (for Calibre Content Server, usually ends with `/opds`).
+   
+   - **Username / Password**: Optional credentials for authenticated servers.
+
 4. Use **Delete Server** inside a server entry to remove it.
 
 Behavior notes:
@@ -253,9 +304,9 @@ For web-based WiFi network management, see [Web Settings (WiFi + OPDS)](#366-web
 While in **File Transfer** mode, the web settings page includes management cards for both **WiFi Networks** and **OPDS Servers**.
 
 1. On device: open **File Transfer** and connect to WiFi.
-1. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local`.
-1. In **WiFi Networks**, add, edit, or delete saved network entries (SSID + optional password).
-1. In **OPDS Servers**, add, edit, or delete OPDS catalogs.
+2. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local`.
+3. In **WiFi Networks**, add, edit, or delete saved network entries (SSID + optional password).
+4. In **OPDS Servers**, add, edit, or delete OPDS catalogs.
 
 Behavior notes:
 
@@ -288,13 +339,19 @@ Already have KOReader Sync credentials? Skip registration; basic sync only requi
 When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
 
 2. On each CrossPoint device:
+   
    - Go to **Settings -> System -> KOReader Sync**.
+   
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
+   
    - Set **Sync Server URL** to `https://sync.koreader.rocks`, or leave it empty (both use the same default KOReader sync server).
+   
    - Run **Authenticate**.
 
 3. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
+   
    - Choose **Apply Remote** to jump to remote progress.
+   
    - Choose **Upload Local** to push current progress.
 
 ##### Option B: Self-Hosted Server (Docker Compose)
@@ -337,7 +394,7 @@ curl -H "Accept: application/vnd.koreader.v1+json" "http://<server-ip>:17200/hea
 ```
 
 3. Register a user once.
-CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
+   CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
 
 > [!WARNING]
 > Sending a reusable MD5-derived password over plain HTTP is insecure.
@@ -359,29 +416,35 @@ curl -i "http://<server-ip>:17200/users/create" \
 If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
 
 4. On each CrossPoint device:
+   
    - Go to **Settings -> System -> KOReader Sync**.
+   
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
+   
    - Set **Sync Server URL** to `http://<server-ip>:17200`.
+   
    - Run **Authenticate**.
 
 If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
 
 5. While reading, press **Confirm** to open the reader menu, then select **Sync Progress**.
+   
    - Choose **Apply Remote** to jump to remote progress.
+   
    - Choose **Upload Local** to push current progress.
 
 ### 3.7 Sleep Screen
 
 The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
 
-| Mode | Behavior |
-|------|----------|
-| **Dark** (default) | The CrossPoint logo on a dark background. |
-| **Light** | The CrossPoint logo on a white background. |
-| **Custom** | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found. |
-| **Cover** | The cover of the currently open book. Falls back to **Dark** if no book is open. |
+| Mode               | Behavior                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Dark** (default) | The CrossPoint logo on a dark background.                                                                                    |
+| **Light**          | The CrossPoint logo on a white background.                                                                                   |
+| **Custom**         | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found.                             |
+| **Cover**          | The cover of the currently open book. Falls back to **Dark** if no book is open.                                             |
 | **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
-| **None** | A blank screen. |
+| **None**           | A blank screen.                                                                                                              |
 
 #### Cover settings
 
@@ -399,6 +462,7 @@ To use custom sleep images, set the sleep screen mode to **Custom** or **Cover +
 
 > [!TIP]
 > For best results:
+> 
 > - Use uncompressed BMP files with 24-bit color depth
 > - X4: Use a resolution of 480x800 pixels to match the device's screen resolution.
 > - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
@@ -429,6 +493,7 @@ See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation detai
 Once you have opened a book, the button layout changes to facilitate reading.
 
 ### Page Turning
+
 | Action            | Buttons                              |
 | ----------------- | ------------------------------------ |
 | **Previous Page** | Press **Left** _or_ **Volume Up**    |
@@ -439,6 +504,7 @@ The role of the volume (side) buttons can be swapped in the **[Controls Settings
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
 ### Chapter Navigation
+
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
 * **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
 
@@ -457,6 +523,7 @@ On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the dev
 When reading an EPUB that contains footnotes, you can navigate to the footnote text by selecting the footnote reference in the book. From the footnote, you can return to your original reading position.
 
 ### System Navigation
+
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
@@ -465,9 +532,9 @@ When reading an EPUB that contains footnotes, you can navigate to the footnote t
 
 CrossPoint renders text using the following Unicode character blocks, enabling support for a wide range of languages:
 
-*   **Latin Script (Basic, Supplement, Extended-A/B):** Covers English, German, French, Spanish, Portuguese, Italian, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Hungarian, Romanian, Slovak, Slovenian, Turkish, Catalan, and others.
-*   **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
-*   **Vietnamese:** Supported via extended Latin glyph coverage in the built-in fonts.
+* **Latin Script (Basic, Supplement, Extended-A/B):** Covers English, German, French, Spanish, Portuguese, Italian, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Hungarian, Romanian, Slovak, Slovenian, Turkish, Catalan, and others.
+* **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
+* **Vietnamese:** Supported via extended Latin glyph coverage in the built-in fonts.
 
 What is not supported with built-in fonts: Chinese, Japanese, Korean, Hebrew, Arabic, Greek, and Farsi. However, **CJK and other extended scripts can be enabled by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
 
@@ -496,9 +563,9 @@ Press **Back** at any time to close the menu and return to your current page.
 
 Accessible by selecting **Chapters** from the Reader Menu.
 
-1.  Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to highlight the desired chapter.
-2.  Press **Confirm** to jump to that chapter.
-3.  *Alternatively, press **Back** to cancel and return to your current page.*
+1. Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to highlight the desired chapter.
+2. Press **Confirm** to jump to that chapter.
+3. *Alternatively, press **Back** to cancel and return to your current page.*
 
 ---
 
@@ -518,8 +585,7 @@ Please note that this firmware is currently in active development. The following
 
 * **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
 * **Unsupported Image Formats:** Most JPG and PNG images in EPUBs render correctly. GIFs and progressive JPEGs are not supported and will fall back to an `[Image]` placeholder.
-* **RTL Scripts:** Arabic, Hebrew, and Farsi are not yet supported.
-* **Bookmarks:** Not yet implemented.
+* 
 * **Dictionary Lookup:** Inline word lookup is not yet implemented.
 
 ---
@@ -545,6 +611,7 @@ python3 scripts/debugging_monitor.py COM7                # Windows
 ```
 
 **Features:**
+
 - Color-coded log output by category (errors, memory, display, EPUB parsing, etc.)
 - Live memory usage graph (free RAM, total RAM, max contiguous allocation) updated every second
 - Interactive command prompt — type a command and press Enter to send it to the device
@@ -552,13 +619,14 @@ python3 scripts/debugging_monitor.py COM7                # Windows
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
-| `--baud RATE` | Baud rate (default: 115200) |
-| `--filter KEYWORD` | Show only lines containing the keyword (case-insensitive) |
-| `--suppress KEYWORD` | Hide lines containing the keyword (case-insensitive) |
+| Option               | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `--baud RATE`        | Baud rate (default: 115200)                               |
+| `--filter KEYWORD`   | Show only lines containing the keyword (case-insensitive) |
+| `--suppress KEYWORD` | Hide lines containing the keyword (case-insensitive)      |
 
 **Examples:**
+
 ```
 # Show only memory-related log lines
 python3 scripts/debugging_monitor.py --filter MEM
