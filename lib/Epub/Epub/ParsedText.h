@@ -40,7 +40,12 @@ class ParsedText {
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks, bool allowFocusBoundaryBreak,
                             int focusBoundaryAvailableWidth);
   bool hyphenateFocusPrefixAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
-                                   std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
+                                   std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks, int& consumedWidth,
+                                   size_t& consumedWordCount);
+  bool hyphenatePreviousFocusWordInContinuation(size_t lineStart, size_t overflowIndex, int effectivePageWidth,
+                                                const GfxRenderer& renderer, int fontId,
+                                                std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                                int& lineWidth, size_t& currentIndex);
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
                    const std::function<void(std::shared_ptr<TextBlock>)>& processLine, const GfxRenderer& renderer,
