@@ -940,7 +940,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
-    // Double FAST_REFRESH handles ghosting for image pages; don't count toward full refresh cadence
+    // The image's own page is handled above and doesn't count toward the full
+    // refresh cadence. But the grayscale pass below leaves gray charge in the
+    // image region that a plain fast diff on the *next* page can't clear, so
+    // text there ghosts gray (#2190). Force the next ordinary page onto the
+    // HALF ghost-cleanup path, which drives every pixel to its target
+    // regardless of residue.
+    pagesUntilFullRefresh = 1;
   } else {
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   }
