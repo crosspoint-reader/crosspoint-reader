@@ -300,11 +300,13 @@ void EpubReaderActivity::loop() {
         }
         break;
       case CrossPointSettings::LP_MENU_KOSYNC:
-        // Hold ~1s launches KOReader sync (no-op if no credentials are stored).
+        // Hold ~1s launches KOReader sync. If sync can't run (no credentials stored), fall
+        // through so the normal Confirm-release still opens the reader menu.
         if (mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-          ignoreNextConfirmRelease = true;  // Prevent accidental menu open after launching sync
-          launchKOReaderSync();
-          return;
+          if (launchKOReaderSync()) {
+            ignoreNextConfirmRelease = true;  // sync launched or error shown; suppress menu open
+            return;
+          }
         }
         break;
       case CrossPointSettings::LP_MENU_DISABLED:
@@ -572,8 +574,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   }
 }
 
-void EpubReaderActivity::launchKOReaderSync() {
-  if (!KOREADER_STORE.hasCredentials()) return;
+bool EpubReaderActivity::launchKOReaderSync() {
+  if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
@@ -599,7 +601,7 @@ void EpubReaderActivity::launchKOReaderSync() {
     LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
     pendingSyncSaveError = true;
     requestUpdate();
-    return;
+    return true;  // acted: surfaced a save error to the user
   }
 
   // Release Epub and Section to free ~65KB RAM for the TLS handshake.
@@ -617,6 +619,7 @@ void EpubReaderActivity::launchKOReaderSync() {
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
       renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
       std::move(localChapterName), paragraphIndex));
+  return true;  // acted: launched the sync activity
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
