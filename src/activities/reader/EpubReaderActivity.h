@@ -97,12 +97,19 @@ class EpubReaderActivity final : public Activity {
   int loadedHighlightsSpine = -1;
   bool showHighlightMessage = false;
   unsigned long highlightMessageTime = 0UL;
+  bool showHighlightDeletedMessage = false;
+  // Set after a long-press delete fires so the following Confirm release does
+  // not also set an anchor / finalize a selection.
+  bool ignoreNextSelectionConfirmRelease = false;
 
   void enterSelectionMode();
   void exitSelectionMode();
   void buildSelectableWords(const Page& page, int marginLeft, int marginTop);
   void handleSelectionInput();
   void finalizeHighlight();
+  // Delete the stored highlight under the selection cursor (long-press Confirm).
+  // Returns true if a highlight was found and removed.
+  bool deleteHighlightAtCursor();
   void loadSectionHighlights();
   // Draw stored highlights (underline) for the given page; best-effort.
   void drawStoredHighlights(const Page& page, int marginLeft, int marginTop) const;

@@ -269,6 +269,11 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showHighlightDeletedMessage && (millis() - highlightMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showHighlightDeletedMessage = false;
+    requestUpdate();
+  }
+
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ignoreNextConfirmRelease) {
@@ -887,6 +892,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showHighlightMessage) {
     GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_ADDED));
   }
+
+  if (showHighlightDeletedMessage) {
+    GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_DELETED));
+  }
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
@@ -1302,6 +1311,7 @@ void EpubReaderActivity::enterSelectionMode() {
   }
   selectionMode = true;
   selectionAnchorSet = false;
+  ignoreNextSelectionConfirmRelease = false;
   selectionCursor = 0;
   selectableWords.clear();
   requestUpdate();  // render() rebuilds selectableWords for the current page
@@ -1310,6 +1320,7 @@ void EpubReaderActivity::enterSelectionMode() {
 void EpubReaderActivity::exitSelectionMode() {
   selectionMode = false;
   selectionAnchorSet = false;
+  ignoreNextSelectionConfirmRelease = false;
   selectableWords.clear();
   requestUpdate();
 }
@@ -1321,8 +1332,27 @@ void EpubReaderActivity::handleSelectionInput() {
     return;
   }
 
+  // Long-press Confirm deletes the stored highlight under the cursor.
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
+    if (!ignoreNextSelectionConfirmRelease) {
+      if (deleteHighlightAtCursor()) {
+        showHighlightDeletedMessage = true;
+        highlightMessageTime = millis();
+      }
+      // Swallow the upcoming release so it doesn't also set an anchor/finalize.
+      ignoreNextSelectionConfirmRelease = true;
+      requestUpdate();
+    }
+    return;
+  }
+
   // Confirm: first press sets the anchor, second press finalizes.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (ignoreNextSelectionConfirmRelease) {
+      ignoreNextSelectionConfirmRelease = false;
+      return;
+    }
     if (selectableWords.empty()) return;
     if (!selectionAnchorSet) {
       const auto& sw = selectableWords[selectionCursor];
@@ -1455,6 +1485,58 @@ void EpubReaderActivity::finalizeHighlight() {
   }
 
   exitSelectionMode();
+}
+
+bool EpubReaderActivity::deleteHighlightAtCursor() {
+  if (!epub || !section || selectableWords.empty() || selectionCursor < 0 ||
+      selectionCursor >= static_cast<int>(selectableWords.size())) {
+    return false;
+  }
+
+  const uint16_t curPage = static_cast<uint16_t>(section->currentPage);
+  const auto& sw = selectableWords[selectionCursor];
+  const uint16_t curSpine = static_cast<uint16_t>(currentSpineIndex);
+
+  // True if the cursor word (page/element/word) falls inside [start, end] of h.
+  // Only meaningful when h belongs to this chapter and its cached geometry still
+  // matches the current layout (same gate as drawStoredHighlights).
+  const auto covers = [&](const HighlightEntry& h) {
+    if (h.spineIndex != curSpine) return false;
+    if (h.chapterPageCount != section->pageCount) return false;
+    if (curPage < h.startPage || curPage > h.endPage) return false;
+    if (curPage == h.startPage &&
+        (sw.element < h.startElement || (sw.element == h.startElement && sw.word < h.startWord))) {
+      return false;
+    }
+    if (curPage == h.endPage && (sw.element > h.endElement || (sw.element == h.endElement && sw.word > h.endWord))) {
+      return false;
+    }
+    return true;
+  };
+
+  const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
+  if (!Storage.exists(path.c_str())) return false;
+
+  std::vector<HighlightEntry> highlights;
+  String json = Storage.readFile(path.c_str());
+  if (json.isEmpty() || !JsonSettingsIO::loadHighlights(highlights, json.c_str())) {
+    return false;
+  }
+
+  const size_t before = highlights.size();
+  highlights.erase(std::remove_if(highlights.begin(), highlights.end(), covers), highlights.end());
+  if (highlights.size() == before) {
+    return false;  // cursor not on a stored highlight
+  }
+
+  if (!JsonSettingsIO::saveHighlights(highlights, path.c_str())) {
+    LOG_ERR("ERS", "Failed to save highlights after delete: %s", path.c_str());
+    return false;
+  }
+
+  // Invalidate the per-section cache so the removed underline disappears.
+  sectionHighlightsLoaded = false;
+  return true;
 }
 
 void EpubReaderActivity::drawStoredHighlights(const Page& page, const int marginLeft, const int marginTop) const {
