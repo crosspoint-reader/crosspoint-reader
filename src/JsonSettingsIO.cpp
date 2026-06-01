@@ -501,3 +501,43 @@ bool JsonSettingsIO::loadHighlights(std::vector<HighlightEntry>& highlights, con
   LOG_DBG("HLT", "Loaded %zu highlights from file", highlights.size());
   return true;
 }
+
+namespace {
+// Minimal ArduinoJson input source backed by a HalFile. ArduinoJson's default
+// Reader uses read()/readBytes(), so we expose just those — letting the parser
+// stream straight from the SD card without first buffering the whole file in a
+// String. HalFile is only a Print subclass, so it can't use ReadBufferingStream.
+struct HalFileJsonReader {
+  HalFile& file;
+  int read() { return file.read(); }
+  size_t readBytes(char* buffer, size_t length) {
+    const int n = file.read(buffer, length);
+    return n > 0 ? static_cast<size_t>(n) : 0;
+  }
+};
+}  // namespace
+
+bool JsonSettingsIO::countHighlightsInFile(const char* path, size_t& outCount) {
+  outCount = 0;
+  HalFile f;
+  if (!Storage.openFileForRead("HLT", path, f)) {
+    return false;
+  }
+
+  // Filter: keep only a single tiny field per array element so deserialization
+  // discards the large "text" payload instead of buffering it. Peak RAM is then
+  // bounded by the entry count, not the file's text size.
+  JsonDocument filter;
+  filter["highlights"][0]["spine"] = true;
+
+  JsonDocument doc;
+  HalFileJsonReader reader{f};
+  const auto error = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
+  if (error) {
+    LOG_ERR("HLT", "JSON parse error counting %s: %s", path, error.c_str());
+    return false;
+  }
+
+  outCount = doc["highlights"].as<JsonArrayConst>().size();
+  return true;
+}

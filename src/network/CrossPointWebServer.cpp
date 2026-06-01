@@ -1749,20 +1749,19 @@ void CrossPointWebServer::handleHighlightList() const {
       file.close();
 
       if (!isDir && fileName.endsWith(".json")) {
-        // Count highlights by loading the file (files are small, one per book).
+        // Count highlights without materializing entries: countHighlightsInFile
+        // streams the JSON from disk under a filter, so a large append-only file
+        // can't exhaust heap just to render the list.
         const std::string fullPath = dir + fileName.c_str();
-        String json = Storage.readFile(fullPath.c_str());
-        std::vector<HighlightEntry> highlights;
-        if (!json.isEmpty()) {
-          JsonSettingsIO::loadHighlights(highlights, json.c_str());
-        }
+        size_t count = 0;
+        JsonSettingsIO::countHighlightsInFile(fullPath.c_str(), count);
 
         // Strip the .json extension for display.
         String displayName = fileName.substring(0, fileName.length() - 5);
 
         JsonDocument doc;
         doc["name"] = displayName.c_str();
-        doc["count"] = highlights.size();
+        doc["count"] = count;
         String out;
         serializeJson(doc, out);
 
@@ -1800,13 +1799,38 @@ void CrossPointWebServer::handleHighlightFile() const {
   }
 
   const std::string path = HighlightUtil::getHighlightsDir() + name.c_str() + ".json";
-  if (!Storage.exists(path.c_str())) {
+  HalFile file;
+  if (!Storage.openFileForRead("WEB", path.c_str(), file)) {
     server->send(404, "text/plain", "Not found");
     return;
   }
 
-  String json = Storage.readFile(path.c_str());
-  server->send(200, "application/json", json);
+  // Stream the file in chunks instead of buffering the whole payload in a String,
+  // so raw export of a large append-only highlights file stays within heap limits.
+  server->setContentLength(file.size());
+  server->send(200, "application/json", "");
+
+  NetworkClient client = server->client();
+  constexpr size_t chunkSize = 1024;
+  uint8_t buffer[chunkSize];
+  bool ok = true;
+  while (ok && file.available()) {
+    const int result = file.read(buffer, chunkSize);
+    if (result <= 0) break;
+    size_t total = 0;
+    const size_t bytesRead = static_cast<size_t>(result);
+    while (total < bytesRead) {
+      esp_task_wdt_reset();
+      const size_t wrote = client.write(buffer + total, bytesRead - total);
+      if (wrote == 0) {
+        ok = false;
+        break;
+      }
+      total += wrote;
+    }
+  }
+  client.clear();
+  file.close();
   LOG_DBG("WEB", "Served highlight file: %s", path.c_str());
 }
 

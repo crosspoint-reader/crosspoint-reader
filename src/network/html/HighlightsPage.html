@@ -126,12 +126,22 @@
     }
 
     async function loadBookList() {
+      // Reset any previously loaded book so a refresh that returns no files or
+      // errors can't leave a stale preview / enabled download buttons behind.
+      currentName = '';
+      currentRaw = '';
+      sortedHighlights = [];
+      downloadMdBtn.disabled = true;
+      downloadJsonBtn.disabled = true;
+      preview.className = 'empty';
+      preview.textContent = 'Select a book to see its highlights.';
       bookSelect.innerHTML = '<option value="">Loading…</option>';
       try {
         const res = await fetch('/api/highlights');
         const files = await res.json();
         if (!files.length) {
           bookSelect.innerHTML = '<option value="">No highlight files found</option>';
+          preview.textContent = 'No highlight files found.';
           return;
         }
         bookSelect.innerHTML = '<option value="">Select a book…</option>';
@@ -143,6 +153,7 @@
         }
       } catch (e) {
         bookSelect.innerHTML = '<option value="">Failed to load</option>';
+        preview.textContent = 'Failed to load highlight files.';
       }
     }
 
