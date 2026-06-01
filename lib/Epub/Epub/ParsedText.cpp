@@ -168,6 +168,28 @@ bool lineFilledEnoughForFocusBoundaryBreak(const int lineWidth, const int effect
          effectivePageWidth * kMinFocusBoundaryFillNumerator;
 }
 
+bool shouldJustifyLine(const CssTextAlign alignment, const bool isLastLine, const bool focusReadingEnabled,
+                       const size_t gapCount, const int spareSpace, const int naturalGapWidth,
+                       const int effectivePageWidth) {
+  if (alignment != CssTextAlign::Justify || isLastLine || gapCount == 0 || spareSpace <= 0) {
+    return false;
+  }
+  if (!focusReadingEnabled) {
+    return true;
+  }
+
+  // Focus Reading widens many words and often leaves sparse lines in narrow columns.
+  // Full justification then turns a small number of gaps into distracting rivers.
+  constexpr size_t kMinFocusJustifyGaps = 2;
+  constexpr int kMaxFocusJustifySpareNumerator = 1;
+  constexpr int kMaxFocusJustifySpareDenominator = 5;
+  if (gapCount < kMinFocusJustifyGaps ||
+      spareSpace * kMaxFocusJustifySpareDenominator > effectivePageWidth * kMaxFocusJustifySpareNumerator) {
+    return false;
+  }
+  return naturalGapWidth <= 0 || spareSpace <= naturalGapWidth * 2;
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -1110,9 +1132,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // For justified text, compute per-gap extra to distribute remaining space evenly
   const int spareSpace = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-  const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
-                               ? spareSpace / static_cast<int>(actualGapCount)
-                               : 0;
+  const bool justifyLine = shouldJustifyLine(effectiveAlignment, isLastLine, focusReadingEnabled, actualGapCount,
+                                            spareSpace, totalNaturalGaps, effectivePageWidth);
+  const int justifyExtra = justifyLine ? spareSpace / static_cast<int>(actualGapCount) : 0;
 
   // BiDi processing: reorder words with UAX#9 in full-line context.
   visualOrderScratch.clear();
@@ -1184,14 +1206,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
 
     const int reorderedSpare = effectivePageWidth - reorderedWordWidthSum - reorderedNaturalGaps;
+    const bool reorderedJustifyLine =
+        shouldJustifyLine(effectiveAlignment, isLastLine, focusReadingEnabled, reorderedGapCount, reorderedSpare,
+                          reorderedNaturalGaps, effectivePageWidth);
     const int reorderedJustifyExtra =
-        (effectiveAlignment == CssTextAlign::Justify && !isLastLine && reorderedGapCount >= 1)
-            ? reorderedSpare / static_cast<int>(reorderedGapCount)
-            : 0;
+        reorderedJustifyLine ? reorderedSpare / static_cast<int>(reorderedGapCount) : 0;
 
-    const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                                        ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount)
-                                        : 0;
+    const int justifyContribution = reorderedJustifyLine ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount)
+                                                         : 0;
     const int contentWidth = reorderedWordWidthSum + reorderedNaturalGaps + justifyContribution;
 
     int xpos = 0;
@@ -1220,8 +1242,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         int advance =
             renderer.getKerning(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
                                 firstCodepoint(reorderedWordsScratch[wordIdx + 1]), reorderedStylesScratch[wordIdx]);
-        if (reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] &&
-            effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+        if (reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] && reorderedJustifyLine) {
           advance += reorderedJustifyExtra;
         }
         xpos += advance;
@@ -1229,7 +1250,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         int gap = renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
                                            firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
                                            reorderedStylesScratch[wordIdx]);
-        if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+        if (reorderedJustifyLine) {
           gap += reorderedJustifyExtra;
         }
         xpos += gap;
@@ -1260,8 +1281,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           // Cross-boundary kerning for continuation words
           int advance = renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                             firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
-          if (lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
-              effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+          if (lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] && justifyLine) {
             advance += justifyExtra;
           }
           xpos -= advance;
@@ -1271,7 +1291,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
                                            firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
-          if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+          if (justifyLine) {
             gap += justifyExtra;
           }
           xpos -= gap;
@@ -1294,8 +1314,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           int advance = wordWidths[lastBreakAt + wordIdx];
           advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                          firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
-          if (lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
-              effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+          if (lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] && justifyLine) {
             advance += justifyExtra;
           }
           xpos += advance;
@@ -1305,7 +1324,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
                                            firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
-          if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
+          if (justifyLine) {
             gap += justifyExtra;
           }
           xpos += wordWidths[lastBreakAt + wordIdx] + gap;
