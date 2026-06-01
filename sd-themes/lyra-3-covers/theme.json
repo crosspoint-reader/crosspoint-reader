@@ -6,7 +6,10 @@
   "inherits": "lyra",
   "metrics": {
     "homeCoverTileHeight": 300,
-    "homeRecentBooksCount": 3
+    "homeRecentBooksCount": 3,
+    "homeMenuTopOffset": 8,
+    "menuRowHeight": 56,
+    "menuSpacing": 4
   },
   "components": {
     "homeRecents": {

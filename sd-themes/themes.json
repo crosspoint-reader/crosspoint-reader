@@ -100,11 +100,11 @@
         {
           "path": "theme.json",
           "url": "carousel/theme.json",
-          "size": 4228,
-          "crc32": 1341199046
+          "size": 4303,
+          "crc32": 1789517670
         }
       ],
-      "totalSize": 6918
+      "totalSize": 6993
     },
     {
       "id": "classic",
@@ -218,11 +218,11 @@
         {
           "path": "theme.json",
           "url": "lyra-3-covers/theme.json",
-          "size": 3554,
-          "crc32": 2056606479
+          "size": 3629,
+          "crc32": 3107595529
         }
       ],
-      "totalSize": 6244
+      "totalSize": 6319
     },
     {
       "id": "roundedraff",

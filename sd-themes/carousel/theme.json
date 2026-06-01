@@ -13,7 +13,10 @@
   "metrics": {
     "homeCoverHeight": 300,
     "homeCoverTileHeight": 340,
-    "homeRecentBooksCount": 3
+    "homeRecentBooksCount": 3,
+    "homeMenuTopOffset": 8,
+    "menuRowHeight": 56,
+    "menuSpacing": 4
   },
   "components": {
     "homeRecents": {
