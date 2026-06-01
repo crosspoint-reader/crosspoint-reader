@@ -9,10 +9,6 @@
 #define NOTOSANS_14_FONT_ID (-1589315735)
 #define NOTOSANS_16_FONT_ID (1669013660)
 #define NOTOSANS_18_FONT_ID (37077304)
-#define OPENDYSLEXIC_8_FONT_ID (-853313197)
-#define OPENDYSLEXIC_10_FONT_ID (963754926)
-#define OPENDYSLEXIC_12_FONT_ID (858950283)
-#define OPENDYSLEXIC_14_FONT_ID (1877344218)
 #define UI_10_FONT_ID (22918846)
 #define UI_12_FONT_ID (1635686837)
 #define SMALL_FONT_ID (674098198)
@@ -27,10 +23,6 @@ static_assert(NOTOSANS_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(NOTOSANS_14_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(NOTOSANS_16_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(NOTOSANS_18_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(OPENDYSLEXIC_8_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(OPENDYSLEXIC_10_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(OPENDYSLEXIC_12_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(OPENDYSLEXIC_14_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
