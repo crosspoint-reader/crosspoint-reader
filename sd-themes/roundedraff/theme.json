@@ -7,14 +7,14 @@
   "metrics": {
     "topPadding": 0,
     "headerHeight": 45,
-    "contentSidePadding": 15,
+    "contentSidePadding": 20,
     "listRowHeight": 42,
     "listWithSubtitleRowHeight": 69,
     "menuRowHeight": 42,
     "menuSpacing": 6,
     "homeTopPadding": 55,
-    "homeCoverHeight": 260,
-    "homeCoverTileHeight": 300,
+    "homeCoverHeight": 300,
+    "homeCoverTileHeight": 350,
     "homeRecentBooksCount": 1,
     "homeContinueReadingInMenu": true,
     "homeMenuTopOffset": 20,
@@ -34,19 +34,22 @@
       "type": "cover-strip",
       "maxBooks": 1,
       "wrap": false,
-      "selectionLineWidth": 2,
-      "selectionCornerRadius": 10,
+      "drawPanel": true,
+      "panelCornerRadius": 20,
+      "panelInsetX": 20,
+      "selectionLineWidth": 1,
+      "selectionCornerRadius": 18,
       "slots": [
         {
           "book": "selected",
           "x": "center",
-          "y": "top",
-          "height": 260,
-          "widthPercent": 62,
-          "yOffset": 8,
-          "selected": true,
+          "y": "center",
+          "height": 300,
+          "widthPercent": 60,
+          "yOffset": 0,
+          "selected": false,
           "title": {
-            "enabled": true,
+            "enabled": false,
             "font": "ui12",
             "style": "bold",
             "maxLines": 2,
@@ -63,9 +66,9 @@
       "drawPanel": false,
       "selectionStyle": "pill",
       "selectionCornerRadius": 30,
-      "selectionInset": 15,
-      "rowPaddingX": 30,
-      "textInsetX": 15
+      "selectionInset": 20,
+      "rowPaddingX": 40,
+      "textInsetX": 20
     },
     "list": {
       "font": "ui12",
@@ -77,8 +80,8 @@
       "selectionOutline": false,
       "selectedTextInverted": true,
       "rowBackgrounds": true,
-      "rowSidePadding": 10,
-      "textInsetX": 15,
+      "rowSidePadding": 20,
+      "textInsetX": 20,
       "selectionInsetX": 0,
       "selectionInsetY": 0,
       "titleOffsetY": 12,
@@ -86,6 +89,14 @@
       "valueOffsetY": 12,
       "subtitleValueOffsetY": 22,
       "iconOffsetY": 0
+    },
+    "header": {
+      "font": "ui12",
+      "style": "bold",
+      "centeredTitle": false,
+      "showDivider": false,
+      "titleOffsetY": 0,
+      "batteryOffsetY": 14
     },
     "buttonHints": {
       "font": "small",
@@ -110,7 +121,7 @@
       "selectedCornerRadius": 18,
       "selectedTextInverted": true,
       "drawDivider": true,
-      "horizontalInset": 2
+      "horizontalInset": 4
     }
   },
   "assets": {

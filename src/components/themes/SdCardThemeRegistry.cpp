@@ -161,6 +161,9 @@ void parseHomeRecentsSpec(JsonObjectConst obj, ThemeHomeRecentsSpec& spec) {
   }
   spec.maxBooks = obj["maxBooks"] | spec.maxBooks;
   spec.wrap = obj["wrap"] | spec.wrap;
+  spec.drawPanel = obj["drawPanel"] | spec.drawPanel;
+  spec.panelCornerRadius = obj["panelCornerRadius"] | spec.panelCornerRadius;
+  spec.panelInsetX = obj["panelInsetX"] | spec.panelInsetX;
   spec.selectionLineWidth = obj["selectionLineWidth"] | spec.selectionLineWidth;
   spec.selectionCornerRadius = obj["selectionCornerRadius"] | spec.selectionCornerRadius;
 
@@ -247,6 +250,16 @@ void parseListSpec(JsonObjectConst obj, ThemeListSpec& spec) {
   spec.showIcons = obj["showIcons"] | spec.showIcons;
   spec.iconSize = obj["iconSize"] | spec.iconSize;
   spec.textGap = obj["textGap"] | spec.textGap;
+  const char* selectionStyle = obj["selectionStyle"].as<const char*>();
+  if (selectionStyle != nullptr) {
+    if (strcmp(selectionStyle, "underline") == 0) {
+      spec.selectionStyle = ThemeMenuSelectionStyle::Underline;
+    } else if (strcmp(selectionStyle, "outline") == 0) {
+      spec.selectionStyle = ThemeMenuSelectionStyle::Outline;
+    } else {
+      spec.selectionStyle = ThemeMenuSelectionStyle::Fill;
+    }
+  }
   spec.selectionCornerRadius = obj["selectionCornerRadius"] | spec.selectionCornerRadius;
   spec.selectionFill = obj["selectionFill"] | spec.selectionFill;
   spec.selectionOutline = obj["selectionOutline"] | spec.selectionOutline;
@@ -326,6 +339,7 @@ void parseHeaderSpec(JsonObjectConst obj, ThemeHeaderSpec& spec) {
   spec.centeredTitle = obj["centeredTitle"] | spec.centeredTitle;
   spec.showDivider = obj["showDivider"] | spec.showDivider;
   spec.titleOffsetY = obj["titleOffsetY"] | spec.titleOffsetY;
+  spec.batteryOffsetY = obj["batteryOffsetY"] | spec.batteryOffsetY;
 }
 
 bool iconForKey(const char* key, UIIcon& out) {

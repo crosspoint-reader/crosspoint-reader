@@ -38,6 +38,7 @@
       "style": "regular",
       "showIcons": false,
       "textGap": 0,
+      "selectionStyle": "underline",
       "selectionCornerRadius": 0,
       "selectionFill": false,
       "selectionOutline": false,

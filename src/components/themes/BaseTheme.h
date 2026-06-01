@@ -131,6 +131,9 @@ struct ThemeHomeRecentsSpec {
   ThemeHomeRecentsType type = ThemeHomeRecentsType::Default;
   int maxBooks = 1;
   bool wrap = false;
+  bool drawPanel = false;
+  int panelCornerRadius = 6;
+  int panelInsetX = 0;
   int selectionLineWidth = 3;
   int selectionCornerRadius = 6;
   std::vector<ThemeCoverSlotSpec> slots;
@@ -164,6 +167,7 @@ struct ThemeListSpec {
   bool showIcons = true;
   int iconSize = 0;
   int textGap = 8;
+  ThemeMenuSelectionStyle selectionStyle = ThemeMenuSelectionStyle::Fill;
   int selectionCornerRadius = 6;
   bool selectionFill = true;
   bool selectionOutline = false;
@@ -219,6 +223,7 @@ struct ThemeHeaderSpec {
   bool centeredTitle = false;
   bool showDivider = true;
   int titleOffsetY = 0;
+  int batteryOffsetY = 5;
 };
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
@@ -328,6 +333,7 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  virtual bool homeCoverCacheDependsOnSelector() const { return false; }
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,

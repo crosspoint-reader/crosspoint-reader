@@ -231,8 +231,10 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
 
     const bool showBatteryPercentage =
         SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-    const int batteryX = rect.x + rect.width - 12 - metrics().batteryWidth;
-    drawBatteryRight(renderer, Rect{batteryX, rect.y + 5, metrics().batteryWidth, metrics().batteryHeight},
+    const int batteryX = rect.x + rect.width - metrics().contentSidePadding - metrics().batteryWidth;
+    drawBatteryRight(renderer,
+                     Rect{batteryX, rect.y + header_->batteryOffsetY, metrics().batteryWidth,
+                          metrics().batteryHeight},
                      showBatteryPercentage);
 
     const auto style = header_->bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
@@ -442,11 +444,11 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          selectedY + spec.selectionInsetY,
                          contentWidth - metrics().contentSidePadding * 2 - spec.selectionInsetX * 2,
                          rowHeight - spec.selectionInsetY * 2};
-      if (spec.selectionFill) {
+      if (spec.selectionStyle == ThemeMenuSelectionStyle::Fill && spec.selectionFill) {
         renderer.fillRoundedRect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height,
                                  spec.selectionCornerRadius, Color::LightGray);
       }
-      if (spec.selectionOutline) {
+      if (spec.selectionStyle == ThemeMenuSelectionStyle::Outline || spec.selectionOutline) {
         renderer.drawRoundedRect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height, 1,
                                  spec.selectionCornerRadius, true);
       }
@@ -485,13 +487,19 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
       const auto itemName = rowTitle(i);
       const auto item = renderer.truncatedText(spec.fontId, itemName.c_str(), rowTextWidth, titleStyle);
-      renderer.drawText(spec.fontId, textX, itemY + spec.titleOffsetY, item.c_str(),
-                        !(selected && spec.selectedTextInverted), titleStyle);
+      const int titleY = itemY + spec.titleOffsetY;
+      renderer.drawText(spec.fontId, textX, titleY, item.c_str(), !(selected && spec.selectedTextInverted),
+                        titleStyle);
+      if (selected && spec.selectionStyle == ThemeMenuSelectionStyle::Underline) {
+        const int textWidth = renderer.getTextWidth(spec.fontId, item.c_str(), titleStyle);
+        const int underlineY = std::min(itemY + rowHeight - 4, titleY + renderer.getLineHeight(spec.fontId) + 2);
+        renderer.drawLine(textX, underlineY, textX + textWidth - 1, underlineY, 1, true);
+      }
 
       if (rowDimmed && rowDimmed(i) && !selected) {
         const int titleWidth = renderer.getTextWidth(spec.fontId, item.c_str(), titleStyle);
         const int lineH = renderer.getLineHeight(spec.fontId);
-        for (int py = itemY + spec.titleOffsetY; py < itemY + spec.titleOffsetY + lineH; py++)
+        for (int py = titleY; py < titleY + lineH; py++)
           for (int px = textX; px < textX + titleWidth; px++)
             if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
       }
@@ -921,6 +929,12 @@ void LyraTheme::drawCoverStripRecents(GfxRenderer& renderer, Rect rect, const st
   const int bookCount = static_cast<int>(recentBooks.size());
   const int selected = selectorIndex >= 0 && selectorIndex < bookCount ? selectorIndex : 0;
   const auto& m = metrics();
+
+  if (spec.drawPanel) {
+    const int inset = std::max(0, spec.panelInsetX);
+    renderer.fillRoundedRect(rect.x + inset, rect.y, std::max(0, rect.width - inset * 2), rect.height,
+                             spec.panelCornerRadius, Color::LightGray);
+  }
 
   auto resolveBookIndex = [&](const ThemeCoverSlotSpec& slot) {
     switch (slot.book) {

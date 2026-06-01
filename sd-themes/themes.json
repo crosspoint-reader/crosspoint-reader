@@ -322,11 +322,11 @@
         {
           "path": "theme.json",
           "url": "roundedraff/theme.json",
-          "size": 3821,
-          "crc32": 279424530
+          "size": 4085,
+          "crc32": 3194980012
         }
       ],
-      "totalSize": 6511
+      "totalSize": 6775
     },
     {
       "id": "super-minimal",
@@ -426,11 +426,11 @@
         {
           "path": "theme.json",
           "url": "super-minimal/theme.json",
-          "size": 2483,
-          "crc32": 4266934676
+          "size": 2520,
+          "crc32": 72113598
         }
       ],
-      "totalSize": 5173
+      "totalSize": 5210
     }
   ]
 }

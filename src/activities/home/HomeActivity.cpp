@@ -230,7 +230,10 @@ void HomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  bool bufferRestored = coverBufferStored && coverBufferSelectorIndex == selectorIndex && restoreCoverBuffer();
+  const bool selectorSensitiveCoverCache = GUI.homeCoverCacheDependsOnSelector();
+  bool bufferRestored =
+      coverBufferStored && (!selectorSensitiveCoverCache || coverBufferSelectorIndex == selectorIndex) &&
+      restoreCoverBuffer();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
                  metrics.homeContinueReadingInMenu && metrics.homeShowContinueReadingHeader && !recentBooks.empty()
