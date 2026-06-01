@@ -26,15 +26,19 @@ class RemindersRenderer {
  public:
   // Draw the page starting at startIndex; returns the next page's start index
   // (== data.count when this was the last page). Presents with HALF_REFRESH.
-  static uint8_t renderFull(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex = 0);
+  // selectedIndex, when >= 0, highlights the corresponding task item with a
+  // filled checkbox to indicate it is ready to be marked complete.
+  static uint8_t renderFull(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex = 0,
+                            int8_t selectedIndex = -1);
 
   // Re-render the same page (countdowns recomputed) with FAST_REFRESH. Returns
   // false if a timed item has elapsed since the last sync, signalling the caller
   // to fall back to a full refresh to clear ghosting.
-  static bool renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex = 0);
+  static bool renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex = 0,
+                                   int8_t selectedIndex = -1);
 
  private:
   // Render one page into the framebuffer (no present). Returns the next page's
   // start index.
-  static uint8_t drawLayout(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex);
+  static uint8_t drawLayout(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex, int8_t selectedIndex);
 };

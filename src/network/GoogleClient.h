@@ -36,6 +36,11 @@ class GoogleClient {
   // Result::Cancelled.
   static Result syncAll(RemindersData& out, const volatile bool* cancel = nullptr);
 
+  // Connect WiFi, refresh token, PATCH a single Google Task to completed, and
+  // tear WiFi back down. On OK, data.items[itemIndex].completed is set to true
+  // and the cache file is updated. On failure `data` is left untouched.
+  static Result markTaskComplete(uint8_t itemIndex, RemindersData& data, const volatile bool* cancel = nullptr);
+
   // Human-readable label for logging / UI.
   static const char* resultName(Result r);
 };

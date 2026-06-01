@@ -32,7 +32,8 @@ constexpr char CALENDAR_URL[] =
     "&fields=items(summary,location,start,end)";
 constexpr char TASKS_URL[] =
     "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
-    "?showCompleted=false&maxResults=25&fields=items(title,notes,due,status)";
+    "?showCompleted=false&maxResults=25&fields=items(id,title,notes,due,status)";
+constexpr char TASKS_COMPLETE_URL_PREFIX[] = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/";
 // Distance Matrix: one origin (home) to many destinations in a single request.
 // duration_in_traffic needs a future departure_time, supplied per-call.
 constexpr char DISTANCE_MATRIX_URL[] =
@@ -166,7 +167,7 @@ std::string urlEncode(const std::string& in) {
 // Mirrors HttpDownloader's manual open/fetch/read pattern (perform() buffers the
 // whole body via callbacks). `bearer` and `body` are optional.
 bool httpExec(esp_http_client_method_t method, const std::string& url, const std::string& bearer,
-              const std::string& body, std::string& outBody, int& outStatus) {
+              const std::string& body, std::string& outBody, int& outStatus, const char* contentType = nullptr) {
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.buffer_size = HTTP_RX_BUF;
@@ -185,8 +186,10 @@ bool httpExec(esp_http_client_method_t method, const std::string& url, const std
     const std::string auth = "Bearer " + bearer;
     esp_http_client_set_header(client, "Authorization", auth.c_str());
   }
-  if (method == HTTP_METHOD_POST) {
-    esp_http_client_set_header(client, "Content-Type", "application/x-www-form-urlencoded");
+  if (!body.empty()) {
+    const char* ct =
+        contentType ? contentType : (method == HTTP_METHOD_POST ? "application/x-www-form-urlencoded" : nullptr);
+    if (ct) esp_http_client_set_header(client, "Content-Type", ct);
   }
 
   esp_err_t err = esp_http_client_open(client, body.size());
@@ -337,16 +340,14 @@ bool connectWifi() {
     }
   }
   if (scanCount >= 0) WiFi.scanDelete();
-  std::sort(present.begin(), present.end(),
-            [](const Candidate& a, const Candidate& b) { return a.rssi > b.rssi; });
+  std::sort(present.begin(), present.end(), [](const Candidate& a, const Candidate& b) { return a.rssi > b.rssi; });
 
   std::vector<std::string> candidates;
   candidates.reserve(present.size() + absent.size());
   for (const Candidate& c : present) candidates.push_back(c.ssid);
   for (const std::string& s : absent) candidates.push_back(s);
 
-  LOG_INF("GOOG", "WiFi scan: %d AP(s), %u saved in range", scanCount < 0 ? 0 : scanCount,
-          (unsigned)present.size());
+  LOG_INF("GOOG", "WiFi scan: %d AP(s), %u saved in range", scanCount < 0 ? 0 : scanCount, (unsigned)present.size());
 
   for (const std::string& ssid : candidates) {
     if (cancelled()) return false;
@@ -600,6 +601,7 @@ bool fetchTasks(const std::string& token, RemindersData& out) {
 
   JsonDocument filter;
   JsonObject fi = filter["items"].add<JsonObject>();
+  fi["id"] = true;
   fi["title"] = true;
   fi["notes"] = true;
   fi["due"] = true;
@@ -622,6 +624,7 @@ bool fetchTasks(const std::string& token, RemindersData& out) {
     it.is_calendar = false;
     it.completed = false;
     snprintf(it.title, sizeof(it.title), "%s", tk["title"] | "(untitled task)");
+    snprintf(it.task_id, sizeof(it.task_id), "%s", tk["id"] | "");
     // Tasks only record a due *date* (time is always midnight and ignored), so
     // treat any due as all-day: show the date, not a midnight-UTC countdown.
     const char* due = tk["due"] | (const char*)nullptr;  // cppcheck-suppress badBitmaskCheck
@@ -646,6 +649,29 @@ bool fetchTasks(const std::string& token, RemindersData& out) {
     out.items[out.count++] = it;
   }
   LOG_DBG("GOOG", "tasks: %u items total", out.count);
+  return true;
+}
+
+// PATCH a single Google Task to status=completed. Connects WiFi, refreshes the
+// token, issues the PATCH, then disconnects. On success sets item.completed=true
+// and saves the cache; on any failure `out` is left untouched.
+bool completeTask(const std::string& token, CalItem& item) {
+  if (item.task_id[0] == '\0') {
+    LOG_ERR("GOOG", "completeTask: empty task_id");
+    return false;
+  }
+  const std::string url = std::string(TASKS_COMPLETE_URL_PREFIX) + item.task_id;
+  std::string resp;
+  int status = 0;
+  if (!httpExec(HTTP_METHOD_PATCH, url, token, "{\"status\":\"completed\"}", resp, status, "application/json")) {
+    return false;
+  }
+  if (status != 200 && status != 204) {
+    LOG_ERR("GOOG", "completeTask PATCH status %d", status);
+    return false;
+  }
+  item.completed = true;
+  LOG_INF("GOOG", "Task completed: %s", item.title);
   return true;
 }
 
@@ -716,6 +742,47 @@ GoogleClient::Result GoogleClient::syncAll(RemindersData& out, const volatile bo
   out.saveToFile();
 
   LOG_INF("GOOG", "Sync OK: %u items", out.count);
+  return Result::OK;
+}
+
+GoogleClient::Result GoogleClient::markTaskComplete(uint8_t itemIndex, RemindersData& data,
+                                                    const volatile bool* cancel) {
+  g_cancelFlag = cancel;
+  struct CancelGuard {
+    ~CancelGuard() { g_cancelFlag = nullptr; }
+  } guard;
+
+  if (itemIndex >= data.count) return Result::FetchFailed;
+  CalItem& item = data.items[itemIndex];
+  if (item.is_calendar || item.task_id[0] == '\0') return Result::FetchFailed;
+
+  Creds creds;
+  if (!loadCreds(creds)) return Result::NoCredentials;
+  if (cancelled()) return Result::Cancelled;
+  if (!connectWifi()) return cancelled() ? Result::Cancelled : Result::WifiFailed;
+
+  auto wifiOff = []() {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+  };
+
+  if (cancelled()) {
+    wifiOff();
+    return Result::Cancelled;
+  }
+
+  std::string token;
+  if (!refreshAccessToken(creds, token)) {
+    wifiOff();
+    return cancelled() ? Result::Cancelled : Result::AuthFailed;
+  }
+
+  const bool ok = completeTask(token, item);
+  wifiOff();
+
+  if (!ok) return Result::FetchFailed;
+
+  data.saveToFile();
   return Result::OK;
 }
 

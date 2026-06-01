@@ -31,14 +31,17 @@ class RemindersActivity final : public Activity {
   bool preventAutoSleep() override { return state != State::Failed && !staleReached; }
 
  private:
-  enum class State { Syncing, Showing, Failed };
+  enum class State { Syncing, Showing, Completing, Failed };
 
   void startSync();
+  void startComplete(uint8_t itemIndex);
   void onMinuteTick();
   void enterStale();
 
   static void syncTaskTrampoline(void* param);
   void runSyncTask();
+  static void completeTaskTrampoline(void* param);
+  void runCompleteTask();
 
   State state = State::Syncing;
   bool syncStarted = false;
@@ -66,6 +69,12 @@ class RemindersActivity final : public Activity {
   uint8_t pageHistory[REMINDERS_MAX_ITEMS] = {};
   uint8_t pageDepth = 0;
   volatile uint8_t lastNextIndex = 0;
+
+  // Per-item task selection. -1 = nothing selected. Only task items (not calendar
+  // events) with a non-empty task_id are selectable. Left/Right cycle through them.
+  int8_t selectedIndex = -1;
+  // Index passed to markTaskComplete during the Completing state.
+  uint8_t completeItemIndex = 0;
 
   // Double-tap Confirm detection (400 ms window) for manual re-sync.
   unsigned long lastConfirmMs = 0;
