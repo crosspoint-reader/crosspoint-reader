@@ -233,21 +233,29 @@ int do_shape(const bidi_char* line, bidi_char* to, int count) {
     const bool joinsRight = has_joining_right_neighbor(line, i, count) && can_join_right(shapeType);
 
     if ((cp == 0x0622 || cp == 0x0623 || cp == 0x0625 || cp == 0x0627) && i > 0) {
-      const ucschar prev = line[i - 1].wc;
-      if (prev == 0x0644) {
-        const bool ligatureJoinsLeft = has_joining_left_neighbor(line, i - 1) && can_join_left(arabic_shape_type(prev));
+      // Walk backwards to find the previous non-transparent joining character
+      int prev_idx = i - 1;
+      while (prev_idx >= 0 && (line[prev_idx].wc == 0x200D || line[prev_idx].wc == 0 || is_arabic_transparent(line[prev_idx].wc))) {
+        prev_idx--;
+      }
+      
+      if (prev_idx >= 0) {
+        const ucschar prev = line[prev_idx].wc;
+        if (prev == 0x0644) {
+          const bool ligatureJoinsLeft = has_joining_left_neighbor(line, prev_idx) && can_join_left(arabic_shape_type(prev));
 
-        if (cp == 0x0622)
-          to[i].wc = ligatureJoinsLeft ? 0xFEF6 : 0xFEF5;
-        else if (cp == 0x0623)
-          to[i].wc = ligatureJoinsLeft ? 0xFEF8 : 0xFEF7;
-        else if (cp == 0x0625)
-          to[i].wc = ligatureJoinsLeft ? 0xFEFA : 0xFEF9;
-        else
-          to[i].wc = ligatureJoinsLeft ? 0xFEFC : 0xFEFB;
+          if (cp == 0x0622)
+            to[i].wc = ligatureJoinsLeft ? 0xFEF6 : 0xFEF5;
+          else if (cp == 0x0623)
+            to[i].wc = ligatureJoinsLeft ? 0xFEF8 : 0xFEF7;
+          else if (cp == 0x0625)
+            to[i].wc = ligatureJoinsLeft ? 0xFEFA : 0xFEF9;
+          else
+            to[i].wc = ligatureJoinsLeft ? 0xFEFC : 0xFEFB;
 
-        to[i - 1].wc = 0;
-        continue;
+          to[prev_idx].wc = 0;
+          continue;
+        }
       }
     }
 

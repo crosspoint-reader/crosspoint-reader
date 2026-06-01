@@ -117,6 +117,10 @@ int do_bidi(bool autodir, int paragraphLevel, bidi_char* line, int count);
  *   Applies Arabic shaping to a logically ordered line before visual reordering.
  *   The shaped result is written to `to`; entries consumed by Lam-Alef ligatures
  *   are emitted as wc=0 so callers can skip them after do_bidi().
+ *
+ *   IMPORTANT: `line` and `to` must not overlap (no aliasing). They must be
+ *   separate, non-overlapping buffers to avoid read-after-write issues during
+ *   shaping and ligature formation.
  */
 int do_shape(const bidi_char* line, bidi_char* to, int count);
 
