@@ -777,8 +777,13 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
     if (label == nullptr || label[0] == '\0') return;
 
     if (shapes) {
-      drawButtonHintShape(renderer, shapeForButtonHintLabel(label), x + buttonWidth / 2, y + buttonHeight / 2,
-                          shapeSize);
+      ButtonHintShape shape = shapeForButtonHintLabel(label);
+      if (strcmp(label, ">") == 0 || matchesLabel(label, tr(STR_DIR_RIGHT))) {
+        shape = ButtonHintShape::Up;
+      } else if (strcmp(label, "<") == 0 || matchesLabel(label, tr(STR_DIR_LEFT))) {
+        shape = ButtonHintShape::Down;
+      }
+      drawButtonHintShape(renderer, shape, x + buttonWidth / 2, y + buttonHeight / 2, shapeSize);
       return;
     }
 
