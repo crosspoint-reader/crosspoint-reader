@@ -51,7 +51,12 @@ for size in ${UI_FONT_SIZES[@]}; do
     output_path="../builtinFonts/${font_name}.h"
     python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path \
       --additional-intervals 0x05D0,0x05EA \
-      --additional-intervals 0x0600,0x06FF \
+      --additional-intervals 0x060C,0x060C \
+      --additional-intervals 0x061F,0x061F \
+      --additional-intervals 0x0621,0x064A \
+      --additional-intervals 0x0660,0x0669 \
+      --additional-intervals 0x0671,0x0671 \
+      --additional-intervals 0xFB50,0xFB50 \
       --additional-intervals 0xFE70,0xFEFC > $output_path
     echo "Generated $output_path"
   done
@@ -62,9 +67,14 @@ python fontconvert.py notosans_8_regular 8 \
   ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \
   ../builtinFonts/source/NotoSansArabic/NotoSansArabic-Regular.ttf \
   --additional-intervals 0x05D0,0x05EA \
-  --additional-intervals 0x0600,0x06FF \
+  --additional-intervals 0x060C,0x060C \
+  --additional-intervals 0x061F,0x061F \
+  --additional-intervals 0x0621,0x064A \
+  --additional-intervals 0x0660,0x0669 \
+  --additional-intervals 0x0671,0x0671 \
   --additional-intervals 0xFB50,0xFB50 \
   --additional-intervals 0xFE70,0xFEFC > ../builtinFonts/notosans_8_regular.h
+echo "Generated ../builtinFonts/notosans_8_regular.h"
 
 echo ""
 echo "Running compression verification..."
