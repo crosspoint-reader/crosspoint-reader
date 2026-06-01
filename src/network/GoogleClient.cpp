@@ -309,6 +309,11 @@ bool connectWifi() {
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  // The radio isn't ready immediately after a deep-sleep wake; the known-good
+  // scan path (WifiSelectionActivity::startWifiScan) settles 100ms before
+  // scanning. Without this the first synchronous scan returns 0 and every saved
+  // network falls into the slow absent[] per-SSID timeout path below.
+  delay(100);
 
   // Scan for what's actually in range, then connect to the strongest *saved*
   // network that's present. This is the key to reliable wake-from-sleep sync:
@@ -317,7 +322,15 @@ bool connectWifi() {
   // saved network sitting right there. An active scan lets us skip absent
   // networks entirely and pick the readily-available one. The scan runs a few
   // seconds; we are on the off-loop sync task so blocking is fine.
-  const int scanCount = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+  int scanCount = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+  // An empty/failed first scan right after wake is common; retry a few times
+  // with a short settle, bailing out if a Back press cancelled the sync.
+  for (int attempt = 0; scanCount <= 0 && attempt < 3; attempt++) {
+    if (cancelled()) return false;
+    delay(400);
+    WiFi.scanDelete();
+    scanCount = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+  }
 
   // Ordered candidate list. First: saved networks seen in the scan, strongest
   // signal first. Then: any saved networks NOT seen (covers hidden SSIDs the
