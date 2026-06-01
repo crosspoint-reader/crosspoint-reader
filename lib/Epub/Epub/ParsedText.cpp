@@ -592,43 +592,12 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       }
 
       // Word would overflow — try to split based on hyphenation points
-      int lineWidthBeforeOverflowWord = lineWidth;
-      int freshOverflowWordWidth = wordWidths[currentIndex];
-      if (focusReadingEnabled && currentIndex > lineStart && wordIsFocusSuffix[currentIndex] &&
-          wordContinues[currentIndex] && !wordIsFocusSuffix[currentIndex - 1]) {
-        const size_t prefixIndex = currentIndex - 1;
-        int prefixSpacing = 0;
-        if (prefixIndex > lineStart && !continuesVec[prefixIndex]) {
-          prefixSpacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[prefixIndex - 1]),
-                                                   firstCodepoint(words[prefixIndex]), wordStyles[prefixIndex - 1]);
-        } else if (prefixIndex > lineStart && continuesVec[prefixIndex]) {
-          prefixSpacing = renderer.getKerning(fontId, lastCodepoint(words[prefixIndex - 1]),
-                                              firstCodepoint(words[prefixIndex]), wordStyles[prefixIndex - 1]);
-        }
-        lineWidthBeforeOverflowWord = std::max(0, lineWidth - prefixSpacing - static_cast<int>(wordWidths[prefixIndex]));
-        freshOverflowWordWidth = wordWidths[prefixIndex] +
-                                 renderer.getKerning(fontId, lastCodepoint(words[prefixIndex]),
-                                                     firstCodepoint(words[currentIndex]), wordStyles[prefixIndex]) +
-                                 wordWidths[currentIndex];
-      } else if (focusReadingEnabled && currentIndex + 1 < wordWidths.size() && wordIsFocusSuffix[currentIndex + 1] &&
-                 wordContinues[currentIndex + 1] && !wordIsFocusSuffix[currentIndex]) {
-        freshOverflowWordWidth = wordWidths[currentIndex] +
-                                 renderer.getKerning(fontId, lastCodepoint(words[currentIndex]),
-                                                     firstCodepoint(words[currentIndex + 1]), wordStyles[currentIndex]) +
-                                 wordWidths[currentIndex + 1];
-      }
-
-      const bool wholeOverflowWordFitsFreshLine = freshOverflowWordWidth <= effectivePageWidth;
-      const bool lineFilledForHyphenation =
-          lineFilledEnoughForFocusBoundaryBreak(lineWidthBeforeOverflowWord, effectivePageWidth);
-      const bool allowHyphenationForOverflow =
-          !focusReadingEnabled || isFirstWord || !wholeOverflowWordFitsFreshLine || lineFilledForHyphenation;
-
       const int availableWidth = effectivePageWidth - lineWidth - spacing;
       const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
 
-      const bool allowFocusBoundaryBreak = !isFirstWord && lineFilledForHyphenation;
-      if (availableWidth > 0 && allowHyphenationForOverflow &&
+      const bool allowFocusBoundaryBreak =
+          !isFirstWord && lineFilledEnoughForFocusBoundaryBreak(lineWidth, effectivePageWidth);
+      if (availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks,
                                allowFocusBoundaryBreak, /*focusBoundaryAvailableWidth=*/effectivePageWidth - lineWidth)) {
         // Prefix now fits; append it to this line and move to next line
@@ -639,8 +608,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
       int focusPrefixConsumedWidth = 0;
       size_t focusPrefixConsumedCount = 0;
-      if (availableWidth > 0 && allowHyphenationForOverflow && focusReadingEnabled &&
-          currentIndex + 1 < wordWidths.size() &&
+      if (availableWidth > 0 && focusReadingEnabled && currentIndex + 1 < wordWidths.size() &&
           hyphenateFocusPrefixAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks,
                                       lineWidth + spacing, effectivePageWidth, focusPrefixConsumedWidth,
                                       focusPrefixConsumedCount)) {
@@ -655,7 +623,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
           std::any_of(words.begin() + lineStart, words.begin() + currentIndex, endsWithBreakableHyphen);
 
       if (!visibleHyphenBreakAvailable && focusReadingEnabled && currentIndex > lineStart &&
-          currentIndex < continuesVec.size() && continuesVec[currentIndex] && allowHyphenationForOverflow &&
+          currentIndex < continuesVec.size() && continuesVec[currentIndex] &&
           hyphenatePreviousFocusWordInContinuation(lineStart, currentIndex, effectivePageWidth, renderer, fontId,
                                                    wordWidths, continuesVec, lineWidth, currentIndex)) {
         break;
