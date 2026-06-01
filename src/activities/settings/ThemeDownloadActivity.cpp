@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "MappedInputManager.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -32,6 +33,7 @@ void ThemeDownloadActivity::onExit() {
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
     delay(30);
+    silentRestart();
   }
 }
 
