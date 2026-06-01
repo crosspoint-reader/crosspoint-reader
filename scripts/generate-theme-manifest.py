@@ -19,7 +19,7 @@ def safe_theme_dirs(root: Path):
 def build_manifest(root: Path, base_url: str):
     themes = []
     for theme_dir in safe_theme_dirs(root):
-        theme_doc = json.loads((theme_dir / "theme.json").read_text())
+        theme_doc = json.loads((theme_dir / "theme.json").read_text(encoding="utf-8"))
         files = []
         total = 0
         for file_path in sorted(p for p in theme_dir.rglob("*") if p.is_file()):
@@ -58,7 +58,7 @@ def main():
     manifest = build_manifest(Path(args.root), args.base_url)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(manifest, indent=2) + "\n")
+    output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

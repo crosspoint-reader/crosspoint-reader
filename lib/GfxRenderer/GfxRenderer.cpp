@@ -8,6 +8,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cassert>
 
 #include "FontCacheManager.h"
 
@@ -884,6 +885,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   if (bitmap == nullptr || width <= 0 || height <= 0) return;
+  assert(width == height);
 
   const int bytesPerRow = (width + 7) / 8;
   for (int sourceY = 0; sourceY < height; ++sourceY) {

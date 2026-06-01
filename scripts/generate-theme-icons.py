@@ -34,7 +34,12 @@ def parse_icon_header(path: Path):
     width = int(size_match.group(1))
     height = int(size_match.group(2))
 
-    values = [int(m.group(1), 16) for m in re.finditer(r"0x([0-9A-Fa-f]{2})", text)]
+    bitmap_match = re.search(r"static\s+const\s+uint8_t\s+\w+\s*\[\]\s*=\s*\{(?P<body>.*?)\};", text, re.DOTALL)
+    if not bitmap_match:
+        raise ValueError(f"missing bitmap data in {path}")
+    bitmap_body = bitmap_match.group("body")
+
+    values = [int(m.group(1), 16) for m in re.finditer(r"0x([0-9A-Fa-f]{2})", bitmap_body)]
     expected = ((width + 7) // 8) * height
     if len(values) != expected:
         raise ValueError(f"{path}: expected {expected} bytes, found {len(values)}")
