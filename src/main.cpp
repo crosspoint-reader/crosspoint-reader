@@ -457,7 +457,10 @@ void setup() {
     // settle window even if the loop body takes longer than expected on slow boots.
     // The window is extended slightly when Reminders is enabled to catch the release+re-press of
     // the second tap.
-    bool sawPowerRelease = false;
+    // verifyPowerButtonWakeup's internal update loop consumes the wasReleased event
+    // for the initial press. If the button is already up, the release already happened
+    // and only the second press needs to be caught.
+    bool sawPowerRelease = SETTINGS.remindersEnabled && !gpio.isPressed(HalGPIO::BTN_POWER);
     const unsigned long settleWindow = SETTINGS.remindersEnabled ? 800 : 500;
     const unsigned long settleStart = millis();
     while (millis() - settleStart < settleWindow) {
