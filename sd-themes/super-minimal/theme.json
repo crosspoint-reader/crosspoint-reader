@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "id": "super-minimal",
+  "name": "Super Minimal",
+  "description": "A quiet text-only theme with no cover area, centered home options, underline selection, and icon-only hints.",
+  "inherits": "lyra",
+  "metrics": {
+    "headerHeight": 48,
+    "tabBarHeight": 36,
+    "homeTopPadding": 48,
+    "homeCoverHeight": 0,
+    "homeCoverTileHeight": 0,
+    "homeRecentBooksCount": 1,
+    "homeContinueReadingInMenu": true,
+    "homeShowContinueReadingHeader": true,
+    "homeMenuTopOffset": 0,
+    "menuRowHeight": 42,
+    "menuSpacing": 6
+  },
+  "components": {
+    "homeRecents": {
+      "type": "none"
+    },
+    "homeMenu": {
+      "font": "ui10",
+      "style": "regular",
+      "centeredText": true,
+      "centerVertically": true,
+      "showIcons": false,
+      "drawPanel": false,
+      "panelWidth": 360,
+      "selectionStyle": "underline",
+      "selectionCornerRadius": 6,
+      "selectionInset": 18
+    },
+    "list": {
+      "font": "ui10",
+      "style": "regular",
+      "showIcons": false,
+      "textGap": 0,
+      "selectionStyle": "underline",
+      "selectionCornerRadius": 0,
+      "selectionFill": false,
+      "selectionOutline": false,
+      "selectedTextInverted": false,
+      "selectionInsetX": 0,
+      "selectionInsetY": 0,
+      "titleOffsetY": 7,
+      "subtitleOffsetY": 30,
+      "valueOffsetY": 6,
+      "subtitleValueOffsetY": 16,
+      "iconOffsetY": 0
+    },
+    "header": {
+      "font": "ui10",
+      "style": "regular",
+      "centeredTitle": true,
+      "showDivider": false,
+      "titleOffsetY": 0
+    },
+    "tabBar": {
+      "font": "ui10",
+      "style": "regular",
+      "equalWidth": true,
+      "selectionStyle": "underline",
+      "selectedTextInverted": false,
+      "drawDivider": false,
+      "horizontalInset": 2
+    },
+    "buttonHints": {
+      "font": "small",
+      "style": "regular",
+      "buttonWidth": 80,
+      "smallButtonHeight": 15,
+      "cornerRadius": 6,
+      "fill": false,
+      "outline": false,
+      "drawEmpty": false,
+      "shapes": true,
+      "shapeSize": 18,
+      "textOffsetY": 7
+    }
+  },
+  "devices": {
+    "x3": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 4,
+        "sideButtons": "up-down"
+      }
+    },
+    "x4": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 0,
+        "sideButtons": "up-down"
+      }
+    }
+  },
+  "extensions": {
+    "crossink": {
+      "reference": "src/components/themes/minimal"
+    }
+  }
+}

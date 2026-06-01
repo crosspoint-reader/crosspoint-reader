@@ -1,0 +1,179 @@
+{
+  "schema": 1,
+  "id": "carousel",
+  "name": "Carousel",
+  "description": "A cover-focused home screen with a centered book, side previews, and a thicker outline while browsing covers.",
+  "inherits": "lyra",
+  "requires": {
+    "crosspoint": {
+      "schema": 1,
+      "modules": ["cover-strip"]
+    }
+  },
+  "metrics": {
+    "homeCoverHeight": 300,
+    "homeCoverTileHeight": 340,
+    "homeRecentBooksCount": 3,
+    "homeMenuTopOffset": 8,
+    "menuRowHeight": 56,
+    "menuSpacing": 4
+  },
+  "components": {
+    "homeRecents": {
+      "type": "cover-strip",
+      "maxBooks": 3,
+      "wrap": true,
+      "selectionLineWidth": 3,
+      "inactiveSelectionLineWidth": 1,
+      "selectionCornerRadius": 6,
+      "slots": [
+        {
+          "book": "previous",
+          "x": "padding",
+          "y": "center",
+          "height": 225,
+          "widthPercent": 62
+        },
+        {
+          "book": "selected",
+          "x": "center",
+          "y": "top",
+          "height": 300,
+          "widthPercent": 62,
+          "yOffset": 8,
+          "selected": true,
+          "title": {
+            "enabled": true,
+            "font": "ui12",
+            "style": "bold",
+            "maxLines": 2,
+            "offsetY": 12
+          }
+        },
+        {
+          "book": "next",
+          "x": "right-padding",
+          "y": "center",
+          "height": 225,
+          "widthPercent": 62
+        }
+      ]
+    },
+    "homeMenu": {
+      "font": "ui12",
+      "style": "regular",
+      "centeredText": false,
+      "showIcons": true,
+      "drawPanel": false,
+      "selectionStyle": "fill",
+      "selectionCornerRadius": 6,
+      "selectionInset": 20
+    },
+    "list": {
+      "font": "ui10",
+      "style": "regular",
+      "showIcons": true,
+      "textGap": 8,
+      "selectionCornerRadius": 6,
+      "selectionFill": true,
+      "selectionOutline": false,
+      "selectedTextInverted": false,
+      "selectionInsetX": 0,
+      "selectionInsetY": 0,
+      "titleOffsetY": 7,
+      "subtitleOffsetY": 30,
+      "valueOffsetY": 6,
+      "subtitleValueOffsetY": 16,
+      "iconOffsetY": 0
+    },
+    "buttonHints": {
+      "font": "small",
+      "style": "regular",
+      "buttonWidth": 80,
+      "smallButtonHeight": 15,
+      "cornerRadius": 6,
+      "fill": true,
+      "outline": true,
+      "drawEmpty": true,
+      "textOffsetY": 7
+    }
+  },
+  "assets": {
+    "icons": {
+      "book": "icons/book.bmp",
+      "book24": "icons/book24.bmp",
+      "bookmark": "icons/bookmark.bmp",
+      "cover": "icons/cover.bmp",
+      "file24": "icons/file24.bmp",
+      "folder": "icons/folder.bmp",
+      "folder24": "icons/folder24.bmp",
+      "hotspot": "icons/hotspot.bmp",
+      "image24": "icons/image24.bmp",
+      "library": "icons/library.bmp",
+      "recent": "icons/recent.bmp",
+      "settings": "icons/settings2.bmp",
+      "text24": "icons/text24.bmp",
+      "transfer": "icons/transfer.bmp",
+      "wifi": "icons/wifi.bmp"
+    }
+  },
+  "devices": {
+    "x3": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 4,
+        "sideButtons": "up-down"
+      },
+      "components": {
+        "homeRecents": {
+          "slots": [
+            {
+              "book": "previous",
+              "x": "padding",
+              "y": "center",
+              "height": 210,
+              "widthPercent": 62
+            },
+            {
+              "book": "selected",
+              "x": "center",
+              "y": "top",
+              "height": 280,
+              "widthPercent": 62,
+              "yOffset": 8,
+              "selected": true,
+              "title": {
+                "enabled": true,
+                "font": "ui12",
+                "style": "bold",
+                "maxLines": 2,
+                "offsetY": 12
+              }
+            },
+            {
+              "book": "next",
+              "x": "right-padding",
+              "y": "center",
+              "height": 210,
+              "widthPercent": 62
+            }
+          ]
+        }
+      }
+    },
+    "x4": {
+      "constraints": {
+        "screenWidth": 480,
+        "screenHeight": 800,
+        "frontButtons": 0,
+        "sideButtons": "up-down"
+      }
+    }
+  },
+  "extensions": {
+    "crossink": {
+      "readingStatsFooter": true
+    }
+  }
+}

@@ -21,6 +21,7 @@
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
+#include "ThemeDownloadActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -38,8 +39,9 @@ void SettingsActivity::rebuildSettingsLists() {
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
+  UITheme::getInstance().refreshRegistry();
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
+  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &UITheme::getInstance().registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
@@ -51,6 +53,11 @@ void SettingsActivity::rebuildSettingsLists() {
       systemSettings.push_back(setting);
     }
   }
+  // getSettingsList copies the SD theme names/ids into the UI theme setting.
+  // Keeping the full parsed SD theme registry alive while child activities
+  // like the font downloader run leaves less contiguous heap for TLS/header
+  // parsing.
+  UITheme::getInstance().registry().clear();
 
   // Append device-only ACTION items
   controlsSettings.insert(controlsSettings.begin(),
@@ -62,6 +69,10 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  auto themeSettingIt = std::find_if(displaySettings.begin(), displaySettings.end(),
+                                     [](const SettingInfo& setting) { return setting.nameId == StrId::STR_UI_THEME; });
+  displaySettings.insert(themeSettingIt == displaySettings.end() ? displaySettings.end() : themeSettingIt + 1,
+                         SettingInfo::Action(StrId::STR_MANAGE_THEMES, SettingAction::DownloadThemes));
   // Insert "Manage Fonts" right after the font family setting so users discover it naturally
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
@@ -83,6 +94,19 @@ void SettingsActivity::rebuildSettingsLists() {
       break;
   }
   settingsCount = static_cast<int>(currentSettings->size());
+}
+
+void SettingsActivity::releaseSettingsLists() {
+  displaySettings.clear();
+  readerSettings.clear();
+  controlsSettings.clear();
+  systemSettings.clear();
+  displaySettings.shrink_to_fit();
+  readerSettings.shrink_to_fit();
+  controlsSettings.shrink_to_fit();
+  systemSettings.shrink_to_fit();
+  currentSettings = nullptr;
+  settingsCount = 0;
 }
 
 void SettingsActivity::onEnter() {
@@ -187,6 +211,7 @@ void SettingsActivity::toggleCurrentSetting() {
   const auto& setting = (*currentSettings)[selectedSetting];
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
   const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
+  const bool themeChanged = setting.nameId == StrId::STR_UI_THEME;
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
@@ -251,9 +276,22 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
+        releaseSettingsLists();
+        UITheme::getInstance().releaseSdThemeAssetMemory();
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
+                                 UITheme::getInstance().reload();
+                                 rebuildSettingsLists();
+                               });
+        break;
+      case SettingAction::DownloadThemes:
+        releaseSettingsLists();
+        UITheme::getInstance().releaseSdThemeAssetMemory();
+        startActivityForResult(std::make_unique<ThemeDownloadActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 UITheme::getInstance().reload();
                                  rebuildSettingsLists();
                                });
         break;
@@ -271,6 +309,11 @@ void SettingsActivity::toggleCurrentSetting() {
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
+  if (themeChanged) {
+    UITheme::getInstance().reload();
+    rebuildSettingsLists();
+    requestUpdate();
+  }
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {

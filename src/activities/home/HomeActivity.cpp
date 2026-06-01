@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -51,7 +52,7 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   }
 }
 
-void HomeActivity::loadRecentCovers(int coverHeight) {
+void HomeActivity::loadRecentCovers(const std::vector<int>& coverHeights) {
   recentsLoading = true;
   bool showingLoading = false;
   Rect popupRect;
@@ -59,8 +60,16 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   int progress = 0;
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
-      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      bool hasMissingThumb = false;
+      for (const int coverHeight : coverHeights) {
+        std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+        if (!Storage.exists(coverPath.c_str())) {
+          hasMissingThumb = true;
+          break;
+        }
+      }
+
+      if (hasMissingThumb) {
         // If epub, try to load the metadata for title/author and cover
         if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
@@ -73,7 +82,13 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(coverHeight);
+          bool success = true;
+          for (const int coverHeight : coverHeights) {
+            std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+            if (!Storage.exists(coverPath.c_str())) {
+              success = epub.generateThumbBmp(coverHeight) && success;
+            }
+          }
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
@@ -90,7 +105,13 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(coverHeight);
+            bool success = true;
+            for (const int coverHeight : coverHeights) {
+              std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+              if (!Storage.exists(coverPath.c_str())) {
+                success = xtc.generateThumbBmp(coverHeight) && success;
+              }
+            }
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
@@ -115,9 +136,12 @@ void HomeActivity::onEnter() {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
+  LOG_DBG("HOME", "Loaded %d/%d recent book(s) for home theme", static_cast<int>(recentBooks.size()),
+          metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  coverSelectorIndex = recentBooks.empty() ? 0 : std::min(selectorIndex, static_cast<int>(recentBooks.size()) - 1);
 
   // Trigger first update
   requestUpdate();
@@ -137,33 +161,35 @@ bool HomeActivity::storeCoverBuffer() {
   freeCoverBuffer();
   const size_t needed = renderer.getRegionByteSize(coverRectX, coverRectY, coverRectW, coverRectH);
   if (needed == 0) return false;
-  coverBuffer = static_cast<uint8_t*>(malloc(needed));
+  coverBuffer = makeUniqueNoThrow<uint8_t[]>(needed);
   if (!coverBuffer) {
     LOG_ERR("HOME", "OOM: cover buffer (%u bytes)", (unsigned)needed);
     return false;
   }
   coverBufferSize = needed;
-  if (!renderer.copyRegionToBuffer(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer, coverBufferSize)) {
-    free(coverBuffer);
-    coverBuffer = nullptr;
+  if (!renderer.copyRegionToBuffer(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer.get(),
+                                   coverBufferSize)) {
+    coverBuffer.reset();
     coverBufferSize = 0;
     return false;
   }
+  coverBufferSelectorIndex = coverSelectorIndex;
+  coverBufferStripSelected = selectorIndex < static_cast<int>(recentBooks.size());
   return true;
 }
 
 bool HomeActivity::restoreCoverBuffer() {
   if (!coverBuffer || coverRectW <= 0 || coverRectH <= 0) return false;
-  return renderer.copyBufferToRegion(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer, coverBufferSize);
+  return renderer.copyBufferToRegion(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer.get(),
+                                     coverBufferSize);
 }
 
 void HomeActivity::freeCoverBuffer() {
-  if (coverBuffer) {
-    free(coverBuffer);
-    coverBuffer = nullptr;
-  }
+  coverBuffer.reset();
   coverBufferSize = 0;
   coverBufferStored = false;
+  coverBufferSelectorIndex = -1;
+  coverBufferStripSelected = false;
 }
 
 void HomeActivity::loop() {
@@ -171,11 +197,17 @@ void HomeActivity::loop() {
 
   buttonNavigator.onNext([this, menuCount] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    if (selectorIndex < static_cast<int>(recentBooks.size())) {
+      coverSelectorIndex = selectorIndex;
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, menuCount] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    if (selectorIndex < static_cast<int>(recentBooks.size())) {
+      coverSelectorIndex = selectorIndex;
+    }
     requestUpdate();
   });
 
@@ -211,24 +243,44 @@ void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  constexpr int coverCacheBleed = 12;
+  const bool hasCoverArea = metrics.homeCoverTileHeight > 0 && metrics.homeCoverHeight > 0;
 
   renderer.clearScreen();
-  bool bufferRestored = coverBufferStored && restoreCoverBuffer();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
-                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
-  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
-  // instead of the 48 KB full framebuffer the previous bind captured.
+  // which sub-region of the framebuffer to snapshot. Include a small bleed
+  // because cover-strip themes can draw selection outlines just outside the
+  // nominal cover tile.
   coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
+  coverRectY = hasCoverArea ? std::max(0, metrics.homeTopPadding - coverCacheBleed) : 0;
   coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
+  coverRectH = hasCoverArea
+                   ? std::min(pageHeight - coverRectY,
+                              metrics.homeCoverTileHeight + (metrics.homeTopPadding - coverRectY) + coverCacheBleed)
+                   : 0;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+                 metrics.homeContinueReadingInMenu && metrics.homeShowContinueReadingHeader && !recentBooks.empty()
+                     ? recentBooks[std::min(coverSelectorIndex, static_cast<int>(recentBooks.size()) - 1)].title.c_str()
+                     : nullptr);
+
+  const bool selectorSensitiveCoverCache = GUI.homeCoverCacheDependsOnSelector();
+  const bool coverStripSelected = selectorIndex < static_cast<int>(recentBooks.size());
+  bool bufferRestored = hasCoverArea && coverBufferStored &&
+                        (!selectorSensitiveCoverCache || (coverBufferSelectorIndex == coverSelectorIndex &&
+                                                          coverBufferStripSelected == coverStripSelected)) &&
+                        restoreCoverBuffer();
+
+  if (hasCoverArea) {
+    GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+                            recentBooks, coverSelectorIndex, coverRendered, coverBufferStored, bufferRestored,
+                            std::bind(&HomeActivity::storeCoverBuffer, this), coverStripSelected);
+  } else {
+    coverRendered = false;
+    coverBufferStored = false;
+    bufferRestored = false;
+  }
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
@@ -264,9 +316,9 @@ void HomeActivity::render(RenderLock&&) {
   if (!firstRenderDone) {
     firstRenderDone = true;
     requestUpdate();
-  } else if (!recentsLoaded && !recentsLoading) {
+  } else if (metrics.homeCoverHeight > 0 && !recentsLoaded && !recentsLoading) {
     recentsLoading = true;
-    loadRecentCovers(metrics.homeCoverHeight);
+    loadRecentCovers(UITheme::getInstance().getHomeCoverThumbHeights());
   }
 }
 

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,7 @@ struct ThemeMetrics {
   int homeCoverTileHeight;
   int homeRecentBooksCount;
   bool homeContinueReadingInMenu;
+  bool homeShowContinueReadingHeader;
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
@@ -97,7 +99,144 @@ struct ThemeMetrics {
   int textFieldLineEndOffset;
 };
 
+enum class ThemeHomeRecentsType { Default, None, CoverStrip };
+enum class ThemeBookRef { Previous, Selected, Next, Index };
+enum class ThemeSlotX { Padding, Center, RightPadding };
+enum class ThemeSlotY { Top, Center };
+enum class ThemeMenuSelectionStyle { Fill, Outline, Triangle, Underline, Pill };
+enum class ThemeButtonHintsStyle { Buttons, Shapes, Groups };
+
+struct ThemeTitleSpec {
+  bool enabled = false;
+  int fontId = 12;
+  bool bold = true;
+  int maxLines = 2;
+  int offsetY = 12;
+};
+
+struct ThemeCoverSlotSpec {
+  ThemeBookRef book = ThemeBookRef::Selected;
+  int bookIndex = 0;
+  ThemeSlotX x = ThemeSlotX::Center;
+  ThemeSlotY y = ThemeSlotY::Top;
+  int height = 300;
+  int widthPercent = 62;
+  int xOffset = 0;
+  int yOffset = 0;
+  bool selected = false;
+  ThemeTitleSpec title;
+};
+
+struct ThemeHomeRecentsSpec {
+  ThemeHomeRecentsType type = ThemeHomeRecentsType::Default;
+  int maxBooks = 1;
+  bool wrap = false;
+  bool drawPanel = false;
+  int panelCornerRadius = 6;
+  int panelInsetX = 0;
+  int selectionLineWidth = 3;
+  int inactiveSelectionLineWidth = 0;
+  int selectionCornerRadius = 6;
+  std::vector<ThemeCoverSlotSpec> slots;
+};
+
+struct ThemeButtonMenuSpec {
+  bool enabled = false;
+  int fontId = 12;
+  bool bold = false;
+  bool centeredText = false;
+  bool centerVertically = false;
+  bool showIcons = true;
+  int panelWidth = 0;
+  bool drawPanel = false;
+  int panelCornerRadius = 3;
+  ThemeMenuSelectionStyle selectionStyle = ThemeMenuSelectionStyle::Fill;
+  int selectionCornerRadius = 6;
+  int selectionInset = 16;
+  bool selectedTextInverted = false;
+  bool selectionFillBlack = false;
+  int rowPaddingX = 16;
+  int textInsetX = 16;
+};
+
+struct ThemeListSpec {
+  bool enabled = false;
+  int fontId = 10;
+  bool bold = false;
+  int subtitleFontId = 0;
+  int valueFontId = 0;
+  bool showIcons = true;
+  int iconSize = 0;
+  int textGap = 8;
+  ThemeMenuSelectionStyle selectionStyle = ThemeMenuSelectionStyle::Fill;
+  int selectionCornerRadius = 6;
+  bool selectionFill = true;
+  bool selectionOutline = false;
+  bool selectedTextInverted = false;
+  bool rowBackgrounds = false;
+  bool centerSingleLineRows = false;
+  bool subtitleRowAutoHeight = false;
+  bool centerValueVertically = false;
+  int rowSidePadding = 0;
+  int rowGap = 0;
+  int textInsetX = 8;
+  int selectionInsetX = 0;
+  int selectionInsetY = 0;
+  int titleOffsetY = 7;
+  int subtitleOffsetY = 30;
+  int subtitleTopPadding = 10;
+  int subtitleBottomPadding = 10;
+  int subtitleInterLineGap = 4;
+  int valueOffsetY = 6;
+  int subtitleValueOffsetY = 16;
+  int iconOffsetY = 0;
+};
+
+struct ThemeButtonHintsSpec {
+  bool enabled = false;
+  int fontId = 0;
+  bool bold = false;
+  int buttonWidth = 80;
+  int smallButtonHeight = 15;
+  int cornerRadius = 6;
+  bool fill = true;
+  bool outline = true;
+  bool drawEmpty = true;
+  bool shapes = false;
+  ThemeButtonHintsStyle style = ThemeButtonHintsStyle::Buttons;
+  int sidePadding = 20;
+  int groupGap = 10;
+  int bottomMargin = 10;
+  int innerPadding = 16;
+  int shapeSize = 18;
+  int textOffsetY = 7;
+};
+
+struct ThemeTabBarSpec {
+  bool enabled = false;
+  int fontId = 10;
+  bool bold = false;
+  bool equalWidth = false;
+  ThemeMenuSelectionStyle selectionStyle = ThemeMenuSelectionStyle::Fill;
+  int selectedCornerRadius = 6;
+  bool selectedTextInverted = true;
+  bool drawDivider = true;
+  int horizontalInset = 2;
+};
+
+struct ThemeHeaderSpec {
+  bool enabled = false;
+  int fontId = 12;
+  bool bold = true;
+  bool centeredTitle = false;
+  bool showDivider = true;
+  int titleOffsetY = 0;
+  int batteryOffsetY = 5;
+};
+
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
+
+using ThemeIconMap = std::map<UIIcon, std::string>;
 
 enum class KeyboardKeyType { Normal, Shift, Mode, Space, Del, Ok, Disabled };
 
@@ -125,6 +264,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeCoverTileHeight = 400,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = false,
+                                 .homeShowContinueReadingHeader = true,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
@@ -197,10 +337,12 @@ class BaseTheme {
                           bool selected) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
-                                   bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
+                                   bool& bufferRestored, std::function<bool()> storeCoverBuffer,
+                                   bool coverStripSelected = true) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  virtual bool homeCoverCacheDependsOnSelector() const { return false; }
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,

@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "MappedInputManager.h"
@@ -20,34 +21,127 @@ UITheme::UITheme() {
   setTheme(themeType);
 }
 
+void UITheme::refreshRegistry() { themeRegistry.discover(); }
+
+void UITheme::releaseSdThemeAssetMemory() {
+  // Keep active SD theme backing storage intact; currentTheme may hold pointers
+  // into it. This only releases discovered theme metadata that can be rebuilt.
+  themeRegistry.clear();
+}
+
+std::vector<int> UITheme::getHomeCoverThumbHeights() const {
+  std::vector<int> heights;
+  heights.reserve(1 + currentSdHomeRecents.slots.size());
+  auto addHeight = [&heights](int height) {
+    if (height > 0 && std::find(heights.begin(), heights.end(), height) == heights.end()) {
+      heights.push_back(height);
+    }
+  };
+
+  addHeight(currentMetrics->homeCoverHeight);
+  if (currentSdHomeRecents.type == ThemeHomeRecentsType::CoverStrip) {
+    for (const auto& slot : currentSdHomeRecents.slots) {
+      addHeight(slot.height);
+    }
+  }
+  return heights;
+}
+
 void UITheme::reload() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
+  if (SETTINGS.sdThemeName[0] != '\0') {
+    const SdCardThemeInfo* themeInfo = themeRegistry.findTheme(SETTINGS.sdThemeName);
+    if (themeInfo == nullptr) {
+      refreshRegistry();
+      themeInfo = themeRegistry.findTheme(SETTINGS.sdThemeName);
+    }
+    if (themeInfo == nullptr) {
+      LOG_ERR("UI", "SD theme not found: %s (falling back to built-in theme)", SETTINGS.sdThemeName);
+      themeRegistry.clear();
+      SETTINGS.sdThemeName[0] = '\0';
+      SETTINGS.saveToFile();
+      setTheme(static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme));
+      return;
+    }
+
+    LOG_DBG("UI", "Using SD theme: %s recentsType=%d count=%d slots=%d", themeInfo->id.c_str(),
+            static_cast<int>(themeInfo->homeRecents.type), themeInfo->metrics.homeRecentBooksCount,
+            static_cast<int>(themeInfo->homeRecents.slots.size()));
+    currentSdMetrics = themeInfo->metrics;
+    currentSdHomeRecents = themeInfo->homeRecents;
+    currentSdButtonMenu = themeInfo->buttonMenu;
+    currentSdList = themeInfo->list;
+    currentSdButtonHints = themeInfo->buttonHints;
+    currentSdTabBar = themeInfo->tabBar;
+    currentSdHeader = themeInfo->header;
+    currentSdThemePath = themeInfo->path;
+    currentSdIcons = themeInfo->icons;
+    const bool inheritsClassic = themeInfo->inherits == "classic";
+    themeRegistry.clear();
+    if (inheritsClassic) {
+      currentTheme = std::make_unique<BaseTheme>();
+      currentMetrics = &currentSdMetrics;
+      return;
+    }
+    const ThemeHomeRecentsSpec* homeRecents =
+        currentSdHomeRecents.type != ThemeHomeRecentsType::Default ? &currentSdHomeRecents : nullptr;
+    const ThemeButtonMenuSpec* buttonMenu = currentSdButtonMenu.enabled ? &currentSdButtonMenu : nullptr;
+    const ThemeListSpec* list = currentSdList.enabled ? &currentSdList : nullptr;
+    const ThemeButtonHintsSpec* buttonHints = currentSdButtonHints.enabled ? &currentSdButtonHints : nullptr;
+    const ThemeTabBarSpec* tabBar = currentSdTabBar.enabled ? &currentSdTabBar : nullptr;
+    const ThemeHeaderSpec* header = currentSdHeader.enabled ? &currentSdHeader : nullptr;
+    currentTheme = std::make_unique<LyraTheme>(&currentSdMetrics, homeRecents, buttonMenu, list, buttonHints, tabBar,
+                                               header, currentSdThemePath.c_str(), &currentSdIcons);
+    currentMetrics = &currentSdMetrics;
+    return;
+  }
+
+  setTheme(static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme));
 }
 
 void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
+  std::unique_ptr<BaseTheme> nextTheme;
+  const ThemeMetrics* nextMetrics = &LyraMetrics::values;
+
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");
-      currentTheme = std::make_unique<BaseTheme>();
-      currentMetrics = &BaseMetrics::values;
+      nextTheme = std::make_unique<BaseTheme>();
+      nextMetrics = &BaseMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA:
       LOG_DBG("UI", "Using Lyra theme");
-      currentTheme = std::make_unique<LyraTheme>();
-      currentMetrics = &LyraMetrics::values;
+      nextTheme = std::make_unique<LyraTheme>();
+      nextMetrics = &LyraMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::ROUNDEDRAFF:
       LOG_DBG("UI", "Using RoundedRaff theme");
-      currentTheme = std::make_unique<RoundedRaffTheme>();
-      currentMetrics = &RoundedRaffMetrics::values;
+      nextTheme = std::make_unique<RoundedRaffTheme>();
+      nextMetrics = &RoundedRaffMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
       LOG_DBG("UI", "Using Lyra 3 Covers theme");
-      currentTheme = std::make_unique<Lyra3CoversTheme>();
-      currentMetrics = &Lyra3CoversMetrics::values;
+      nextTheme = std::make_unique<Lyra3CoversTheme>();
+      nextMetrics = &Lyra3CoversMetrics::values;
+      break;
+    default:
+      LOG_DBG("UI", "Using Lyra theme");
+      nextTheme = std::make_unique<LyraTheme>();
+      nextMetrics = &LyraMetrics::values;
       break;
   }
+
+  currentTheme = std::move(nextTheme);
+  currentMetrics = nextMetrics;
+  currentSdMetrics = ThemeMetrics{};
+  currentSdHomeRecents = ThemeHomeRecentsSpec{};
+  currentSdButtonMenu = ThemeButtonMenuSpec{};
+  currentSdList = ThemeListSpec{};
+  currentSdButtonHints = ThemeButtonHintsSpec{};
+  currentSdTabBar = ThemeTabBarSpec{};
+  currentSdHeader = ThemeHeaderSpec{};
+  currentSdThemePath.clear();
+  currentSdIcons.clear();
+  themeRegistry.clear();
 }
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,

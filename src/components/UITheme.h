@@ -4,9 +4,11 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/SdCardThemeRegistry.h"
 
 class UITheme {
   // Static instance
@@ -18,6 +20,10 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() const { return *currentMetrics; }
   const BaseTheme& getTheme() const { return *currentTheme; }
+  std::vector<int> getHomeCoverThumbHeights() const;
+  SdCardThemeRegistry& registry() { return themeRegistry; }
+  void refreshRegistry();
+  void releaseSdThemeAssetMemory();
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
@@ -33,7 +39,17 @@ class UITheme {
 
  private:
   const ThemeMetrics* currentMetrics;
+  ThemeMetrics currentSdMetrics;
+  ThemeHomeRecentsSpec currentSdHomeRecents;
+  ThemeButtonMenuSpec currentSdButtonMenu;
+  ThemeListSpec currentSdList;
+  ThemeButtonHintsSpec currentSdButtonHints;
+  ThemeTabBarSpec currentSdTabBar;
+  ThemeHeaderSpec currentSdHeader;
+  std::string currentSdThemePath;
+  ThemeIconMap currentSdIcons;
   std::unique_ptr<BaseTheme> currentTheme;
+  SdCardThemeRegistry themeRegistry;
 };
 
 // Helper macro to access current theme

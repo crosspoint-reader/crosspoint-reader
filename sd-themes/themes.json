@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "baseUrl": "https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/feat-sd-theme-system/sd-themes",
+  "themes": [
+    {
+      "id": "carousel",
+      "name": "Carousel",
+      "description": "A cover-focused home screen with a centered book, side previews, and a thicker outline while browsing covers.",
+      "files": [
+        {
+          "path": "icons/book.bmp",
+          "url": "carousel/icons/book.bmp",
+          "size": 190,
+          "crc32": 2024654237
+        },
+        {
+          "path": "icons/book24.bmp",
+          "url": "carousel/icons/book24.bmp",
+          "size": 158,
+          "crc32": 3979654830
+        },
+        {
+          "path": "icons/bookmark.bmp",
+          "url": "carousel/icons/bookmark.bmp",
+          "size": 190,
+          "crc32": 2661833068
+        },
+        {
+          "path": "icons/cover.bmp",
+          "url": "carousel/icons/cover.bmp",
+          "size": 190,
+          "crc32": 4277343188
+        },
+        {
+          "path": "icons/file24.bmp",
+          "url": "carousel/icons/file24.bmp",
+          "size": 158,
+          "crc32": 2617288513
+        },
+        {
+          "path": "icons/folder.bmp",
+          "url": "carousel/icons/folder.bmp",
+          "size": 190,
+          "crc32": 2058771447
+        },
+        {
+          "path": "icons/folder24.bmp",
+          "url": "carousel/icons/folder24.bmp",
+          "size": 158,
+          "crc32": 3210810266
+        },
+        {
+          "path": "icons/hotspot.bmp",
+          "url": "carousel/icons/hotspot.bmp",
+          "size": 190,
+          "crc32": 1094047065
+        },
+        {
+          "path": "icons/image24.bmp",
+          "url": "carousel/icons/image24.bmp",
+          "size": 158,
+          "crc32": 4245831462
+        },
+        {
+          "path": "icons/library.bmp",
+          "url": "carousel/icons/library.bmp",
+          "size": 190,
+          "crc32": 3825893573
+        },
+        {
+          "path": "icons/recent.bmp",
+          "url": "carousel/icons/recent.bmp",
+          "size": 190,
+          "crc32": 1431260786
+        },
+        {
+          "path": "icons/settings2.bmp",
+          "url": "carousel/icons/settings2.bmp",
+          "size": 190,
+          "crc32": 2285623569
+        },
+        {
+          "path": "icons/text24.bmp",
+          "url": "carousel/icons/text24.bmp",
+          "size": 158,
+          "crc32": 2842394777
+        },
+        {
+          "path": "icons/transfer.bmp",
+          "url": "carousel/icons/transfer.bmp",
+          "size": 190,
+          "crc32": 3478276151
+        },
+        {
+          "path": "icons/wifi.bmp",
+          "url": "carousel/icons/wifi.bmp",
+          "size": 190,
+          "crc32": 2222207198
+        },
+        {
+          "path": "theme.json",
+          "url": "carousel/theme.json",
+          "size": 4303,
+          "crc32": 1789517670
+        }
+      ],
+      "totalSize": 6993
+    },
+    {
+      "id": "super-minimal",
+      "name": "Super Minimal",
+      "description": "A quiet text-only theme with no cover area, centered home options, underline selection, and icon-only hints.",
+      "files": [
+        {
+          "path": "theme.json",
+          "url": "super-minimal/theme.json",
+          "size": 2541,
+          "crc32": 2904465161
+        }
+      ],
+      "totalSize": 2541
+    }
+  ]
+}

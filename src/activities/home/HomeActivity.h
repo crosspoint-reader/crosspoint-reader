@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "./FileBrowserActivity.h"
@@ -12,14 +13,17 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  int coverSelectorIndex = 0;
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
-  bool coverRendered = false;      // Track if cover has been rendered once
-  bool coverBufferStored = false;  // Track if cover buffer is stored
-  uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
-  size_t coverBufferSize = 0;      // Bytes allocated to coverBuffer
+  bool coverRendered = false;              // Track if cover has been rendered once
+  bool coverBufferStored = false;          // Track if cover buffer is stored
+  std::unique_ptr<uint8_t[]> coverBuffer;  // HomeActivity's own buffer for cover image
+  size_t coverBufferSize = 0;              // Bytes allocated to coverBuffer
+  int coverBufferSelectorIndex = -1;
+  bool coverBufferStripSelected = false;
   // Logical rect last passed to drawRecentBookCover. The cover snapshot only
   // needs to cover this region, not the entire framebuffer, so we cache the
   // tile instead of all 48 KB. Set in render() before the call.
@@ -67,7 +71,7 @@ class HomeActivity final : public Activity {
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
   void loadRecentBooks(int maxBooks);
-  void loadRecentCovers(int coverHeight);
+  void loadRecentCovers(const std::vector<int>& coverHeights);
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
