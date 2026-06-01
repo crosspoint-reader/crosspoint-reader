@@ -201,10 +201,19 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   pw.init(*ctx->renderer);
   pw.beginRow(outY);
 
+  // The cache streams to disk one row at a time. Flushing rows below this one
+  // (PNGdec delivers scanlines top to bottom) repositions the single-row band.
+  // A flush failure stops caching for the rest of the decode so we never write
+  // past the band buffer; finalize() then drops the partial file.
   DirectCacheWriter cw;
   if (caching) {
-    cw.init(ctx->cache.buffer, ctx->cache.bytesPerRow, ctx->cache.originX);
-    cw.beginRow(outY, ctx->config->y);
+    if (!ctx->cache.advanceTo(dstY)) {
+      caching = false;
+      ctx->caching = false;
+    } else {
+      cw.init(ctx->cache.buffer, ctx->cache.bytesPerRow, ctx->cache.bandRows, ctx->cache.originX);
+      cw.beginRow(outY, ctx->config->y + ctx->cache.bandStart);
+    }
   }
 
   int srcX = 0;
@@ -348,19 +357,16 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
 
-  // Allocate cache buffer using SCALED dimensions.
-  // PNG decode is fast enough (~135ms for 400x600) that caching provides minimal benefit
-  // for larger images, while the cache buffer competes with the 44KB PNG decoder for heap.
-  // Skip caching when the buffer would exceed the framebuffer size (48KB).
-  static constexpr size_t PNG_MAX_CACHE_BYTES = 48000;
+  // Stream the pixel cache to disk. PNGdec delivers source scanlines top to
+  // bottom and we emit at most one (downscaled) output row per callback, so the
+  // band only needs a single row. Streaming keeps the working set tiny, so
+  // unlike the old full-image buffer it neither competes with the ~44KB decoder
+  // nor forces larger images to skip caching - which previously meant a full
+  // re-decode on every one of an image page's ~14 render passes.
   ctx.caching = !config.cachePath.empty();
   if (ctx.caching) {
-    size_t cacheSize = (size_t)((ctx.dstWidth + 3) / 4) * ctx.dstHeight;
-    if (cacheSize > PNG_MAX_CACHE_BYTES) {
-      LOG_DBG("PNG", "Skipping cache: %zu bytes exceeds PNG limit (%zu)", cacheSize, PNG_MAX_CACHE_BYTES);
-      ctx.caching = false;
-    } else if (!ctx.cache.allocate(ctx.dstWidth, ctx.dstHeight, config.x, config.y)) {
-      LOG_ERR("PNG", "Failed to allocate cache buffer, continuing without caching");
+    if (!ctx.cache.begin(config.cachePath, ctx.dstWidth, ctx.dstHeight, config.x, config.y, 1)) {
+      LOG_ERR("PNG", "Failed to start cache stream, continuing without caching");
       ctx.caching = false;
     }
   }
@@ -374,14 +380,15 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   if (rc != PNG_SUCCESS) {
     LOG_ERR("PNG", "Decode failed: %d", rc);
+    if (ctx.caching) ctx.cache.abort();
     return false;
   }
 
   LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 
-  // Write cache file if caching was enabled and buffer was allocated
+  // Finalize the streamed cache (caching may have been cleared on a flush error).
   if (ctx.caching) {
-    ctx.cache.writeToFile(config.cachePath);
+    ctx.cache.finalize();
   }
 
   return true;

@@ -147,27 +147,42 @@ struct DirectPixelWriter {
 // Direct cache writer that eliminates per-pixel overhead from PixelCache::setPixel().
 // Pre-computes row pointer so the inner loop is just byte index + bit manipulation.
 //
-// Caller guarantees coordinates are within cache bounds.
+// The cache buffer is a small streaming band (e.g. 16 rows), not the full image,
+// so a band-relative row/column that lands outside it would corrupt adjacent
+// heap. This writer therefore bounds-checks every access: beginRow() invalidates
+// the row when it falls outside the band, and writePixel() drops out-of-range
+// columns. This path only runs during the single decode that populates the
+// cache, never on the screen render hot path, so the checks are cheap.
 struct DirectCacheWriter {
   uint8_t* buffer;
   int bytesPerRow;
+  int bandRows;
   int originX;
-  uint8_t* rowPtr;  // Pre-computed for current row
+  uint8_t* rowPtr;  // Pre-computed for current row; nullptr if row is out of band
 
-  void init(uint8_t* cacheBuffer, int cacheBytesPerRow, int cacheOriginX) {
+  void init(uint8_t* cacheBuffer, int cacheBytesPerRow, int cacheBandRows, int cacheOriginX) {
     buffer = cacheBuffer;
     bytesPerRow = cacheBytesPerRow;
+    bandRows = cacheBandRows;
     originX = cacheOriginX;
     rowPtr = nullptr;
   }
 
-  // Call once per row before the column loop.
-  inline void beginRow(int screenY, int cacheOriginY) { rowPtr = buffer + (screenY - cacheOriginY) * bytesPerRow; }
+  // Call once per row before the column loop. Drops rows outside the band.
+  inline void beginRow(int screenY, int cacheOriginY) {
+    const int localRow = screenY - cacheOriginY;
+    rowPtr = (static_cast<unsigned>(localRow) < static_cast<unsigned>(bandRows))
+                 ? buffer + (size_t)localRow * bytesPerRow
+                 : nullptr;
+  }
 
-  // Write a 2-bit pixel value. No bounds checking.
+  // Write a 2-bit pixel value. Drops the write if the row is out of band or the
+  // column is out of range.
   inline void writePixel(int screenX, uint8_t value) const {
+    if (!rowPtr) return;
     const int localX = screenX - originX;
-    const int byteIdx = localX >> 2;            // localX / 4
+    const int byteIdx = localX >> 2;  // localX / 4
+    if (static_cast<unsigned>(byteIdx) >= static_cast<unsigned>(bytesPerRow)) return;
     const int bitShift = 6 - (localX & 3) * 2;  // MSB first: pixel 0 at bits 6-7
     rowPtr[byteIdx] = (rowPtr[byteIdx] & ~(0x03 << bitShift)) | ((value & 0x03) << bitShift);
   }
