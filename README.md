@@ -29,7 +29,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
   - Web settings UI/API (edit many device settings from browser)
   - WebSocket fast uploads
   - WebDAV handler
-  - AP mode (hotspot) and STA mode (join existing WiFi), both with QR helpers
+  - AP mode (hotspot) and STA mode (join existing Wi-Fi), both with QR helpers
   - Calibre wireless connect flow
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
   - OTA update checks and installs from GitHub releases
@@ -207,7 +207,7 @@ CrossPoint Reader is pretty aggressive about caching data down to the SD card to
 
 ### Data caching
 
-The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the 
+The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the
 cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
 
 ```text
@@ -216,13 +216,18 @@ cache. This cache directory exists at `.crosspoint` on the SD card. The structur
 │   ├── progress.bin     # reading position (chapter, page, etc.)
 │   ├── cover.bmp        # generated cover image
 │   ├── book.bin         # metadata: title, author, spine, TOC
+│   ├── css_rules.cache  # parsed CSS rule cache
+│   ├── img_*            # rendered image cache files
 │   └── sections/        # per-chapter layout cache
 │       ├── 0.bin
 │       ├── 1.bin
 │       └── ...
+├── settings.json        # device settings
+├── state.json           # resume/runtime state
+└── recent.json          # recent books list
 ```
 
-Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Note: the cache isn't cleared automatically when you delete a book, and moving a file to a new path resets its reading progress.
+Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 
