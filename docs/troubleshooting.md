@@ -46,7 +46,7 @@ This document shows common issues and possible solutions while using the device 
 2. Check that the filename is valid for the SD card filesystem
 3. Try uploading a smaller file first to test
 4. Refresh the browser page and try again
-5. If WebSocket upload fails repeatedly, try the HTTP fallback path by refreshing and uploading again
+5. If WebSocket upload fails repeatedly, refresh the page and retry with the HTTP fallback path
 
 ### Saved Password Not Working
 

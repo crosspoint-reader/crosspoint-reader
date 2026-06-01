@@ -105,7 +105,7 @@ The Recent Books screen lists the most recently opened books in a chronological 
 
 The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
 
-See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
+See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
 The web interface also supports **WebDAV**, allowing you to mount the device as a network drive and manage files directly from your computer's file manager.
 
@@ -114,7 +114,7 @@ Download links for files already on the device are available in the web interfac
 A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined-network web server sessions.
 
 > [!TIP]
-> Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
+> Advanced users can also manage files programmatically or via the command line using `curl`. See the [web server docs](./docs/webserver.md) for details.
 > [!TIP]
 > If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
 

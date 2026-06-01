@@ -72,7 +72,7 @@ OPDS server.
 
 ## Web Interface
 
-The browser UI has three primary pages.
+The browser UI has four primary pages.
 
 ### Home
 
@@ -130,11 +130,11 @@ Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoint
 - There is no authentication.
 - Anyone on the same network can access the web interface while it is running.
 - The server stops when you exit File Transfer or Calibre Wireless mode.
-- Hotspot mode creates an open network for convenience; disconnect when done.
+- Hotspot mode creates an open network for connectivity fallback; disconnect when done.
 
 ## Tips
 
-1. Use **Create Hotspot** when you do not trust or control the local network.
+1. Use **Create Hotspot** when no trusted network is available.
 2. Prefer `crosspoint.local` when available, but keep the displayed IP address as a fallback.
 3. Move closer to the router if upload progress stalls in Join Network mode.
 4. Upload custom fonts through the Fonts page or copy them to `/.fonts/` or `/fonts/` on the SD card.

@@ -452,7 +452,7 @@ Incomplete WebSocket uploads are deleted on disconnect or error.
 
 ## WebDAV
 
-The same HTTP server registers a Class 1 WebDAV handler for file manager clients.
+The same HTTP server registers a WebDAV-compatible handler for file manager clients.
 
 Supported methods:
 
@@ -464,8 +464,9 @@ Notes:
 
 - `PUT` writes to a temporary `.davtmp` file first, then renames it into place.
 - Protected paths are rejected.
-- `LOCK` and `UNLOCK` are accepted for client compatibility but do not provide
-  full locking semantics.
+- `LOCK` and `UNLOCK` are accepted for client compatibility only. The server
+  does not implement full WebDAV Class 2 locking semantics such as persistent
+  locks or lock discovery.
 
 ## UDP Discovery
 

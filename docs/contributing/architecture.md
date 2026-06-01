@@ -151,7 +151,7 @@ Typical persisted areas on SD:
     sections/*.bin
     img_* cache files
   settings.json
-  state.bin
+  state.json
 ```
 
 `sections/*.bin` contains rendered pages plus anchor, paragraph, and list-item
