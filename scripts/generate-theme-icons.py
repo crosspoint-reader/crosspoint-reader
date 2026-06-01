@@ -41,6 +41,27 @@ def parse_icon_header(path: Path):
     return width, height, bytes(values)
 
 
+def get_bit(bitmap: bytes, width: int, x: int, y: int) -> int:
+    stride = (width + 7) // 8
+    return (bitmap[y * stride + x // 8] >> (7 - (x % 8))) & 1
+
+
+def set_bit(buf: bytearray, width: int, x: int, y: int, value: int):
+    stride = (width + 7) // 8
+    if value:
+        buf[y * stride + x // 8] |= 1 << (7 - (x % 8))
+
+
+def rotate_1bit_cw(width: int, height: int, bitmap: bytes):
+    rotated_width = height
+    rotated_height = width
+    rotated = bytearray(((rotated_width + 7) // 8) * rotated_height)
+    for y in range(height):
+        for x in range(width):
+            set_bit(rotated, rotated_width, height - 1 - y, x, get_bit(bitmap, width, x, y))
+    return rotated_width, rotated_height, bytes(rotated)
+
+
 def write_1bit_bmp(path: Path, width: int, height: int, bitmap: bytes):
     src_stride = (width + 7) // 8
     dst_stride = ((width + 31) // 32) * 4
@@ -77,6 +98,7 @@ def main():
     for header in ICON_HEADERS:
         icon_path = icon_root / header
         width, height, data = parse_icon_header(icon_path)
+        width, height, data = rotate_1bit_cw(width, height, data)
         parsed.append((icon_path.stem, width, height, data))
 
     for theme_dir in sorted(theme_root.iterdir()):
