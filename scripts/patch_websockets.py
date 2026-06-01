@@ -1,6 +1,5 @@
 """
-PlatformIO pre-build script: apply CrossPoint's WebSockets patches via
-`git apply`.
+PlatformIO pre-build script: apply CrossPoint's WebSockets patches.
 
 The upstream links2004/WebSockets 2.7.3 pin calls the deprecated
 `NetworkClient::flush()` in `WebSocketsClient::clientDisconnect`. Recent
@@ -9,14 +8,20 @@ so every release build emits a -Wdeprecated-declarations warning. The patch
 in `scripts/websockets_patches/` swaps it for the non-deprecated `clear()`,
 which has the same RX-discard semantics the disconnect path wants.
 
-Unlike JPEGDEC (a git checkout), the WebSockets libdep is an extracted
-registry tarball with no `.git` directory, so we locate it by its source
-file instead. `git apply` itself does not require a git working tree.
+We use GNU `patch`, not `git apply`, on purpose. The WebSockets libdep lives
+under `.pio/libdeps/<env>/WebSockets`, which sits *inside* the project's own
+git work tree (`.pio` is gitignored, but git still owns the path). `git apply`
+resolves against that enclosing repo rather than the libdep, so it silently
+no-ops -- both the forward and reverse `--check` "succeed" without touching
+the file. (JPEGDEC dodges this only because it is installed as its own git
+checkout with a private `.git`.) GNU `patch` ignores git entirely and edits
+the file in place, which is what we need here.
 
-Each patch's idempotency is decided by git itself:
-  * `git apply --check --reverse` succeeds  -> already applied, skip
-  * `git apply --check`            succeeds  -> apply
-  * neither succeeds                          -> abort the build
+Patches are read with `-i` so stdin stays free; stdin is fed from /dev/null
+so any prompt defaults to "no". That yields clean three-state detection:
+  * reverse dry-run succeeds  -> already applied, skip
+  * forward dry-run succeeds  -> apply
+  * neither succeeds          -> source diverged, abort the build
 
 Patches live in `scripts/websockets_patches/` as one-commit-per-fix files.
 Applied in lexical order.
@@ -30,9 +35,9 @@ import sys
 
 PATCH_DIR = os.path.join(env["PROJECT_DIR"], "scripts", "websockets_patches")  # noqa: F821
 
-# Sentinel file used to locate the WebSockets libdep working tree. `git apply`
-# is run with this directory as cwd, matching the `a/src/...` paths in the
-# patch (default -p1 strips the leading component).
+# Sentinel file used to locate the WebSockets libdep working tree. `patch` is
+# run with this directory as cwd, matching the `a/src/...` paths in the patch
+# (default -p1 strips the leading component).
 SENTINEL = os.path.join("src", "WebSocketsClient.cpp")
 
 
@@ -70,34 +75,40 @@ def _patch_files():
 
 def _apply_one(ws_dir, patch_path):
     name = os.path.basename(patch_path)
-    if _git_apply_succeeds(ws_dir, patch_path, reverse=True):
-        return
-    if not _git_apply_succeeds(ws_dir, patch_path, reverse=False):
+    if _patch_succeeds(ws_dir, patch_path, dry_run=True, reverse=True):
+        return  # already applied
+    if not _patch_succeeds(ws_dir, patch_path, dry_run=True, reverse=False):
         # Not applied, not appliable -- the libdep source has diverged from
         # what the patch expects. Don't write a half-patched file.
-        result = subprocess.run(
-            ["git", "apply", "--check", patch_path],
-            cwd=ws_dir,
-            capture_output=True,
-            text=True,
-        )
+        result = _run_patch(ws_dir, patch_path, dry_run=True, reverse=False)
         sys.stderr.write(
             "ERROR: WebSockets patch %s does not apply cleanly:\n%s%s\n"
             % (name, result.stdout, result.stderr)
         )
         raise SystemExit(1)
-    subprocess.run(["git", "apply", patch_path], cwd=ws_dir, check=True)
+    if not _patch_succeeds(ws_dir, patch_path, dry_run=False, reverse=False):
+        sys.stderr.write("ERROR: WebSockets patch %s failed to apply\n" % name)
+        raise SystemExit(1)
     print("Applied WebSockets patch: %s" % name)
 
 
-def _git_apply_succeeds(ws_dir, patch_path, *, reverse):
-    cmd = ["git", "apply", "--check"]
+def _patch_succeeds(ws_dir, patch_path, *, dry_run, reverse):
+    return _run_patch(ws_dir, patch_path, dry_run=dry_run, reverse=reverse).returncode == 0
+
+
+def _run_patch(ws_dir, patch_path, *, dry_run, reverse):
+    # -i reads the patch from a file so stdin is free; feeding stdin from
+    # /dev/null makes any GNU patch prompt default to "no" (skip), which is
+    # exactly the non-destructive behaviour we want for the dry-run probes.
+    cmd = ["patch", "-p1", "-i", patch_path]
+    if dry_run:
+        cmd.append("--dry-run")
     if reverse:
         cmd.append("--reverse")
-    cmd.append(patch_path)
-    return subprocess.run(
-        cmd, cwd=ws_dir, capture_output=True, text=True
-    ).returncode == 0
+    with open(os.devnull, "rb") as devnull:
+        return subprocess.run(
+            cmd, cwd=ws_dir, stdin=devnull, capture_output=True, text=True
+        )
 
 
 patch_websockets(env)  # noqa: F821
