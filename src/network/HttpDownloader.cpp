@@ -26,7 +26,8 @@ constexpr int HTTP_TX_BUF = 1024;
 // slow servers room. esp_http_client's timeout_ms is uint32, so unlike Arduino
 // HTTPClient's uint16 setTimeout it doesn't silently truncate.
 constexpr int HTTP_TIMEOUT_MS = 60000;
-constexpr size_t READ_CHUNK = 1024;
+constexpr size_t READ_CHUNK = 2048;
+constexpr size_t FALLBACK_READ_CHUNK = 1024;
 constexpr uint32_t PROGRESS_INTERVAL_MS = 500;
 constexpr size_t MIN_PROGRESS_STEP_BYTES = 16 * 1024;
 
@@ -194,11 +195,16 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     size_t lastProgressBytes = 0;
     uint32_t lastProgressMs = millis();
 
-    auto buf = makeUniqueNoThrow<char[]>(READ_CHUNK);
+    size_t readChunk = READ_CHUNK;
+    auto buf = makeUniqueNoThrow<char[]>(readChunk);
     if (!buf) {
-      LOG_ERR("HTTP", "OOM: %u byte read buffer", (unsigned)READ_CHUNK);
-      esp_http_client_cleanup(client);
-      return HttpDownloader::HTTP_ERROR;
+      readChunk = FALLBACK_READ_CHUNK;
+      buf = makeUniqueNoThrow<char[]>(readChunk);
+      if (!buf) {
+        LOG_ERR("HTTP", "OOM: %u byte read buffer", (unsigned)readChunk);
+        esp_http_client_cleanup(client);
+        return HttpDownloader::HTTP_ERROR;
+      }
     }
 
     while (true) {
@@ -206,7 +212,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
         esp_http_client_cleanup(client);
         return HttpDownloader::ABORTED;
       }
-      const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
+      const int read = esp_http_client_read(client, buf.get(), readChunk);
       if (read < 0) {
         LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
         esp_http_client_cleanup(client);
@@ -278,6 +284,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
+  const uint32_t startMs = millis();
 
   if (Storage.exists(destPath.c_str())) {
     Storage.remove(destPath.c_str());
@@ -307,6 +314,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     Storage.remove(destPath.c_str());
     return HTTP_ERROR;
   }
-  LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
+  const uint32_t elapsedMs = millis() - startMs;
+  const uint32_t bytesPerSec = elapsedMs > 0 ? static_cast<uint32_t>((sink.downloaded * 1000ULL) / elapsedMs) : 0;
+  LOG_DBG("HTTP", "Downloaded %zu bytes in %lu ms (%lu B/s)", sink.downloaded,
+          static_cast<unsigned long>(elapsedMs), static_cast<unsigned long>(bytesPerSec));
   return OK;
 }
