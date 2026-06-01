@@ -166,6 +166,7 @@ bool HomeActivity::storeCoverBuffer() {
     return false;
   }
   coverBufferSelectorIndex = coverSelectorIndex;
+  coverBufferStripSelected = selectorIndex < static_cast<int>(recentBooks.size());
   return true;
 }
 
@@ -182,6 +183,7 @@ void HomeActivity::freeCoverBuffer() {
   coverBufferSize = 0;
   coverBufferStored = false;
   coverBufferSelectorIndex = -1;
+  coverBufferStripSelected = false;
 }
 
 void HomeActivity::loop() {
@@ -258,12 +260,14 @@ void HomeActivity::render(RenderLock&&) {
                      : nullptr);
 
   const bool selectorSensitiveCoverCache = GUI.homeCoverCacheDependsOnSelector();
+  const bool coverStripSelected = selectorIndex < static_cast<int>(recentBooks.size());
   bool bufferRestored =
       hasCoverArea && coverBufferStored &&
-      (!selectorSensitiveCoverCache || coverBufferSelectorIndex == coverSelectorIndex) && restoreCoverBuffer();
+      (!selectorSensitiveCoverCache ||
+       (coverBufferSelectorIndex == coverSelectorIndex && coverBufferStripSelected == coverStripSelected)) &&
+      restoreCoverBuffer();
 
   if (hasCoverArea) {
-    const bool coverStripSelected = selectorIndex < static_cast<int>(recentBooks.size());
     GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                             recentBooks, coverSelectorIndex, coverRendered, coverBufferStored, bufferRestored,
                             std::bind(&HomeActivity::storeCoverBuffer, this), coverStripSelected);
