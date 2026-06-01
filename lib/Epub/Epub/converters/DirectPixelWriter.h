@@ -99,6 +99,43 @@ struct DirectPixelWriter {
     rowPhyYBase = phyYBase + logicalY * phyYStepY;
   }
 
+  // For the current row (set via beginRow), narrow [colStart, colEnd) to the
+  // columns whose pixels fall inside the active strip band. writePixel() would
+  // clip the rest anyway, but on a strip pass that is most of a full-page image
+  // (only ~one strip-height worth of columns survive in portrait); skipping them
+  // here avoids the per-pixel unpack+transform entirely. For full-frame passes
+  // (clipRows == panel height) the range is unchanged. xBase is the logical X of
+  // column 0; the band test mirrors writePixel(): 0 <= phyY - originY < clipRows.
+  inline void bandColRange(int xBase, int width, int& colStart, int& colEnd) const {
+    colStart = 0;
+    colEnd = width;
+    if (phyYStepX == 0) {
+      // phyY is constant across the row: the whole row is in-band or out.
+      const int sy = rowPhyYBase - originY;
+      if (static_cast<unsigned>(sy) >= static_cast<unsigned>(clipRows)) colEnd = 0;
+      return;
+    }
+    // phyY = rowPhyYBase + logicalX * phyYStepX (phyYStepX is +1 or -1).
+    // Solve originY <= phyY <= originY + clipRows - 1 for logicalX.
+    const int loY = originY;
+    const int hiY = originY + clipRows - 1;
+    int xLo, xHi;
+    if (phyYStepX > 0) {
+      xLo = loY - rowPhyYBase;
+      xHi = hiY - rowPhyYBase;
+    } else {
+      xLo = rowPhyYBase - hiY;
+      xHi = rowPhyYBase - loY;
+    }
+    const int cs = xLo - xBase;
+    const int ce = xHi - xBase + 1;  // exclusive
+    if (cs > colStart) colStart = cs;
+    if (ce < colEnd) colEnd = ce;
+    if (colStart < 0) colStart = 0;
+    if (colEnd > width) colEnd = width;
+    if (colStart > colEnd) colStart = colEnd;
+  }
+
   // Write a single 2-bit dithered pixel value to the framebuffer.
   // Must be called after beginRow() for the current row.
   // No bounds checking — caller guarantees coordinates are valid.
