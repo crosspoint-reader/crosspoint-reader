@@ -97,6 +97,19 @@ void SettingsActivity::rebuildSettingsLists() {
   settingsCount = static_cast<int>(currentSettings->size());
 }
 
+void SettingsActivity::releaseSettingsLists() {
+  displaySettings.clear();
+  readerSettings.clear();
+  controlsSettings.clear();
+  systemSettings.clear();
+  displaySettings.shrink_to_fit();
+  readerSettings.shrink_to_fit();
+  controlsSettings.shrink_to_fit();
+  systemSettings.shrink_to_fit();
+  currentSettings = nullptr;
+  settingsCount = 0;
+}
+
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
@@ -264,16 +277,22 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
+        releaseSettingsLists();
+        UITheme::getInstance().releaseSdThemeDownloadMemory();
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
+                                 UITheme::getInstance().reload();
                                  rebuildSettingsLists();
                                });
         break;
       case SettingAction::DownloadThemes:
+        releaseSettingsLists();
+        UITheme::getInstance().releaseSdThemeDownloadMemory();
         startActivityForResult(std::make_unique<ThemeDownloadActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
+                                 UITheme::getInstance().reload();
                                  rebuildSettingsLists();
                                });
         break;

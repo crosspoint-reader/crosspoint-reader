@@ -21,6 +21,11 @@ UITheme::UITheme() {
 
 void UITheme::refreshRegistry() { themeRegistry.discover(); }
 
+void UITheme::releaseSdThemeDownloadMemory() {
+  themeRegistry.clear();
+  currentSdIcons.clear();
+}
+
 std::vector<int> UITheme::getHomeCoverThumbHeights() const {
   std::vector<int> heights;
   auto addHeight = [&heights](int height) {

@@ -421,8 +421,14 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<bool(int index)>& rowDimmed) const {
   if (list_ != nullptr && list_->enabled) {
     const ThemeListSpec& spec = *list_;
-    const int rowHeight = (rowSubtitle != nullptr) ? metrics().listWithSubtitleRowHeight : metrics().listRowHeight;
-    const int pageItems = std::max(1, rect.height / std::max(1, rowHeight));
+    const bool hasSubtitle = rowSubtitle != nullptr;
+    int rowHeight = hasSubtitle ? metrics().listWithSubtitleRowHeight : metrics().listRowHeight;
+    if (hasSubtitle && spec.subtitleRowAutoHeight) {
+      rowHeight = spec.subtitleTopPadding + renderer.getLineHeight(spec.fontId) + spec.subtitleInterLineGap +
+                  renderer.getLineHeight(spec.subtitleFontId) + spec.subtitleBottomPadding;
+    }
+    const int rowStep = rowHeight + std::max(0, spec.rowGap);
+    const int pageItems = std::max(1, rect.height / std::max(1, rowStep));
     const int totalPages = (itemCount + pageItems - 1) / pageItems;
     const int contentWidth =
         rect.width - (totalPages > 1 ? (metrics().scrollBarWidth + metrics().scrollBarRightOffset) : 1);
@@ -439,7 +445,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     if (selectedIndex >= 0 && !spec.rowBackgrounds) {
-      const int selectedY = rect.y + selectedIndex % pageItems * rowHeight;
+      const int selectedY = rect.y + selectedIndex % pageItems * rowStep;
       Rect selectionRect{rect.x + metrics().contentSidePadding + spec.selectionInsetX,
                          selectedY + spec.selectionInsetY,
                          contentWidth - metrics().contentSidePadding * 2 - spec.selectionInsetX * 2,
@@ -468,7 +474,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     const auto pageStartIndex = selectedIndex / pageItems * pageItems;
     const auto titleStyle = spec.bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
     for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
-      const int itemY = rect.y + (i % pageItems) * rowHeight;
+      const int itemY = rect.y + (i % pageItems) * rowStep;
       const bool selected = i == selectedIndex;
       int rowTextWidth = textWidth;
       if (spec.rowBackgrounds) {
@@ -495,7 +501,8 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       }
       const int titleY = centerSingleLine
                              ? itemY + (rowHeight - renderer.getLineHeight(spec.fontId)) / 2
-                             : itemY + spec.titleOffsetY;
+                             : itemY + (spec.subtitleRowAutoHeight && rowSubtitle != nullptr ? spec.subtitleTopPadding
+                                                                                              : spec.titleOffsetY);
       renderer.drawText(spec.fontId, textX, titleY, item.c_str(), !(selected && spec.selectedTextInverted),
                         titleStyle);
       if (selected && spec.selectionStyle == ThemeMenuSelectionStyle::Underline) {
@@ -532,7 +539,10 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
       if (rowSubtitle != nullptr && !subtitleText.empty()) {
         const auto subtitle = renderer.truncatedText(spec.subtitleFontId, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(spec.subtitleFontId, textX, itemY + spec.subtitleOffsetY, subtitle.c_str(),
+        const int subtitleY = spec.subtitleRowAutoHeight
+                                  ? titleY + renderer.getLineHeight(spec.fontId) + spec.subtitleInterLineGap
+                                  : itemY + spec.subtitleOffsetY;
+        renderer.drawText(spec.subtitleFontId, textX, subtitleY, subtitle.c_str(),
                           !(selected && spec.selectedTextInverted));
       }
 
@@ -542,9 +552,10 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                                    itemY, valueWidth + hPaddingInSelection, rowHeight, spec.selectionCornerRadius,
                                    Color::Black);
         }
-        const int valueY = centerSingleLine
-                               ? itemY + (rowHeight - renderer.getLineHeight(spec.valueFontId)) / 2
-                               : itemY + (rowSubtitle != nullptr ? spec.subtitleValueOffsetY : spec.valueOffsetY);
+        const int valueY =
+            (centerSingleLine || spec.centerValueVertically)
+                ? itemY + (rowHeight - renderer.getLineHeight(spec.valueFontId)) / 2
+                : itemY + (rowSubtitle != nullptr ? spec.subtitleValueOffsetY : spec.valueOffsetY);
         const int valueX = spec.rowBackgrounds ? rowX + rowWidth - spec.textInsetX - valueWidth
                                                : rect.x + contentWidth - metrics().contentSidePadding - valueWidth;
         renderer.drawText(spec.valueFontId, valueX, valueY, valueText.c_str(),

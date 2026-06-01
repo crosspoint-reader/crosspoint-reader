@@ -23,6 +23,7 @@ class UITheme {
   std::vector<int> getHomeCoverThumbHeights() const;
   SdCardThemeRegistry& registry() { return themeRegistry; }
   void refreshRegistry();
+  void releaseSdThemeDownloadMemory();
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
