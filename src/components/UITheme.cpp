@@ -42,7 +42,12 @@ void UITheme::reload() {
   if (SETTINGS.sdThemeName[0] != '\0') {
     const SdCardThemeInfo* themeInfo = themeRegistry.findTheme(SETTINGS.sdThemeName);
     if (themeInfo == nullptr) {
+      refreshRegistry();
+      themeInfo = themeRegistry.findTheme(SETTINGS.sdThemeName);
+    }
+    if (themeInfo == nullptr) {
       LOG_ERR("UI", "SD theme not found: %s (falling back to Lyra)", SETTINGS.sdThemeName);
+      themeRegistry.clear();
       SETTINGS.sdThemeName[0] = '\0';
       SETTINGS.uiTheme = CrossPointSettings::UI_THEME::LYRA;
       SETTINGS.saveToFile();
@@ -62,7 +67,9 @@ void UITheme::reload() {
     currentSdHeader = themeInfo->header;
     currentSdThemePath = themeInfo->path;
     currentSdIcons = themeInfo->icons;
-    if (themeInfo->inherits == "classic") {
+    const bool inheritsClassic = themeInfo->inherits == "classic";
+    themeRegistry.clear();
+    if (inheritsClassic) {
       currentTheme = std::make_unique<BaseTheme>();
       currentMetrics = &currentSdMetrics;
       return;

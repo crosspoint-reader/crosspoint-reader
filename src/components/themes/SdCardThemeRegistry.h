@@ -36,6 +36,7 @@ class SdCardThemeRegistry {
   static constexpr const char* THEMES_DIR_VISIBLE = "/themes";
 
   bool discover();
+  void clear();
 
   const std::vector<SdCardThemeInfo>& getThemes() const { return themes_; }
   const SdCardThemeInfo* findTheme(const std::string& id) const;

@@ -506,7 +506,7 @@ void SdCardThemeRegistry::scanRoot(const char* rootPath, std::vector<SdCardTheme
 
 bool SdCardThemeRegistry::discover() {
   themes_.clear();
-  themes_.reserve(MAX_SD_THEMES);
+  themes_.reserve(8);
 
   scanRoot(THEMES_DIR_HIDDEN, themes_);
   scanRoot(THEMES_DIR_VISIBLE, themes_);
@@ -520,6 +520,11 @@ bool SdCardThemeRegistry::discover() {
 
   LOG_DBG("THREG", "Discovery complete: %d themes", static_cast<int>(themes_.size()));
   return !themes_.empty();
+}
+
+void SdCardThemeRegistry::clear() {
+  themes_.clear();
+  themes_.shrink_to_fit();
 }
 
 const SdCardThemeInfo* SdCardThemeRegistry::findTheme(const std::string& id) const {
