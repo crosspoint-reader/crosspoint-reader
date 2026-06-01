@@ -4,6 +4,7 @@
 #include <array>
 
 #include "HyphenationCommon.h"
+#include "generated/hyph-ca.trie.h"
 #include "generated/hyph-de.trie.h"
 #include "generated/hyph-en.trie.h"
 #include "generated/hyph-es.trie.h"
@@ -21,16 +22,18 @@ LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 3
 LanguageHyphenator frenchHyphenator(fr_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator germanHyphenator(de_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator russianHyphenator(ru_patterns, isCyrillicLetter, toLowerCyrillic);
+LanguageHyphenator catalanHyphenator(ca_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator spanishHyphenator(es_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator italianHyphenator(it_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator swedishHyphenator(sv_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator ukrainianHyphenator(uk_patterns, isCyrillicLetter, toLowerCyrillic);
 LanguageHyphenator polishHyphenator(pl_patterns, isLatinLetter, toLowerLatin);
 
-using EntryArray = std::array<LanguageEntry, 9>;
+using EntryArray = std::array<LanguageEntry, 10>;
 
 const EntryArray& entries() {
-  static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
+  static const EntryArray kEntries = {{{"catalan", "ca", &catalanHyphenator},
+                                       {"english", "en", &englishHyphenator},
                                        {"french", "fr", &frenchHyphenator},
                                        {"german", "de", &germanHyphenator},
                                        {"russian", "ru", &russianHyphenator},

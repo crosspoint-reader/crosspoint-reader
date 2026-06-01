@@ -16,6 +16,7 @@ process() {
     --output "lib/Epub/Epub/hyphenation/generated/hyph-${lang}.trie.h"
 }
 
+process ca
 process en
 process fr
 process de
