@@ -25,8 +25,11 @@ static constexpr int TEX_GAP = 8;
 static constexpr int TEX_PADV = 4;
 // Inner horizontal text indent inside the paper block.
 static constexpr int TEX_PADH = 9;
-// Solid-black task title banner height.
-static constexpr int BAR_HEIGHT = 24;
+// Vertical padding above/below the title text inside its full-width banner; the
+// banner height tracks the text height so it just covers the glyphs.
+static constexpr int TITLE_BANNER_PAD = 3;
+// Left inset for the title text within the edge-to-edge black banner.
+static constexpr int TITLE_BANNER_TEXT_X = 16;
 // Tightened stale-data banner height.
 static constexpr int STALE_BAR_H = 18;
 
@@ -207,8 +210,8 @@ void drawStaleBar(const GfxRenderer& r, const RemindersData& data, int barTop, i
 // ─── Item block height (for pagination) ───────────────────────────────────────
 
 int blockHeight(const CalItem& it, int titleH, int subH, int detailH, int leaveByH) {
-  (void)titleH;  // title is a fixed-height solid black banner
-  int h = TEX_GAP + BAR_HEIGHT + TEX_GAP;
+  // Full-width title banner: height tracks the text plus a little vertical pad.
+  int h = TEX_GAP + (titleH + TITLE_BANNER_PAD * 2) + TEX_GAP;
   if (it.note_count > 0) h += it.note_count * zoneH(subH);
   if (it.start_epoch != 0) {
     if (it.all_day) {
@@ -228,16 +231,19 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
              int contentWidth, time_t now, bool clockValid, int titleH, int subH, int detailH, int leaveByH) {
   (void)contentRight;
 
-  // ── Title — solid black banner, full width, white text ──────────────────
+  // ── Title — solid black banner spanning the full screen width, white text.
+  // The bar runs edge-to-edge (x=0..W, ignoring the side margins) and is only
+  // as tall as the text needs, per the mockup's full-bleed task banner. ───────
   {
     char buf[96];
     snprintf(buf, sizeof(buf), "#%02u  %s", number, it.title);
-    const std::string trunc = r.truncatedText(TITLE_FONT, buf, contentWidth - 16);
+    const int bannerH = titleH + TITLE_BANNER_PAD * 2;
+    const std::string trunc = r.truncatedText(TITLE_FONT, buf, W - TITLE_BANNER_TEXT_X * 2);
     const int bannerY = y + TEX_GAP;
-    r.fillRect(contentLeft, bannerY, contentWidth, BAR_HEIGHT, true);
-    const int textTop = centeredTextTop(r, TITLE_FONT, bannerY, BAR_HEIGHT);
-    r.drawText(TITLE_FONT, contentLeft + 8, textTop, trunc.c_str(), false, EpdFontFamily::BOLD);
-    y = bannerY + BAR_HEIGHT + TEX_GAP;
+    r.fillRect(0, bannerY, W, bannerH, true);
+    r.drawText(TITLE_FONT, TITLE_BANNER_TEXT_X, bannerY + TITLE_BANNER_PAD, trunc.c_str(), false,
+               EpdFontFamily::BOLD);
+    y = bannerY + bannerH + TEX_GAP;
   }
 
   // ── Sub-items — crosshatch, one indented zone per note with ↳ prefix ────

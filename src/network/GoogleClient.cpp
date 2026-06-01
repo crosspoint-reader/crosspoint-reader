@@ -282,30 +282,72 @@ bool tryConnectSsid(const std::string& ssid, const std::string& password) {
   return WiFi.status() == WL_CONNECTED;
 }
 
+// Returns the best (strongest) RSSI for `ssid` across all scan entries, or
+// INT32_MIN if the SSID was not seen in the scan. A network can appear multiple
+// times (mesh/repeaters); we want the strongest.
+int32_t bestRssiInScan(int scanCount, const std::string& ssid) {
+  int32_t best = INT32_MIN;
+  for (int i = 0; i < scanCount; i++) {
+    if (ssid == WiFi.SSID(i).c_str()) {
+      const int32_t rssi = WiFi.RSSI(i);
+      if (rssi > best) best = rssi;
+    }
+  }
+  return best;
+}
+
 bool connectWifi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
-  // Build an ordered candidate list: the last-connected network first (fastest
-  // path for a configured device), then every other saved network. The fallback
-  // matters on a freshly flashed device that has saved credentials but has not
-  // recorded a "last connected" SSID yet — without it the first sync fails until
-  // the user manually connects once through Settings -> WiFi.
-  std::vector<std::string> candidates;
-  const std::string last = WIFI_STORE.getLastConnectedSsid();
-  if (!last.empty() && WIFI_STORE.findCredential(last) != nullptr) {
-    candidates.push_back(last);
-  }
-  for (const WifiCredential& c : WIFI_STORE.getCredentials()) {
-    if (std::find(candidates.begin(), candidates.end(), c.ssid) == candidates.end()) {
-      candidates.push_back(c.ssid);
-    }
-  }
-  if (candidates.empty()) {
+  if (WIFI_STORE.getCredentials().empty()) {
     LOG_ERR("GOOG", "No saved WiFi networks to connect to");
     return false;
   }
 
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+
+  // Scan for what's actually in range, then connect to the strongest *saved*
+  // network that's present. This is the key to reliable wake-from-sleep sync:
+  // the old behaviour blindly tried the last-connected SSID first (a full 20s
+  // timeout) even when that network was long gone, never noticing a different
+  // saved network sitting right there. An active scan lets us skip absent
+  // networks entirely and pick the readily-available one. The scan runs a few
+  // seconds; we are on the off-loop sync task so blocking is fine.
+  const int scanCount = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+
+  // Ordered candidate list. First: saved networks seen in the scan, strongest
+  // signal first. Then: any saved networks NOT seen (covers hidden SSIDs the
+  // scan may miss, and a totally failed scan) in stored order, so we never do
+  // worse than the previous saved-only behaviour.
+  struct Candidate {
+    std::string ssid;
+    int32_t rssi;
+  };
+  std::vector<Candidate> present;
+  std::vector<std::string> absent;
+  present.reserve(WIFI_STORE.getCredentials().size());
+  absent.reserve(WIFI_STORE.getCredentials().size());
+  for (const WifiCredential& c : WIFI_STORE.getCredentials()) {
+    const int32_t rssi = scanCount > 0 ? bestRssiInScan(scanCount, c.ssid) : INT32_MIN;
+    if (rssi != INT32_MIN) {
+      present.push_back({c.ssid, rssi});
+    } else {
+      absent.push_back(c.ssid);
+    }
+  }
+  if (scanCount >= 0) WiFi.scanDelete();
+  std::sort(present.begin(), present.end(),
+            [](const Candidate& a, const Candidate& b) { return a.rssi > b.rssi; });
+
+  std::vector<std::string> candidates;
+  candidates.reserve(present.size() + absent.size());
+  for (const Candidate& c : present) candidates.push_back(c.ssid);
+  for (const std::string& s : absent) candidates.push_back(s);
+
+  LOG_INF("GOOG", "WiFi scan: %d AP(s), %u saved in range", scanCount < 0 ? 0 : scanCount,
+          (unsigned)present.size());
+
   for (const std::string& ssid : candidates) {
     if (cancelled()) return false;
     const WifiCredential* cred = WIFI_STORE.findCredential(ssid);
