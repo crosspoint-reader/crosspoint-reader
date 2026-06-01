@@ -25,6 +25,7 @@ void RemindersActivity::onEnter() {
   pageStart = 0;
   pageDepth = 0;
   lastNextIndex = 0;
+  selectedIndex = -1;
   requestUpdate();
 }
 
@@ -68,7 +69,38 @@ void RemindersActivity::startSync() {
   pageStart = 0;
   pageDepth = 0;
   lastNextIndex = 0;
+  selectedIndex = -1;
   requestUpdate();
+}
+
+void RemindersActivity::completeTaskTrampoline(void* param) {
+  static_cast<RemindersActivity*>(param)->runCompleteTask();
+}
+
+void RemindersActivity::runCompleteTask() {
+  syncResult = GoogleClient::markTaskComplete(completeItemIndex, gRemindersData, &syncCancel);
+  LOG_DBG("RMND", "Complete task stack high-water: %u bytes",
+          uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t));
+  syncDone = true;
+  TaskHandle_t self = syncTask;
+  syncTask = nullptr;
+  vTaskDelete(self);
+}
+
+void RemindersActivity::startComplete(uint8_t itemIndex) {
+  completeItemIndex = itemIndex;
+  selectedIndex = -1;
+  state = State::Completing;
+  syncDone = false;
+  syncCancel = false;
+  syncResult = GoogleClient::Result::OK;
+  requestUpdateAndWait();
+  if (xTaskCreate(&completeTaskTrampoline, "RmndComplete", SYNC_TASK_STACK, this, 1, &syncTask) != pdPASS) {
+    LOG_ERR("RMND", "Failed to create complete task");
+    syncTask = nullptr;
+    syncResult = GoogleClient::Result::FetchFailed;
+    syncDone = true;
+  }
 }
 
 void RemindersActivity::loop() {
@@ -122,9 +154,14 @@ void RemindersActivity::loop() {
     }
 
     case State::Showing: {
-      // Manual re-sync on a double-tap of Confirm (single press is ignored to
-      // avoid accidental syncs).
       if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+        // Single Confirm on a selected completable task: mark it complete.
+        if (selectedIndex >= 0) {
+          LOG_DBG("RMND", "Confirm: completing task index %d", selectedIndex);
+          startComplete(static_cast<uint8_t>(selectedIndex));
+          return;
+        }
+        // No selection: double-tap Confirm triggers a manual re-sync.
         const unsigned long nowMs = millis();
         if (nowMs - lastConfirmMs <= DOUBLE_TAP_MS) {
           lastConfirmMs = 0;
@@ -140,24 +177,75 @@ void RemindersActivity::loop() {
         return;
       }
 
-      // Down: next page (if the list overflowed). Up: previous page.
+      // Down: next page. Up: previous page. Both reset the task selection.
       if (mappedInput.wasPressed(MappedInputManager::Button::Down) && lastNextIndex < gRemindersData.count) {
         if (pageDepth < REMINDERS_MAX_ITEMS) pageHistory[pageDepth++] = pageStart;
         pageStart = lastNextIndex;
+        selectedIndex = -1;
         tickRefresh = false;
         requestUpdate();
         return;
       }
       if (mappedInput.wasPressed(MappedInputManager::Button::Up) && pageDepth > 0) {
         pageStart = pageHistory[--pageDepth];
+        selectedIndex = -1;
         tickRefresh = false;
         requestUpdate();
+        return;
+      }
+
+      // Right/Left: cycle the task-completion cursor through completable items
+      // on the current page (tasks with a non-empty task_id).
+      const uint8_t pageEnd = lastNextIndex;
+      if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+        int8_t next = -1;
+        for (uint8_t k = (selectedIndex >= 0 ? selectedIndex + 1 : pageStart); k < pageEnd; k++) {
+          const CalItem& c = gRemindersData.items[k];
+          if (!c.is_calendar && c.task_id[0] != '\0') {
+            next = static_cast<int8_t>(k);
+            break;
+          }
+        }
+        if (next != selectedIndex) {
+          selectedIndex = next;
+          tickRefresh = false;
+          requestUpdate();
+        }
+        return;
+      }
+      if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+        int8_t prev = -1;
+        const uint8_t scanEnd = selectedIndex >= 0 ? static_cast<uint8_t>(selectedIndex) : pageEnd;
+        for (int k = static_cast<int>(scanEnd) - 1; k >= static_cast<int>(pageStart); k--) {
+          const CalItem& c = gRemindersData.items[k];
+          if (!c.is_calendar && c.task_id[0] != '\0') {
+            prev = static_cast<int8_t>(k);
+            break;
+          }
+        }
+        if (prev != selectedIndex) {
+          selectedIndex = prev;
+          tickRefresh = false;
+          requestUpdate();
+        }
         return;
       }
 
       if (!staleReached && millis() - showStartMs >= TICK_MS * static_cast<unsigned long>(tickCount + 1)) {
         tickCount++;
         onMinuteTick();
+      }
+      return;
+    }
+
+    case State::Completing: {
+      if (syncDone) {
+        if (syncResult != GoogleClient::Result::OK) {
+          LOG_ERR("RMND", "Task completion failed: %s", GoogleClient::resultName(syncResult));
+        }
+        state = State::Showing;
+        tickRefresh = false;
+        requestUpdate();
       }
       return;
     }
@@ -205,15 +293,21 @@ void RemindersActivity::render(RenderLock&&) {
     }
     case State::Showing: {
       if (tickRefresh) {
-        const bool ok = RemindersRenderer::renderCountdownsOnly(renderer, gRemindersData, pageStart);
+        const bool ok = RemindersRenderer::renderCountdownsOnly(renderer, gRemindersData, pageStart, selectedIndex);
         tickRefresh = false;
         if (!ok) {
-          // An item elapsed: clear ghosting with a full refresh.
-          lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart);
+          lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart, selectedIndex);
         }
       } else {
-        lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart);
+        lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart, selectedIndex);
       }
+      return;
+    }
+    case State::Completing: {
+      renderer.clearScreen();
+      renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2, tr(STR_REMINDERS_COMPLETING), true,
+                                EpdFontFamily::BOLD);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       return;
     }
     case State::Failed: {

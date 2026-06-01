@@ -15,6 +15,11 @@ struct CalItem {
   char title[80];
   char location[64];                    // first comma-separated portion only
   char notes[REMINDERS_MAX_NOTES][48];  // task notes / sub-items
+  // Google Tasks id, needed to PATCH the task to completed (empty for Calendar
+  // events, which are not completable). 64 bytes covers observed Task ids; the
+  // whole array lives in the single static gRemindersData global, so this adds
+  // 64*REMINDERS_MAX_ITEMS = 1 KB of DRAM with no heap growth.
+  char task_id[64];
   uint8_t note_count;
   time_t start_epoch;   // UTC seconds; 0 = no specific time (all-day / undated)
   time_t end_epoch;     // UTC seconds; 0 = unknown

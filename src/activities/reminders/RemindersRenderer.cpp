@@ -25,18 +25,21 @@ static constexpr int TEX_GAP = 8;
 static constexpr int TEX_PADV = 4;
 // Inner horizontal text indent inside the paper block.
 static constexpr int TEX_PADH = 9;
-// Solid-black task title banner height.
-static constexpr int BAR_HEIGHT = 24;
+// Vertical padding above/below the title text inside its full-width banner; the
+// banner height tracks the text height so it just covers the glyphs.
+static constexpr int TITLE_BANNER_PAD = 3;
+// Left inset for the title text within the edge-to-edge black banner.
+static constexpr int TITLE_BANNER_TEXT_X = 16;
 // Tightened stale-data banner height.
 static constexpr int STALE_BAR_H = 18;
 
 // ─── Font assignments ─────────────────────────────────────────────────────────
-static constexpr int HEADER_FONT   = UI_10_FONT_ID;
-static constexpr int TITLE_FONT    = NOTOSANS_12_FONT_ID;
+static constexpr int HEADER_FONT = UI_10_FONT_ID;
+static constexpr int TITLE_FONT = NOTOSANS_12_FONT_ID;
 static constexpr int LEAVE_BY_FONT = NOTOSANS_12_FONT_ID;
-static constexpr int SUB_FONT      = UI_10_FONT_ID;
-static constexpr int DETAIL_FONT   = UI_10_FONT_ID;
-static constexpr int FOOTER_FONT   = UI_10_FONT_ID;
+static constexpr int SUB_FONT = UI_10_FONT_ID;
+static constexpr int DETAIL_FONT = UI_10_FONT_ID;
+static constexpr int FOOTER_FONT = UI_10_FONT_ID;
 
 // Sanity floor: 2023-11-14. Below this the clock is unset (deep-sleep wake
 // resets newlib's clock), so countdowns and today's date are suppressed.
@@ -207,8 +210,8 @@ void drawStaleBar(const GfxRenderer& r, const RemindersData& data, int barTop, i
 // ─── Item block height (for pagination) ───────────────────────────────────────
 
 int blockHeight(const CalItem& it, int titleH, int subH, int detailH, int leaveByH) {
-  (void)titleH;  // title is a fixed-height solid black banner
-  int h = TEX_GAP + BAR_HEIGHT + TEX_GAP;
+  // Full-width title banner: height tracks the text plus a little vertical pad.
+  int h = TEX_GAP + (titleH + TITLE_BANNER_PAD * 2) + TEX_GAP;
   if (it.note_count > 0) h += it.note_count * zoneH(subH);
   if (it.start_epoch != 0) {
     if (it.all_day) {
@@ -224,20 +227,46 @@ int blockHeight(const CalItem& it, int titleH, int subH, int detailH, int leaveB
 
 // ─── Draw one item ────────────────────────────────────────────────────────────
 
-int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int W, int contentLeft, int contentRight,
-             int contentWidth, time_t now, bool clockValid, int titleH, int subH, int detailH, int leaveByH) {
+int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t itemIndex, int y, int W, int contentLeft,
+             int contentRight, int contentWidth, time_t now, bool clockValid, int titleH, int subH, int detailH,
+             int leaveByH, int8_t selectedIndex) {
   (void)contentRight;
+  const uint8_t number = itemIndex + 1;
 
-  // ── Title — solid black banner, full width, white text ──────────────────
+  // ── Title — solid black banner spanning the full screen width, white text.
+  // The bar runs edge-to-edge (x=0..W, ignoring the side margins) and is only
+  // as tall as the text needs, per the mockup's full-bleed task banner. ───────
+  // For task items (not calendar events with a task_id), a checkbox is drawn on
+  // the right side: outlined = unselected, inner-filled = selected, fully filled = completed.
   {
+    const bool hasCheckbox = !it.is_calendar && it.task_id[0] != '\0';
+    const bool selected = hasCheckbox && (selectedIndex == static_cast<int8_t>(itemIndex));
+    const int checkSize = titleH;
+    const int checkX = W - TITLE_BANNER_TEXT_X - checkSize;
+    // Truncate title short enough to leave room for the checkbox when present.
+    const int maxTitleW = hasCheckbox ? (checkX - TITLE_BANNER_TEXT_X - 4) : (W - TITLE_BANNER_TEXT_X * 2);
     char buf[96];
     snprintf(buf, sizeof(buf), "#%02u  %s", number, it.title);
-    const std::string trunc = r.truncatedText(TITLE_FONT, buf, contentWidth - 16);
+    const int bannerH = titleH + TITLE_BANNER_PAD * 2;
+    const std::string trunc = r.truncatedText(TITLE_FONT, buf, maxTitleW);
     const int bannerY = y + TEX_GAP;
-    r.fillRect(contentLeft, bannerY, contentWidth, BAR_HEIGHT, true);
-    const int textTop = centeredTextTop(r, TITLE_FONT, bannerY, BAR_HEIGHT);
-    r.drawText(TITLE_FONT, contentLeft + 8, textTop, trunc.c_str(), false, EpdFontFamily::BOLD);
-    y = bannerY + BAR_HEIGHT + TEX_GAP;
+    r.fillRect(0, bannerY, W, bannerH, true);
+    r.drawText(TITLE_FONT, TITLE_BANNER_TEXT_X, bannerY + TITLE_BANNER_PAD, trunc.c_str(), false, EpdFontFamily::BOLD);
+    if (hasCheckbox) {
+      const int checkY = bannerY + TITLE_BANNER_PAD;
+      if (it.completed) {
+        // Completed: white filled square.
+        r.fillRect(checkX, checkY, checkSize, checkSize, false);
+      } else if (selected) {
+        // Selected (ready to complete): outline + inner filled dot.
+        r.drawRect(checkX, checkY, checkSize, checkSize, false);
+        r.fillRect(checkX + 3, checkY + 3, checkSize - 6, checkSize - 6, false);
+      } else {
+        // Uncompleted, unselected: white outline only.
+        r.drawRect(checkX, checkY, checkSize, checkSize, false);
+      }
+    }
+    y = bannerY + bannerH + TEX_GAP;
   }
 
   // ── Sub-items — crosshatch, one indented zone per note with ↳ prefix ────
@@ -310,7 +339,8 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
-uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex) {
+uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex,
+                                      int8_t selectedIndex) {
   // Force portrait — the 480×800 panel is always rendered portrait regardless
   // of what orientation the reader left the screen in.
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -319,7 +349,7 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
   const int H = renderer.getScreenHeight();
   renderer.clearScreen(0xFF);  // white background
 
-  const int contentLeft  = MARGIN_X;
+  const int contentLeft = MARGIN_X;
   const int contentRight = W - MARGIN_X;
   const int contentWidth = contentRight - contentLeft;
 
@@ -327,12 +357,12 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
   const bool clockValid = now > MIN_VALID_EPOCH;
   const time_t hdrEpoch = clockValid ? now : data.synced_epoch;
 
-  const int titleH   = renderer.getLineHeight(TITLE_FONT);
-  const int subH     = renderer.getLineHeight(SUB_FONT);
-  const int detailH  = renderer.getLineHeight(DETAIL_FONT);
+  const int titleH = renderer.getLineHeight(TITLE_FONT);
+  const int subH = renderer.getLineHeight(SUB_FONT);
+  const int detailH = renderer.getLineHeight(DETAIL_FONT);
   const int leaveByH = renderer.getLineHeight(LEAVE_BY_FONT);
-  const int headerH  = renderer.getLineHeight(HEADER_FONT);
-  const int footerH  = renderer.getLineHeight(FOOTER_FONT);
+  const int headerH = renderer.getLineHeight(HEADER_FONT);
+  const int footerH = renderer.getLineHeight(FOOTER_FONT);
 
   // ── Header — dense halftone ──────────────────────────────────────────────
   int y = 0;
@@ -351,13 +381,13 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
 
   // ── Footer geometry — hints flush at the very bottom ────────────────────
   const int hintHeight = 2 * footerH;
-  const int hintTop    = H - 6 - hintHeight;
-  const int dividerY   = hintTop - 6;
+  const int hintTop = H - 6 - hintHeight;
+  const int dividerY = hintTop - 6;
 
   int staleBarTop = 0;
   int contentBottom;
   if (data.is_stale) {
-    staleBarTop   = dividerY - 6 - STALE_BAR_H;
+    staleBarTop = dividerY - 6 - STALE_BAR_H;
     contentBottom = staleBarTop - 4;
   } else {
     contentBottom = dividerY - 4;
@@ -369,12 +399,14 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
 
   // ── Item loop with pagination ────────────────────────────────────────────
   uint8_t i = startIndex;
+  bool hasCompletable = false;
   while (i < data.count) {
     const CalItem& it = data.items[i];
     const int bh = blockHeight(it, titleH, subH, detailH, leaveByH);
     if (i != startIndex && y + bh > contentBottom) break;
-    y = drawItem(renderer, it, static_cast<uint8_t>(i + 1), y, W, contentLeft, contentRight, contentWidth, now,
-                 clockValid, titleH, subH, detailH, leaveByH);
+    y = drawItem(renderer, it, i, y, W, contentLeft, contentRight, contentWidth, now, clockValid, titleH, subH, detailH,
+                 leaveByH, selectedIndex);
+    if (!it.is_calendar && it.task_id[0] != '\0') hasCompletable = true;
     i++;
   }
   const uint8_t nextIndex = i;
@@ -401,6 +433,14 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
       hint += tr(STR_REMINDERS_HINT_PAGE);
       hint += "  ";
     }
+    if (hasCompletable) {
+      hint += tr(STR_REMINDERS_HINT_SELECT);
+      hint += "  ";
+      if (selectedIndex >= 0) {
+        hint += tr(STR_REMINDERS_HINT_COMPLETE);
+        hint += "  ";
+      }
+    }
     hint += tr(STR_REMINDERS_HINT_SYNC);
     hint += "  ";
     hint += tr(STR_REMINDERS_HINT_EXIT);
@@ -414,14 +454,16 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
   return nextIndex;
 }
 
-uint8_t RemindersRenderer::renderFull(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex) {
-  const uint8_t nextIndex = drawLayout(renderer, data, startIndex);
+uint8_t RemindersRenderer::renderFull(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex,
+                                      int8_t selectedIndex) {
+  const uint8_t nextIndex = drawLayout(renderer, data, startIndex, selectedIndex);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   return nextIndex;
 }
 
-bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex) {
-  drawLayout(renderer, data, startIndex);
+bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex,
+                                             int8_t selectedIndex) {
+  drawLayout(renderer, data, startIndex, selectedIndex);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
   const time_t now = time(nullptr);
