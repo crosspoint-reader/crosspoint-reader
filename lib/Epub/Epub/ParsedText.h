@@ -40,8 +40,8 @@ class ParsedText {
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks, bool allowFocusBoundaryBreak,
                             int focusBoundaryAvailableWidth);
   bool hyphenateFocusPrefixAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
-                                   std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks, int& consumedWidth,
-                                   size_t& consumedWordCount);
+                                   std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks, int widthBeforeWord,
+                                   int effectivePageWidth, int& consumedWidth, size_t& consumedWordCount);
   bool hyphenatePreviousFocusWordInContinuation(size_t lineStart, size_t overflowIndex, int effectivePageWidth,
                                                 const GfxRenderer& renderer, int fontId,
                                                 std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,

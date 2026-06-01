@@ -160,6 +160,14 @@ bool readableInsertedFocusBreak(const std::string& word, const size_t breakOffse
          renderedCodepointCount(word, breakOffset) >= kMinFocusInsertedSuffix;
 }
 
+bool lineFilledEnoughForFocusBoundaryBreak(const int lineWidth, const int effectivePageWidth) {
+  if (lineWidth <= 0 || effectivePageWidth <= 0) return false;
+  constexpr int kMinFocusBoundaryFillNumerator = 3;
+  constexpr int kMinFocusBoundaryFillDenominator = 4;
+  return lineWidth * kMinFocusBoundaryFillDenominator >=
+         effectivePageWidth * kMinFocusBoundaryFillNumerator;
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -565,10 +573,11 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       const int availableWidth = effectivePageWidth - lineWidth - spacing;
       const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
 
+      const bool allowFocusBoundaryBreak =
+          !isFirstWord && lineFilledEnoughForFocusBoundaryBreak(lineWidth, effectivePageWidth);
       if (availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks,
-                               /*allowFocusBoundaryBreak=*/!isFirstWord,
-                               /*focusBoundaryAvailableWidth=*/effectivePageWidth - lineWidth)) {
+                               allowFocusBoundaryBreak, /*focusBoundaryAvailableWidth=*/effectivePageWidth - lineWidth)) {
         // Prefix now fits; append it to this line and move to next line
         lineWidth += spacing + wordWidths[currentIndex];
         ++currentIndex;
@@ -579,7 +588,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       size_t focusPrefixConsumedCount = 0;
       if (availableWidth > 0 && focusReadingEnabled && currentIndex + 1 < wordWidths.size() &&
           hyphenateFocusPrefixAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks,
-                                      focusPrefixConsumedWidth, focusPrefixConsumedCount)) {
+                                      lineWidth + spacing, effectivePageWidth, focusPrefixConsumedWidth,
+                                      focusPrefixConsumedCount)) {
         lineWidth += spacing + focusPrefixConsumedWidth;
         currentIndex += focusPrefixConsumedCount;
         break;
@@ -855,6 +865,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 bool ParsedText::hyphenateFocusPrefixAtIndex(const size_t wordIndex, const int availableWidth,
                                              const GfxRenderer& renderer, const int fontId,
                                              std::vector<uint16_t>& wordWidths, const bool allowFallbackBreaks,
+                                             const int widthBeforeWord, const int effectivePageWidth,
                                              int& consumedWidth, size_t& consumedWordCount) {
   consumedWidth = 0;
   consumedWordCount = 0;
@@ -912,6 +923,10 @@ bool ParsedText::hyphenateFocusPrefixAtIndex(const size_t wordIndex, const int a
     }
 
     if (currentLineWidth > availableWidth || currentLineWidth <= chosenWidth) {
+      continue;
+    }
+    if (offset == boundaryOffset && info.requiresInsertedHyphen && !breakUsesExplicitSoftHyphen(mergedWord, offset) &&
+        !lineFilledEnoughForFocusBoundaryBreak(widthBeforeWord + currentLineWidth, effectivePageWidth)) {
       continue;
     }
 
@@ -1019,7 +1034,8 @@ bool ParsedText::hyphenatePreviousFocusWordInContinuation(const size_t lineStart
     size_t consumedWordCount = 0;
     if (availableWidth <= 0 ||
         !hyphenateFocusPrefixAtIndex(wordIndex, availableWidth, renderer, fontId, wordWidths,
-                                     /*allowFallbackBreaks=*/false, consumedWidth, consumedWordCount)) {
+                                     /*allowFallbackBreaks=*/false, widthBefore + spacingToWord, effectivePageWidth,
+                                     consumedWidth, consumedWordCount)) {
       continue;
     }
 
