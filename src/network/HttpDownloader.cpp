@@ -88,8 +88,7 @@ bool isGitHubHost(const std::string& host) {
   const size_t suffixLen = strlen(GITHUBUSERCONTENT_SUFFIX);
   return host == "github.com" || host == "gist.github.com" || host == "raw.githubusercontent.com" ||
          host == "release-assets.githubusercontent.com" || host == "objects.githubusercontent.com" ||
-         (host.size() > suffixLen &&
-          host.compare(host.size() - suffixLen, suffixLen, GITHUBUSERCONTENT_SUFFIX) == 0);
+         (host.size() > suffixLen && host.compare(host.size() - suffixLen, suffixLen, GITHUBUSERCONTENT_SUFFIX) == 0);
 }
 
 bool useMinimalClientForUrl(const std::string& url) {
