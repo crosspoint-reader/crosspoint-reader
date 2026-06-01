@@ -487,7 +487,15 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
       const auto itemName = rowTitle(i);
       const auto item = renderer.truncatedText(spec.fontId, itemName.c_str(), rowTextWidth, titleStyle);
-      const int titleY = itemY + spec.titleOffsetY;
+      bool centerSingleLine = spec.centerSingleLineRows && rowSubtitle == nullptr;
+      std::string subtitleText;
+      if (rowSubtitle != nullptr) {
+        subtitleText = rowSubtitle(i);
+        centerSingleLine = spec.centerSingleLineRows && subtitleText.empty();
+      }
+      const int titleY = centerSingleLine
+                             ? itemY + (rowHeight - renderer.getLineHeight(spec.fontId)) / 2
+                             : itemY + spec.titleOffsetY;
       renderer.drawText(spec.fontId, textX, titleY, item.c_str(), !(selected && spec.selectedTextInverted),
                         titleStyle);
       if (selected && spec.selectionStyle == ThemeMenuSelectionStyle::Underline) {
@@ -522,8 +530,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
         }
       }
 
-      if (rowSubtitle != nullptr) {
-        const std::string subtitleText = rowSubtitle(i);
+      if (rowSubtitle != nullptr && !subtitleText.empty()) {
         const auto subtitle = renderer.truncatedText(spec.subtitleFontId, subtitleText.c_str(), rowTextWidth);
         renderer.drawText(spec.subtitleFontId, textX, itemY + spec.subtitleOffsetY, subtitle.c_str(), true);
       }
@@ -534,7 +541,9 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                                    itemY, valueWidth + hPaddingInSelection, rowHeight, spec.selectionCornerRadius,
                                    Color::Black);
         }
-        const int valueY = itemY + (rowSubtitle != nullptr ? spec.subtitleValueOffsetY : spec.valueOffsetY);
+        const int valueY = centerSingleLine
+                               ? itemY + (rowHeight - renderer.getLineHeight(spec.valueFontId)) / 2
+                               : itemY + (rowSubtitle != nullptr ? spec.subtitleValueOffsetY : spec.valueOffsetY);
         const int valueX = spec.rowBackgrounds ? rowX + rowWidth - spec.textInsetX - valueWidth
                                                : rect.x + contentWidth - metrics().contentSidePadding - valueWidth;
         renderer.drawText(spec.valueFontId, valueX, valueY, valueText.c_str(),

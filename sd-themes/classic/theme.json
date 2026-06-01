@@ -3,7 +3,7 @@
   "id": "classic",
   "name": "Classic",
   "description": "Original CrossPoint classic UI rebuilt as an SD theme.",
-  "inherits": "lyra",
+  "inherits": "classic",
   "metrics": {
     "batteryWidth": 15,
     "batteryHeight": 12,

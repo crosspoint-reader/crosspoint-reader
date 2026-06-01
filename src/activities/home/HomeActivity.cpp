@@ -235,27 +235,34 @@ void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  constexpr int coverCacheBleed = 12;
+  const bool hasCoverArea = metrics.homeCoverTileHeight > 0 && metrics.homeCoverHeight > 0;
 
   renderer.clearScreen();
-  const bool selectorSensitiveCoverCache = GUI.homeCoverCacheDependsOnSelector();
-  bool bufferRestored =
-      coverBufferStored && (!selectorSensitiveCoverCache || coverBufferSelectorIndex == coverSelectorIndex) &&
-      restoreCoverBuffer();
+
+  // Record the tile rect so storeCoverBuffer (called from the theme) knows
+  // which sub-region of the framebuffer to snapshot. Include a small bleed
+  // because cover-strip themes can draw selection outlines just outside the
+  // nominal cover tile.
+  coverRectX = 0;
+  coverRectY = hasCoverArea ? std::max(0, metrics.homeTopPadding - coverCacheBleed) : 0;
+  coverRectW = pageWidth;
+  coverRectH = hasCoverArea
+                   ? std::min(pageHeight - coverRectY,
+                              metrics.homeCoverTileHeight + (metrics.homeTopPadding - coverRectY) + coverCacheBleed)
+                   : 0;
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
                  metrics.homeContinueReadingInMenu && metrics.homeShowContinueReadingHeader && !recentBooks.empty()
                      ? recentBooks[std::min(coverSelectorIndex, static_cast<int>(recentBooks.size()) - 1)].title.c_str()
                      : nullptr);
 
-  // Record the tile rect so storeCoverBuffer (called from the theme) knows
-  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
-  // instead of the 48 KB full framebuffer the previous bind captured.
-  coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
-  coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
+  const bool selectorSensitiveCoverCache = GUI.homeCoverCacheDependsOnSelector();
+  bool bufferRestored =
+      hasCoverArea && coverBufferStored &&
+      (!selectorSensitiveCoverCache || coverBufferSelectorIndex == coverSelectorIndex) && restoreCoverBuffer();
 
-  if (metrics.homeCoverTileHeight > 0 && metrics.homeCoverHeight > 0) {
+  if (hasCoverArea) {
     GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                             recentBooks, coverSelectorIndex, coverRendered, coverBufferStored, bufferRestored,
                             std::bind(&HomeActivity::storeCoverBuffer, this));

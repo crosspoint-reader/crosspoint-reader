@@ -173,6 +173,7 @@ struct ThemeListSpec {
   bool selectionOutline = false;
   bool selectedTextInverted = false;
   bool rowBackgrounds = false;
+  bool centerSingleLineRows = false;
   int rowSidePadding = 0;
   int textInsetX = 8;
   int selectionInsetX = 0;

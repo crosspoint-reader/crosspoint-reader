@@ -265,6 +265,7 @@ void parseListSpec(JsonObjectConst obj, ThemeListSpec& spec) {
   spec.selectionOutline = obj["selectionOutline"] | spec.selectionOutline;
   spec.selectedTextInverted = obj["selectedTextInverted"] | spec.selectedTextInverted;
   spec.rowBackgrounds = obj["rowBackgrounds"] | spec.rowBackgrounds;
+  spec.centerSingleLineRows = obj["centerSingleLineRows"] | spec.centerSingleLineRows;
   spec.rowSidePadding = obj["rowSidePadding"] | spec.rowSidePadding;
   spec.textInsetX = obj["textInsetX"] | spec.textInsetX;
   spec.selectionInsetX = obj["selectionInsetX"] | spec.selectionInsetX;

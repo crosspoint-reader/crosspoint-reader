@@ -119,6 +119,7 @@
       "selectionOutline": false,
       "selectedTextInverted": true,
       "rowBackgrounds": true,
+      "centerSingleLineRows": true,
       "rowSidePadding": 20,
       "textInsetX": 20,
       "selectionInsetX": 0,

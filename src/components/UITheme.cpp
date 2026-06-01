@@ -62,6 +62,11 @@ void UITheme::reload() {
     currentSdHeader = themeInfo->header;
     currentSdThemePath = themeInfo->path;
     currentSdIcons = themeInfo->icons;
+    if (themeInfo->inherits == "classic") {
+      currentTheme = std::make_unique<BaseTheme>();
+      currentMetrics = &currentSdMetrics;
+      return;
+    }
     const ThemeHomeRecentsSpec* homeRecents =
         currentSdHomeRecents.type != ThemeHomeRecentsType::Default ? &currentSdHomeRecents : nullptr;
     const ThemeButtonMenuSpec* buttonMenu = currentSdButtonMenu.enabled ? &currentSdButtonMenu : nullptr;
