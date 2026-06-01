@@ -1409,8 +1409,6 @@ struct PageWordGeom {
   int x;
   int y;  // top of the text line (already margin-offset)
   int w;
-  uint16_t element;
-  uint16_t word;
   std::string text;
 };
 
@@ -1434,7 +1432,7 @@ void collectPageWords(const Page& page, const GfxRenderer& renderer, int fontId,
     for (uint16_t wi = 0; wi < words.size(); wi++) {
       const int ww = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
       if (ww <= 0) continue;
-      out.push_back({xpos[wi] + lineX, lineY, ww, ei, wi, words[wi]});
+      out.push_back({xpos[wi] + lineX, lineY, ww, words[wi]});
     }
   }
 }
