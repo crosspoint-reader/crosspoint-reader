@@ -405,7 +405,12 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
       if (rowIcon != nullptr && spec.showIcons) {
         const UIIcon icon = rowIcon(i);
-        const int iconY = itemY + (rowHeight - iconSize) / 2 + spec.iconOffsetY;
+        const int titleLineHeight = renderer.getLineHeight(spec.fontId);
+        const int textBlockTop = spec.titleOffsetY;
+        const int textBlockBottom =
+            rowSubtitle != nullptr ? spec.subtitleOffsetY + renderer.getLineHeight(spec.subtitleFontId)
+                                   : spec.titleOffsetY + titleLineHeight;
+        const int iconY = itemY + (textBlockTop + textBlockBottom - iconSize) / 2 + spec.iconOffsetY;
         if (!drawThemeIcon(renderer, icon, rect.x + metrics().contentSidePadding + hPaddingInSelection,
                            iconY, iconSize)) {
           const uint8_t* iconBitmap = iconForName(icon, iconSize);
@@ -504,7 +509,11 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
-      const int iconY = itemY + (rowHeight - iconSize) / 2;
+      const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+      const int textBlockTop = 7;
+      const int textBlockBottom =
+          rowSubtitle != nullptr ? 30 + renderer.getLineHeight(SMALL_FONT_ID) : textBlockTop + titleLineHeight;
+      const int iconY = itemY + (textBlockTop + textBlockBottom - iconSize) / 2;
       if (!drawThemeIcon(renderer, icon, rect.x + metrics().contentSidePadding + hPaddingInSelection, iconY, iconSize)) {
         const uint8_t* iconBitmap = iconForName(icon, iconSize);
         if (iconBitmap != nullptr) {
