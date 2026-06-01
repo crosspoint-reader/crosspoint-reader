@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "roundedraff",
   "name": "RoundedRaff",
-  "description": "RoundedRaff layout packaged as an SD theme.",
+  "description": "A rounded, high-contrast theme with pill menus, rounded list rows, and grouped button hints.",
   "inherits": "lyra",
   "metrics": {
     "batteryWidth": 15,

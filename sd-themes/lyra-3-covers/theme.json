@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "lyra-3-covers",
   "name": "Lyra 3 Covers",
-  "description": "Lyra home layout with three recent cover slots.",
+  "description": "Lyra with three recent book covers across the home screen for faster visual switching.",
   "inherits": "lyra",
   "metrics": {
     "homeCoverTileHeight": 300,

@@ -5,7 +5,7 @@
     {
       "id": "carousel",
       "name": "Carousel",
-      "description": "CrossInk-style carousel layout packaged as an SD theme.",
+      "description": "A cover-focused home screen with a centered book, side previews, and a thicker outline while browsing covers.",
       "files": [
         {
           "path": "icons/book.bmp",
@@ -100,30 +100,30 @@
         {
           "path": "theme.json",
           "url": "carousel/theme.json",
-          "size": 4174,
-          "crc32": 4100801890
+          "size": 4228,
+          "crc32": 1341199046
         }
       ],
-      "totalSize": 6864
+      "totalSize": 6918
     },
     {
       "id": "classic",
       "name": "Classic",
-      "description": "Original CrossPoint classic UI rebuilt as an SD theme.",
+      "description": "The original CrossPoint look with square selections, centered home buttons, and the classic cover card.",
       "files": [
         {
           "path": "theme.json",
           "url": "classic/theme.json",
-          "size": 4129,
-          "crc32": 4127080778
+          "size": 4178,
+          "crc32": 1639338437
         }
       ],
-      "totalSize": 4129
+      "totalSize": 4178
     },
     {
       "id": "lyra-3-covers",
       "name": "Lyra 3 Covers",
-      "description": "Lyra home layout with three recent cover slots.",
+      "description": "Lyra with three recent book covers across the home screen for faster visual switching.",
       "files": [
         {
           "path": "icons/book.bmp",
@@ -218,16 +218,16 @@
         {
           "path": "theme.json",
           "url": "lyra-3-covers/theme.json",
-          "size": 3515,
-          "crc32": 3355146043
+          "size": 3554,
+          "crc32": 2056606479
         }
       ],
-      "totalSize": 6205
+      "totalSize": 6244
     },
     {
       "id": "roundedraff",
       "name": "RoundedRaff",
-      "description": "RoundedRaff layout packaged as an SD theme.",
+      "description": "A rounded, high-contrast theme with pill menus, rounded list rows, and grouped button hints.",
       "files": [
         {
           "path": "icons/book.bmp",
@@ -322,16 +322,16 @@
         {
           "path": "theme.json",
           "url": "roundedraff/theme.json",
-          "size": 5414,
-          "crc32": 3633699914
+          "size": 5463,
+          "crc32": 823987215
         }
       ],
-      "totalSize": 8104
+      "totalSize": 8153
     },
     {
       "id": "super-minimal",
       "name": "Super Minimal",
-      "description": "Centered text-only home menu with Continue Reading as the first item and no cover area.",
+      "description": "A quiet text-only theme with no cover area, centered home options, underline selection, and icon-only hints.",
       "files": [
         {
           "path": "icons/book.bmp",
@@ -426,11 +426,11 @@
         {
           "path": "theme.json",
           "url": "super-minimal/theme.json",
-          "size": 2520,
-          "crc32": 72113598
+          "size": 2541,
+          "crc32": 2904465161
         }
       ],
-      "totalSize": 5210
+      "totalSize": 5231
     }
   ]
 }

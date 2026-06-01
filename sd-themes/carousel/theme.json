@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "carousel",
   "name": "Carousel",
-  "description": "CrossInk-style carousel layout packaged as an SD theme.",
+  "description": "A cover-focused home screen with a centered book, side previews, and a thicker outline while browsing covers.",
   "inherits": "lyra",
   "requires": {
     "crosspoint": {

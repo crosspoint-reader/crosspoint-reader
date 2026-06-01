@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "super-minimal",
   "name": "Super Minimal",
-  "description": "Centered text-only home menu with Continue Reading as the first item and no cover area.",
+  "description": "A quiet text-only theme with no cover area, centered home options, underline selection, and icon-only hints.",
   "inherits": "lyra",
   "metrics": {
     "headerHeight": 48,

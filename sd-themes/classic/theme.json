@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "classic",
   "name": "Classic",
-  "description": "Original CrossPoint classic UI rebuilt as an SD theme.",
+  "description": "The original CrossPoint look with square selections, centered home buttons, and the classic cover card.",
   "inherits": "classic",
   "metrics": {
     "batteryWidth": 15,
