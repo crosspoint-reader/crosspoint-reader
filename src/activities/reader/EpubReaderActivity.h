@@ -98,6 +98,7 @@ class EpubReaderActivity final : public Activity {
   bool showHighlightMessage = false;
   unsigned long highlightMessageTime = 0UL;
   bool showHighlightDeletedMessage = false;
+  bool showHighlightOverlapMessage = false;
   // Set after a long-press delete fires so the following Confirm release does
   // not also set an anchor / finalize a selection.
   bool ignoreNextSelectionConfirmRelease = false;

@@ -274,6 +274,11 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showHighlightOverlapMessage && (millis() - highlightMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showHighlightOverlapMessage = false;
+    requestUpdate();
+  }
+
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ignoreNextConfirmRelease) {
@@ -896,6 +901,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showHighlightDeletedMessage) {
     GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_DELETED));
   }
+
+  if (showHighlightOverlapMessage) {
+    GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_OVERLAP));
+  }
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
@@ -1393,6 +1402,118 @@ void EpubReaderActivity::handleSelectionInput() {
   }
 }
 
+namespace {
+// One rendered word on a page, with the geometry needed to underline it and the
+// element/word indices used by the selection cursor.
+struct PageWordGeom {
+  int x;
+  int y;  // top of the text line (already margin-offset)
+  int w;
+  uint16_t element;
+  uint16_t word;
+  std::string text;
+};
+
+// Flatten a page's text words (in reading order) with their on-screen geometry.
+void collectPageWords(const Page& page, const GfxRenderer& renderer, int fontId, int marginLeft, int marginTop,
+                      std::vector<PageWordGeom>& out) {
+  out.clear();
+  out.reserve(300);
+  for (uint16_t ei = 0; ei < page.elements.size(); ei++) {
+    const auto& el = page.elements[ei];
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const auto& block = line.getBlock();
+    if (!block) continue;
+    const auto& words = block->getWords();
+    const auto& xpos = block->getWordXpos();
+    const auto& styles = block->getWordStyles();
+    if (words.size() != xpos.size() || words.size() != styles.size()) continue;
+    const int lineX = line.xPos + marginLeft;
+    const int lineY = line.yPos + marginTop;
+    for (uint16_t wi = 0; wi < words.size(); wi++) {
+      const int ww = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
+      if (ww <= 0) continue;
+      out.push_back({xpos[wi] + lineX, lineY, ww, ei, wi, words[wi]});
+    }
+  }
+}
+
+// Split a normalized highlight string into its whitespace-separated words.
+std::vector<std::string> splitHighlightWords(const std::string& s) {
+  std::vector<std::string> words;
+  size_t i = 0;
+  while (i < s.size()) {
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++;
+    size_t start = i;
+    while (i < s.size() && !std::isspace(static_cast<unsigned char>(s[i]))) i++;
+    if (i > start) words.push_back(s.substr(start, i - start));
+  }
+  return words;
+}
+
+// Longest contiguous run of words common to the page and the highlight. Matching
+// by text (not stored coordinates) keeps highlights correct after the layout
+// reflows from a font/margin/orientation change. Returns [lo, hi) into pw, or
+// {0, 0} when there is no run worth drawing. A single shared common word is
+// ignored unless it is the whole (one-word) highlight, to avoid stray marks.
+std::pair<int, int> matchHighlightRun(const std::vector<PageWordGeom>& pw, const std::vector<std::string>& hl) {
+  const int m = static_cast<int>(pw.size());
+  const int n = static_cast<int>(hl.size());
+  if (m == 0 || n == 0) return {0, 0};
+
+  // Rolling longest-common-substring DP over the highlight dimension.
+  std::vector<int> prev(n + 1, 0);
+  std::vector<int> curr(n + 1, 0);
+  int bestLen = 0;
+  int bestEndP = 0;  // exclusive end index in pw of the best run
+  for (int i = 1; i <= m; i++) {
+    for (int j = 1; j <= n; j++) {
+      if (pw[i - 1].text == hl[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
+        if (curr[j] > bestLen) {
+          bestLen = curr[j];
+          bestEndP = i;
+        }
+      } else {
+        curr[j] = 0;
+      }
+    }
+    std::swap(prev, curr);
+    std::fill(curr.begin(), curr.end(), 0);
+  }
+
+  const int minLen = (n == 1) ? 1 : 2;
+  if (bestLen < minLen) return {0, 0};
+  return {bestEndP - bestLen, bestEndP};
+}
+
+// True if two word sequences share a contiguous run of length >= the smaller
+// sequence's overlap unit (1 word for single-word highlights, else 2). Used to
+// forbid overlapping highlights. O(a*b) but both inputs are short.
+bool highlightsOverlap(const std::vector<std::string>& a, const std::vector<std::string>& b) {
+  const int m = static_cast<int>(a.size());
+  const int n = static_cast<int>(b.size());
+  if (m == 0 || n == 0) return false;
+  const int need = (m == 1 || n == 1) ? 1 : 2;
+  std::vector<int> prev(n + 1, 0);
+  std::vector<int> curr(n + 1, 0);
+  for (int i = 1; i <= m; i++) {
+    for (int j = 1; j <= n; j++) {
+      if (a[i - 1] == b[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
+        if (curr[j] >= need) return true;
+      } else {
+        curr[j] = 0;
+      }
+    }
+    std::swap(prev, curr);
+    std::fill(curr.begin(), curr.end(), 0);
+  }
+  return false;
+}
+}  // namespace
+
 void EpubReaderActivity::finalizeHighlight() {
   if (!epub || !section || selectableWords.empty()) {
     exitSelectionMode();
@@ -1447,21 +1568,6 @@ void EpubReaderActivity::finalizeHighlight() {
     return;
   }
 
-  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
-
-  HighlightEntry entry;
-  entry.text = collected;
-  entry.xpath = progress.xpath;
-  entry.percentage = progress.percentage;
-  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
-  entry.startPage = start.page;
-  entry.startElement = start.element;
-  entry.startWord = start.word;
-  entry.endPage = end.page;
-  entry.endElement = end.element;
-  entry.endWord = end.word;
-  entry.chapterPageCount = section->pageCount;
-
   // Append to the per-book JSON file (load existing, push_back, save).
   const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
   const std::string dir = HighlightUtil::getHighlightsDir();
@@ -1473,6 +1579,30 @@ void EpubReaderActivity::finalizeHighlight() {
       JsonSettingsIO::loadHighlights(highlights, json.c_str());
     }
   }
+
+  // Reject overlapping highlights: if the new text shares any whole word run with
+  // an existing highlight in this chapter, treat it as an overlap and skip it.
+  // Highlights are word-granular and matched by text, so word-level overlap is the
+  // right unit here.
+  const auto newWords = splitHighlightWords(collected);
+  for (const auto& h : highlights) {
+    if (h.spineIndex != static_cast<uint16_t>(currentSpineIndex)) continue;
+    if (highlightsOverlap(splitHighlightWords(h.text), newWords)) {
+      showHighlightOverlapMessage = true;
+      highlightMessageTime = millis();
+      exitSelectionMode();
+      return;
+    }
+  }
+
+  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+
+  HighlightEntry entry;
+  entry.text = collected;
+  entry.xpath = progress.xpath;
+  entry.percentage = progress.percentage;
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+
   highlights.push_back(entry);
   const bool ok = JsonSettingsIO::saveHighlights(highlights, path.c_str());
   if (ok) {
@@ -1492,27 +1622,16 @@ bool EpubReaderActivity::deleteHighlightAtCursor() {
       selectionCursor >= static_cast<int>(selectableWords.size())) {
     return false;
   }
-
-  const uint16_t curPage = static_cast<uint16_t>(section->currentPage);
-  const auto& sw = selectableWords[selectionCursor];
   const uint16_t curSpine = static_cast<uint16_t>(currentSpineIndex);
 
-  // True if the cursor word (page/element/word) falls inside [start, end] of h.
-  // Only meaningful when h belongs to this chapter and its cached geometry still
-  // matches the current layout (same gate as drawStoredHighlights).
-  const auto covers = [&](const HighlightEntry& h) {
-    if (h.spineIndex != curSpine) return false;
-    if (h.chapterPageCount != section->pageCount) return false;
-    if (curPage < h.startPage || curPage > h.endPage) return false;
-    if (curPage == h.startPage &&
-        (sw.element < h.startElement || (sw.element == h.startElement && sw.word < h.startWord))) {
-      return false;
-    }
-    if (curPage == h.endPage && (sw.element > h.endElement || (sw.element == h.endElement && sw.word > h.endWord))) {
-      return false;
-    }
-    return true;
-  };
+  // Re-collect the current page's words (same order/filter as selectableWords, so
+  // the cursor index lines up) and find which stored highlight's matched run the
+  // cursor sits inside. Matching is by text, so it survives layout reflow.
+  auto page = section->loadPageFromSectionFile();
+  if (!page) return false;
+  std::vector<PageWordGeom> pw;
+  collectPageWords(*page, renderer, SETTINGS.getReaderFontId(), 0, 0, pw);
+  if (selectionCursor >= static_cast<int>(pw.size())) return false;
 
   const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
   if (!Storage.exists(path.c_str())) return false;
@@ -1522,6 +1641,14 @@ bool EpubReaderActivity::deleteHighlightAtCursor() {
   if (json.isEmpty() || !JsonSettingsIO::loadHighlights(highlights, json.c_str())) {
     return false;
   }
+
+  // True if highlight h is for this chapter and its matched run on this page
+  // covers the cursor word index.
+  const auto covers = [&](const HighlightEntry& h) {
+    if (h.spineIndex != curSpine) return false;
+    const auto [lo, hi] = matchHighlightRun(pw, splitHighlightWords(h.text));
+    return selectionCursor >= lo && selectionCursor < hi;
+  };
 
   const size_t before = highlights.size();
   highlights.erase(std::remove_if(highlights.begin(), highlights.end(), covers), highlights.end());
@@ -1543,35 +1670,17 @@ void EpubReaderActivity::drawStoredHighlights(const Page& page, const int margin
   if (sectionHighlights.empty()) return;
   const int fontId = SETTINGS.getReaderFontId();
   const int ascender = renderer.getFontAscenderSize(fontId);
-  const uint16_t curPage = static_cast<uint16_t>(section ? section->currentPage : 0);
+
+  std::vector<PageWordGeom> pw;
+  collectPageWords(page, renderer, fontId, marginLeft, marginTop, pw);
+  if (pw.empty()) return;
 
   for (const auto& h : sectionHighlights) {
-    // Geometry only valid when the cached layout still matches creation time.
-    if (h.chapterPageCount != (section ? section->pageCount : 0)) continue;
-    if (curPage < h.startPage || curPage > h.endPage) continue;
-
-    for (uint16_t ei = 0; ei < page.elements.size(); ei++) {
-      const auto& el = page.elements[ei];
-      if (el->getTag() != TAG_PageLine) continue;
-      const auto& line = static_cast<const PageLine&>(*el);
-      const auto& block = line.getBlock();
-      if (!block) continue;
-      const auto& words = block->getWords();
-      const auto& xpos = block->getWordXpos();
-      const auto& styles = block->getWordStyles();
-      if (words.size() != xpos.size() || words.size() != styles.size()) continue;
-
-      const int lineX = line.xPos + marginLeft;
-      const int underlineY = line.yPos + marginTop + ascender + 2;
-      for (uint16_t wi = 0; wi < words.size(); wi++) {
-        // Range test against (startPage,startElement,startWord)..(end...).
-        if (curPage == h.startPage && (ei < h.startElement || (ei == h.startElement && wi < h.startWord))) continue;
-        if (curPage == h.endPage && (ei > h.endElement || (ei == h.endElement && wi > h.endWord))) continue;
-        const int wx = xpos[wi] + lineX;
-        const int ww = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
-        if (ww <= 0) continue;
-        renderer.drawLine(wx, underlineY, wx + ww, underlineY, true);
-      }
+    const auto hlWords = splitHighlightWords(h.text);
+    const auto [lo, hi] = matchHighlightRun(pw, hlWords);
+    for (int i = lo; i < hi; i++) {
+      const int underlineY = pw[i].y + ascender + 2;
+      renderer.drawLine(pw[i].x, underlineY, pw[i].x + pw[i].w, underlineY, true);
     }
   }
 }

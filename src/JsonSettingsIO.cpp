@@ -457,13 +457,6 @@ bool JsonSettingsIO::saveHighlights(const std::vector<HighlightEntry>& highlight
     obj["xpath"] = h.xpath;
     obj["percentage"] = h.percentage;
     obj["spine"] = h.spineIndex;
-    obj["sp"] = h.startPage;
-    obj["se"] = h.startElement;
-    obj["sw"] = h.startWord;
-    obj["ep"] = h.endPage;
-    obj["ee"] = h.endElement;
-    obj["ew"] = h.endWord;
-    obj["cpc"] = h.chapterPageCount;
   }
 
   String json;
@@ -489,13 +482,6 @@ bool JsonSettingsIO::loadHighlights(std::vector<HighlightEntry>& highlights, con
     h.xpath = obj["xpath"] | std::string("");
     h.percentage = obj["percentage"] | static_cast<float>(0);
     h.spineIndex = obj["spine"] | static_cast<uint16_t>(0);
-    h.startPage = obj["sp"] | static_cast<uint16_t>(0);
-    h.startElement = obj["se"] | static_cast<uint16_t>(0);
-    h.startWord = obj["sw"] | static_cast<uint16_t>(0);
-    h.endPage = obj["ep"] | static_cast<uint16_t>(0);
-    h.endElement = obj["ee"] | static_cast<uint16_t>(0);
-    h.endWord = obj["ew"] | static_cast<uint16_t>(0);
-    h.chapterPageCount = obj["cpc"] | static_cast<uint16_t>(0);
   }
 
   LOG_DBG("HLT", "Loaded %zu highlights from file", highlights.size());

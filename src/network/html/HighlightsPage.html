@@ -55,6 +55,7 @@
       </div>
       <div class="row">
         <button id="downloadMdBtn" type="button" disabled>Download Markdown</button>
+        <button id="downloadClippingsBtn" type="button" disabled>Download My Clippings.txt</button>
         <button id="downloadJsonBtn" class="secondary" type="button" disabled>Download JSON</button>
       </div>
     </div>
@@ -68,6 +69,7 @@
     const bookSelect = document.getElementById('bookSelect');
     const refreshBtn = document.getElementById('refreshBtn');
     const downloadMdBtn = document.getElementById('downloadMdBtn');
+    const downloadClippingsBtn = document.getElementById('downloadClippingsBtn');
     const downloadJsonBtn = document.getElementById('downloadJsonBtn');
     const preview = document.getElementById('preview');
 
@@ -97,6 +99,23 @@
         md += '> — ' + pct + '%\n\n';
       }
       return md;
+    }
+
+    // Kindle-compatible "My Clippings.txt" format: title header, a location line,
+    // the quoted text, and a "==========" separator after each entry. Lets the
+    // export be consumed by tools that already parse Kindle clippings (Calibre,
+    // Readwise, etc.). Title is taken from the file name; chapter (spine) and
+    // in-book percent stand in for the Kindle location.
+    function buildClippings(name, list) {
+      let out = '';
+      for (const h of list) {
+        const pct = Math.round((h.percentage || 0) * 1000) / 10;
+        out += name + '\n';
+        out += '- Your Highlight on chapter ' + (h.spine || 0) + ' | ' + pct + '%\n\n';
+        out += (h.text || '').trim() + '\n';
+        out += '==========\n';
+      }
+      return out;
     }
 
     function renderPreview() {
@@ -132,6 +151,7 @@
       currentRaw = '';
       sortedHighlights = [];
       downloadMdBtn.disabled = true;
+      downloadClippingsBtn.disabled = true;
       downloadJsonBtn.disabled = true;
       preview.className = 'empty';
       preview.textContent = 'Select a book to see its highlights.';
@@ -162,6 +182,7 @@
       currentRaw = '';
       sortedHighlights = [];
       downloadMdBtn.disabled = true;
+      downloadClippingsBtn.disabled = true;
       downloadJsonBtn.disabled = true;
       if (!name) {
         preview.className = 'empty';
@@ -175,6 +196,7 @@
         sortedHighlights = sortHighlights(data.highlights || []);
         renderPreview();
         downloadMdBtn.disabled = sortedHighlights.length === 0;
+        downloadClippingsBtn.disabled = sortedHighlights.length === 0;
         downloadJsonBtn.disabled = false;
       } catch (e) {
         preview.className = 'empty';
@@ -186,6 +208,9 @@
     refreshBtn.addEventListener('click', loadBookList);
     downloadMdBtn.addEventListener('click', () => {
       download(currentName + '.md', buildMarkdown(currentName, sortedHighlights), 'text/markdown');
+    });
+    downloadClippingsBtn.addEventListener('click', () => {
+      download(currentName + ' - My Clippings.txt', buildClippings(currentName, sortedHighlights), 'text/plain');
     });
     downloadJsonBtn.addEventListener('click', () => {
       download(currentName + '.json', currentRaw, 'application/json');
