@@ -57,6 +57,11 @@ uint32_t lastCodepoint(const std::string& word) {
 
 bool containsSoftHyphen(const std::string& word) { return word.find(SOFT_HYPHEN_UTF8) != std::string::npos; }
 
+bool breakUsesExplicitSoftHyphen(const std::string& word, const size_t breakOffset) {
+  return breakOffset >= SOFT_HYPHEN_BYTES &&
+         word.compare(breakOffset - SOFT_HYPHEN_BYTES, SOFT_HYPHEN_BYTES, SOFT_HYPHEN_UTF8) == 0;
+}
+
 // Removes every soft hyphen in-place so rendered glyphs match measured widths.
 void stripSoftHyphensInPlace(std::string& word) {
   size_t pos = 0;
@@ -127,6 +132,32 @@ bool endsWithBreakableHyphen(const std::string& token) {
   if (token.empty()) return false;
   const uint32_t cp = lastCodepoint(token);
   return cp == '-' || cp == 0x2013 || cp == 0x2014;
+}
+
+size_t renderedCodepointCount(const std::string& word, const size_t startByte = 0,
+                              const size_t endByte = std::string::npos) {
+  if (startByte >= word.size()) return 0;
+  const size_t clampedEnd = std::min(endByte, word.size());
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + startByte);
+  const auto* end = reinterpret_cast<const unsigned char*>(word.c_str() + clampedEnd);
+
+  size_t count = 0;
+  while (ptr < end) {
+    const uint32_t cp = utf8NextCodepoint(&ptr);
+    if (cp == 0) break;
+    if (cp != 0x00AD) ++count;
+  }
+  return count;
+}
+
+bool readableInsertedFocusBreak(const std::string& word, const size_t breakOffset) {
+  // Focus Reading's visual split is not a typographic hyphenation hint. Keep
+  // inserted hyphens away from short focus prefixes like app-, exp-, con-, and
+  // learn- unless both sides are long enough to read comfortably.
+  constexpr size_t kMinFocusInsertedPrefix = 4;
+  constexpr size_t kMinFocusInsertedSuffix = 4;
+  return renderedCodepointCount(word, 0, breakOffset) >= kMinFocusInsertedPrefix &&
+         renderedCodepointCount(word, breakOffset) >= kMinFocusInsertedSuffix;
 }
 
 }  // namespace
@@ -278,6 +309,7 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine) const {
   }
   return 0;
 }
+
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
@@ -553,8 +585,13 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
         break;
       }
 
-      if (focusReadingEnabled && currentIndex > lineStart && currentIndex < continuesVec.size() &&
+      const bool visibleHyphenBreakAvailable =
+          focusReadingEnabled && currentIndex > lineStart && currentIndex < continuesVec.size() &&
           continuesVec[currentIndex] &&
+          std::any_of(words.begin() + lineStart, words.begin() + currentIndex, endsWithBreakableHyphen);
+
+      if (!visibleHyphenBreakAvailable && focusReadingEnabled && currentIndex > lineStart &&
+          currentIndex < continuesVec.size() && continuesVec[currentIndex] &&
           hyphenatePreviousFocusWordInContinuation(lineStart, currentIndex, effectivePageWidth, renderer, fontId,
                                                    wordWidths, continuesVec, lineWidth, currentIndex)) {
         break;
@@ -656,6 +693,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
+    if (needsHyphen && focusPrefixBytes > 0 && !breakUsesExplicitSoftHyphen(hyphenationSource, offset) &&
+        !readableInsertedFocusBreak(hyphenationSource, offset)) {
+      continue;
+    }
 
     // For a break at the focus boundary, the suffix contributes zero width to this line,
     // but an inserted visible hyphen still widens the already-placed bold prefix.
@@ -700,6 +741,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
       }
 
       const std::string prefixCandidate = words[prefixIdx].substr(0, offset);
+      if (info.requiresInsertedHyphen && !breakUsesExplicitSoftHyphen(hyphenationSource, offset) &&
+          !readableInsertedFocusBreak(hyphenationSource, offset)) {
+        continue;
+      }
       const int prefixWidth =
           measureWordWidth(renderer, fontId, prefixCandidate, wordStyles[prefixIdx], info.requiresInsertedHyphen);
       const int widthDelta = prefixWidth - static_cast<int>(wordWidths[prefixIdx]);
@@ -842,6 +887,10 @@ bool ParsedText::hyphenateFocusPrefixAtIndex(const size_t wordIndex, const int a
       continue;
     }
     if (focusBoundaryFallbackOnly && offset != boundaryOffset) {
+      continue;
+    }
+    if (info.requiresInsertedHyphen && !breakUsesExplicitSoftHyphen(mergedWord, offset) &&
+        !readableInsertedFocusBreak(mergedWord, offset)) {
       continue;
     }
 
