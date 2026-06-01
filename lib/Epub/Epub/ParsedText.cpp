@@ -703,6 +703,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
+    if (isAtBoundary && needsHyphen && !breakUsesExplicitSoftHyphen(hyphenationSource, offset)) {
+      continue;
+    }
     if (needsHyphen && focusPrefixBytes > 0 && !breakUsesExplicitSoftHyphen(hyphenationSource, offset) &&
         !readableInsertedFocusBreak(hyphenationSource, offset)) {
       continue;
@@ -898,6 +901,9 @@ bool ParsedText::hyphenateFocusPrefixAtIndex(const size_t wordIndex, const int a
       continue;
     }
     if (focusBoundaryFallbackOnly && offset != boundaryOffset) {
+      continue;
+    }
+    if (offset == boundaryOffset && info.requiresInsertedHyphen && !breakUsesExplicitSoftHyphen(mergedWord, offset)) {
       continue;
     }
     if (info.requiresInsertedHyphen && !breakUsesExplicitSoftHyphen(mergedWord, offset) &&
