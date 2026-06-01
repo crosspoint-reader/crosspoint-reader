@@ -30,8 +30,6 @@ static constexpr int TEX_PADH = 9;
 static constexpr int TITLE_BANNER_PAD = 3;
 // Left inset for the title text within the edge-to-edge black banner.
 static constexpr int TITLE_BANNER_TEXT_X = 16;
-// Tightened stale-data banner height.
-static constexpr int STALE_BAR_H = 18;
 
 // ─── Font assignments ─────────────────────────────────────────────────────────
 static constexpr int HEADER_FONT = UI_10_FONT_ID;
@@ -116,11 +114,6 @@ void dottedHLine(const GfxRenderer& r, int x, int y, int w) {
   for (int i = 0; i < w; i += 2) r.drawPixel(x + i, y, true);
 }
 
-// Top y so that a single text line is vertically centred in a band of height h.
-int centeredTextTop(const GfxRenderer& r, int font, int bandTop, int h) {
-  return bandTop + (h - r.getTextHeight(font)) / 2;
-}
-
 // ─── Texture engine ───────────────────────────────────────────────────────────
 //
 // Hierarchy (density encodes visual weight, highest → lowest):
@@ -191,22 +184,6 @@ int drawZone(const GfxRenderer& r, int font, const char* text, Tex tex, int y, i
   return y + TEX_GAP + paperH + TEX_GAP;
 }
 
-// Stale-data bar (inverted, centred label).
-void drawStaleBar(const GfxRenderer& r, const RemindersData& data, int barTop, int contentLeft, int contentWidth) {
-  r.fillRect(contentLeft, barTop, contentWidth, STALE_BAR_H, true);
-  char banner[56];
-  if (data.synced_epoch > MIN_VALID_EPOCH) {
-    char clk[16];
-    formatClock12(data.synced_epoch, clk, sizeof(clk));
-    snprintf(banner, sizeof(banner), "%s %s - %s", tr(STR_REMINDERS_LAST_SYNCED), clk, tr(STR_REMINDERS_NOT_LIVE));
-  } else {
-    snprintf(banner, sizeof(banner), "%s", tr(STR_REMINDERS_NOT_LIVE));
-  }
-  const int tw = r.getTextWidth(FOOTER_FONT, banner, EpdFontFamily::REGULAR);
-  r.drawText(FOOTER_FONT, contentLeft + (contentWidth - tw) / 2, centeredTextTop(r, FOOTER_FONT, barTop, STALE_BAR_H),
-             banner, false, EpdFontFamily::REGULAR);
-}
-
 // ─── Item block height (for pagination) ───────────────────────────────────────
 
 int blockHeight(const CalItem& it, int titleH, int subH, int detailH, int leaveByH) {
@@ -229,7 +206,7 @@ int blockHeight(const CalItem& it, int titleH, int subH, int detailH, int leaveB
 
 int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t itemIndex, int y, int W, int contentLeft,
              int contentRight, int contentWidth, time_t now, bool clockValid, int titleH, int subH, int detailH,
-             int leaveByH, int8_t selectedIndex) {
+             int leaveByH, int8_t selectedIndex, bool isStale) {
   (void)contentRight;
   const uint8_t number = itemIndex + 1;
 
@@ -301,7 +278,9 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t itemIndex, int y, 
       } else {
         formatTimeWithDay(it.start_epoch, now, clockValid, leftLabel, sizeof(leftLabel));
       }
-      if (clockValid) {
+      // The live countdown is suppressed when stale (standby / sleep screen): a
+      // frozen "HH:MM LEFT" would be misleading, so only the time label remains.
+      if (clockValid && !isStale) {
         char cd[24];
         formatCountdownCompact(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
         snprintf(leaveLine, sizeof(leaveLine), "%s  |  %s %s", leftLabel, cd, tr(STR_REMINDERS_LEFT));
@@ -339,8 +318,9 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t itemIndex, int y, 
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
-uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex,
-                                      int8_t selectedIndex) {
+RemindersRenderer::LayoutResult RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData& data,
+                                                              uint8_t startIndex, int8_t selectedIndex,
+                                                              bool autoSelectFirst) {
   // Force portrait — the 480×800 panel is always rendered portrait regardless
   // of what orientation the reader left the screen in.
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -384,29 +364,32 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
   const int hintTop = H - 6 - hintHeight;
   const int dividerY = hintTop - 6;
 
-  int staleBarTop = 0;
-  int contentBottom;
-  if (data.is_stale) {
-    staleBarTop = dividerY - 6 - STALE_BAR_H;
-    contentBottom = staleBarTop - 4;
-  } else {
-    contentBottom = dividerY - 4;
-  }
+  const int contentBottom = dividerY - 4;
 
   if (data.count == 0) {
     renderer.drawCenteredText(TITLE_FONT, (y + contentBottom) / 2, tr(STR_REMINDERS_NO_TASKS));
   }
 
   // ── Item loop with pagination ────────────────────────────────────────────
+  // When nothing is explicitly selected and auto-select is requested, the first
+  // completable task drawn on this page becomes the highlight, so a single
+  // Confirm checks it. effectiveSelected is set just before drawing that item,
+  // guaranteeing the highlight lands on an on-page task in this single pass.
+  const bool autoSelect = autoSelectFirst && selectedIndex < 0;
+  int8_t effectiveSelected = selectedIndex;
   uint8_t i = startIndex;
   bool hasCompletable = false;
   while (i < data.count) {
     const CalItem& it = data.items[i];
     const int bh = blockHeight(it, titleH, subH, detailH, leaveByH);
     if (i != startIndex && y + bh > contentBottom) break;
+    const bool completable = !it.is_calendar && it.task_id[0] != '\0';
+    if (autoSelect && effectiveSelected < 0 && completable) {
+      effectiveSelected = static_cast<int8_t>(i);
+    }
     y = drawItem(renderer, it, i, y, W, contentLeft, contentRight, contentWidth, now, clockValid, titleH, subH, detailH,
-                 leaveByH, selectedIndex);
-    if (!it.is_calendar && it.task_id[0] != '\0') hasCompletable = true;
+                 leaveByH, effectiveSelected, data.is_stale);
+    if (completable) hasCompletable = true;
     i++;
   }
   const uint8_t nextIndex = i;
@@ -416,11 +399,6 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
   // ── Dot-grid texture fills remaining content space ───────────────────────
   if (y < contentBottom - TEX_GAP) {
     paintTex(renderer, y, contentBottom - y, Tex::DotGrid, W, contentLeft);
-  }
-
-  // ── Stale-data banner ────────────────────────────────────────────────────
-  if (data.is_stale) {
-    drawStaleBar(renderer, data, staleBarTop, contentLeft, contentWidth);
   }
 
   // ── Footer divider ───────────────────────────────────────────────────────
@@ -436,7 +414,7 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
     if (hasCompletable) {
       hint += tr(STR_REMINDERS_HINT_SELECT);
       hint += "  ";
-      if (selectedIndex >= 0) {
+      if (effectiveSelected >= 0) {
         hint += tr(STR_REMINDERS_HINT_COMPLETE);
         hint += "  ";
       }
@@ -451,19 +429,22 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
     }
   }
 
-  return nextIndex;
+  return {nextIndex, effectiveSelected};
 }
 
 uint8_t RemindersRenderer::renderFull(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex,
-                                      int8_t selectedIndex) {
-  const uint8_t nextIndex = drawLayout(renderer, data, startIndex, selectedIndex);
+                                      int8_t selectedIndex, bool autoSelectFirst, int8_t* resolvedSelected) {
+  const LayoutResult res = drawLayout(renderer, data, startIndex, selectedIndex, autoSelectFirst);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-  return nextIndex;
+  if (resolvedSelected != nullptr) *resolvedSelected = res.resolvedSelected;
+  return res.nextIndex;
 }
 
 bool RemindersRenderer::renderCountdownsOnly(GfxRenderer& renderer, const RemindersData& data, uint8_t startIndex,
                                              int8_t selectedIndex) {
-  drawLayout(renderer, data, startIndex, selectedIndex);
+  // Selection is already resolved by the preceding full render, so the tick path
+  // never needs to auto-select.
+  drawLayout(renderer, data, startIndex, selectedIndex, /*autoSelectFirst=*/false);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
   const time_t now = time(nullptr);

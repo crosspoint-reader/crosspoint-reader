@@ -279,7 +279,7 @@ void RemindersActivity::enterStale() {
   staleReached = true;  // stops preventAutoSleep(); main loop will sleep on timeout
   tickRefresh = false;
   gRemindersData.saveToFile();
-  requestUpdate();  // renderFull() draws the stale banner because is_stale is set
+  requestUpdate();  // renderFull() suppresses the live countdown because is_stale is set
 }
 
 void RemindersActivity::render(RenderLock&&) {
@@ -296,10 +296,20 @@ void RemindersActivity::render(RenderLock&&) {
         const bool ok = RemindersRenderer::renderCountdownsOnly(renderer, gRemindersData, pageStart, selectedIndex);
         tickRefresh = false;
         if (!ok) {
-          lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart, selectedIndex);
+          // A full redraw resolves the default highlight; capture it so Confirm
+          // and Left/Right operate on the auto-selected task.
+          int8_t resolved = selectedIndex;
+          lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart, selectedIndex,
+                                                        /*autoSelectFirst=*/true, &resolved);
+          selectedIndex = resolved;
         }
       } else {
-        lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart, selectedIndex);
+        // Auto-highlight the first completable task on the page so a single
+        // Confirm checks it; capture the resolved index for input handling.
+        int8_t resolved = selectedIndex;
+        lastNextIndex = RemindersRenderer::renderFull(renderer, gRemindersData, pageStart, selectedIndex,
+                                                      /*autoSelectFirst=*/true, &resolved);
+        selectedIndex = resolved;
       }
       return;
     }
