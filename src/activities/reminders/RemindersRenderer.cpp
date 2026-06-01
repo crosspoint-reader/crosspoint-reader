@@ -90,6 +90,18 @@ void formatCountdownVerbose(long secsLeft, char* buf, size_t len) {
     snprintf(buf, len, "%02ldH %02ldM", hours, mins);
 }
 
+// Compact HH:MM countdown — e.g. "01:23" for 1h 23m, "2D 18H" for multi-day.
+void formatCountdownCompact(long secsLeft, char* buf, size_t len) {
+  if (secsLeft < 0) secsLeft = 0;
+  const long days = secsLeft / 86400;
+  const long hours = (secsLeft % 86400) / 3600;
+  const long mins = (secsLeft % 3600) / 60;
+  if (days > 0)
+    snprintf(buf, len, "%ldD %02ldH", days, hours);
+  else
+    snprintf(buf, len, "%02ld:%02ld", hours, mins);
+}
+
 // Uppercase 12-hour time, prefixed with the full weekday name when `epoch` falls
 // on a different local day than `now` (e.g. "Tuesday 4:00PM" vs "4:00PM").
 void formatTimeWithDay(time_t epoch, time_t now, bool clockValid, char* buf, size_t len) {
@@ -257,8 +269,9 @@ void drawStaleBar(const GfxRenderer& r, const RemindersData& data, int barTop, i
 // ─── Item block height (for pagination) ───────────────────────────────────────
 
 int blockHeight(const CalItem& it, int titleH, int subH, int detailH) {
-  int h = zoneH(titleH);
-  if (it.note_count > 0) h += zoneH(subH, it.note_count);
+  (void)titleH;  // title is now a fixed-height solid black banner
+  int h = TEX_GAP + BAR_HEIGHT + TEX_GAP;
+  if (it.note_count > 0) h += it.note_count * zoneH(subH);
   if (it.start_epoch != 0) {
     if (it.all_day) {
       h += zoneH(detailH);
@@ -275,28 +288,24 @@ int blockHeight(const CalItem& it, int titleH, int subH, int detailH) {
 
 int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int W, int contentLeft, int contentRight,
              int contentWidth, time_t now, bool clockValid, int titleH, int subH, int detailH) {
-  // ── Title — medium halftone, fit-content paper with extra left indent ────
+  // ── Title — solid black banner, full width, white text ──────────────────
   {
     char buf[96];
     snprintf(buf, sizeof(buf), "#%02u  %s", number, it.title);
-    const std::string trunc = r.truncatedText(TITLE_FONT, buf, contentWidth - TEX_PADH * 2 - TITLE_INDENT);
-    y = drawZoneFit(r, TITLE_FONT, trunc.c_str(), Tex::Med, y, W, contentLeft, contentRight, titleH, true,
-                    TITLE_INDENT);
+    const std::string trunc = r.truncatedText(TITLE_FONT, buf, contentWidth - 16);
+    const int bannerY = y + TEX_GAP;
+    r.fillRect(contentLeft, bannerY, contentWidth, BAR_HEIGHT, true);
+    const int textTop = centeredTextTop(r, TITLE_FONT, bannerY, BAR_HEIGHT);
+    r.drawText(TITLE_FONT, contentLeft + 8, textTop, trunc.c_str(), false, EpdFontFamily::BOLD);
+    y = bannerY + BAR_HEIGHT + TEX_GAP;
   }
 
-  // ── Sub-items — crosshatch, grouped on one paper block ───────────────────
-  if (it.note_count > 0) {
-    const int paperH = it.note_count * subH + TEX_PADV * 2;
-    const int bandTop = y + TEX_GAP;
-    paintTex(r, bandTop, paperH, Tex::Cross, W, contentLeft);
-    int ty = bandTop + TEX_PADV;
-    for (uint8_t n = 0; n < it.note_count; n++) {
-      char noteBuf[56];
-      snprintf(noteBuf, sizeof(noteBuf), "  > %.*s", static_cast<int>(sizeof(it.notes[0]) - 1), it.notes[n]);
-      r.drawText(SUB_FONT, contentLeft + TEX_PADH + 8, ty, noteBuf, true, EpdFontFamily::REGULAR);
-      ty += subH;
-    }
-    y += TEX_GAP + paperH + TEX_GAP;
+  // ── Sub-items — crosshatch, one zone per note with ↳ prefix ─────────────
+  for (uint8_t n = 0; n < it.note_count; n++) {
+    char noteBuf[60];
+    snprintf(noteBuf, sizeof(noteBuf), "\xe2\x86\xb3 %.*s", static_cast<int>(sizeof(it.notes[0]) - 1), it.notes[n]);
+    const std::string noteTrunc = r.truncatedText(SUB_FONT, noteBuf, contentWidth - TEX_PADH * 2 - 8);
+    y = drawZone(r, SUB_FONT, noteTrunc.c_str(), Tex::Cross, y, W, contentLeft, subH, false, false, 8);
   }
 
   // ── Time / banner ────────────────────────────────────────────────────────
@@ -317,12 +326,17 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
       const bool hasTravel = it.is_calendar && it.travel_secs > 0;
       const time_t countdownTarget = hasTravel ? it.start_epoch - it.travel_secs : it.start_epoch;
       char leftLabel[48], rightLabel[40];
-      formatTimeWithDay(it.start_epoch, now, clockValid, leftLabel, sizeof(leftLabel));
+      if (hasTravel) {
+        char leaveBuf[16];
+        formatClock12(countdownTarget, leaveBuf, sizeof(leaveBuf));
+        snprintf(leftLabel, sizeof(leftLabel), "%s %s", tr(STR_REMINDERS_LEAVE_BY), leaveBuf);
+      } else {
+        formatTimeWithDay(it.start_epoch, now, clockValid, leftLabel, sizeof(leftLabel));
+      }
       if (clockValid) {
         char cd[24];
-        formatCountdownVerbose(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
-        snprintf(rightLabel, sizeof(rightLabel), "%s %s",
-                 hasTravel ? tr(STR_REMINDERS_LEAVE_IN) : tr(STR_REMINDERS_STARTS_IN), cd);
+        formatCountdownCompact(static_cast<long>(countdownTarget - now), cd, sizeof(cd));
+        snprintf(rightLabel, sizeof(rightLabel), "%s %s", cd, tr(STR_REMINDERS_LEFT));
       } else {
         rightLabel[0] = '\0';
       }
@@ -333,7 +347,7 @@ int drawItem(const GfxRenderer& r, const CalItem& it, uint8_t number, int y, int
         char metaBuf[64];
         char evtBuf[16];
         formatClock12(it.start_epoch, evtBuf, sizeof(evtBuf));
-        snprintf(metaBuf, sizeof(metaBuf), "EVENT: %s  |  TRAVEL: %ldm", evtBuf,
+        snprintf(metaBuf, sizeof(metaBuf), "EVENT: %s  |  TRAVEL: %ld mins", evtBuf,
                  static_cast<long>(it.travel_secs / 60));
         const std::string metaTrunc = r.truncatedText(DETAIL_FONT, metaBuf, contentWidth - TEX_PADH * 2);
         y = drawZone(r, DETAIL_FONT, metaTrunc.c_str(), Tex::Ruled, y, W, contentLeft, detailH, false, false);
@@ -386,8 +400,8 @@ uint8_t RemindersRenderer::drawLayout(GfxRenderer& renderer, const RemindersData
     if (hdrEpoch > MIN_VALID_EPOCH) {
       struct tm hdrTm;
       localTm(hdrEpoch, hdrTm);
-      snprintf(header, sizeof(header), "%s  |  %s %s %d  |  %u %s", tr(STR_REMINDERS_TASKS), WDAY[hdrTm.tm_wday % 7],
-               MON[hdrTm.tm_mon % 12], hdrTm.tm_mday, static_cast<unsigned>(data.count), tr(STR_REMINDERS_ITEMS));
+      snprintf(header, sizeof(header), "%s  |  %s %s %d", tr(STR_REMINDERS_TASKS), WDAY[hdrTm.tm_wday % 7],
+               MON[hdrTm.tm_mon % 12], hdrTm.tm_mday);
     } else {
       snprintf(header, sizeof(header), "%s", tr(STR_REMINDERS_TASKS));
     }
