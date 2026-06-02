@@ -324,7 +324,27 @@ void RemindersActivity::render(RenderLock&&) {
       const int midY = renderer.getScreenHeight() / 2;
       renderer.clearScreen();
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_REMINDERS_SYNC_FAILED), true, EpdFontFamily::BOLD);
-      renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_REMINDERS_SYNC_FAILED_HINT));
+      // Name the stage that actually failed so a single test run pins the cause
+      // (Cancelled/OK never reach this screen — see loop()).
+      StrId hint;
+      switch (syncResult) {
+        case GoogleClient::Result::NoCredentials:
+          hint = StrId::STR_REMINDERS_FAIL_CREDS;
+          break;
+        case GoogleClient::Result::WifiFailed:
+          hint = StrId::STR_REMINDERS_FAIL_WIFI;
+          break;
+        case GoogleClient::Result::ClockUnset:
+          hint = StrId::STR_REMINDERS_FAIL_CLOCK;
+          break;
+        case GoogleClient::Result::AuthFailed:
+          hint = StrId::STR_REMINDERS_FAIL_AUTH;
+          break;
+        default:
+          hint = StrId::STR_REMINDERS_FAIL_FETCH;
+          break;
+      }
+      renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, I18N.get(hint));
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_REMINDERS_RETRY), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
