@@ -342,7 +342,14 @@ void EpubReaderActivity::loop() {
     {
       RenderLock lock(*this);
       nextPageNumber = 0;
-      currentSpineIndex = nextTriggered ? currentSpineIndex + 1 : currentSpineIndex - 1;
+      if (nextTriggered) {
+        currentSpineIndex++;
+      } else {
+        const bool isInsideCurrentChapter = section && section->currentPage > 0;
+        if (!isInsideCurrentChapter && currentSpineIndex > 0) {
+          currentSpineIndex--;
+        }
+      }
       section.reset();
     }
     requestUpdate();
