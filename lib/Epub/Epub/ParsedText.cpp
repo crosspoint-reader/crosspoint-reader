@@ -702,14 +702,15 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
         words[prefixIdx].push_back('-');
       }
 
+      const auto prefixStyle = wordStyles[prefixIdx];
       words.insert(words.begin() + wordIndex, prefixRemainder);
-      wordStyles.insert(wordStyles.begin() + wordIndex, style);
+      wordStyles.insert(wordStyles.begin() + wordIndex, prefixStyle);
       wordContinues.insert(wordContinues.begin() + wordIndex, false);
       wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex, false);
 
       wordIsFocusSuffix[wordIndex + 1] = false;
       wordWidths[prefixIdx] = static_cast<uint16_t>(chosenPrefixWidth);
-      const uint16_t remainderWidth = measureWordWidth(renderer, fontId, prefixRemainder, style);
+      const uint16_t remainderWidth = measureWordWidth(renderer, fontId, prefixRemainder, prefixStyle);
       wordWidths.insert(wordWidths.begin() + wordIndex, remainderWidth);
       return false;
     }
