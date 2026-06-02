@@ -445,7 +445,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
         {
           // Resolve the image path relative to the HTML file
-          std::string resolvedPath = FsHelpers::normalisePath(self->contentBase + src);
+          std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
 
           if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
             // Create a unique filename for the cached image

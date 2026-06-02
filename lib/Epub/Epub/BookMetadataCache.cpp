@@ -199,7 +199,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     spineFile.seek(0);
     for (int i = 0; i < spineCount; i++) {
       auto entry = readSpineEntry(spineFile);
-      std::string path = FsHelpers::normalisePath(entry.href);
+      std::string path = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(entry.href));
 
       ZipFile::SizeTarget t;
       t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
@@ -243,13 +243,13 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     if (useBatchSizes) {
       itemSize = spineSizes[i];
       if (itemSize == 0) {
-        const std::string path = FsHelpers::normalisePath(spineEntry.href);
+        const std::string path = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(spineEntry.href));
         if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
           LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
         }
       }
     } else {
-      const std::string path = FsHelpers::normalisePath(spineEntry.href);
+      const std::string path = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(spineEntry.href));
       if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
         LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
       }
