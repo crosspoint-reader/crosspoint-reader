@@ -240,7 +240,13 @@ void HalGPIO::startDeepSleep() {
     inputMgr.update();
   }
   // Arm the wakeup trigger *after* the button is released
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+#else
+  // ESP32-S3 (e.g. M5 PaperColor) has no GPIO deep-sleep wakeup; use RTC ext1.
+  // POWER_BUTTON_PIN must be an RTC-capable GPIO (GPIO0-21 on S3).
+  esp_sleep_enable_ext1_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
