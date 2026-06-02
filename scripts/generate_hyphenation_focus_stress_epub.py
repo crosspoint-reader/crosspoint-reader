@@ -17,7 +17,7 @@ TITLE = "Hyphenation and Focus Reading Stress Test"
 
 
 def soft(word: str) -> str:
-    """Mark soft hyphens with a readable ASCII token in source paragraphs."""
+    """Replace the ASCII placeholder '|' with the soft-hyphen HTML entity (U+00AD)."""
     return word.replace("|", "&#173;")
 
 
