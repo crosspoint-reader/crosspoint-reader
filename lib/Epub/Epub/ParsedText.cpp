@@ -88,6 +88,21 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
+EpdFontFamily::Style focusSuffixStyleFor(const EpdFontFamily::Style prefixStyle) {
+  return static_cast<EpdFontFamily::Style>(prefixStyle & ~EpdFontFamily::BOLD);
+}
+
+uint16_t measureBoundaryHyphenWidth(const GfxRenderer& renderer, const int fontId,
+                                    const EpdFontFamily::Style prefixStyle) {
+  return measureWordWidth(renderer, fontId, "-", focusSuffixStyleFor(prefixStyle));
+}
+
+int measureAttachedBoundaryHyphenAdvance(const GfxRenderer& renderer, const int fontId, const std::string& prefix,
+                                         const EpdFontFamily::Style prefixStyle) {
+  const int kerning = renderer.getKerning(fontId, lastCodepoint(prefix), '-', prefixStyle);
+  return kerning + measureBoundaryHyphenWidth(renderer, fontId, prefixStyle);
+}
+
 // Checks if a UTF-8 codepoint should be counted as part of a word for Focus Reading
 bool isWordCharacter(uint32_t cp) {
   // ASCII range (Catches 95%+ of characters immediately)
@@ -548,6 +563,13 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
                                       allowFallbackBreaks)) {
         lineWidth += spacing + wordWidths[currentIndex];
         ++currentIndex;
+        if (currentIndex < wordWidths.size() && words[currentIndex] == "-" && wordIsFocusSuffix[currentIndex] &&
+            continuesVec[currentIndex]) {
+          lineWidth += renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
+                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]) +
+                       wordWidths[currentIndex];
+          ++currentIndex;
+        }
         break;
       }
 
@@ -646,13 +668,9 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     int rankingWidth;
     if (isAtBoundary) {
       const size_t prefixIdx = wordIndex - 1;
-      int hyphenDelta = 0;
-      if (needsHyphen) {
-        const int widthWithHyphen =
-            measureWordWidth(renderer, fontId, words[prefixIdx], wordStyles[prefixIdx], /*appendHyphen=*/true);
-        hyphenDelta = widthWithHyphen - static_cast<int>(wordWidths[prefixIdx]);
-      }
-      fitWidth = std::max(0, hyphenDelta);
+      fitWidth = needsHyphen
+                     ? measureAttachedBoundaryHyphenAdvance(renderer, fontId, words[prefixIdx], wordStyles[prefixIdx])
+                     : 0;
       rankingWidth = 0;
     } else {
       fitWidth = measureWordWidth(renderer, fontId, word.substr(0, localOffset), style, needsHyphen);
@@ -702,15 +720,15 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
         words[prefixIdx].push_back('-');
       }
 
-      const auto prefixStyle = wordStyles[prefixIdx];
+      const EpdFontFamily::Style remainderStyle = focusSuffixStyleFor(wordStyles[prefixIdx]);
       words.insert(words.begin() + wordIndex, prefixRemainder);
-      wordStyles.insert(wordStyles.begin() + wordIndex, prefixStyle);
+      wordStyles.insert(wordStyles.begin() + wordIndex, remainderStyle);
       wordContinues.insert(wordContinues.begin() + wordIndex, false);
       wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex, false);
 
       wordIsFocusSuffix[wordIndex + 1] = false;
       wordWidths[prefixIdx] = static_cast<uint16_t>(chosenPrefixWidth);
-      const uint16_t remainderWidth = measureWordWidth(renderer, fontId, prefixRemainder, prefixStyle);
+      const uint16_t remainderWidth = measureWordWidth(renderer, fontId, prefixRemainder, remainderStyle);
       wordWidths.insert(wordWidths.begin() + wordIndex, remainderWidth);
       return false;
     }
@@ -727,15 +745,20 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   if (chosenIsAtFocusBoundary) {
     const size_t prefixIdx = wordIndex - 1;
     if (chosenNeedsHyphen) {
-      words[prefixIdx].push_back('-');
+      const EpdFontFamily::Style hyphenStyle = focusSuffixStyleFor(wordStyles[prefixIdx]);
+      words.insert(words.begin() + wordIndex, "-");
+      wordStyles.insert(wordStyles.begin() + wordIndex, hyphenStyle);
+      wordContinues.insert(wordContinues.begin() + wordIndex, true);
+      wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex, true);
+      wordWidths.insert(wordWidths.begin() + wordIndex,
+                        measureBoundaryHyphenWidth(renderer, fontId, wordStyles[prefixIdx]));
     }
     // Detach the suffix completely: it starts fresh on the next line and should no longer be
     // treated as the continuation of the focus-reading prefix from the previous line.
-    wordContinues[wordIndex] = false;
-    wordIsFocusSuffix[wordIndex] = false;
-    // Update the prefix width to account for the added hyphen.
-    wordWidths[prefixIdx] = measureWordWidth(renderer, fontId, words[prefixIdx], wordStyles[prefixIdx]);
-    return false;  // Signal that nothing from the suffix fits on this line
+    const size_t suffixIdx = chosenNeedsHyphen ? wordIndex + 1 : wordIndex;
+    wordContinues[suffixIdx] = false;
+    wordIsFocusSuffix[suffixIdx] = false;
+    return chosenNeedsHyphen;  // Include the artificial hyphen on this line when one was inserted.
   }
 
   // Split the word at the selected breakpoint and append a hyphen if required.
@@ -810,18 +833,26 @@ bool ParsedText::hyphenateFocusPrefixAtIndex(const size_t wordIndex, const int a
       continue;
     }
 
-    const int prefixWidth =
-        measureWordWidth(renderer, fontId, words[wordIndex], wordStyles[wordIndex], info.requiresInsertedHyphen);
+    int prefixWidth = wordWidths[wordIndex];
+    if (info.requiresInsertedHyphen) {
+      prefixWidth += measureAttachedBoundaryHyphenAdvance(renderer, fontId, words[wordIndex], wordStyles[wordIndex]);
+    }
     if (prefixWidth > availableWidth) {
       return false;
     }
 
     if (info.requiresInsertedHyphen) {
-      words[wordIndex].push_back('-');
+      const EpdFontFamily::Style hyphenStyle = focusSuffixStyleFor(wordStyles[wordIndex]);
+      words.insert(words.begin() + wordIndex + 1, "-");
+      wordStyles.insert(wordStyles.begin() + wordIndex + 1, hyphenStyle);
+      wordContinues.insert(wordContinues.begin() + wordIndex + 1, true);
+      wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, true);
+      wordWidths.insert(wordWidths.begin() + wordIndex + 1,
+                        measureBoundaryHyphenWidth(renderer, fontId, wordStyles[wordIndex]));
     }
-    wordContinues[wordIndex + 1] = false;
-    wordIsFocusSuffix[wordIndex + 1] = false;
-    wordWidths[wordIndex] = static_cast<uint16_t>(prefixWidth);
+    const size_t suffixIdx = info.requiresInsertedHyphen ? wordIndex + 2 : wordIndex + 1;
+    wordContinues[suffixIdx] = false;
+    wordIsFocusSuffix[suffixIdx] = false;
     return true;
   }
 
