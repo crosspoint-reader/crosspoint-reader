@@ -302,6 +302,15 @@ int32_t bestRssiInScan(int scanCount, const std::string& ssid) {
 bool connectWifi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
+  // Wake-from-sleep boots straight into Reminders, which never visits the WiFi
+  // settings screen — the only place that populates WIFI_STORE. After a deep-
+  // sleep wake (a full chip reset) the in-memory list is therefore empty even
+  // though /.crosspoint/wifi.json holds saved networks. Load it from SD before
+  // concluding there's nothing to connect to.
+  if (WIFI_STORE.getCredentials().empty()) {
+    WIFI_STORE.loadFromFile();
+  }
+
   if (WIFI_STORE.getCredentials().empty()) {
     LOG_ERR("GOOG", "No saved WiFi networks to connect to");
     return false;
