@@ -33,7 +33,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [Footnote Navigation](#footnote-navigation)
       - [System Navigation](#system-navigation)
       - [Supported Languages](#supported-languages)
-  - [5. Reader Menu](`#5-reader-menu`)
+  - [5. Reader Menu](#5-reader-menu)
       - [5.1 Chapter Selection](#51-chapter-selection)
       - [5.2 Bookmarks](#52-bookmarks)
   - [6. Current Limitations & Roadmap](#6-current-limitations--roadmap)
