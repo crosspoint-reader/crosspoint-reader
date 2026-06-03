@@ -63,8 +63,23 @@ bool FontInstaller::ensureFamilyDir(const char* familyName) {
 
   if (!Storage.exists(root)) {
     if (!Storage.mkdir(root)) {
-      LOG_ERR("FONT", "Failed to create fonts dir: %s", root);
-      return false;
+      const char* fallbackRoot = nullptr;
+      if (strcmp(root, SdCardFontRegistry::FONTS_DIR_HIDDEN) == 0) {
+        fallbackRoot = SdCardFontRegistry::FONTS_DIR_VISIBLE;
+      } else if (strcmp(root, SdCardFontRegistry::FONTS_DIR_VISIBLE) == 0) {
+        fallbackRoot = SdCardFontRegistry::FONTS_DIR_HIDDEN;
+      }
+
+      if (!fallbackRoot || (!Storage.exists(fallbackRoot) && !Storage.mkdir(fallbackRoot))) {
+        LOG_ERR("FONT", "Failed to create fonts dir: %s", root);
+        if (fallbackRoot) {
+          LOG_ERR("FONT", "Failed to create fallback fonts dir: %s", fallbackRoot);
+        }
+        return false;
+      }
+
+      LOG_INF("FONT", "Failed to create fonts dir: %s; using fallback: %s", root, fallbackRoot);
+      root = fallbackRoot;
     }
   }
 
