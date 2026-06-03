@@ -8,9 +8,7 @@
 namespace FsHelpers {
 
 namespace {
-bool isHexDigit(const char c) {
-  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-}
+bool isHexDigit(const char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
 uint8_t hexValue(const char c) {
   if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
