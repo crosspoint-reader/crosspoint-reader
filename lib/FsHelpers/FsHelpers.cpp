@@ -182,6 +182,21 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
       output[i] = c;
     }
   }
+
+  // If the truncation split a multi-byte UTF-8 sequence, drop the partial
+  // trailing bytes. FAT32 long filenames are stored as UTF-16, so SdFat
+  // (USE_UTF8_LONG_NAMES) rejects an incomplete sequence and the
+  // directory/file creation fails. input[i] is the first byte we did not
+  // copy; if it is a continuation byte (10xxxxxx) the last copied character
+  // is incomplete and must be removed.
+  if (input[i] != '\0' && (static_cast<unsigned char>(input[i]) & 0xC0) == 0x80) {
+    while (i > 0 && (static_cast<unsigned char>(output[i - 1]) & 0xC0) == 0x80) {
+      i--;
+    }
+    if (i > 0) {
+      i--;
+    }
+  }
   output[i] = '\0';
 }
 
