@@ -34,8 +34,9 @@ static inline void splitIpaRuns(const char* text, std::vector<IpaTextSpan>& out)
   const auto* p = reinterpret_cast<const uint8_t*>(text);
   uint32_t cp;
   while ((cp = utf8NextCodepoint(&p))) {
-    const bool ipa = isIpaCodepoint(cp);
-    if (!first && ipa != currentIsIpa) {
+    const bool combining = utf8IsCombiningMark(cp);
+    const bool ipa = combining ? currentIsIpa : isIpaCodepoint(cp);
+    if (!first && !combining && ipa != currentIsIpa) {
       out.push_back({std::move(current), currentIsIpa});
       current.clear();
     }
