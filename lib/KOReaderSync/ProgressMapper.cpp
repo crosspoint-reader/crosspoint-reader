@@ -1,5 +1,6 @@
 #include "ProgressMapper.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <cstring>
 
 #include "ChapterXPathResolver.h"
+#include "Epub/Section.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
 
@@ -506,8 +508,9 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStr
 }
 }  // namespace
 
-KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
-  KOReaderPosition result;
+SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub>& epub,
+                                                      const CrossPointPosition& pos) {
+  SavedProgressPosition result;
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
@@ -520,13 +523,14 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   if (result.xpath.empty()) {
     result.xpath = generateXPath(epub, pos.spineIndex, intra);
   }
-  LOG_DBG("PM", "-> KO: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
+  LOG_DBG("PM", "-> Progress: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
           result.percentage * 100, result.xpath.c_str());
   return result;
 }
 
-CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
-                                                int currentSpineIndex, int totalPagesInCurrentSpine) {
+CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
+                                                GfxRenderer& renderer, int currentSpineIndex,
+                                                int totalPagesInCurrentSpine, int fallbackTotalPages) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) return result;
@@ -556,7 +560,6 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       }
     }
   }
-  if (result.spineIndex >= spineCount) return result;
 
   const size_t prevCum = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
   const size_t spineSize = epub->getCumulativeSpineItemSize(result.spineIndex) - prevCum;
@@ -570,7 +573,17 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       result.totalPages = std::max(
           1, static_cast<int>(totalPagesInCurrentSpine * static_cast<float>(spineSize) / static_cast<float>(cs)));
   }
-  if (spineSize == 0 || result.totalPages == 0) return result;
+
+  if (result.totalPages <= 0) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    if (auto cachedCount = tempSection.getCachedPageCount()) {
+      result.totalPages = *cachedCount;
+    } else if (fallbackTotalPages > 0) {
+      result.totalPages = fallbackTotalPages;
+    } else {
+      result.totalPages = 1;  // Prevent division by zero and give a fallback
+    }
+  }
 
   float intra = 0.0f;
   if (useAncestry) {
@@ -613,8 +626,60 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
   result.pageNumber = std::max(
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
-  LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
+  LOG_DBG("PM", "<- Progress: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
+
+  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
+  if (result.hasLiIndex || result.xpathAnchorId[0] != '\0' || result.hasParagraphIndex) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    bool refined = false;
+    if (result.hasLiIndex) {
+      const auto liPage = tempSection.getPageForListItemIndex(result.liIndex);
+      if (liPage.has_value()) {
+        LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage, result.pageNumber);
+        result.pageNumber = *liPage;
+        refined = true;
+      } else {
+        LOG_DBG("PM", "Li index %u not found in section LUT", result.liIndex);
+      }
+    }
+    if (!refined && result.xpathAnchorId[0] != '\0') {
+      const auto anchorPage = tempSection.getPageForAnchor(std::string(result.xpathAnchorId));
+      if (anchorPage.has_value()) {
+        LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage, result.pageNumber);
+        result.pageNumber = *anchorPage;
+        refined = true;
+      } else {
+        LOG_DBG("PM", "Anchor '%s' not found in section cache", result.xpathAnchorId);
+      }
+    }
+    if (!refined && result.hasParagraphIndex) {
+      const auto paragraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex);
+      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex + 1);
+      if (paragraphPage.has_value()) {
+        int refinedPage = std::max(result.pageNumber, static_cast<int>(*paragraphPage));
+        if (nextParagraphPage.has_value()) {
+          const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
+          // occupies different pages than at build time).
+          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+            refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+          }
+        }
+        char nextParaBuf[8];
+        if (nextParagraphPage.has_value())
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+        else
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
+        LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d", result.paragraphIndex,
+                *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
+        result.pageNumber = refinedPage;
+      } else {
+        LOG_DBG("PM", "Paragraph %u not found in section LUT", result.paragraphIndex);
+      }
+    }
+  }
   return result;
 }
 

@@ -2,24 +2,8 @@
 
 #include "CrossPointSettings.h"
 
-namespace {
-using ButtonIndex = uint8_t;
-
-struct SideLayoutMap {
-  ButtonIndex pageBack;
-  ButtonIndex pageForward;
-};
-
-// Order matches CrossPointSettings::SIDE_BUTTON_LAYOUT.
-constexpr SideLayoutMap kSideLayouts[] = {
-    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},
-    {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},
-};
-}  // namespace
-
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
-  const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
-  const auto& side = kSideLayouts[sideLayout];
+  const auto sideLayout = SETTINGS.sideButtonLayout;
 
   switch (button) {
     case Button::Back:
@@ -45,10 +29,26 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       return (gpio.*fn)(HalGPIO::BTN_POWER);
     case Button::PageBack:
       // Reader page navigation uses side buttons and can be swapped via settings.
-      return (gpio.*fn)(side.pageBack);
+      switch (sideLayout) {
+        case CrossPointSettings::PREV_NEXT:
+          return (gpio.*fn)(HalGPIO::BTN_UP);
+        case CrossPointSettings::NEXT_PREV:
+          return (gpio.*fn)(HalGPIO::BTN_DOWN);
+        case CrossPointSettings::SIDE_BUTTONS_DISABLED:
+        default:
+          return false;
+      }
     case Button::PageForward:
       // Reader page navigation uses side buttons and can be swapped via settings.
-      return (gpio.*fn)(side.pageForward);
+      switch (sideLayout) {
+        case CrossPointSettings::PREV_NEXT:
+          return (gpio.*fn)(HalGPIO::BTN_DOWN);
+        case CrossPointSettings::NEXT_PREV:
+          return (gpio.*fn)(HalGPIO::BTN_UP);
+        case CrossPointSettings::SIDE_BUTTONS_DISABLED:
+        default:
+          return false;
+      }
   }
 
   return false;

@@ -16,6 +16,12 @@ struct DirectPixelWriter {
   uint8_t* fb;
   GfxRenderer::RenderMode mode;
   uint16_t displayWidthBytes;  // Runtime framebuffer stride (X4: 100, X3: 99)
+  // Active write target: for tiled grayscale, fb is the band scratch, originY is
+  // the band's top physical row, and clipRows is the band height. Off-band
+  // pixels are dropped. With no strip active these collapse to the full frame
+  // (originY 0, clipRows panelHeight) so the clip doubles as a bounds guard.
+  int originY;
+  int clipRows;
 
   // Orientation is collapsed into a linear transform:
   //   phyX = phyXBase + x * phyXStepX + y * phyXStepY
@@ -28,7 +34,9 @@ struct DirectPixelWriter {
   int rowPhyXBase, rowPhyYBase;
 
   void init(GfxRenderer& renderer) {
-    fb = renderer.getFrameBuffer();
+    fb = renderer.getWriteTarget();
+    originY = renderer.getWriteOriginY();
+    clipRows = renderer.getWriteRows();
     mode = renderer.getRenderMode();
     displayWidthBytes = renderer.getDisplayWidthBytes();
 
@@ -120,7 +128,12 @@ struct DirectPixelWriter {
     const int phyX = rowPhyXBase + logicalX * phyXStepX;
     const int phyY = rowPhyYBase + logicalX * phyYStepX;
 
-    const uint16_t byteIndex = phyY * displayWidthBytes + (phyX >> 3);
+    // Band-local row. The unsigned compare drops both off-band pixels (strip
+    // mode) and any out-of-frame row (full-frame mode) in one branch.
+    const int sy = phyY - originY;
+    if (static_cast<unsigned>(sy) >= static_cast<unsigned>(clipRows)) return;
+
+    const uint16_t byteIndex = static_cast<uint16_t>(sy * displayWidthBytes + (phyX >> 3));
     const uint8_t bitMask = 1 << (7 - (phyX & 7));
 
     if (state) {
