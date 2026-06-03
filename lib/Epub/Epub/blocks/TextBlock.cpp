@@ -78,6 +78,13 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         underlineWidth = visibleWidth;
       }
 
+      // SUP/SUB words are rendered at 50% glyph scale (see the baseline comment
+      // above and drawText), but getTextWidth reports the full-size width, so the
+      // underline would be drawn ~2x too long. Halve it to match the scaled glyphs.
+      if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+        underlineWidth = (underlineWidth + 1) / 2;
+      }
+
       renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
     }
   }
