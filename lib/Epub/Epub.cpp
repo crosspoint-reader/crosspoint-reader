@@ -44,7 +44,7 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   return true;
 }
 
-bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
+bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool writeSpineEntries) {
   std::string contentOpfFilePath;
   if (!findContentOpfFile(&contentOpfFilePath)) {
     LOG_ERR("EBP", "Could not find content.opf in zip");
@@ -61,7 +61,8 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
     return false;
   }
 
-  ContentOpfParser opfParser(getCachePath(), getBasePath(), contentOpfSize, bookMetadataCache.get());
+  ContentOpfParser opfParser(getCachePath(), getBasePath(), contentOpfSize,
+                             writeSpineEntries ? bookMetadataCache.get() : nullptr);
   if (!opfParser.setup()) {
     LOG_ERR("EBP", "Could not setup content.opf parser");
     return false;
@@ -256,35 +257,27 @@ bool Epub::parseTocNavFile() const {
 }
 
 void Epub::discoverCssFilesFromZip() {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    LOG_ERR("EBP", "Cannot discover CSS from ZIP because book metadata cache is not loaded");
-    return;
-  }
-
+  const std::string& opfDir = contentBasePath;
   ZipFile zf(filepath);
 
-  if (!zf.loadAllFileStatSlims()) {
-    LOG_ERR("EBP", "Failed to load ZIP file stat slims for CSS discovery");
-    return;
-  }
+  if (!zf.enumerateFilePaths([&](std::string_view filePath) {
+        if (!opfDir.empty() && filePath.find(opfDir) != 0) {
+          return;
+        }
 
-  size_t lastSlash = contentBasePath.find_last_of('/');
+        if (!FsHelpers::hasCssExtension(filePath)) {
+          return;
+        }
 
-  std::string opfDir = (lastSlash != std::string::npos) ? contentBasePath.substr(0, lastSlash + 1) : "";
+        if (std::find(cssFiles.begin(), cssFiles.end(), filePath) != cssFiles.end()) {
+          return;
+        }
 
-  zf.enumerateFilePaths([&](std::string_view filePath) {
-    if (!opfDir.empty() && filePath.find(opfDir) != 0) {
-      return;  // Skip files that are not in the same directory as OPF manifest, as CSS files are typically located
-               // there or in subfolders
-    }
-
-    if (FsHelpers::hasCssExtension(filePath)) {
-      if (std::find(cssFiles.begin(), cssFiles.end(), filePath) == cssFiles.end()) {
         LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %.*s", (int)filePath.size(), filePath.data());
         cssFiles.push_back(std::string{filePath});
-      }
-    }
-  });
+      })) {
+    LOG_ERR("EBP", "Failed to enumerate ZIP file paths for CSS discovery");
+  }
 }
 
 void Epub::parseCssFiles() const {
@@ -383,15 +376,20 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         LOG_DBG("EBP", "CSS rules cache missing or stale, attempting to parse CSS files");
         cssParser->deleteCache();
 
-        if (!parseContentOpf(bookMetadataCache->coreMetadata)) {
+        BookMetadataCache::BookMetadata cachedMetadata = bookMetadataCache->coreMetadata;
+        if (!parseContentOpf(cachedMetadata, /*writeSpineEntries=*/false)) {
           LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
           // continue anyway - book will work without CSS and we'll still load any inline style CSS
         } else {
-          // Handle case where CSS files are not listed in OPF manifest
-          // but are still referenced by HTML files - discover and parse them too
           discoverCssFilesFromZip();
         }
+        bookMetadataCache.reset();
         parseCssFiles();
+        bookMetadataCache.reset(new BookMetadataCache(cachePath));
+        if (!bookMetadataCache->load()) {
+          LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
+          return false;
+        }
         // Invalidate section caches so they are rebuilt with the new CSS
         Storage.removeDir((cachePath + "/sections").c_str());
       }
@@ -428,6 +426,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     LOG_ERR("EBP", "Could not parse content.opf");
     return false;
   }
+  discoverCssFilesFromZip();
   if (!bookMetadataCache->endContentOpfPass()) {
     LOG_ERR("EBP", "Could not end writing content.opf pass");
     return false;
@@ -485,20 +484,18 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     LOG_DBG("EBP", "Could not cleanup tmp files - ignoring");
   }
 
+  if (!skipLoadingCss) {
+    // Parse CSS before reloading book.bin to leave more heap for CSS rule-table growth.
+    bookMetadataCache.reset();
+    parseCssFiles();
+    Storage.removeDir((cachePath + "/sections").c_str());
+  }
+
   // Reload the cache from disk so it's in the correct state
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   if (!bookMetadataCache->load()) {
     LOG_ERR("EBP", "Failed to reload cache after writing");
     return false;
-  }
-
-  if (!skipLoadingCss) {
-    // Handle case where CSS files are not listed in OPF manifest
-    // but are still referenced by HTML files - discover and parse them too
-    discoverCssFilesFromZip();
-    // Parse CSS files after cache reload
-    parseCssFiles();
-    Storage.removeDir((cachePath + "/sections").c_str());
   }
 
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
