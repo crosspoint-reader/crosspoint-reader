@@ -14,7 +14,10 @@
 #include "network/HttpDownloader.h"
 
 namespace {
-constexpr int PAGE_ITEMS = 23;
+constexpr int LIST_FONT_ID = UI_12_FONT_ID;
+constexpr int LIST_TOP = 60;
+constexpr int ROW_HEIGHT = 38;
+constexpr int PAGE_ITEMS = 18;
 }
 
 void RssFeedBrowserActivity::onEnter() {
@@ -133,14 +136,14 @@ void RssFeedBrowserActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
   } else {
     const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-    renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
+    renderer.fillRect(0, LIST_TOP + (selectorIndex % PAGE_ITEMS) * ROW_HEIGHT - 3, pageWidth - 1, ROW_HEIGHT);
 
     for (size_t i = pageStartIndex; i < items.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
       const auto& item = items[i];
       std::string displayText = item.title;
       if (!item.published.empty()) displayText += " - " + item.published;
-      auto row = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
-      renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, row.c_str(),
+      auto row = renderer.truncatedText(LIST_FONT_ID, displayText.c_str(), pageWidth - 40);
+      renderer.drawText(LIST_FONT_ID, 20, LIST_TOP + (i % PAGE_ITEMS) * ROW_HEIGHT, row.c_str(),
                         i != static_cast<size_t>(selectorIndex));
     }
   }
