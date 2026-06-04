@@ -445,39 +445,20 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
           return;
         }
 
-        // TODO: Consider adding support for sibling css selectors in the future
-        // Ensure no + in selector as we don't support adjacent CSS selectors for now
-        if (sel.find('+') != std::string_view::npos) return;
-
-        // TODO: Consider adding support for direct nested css selectors in the future
-        // Ensure no > in selector as we don't support nested CSS selectors for now
-        if (sel.find('>') != std::string_view::npos) return;
-
-        // TODO: Consider adding support for attribute css selectors in the future
-        // Ensure no [ in selector as we don't support attribute CSS selectors for now
-        if (sel.find('[') != std::string_view::npos) return;
-
-        // TODO: Consider adding support for pseudo selectors in the future
-        // Ensure no : in selector as we don't support pseudo CSS selectors for now
-        if (sel.find(':') != std::string_view::npos) return;
-
-        // TODO: Consider adding support for ID css selectors in the future
-        // Ensure no # in selector as we don't support ID CSS selectors for now
-        if (sel.find('#') != std::string_view::npos) return;
-
-        // TODO: Consider adding support for general sibling combinator selectors in the future
-        // Ensure no ~ in selector as we don't support general sibling combinator CSS selectors for now
-        if (sel.find('~') != std::string_view::npos) return;
-
-        // TODO: Consider adding support for wildcard css selectors in the future
-        // Ensure no * in selector as we don't support wildcard CSS selectors for now
-        if (sel.find('*') != std::string_view::npos) return;
-
-        // TODO: Add support for more complex selectors in the future
-        // At the moment, we only ever check for `tag`, `tag.class1` or `.class1`
-        // If the selector has whitespace in it, then it's either a CSS selector for a descendant element (e.g. `tag1
-        // tag2`) or some other slightly more advanced CSS selector which we don't support yet
-        if (sel.find(' ') != std::string_view::npos) return;
+        // TODO: Support richer CSS selector syntax in the future. For now we only
+        // handle `tag`, `.class`, or `tag.class`. Reject anything containing a
+        // character that introduces unsupported syntax:
+        //   '+'  adjacent sibling combinator
+        //   '>'  child combinator
+        //   '['  attribute selector
+        //   ':'  pseudo class/element
+        //   '#'  ID selector
+        //   '~'  general sibling combinator
+        //   '*'  wildcard
+        //   ' '  descendant combinator
+        // Single-pass scan via find_first_of instead of eight sequential find() calls.
+        constexpr std::string_view kUnsupportedSelectorChars = "+>[:#~* ";
+        if (sel.find_first_of(kUnsupportedSelectorChars) != std::string_view::npos) return;
 
         // Skip if this would exceed the rule limit
         if (rulesBySelector_.size() >= MAX_RULES) {
