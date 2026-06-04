@@ -21,6 +21,7 @@
 #include "util/DictionaryActivityUtils.h"
 #include "util/IpaUtils.h"
 #include "util/LookupHistory.h"
+#include "util/TextPool.h"
 
 static constexpr char kBullet[] = "- ";
 
@@ -81,6 +82,7 @@ void DictionaryDefinitionActivity::wrapText() {
 void DictionaryDefinitionActivity::loadPage(int page) {
   layoutLines.clear();
   layoutLines.reserve(static_cast<size_t>(linesPerPage) + 1);
+  pagePool_.clear();
   collectTargetPage_ = page;
   collectLineCount_ = 0;
 
@@ -99,9 +101,23 @@ void DictionaryDefinitionActivity::collectLineSink(void* ctx, DictLayout::Layout
   auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
   const int idx = self->collectLineCount_++;
   const int start = self->collectTargetPage_ * self->linesPerPage;
-  if (idx >= start && idx < start + self->linesPerPage) {
-    self->layoutLines.push_back(std::move(line));
+  if (idx < start || idx >= start + self->linesPerPage) return;  // not on this page — discard
+
+  // Pool the kept line's text: each (already same-style-merged) segment becomes
+  // one null-terminated pool entry referenced by {offset, len}.
+  PooledLine pooled;
+  pooled.indentLevel = line.indentLevel;
+  pooled.isListItem = line.isListItem;
+  pooled.segments.reserve(line.segments.size());
+  for (const auto& seg : line.segments) {
+    PooledSegment ps;
+    ps.offset = TextPool::append(self->pagePool_, seg.text.c_str(), seg.text.size());
+    ps.len = static_cast<uint16_t>(seg.text.size());
+    ps.style = seg.style;
+    ps.isIpa = seg.isIpa;
+    pooled.segments.push_back(ps);
   }
+  self->layoutLines.push_back(std::move(pooled));
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +270,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
 
   const int lineHeight = getLineHeight();  // cached for loop
   for (int i = 0; i < linesPerPage && i < static_cast<int>(layoutLines.size()); i++) {
-    const DictLayout::LayoutLine& line = layoutLines[i];
+    const PooledLine& line = layoutLines[i];
     const int16_t lineY = static_cast<int16_t>(bodyStartY + i * lineHeight);
     int x = leftPadding + line.indentLevel * indentStep;
 
@@ -265,7 +281,7 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
     for (const auto& seg : line.segments) {
       const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
       const int spaceWidth = renderer.getSpaceWidth(segFontId, seg.style);
-      const char* p = seg.text.c_str();
+      const char* p = pagePool_.data() + seg.offset;
       while (*p) {
         while (*p == ' ') {
           x += spaceWidth;
@@ -478,7 +494,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const int lineHeight = getLineHeight();  // cached for loop + renderHighlight
   auto renderBody = [&]() {
     for (int i = 0; i < linesPerPage && i < static_cast<int>(layoutLines.size()); i++) {
-      const DictLayout::LayoutLine& line = layoutLines[i];
+      const PooledLine& line = layoutLines[i];
       const int y = bodyStartY + i * lineHeight;
       int x = leftPadding + line.indentLevel * indentStep;
 
@@ -489,13 +505,14 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
       for (const auto& seg : line.segments) {
         const int segFontId = seg.isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
-        renderer.drawText(segFontId, x, y, seg.text.c_str(), true, seg.style);
+        const char* segText = pagePool_.data() + seg.offset;
+        renderer.drawText(segFontId, x, y, segText, true, seg.style);
         if ((seg.style & EpdFontFamily::UNDERLINE) != 0) {
-          const int segWidth = renderer.getTextWidth(segFontId, seg.text.c_str(), seg.style);
+          const int segWidth = renderer.getTextWidth(segFontId, segText, seg.style);
           const int underlineY = y + renderer.getFontAscenderSize(segFontId) + 2;
           renderer.drawLine(x, underlineY, x + segWidth, underlineY, true);
         }
-        x += renderer.getTextAdvanceX(segFontId, seg.text.c_str(), seg.style);
+        x += renderer.getTextAdvanceX(segFontId, segText, seg.style);
       }
     }
   };

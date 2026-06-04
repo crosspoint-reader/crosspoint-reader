@@ -52,9 +52,27 @@ class DictionaryDefinitionActivity final : public Activity {
   std::vector<std::string> chainWords;  // previous headwords for back-nav
   bool chainBackNavInProgress = false;
 
+  // Resident page representation (Stage 2b-pool). Segments reference text by
+  // {offset, len} into pagePool_ instead of owning a std::string each — the
+  // Wrapper already merged same-style runs, so each segment is one pooled,
+  // null-terminated entry (kerning preserved, valid for C-API drawText).
+  struct PooledSegment {
+    uint16_t offset = 0;  // into pagePool_
+    uint16_t len = 0;
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    bool isIpa = false;
+  };
+  struct PooledLine {
+    std::vector<PooledSegment> segments;
+    uint8_t indentLevel = 0;
+    bool isListItem = false;
+  };
+
   // layoutLines holds ONLY the current page's lines (Stage 2a streaming). render
   // and extractWordsFromLayout index it from 0; loadPage() refills it per turn.
-  std::vector<DictLayout::LayoutLine> layoutLines;
+  // pagePool_ backs all segment text for the resident page.
+  std::vector<PooledLine> layoutLines;
+  std::string pagePool_;
   int currentPage = 0;
   int linesPerPage = 0;
   int totalPages = 0;

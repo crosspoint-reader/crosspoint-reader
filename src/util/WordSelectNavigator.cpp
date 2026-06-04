@@ -5,6 +5,7 @@
 #include <cstdlib>
 
 #include "MappedInputManager.h"
+#include "TextPool.h"
 
 void WordSelectNavigator::load(std::vector<WordInfo> w, std::vector<Row> r, std::string pool,
                                bool consumeInitialConfirm) {
@@ -33,11 +34,7 @@ void WordSelectNavigator::organizeIntoRows(std::vector<WordInfo>& words, std::ve
 }
 
 uint16_t WordSelectNavigator::poolAppend(std::string& pool, const char* s, size_t len) {
-  uint16_t offset = static_cast<uint16_t>(pool.size());
-  if (pool.size() + len + 1 > pool.capacity()) pool.reserve(pool.capacity() + 256);
-  pool.append(s, len);
-  pool.push_back('\0');
-  return offset;
+  return TextPool::append(pool, s, len);
 }
 
 void WordSelectNavigator::reset() {
