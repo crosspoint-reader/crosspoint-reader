@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cstring>
 #include <string_view>
 
@@ -89,6 +90,19 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
       start = i + 1;
     }
   }
+}
+
+// Parse the entirety of s as a number into `out`. Accepts an optional leading
+// '+' (which std::from_chars rejects by spec) so callers can pass CSS-style
+// signed numbers without manual trimming. Returns false on empty input, a
+// non-numeric suffix, or any from_chars error.
+template <typename T>
+bool tryParseNumber(std::string_view s, T& out) {
+  const char* begin = s.data();
+  const char* end = s.data() + s.size();
+  if (begin < end && *begin == '+') ++begin;
+  const auto r = std::from_chars(begin, end, out);
+  return r.ec == std::errc{} && r.ptr == end;
 }
 
 // Collect up to 4 whitespace-separated tokens for a CSS edge-value shorthand
@@ -196,19 +210,10 @@ CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
   // Numeric values: 100-900
   // CSS spec: 400 = normal, 700 = bold
   // We use: 0-400 = normal, 700+ = bold, 500-600 = normal (conservative)
-  char numBuf[16];
-  const size_t numLen = std::min(val.size(), sizeof(numBuf) - 1);
-  std::memcpy(numBuf, val.data(), numLen);
-  numBuf[numLen] = '\0';
-
-  char* endPtr = nullptr;
-  const long numericWeight = std::strtol(numBuf, &endPtr, 10);
-
-  // If we parsed a number and consumed the whole string
-  if (endPtr != numBuf && *endPtr == '\0') {
+  long numericWeight = 0;
+  if (tryParseNumber(val, numericWeight)) {
     return numericWeight >= 700 ? CssFontWeight::Bold : CssFontWeight::Normal;
   }
-
   return CssFontWeight::Normal;
 }
 
@@ -242,14 +247,8 @@ bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
     }
   }
 
-  char numBuf[32];
-  const size_t numLen = std::min(unitStart, sizeof(numBuf) - 1);
-  std::memcpy(numBuf, val.data(), numLen);
-  numBuf[numLen] = '\0';
-
-  char* endPtr = nullptr;
-  const float numericValue = std::strtof(numBuf, &endPtr);
-  if (endPtr == numBuf) {
+  float numericValue;
+  if (!tryParseNumber(val.substr(0, unitStart), numericValue)) {
     out = CssLength{};
     return false;  // No number parsed (e.g. auto, inherit, initial)
   }
