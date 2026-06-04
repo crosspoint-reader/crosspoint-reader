@@ -833,10 +833,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 self->renderer.getSpaceWidth(self->fontId, EpdFontFamily::REGULAR)));
           listItemStyle.textIndentDefined = true;
           self->currentTextBlock->setBlockStyle(listItemStyle);
-          self->blockStyleStack.back().textIndent = listItemStyle.textIndent;
-          self->blockStyleStack.back().textIndentDefined = true;
         }
         self->hasPendingListMarker = true;
+      } else if (self->hasPendingListMarker && !cssStyle.hasTextIndent()) {
+        auto listItemStyle = self->currentTextBlock->getBlockStyle();
+        listItemStyle.textIndent = static_cast<int16_t>(
+            -(self->renderer.getTextAdvanceX(self->fontId, self->pendingListMarker, EpdFontFamily::REGULAR) +
+              self->renderer.getSpaceWidth(self->fontId, EpdFontFamily::REGULAR)));
+        listItemStyle.textIndentDefined = true;
+        self->currentTextBlock->setBlockStyle(listItemStyle);
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
