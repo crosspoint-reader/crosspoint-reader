@@ -68,9 +68,17 @@ struct ClippingResult {
   uint16_t wordCount = 0;
 };
 
+/// Returned by ClipSelectionActivity in Mode::WORD_SELECT.
+/// Contains only the selected text and word indices — no anchor metadata.
+struct WordSelectResult {
+  std::string text;
+  int fromWordIdx = -1;
+  int toWordIdx = -1;
+};
+
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, PageResult,
-                 SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, ClippingResult>;
+                 SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, ClippingResult, WordSelectResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

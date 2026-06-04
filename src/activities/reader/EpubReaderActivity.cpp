@@ -32,6 +32,7 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "WordRef.h"
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -602,7 +603,7 @@ void EpubReaderActivity::startClipSelection() {
   const int startPage = section->currentPage;
   const int pagesToLoad = std::min(3, section->pageCount - startPage);
 
-  std::vector<ClipSelectionActivity::WordRef> words;
+  std::vector<WordRef> words;
   words.reserve(pagesToLoad * 60);
 
   auto stripEmSpace = [](const std::string& w) -> std::string {
@@ -689,7 +690,7 @@ void EpubReaderActivity::startClipSelection() {
   startActivityForResult(
       std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
                                               epub->getAuthor(), chapterTitle, startPage + 1, readerFontId, *section,
-                                              startPage, mTop, mLeft),
+                                              startPage, mTop, mLeft, ClipSelectionActivity::Config{}),
       [this, chapterTitle, startPage](const ActivityResult& result) {
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);

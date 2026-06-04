@@ -10,12 +10,13 @@
 
 #include "../ActivityResult.h"
 #include "MappedInputManager.h"
+#include "clippings/ClipTextBuilder.h"
 #include "components/UITheme.h"
 
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::vector<WordRef> words, std::string bookTitle, std::string author,
                                              std::string chapterTitle, int pageNumber, int fontId, Section& section,
-                                             int startPageInSection, int marginTop, int marginLeft)
+                                             int startPageInSection, int marginTop, int marginLeft, Config config)
     : Activity("ClipSelection", renderer, mappedInput),
       words(std::move(words)),
       bookTitle(std::move(bookTitle)),
@@ -23,6 +24,7 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
       chapterTitle(std::move(chapterTitle)),
       pageNumber(pageNumber),
       fontId(fontId),
+      config(config),
       section(section),
       startPageInSection(startPageInSection),
       marginTop(marginTop),
@@ -174,128 +176,22 @@ void ClipSelectionActivity::loop() {
     } else {
       const int from = std::min(startMarkIdx, cursorIdx);
       const int to = std::max(startMarkIdx, cursorIdx);
-      std::string text;
-      auto stripEmSpace = [](const std::string& w) -> std::string {
-        if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
-            static_cast<unsigned char>(w[2]) == 0x83) {
-          return w.substr(3);
-        }
-        return w;
-      };
-      auto hasEmSpace = [](const std::string& w) -> bool {
-        return w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
-               static_cast<unsigned char>(w[2]) == 0x83;
-      };
-      auto stripTrailingHyphen = [](std::string w) -> std::string {
-        while (!w.empty() && w.back() == '-') w.pop_back();
-        return w;
-      };
 
-      constexpr int ANCHOR_WORDS = 4;
-      std::string startAnchor;
-      int anchorCount = 0;
-
-      for (int i = from; i <= to; ++i) {
-        const auto& wtext = stripEmSpace(words[i].text);
-        const bool yGap =
-            i > from && words[i].pageIdx == words[i - 1].pageIdx && words[i].y > words[i - 1].y + words[i - 1].h;
-        const bool paragraphStart = (i > from) && (hasEmSpace(words[i].text) || words[i].paragraphStart || yGap);
-        if (paragraphStart) {
-          LOG_DBG("CLIP", "NL w[%d] em=%d ps=%d yGap=%d text=%.30s", i, hasEmSpace(words[i].text),
-                  words[i].paragraphStart, yGap, wtext.c_str());
+      if (config.mode == Config::Mode::WORD_SELECT) {
+        // Assemble plain text only — no anchor building.
+        std::string text;
+        for (int i = from; i <= to; ++i) {
+          const auto& w = words[i].text;
+          const bool hasEm = w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 &&
+                             static_cast<unsigned char>(w[1]) == 0x80 && static_cast<unsigned char>(w[2]) == 0x83;
+          const std::string wtext = hasEm ? w.substr(3) : w;
+          if (!text.empty()) text += ' ';
+          text += wtext;
         }
-        if (i > from && !text.empty() && !paragraphStart) {
-          const auto& prev = words[i - 1].text;
-          const auto& prevStripped = stripEmSpace(prev);
-          if (prevStripped.size() >= 1 && prevStripped.back() == '-' && !wtext.empty() &&
-              !std::isspace(static_cast<unsigned char>(wtext[0])) &&
-              !std::ispunct(static_cast<unsigned char>(wtext[0])) &&
-              prevStripped.find('-') == prevStripped.size() - 1) {
-            LOG_DBG("CLIP", "MERGE w[%d] \"%.15s\"+\"%.15s\"", i - 1, prevStripped.c_str(), wtext.c_str());
-            text.pop_back();
-            text += wtext;
-            continue;
-          }
-        }
-        if (paragraphStart) {
-          text += '\n';
-        } else if (!text.empty()) {
-          const bool attached = (words[i].y == words[i - 1].y) && (words[i].x <= words[i - 1].x + words[i - 1].w + 2);
-          LOG_DBG("CLIP", "%s w[%d] gap=%d text=%.30s", attached ? "ATTACH" : "SEP", i,
-                  words[i].x - (words[i - 1].x + words[i - 1].w), words[i].text.c_str());
-          if (!attached) {
-            text += ' ';
-          }
-        }
-        text += wtext;
-
-        if (anchorCount < ANCHOR_WORDS) {
-          if (!startAnchor.empty()) startAnchor += ' ';
-          startAnchor += stripTrailingHyphen(wtext);
-          anchorCount++;
-        }
+        setResult(WordSelectResult{std::move(text), from, to});
+      } else {
+        setResult(ClipTextBuilder::build(words, from, to, total, startPageInSection));
       }
-
-      std::string endAnchorFull;
-      anchorCount = 0;
-      for (int i = to; i >= from && anchorCount < ANCHOR_WORDS; --i) {
-        const auto wtext = stripTrailingHyphen(stripEmSpace(words[i].text));
-        if (!endAnchorFull.empty())
-          endAnchorFull = wtext + ' ' + endAnchorFull;
-        else
-          endAnchorFull = wtext;
-        anchorCount++;
-      }
-
-      constexpr int CONTEXT_WORDS = 3;
-      std::string beforeStart;
-      for (int i = from - 1; i >= 0 && (from - i) <= CONTEXT_WORDS; --i) {
-        const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
-        if (stripped.find_first_not_of(' ') == std::string::npos) continue;
-        if (!beforeStart.empty())
-          beforeStart = stripped + ' ' + beforeStart;
-        else
-          beforeStart = stripped;
-      }
-      std::string afterEnd;
-      for (int i = to + 1; i < total && (i - to) <= CONTEXT_WORDS; ++i) {
-        const auto stripped = stripTrailingHyphen(stripEmSpace(words[i].text));
-        if (stripped.find_first_not_of(' ') == std::string::npos) continue;
-        if (!afterEnd.empty())
-          afterEnd += ' ' + stripped;
-        else
-          afterEnd = stripped;
-      }
-      std::string midText;
-      {
-        constexpr int MID_WORDS = 4;
-        int midStart = (from + to) / 2 - (MID_WORDS / 2);
-        int midEnd = midStart + MID_WORDS - 1;
-        if (midStart < from) midStart = from;
-        if (midEnd > to) midEnd = to;
-        for (int i = midStart; i <= midEnd; ++i) {
-          const auto wtext = stripTrailingHyphen(stripEmSpace(words[i].text));
-          if (!midText.empty()) midText += ' ';
-          midText += wtext;
-        }
-      }
-
-      LOG_DBG("CLIP", "Anchors: start=\"%.40s\" end=\"%.40s\" ctx=[\"%.20s\"] [\"%.20s\"] wc=%d", startAnchor.c_str(),
-              endAnchorFull.c_str(), beforeStart.c_str(), afterEnd.c_str(), to - from + 1);
-
-      ActivityResult result;
-      result.data = ClippingResult{std::move(text),
-                                   from,
-                                   to,
-                                   static_cast<uint16_t>(startPageInSection + words[from].pageIdx),
-                                   static_cast<uint16_t>(startPageInSection + words[to].pageIdx),
-                                   std::move(startAnchor),
-                                   std::move(endAnchorFull),
-                                   std::move(beforeStart),
-                                   std::move(afterEnd),
-                                   std::move(midText),
-                                   static_cast<uint16_t>(to - from + 1)};
-      setResult(std::move(result));
       finish();
     }
     return;
@@ -326,11 +222,13 @@ void ClipSelectionActivity::render(RenderLock&&) {
   memcpy(renderer.getFrameBuffer(), savedBuffer.get(), savedBufferSize);
   drawHighlights();
 
-  const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (config.render.showButtonHints) {
+    const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(config.render.refreshMode);
 }
 
 void ClipSelectionActivity::switchToPage(int pageIdx) {
@@ -351,76 +249,75 @@ void ClipSelectionActivity::switchToPage(int pageIdx) {
   currentDisplayPage = pageIdx;
 }
 
-void ClipSelectionActivity::drawHighlights() {
-  auto hasEmSpace = [](const std::string& t) {
-    return t.size() >= 3 && static_cast<unsigned char>(t[0]) == 0xE2 && static_cast<unsigned char>(t[1]) == 0x80 &&
-           static_cast<unsigned char>(t[2]) == 0x83;
-  };
+void ClipSelectionActivity::applyWordStyle(const WordRef& word, const WordStyle& style) const {
+  const auto s = static_cast<EpdFontFamily::Style>(word.style & ~EpdFontFamily::UNDERLINE);
+  const bool hasEm = word.text.size() >= 3 && static_cast<unsigned char>(word.text[0]) == 0xE2 &&
+                     static_cast<unsigned char>(word.text[1]) == 0x80 &&
+                     static_cast<unsigned char>(word.text[2]) == 0x83;
+  const int skipX = hasEm ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s) : 0;
+  const int drawX = word.x + skipX;
+  const int drawW = word.w - skipX;
+  if (drawW <= 0) return;
 
-  auto emSpaceSkip = [this, &hasEmSpace](const std::string& t, EpdFontFamily::Style s) -> int {
-    if (hasEmSpace(t)) return renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s);
-    return 0;
-  };
+  const uint8_t flags = style.flags;
+  const bool doInvert = (flags & WordStyle::INVERT) != 0;
+  const bool doFill = !doInvert && (flags & WordStyle::FILL) != 0;
 
-  auto drawContinuousHighlight = [this, &emSpaceSkip, &hasEmSpace](int first, int last) {
-    const auto& fw = words[first];
-    const auto& lw = words[last];
-    const auto fs = static_cast<EpdFontFamily::Style>(fw.style & ~EpdFontFamily::UNDERLINE);
-    const int skip = emSpaceSkip(fw.text, fs);
-    const int startX = fw.x + skip;
-    const int spanW = (lw.x + lw.w) - startX;
-    renderer.fillRectDither(startX, fw.y, spanW, fw.h, Color::LightGray);
-    for (int i = first; i <= last; ++i) {
-      if (words[i].text.find_first_not_of(" \t") != std::string::npos) {
-        const auto s = static_cast<EpdFontFamily::Style>(words[i].style & ~EpdFontFamily::UNDERLINE);
-        if (i == first && hasEmSpace(words[i].text)) {
-          renderer.drawText(fontId, startX, words[i].y, words[i].text.c_str() + 3, true, s);
-        } else {
-          renderer.drawText(fontId, words[i].x, words[i].y, words[i].text.c_str(), true, s);
-        }
-      }
+  if (doInvert) {
+    renderer.fillRect(drawX, word.y, drawW, word.h, true);
+  } else if (doFill) {
+    renderer.fillRectDither(drawX, word.y, drawW, word.h, style.fillColor);
+  }
+
+  if ((flags & WordStyle::BORDER) != 0) {
+    renderer.drawRect(drawX, word.y, drawW, word.h, !doInvert);
+  }
+
+  if (word.text.find_first_not_of(" \t") != std::string::npos) {
+    const bool textBlack = !doInvert;
+    if (hasEm) {
+      renderer.drawText(fontId, drawX, word.y, word.text.c_str() + 3, textBlack, s);
+    } else {
+      renderer.drawText(fontId, word.x, word.y, word.text.c_str(), textBlack, s);
     }
-  };
+  }
 
+  if ((flags & WordStyle::UNDERLINE) != 0) {
+    const int underlineY = word.y + renderer.getFontAscenderSize(fontId) + 2;
+    renderer.drawLine(drawX, underlineY, drawX + drawW, underlineY, true);
+  }
+}
+
+void ClipSelectionActivity::drawHighlights() {
   if (startMarkIdx != -1) {
     const int from = std::min(startMarkIdx, cursorIdx);
     const int to = std::max(startMarkIdx, cursorIdx);
+
+    // Render continuous same-row runs as a single highlight span
     int runStart = -1;
     for (int i = from; i <= to; ++i) {
-      bool skipWord = (words[i].pageIdx != currentDisplayPage);
+      const bool skipWord = (words[i].pageIdx != currentDisplayPage);
       if (skipWord) {
         if (runStart >= 0) {
-          drawContinuousHighlight(runStart, i - 1);
+          // draw run [runStart, i-1] word by word
+          for (int j = runStart; j <= i - 1; ++j) applyWordStyle(words[j], config.render.selection);
           runStart = -1;
         }
       } else if (runStart < 0 || words[i].y != words[runStart].y) {
         if (runStart >= 0) {
-          drawContinuousHighlight(runStart, i - 1);
+          for (int j = runStart; j <= i - 1; ++j) applyWordStyle(words[j], config.render.selection);
         }
         runStart = i;
       }
     }
     if (runStart >= 0) {
-      drawContinuousHighlight(runStart, to);
+      for (int j = runStart; j <= to; ++j) applyWordStyle(words[j], config.render.selection);
     }
   }
 
   const auto& cw = words[cursorIdx];
   if (cw.pageIdx == currentDisplayPage) {
-    const auto cs = static_cast<EpdFontFamily::Style>(cw.style & ~EpdFontFamily::UNDERLINE);
-    const int skip = emSpaceSkip(cw.text, cs);
-    const int cx = cw.x + skip;
-    const int cWidth = cw.w - skip;
-    if (cWidth > 0) {
-      renderer.fillRectDither(cx, cw.y, cWidth, cw.h, Color::LightGray);
-      if (cw.text.find_first_not_of(" \t") != std::string::npos) {
-        if (hasEmSpace(cw.text)) {
-          renderer.drawText(fontId, cx, cw.y, cw.text.c_str() + 3, true, cs);
-        } else {
-          renderer.drawText(fontId, cw.x, cw.y, cw.text.c_str(), true, cs);
-        }
-      }
-    }
+    applyWordStyle(cw, config.render.cursor);
   }
 }
 
