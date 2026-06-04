@@ -92,6 +92,13 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
   }
 }
 
+// FNV-1a (64-bit) per Fowler/Noll/Vo. `fnv1aMix` is the per-byte mix step;
+// callers apply any byte-level transform (e.g. asciiToLower) before mixing.
+constexpr size_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
+constexpr size_t FNV_PRIME = 1099511628211ULL;
+
+constexpr size_t fnv1aMix(size_t hash, unsigned char byte) { return (hash ^ byte) * FNV_PRIME; }
+
 // Parse the entirety of s as a number into `out`. Accepts an optional leading
 // '+' (which std::from_chars rejects by spec) so callers can pass CSS-style
 // signed numbers without manual trimming. Returns false on empty input, a
@@ -147,18 +154,22 @@ std::string_view stripTrailingImportant(std::string_view value) {
 // with the other ASCII helpers in this translation unit.
 
 size_t CssParser::SvHash::operator()(std::string_view sv) const noexcept {
-  // FNV-1a (64-bit) over ASCII-lowercased bytes. Constants per Fowler/Noll/Vo.
-  constexpr size_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
-  constexpr size_t FNV_PRIME = 1099511628211ULL;
   size_t h = FNV_OFFSET_BASIS;
-  for (char c : sv) {
-    h ^= static_cast<unsigned char>(asciiToLower(c));
-    h *= FNV_PRIME;
-  }
+  for (char c : sv) h = fnv1aMix(h, asciiToLower(c));
   return h;
 }
 
 size_t CssParser::SvHash::operator()(const std::string& s) const noexcept { return operator()(std::string_view(s)); }
+
+size_t CssParser::SvHash::operator()(CompositeKey k) const noexcept {
+  // Hash the case-folded concatenation of every piece without materializing
+  // it — the running hash continues across pieces as if they were one buffer.
+  size_t h = FNV_OFFSET_BASIS;
+  for (std::string_view piece : k.pieces) {
+    for (char c : piece) h = fnv1aMix(h, asciiToLower(c));
+  }
+  return h;
+}
 
 bool CssParser::SvEqual::operator()(std::string_view a, std::string_view b) const noexcept {
   if (a.size() != b.size()) return false;
@@ -179,6 +190,21 @@ bool CssParser::SvEqual::operator()(std::string_view a, const std::string& b) co
 bool CssParser::SvEqual::operator()(const std::string& a, const std::string& b) const noexcept {
   return operator()(std::string_view(a), std::string_view(b));
 }
+
+bool CssParser::SvEqual::operator()(CompositeKey k, std::string_view sv) const noexcept {
+  size_t total = 0;
+  for (std::string_view piece : k.pieces) total += piece.size();
+  if (total != sv.size()) return false;
+  size_t i = 0;
+  for (std::string_view piece : k.pieces) {
+    for (char c : piece) {
+      if (asciiToLower(c) != asciiToLower(sv[i++])) return false;
+    }
+  }
+  return true;
+}
+
+bool CssParser::SvEqual::operator()(std::string_view sv, CompositeKey k) const noexcept { return operator()(k, sv); }
 
 // Property value interpreters
 
@@ -639,34 +665,19 @@ CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view clas
 
   if (classAttr.empty()) return result;
 
-  // Composite keys (".cls" and "tag.cls") need a scratch buffer to avoid a
-  // per-element heap allocation. The bytes are written verbatim — case is
-  // folded inside the hash/equal.
-  char keyBuf[MAX_SELECTOR_LENGTH + 1];
-
   // TODO: Support combinations of classes (e.g. style on .class1.class2)
-  // 2. Apply class styles (medium priority)
+  // 2. Apply class styles (medium priority). The transparent hash/equal accept
+  // a CompositeKey, so we never materialize the concatenation.
   forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
-    if (cls.size() + 1 > sizeof(keyBuf)) return;
-    keyBuf[0] = '.';
-    std::memcpy(keyBuf + 1, cls.data(), cls.size());
-    if (auto it = rulesBySelector_.find(std::string_view(keyBuf, 1 + cls.size())); it != rulesBySelector_.end()) {
+    if (auto it = rulesBySelector_.find(CompositeKey{".", cls}); it != rulesBySelector_.end()) {
       result.applyOver(it->second);
     }
   });
 
   // TODO: Support combinations of classes (e.g. style on p.class1.class2)
-  // 3. Apply element.class styles (higher priority). Write the tag prefix once;
-  // each iteration only rewrites the bytes after the '.' separator.
-  const size_t tagLen = tagName.size();
-  if (tagLen + 1 >= sizeof(keyBuf)) return result;
-  std::memcpy(keyBuf, tagName.data(), tagLen);
-  keyBuf[tagLen] = '.';
+  // 3. Apply element.class styles (higher priority).
   forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
-    if (tagLen + 1 + cls.size() > sizeof(keyBuf)) return;
-    std::memcpy(keyBuf + tagLen + 1, cls.data(), cls.size());
-    if (auto it = rulesBySelector_.find(std::string_view(keyBuf, tagLen + 1 + cls.size()));
-        it != rulesBySelector_.end()) {
+    if (auto it = rulesBySelector_.find(CompositeKey{tagName, ".", cls}); it != rulesBySelector_.end()) {
       result.applyOver(it->second);
     }
   });

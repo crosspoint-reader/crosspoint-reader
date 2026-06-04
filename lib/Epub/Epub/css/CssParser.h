@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include <initializer_list>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -105,6 +106,17 @@ class CssParser {
   bool loadFromCache();
 
  private:
+  // Lookup key for a multi-piece selector. The pieces are hashed and compared
+  // as if concatenated, so callers can look up composite keys without
+  // materializing the concatenation in a scratch buffer. Constructed from a
+  // braced list of any arity, e.g. `CompositeKey{tagName, ".", cls}` or
+  // `CompositeKey{".", cls}`. The initializer_list's backing array lives for
+  // the full expression, which covers the lifetime of the find() call.
+  struct CompositeKey {
+    std::initializer_list<std::string_view> pieces;
+    CompositeKey(std::initializer_list<std::string_view> p) noexcept : pieces(p) {}
+  };
+
   // ASCII-case-insensitive transparent hash/equal. Stored selectors and lookup
   // keys are compared without regard to case, so callers may insert and look up
   // using whatever case the CSS source or HTML element name happens to use.
@@ -113,6 +125,7 @@ class CssParser {
     using is_transparent = void;
     size_t operator()(std::string_view sv) const noexcept;
     size_t operator()(const std::string& s) const noexcept;
+    size_t operator()(CompositeKey k) const noexcept;
   };
   struct SvEqual {
     using is_transparent = void;
@@ -120,6 +133,8 @@ class CssParser {
     bool operator()(const std::string& a, std::string_view b) const noexcept;
     bool operator()(std::string_view a, const std::string& b) const noexcept;
     bool operator()(const std::string& a, const std::string& b) const noexcept;
+    bool operator()(CompositeKey a, std::string_view b) const noexcept;
+    bool operator()(std::string_view a, CompositeKey b) const noexcept;
   };
 
   // Storage: maps selector -> style properties. Hash/equal are case-insensitive.
