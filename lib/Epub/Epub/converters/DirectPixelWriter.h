@@ -4,6 +4,8 @@
 #include <HalDisplay.h>
 #include <stdint.h>
 
+#include <cassert>
+
 // Direct framebuffer writer that eliminates per-pixel overhead from the image
 // rendering hot path.  Pre-computes orientation transform as linear coefficients
 // and caches render-mode state so the inner loop is: one multiply, one add,
@@ -107,6 +109,9 @@ struct DirectPixelWriter {
   // (clipRows == panel height) the range is unchanged. xBase is the logical X of
   // column 0; the band test mirrors writePixel(): 0 <= phyY - originY < clipRows.
   inline void bandColRange(int xBase, int width, int& colStart, int& colEnd) const {
+    // init() only ever sets phyYStepX to 0, +1, or -1; the +1/-1 solve below
+    // relies on that.
+    assert(phyYStepX == 0 || phyYStepX == 1 || phyYStepX == -1);
     colStart = 0;
     colEnd = width;
     if (phyYStepX == 0) {

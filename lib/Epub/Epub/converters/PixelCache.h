@@ -173,8 +173,10 @@ struct PixelCache {
   }
 
   ~PixelCache() {
-    if (ok && file.isOpen()) {
-      // Neither finalize() nor abort() ran: leave no corrupt cache behind.
+    if (file.isOpen()) {
+      // The file is still open, so neither finalize() nor abort() ran, or a
+      // mid-stream write failed (advanceTo() cleared ok but left the file open).
+      // Drop the partial cache so we leave no corrupt file behind.
       abort();
     }
     if (buffer) {
