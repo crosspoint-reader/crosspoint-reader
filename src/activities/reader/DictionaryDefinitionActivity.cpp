@@ -156,12 +156,16 @@ void DictionaryDefinitionActivity::wrapHtml() {
     const auto* bp = reinterpret_cast<const uint8_t*>(tok.c_str());
     std::string pending;
     int pendingWidth = 0;
+    bool pendingIsIpa = false;
     uint32_t cp;
     while ((cp = utf8NextCodepoint(&bp))) {
+      const bool combining = utf8IsCombiningMark(cp);
+      const bool cpIsIpa = combining ? pendingIsIpa : isIpaCodepoint(cp);
+      if (pending.empty()) pendingIsIpa = cpIsIpa;
       char buf[4];
       const int cpLen = utf8EncodeCodepoint(cp, buf);
       std::string cpStr(buf, cpLen);
-      const int fontId = isIpaCodepoint(cp) ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
+      const int fontId = cpIsIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
       const int cpWidth = renderer.getTextWidth(fontId, cpStr.c_str(), style);
       if (!pending.empty() && currentX + pendingWidth + cpWidth > maxWidth) {
         appendMixed(pending.c_str(), style);
@@ -169,6 +173,7 @@ void DictionaryDefinitionActivity::wrapHtml() {
         startLine(indentLevel, false);
         pending.clear();
         pendingWidth = 0;
+        pendingIsIpa = cpIsIpa;
       }
       pending += cpStr;
       pendingWidth += cpWidth;

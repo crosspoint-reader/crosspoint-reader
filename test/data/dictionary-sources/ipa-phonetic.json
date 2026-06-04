@@ -1,5 +1,5 @@
 {
-  "_comment": "IPA phonetic character rendering test dictionary. Exercises all four IPA Unicode blocks in HTML definitions. Used by ch19 of test_dictionary.epub.",
+  "_comment": "IPA phonetic character rendering test dictionary. Exercises the four main IPA Unicode blocks, nine individual Latin/Greek characters outside those blocks, and combining marks across three combining-mark ranges. Used by ch19 of test_dictionary.epub.",
   "meta": {
     "name": "ipa-phonetic",
     "bookname": "IPA Phonetic",
@@ -55,6 +55,16 @@
       "_comment": "F-063 verification: real-dict entry with pronunciation\\n<HTML> format. Tests that \\n between pronunciation and body does not render as ◆. Verbatim from dict-en-en-2026-03-01.",
       "headword": "austere",
       "definition": "/\u0251\u02c8sti\u0279/, /\u0252\u02c8st\u026a\u0259(\u0279)/, /\u0254\u02c8sti\u0279/, /\u0254\u02d0\u02c8st\u026a\u0259(\u0279)/\n<p><b>Adjective</b></p><ol><li>Grim or severe in manner or appearance.</li><li>Lacking decoration; trivial; not extravagant or gaudy.</li><li>Adhering to the economic policy of austerity.</li><li>Harsh; astringent.</li></ol><p>From Ancient Greek <i>\u03b1\u1f50\u03c3\u03c4\u03b7\u03c1\u03cc\u03c2</i> (aust\u0113r\u00f3s, \"bitter, harsh, astringent\"), having the specific meaning \"making the tongue dry\" (originally used of fruits, wines), related to <i>\u03b1\u1f54\u03c9</i> (a\u00fa\u014d, \"to singe\"), <i>\u03b1\u1f56\u03bf\u03c2</i> (a\u00fbos, \"dry\").</p></html>"
+    },
+    {
+      "_comment": "Individual Latin and Greek characters classified as IPA — U+00E6, U+00F0, U+00F8, U+0127, U+014B, U+0153, U+03B2, U+03B8, U+03C7",
+      "headword": "ipa-latin-greek",
+      "definition": "<p>Individual Latin and Greek characters classified as IPA (outside the four main Unicode blocks):</p><p>\u00e6 \u00f0 \u00f8 \u0127 \u014b \u0153 \u03b2 \u03b8 \u03c7</p><p>Mixed with regular text: The letter \u00e6 appears in encyclop\u00e6dia; \u00f0 is the voiced dental fricative; \u00f8 marks front-rounded vowels; \u0127 represents a voiceless pharyngeal fricative; \u014b is the velar nasal as in <em>sing</em>; \u0153 is the front-rounded mid vowel; \u03b2 is the voiced bilabial fricative; \u03b8 is the voiceless dental fricative; \u03c7 is the voiceless uvular fricative.</p>"
+    },
+    {
+      "_comment": "Combining marks on IPA and non-IPA bases — U+0300-036F, U+1DC0-1DFF, U+20D0-20FF",
+      "headword": "ipa-combining-marks",
+      "definition": "<p>Combining marks on IPA bases (Combining Diacritical Marks U+0300\u2013U+036F):</p><p>\u0259\u0301 \u025b\u0300 \u0254\u0302 \u0272\u031f \u00f0\u0330 \u0251\u0339</p><p>Combining marks on IPA bases (Supplement U+1DC0\u2013U+1DFF):</p><p>\u0259\u1dc0 \u025b\u1dc4</p><p>Combining marks on IPA bases (Symbols U+20D0\u2013U+20FF):</p><p>\u03b2\u20d7 \u03c7\u20db</p><p>Mixed: combining marks on IPA bases inherit IPA status: \u0259\u0301 \u025b\u0300 \u0254\u0302 \u0272\u031f \u00f0\u0330 must render in Doulos SIL. Combining marks on non-IPA bases stay with the regular font: \u0061\u0301 \u0065\u0300 must render in the definition font (non-IPA). No combining mark should appear as a standalone glyph or filled diamond. Supplement and symbol range marks may lack a Doulos SIL glyph; a filled diamond for those is a font coverage issue, not a classification bug.</p>"
     }
   ],
   "synonyms": []

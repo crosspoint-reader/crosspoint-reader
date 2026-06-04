@@ -51,7 +51,7 @@ python fontconvert.py notosans_8_regular 8 \
 # IPA font — Doulos SIL Regular, 16pt, IPA codepoints only
 IPA_SOURCE="../builtinFonts/source/DoulosSIL/DoulosSIL-Regular.ttf"
 IPA_STRIPPED="/tmp/doulos_sil_ipa_stripped.ttf"
-IPA_UNICODES="U+0250-02AF,U+02B0-02FF,U+1D00-1D7F,U+1D80-1DBF"
+IPA_UNICODES="U+00E6,U+00F0,U+00F8,U+0127,U+014B,U+0153,U+03B2,U+03B8,U+03C7,U+0250-02AF,U+02B0-02FF,U+0300-036F,U+1D00-1D7F,U+1D80-1DBF,U+1DC0-1DFF,U+20D0-20FF"
 
 pyftsubset "$IPA_SOURCE" \
   --unicodes="$IPA_UNICODES" \
@@ -64,8 +64,20 @@ python fontconvert.py ipa_16_regular 16 "$IPA_STRIPPED" \
   --no-default-intervals \
   --additional-intervals 0x0250,0x02AF \
   --additional-intervals 0x02B0,0x02FF \
+  --additional-intervals 0x0300,0x036F \
   --additional-intervals 0x1D00,0x1D7F \
   --additional-intervals 0x1D80,0x1DBF \
+  --additional-intervals 0x1DC0,0x1DFF \
+  --additional-intervals 0x20D0,0x20FF \
+  --additional-intervals 0x00E6,0x00E6 \
+  --additional-intervals 0x00F0,0x00F0 \
+  --additional-intervals 0x00F8,0x00F8 \
+  --additional-intervals 0x0127,0x0127 \
+  --additional-intervals 0x014B,0x014B \
+  --additional-intervals 0x0153,0x0153 \
+  --additional-intervals 0x03B2,0x03B2 \
+  --additional-intervals 0x03B8,0x03B8 \
+  --additional-intervals 0x03C7,0x03C7 \
   > ../builtinFonts/ipa_16_regular.h
 
 echo "Generated ipa_16_regular.h"
