@@ -92,10 +92,18 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
   }
 }
 
-// FNV-1a (64-bit) per Fowler/Noll/Vo. `fnv1aMix` is the per-byte mix step;
-// callers apply any byte-level transform (e.g. asciiToLower) before mixing.
-constexpr size_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
-constexpr size_t FNV_PRIME = 1099511628211ULL;
+// FNV-1a per Fowler/Noll/Vo, sized to match size_t on the target. The firmware
+// runs on a 32-bit core where size_t is 32 bits, so naively using the 64-bit
+// constants would silently truncate FNV_PRIME to a non-prime and wreck hash
+// distribution. The selection below picks the canonical 32- or 64-bit
+// constants at compile time so the same source works in a 64-bit host
+// simulator. `fnv1aMix` is the per-byte mix step; callers apply any
+// byte-level transform (e.g. asciiToLower) first.
+static_assert(sizeof(size_t) == 4 || sizeof(size_t) == 8, "FNV constants are only defined for 32- or 64-bit size_t");
+constexpr size_t FNV_OFFSET_BASIS =
+    sizeof(size_t) == 8 ? static_cast<size_t>(14695981039346656037ULL) : static_cast<size_t>(2166136261U);
+constexpr size_t FNV_PRIME =
+    sizeof(size_t) == 8 ? static_cast<size_t>(1099511628211ULL) : static_cast<size_t>(16777619U);
 
 constexpr size_t fnv1aMix(size_t hash, unsigned char byte) { return (hash ^ byte) * FNV_PRIME; }
 
