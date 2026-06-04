@@ -5,9 +5,11 @@
 #include <algorithm>
 
 #include "OpdsServerStore.h"
+#include "RssFeedStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "browser/RssFeedBrowserActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -15,6 +17,7 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
+#include "settings/RssFeedListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
@@ -192,6 +195,15 @@ void ActivityManager::goToBrowser() {
   }
 }
 
+void ActivityManager::goToRssReader() {
+  const auto& feeds = RSS_STORE.getFeeds();
+  if (feeds.size() == 1) {
+    replaceActivity(std::make_unique<RssFeedBrowserActivity>(renderer, mappedInput, feeds[0]));
+  } else {
+    replaceActivity(std::make_unique<RssFeedListActivity>(renderer, mappedInput, true));
+  }
+}
+
 void ActivityManager::goToReader(std::string path) {
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
@@ -216,6 +228,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::RECENTS;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+    } else if (activityName == "RssFeedBrowser" || activityName == "RssArticle" || activityName == "RssFeedList") {
+      initialMenuItem = HomeMenuItem::RSS_READER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "Settings") {

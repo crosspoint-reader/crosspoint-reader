@@ -13,6 +13,7 @@
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "RssFeedStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
 
@@ -409,6 +410,55 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
   }
 
   LOG_DBG("OPS", "Loaded %zu OPDS servers from file", store.servers.size());
+  return true;
+}
+
+// ---- RssFeedStore ----
+
+bool JsonSettingsIO::saveRss(const RssFeedStore& store, const char* path) {
+  JsonDocument doc;
+
+  JsonArray arr = doc["feeds"].to<JsonArray>();
+  for (const auto& feed : store.getFeeds()) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["name"] = feed.name;
+    obj["url"] = feed.url;
+    obj["username"] = feed.username;
+    obj["password_obf"] = obfuscation::obfuscateToBase64(feed.password);
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadRss(RssFeedStore& store, const char* json, bool* needsResave) {
+  if (needsResave) *needsResave = false;
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("RSS", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  store.feeds.clear();
+  JsonArray arr = doc["feeds"].as<JsonArray>();
+  for (JsonObject obj : arr) {
+    if (store.feeds.size() >= RssFeedStore::MAX_FEEDS) break;
+    RssFeed feed;
+    feed.name = obj["name"] | std::string("");
+    feed.url = obj["url"] | std::string("");
+    feed.username = obj["username"] | std::string("");
+    bool ok = false;
+    feed.password = obfuscation::deobfuscateFromBase64(obj["password_obf"] | "", &ok);
+    if (!ok || feed.password.empty()) {
+      feed.password = obj["password"] | std::string("");
+      if (!feed.password.empty() && needsResave) *needsResave = true;
+    }
+    store.feeds.push_back(std::move(feed));
+  }
+
+  LOG_DBG("RSS", "Loaded %zu RSS feeds from file", store.feeds.size());
   return true;
 }
 
