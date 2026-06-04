@@ -573,6 +573,22 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
         break;
       }
 
+      // If an attached continuation token (usually punctuation) overflows after the
+      // preceding word fit, try hyphenating that preceding word so the continuation
+      // can travel with the remainder. Without this, "a gentlewoman," can fit up to
+      // "gentlewoman" and then backtrack all the way to "a" when the comma/quote
+      // token does not fit.
+      if (availableWidth > 0 && focusReadingEnabled && currentIndex > lineStart && continuesVec[currentIndex]) {
+        const size_t splitIndex = currentIndex - 1;
+        const size_t oldWordCount = words.size();
+        if (hyphenateWordAtIndex(splitIndex, wordWidths[splitIndex], renderer, fontId, wordWidths, allowFallbackBreaks,
+                                 /*allowFocusBoundaryBreak=*/true,
+                                 /*focusBoundaryAvailableWidth=*/wordWidths[splitIndex]) ||
+            words.size() != oldWordCount) {
+          break;
+        }
+      }
+
       // Could not split: force at least one word per line to avoid infinite loop
       if (currentIndex == lineStart) {
         lineWidth += candidateWidth;
