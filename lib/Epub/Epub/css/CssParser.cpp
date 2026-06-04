@@ -417,10 +417,7 @@ CssStyle CssParser::parseDeclarations(std::string_view declBlock) {
   for (size_t i = 0; i <= declBlock.size(); ++i) {
     if (i == declBlock.size() || declBlock[i] == ';') {
       if (i > start) {
-        const std::string_view decl = declBlock.substr(start, i - start);
-        if (!decl.empty()) {
-          parseDeclarationIntoStyle(decl, style);
-        }
+        parseDeclarationIntoStyle(declBlock.substr(start, i - start), style);
       }
       start = i + 1;
     }
