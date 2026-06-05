@@ -736,8 +736,16 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
 
   const int phyX0 = std::min(paX, pbX);
   const int phyX1 = std::max(paX, pbX);  // inclusive
-  const int phyY0 = std::min(paY, pbY);
-  const int phyY1 = std::max(paY, pbY);
+  int phyY0 = std::min(paY, pbY);
+  int phyY1 = std::max(paY, pbY);
+
+  // Strip mode: clip Y range to the active band and redirect writes.
+  uint8_t* target = getWriteTarget();
+  const int originY = getWriteOriginY();
+  const int writeRows = getWriteRows();
+  phyY0 = std::max(phyY0, originY);
+  phyY1 = std::min(phyY1, originY + writeRows - 1);
+  if (phyY0 > phyY1) return;
 
   // Bit/byte layout: MSB-first within a byte, so phyX → bit (7 - (phyX & 7)).
   // Head and tail masks cover only the in-rect bits of the first/last byte.
@@ -751,7 +759,7 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
     // Solid fill. Framebuffer: 0 = black, 1 = white.
     const uint8_t fillByte = (C == Color::Black) ? 0x00u : 0xFFu;
     for (int py = phyY0; py <= phyY1; ++py) {
-      uint8_t* row = frameBuffer + static_cast<int32_t>(py) * panelStride;
+      uint8_t* row = target + static_cast<int32_t>(py - originY) * panelStride;
       if (byteStart == byteEnd) {
         const uint8_t mask = headMask & tailMask;
         if constexpr (C == Color::Black) {
@@ -853,7 +861,7 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
       // pixel — setting or clearing — so we must do the same). Inside the
       // rect mask: write whiteMask (1s where white, 0s where black). Outside
       // the rect mask: leave the framebuffer untouched.
-      uint8_t* row = frameBuffer + static_cast<int32_t>(py) * panelStride;
+      uint8_t* row = target + static_cast<int32_t>(py - originY) * panelStride;
       if (byteStart == byteEnd) {
         const uint8_t rectMask = headMask & tailMask;
         row[byteStart] = static_cast<uint8_t>((row[byteStart] & ~rectMask) | (rectMask & whiteMask));
