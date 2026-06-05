@@ -6,9 +6,14 @@
 #include <I18n.h>
 #include <Serialization.h>
 #include <Utf8.h>
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <random>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "IsHasChapterPattern.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -312,6 +317,145 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   free(buffer);
 
   return !outLines.empty();
+}
+
+void TxtReaderActivity::scanChapters() {
+  m_chapters.clear();
+  m_isVolumeOnlyBook = false;
+  // Chapter is 76 bytes (4 + 4 + 4 + 64). 2000 chapters = 152 KB DRAM.
+  m_chapters.reserve(1000);
+
+  constexpr size_t kChunkSize = 8192;
+  constexpr size_t kMaxLineLength = 4096;
+  constexpr uint32_t kMaxChapters = 2000;
+  constexpr uint32_t kYieldEveryBytes = 50 * 1024;
+  std::vector<uint8_t> buf(kChunkSize);
+  uint32_t filePos = 0;
+  std::string currentLine;
+  currentLine.reserve(256);
+  bool sawAnyChapter = false;
+  uint32_t bytesSinceLastYield = 0;
+
+  // Pass 1: scan for "第N章" patterns.
+  while (filePos < txt->getFileSize()) {
+    const size_t toRead = std::min(kChunkSize,
+                                   static_cast<size_t>(txt->getFileSize() - filePos));
+    if (!txt->readContent(buf.data(), filePos, toRead)) {
+      LOG_ERR("TXT", "readContent failed at offset %u", filePos);
+      break;
+    }
+    const uint32_t lineStart = filePos;
+    for (size_t i = 0; i < toRead; ++i) {
+      const char c = static_cast<char>(buf[i]);
+      if (c == '\n' || c == '\r') {
+        if (isHasChapterPattern(currentLine.c_str(),
+                                static_cast<int>(currentLine.size()))) {
+          if (m_chapters.size() >= kMaxChapters) break;
+          Chapter ch{};
+          ch.chapterIndex = static_cast<uint32_t>(m_chapters.size());
+          ch.byteOffset = lineStart;
+          std::strncpy(ch.shortTitle, currentLine.c_str(),
+                       sizeof(ch.shortTitle) - 1);
+          ch.shortTitle[sizeof(ch.shortTitle) - 1] = '\0';
+          m_chapters.push_back(ch);
+          sawAnyChapter = true;
+        }
+        currentLine.clear();
+        if (c == '\r' && i + 1 < toRead && buf[i + 1] == '\n') ++i;
+      } else {
+        if (currentLine.size() < kMaxLineLength) {
+          currentLine.push_back(c);
+        }
+      }
+    }
+    filePos += static_cast<uint32_t>(toRead);
+    bytesSinceLastYield += static_cast<uint32_t>(toRead);
+    if (bytesSinceLastYield >= kYieldEveryBytes) {
+      vTaskDelay(1);
+      bytesSinceLastYield = 0;
+    }
+    if (m_chapters.size() >= kMaxChapters) break;
+  }
+
+  if (sawAnyChapter && m_chapters.size() > 1) {
+    for (size_t i = 0; i + 1 < m_chapters.size(); ++i) {
+      m_chapters[i].endOffset = m_chapters[i + 1].byteOffset;
+    }
+    m_chapters.back().endOffset = static_cast<uint32_t>(txt->getFileSize());
+    return;
+  }
+
+  // Volume-only fallback.
+  m_chapters.clear();
+  m_chapters.reserve(1000);
+  m_isVolumeOnlyBook = true;
+  uint32_t paraCount = 0;
+  uint32_t chapterStart = 0;
+  std::minstd_rand rng(static_cast<uint32_t>(txt->getFileSize()));
+  uint16_t nextThreshold = VOLUME_PARAGRAPHS_BASE +
+                           (rng() % VOLUME_PARAGRAPHS_JITTER);
+  filePos = 0;
+  currentLine.clear();
+  bytesSinceLastYield = 0;
+
+  while (filePos < txt->getFileSize()) {
+    const size_t toRead = std::min(kChunkSize,
+                                   static_cast<size_t>(txt->getFileSize() - filePos));
+    if (!txt->readContent(buf.data(), filePos, toRead)) {
+      LOG_ERR("TXT", "readContent failed at offset %u", filePos);
+      break;
+    }
+    for (size_t i = 0; i < toRead; ++i) {
+      const char c = static_cast<char>(buf[i]);
+      if (c == '\n') {
+        if (currentLine.empty()) {
+          if (++paraCount >= nextThreshold) {
+            if (m_chapters.size() >= kMaxChapters) break;
+            Chapter ch{};
+            ch.chapterIndex = static_cast<uint32_t>(m_chapters.size());
+            ch.byteOffset = chapterStart;
+            std::snprintf(ch.shortTitle, sizeof(ch.shortTitle),
+                          "\xe7\xac\xac%u\xe7\xab\xa0",
+                          static_cast<unsigned>(m_chapters.size() + 1));
+            m_chapters.push_back(ch);
+            chapterStart = filePos + 1;
+            paraCount = 0;
+            nextThreshold = VOLUME_PARAGRAPHS_BASE +
+                            (rng() % VOLUME_PARAGRAPHS_JITTER);
+          }
+        }
+        currentLine.clear();
+      } else if (c != '\r') {
+        if (currentLine.size() < kMaxLineLength) {
+          currentLine.push_back(c);
+        }
+      }
+    }
+    filePos += static_cast<uint32_t>(toRead);
+    bytesSinceLastYield += static_cast<uint32_t>(toRead);
+    if (bytesSinceLastYield >= kYieldEveryBytes) {
+      vTaskDelay(1);
+      bytesSinceLastYield = 0;
+    }
+    if (m_chapters.size() >= kMaxChapters) break;
+  }
+  if (chapterStart < txt->getFileSize() && m_chapters.size() < kMaxChapters) {
+    Chapter ch{};
+    ch.chapterIndex = static_cast<uint32_t>(m_chapters.size());
+    ch.byteOffset = chapterStart;
+    ch.endOffset = static_cast<uint32_t>(txt->getFileSize());
+    std::snprintf(ch.shortTitle, sizeof(ch.shortTitle),
+                  "\xe7\xac\xac%u\xe7\xab\xa0",
+                  static_cast<unsigned>(m_chapters.size() + 1));
+    m_chapters.push_back(ch);
+  }
+  // Unconditional endOffset pass for volume-only chapters.
+  for (size_t i = 0; i + 1 < m_chapters.size(); ++i) {
+    m_chapters[i].endOffset = m_chapters[i + 1].byteOffset;
+  }
+  if (!m_chapters.empty()) {
+    m_chapters.back().endOffset = static_cast<uint32_t>(txt->getFileSize());
+  }
 }
 
 void TxtReaderActivity::render(RenderLock&&) {
