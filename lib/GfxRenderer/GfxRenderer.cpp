@@ -695,11 +695,20 @@ void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) con
 
 void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
   switch (color) {
-    case Color::Clear:                                                       break;
-    case Color::Black:     fillRectImpl<Color::Black>(x, y, width, height);     break;
-    case Color::White:     fillRectImpl<Color::White>(x, y, width, height);     break;
-    case Color::LightGray: fillRectImpl<Color::LightGray>(x, y, width, height); break;
-    case Color::DarkGray:  fillRectImpl<Color::DarkGray>(x, y, width, height);  break;
+    case Color::Clear:
+      break;
+    case Color::Black:
+      fillRectImpl<Color::Black>(x, y, width, height);
+      break;
+    case Color::White:
+      fillRectImpl<Color::White>(x, y, width, height);
+      break;
+    case Color::LightGray:
+      fillRectImpl<Color::LightGray>(x, y, width, height);
+      break;
+    case Color::DarkGray:
+      fillRectImpl<Color::DarkGray>(x, y, width, height);
+      break;
   }
 }
 
@@ -776,37 +785,52 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
     // along a physical row. Derived from inverting rotateCoordinates.
     int dlxPerPhyX = 0, dlyPerPhyX = 0;
     switch (orientation) {
-      case Portrait:                  dlxPerPhyX =  0; dlyPerPhyX =  1; break;
-      case PortraitInverted:          dlxPerPhyX =  0; dlyPerPhyX = -1; break;
-      case LandscapeClockwise:        dlxPerPhyX = -1; dlyPerPhyX =  0; break;
-      case LandscapeCounterClockwise: dlxPerPhyX =  1; dlyPerPhyX =  0; break;
+      case Portrait:
+        dlxPerPhyX = 0;
+        dlyPerPhyX = 1;
+        break;
+      case PortraitInverted:
+        dlxPerPhyX = 0;
+        dlyPerPhyX = -1;
+        break;
+      case LandscapeClockwise:
+        dlxPerPhyX = -1;
+        dlyPerPhyX = 0;
+        break;
+      case LandscapeCounterClockwise:
+        dlxPerPhyX = 1;
+        dlyPerPhyX = 0;
+        break;
     }
 
-    for (int py = phyY0; py <= phyY1; ++py) {
-      // Logical coords at bit 7 of the starting byte (phyX = byteStart * 8).
+    // The dither pattern has period 2 in logical space, and each orientation
+    // maps py to logical coords with a fixed parity relationship. The
+    // blackMask byte therefore repeats with period 2 in py. Precompute both
+    // variants outside the row loop to eliminate the per-row switch + 8-bit
+    // construction loop.
+    uint8_t blackMasks[2];
+    for (int parityIdx = 0; parityIdx < 2; ++parityIdx) {
+      const int samplePy = phyY0 + parityIdx;
       int lxBase = 0, lyBase = 0;
       switch (orientation) {
         case Portrait:
-          lxBase = panelHeight - 1 - py;
+          lxBase = panelHeight - 1 - samplePy;
           lyBase = byteStart * 8;
           break;
         case PortraitInverted:
-          lxBase = py;
+          lxBase = samplePy;
           lyBase = panelWidth - 1 - byteStart * 8;
           break;
         case LandscapeClockwise:
           lxBase = panelWidth - 1 - byteStart * 8;
-          lyBase = panelHeight - 1 - py;
+          lyBase = panelHeight - 1 - samplePy;
           break;
         case LandscapeCounterClockwise:
           lxBase = byteStart * 8;
-          lyBase = py;
+          lyBase = samplePy;
           break;
       }
-
-      // Build the row's "black bitmask" by walking the 8 bit positions and
-      // applying the dither rule on the inverse-rotated logical coords.
-      uint8_t blackMask = 0;
+      uint8_t mask = 0;
       for (int b = 0; b < 8; ++b) {
         const int lx = lxBase + b * dlxPerPhyX;
         const int ly = lyBase + b * dlyPerPhyX;
@@ -816,8 +840,13 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
         } else {  // DarkGray
           isBlack = (((lx + ly) & 1) == 0);
         }
-        if (isBlack) blackMask |= static_cast<uint8_t>(1u << (7 - b));
+        if (isBlack) mask |= static_cast<uint8_t>(1u << (7 - b));
       }
+      blackMasks[samplePy & 1] = mask;
+    }
+
+    for (int py = phyY0; py <= phyY1; ++py) {
+      const uint8_t blackMask = blackMasks[py & 1];
       const uint8_t whiteMask = static_cast<uint8_t>(~blackMask);
 
       // Dither writes BOTH inks (the slow path called drawPixel for every
@@ -844,7 +873,6 @@ template void GfxRenderer::fillRectImpl<Color::Black>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int) const;
-
 
 void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
                                                 const int radius, const Color color) const {
