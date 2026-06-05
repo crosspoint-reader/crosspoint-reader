@@ -251,6 +251,25 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // Apply fixed transforms before any per-line layout work.
   applyParagraphIndent();
 
+  // CJK first-line paragraph indent: if applyParagraphIndent() flagged a CJK
+  // paragraph, measure "我"×2 in the current font/style and override the
+  // indent. Defensively strip any EmSpace that may have been prepended (it
+  // shouldn't be — the CJK branch in applyParagraphIndent returns before
+  // insertion — but the strip is a no-op cost in that case).
+  if (cjkFirstLineIndentNeeded_) {
+    cjkFirstLineIndentNeeded_ = false;
+    if (!wordStyles.empty()) {
+      const uint16_t woWidth = renderer.getTextWidth(fontId, "\xe6\x88\x91", wordStyles[0]);
+      // Strip the em-space inserted by applyParagraphIndent (if any).
+      if (words.front().size() >= 3 && static_cast<unsigned char>(words.front()[0]) == 0xE2 &&
+          static_cast<unsigned char>(words.front()[1]) == 0x80 && static_cast<unsigned char>(words.front()[2]) == 0x83) {
+        words.front().erase(0, 3);
+      }
+      blockStyle.textIndent = static_cast<int16_t>(woWidth * 2);
+      blockStyle.textIndentDefined = true;
+    }
+  }
+
   // Ensure SD card font glyph metrics are loaded before measuring word widths.
   // For flash-based fonts isSdCardFont() returns false and this block is skipped
   // entirely — no heap allocation. For SD card fonts this reads glyph metadata
@@ -452,7 +471,25 @@ void ParsedText::applyParagraphIndent() {
   if (blockStyle.textIndentDefined) {
     // CSS text-indent is explicitly set (even if 0) - don't use fallback EmSpace
     // The actual indent positioning is handled in extractLine()
-  } else if (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left) {
+    return;
+  }
+
+  // CJK detection: if the first codepoint of the first word is CJK, flag the
+  // layout pass to measure "我"×2 and set blockStyle.textIndent to that value.
+  // Done BEFORE the EmSpace fallback so we read the original first codepoint
+  // (the EmSpace bytes are 0xE2 0x80 0x83 = U+2003, not a CJK codepoint, so
+  // checking after insertion would never trigger).
+  const std::string& firstWord = words.front();
+  if (!firstWord.empty()) {
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(firstWord.c_str());
+    const uint32_t firstCp = utf8NextCodepoint(&p);
+    if (utf8IsCjkBreakable(firstCp)) {
+      cjkFirstLineIndentNeeded_ = true;
+      return;
+    }
+  }
+
+  if (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left) {
     // No CSS text-indent defined - use EmSpace fallback for visual indent
     words.front().insert(0, "\xe2\x80\x83");
   }

@@ -22,6 +22,10 @@ class ParsedText {
   bool hyphenationEnabled;
   bool focusReadingEnabled;
 
+  // Set by applyParagraphIndent() when a CJK paragraph needs the 2x"我" indent.
+  // Consumed by layoutAndExtractLines() to measure 我 and set blockStyle.textIndent.
+  bool cjkFirstLineIndentNeeded_ = false;
+
   void applyParagraphIndent();
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec);
