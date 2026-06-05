@@ -20,6 +20,7 @@
 #include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
+#include "util/DictionaryRegistry.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -40,9 +41,25 @@ void SettingsActivity::rebuildSettingsLists() {
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
+  dictionaryRegistry.refreshIfDirty();
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
-    if (setting.category == StrId::STR_NONE_OPT) continue;
+  // The history-limit and hold-confirm settings are Reader-category in the master list
+  // (so the web UI groups them under Reader), but the device places them last. Capture
+  // them by nameId here and re-add below — keeping a single definition in SettingsList.h
+  // instead of re-declaring their range/options. The dictionary selector flows through
+  // the loop normally (last Reader entry) and is special-cased on Confirm to open the picker.
+  SettingInfo histCapSetting{};
+  SettingInfo holdConfirmSetting{};
+  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaryRegistry)) {
+    if (setting.nameId == StrId::STR_LOOKUP_HIST_CAP) {
+      histCapSetting = setting;
+      continue;
+    }
+    if (setting.nameId == StrId::STR_HOLD_CONFIRM) {
+      holdConfirmSetting = setting;
+      continue;
+    }
+    if (setting.category == StrId::STR_NONE_OPT) continue;  // not shown on device
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
@@ -67,30 +84,11 @@ void SettingsActivity::rebuildSettingsLists() {
   // Insert "Manage Fonts" right after the font family setting so users discover it naturally
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
-  {
-    auto dictSetting = SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::Dictionary);
-    dictSetting.stringGetter = [] {
-      std::string path = Dictionary::readDictPath();
-      if (path.empty()) return std::string(tr(STR_DICT_NONE));
-      // Path format: /dictionary/<folder>/<stem> — display the folder name.
-      const size_t lastSlash = path.rfind('/');
-      if (lastSlash == std::string::npos || lastSlash == 0) return path;
-      const size_t prevSlash = path.rfind('/', lastSlash - 1);
-      return (prevSlash != std::string::npos) ? path.substr(prevSlash + 1, lastSlash - prevSlash - 1)
-                                              : path.substr(0, lastSlash);
-    };
-    readerSettings.push_back(std::move(dictSetting));
-  }
-  // These are in SettingsList.h for persistence but with STR_NONE_OPT category,
-  // so we add them here manually to appear after the Dictionary selector.
-  readerSettings.push_back(SettingInfo::Value(
-      StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
-      {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},
-      "lookupHistoryCap", StrId::STR_CAT_READER));
-  readerSettings.push_back(
-      SettingInfo::Enum(StrId::STR_HOLD_CONFIRM, &CrossPointSettings::holdConfirmAction,
-                        {StrId::STR_STATE_OFF, StrId::STR_HOLD_CONFIRM_BOOKMARK, StrId::STR_HOLD_CONFIRM_DICT},
-                        "holdConfirmAction", StrId::STR_CAT_READER));
+  // The dictionary selector itself flows through the category loop above (it is the
+  // last Reader entry before the captured settings). Re-add the captured history-limit
+  // and hold-confirm settings after it, matching the order the web UI shows them.
+  readerSettings.push_back(std::move(histCapSetting));
+  readerSettings.push_back(std::move(holdConfirmSetting));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Update currentSettings pointer and count for the active category
@@ -236,6 +234,13 @@ void SettingsActivity::toggleCurrentSetting() {
                              });
       return;
     }
+    if (setting.nameId == StrId::STR_DICTIONARY) {
+      // Launch the dictionary picker (rich metadata/preparation flow) instead of cycling.
+      // The picker writes the selection to dictionary.bin itself; just refresh on return.
+      startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { rebuildSettingsLists(); });
+      return;
+    }
     const uint8_t totalValues = setting.enumStringValues.empty()
                                     ? static_cast<uint8_t>(setting.enumValues.size())
                                     : static_cast<uint8_t>(setting.enumStringValues.size());
@@ -286,9 +291,6 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::Dictionary:
-        startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing

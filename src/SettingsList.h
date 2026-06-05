@@ -13,6 +13,8 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -90,6 +92,52 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
+// Build the dictionary selector setting dynamically, mirroring buildFontFamilySetting.
+// Options are "None" (index 0) plus each installed dictionary's folder name. The choice
+// is persisted in dictionary.bin (not the settings file) via Dictionary, so this entry
+// uses a getter/setter and no valuePtr — JsonSettingsIO skips it. On device the entry is
+// special-cased to open DictionarySelectActivity; on web it renders as a dropdown.
+inline SettingInfo buildDictionarySetting(const DictionaryRegistry* registry) {
+  std::vector<std::string> options;
+  std::vector<std::string> basePaths;  // parallel to options[1..]; option index i -> basePaths[i-1]
+  options.push_back(I18N.get(StrId::STR_DICT_NONE));
+  if (registry) {
+    const auto& entries = registry->getEntries();
+    options.reserve(entries.size() + 1);
+    basePaths.reserve(entries.size());
+    for (const auto& e : entries) {
+      options.push_back(e.name);
+      basePaths.push_back(e.basePath);
+    }
+  }
+
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY;
+  s.type = SettingType::ENUM;
+  s.enumStringValues = std::move(options);
+  s.key = "dictionary";
+  s.category = StrId::STR_CAT_READER;
+
+  s.valueGetter = [basePaths]() -> uint8_t {
+    const std::string active = Dictionary::readDictPath(nullptr);
+    if (active.empty()) return 0;
+    for (size_t i = 0; i < basePaths.size(); i++) {
+      if (basePaths[i] == active) return static_cast<uint8_t>(i + 1);
+    }
+    return 0;  // active dictionary no longer installed -> show "None"
+  };
+
+  s.valueSetter = [basePaths](uint8_t v) {
+    if (v == 0 || v > basePaths.size()) {
+      Dictionary::saveGlobalDictPath("");  // clear selection
+    } else {
+      Dictionary::saveGlobalDictPath(basePaths[v - 1].c_str());
+    }
+  };
+
+  return s;
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -99,7 +147,8 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // SdCardFontRegistry is supplied AND has SD card fonts installed, the
 // font-family entry is replaced in a per-call copy with a registry-aware
 // version. Callers without SD fonts pay only a vector copy.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
+                                                const DictionaryRegistry* dictRegistry = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v = {
         // --- Display ---
@@ -166,15 +215,21 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
-        // Dictionary settings: STR_NONE_OPT excludes from device UI loop; SettingsActivity adds them
-        // manually after the Dictionary selector for correct ordering.
+        // Dictionary settings: kept last in the Reader block so the web UI groups them
+        // under Reader in this order. SettingsActivity special-cases the dictionary
+        // selector (opens DictionarySelectActivity) and pulls the history-limit/hold-confirm
+        // entries out of its category loop by nameId, re-adding them in this same order for
+        // correct device ordering — keep these as the final Reader entries here.
+        // Placeholder dictionary entry (no installed dictionaries); replaced per-call with a
+        // registry-aware version in getSettingsList(), mirroring the font-family entry.
+        buildDictionarySetting(nullptr),
         SettingInfo::Value(
             StrId::STR_LOOKUP_HIST_CAP, &CrossPointSettings::lookupHistoryCap,
             {CrossPointSettings::HIST_CAP_MIN, CrossPointSettings::HIST_CAP_MAX, CrossPointSettings::HIST_CAP_STEP},
-            "lookupHistoryCap", StrId::STR_NONE_OPT),
+            "lookupHistoryCap", StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_HOLD_CONFIRM, &CrossPointSettings::holdConfirmAction,
                           {StrId::STR_STATE_OFF, StrId::STR_HOLD_CONFIRM_BOOKMARK, StrId::STR_HOLD_CONFIRM_DICT},
-                          "holdConfirmAction", StrId::STR_NONE_OPT),
+                          "holdConfirmAction", StrId::STR_CAT_READER),
         // --- Controls ---
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
@@ -280,6 +335,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
+  if (dictRegistry) {
+    auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_DICTIONARY; });
+    if (it != v.end()) {
+      *it = buildDictionarySetting(dictRegistry);
+    }
+  }
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
