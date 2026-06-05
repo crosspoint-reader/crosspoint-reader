@@ -342,6 +342,7 @@ void TxtReaderActivity::scanChapters() {
   currentLine.reserve(256);
   bool sawAnyChapter = false;
   uint32_t bytesSinceLastYield = 0;
+  uint32_t truncatedLineCount = 0;
 
   // Pass 1: scan for "第N章" patterns.
   while (filePos < txt->getFileSize()) {
@@ -372,6 +373,8 @@ void TxtReaderActivity::scanChapters() {
       } else {
         if (currentLine.size() < kMaxLineLength) {
           currentLine.push_back(c);
+        } else {
+          ++truncatedLineCount;
         }
       }
     }
@@ -382,6 +385,11 @@ void TxtReaderActivity::scanChapters() {
       bytesSinceLastYield = 0;
     }
     if (m_chapters.size() >= kMaxChapters) break;
+  }
+
+  if (truncatedLineCount > 0) {
+    LOG_DBG("TXT", "Skipped %u chars at line start (line cap %u); chapters may be missed",
+            truncatedLineCount, kMaxLineLength);
   }
 
   if (sawAnyChapter && m_chapters.size() > 1) {
@@ -404,6 +412,7 @@ void TxtReaderActivity::scanChapters() {
   filePos = 0;
   currentLine.clear();
   bytesSinceLastYield = 0;
+  truncatedLineCount = 0;
 
   while (filePos < txt->getFileSize()) {
     const size_t toRead = std::min(kChunkSize,
@@ -435,6 +444,8 @@ void TxtReaderActivity::scanChapters() {
       } else if (c != '\r') {
         if (currentLine.size() < kMaxLineLength) {
           currentLine.push_back(c);
+        } else {
+          ++truncatedLineCount;
         }
       }
     }
@@ -445,6 +456,10 @@ void TxtReaderActivity::scanChapters() {
       bytesSinceLastYield = 0;
     }
     if (m_chapters.size() >= kMaxChapters) break;
+  }
+  if (truncatedLineCount > 0) {
+    LOG_DBG("TXT", "Skipped %u chars at line start (line cap %u); chapters may be missed",
+            truncatedLineCount, kMaxLineLength);
   }
   if (chapterStart < txt->getFileSize() && m_chapters.size() < kMaxChapters) {
     Chapter ch{};
