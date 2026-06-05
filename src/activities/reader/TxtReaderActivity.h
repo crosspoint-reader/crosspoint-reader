@@ -3,6 +3,7 @@
 #include <Txt.h>
 
 #include <vector>
+#include <cstdint>
 
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
@@ -30,6 +31,23 @@ class TxtReaderActivity final : public Activity {
   int cachedOrientedMarginBottom = 0;
   int cachedOrientedMarginLeft = 0;
 
+  // CJK chapter detection. Populated by scanChapters(); empty for non-CJK books.
+  struct Chapter {
+    uint32_t chapterIndex;
+    uint32_t byteOffset;
+    uint32_t endOffset;
+    char shortTitle[64];
+  };
+  static constexpr uint32_t TYPE_CACHE_MAGIC = 0x54595045;     // "TYPE"
+  static constexpr uint32_t CHAPTER_CACHE_MAGIC = 0x43484150;  // "CHAP"
+  static constexpr uint8_t TYPE_CACHE_VERSION = 1;
+  static constexpr uint8_t CHAPTER_CACHE_VERSION = 1;
+  static constexpr uint16_t VOLUME_PARAGRAPHS_BASE = 20;
+  static constexpr uint16_t VOLUME_PARAGRAPHS_JITTER = 5;
+
+  bool m_isVolumeOnlyBook = false;
+  std::vector<Chapter> m_chapters;
+
   void renderPage();
   void renderStatusBar() const;
 
@@ -40,6 +58,12 @@ class TxtReaderActivity final : public Activity {
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+
+  void scanChapters();
+  bool loadTypeCache();
+  void saveTypeCache() const;
+  bool loadChapterCache();
+  void saveChapterCache();
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)
