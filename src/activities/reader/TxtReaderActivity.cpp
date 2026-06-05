@@ -709,6 +709,175 @@ void TxtReaderActivity::savePageIndexCache() const {
   LOG_DBG("TRS", "Saved page index cache: %d pages", totalPages);
 }
 
+bool TxtReaderActivity::loadTypeCache() {
+  FsFile f;
+  const std::string path = txt->getCachePath() + "/type.bin";
+  if (!Storage.openFileForRead("TXT", path.c_str(), f)) {
+    return false;  // No cache yet — first open.
+  }
+
+  // Header: 12 bytes = magic[4] + version[1] + fileSize[4] + reserved[3].
+  uint8_t header[12] = {0};
+  if (f.read(header, 12) != 12) {
+    LOG_DBG("TXT", "Type cache header read failed, rebuilding");
+    return false;
+  }
+  uint32_t magic;
+  std::memcpy(&magic, header, 4);
+  if (magic != TYPE_CACHE_MAGIC) {
+    LOG_DBG("TXT", "Type cache magic mismatch, rebuilding");
+    return false;
+  }
+  if (header[4] != TYPE_CACHE_VERSION) {
+    LOG_DBG("TXT", "Type cache version mismatch, rebuilding");
+    return false;
+  }
+
+  // Validate file size — protects against stale cache after file edit.
+  uint32_t fileSizeInCache;
+  std::memcpy(&fileSizeInCache, header + 5, 4);
+  if (fileSizeInCache != txt->getFileSize()) {
+    LOG_DBG("TXT", "Type cache file size mismatch, rebuilding");
+    return false;
+  }
+
+  uint8_t typeByte = 0;
+  if (f.read(&typeByte, 1) != 1) {
+    LOG_DBG("TXT", "Type cache data read failed, rebuilding");
+    return false;
+  }
+  // typeByte is 0 (regular) or 1 (volume-only). Any other value is corrupt.
+  if (typeByte > 1) {
+    LOG_DBG("TXT", "Type cache has unknown type byte %u, rebuilding", typeByte);
+    return false;
+  }
+  m_isVolumeOnlyBook = (typeByte == 1);
+  return true;
+}
+
+void TxtReaderActivity::saveTypeCache() const {
+  FsFile f;
+  const std::string path = txt->getCachePath() + "/type.bin";
+  if (!Storage.openFileForWrite("TXT", path.c_str(), f)) {
+    LOG_DBG("TXT", "Failed to open type cache for write");
+    return;
+  }
+
+  // Header: 12 bytes = magic[4] + version[1] + fileSize[4] + reserved[3].
+  uint8_t header[12] = {0};
+  uint32_t magic = TYPE_CACHE_MAGIC;
+  std::memcpy(header, &magic, 4);
+  header[4] = TYPE_CACHE_VERSION;
+  const uint32_t fileSize = static_cast<uint32_t>(txt->getFileSize());
+  std::memcpy(header + 5, &fileSize, 4);
+  f.write(header, 12);
+  const uint8_t typeByte = m_isVolumeOnlyBook ? 1 : 0;
+  f.write(&typeByte, 1);
+}
+
+bool TxtReaderActivity::loadChapterCache() {
+  FsFile f;
+  const std::string path = txt->getCachePath() + "/chapters.bin";
+  if (!Storage.openFileForRead("TXT", path.c_str(), f)) {
+    return false;  // No cache yet — first open.
+  }
+
+  // Header: 12 bytes = magic[4] + version[1] + fileSize[4] + reserved[3].
+  uint8_t header[12] = {0};
+  if (f.read(header, 12) != 12) {
+    LOG_DBG("TXT", "Chapter cache header read failed, rebuilding");
+    return false;
+  }
+  uint32_t magic;
+  std::memcpy(&magic, header, 4);
+  if (magic != CHAPTER_CACHE_MAGIC) {
+    LOG_DBG("TXT", "Chapter cache magic mismatch, rebuilding");
+    return false;
+  }
+  if (header[4] != CHAPTER_CACHE_VERSION) {
+    LOG_DBG("TXT", "Chapter cache version mismatch, rebuilding");
+    return false;
+  }
+  // Validate file size — critical for offset-based caches.
+  uint32_t fileSizeInCache;
+  std::memcpy(&fileSizeInCache, header + 5, 4);
+  if (fileSizeInCache != txt->getFileSize()) {
+    LOG_DBG("TXT", "Chapter cache file size mismatch, rebuilding");
+    return false;
+  }
+
+  uint32_t count = 0;
+  if (f.read(&count, 4) != 4) {
+    LOG_DBG("TXT", "Chapter cache count read failed, rebuilding");
+    return false;
+  }
+  if (count > 2000) {
+    LOG_DBG("TXT", "Chapter cache count %u out of range, rebuilding", count);
+    return false;
+  }
+  m_chapters.resize(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    Chapter& ch = m_chapters[i];
+    if (f.read(&ch.chapterIndex, 4) != 4) {
+      LOG_DBG("TXT", "Chapter %u: chapterIndex read failed, rebuilding", i);
+      return false;
+    }
+    if (f.read(&ch.byteOffset, 4) != 4) {
+      LOG_DBG("TXT", "Chapter %u: byteOffset read failed, rebuilding", i);
+      return false;
+    }
+    if (f.read(&ch.endOffset, 4) != 4) {
+      LOG_DBG("TXT", "Chapter %u: endOffset read failed, rebuilding", i);
+      return false;
+    }
+    if (f.read(ch.shortTitle, sizeof(ch.shortTitle)) != sizeof(ch.shortTitle)) {
+      LOG_DBG("TXT", "Chapter %u: shortTitle read failed, rebuilding", i);
+      return false;
+    }
+    // Validate field invariants.
+    if (ch.chapterIndex != i) {
+      LOG_DBG("TXT", "Chapter %u: chapterIndex invariant violated, rebuilding", i);
+      return false;
+    }
+    if (ch.byteOffset > ch.endOffset) {
+      LOG_DBG("TXT", "Chapter %u: byteOffset > endOffset, rebuilding", i);
+      return false;
+    }
+    if (ch.endOffset > txt->getFileSize()) {
+      LOG_DBG("TXT", "Chapter %u: endOffset out of bounds, rebuilding", i);
+      return false;
+    }
+  }
+  return true;
+}
+
+void TxtReaderActivity::saveChapterCache() {
+  FsFile f;
+  const std::string path = txt->getCachePath() + "/chapters.bin";
+  if (!Storage.openFileForWrite("TXT", path.c_str(), f)) {
+    LOG_DBG("TXT", "Failed to open chapter cache for write");
+    return;
+  }
+
+  // Header: 12 bytes = magic[4] + version[1] + fileSize[4] + reserved[3].
+  uint8_t header[12] = {0};
+  uint32_t magic = CHAPTER_CACHE_MAGIC;
+  std::memcpy(header, &magic, 4);
+  header[4] = CHAPTER_CACHE_VERSION;
+  const uint32_t fileSize = static_cast<uint32_t>(txt->getFileSize());
+  std::memcpy(header + 5, &fileSize, 4);
+  f.write(header, 12);
+
+  const uint32_t count = static_cast<uint32_t>(m_chapters.size());
+  f.write(&count, 4);
+  for (const auto& ch : m_chapters) {
+    f.write(&ch.chapterIndex, 4);
+    f.write(&ch.byteOffset, 4);
+    f.write(&ch.endOffset, 4);
+    f.write(ch.shortTitle, sizeof(ch.shortTitle));
+  }
+}
+
 ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Txt;
