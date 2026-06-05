@@ -180,9 +180,10 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
     changed = true;
   }
 
-  // Hyphenated pair smoothing: the second half of a hyphenated word should
-  // never be a navigation stop. Both halves highlight together, so landing on
-  // the second half makes it take two presses to move past the pair.
+  // Hyphenated pair smoothing for horizontal navigation:
+  // the second half should not be a horizontal stop since both halves
+  // highlight together. Row navigation (up/down) is exempt — the user
+  // may intend to land on the second half's row.
   if (changed) {
     const int idx = getCurrentFlatIndex();
     if (idx >= 0 && words[idx].continuationOf >= 0) {
@@ -206,8 +207,8 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
             }
           }
         }
-      } else {
-        // Moving backward or row navigation: snap to the first half.
+      } else if (wordPrevPressed) {
+        // Moving backward: snap to the first half.
         const int firstIdx = words[idx].continuationOf;
         currentRow = words[firstIdx].row;
         for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
@@ -217,6 +218,8 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
           }
         }
       }
+      // Row navigation leaves cursor on whichever half
+      // findClosestWord landed on. Both halves highlight regardless.
     }
   }
 
