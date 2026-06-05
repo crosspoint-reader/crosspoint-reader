@@ -130,6 +130,13 @@ void TxtReaderActivity::initializeReader() {
     savePageIndexCache();
   }
 
+  // CJK chapter detection: try cache first; on miss, scan and save.
+  if (!loadTypeCache() || !loadChapterCache()) {
+    scanChapters();
+    saveTypeCache();
+    saveChapterCache();
+  }
+
   // Load saved progress
   loadProgress();
 
