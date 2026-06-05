@@ -180,6 +180,46 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
     changed = true;
   }
 
+  // Hyphenated pair smoothing: the second half of a hyphenated word should
+  // never be a navigation stop. Both halves highlight together, so landing on
+  // the second half makes it take two presses to move past the pair.
+  if (changed) {
+    const int idx = getCurrentFlatIndex();
+    if (idx >= 0 && words[idx].continuationOf >= 0) {
+      if (wordNextPressed) {
+        // Moving forward: skip past the second half to the next word.
+        if (currentWordInRow < static_cast<int>(rows[currentRow].wordIndices.size()) - 1) {
+          currentWordInRow++;
+        } else if (rowCount > 1) {
+          currentRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
+          currentWordInRow = 0;
+        }
+        // If the skip landed on yet another continuation, snap to its first half.
+        const int skippedIdx = getCurrentFlatIndex();
+        if (skippedIdx >= 0 && words[skippedIdx].continuationOf >= 0) {
+          const int firstIdx = words[skippedIdx].continuationOf;
+          currentRow = words[firstIdx].row;
+          for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
+            if (rows[currentRow].wordIndices[i] == firstIdx) {
+              currentWordInRow = i;
+              break;
+            }
+          }
+        }
+      } else {
+        // Moving backward or row navigation: snap to the first half.
+        const int firstIdx = words[idx].continuationOf;
+        currentRow = words[firstIdx].row;
+        for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
+          if (rows[currentRow].wordIndices[i] == firstIdx) {
+            currentWordInRow = i;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   return changed;
 }
 
