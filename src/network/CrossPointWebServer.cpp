@@ -14,7 +14,6 @@
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
-#include "util/DictionaryRegistry.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
@@ -24,6 +23,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
+#include "util/DictionaryRegistry.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser

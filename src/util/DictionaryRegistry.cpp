@@ -34,16 +34,16 @@ bool DictionaryRegistry::discover() {
     return false;
   }
 
-  auto root = Storage.open(root_.c_str());
-  if (!root || !root.isDirectory()) {
-    if (root) root.close();
+  auto rootDir = Storage.open(root_.c_str());
+  if (!rootDir || !rootDir.isDirectory()) {
+    if (rootDir) rootDir.close();
     return false;
   }
 
-  root.rewindDirectory();
+  rootDir.rewindDirectory();
 
   char name[500];
-  for (auto entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+  for (auto entry = rootDir.openNextFile(); entry; entry = rootDir.openNextFile()) {
     entry.getName(name, sizeof(name));
 
     if (!entry.isDirectory() || name[0] == '.') {
@@ -111,7 +111,7 @@ bool DictionaryRegistry::discover() {
     }
   }
 
-  root.close();
+  rootDir.close();
 
   // Sort alphabetically by folder name (case-insensitive — matches FileBrowserActivity).
   std::sort(entries_.begin(), entries_.end(), [](const DictionaryEntry& a, const DictionaryEntry& b) {
