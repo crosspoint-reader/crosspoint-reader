@@ -327,15 +327,15 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 }
 
 void TxtReaderActivity::scanChapters() {
-  m_chapters.clear();
-  m_isVolumeOnlyBook = false;
   // Chapter is 76 bytes (4 + 4 + 4 + 64). 2000 chapters = 152 KB DRAM.
-  m_chapters.reserve(kMaxChapters);  // pre-allocate to cap to avoid 76KB realloc copy
-
   constexpr size_t kChunkSize = 8192;
   constexpr size_t kMaxLineLength = 4096;
   constexpr uint32_t kMaxChapters = 2000;
   constexpr uint32_t kYieldEveryBytes = 50 * 1024;
+
+  m_chapters.clear();
+  m_isVolumeOnlyBook = false;
+  m_chapters.reserve(kMaxChapters);  // pre-allocate to cap to avoid 76KB realloc copy
   std::vector<uint8_t> buf(kChunkSize);
   uint32_t filePos = 0;
   std::string currentLine;
