@@ -534,6 +534,25 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
     isFirstLine = false;
   }
 
+  // CJK 避头标点 post-processing: see computeLineBreaks for full rationale.
+  const size_t totalWordCount = wordWidths.size();
+  for (size_t i = 0; i + 1 < lineBreakIndices.size(); ++i) {
+    const size_t nextBreak = lineBreakIndices[i];
+    if (nextBreak >= totalWordCount) continue;
+    const std::string& nextWord = words[nextBreak];
+    if (nextWord.empty()) continue;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(nextWord.c_str());
+    const uint32_t nextCp = utf8NextCodepoint(&p);
+    if (!isCJKLeadingPunctuation(nextCp)) continue;
+    // Pull the punctuation back to the previous line.
+    // Per Task 1.2 verification, lineBreakIndices[i] is the FIRST word of
+    // the next line (semantics b), so we ADD 1 to push the next line's
+    // start one word later (effectively extending the current line).
+    if (lineBreakIndices[i] + 1 <= totalWordCount) {
+      lineBreakIndices[i] = lineBreakIndices[i] + 1;
+    }
+  }
+
   return lineBreakIndices;
 }
 
