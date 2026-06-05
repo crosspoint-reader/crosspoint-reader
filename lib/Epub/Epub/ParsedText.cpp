@@ -455,7 +455,8 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     const uint32_t nextCp = utf8NextCodepoint(&p);
     if (!isCJKLeadingPunctuation(nextCp)) continue;
     // Pull the punctuation back to the previous line by advancing the break.
-    if (lineBreakIndices[i] + 1 <= totalWordCount) {
+    if (lineBreakIndices[i] + 1 < lineBreakIndices[i + 1] &&
+        lineBreakIndices[i] + 1 <= totalWordCount) {
       lineBreakIndices[i] = lineBreakIndices[i] + 1;
     }
   }
@@ -585,7 +586,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
     // Per Task 1.2 verification, lineBreakIndices[i] is the FIRST word of
     // the next line (semantics b), so we ADD 1 to push the next line's
     // start one word later (effectively extending the current line).
-    if (lineBreakIndices[i] + 1 <= totalWordCount) {
+    if (lineBreakIndices[i] + 1 < lineBreakIndices[i + 1] &&
+        lineBreakIndices[i] + 1 <= totalWordCount) {
       lineBreakIndices[i] = lineBreakIndices[i] + 1;
     }
   }
