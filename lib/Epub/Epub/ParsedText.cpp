@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <Utf8.h>
 
+#include "CjkLayout.h"
+
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -418,6 +420,25 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
     lineBreakIndices.push_back(nextBreakIndex);
     currentWordIndex = nextBreakIndex;
+  }
+
+  // CJK 避头标点 post-processing: pull any CJK leading punctuation back to the
+  // previous line. lineBreakIndices[i] holds the index of the first word of line
+  // (i + 1) (semantics b), so words[lineBreakIndices[i]] is the first word of the
+  // next line after line i. If that word is a CJK leading punctuation, shift the
+  // break one word forward so the punctuation lands at the end of line i.
+  for (size_t i = 0; i + 1 < lineBreakIndices.size(); ++i) {
+    const size_t nextBreak = lineBreakIndices[i];
+    if (nextBreak >= totalWordCount) continue;
+    const std::string& nextWord = words[nextBreak];
+    if (nextWord.empty()) continue;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(nextWord.c_str());
+    const uint32_t nextCp = utf8NextCodepoint(&p);
+    if (!isCJKLeadingPunctuation(nextCp)) continue;
+    // Pull the punctuation back to the previous line by advancing the break.
+    if (lineBreakIndices[i] + 1 <= totalWordCount) {
+      lineBreakIndices[i] = lineBreakIndices[i] + 1;
+    }
   }
 
   return lineBreakIndices;
