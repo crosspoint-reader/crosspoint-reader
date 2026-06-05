@@ -330,7 +330,7 @@ void TxtReaderActivity::scanChapters() {
   m_chapters.clear();
   m_isVolumeOnlyBook = false;
   // Chapter is 76 bytes (4 + 4 + 4 + 64). 2000 chapters = 152 KB DRAM.
-  m_chapters.reserve(1000);
+  m_chapters.reserve(kMaxChapters);  // pre-allocate to cap to avoid 76KB realloc copy
 
   constexpr size_t kChunkSize = 8192;
   constexpr size_t kMaxLineLength = 4096;
@@ -402,7 +402,7 @@ void TxtReaderActivity::scanChapters() {
 
   // Volume-only fallback.
   m_chapters.clear();
-  m_chapters.reserve(1000);
+  m_chapters.reserve(kMaxChapters);  // pre-allocate to cap to avoid 76KB realloc copy
   m_isVolumeOnlyBook = true;
   uint32_t paraCount = 0;
   uint32_t chapterStart = 0;
