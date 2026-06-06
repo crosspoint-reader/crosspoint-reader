@@ -13,6 +13,7 @@
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "ReadingStatsStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
 
@@ -356,6 +357,48 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
   }
 
   LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
+  return true;
+}
+
+// ---- ReadingStatsStore ----
+
+bool JsonSettingsIO::saveReadingStats(const ReadingStatsStore& store, const char* path) {
+  JsonDocument doc;
+  JsonArray arr = doc["books"].to<JsonArray>();
+  for (const auto& book : store.books()) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["path"] = book.bookPath;
+    obj["pagesRead"] = book.pagesRead;
+    obj["totalReadingMs"] = book.totalReadingMs;
+    obj["sessionCount"] = book.sessionCount;
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadReadingStats(ReadingStatsStore& store, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("STATS", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  std::vector<reading_stats::BookStats> books;
+  JsonArray arr = doc["books"].as<JsonArray>();
+  for (JsonObject obj : arr) {
+    reading_stats::BookStats book;
+    book.bookPath = obj["path"] | std::string("");
+    book.pagesRead = obj["pagesRead"] | 0u;
+    book.totalReadingMs = obj["totalReadingMs"] | 0u;
+    book.sessionCount = obj["sessionCount"] | 0u;
+    if (!book.bookPath.empty()) books.push_back(std::move(book));
+  }
+
+  store.loadBooks(std::move(books));
+  LOG_DBG("STATS", "Reading stats loaded (%d books)", static_cast<int>(store.books().size()));
   return true;
 }
 
