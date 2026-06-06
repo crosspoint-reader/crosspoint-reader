@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -52,10 +53,8 @@ class TableBlock final : public Block {
   // Returns true if any border side is enabled.
   bool drawAnyBorder() const {
     if (drawBorderLeft || drawBorderRight || drawInnerColDividers) return true;
-    for (const auto& r : rows) {
-      if (r.drawBorderTop || r.drawBorderBottom) return true;
-    }
-    return false;
+    return std::any_of(rows.begin(), rows.end(),
+                       [](const TableRow& r) { return r.drawBorderTop || r.drawBorderBottom; });
   }
 
   BlockType getType() override { return TABLE_BLOCK; }
