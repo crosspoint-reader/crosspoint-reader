@@ -173,8 +173,12 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
-  // Bank and persist this reading session before any teardown.
-  READING_STATS.endSession(millis());
+  // Bank and persist this reading session before any teardown. Guarded on epub:
+  // onEnter early-returns without starting a session when there is no book, so
+  // skipping here avoids a no-op SD write on that path.
+  if (epub) {
+    READING_STATS.endSession(millis());
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -691,7 +695,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     }
   }
   lastPageTurnTime = millis();
-  READING_STATS.recordPageTurn(lastPageTurnTime, isForwardTurn);
+  READING_STATS.recordPageTurn(static_cast<uint32_t>(lastPageTurnTime), isForwardTurn);
   requestUpdate();
 }
 
