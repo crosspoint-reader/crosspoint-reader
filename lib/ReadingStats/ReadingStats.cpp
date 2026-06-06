@@ -18,16 +18,38 @@ uint32_t ReadingStatsAggregator::cappedDelta(uint32_t nowMs) const {
   return std::min(delta, kMaxPageMs);
 }
 
-void ReadingStatsAggregator::beginSession(const std::string&, uint32_t) {
-  // Implemented in Task 2.
+void ReadingStatsAggregator::beginSession(const std::string& bookPath, uint32_t nowMs) {
+  if (sessionActive_) endSession(nowMs);
+
+  auto it = std::find_if(books_.begin(), books_.end(),
+                         [&](const BookStats& b) { return b.bookPath == bookPath; });
+  if (it == books_.end()) {
+    BookStats fresh;
+    fresh.bookPath = bookPath;
+    books_.push_back(std::move(fresh));
+    activeIndex_ = books_.size() - 1;
+  } else {
+    activeIndex_ = static_cast<std::size_t>(std::distance(books_.begin(), it));
+  }
+  sessionActive_ = true;
+  lastEventMs_ = nowMs;
 }
 
-void ReadingStatsAggregator::recordPageTurn(uint32_t, bool) {
-  // Implemented in Task 2.
+void ReadingStatsAggregator::recordPageTurn(uint32_t nowMs, bool forward) {
+  if (!sessionActive_) return;
+  BookStats& book = books_[*activeIndex_];
+  book.totalReadingMs += cappedDelta(nowMs);
+  if (forward) book.pagesRead++;
+  lastEventMs_ = nowMs;
 }
 
-void ReadingStatsAggregator::endSession(uint32_t) {
-  // Implemented in Task 2.
+void ReadingStatsAggregator::endSession(uint32_t nowMs) {
+  if (!sessionActive_) return;
+  BookStats& book = books_[*activeIndex_];
+  book.totalReadingMs += cappedDelta(nowMs);
+  book.sessionCount++;
+  sessionActive_ = false;
+  activeIndex_.reset();
 }
 
 const BookStats* ReadingStatsAggregator::statsFor(const std::string& bookPath) const {
