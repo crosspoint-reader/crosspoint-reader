@@ -7,7 +7,7 @@ namespace reading_stats {
 void ReadingStatsAggregator::load(std::vector<BookStats> books) {
   books_ = std::move(books);
   sessionActive_ = false;
-  activeIndex_ = -1;
+  activeIndex_.reset();
   lastEventMs_ = 0;
 }
 
@@ -37,15 +37,15 @@ const BookStats* ReadingStatsAggregator::statsFor(const std::string& bookPath) c
 }
 
 uint32_t ReadingStatsAggregator::totalPagesRead() const {
-  uint32_t total = 0;
+  uint64_t total = 0;
   for (const auto& b : books_) total += b.pagesRead;
-  return total;
+  return total > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(total);
 }
 
 uint32_t ReadingStatsAggregator::totalReadingMs() const {
-  uint32_t total = 0;
+  uint64_t total = 0;
   for (const auto& b : books_) total += b.totalReadingMs;
-  return total;
+  return total > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(total);
 }
 
 uint32_t ReadingStatsAggregator::pagesPerHour(const std::string& bookPath) const {

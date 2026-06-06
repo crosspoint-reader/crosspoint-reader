@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,10 +15,7 @@ struct BookStats {
   uint32_t totalReadingMs = 0;  // summed, with each gap capped (see kMaxPageMs)
   uint32_t sessionCount = 0;    // number of ended reading sessions
 
-  bool operator==(const BookStats& o) const {
-    return bookPath == o.bookPath && pagesRead == o.pagesRead && totalReadingMs == o.totalReadingMs &&
-           sessionCount == o.sessionCount;
-  }
+  bool operator==(const BookStats& o) const = default;
 };
 
 // Pure aggregation engine. No Arduino/SD dependencies, so it is unit-tested on
@@ -62,7 +60,7 @@ class ReadingStatsAggregator {
 
   std::vector<BookStats> books_;
   bool sessionActive_ = false;
-  int activeIndex_ = -1;  // index into books_ for the active session
+  std::optional<std::size_t> activeIndex_;  // set to the active session's index in books_
   uint32_t lastEventMs_ = 0;
 };
 
