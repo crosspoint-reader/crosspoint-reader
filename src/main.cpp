@@ -270,9 +270,10 @@ void setup() {
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying power button press duration");
-      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
-                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+      // A power-button wake always boots. We don't gate on hold duration: on a battery cold-boot
+      // the SD/settings init above consumes the press window, so by the time we could check the
+      // button is already released and the device would wrongly fall back to sleep.
+      LOG_DBG("MAIN", "Power button wakeup");
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep

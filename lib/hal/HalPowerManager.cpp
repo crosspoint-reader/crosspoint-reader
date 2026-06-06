@@ -79,12 +79,8 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // Arm the wakeup trigger *after* the button is released
   // Note: this is only useful for waking up on USB power. On battery, the MCU will be completely powered off, so the
   // power button is hard-wired to briefly provide power to the MCU, waking it up regardless of the wakeup source
-  // configuration. Nav ADC pins: Left/Right/Down pull LOW reliably; Up/Confirm/Back stay above logic threshold.
-  esp_deep_sleep_enable_gpio_wakeup(
-      (1ULL << InputManager::POWER_BUTTON_PIN) |
-          (1ULL << InputManager::BUTTON_ADC_PIN_1) |
-          (1ULL << InputManager::BUTTON_ADC_PIN_2),
-      ESP_GPIO_WAKEUP_GPIO_LOW);
+  // configuration. Wake on the power button only (matches upstream crosspoint-reader).
+  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
