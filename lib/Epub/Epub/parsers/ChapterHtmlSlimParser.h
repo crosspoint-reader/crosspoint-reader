@@ -11,6 +11,7 @@
 #include "Epub/FootnoteEntry.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
+#include "Epub/blocks/TableBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
 #include "Epub/css/CssStyle.h"
@@ -77,8 +78,60 @@ class ChapterHtmlSlimParser {
   bool effectiveSup = false;
   bool effectiveSub = false;
   int tableDepth = 0;
-  int tableRowIndex = 0;
-  int tableColIndex = 0;
+
+  // Table accumulation: cells are collected per-row, laid out at </tr>.
+  struct TableCellAccum {
+    std::unique_ptr<ParsedText> text;               // raw words; laid out at </tr>
+    std::vector<std::shared_ptr<TextBlock>> lines;  // filled after layout
+    int16_t paddingLeft = TableBlock::CELL_PADDING_X;
+    int16_t paddingRight = TableBlock::CELL_PADDING_X;
+    int16_t paddingTop = TableBlock::CELL_PADDING_Y;
+    int16_t paddingBottom = TableBlock::CELL_PADDING_Y;
+    int16_t requestedWidth = 0;  // 0 = unspecified (equal distribution)
+    uint8_t colspan = 1;         // number of logical columns this cell spans
+    uint8_t rowspan =
+        1;  // 0 = phantom (occupied by rowspan above), 1 = normal, >1 = rowspan cell; HTML "0" mapped to 64
+
+    void copySpanAndPaddingTo(TableCellAccum& dst) const {
+      dst.colspan = colspan;
+      dst.rowspan = rowspan;
+      dst.paddingLeft = paddingLeft;
+      dst.paddingRight = paddingRight;
+      dst.paddingTop = paddingTop;
+      dst.paddingBottom = paddingBottom;
+    }
+    TableCell toTableCell() const {
+      TableCell c;
+      c.colspan = colspan;
+      c.rowspan = rowspan;
+      c.paddingLeft = paddingLeft;
+      c.paddingRight = paddingRight;
+      c.paddingTop = paddingTop;
+      c.paddingBottom = paddingBottom;
+      return c;
+    }
+  };
+  struct TableRowAccum {
+    std::vector<TableCellAccum> cells;
+    uint8_t maxLines = 0;
+    int16_t maxPaddingTop = TableBlock::CELL_PADDING_Y;
+    int16_t maxPaddingBottom = TableBlock::CELL_PADDING_Y;
+    bool drawBorderTop = false;     // OR of all cells' isBorderTopVisible() in this row
+    bool drawBorderBottom = false;  // OR of all cells' isBorderBottomVisible() in this row
+  };
+  bool inTableCellMode = false;
+  std::vector<TableRowAccum> tableAccumRows;
+  int tableTotalCols = 0;                    // max columns seen across all rows
+  std::vector<int16_t> tableColWidths;       // per-column widths once established (first row with explicit widths)
+  std::vector<uint8_t> tableRowspanTracker;  // remaining rowspan rows per logical column
+  bool tableDrawBorderTop = false;           // baseline from <table> element CSS only; not modified by cells
+  bool tableDrawBorderBottom = false;        // baseline from <table> element CSS only; not modified by cells
+  bool tableDrawBorderLeft = false;          // accumulated from <table>/<td>/<th> CSS: draw left edge
+  bool tableDrawBorderRight = false;         // accumulated from <table>/<td>/<th> CSS: draw right edge
+  bool tableDrawInnerColDividers =
+      false;                         // set when any cell has visible left/right border; gates interior column lines
+  bool tableTruncated = false;       // set by OOM heap guard; suppresses further row/cell parsing
+  bool tableHasFlushedRows = false;  // set after the first incremental page-flush
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
@@ -103,6 +156,9 @@ class ChapterHtmlSlimParser {
   void makePages();
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   void emitHorizontalRule(const BlockStyle& blockStyle);
+  static void emitTablePageSlices(ChapterHtmlSlimParser* self, bool applyTopBorder, bool applyBottomBorder,
+                                  bool isLastFlush);
+  static void recomputeRowMetrics(TableRowAccum& row);
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
