@@ -387,8 +387,10 @@ bool JsonSettingsIO::loadReadingStats(ReadingStatsStore& store, const char* json
   }
 
   std::vector<reading_stats::BookStats> books;
+  constexpr size_t kMaxStatsBooks = 200;
   JsonArray arr = doc["books"].as<JsonArray>();
   for (JsonObject obj : arr) {
+    if (books.size() >= kMaxStatsBooks) break;
     reading_stats::BookStats book;
     book.bookPath = obj["path"] | std::string("");
     book.pagesRead = obj["pagesRead"] | 0u;
