@@ -1,0 +1,153 @@
+<h1>23. Hyphenated Word Navigation</h1>
+
+<p>When a hyphenated compound word wraps across two lines — the first half ending
+with a hyphen at a line break, the second half continuing at the left margin of
+the next line — the word selector treats the split as a single navigation stop.
+Both halves are always highlighted together. This chapter verifies that behaviour
+and the related edge cases.</p>
+<h3>Dictionary</h3>
+<p><em>english-no-syn</em></p>
+
+<h3>Note</h3>
+<p>Enable hyphenation in the reader settings before starting. Without it,
+compound words will not wrap at their hyphens and no target pair will appear.</p>
+<p>Increase the font size to 16 pt or 18 pt before starting. A larger font
+reduces the number of characters per line, making it more likely that a compound
+word wraps at its hyphen. Navigate the page until you find at least one word that
+<strong>ends with a hyphen at a line boundary</strong>; its continuation begins the
+next line at the left margin. That split forms the <strong>target pair</strong>
+used throughout the tests below. If no pair is visible, try a larger font size or
+switch to portrait orientation.</p>
+<p>The first half of the pair appears at the <strong>end</strong> of its line
+(high X position). The second half appears at the <strong>left margin</strong> of
+the line below (low X position). Because of this, pressing Down from the first half
+does <em>not</em> land on the second half — the navigator finds the word closest in
+horizontal position to the first half on the next row, which is a word somewhere
+in the middle or right of that row. To land on the second half via row navigation,
+press Down from a word near the <strong>left margin</strong> (low X) instead.</p>
+
+<h3>Test words</h3>
+<p>The paragraph below contains several long hyphenated compounds. At 16 pt or
+larger, at least one should wrap at its hyphen.</p>
+<p>The well-established practice of cross-examination relies on a
+state-of-the-art understanding of self-determination and re-examination.
+Long-term planning and up-to-date information help avoid mother-in-law
+situations in an ever-changing, multi-disciplinary, decision-making
+environment. A well-considered, re-evaluation of the above-mentioned points is
+often all that is needed.</p>
+
+<h2>Test A: Both halves highlighted regardless of which half the cursor is on</h2>
+<p>Both halves must be highlighted simultaneously whenever the cursor is on either
+half — whether it arrived on the first half via horizontal navigation or on the
+second half via row navigation.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open word-select mode on this page.</li>
+<li>Navigate using <em>Right</em> to the first half of the target
+    pair (the half ending with a hyphen).</li>
+<li>Verify: both halves are highlighted — the first half on its line and the second
+    half at the left margin of the next line must both be inverted.</li>
+<li>Now navigate to the second half via row navigation: press <em>Down</em> past
+    the second half's line to the row below it, press <em>Left</em> repeatedly
+    until the cursor is on the leftmost word of that row, then press <em>Up</em>.
+    Because the second half is the leftmost word on its line, the closest-X
+    algorithm lands on it. (Pressing <em>Left</em> directly on the second
+    half's row does not work — it snaps to the first half instead.)</li>
+<li>Verify: both halves are still highlighted. The highlight must not disappear from
+    the first half when the cursor is on the second half.</li>
+</ol>
+
+<h2>Test B: Horizontal navigation skips the second half in both directions</h2>
+<p>The second half must never be a stopping point for horizontal navigation. Going
+<em>Right</em> through the pair skips the second half; going <em>Left</em> back
+through the pair snaps directly to the first half, also bypassing the second half.</p>
+<h3>Steps</h3>
+<ol>
+<li>Navigate to the word immediately before the first half on the same line.</li>
+<li>Press <em>Right</em> once. Verify the cursor lands on the first half (both
+    halves highlighted).</li>
+<li>Press <em>Right</em> again. The cursor wraps to the next line. Verify it lands
+    on the word immediately after the second half — <em>not</em> on the second half
+    itself. The hyphenated pair must no longer be highlighted.</li>
+<li>Press <em>Left</em> once. Verify the cursor snaps to the first half (both
+    halves highlighted again). It must not stop on the second half.</li>
+<li>Press <em>Left</em> again. Verify the cursor moves to the word before the first
+    half. The pair must no longer be highlighted.</li>
+</ol>
+
+<h2>Test C: Row navigation can land on the second half</h2>
+<p>Pressing <em>Up</em> or <em>Down</em> may land the cursor on the second half.
+When it does, the cursor stays there — it is not forced to the first half. Both
+halves remain highlighted.</p>
+<h3>Note</h3>
+<p>To reach the second half via row navigation, approach from a position with low X
+(near the left margin). The second half is the first word on its line; it has the
+lowest X on that row. Navigating Up from a word near the left margin of the row
+below lands on it.</p>
+<h3>Steps</h3>
+<ol>
+<li>Navigate to the row below the second half's line. (Press <em>Down</em> from
+    anywhere near the pair, then <em>Down</em> again if needed, to reach the line
+    below the second half.)</li>
+<li>On that row, press <em>Left</em> repeatedly until the cursor is on the
+    leftmost word (the first word on the line).</li>
+<li>Press <em>Up</em>. The cursor moves to the second half's line. Because the
+    second half is the leftmost word on its line, the navigator finds it as the
+    closest match.</li>
+<li>Press <em>Up</em> again. Verify the cursor moves to the word
+    <strong>above the second half</strong> — a word near the left margin of the
+    first half's line — and <em>not</em> to the word above the first half (near
+    the right end of that line where the first half ends). Row navigation from
+    the second half must use the second half's horizontal position as the
+    reference, not the first half's.</li>
+</ol>
+
+<h2>Test D: Row navigation after backward snap stays on the correct row</h2>
+<p>After pressing <em>Left</em> snaps the cursor from the second half to the first
+half (crossing a row boundary), pressing <em>Up</em> must not move the cursor
+one row too far. The navigator records the second half's row as the reference for
+the next row navigation, so <em>Up</em> references that row and moves one row
+above it — which is the first half's own row.</p>
+<h3>Steps</h3>
+<ol>
+<li>Navigate to the word immediately after the second half. (Use
+    <em>Right</em> from the first half — it skips the second half and lands
+    on the word after it.)</li>
+<li>Press <em>Left</em> once. Confirm: both halves are highlighted.</li>
+<li>Press <em>Up</em>. Verify: the cursor <em>stays on the first half's row</em>
+    (it may shift to a different word on that row near the left margin, but it must
+    not move to the row above the first half). The pair must still be highlighted
+    if the cursor remains on the first half.</li>
+</ol>
+
+<h2>Test E: Left from second half (arrived via row navigation) skips the first half</h2>
+<p>If the cursor arrived on the second half via row navigation, pressing
+<em>Left</em> once must skip past the first half and land on the word before the
+pair. The first half must not be a stopping point in this case.</p>
+<h3>Steps</h3>
+<ol>
+<li>Reach the second half via row navigation as in Test C (navigate to the row
+    below, press <em>Left</em> to the leftmost word, press <em>Up</em>).</li>
+<li>Confirm: the cursor is on the second half and both halves are highlighted.</li>
+<li>Press <em>Left</em> once. Verify the cursor lands on the word
+    <strong>before the first half</strong> on the first half's row. It must skip
+    past the first half in a single press — the first half must not be a stop.</li>
+</ol>
+
+<h2>Test F: All navigation rules hold inside the dictionary definition view</h2>
+<p>The word-select engine operates identically inside the dictionary definition
+panel. This test repeats Tests A–E on a hyphenated pair found within a
+definition.</p>
+<h3>Steps</h3>
+<ol>
+<li>From word-select mode on this page, navigate to
+    <strong>self-determination</strong> (or any other hyphenated compound from
+    the test paragraph) and press <em>Confirm</em> to open its dictionary
+    definition.</li>
+<li>Word-select mode is now active inside the definition panel. Increase the
+    font size if needed until at least one hyphenated compound in the definition
+    text wraps at its hyphen. If the current word's definition yields no pair,
+    close the panel and try a different compound word.</li>
+<li>Identify the <strong>target pair</strong> inside the definition text, then
+    execute Tests A–E in full on that pair.</li>
+</ol>
