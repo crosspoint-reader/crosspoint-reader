@@ -127,3 +127,50 @@ TEST(ReadingStats, ReopeningSameBookAccumulates) {
   EXPECT_EQ(s->sessionCount, 2u);
   EXPECT_EQ(agg.books().size(), 1u);  // not duplicated
 }
+
+TEST(ReadingStats, PagesPerHourComputesSpeed) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/a.epub", 0);
+  // 30 pages over exactly 1 hour -> 30 pages/hour. Use forward turns and a
+  // final endSession that adds no extra time (each gap <= kMaxPageMs).
+  uint32_t t = 0;
+  for (int i = 0; i < 30; ++i) {
+    t += 120000;  // 2 min per page (under the 5 min cap)
+    agg.recordPageTurn(t, true);
+  }
+  agg.endSession(t);
+
+  const BookStats* s = agg.statsFor("/books/a.epub");
+  ASSERT_NE(s, nullptr);
+  EXPECT_EQ(s->pagesRead, 30u);
+  EXPECT_EQ(s->totalReadingMs, 3600000u);  // 30 * 120000
+  EXPECT_EQ(agg.pagesPerHour("/books/a.epub"), 30u);
+}
+
+TEST(ReadingStats, PagesPerHourIsZeroWithoutTime) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/a.epub", 1000);
+  agg.recordPageTurn(1000, true);  // zero elapsed
+  agg.endSession(1000);
+  EXPECT_EQ(agg.pagesPerHour("/books/a.epub"), 0u);
+}
+
+TEST(ReadingStats, LoadReplacesContentsAndResetsSession) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/stale.epub", 0);  // active session that load() must drop
+
+  std::vector<BookStats> persisted;
+  persisted.push_back(BookStats{"/books/a.epub", 10, 600000, 3});
+  persisted.push_back(BookStats{"/books/b.epub", 5, 300000, 1});
+  agg.load(persisted);
+
+  EXPECT_EQ(agg.books().size(), 2u);
+  EXPECT_EQ(agg.totalPagesRead(), 15u);
+  EXPECT_EQ(agg.statsFor("/books/a.epub")->sessionCount, 3u);
+  EXPECT_EQ(agg.statsFor("/books/stale.epub"), nullptr);
+
+  // After load the prior session is gone, so a stray page turn is ignored
+  // until a new beginSession.
+  agg.recordPageTurn(1000, true);
+  EXPECT_EQ(agg.totalPagesRead(), 15u);
+}
