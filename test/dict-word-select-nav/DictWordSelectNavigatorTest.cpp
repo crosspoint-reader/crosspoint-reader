@@ -328,6 +328,47 @@ static WordSelectNavigator makeSingleRowHyphenatedFixture() {
   return nav;
 }
 
+// Row 0:  wordA(10)  wordB(60)  under-(200)  ← first half, trailing hyphen
+// Row 1:                        -stand(200)  wordD(260)  wordE(310)
+//                                 ↑ second half, leading hyphen too
+static WordSelectNavigator makeHyphenBothFixture() {
+  std::string pool;
+
+  WordSelectNavigator::WordInfo w0 = mkWord("wordA", 10, 0, 40, 0);
+  w0.textOffset = poolAppendString(pool, "wordA");
+  w0.lookupOffset = w0.textOffset;
+
+  WordSelectNavigator::WordInfo w1 = mkWord("wordB", 60, 0, 35, 0);
+  w1.textOffset = poolAppendString(pool, "wordB");
+  w1.lookupOffset = w1.textOffset;
+
+  WordSelectNavigator::WordInfo w2 = mkWord("under-", 200, 0, 50, 0);
+  w2.textOffset = poolAppendString(pool, "under-");
+  w2.lookupOffset = w2.textOffset;
+  w2.continuationIndex = 3;
+
+  WordSelectNavigator::WordInfo w3 = mkWord("-stand", 200, 20, 45, 1);
+  w3.textOffset = poolAppendString(pool, "-stand");
+  w3.lookupOffset = w3.textOffset;
+  w3.continuationOf = 2;
+
+  WordSelectNavigator::WordInfo w4 = mkWord("wordD", 260, 20, 40, 1);
+  w4.textOffset = poolAppendString(pool, "wordD");
+  w4.lookupOffset = w4.textOffset;
+
+  WordSelectNavigator::WordInfo w5 = mkWord("wordE", 310, 20, 40, 1);
+  w5.textOffset = poolAppendString(pool, "wordE");
+  w5.lookupOffset = w5.textOffset;
+
+  std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3, w4, w5};
+  std::vector<WordSelectNavigator::Row> rows;
+  WordSelectNavigator::organizeIntoRows(words, rows);
+
+  WordSelectNavigator nav;
+  nav.load(std::move(words), std::move(rows), std::move(pool));
+  return nav;
+}
+
 // When the only row ends with a hyphenated pair, pressing Right from the first
 // half should wrap around to word 0 — not get stuck on the second half.
 static void testSingleRowForwardSkipWraps() {
@@ -506,6 +547,215 @@ static void testRenderHighlightDifferentialFallback() {
   CHECK(!result2.has_value(), "hyphenated word: nullopt (fast path not supported)");
 }
 
+// Run Tests A–E against any two-row fixture with the same layout as
+// makeHyphenatedFixture. firstHalf / secondHalf are the display strings of
+// the two pair members; the surrounding words are always wordA/wordB/wordD/wordE.
+static void runHyphenNavSuite(const char* label, WordSelectNavigator (*make)(), const char* firstHalf,
+                              const char* secondHalf) {
+  std::printf("%s\n", label);
+
+  // A: Left from wordD hits the second half, snaps to first half; second Left
+  //    continues to wordB.
+  {
+    WordSelectNavigator nav = make();
+    MappedInputManager input;
+    GfxRenderer renderer;
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Left, true);
+    nav.handleNavigation(input, renderer);
+    const WordSelectNavigator::WordInfo* sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), firstHalf) == 0, "A: snap to first half on Left");
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Left, true);
+    nav.handleNavigation(input, renderer);
+    sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), "wordB") == 0, "A: second Left reaches wordB");
+  }
+
+  // B: Right from wordB lands on first half; next Right skips second half -> wordD.
+  {
+    WordSelectNavigator nav = make();
+    MappedInputManager input;
+    GfxRenderer renderer;
+    navigateTo(nav, input, renderer, "wordB");
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Right, true);
+    nav.handleNavigation(input, renderer);
+    const WordSelectNavigator::WordInfo* sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), firstHalf) == 0, "B: Right lands on first half");
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Right, true);
+    nav.handleNavigation(input, renderer);
+    sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), "wordD") == 0, "B: second Right skips second half -> wordD");
+  }
+
+  // C: Up from wordD goes to first half; Down row-navigates to second half and
+  //    stays there (no snap back to first half).
+  {
+    WordSelectNavigator nav = make();
+    MappedInputManager input;
+    GfxRenderer renderer;
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Up, true);
+    nav.handleNavigation(input, renderer);
+    CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), firstHalf) == 0, "C: Up reaches first half");
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Down, true);
+    nav.handleNavigation(input, renderer);
+    const WordSelectNavigator::WordInfo* sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), secondHalf) == 0, "C: Down lands on second half, not snapped away");
+  }
+
+  // D: after backward snap (Left from wordD -> first half), Up must stay on the
+  //    first half's row, not jump above it.
+  {
+    WordSelectNavigator nav = make();
+    MappedInputManager input;
+    GfxRenderer renderer;
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Left, true);
+    nav.handleNavigation(input, renderer);
+    CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), firstHalf) == 0, "D: snapped to first half");
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Up, true);
+    nav.handleNavigation(input, renderer);
+    const WordSelectNavigator::WordInfo* sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), firstHalf) == 0, "D: Up after snap stays on first half's row");
+  }
+
+  // E: Left from second half (arrived via row nav) skips the first half entirely.
+  {
+    WordSelectNavigator nav = make();
+    MappedInputManager input;
+    GfxRenderer renderer;
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Up, true);
+    nav.handleNavigation(input, renderer);
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Down, true);
+    nav.handleNavigation(input, renderer);
+    CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), secondHalf) == 0, "E: on second half via row-nav");
+    input.reset();
+    input.setReleased(MappedInputManager::Button::Left, true);
+    nav.handleNavigation(input, renderer);
+    const WordSelectNavigator::WordInfo* sel = nav.getSelected();
+    CHECK(sel && std::strcmp(nav.getDisplay(*sel), "wordB") == 0,
+          "E: one Left from second half skips first half -> wordB");
+  }
+}
+
+// A word that both starts and ends with '-' (e.g. -re-) must not be treated as
+// the first half of a line-break compound, even when it is the last word on its
+// row. mergeHyphenatedPairs guards this with a lastWord[0] == '-' check.
+//
+// Row 0:  wordA(10)  wordB(60)  -re-(200)   ← ends with '-' but starts with '-'
+// Row 1:                        Test(200)  wordD(260)
+//
+// The test calls mergeHyphenatedPairs (the same function the activity uses) and
+// asserts the fields directly before loading the navigator, so removing the guard
+// from mergeHyphenatedPairs will make this test fail.
+static void testHyphenBothEndsNotPaired() {
+  std::printf("testHyphenBothEndsNotPaired\n");
+
+  std::string pool;
+  WordSelectNavigator::WordInfo w0 = mkWord("wordA", 10, 0, 40, 0);
+  w0.textOffset = poolAppendString(pool, "wordA");
+  w0.lookupOffset = w0.textOffset;
+
+  WordSelectNavigator::WordInfo w1 = mkWord("wordB", 60, 0, 35, 0);
+  w1.textOffset = poolAppendString(pool, "wordB");
+  w1.lookupOffset = w1.textOffset;
+
+  WordSelectNavigator::WordInfo w2 = mkWord("-re-", 200, 0, 30, 0);
+  w2.textOffset = poolAppendString(pool, "-re-");
+  w2.lookupOffset = w2.textOffset;
+
+  WordSelectNavigator::WordInfo w3 = mkWord("Test", 200, 20, 35, 1);
+  w3.textOffset = poolAppendString(pool, "Test");
+  w3.lookupOffset = w3.textOffset;
+
+  WordSelectNavigator::WordInfo w4 = mkWord("wordD", 260, 20, 40, 1);
+  w4.textOffset = poolAppendString(pool, "wordD");
+  w4.lookupOffset = w4.textOffset;
+
+  std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3, w4};
+  std::vector<WordSelectNavigator::Row> rows;
+  WordSelectNavigator::organizeIntoRows(words, rows);
+
+  // Run the actual merge logic — this is what the activity calls.
+  // Without the guard, -re- would be paired with Test here.
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, pool);
+
+  CHECK(words[2].continuationIndex == -1, "-re- not paired: continuationIndex must stay -1 after merge");
+  CHECK(words[3].continuationOf == -1, "Test not paired: continuationOf must stay -1 after merge");
+
+  WordSelectNavigator nav;
+  nav.load(std::move(words), std::move(rows), std::move(pool));
+  MappedInputManager input;
+  GfxRenderer renderer;
+
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Left, true);
+  nav.handleNavigation(input, renderer);
+  const WordSelectNavigator::WordInfo* sel = nav.getSelected();
+  CHECK(sel && std::strcmp(nav.getDisplay(*sel), "Test") == 0, "-re- not paired: Left from wordD lands on Test");
+
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Left, true);
+  nav.handleNavigation(input, renderer);
+  sel = nav.getSelected();
+  CHECK(sel && std::strcmp(nav.getDisplay(*sel), "-re-") == 0, "-re- not paired: second Left lands on -re-");
+
+  renderer.resetCounters();
+  nav.renderHighlight(renderer, 16);
+  CHECK(renderer.fillRectCallCount == 1, "-re- not paired: renderHighlight draws only 1 highlight");
+}
+
+// mergeHyphenatedPairs must strip the trailing '-' from the first half AND the
+// leading '-' from the second half so the lookup text is hyphen-free.
+// e.g. "under-" + "-stand" → lookup "understand", not "under-stand".
+static void testMergeLookupBothHyphens() {
+  std::printf("testMergeLookupBothHyphens\n");
+
+  std::string pool;
+  WordSelectNavigator::WordInfo w0 = mkWord("wordA", 10, 0, 40, 0);
+  w0.textOffset = poolAppendString(pool, "wordA");
+  w0.lookupOffset = w0.textOffset;
+
+  WordSelectNavigator::WordInfo w1 = mkWord("under-", 60, 0, 50, 0);
+  w1.textOffset = poolAppendString(pool, "under-");
+  w1.lookupOffset = w1.textOffset;
+
+  WordSelectNavigator::WordInfo w2 = mkWord("-stand", 60, 20, 45, 1);
+  w2.textOffset = poolAppendString(pool, "-stand");
+  w2.lookupOffset = w2.textOffset;
+
+  WordSelectNavigator::WordInfo w3 = mkWord("wordD", 120, 20, 40, 1);
+  w3.textOffset = poolAppendString(pool, "wordD");
+  w3.lookupOffset = w3.textOffset;
+
+  std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3};
+  std::vector<WordSelectNavigator::Row> rows;
+  WordSelectNavigator::organizeIntoRows(words, rows);
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, pool);
+
+  CHECK(words[1].continuationIndex == 2, "under- paired with -stand");
+  CHECK(words[2].continuationOf == 1, "-stand paired with under-");
+  CHECK(std::strcmp(pool.data() + words[1].lookupOffset, "understand") == 0,
+        "first-half lookup is 'understand', not 'under-stand'");
+  CHECK(std::strcmp(pool.data() + words[2].lookupOffset, "understand") == 0,
+        "second-half lookup is 'understand', not 'under-stand'");
+}
+
+static void testHyphenEndOnly() {
+  runHyphenNavSuite("testHyphenEndOnly (\"under-\" + \"stand\")", makeHyphenatedFixture, "under-", "stand");
+}
+
+static void testHyphenBoth() {
+  runHyphenNavSuite("testHyphenBoth (\"under-\" + \"-stand\")", makeHyphenBothFixture, "under-", "-stand");
+}
+
 int main() {
   std::printf("=== WordSelectNavigator host litmus ===\n");
   testOrganizeIntoRows();
@@ -521,6 +771,10 @@ int main() {
   testRenderHighlightHyphenatedBothHalves();
   testRenderHighlightHyphenatedFromSecondHalf();
   testRenderHighlightDifferentialFallback();
+  testHyphenBothEndsNotPaired();
+  testMergeLookupBothHyphens();
+  testHyphenEndOnly();
+  testHyphenBoth();
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

@@ -35,6 +35,18 @@ Long-term planning and up-to-date information help avoid mother-in-law
 situations in an ever-changing, multi-disciplinary, decision-making
 environment. A well-considered, re-evaluation of the above-mentioned points is
 often all that is needed.</p>
+<p>When seeking target pairs, also look for these three edge-case hyphen-position
+patterns. They may be more readily found inside dictionary definitions than in
+the paragraph above.</p>
+<ul>
+<li><strong>Hyphen at start of word only</strong> — the token begins with a
+    hyphen and has no trailing hyphen (e.g. <em>-ation</em>, <em>-ness</em>).</li>
+<li><strong>Hyphen at end of word only</strong> — the token ends with a hyphen
+    and has no leading hyphen (e.g. <em>re-</em>, <em>anti-</em>). This is the
+    standard first-half pattern exercised by Tests A–E.</li>
+<li><strong>Hyphen at both start and end</strong> — the token carries a hyphen
+    on each side (e.g. <em>-o-</em>, <em>-re-</em>).</li>
+</ul>
 
 <h2>Test A: Both halves highlighted regardless of which half the cursor is on</h2>
 <p>Both halves must be highlighted simultaneously whenever the cursor is on either
@@ -134,7 +146,21 @@ pair. The first half must not be a stopping point in this case.</p>
     past the first half in a single press — the first half must not be a stop.</li>
 </ol>
 
-<h2>Test F: All navigation rules hold inside the dictionary definition view</h2>
+<h2>Test F: Navigation rules hold for all three hyphen-position variants</h2>
+<p>Repeat Tests A–E for each of the three hyphen-position patterns described in
+the Test words section. Each variant must obey all the same rules as the
+standard case.</p>
+<h3>Steps</h3>
+<ol>
+<li>Locate a target pair for each variant. The hyphen-at-end-only case is the
+    standard case from the test paragraph above. Hyphen-at-start-only and
+    hyphen-at-both-ends may require opening dictionary definitions or using a
+    larger font size.</li>
+<li>For each variant found, execute Tests A–E in full on that pair and verify
+    all expected outcomes hold.</li>
+</ol>
+
+<h2>Test G: All navigation rules hold inside the dictionary definition view</h2>
 <p>The word-select engine operates identically inside the dictionary definition
 panel. This test repeats Tests A–E on a hyphenated pair found within a
 definition.</p>

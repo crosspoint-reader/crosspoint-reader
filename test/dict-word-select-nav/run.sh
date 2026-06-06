@@ -23,6 +23,7 @@ CXXFLAGS=(
   -I"$ROOT_DIR/src"
   -I"$ROOT_DIR/lib"
   -I"$ROOT_DIR/lib/EpdFont"
+  -I"$ROOT_DIR/lib/Utf8"
 )
 
 "$CXX" "${CXXFLAGS[@]}" \
