@@ -73,3 +73,57 @@ TEST(ReadingStats, MillisWrapCountsAsZeroDelta) {
   EXPECT_EQ(s->pagesRead, 1u);
   EXPECT_EQ(s->totalReadingMs, 0u);
 }
+
+TEST(ReadingStats, TracksTwoBooksIndependently) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/a.epub", 0);
+  agg.recordPageTurn(1000, true);
+  agg.endSession(1000);
+
+  agg.beginSession("/books/b.epub", 5000);
+  agg.recordPageTurn(7000, true);
+  agg.recordPageTurn(9000, true);
+  agg.endSession(9000);
+
+  EXPECT_EQ(agg.statsFor("/books/a.epub")->pagesRead, 1u);
+  EXPECT_EQ(agg.statsFor("/books/b.epub")->pagesRead, 2u);
+  EXPECT_EQ(agg.totalPagesRead(), 3u);
+}
+
+TEST(ReadingStats, BeginSessionEndsThePriorSession) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/a.epub", 0);
+  agg.recordPageTurn(1000, true);     // book a: +1000 ms, +1 page
+  // Switch to b without an explicit endSession; a is banked at nowMs (2000).
+  agg.beginSession("/books/b.epub", 2000);
+  agg.recordPageTurn(3000, true);     // book b: +1000 ms, +1 page
+  agg.endSession(3000);
+
+  const BookStats* a = agg.statsFor("/books/a.epub");
+  ASSERT_NE(a, nullptr);
+  EXPECT_EQ(a->totalReadingMs, 2000u);  // 1000 (to first turn) + 1000 (banked on switch)
+  EXPECT_EQ(a->sessionCount, 1u);       // switching ended a's session
+
+  const BookStats* b = agg.statsFor("/books/b.epub");
+  ASSERT_NE(b, nullptr);
+  EXPECT_EQ(b->totalReadingMs, 1000u);
+  EXPECT_EQ(b->sessionCount, 1u);
+}
+
+TEST(ReadingStats, ReopeningSameBookAccumulates) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/a.epub", 0);
+  agg.recordPageTurn(1000, true);
+  agg.endSession(1000);
+
+  agg.beginSession("/books/a.epub", 2000);
+  agg.recordPageTurn(3000, true);
+  agg.endSession(3000);
+
+  const BookStats* s = agg.statsFor("/books/a.epub");
+  ASSERT_NE(s, nullptr);
+  EXPECT_EQ(s->pagesRead, 2u);
+  EXPECT_EQ(s->totalReadingMs, 2000u);
+  EXPECT_EQ(s->sessionCount, 2u);
+  EXPECT_EQ(agg.books().size(), 1u);  // not duplicated
+}
