@@ -4,6 +4,13 @@
 
 namespace reading_stats {
 
+namespace {
+uint32_t saturatingAddU32(uint32_t a, uint32_t b) {
+  const uint64_t sum = static_cast<uint64_t>(a) + b;
+  return sum > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(sum);
+}
+}  // namespace
+
 void ReadingStatsAggregator::load(std::vector<BookStats> books) {
   books_ = std::move(books);
   sessionActive_ = false;
@@ -37,7 +44,7 @@ void ReadingStatsAggregator::beginSession(const std::string& bookPath, uint32_t 
 void ReadingStatsAggregator::recordPageTurn(uint32_t nowMs, bool forward) {
   if (!sessionActive_) return;
   BookStats& book = books_[*activeIndex_];
-  book.totalReadingMs += cappedDelta(nowMs);
+  book.totalReadingMs = saturatingAddU32(book.totalReadingMs, cappedDelta(nowMs));
   if (forward) book.pagesRead++;
   lastEventMs_ = nowMs;
 }
@@ -45,7 +52,7 @@ void ReadingStatsAggregator::recordPageTurn(uint32_t nowMs, bool forward) {
 void ReadingStatsAggregator::endSession(uint32_t nowMs) {
   if (!sessionActive_) return;
   BookStats& book = books_[*activeIndex_];
-  book.totalReadingMs += cappedDelta(nowMs);
+  book.totalReadingMs = saturatingAddU32(book.totalReadingMs, cappedDelta(nowMs));
   book.sessionCount++;
   sessionActive_ = false;
   activeIndex_.reset();

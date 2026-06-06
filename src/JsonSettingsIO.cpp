@@ -365,7 +365,9 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
 bool JsonSettingsIO::saveReadingStats(const ReadingStatsStore& store, const char* path) {
   JsonDocument doc;
   JsonArray arr = doc["books"].to<JsonArray>();
+  size_t count = 0;
   for (const auto& book : store.books()) {
+    if (count++ >= ReadingStatsStore::kMaxBooks) break;
     JsonObject obj = arr.add<JsonObject>();
     obj["path"] = book.bookPath;
     obj["pagesRead"] = book.pagesRead;
@@ -382,15 +384,14 @@ bool JsonSettingsIO::loadReadingStats(ReadingStatsStore& store, const char* json
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
   if (error) {
-    LOG_ERR("STATS", "JSON parse error: %s", error.c_str());
+    LOG_ERR("RSS", "JSON parse error: %s", error.c_str());
     return false;
   }
 
   std::vector<reading_stats::BookStats> books;
-  constexpr size_t kMaxStatsBooks = 200;
   JsonArray arr = doc["books"].as<JsonArray>();
   for (JsonObject obj : arr) {
-    if (books.size() >= kMaxStatsBooks) break;
+    if (books.size() >= ReadingStatsStore::kMaxBooks) break;
     reading_stats::BookStats book;
     book.bookPath = obj["path"] | std::string("");
     book.pagesRead = obj["pagesRead"] | 0u;
@@ -400,7 +401,7 @@ bool JsonSettingsIO::loadReadingStats(ReadingStatsStore& store, const char* json
   }
 
   store.loadBooks(std::move(books));
-  LOG_DBG("STATS", "Reading stats loaded (%d books)", static_cast<int>(store.books().size()));
+  LOG_DBG("RSS", "Reading stats loaded (%d books)", static_cast<int>(store.books().size()));
   return true;
 }
 

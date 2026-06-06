@@ -14,7 +14,7 @@ ReadingStatsStore ReadingStatsStore::instance;
 void ReadingStatsStore::endSession(uint32_t nowMs) {
   aggregator.endSession(nowMs);
   if (!saveToFile()) {
-    LOG_ERR("STATS", "Failed to persist reading stats");
+    LOG_ERR("RSS", "Failed to persist reading stats");
   }
 }
 

@@ -174,3 +174,19 @@ TEST(ReadingStats, LoadReplacesContentsAndResetsSession) {
   agg.recordPageTurn(1000, true);
   EXPECT_EQ(agg.totalPagesRead(), 15u);
 }
+
+TEST(ReadingStats, PerBookTimeSaturatesAtUint32Max) {
+  ReadingStatsAggregator agg;
+  // Seed a book already near the uint32 ceiling, then add more time via a turn.
+  std::vector<BookStats> seed;
+  seed.push_back(BookStats{"/books/a.epub", 1, UINT32_MAX - 1000u, 1});
+  agg.load(seed);
+
+  agg.beginSession("/books/a.epub", 0);
+  agg.recordPageTurn(200000, true);  // +200000 ms would overflow -> must saturate
+  agg.endSession(200000);
+
+  const BookStats* s = agg.statsFor("/books/a.epub");
+  ASSERT_NE(s, nullptr);
+  EXPECT_EQ(s->totalReadingMs, UINT32_MAX);
+}

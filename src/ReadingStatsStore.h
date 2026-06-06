@@ -18,6 +18,10 @@ class ReadingStatsStore {
   reading_stats::ReadingStatsAggregator aggregator;
 
  public:
+  // Max per-book entries persisted/loaded. Bounds memory on large libraries;
+  // save and load use the same cap so a reboot never silently drops entries.
+  static constexpr size_t kMaxBooks = 500;
+
   static ReadingStatsStore& getInstance() { return instance; }
 
   // --- Session lifecycle (called from the reader) ---
@@ -43,7 +47,6 @@ class ReadingStatsStore {
   // Only JsonSettingsIO may replace the in-memory stats wholesale (used on load).
   void loadBooks(std::vector<reading_stats::BookStats> books) { aggregator.load(std::move(books)); }
 
-  friend bool JsonSettingsIO::saveReadingStats(const ReadingStatsStore& store, const char* path);
   friend bool JsonSettingsIO::loadReadingStats(ReadingStatsStore& store, const char* json);
 };
 
