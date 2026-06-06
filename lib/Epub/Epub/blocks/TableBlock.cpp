@@ -113,6 +113,7 @@ void TableBlock::render(GfxRenderer& renderer, int fontId, int x, int y) const {
         {
           uint8_t lc = 0;
           for (const auto& nc : rows[ri + 1].cells) {
+            if (lc >= numCols) break;
             if (nc.rowspan == 0) phantomAt[lc] = true;
             lc = static_cast<uint8_t>(lc + ((nc.rowspan == 0) ? 1 : nc.colspan));
           }
@@ -219,6 +220,7 @@ std::unique_ptr<TableBlock> TableBlock::deserialize(HalFile& file) {
     uint8_t numCells = 0;
     serialization::readPod(file, numCells);
     row.cells.resize(numCells);
+    uint16_t rowSpanTotal = 0;
     for (auto& cell : row.cells) {
       serialization::readPod(file, cell.paddingLeft);
       serialization::readPod(file, cell.paddingRight);
@@ -230,6 +232,7 @@ std::unique_ptr<TableBlock> TableBlock::deserialize(HalFile& file) {
         cell.colspan = 1;  // phantom cells always span 1 column
       else if (cell.colspan == 0)
         cell.colspan = 1;  // guard against corrupt data
+      rowSpanTotal += cell.colspan;
       constexpr uint16_t kMaxCellLines = 4096;
       uint16_t numLines = 0;
       serialization::readPod(file, numLines);
@@ -246,6 +249,10 @@ std::unique_ptr<TableBlock> TableBlock::deserialize(HalFile& file) {
         }
         cell.lines.push_back(std::move(line));
       }
+    }
+    if (rowSpanTotal != tb->numCols) {
+      LOG_ERR("TBL", "Row span %u != numCols %u", rowSpanTotal, tb->numCols);
+      return nullptr;
     }
   }
   return tb;
