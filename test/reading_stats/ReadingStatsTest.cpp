@@ -48,3 +48,28 @@ TEST(ReadingStats, PageTurnWithoutSessionIsIgnored) {
   EXPECT_EQ(agg.totalPagesRead(), 0u);
   EXPECT_EQ(agg.totalReadingMs(), 0u);
 }
+
+TEST(ReadingStats, LongGapIsCappedAtMaxPageMs) {
+  ReadingStatsAggregator agg;
+  agg.beginSession("/books/a.epub", 0);
+  // Gap of 1 hour on one page: only kMaxPageMs (5 min) should be counted.
+  agg.recordPageTurn(3600000, true);
+  agg.endSession(3600000);
+
+  const BookStats* s = agg.statsFor("/books/a.epub");
+  ASSERT_NE(s, nullptr);
+  EXPECT_EQ(s->totalReadingMs, ReadingStatsAggregator::kMaxPageMs);
+}
+
+TEST(ReadingStats, MillisWrapCountsAsZeroDelta) {
+  ReadingStatsAggregator agg;
+  // Start near the uint32 millis() ceiling, then wrap past zero.
+  agg.beginSession("/books/a.epub", 0xFFFFFF00u);
+  agg.recordPageTurn(0x00000100u, true);  // nowMs < lastEventMs_ -> 0 ms
+  agg.endSession(0x00000100u);
+
+  const BookStats* s = agg.statsFor("/books/a.epub");
+  ASSERT_NE(s, nullptr);
+  EXPECT_EQ(s->pagesRead, 1u);
+  EXPECT_EQ(s->totalReadingMs, 0u);
+}
