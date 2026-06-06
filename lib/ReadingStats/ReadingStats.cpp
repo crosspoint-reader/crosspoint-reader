@@ -21,8 +21,7 @@ uint32_t ReadingStatsAggregator::cappedDelta(uint32_t nowMs) const {
 void ReadingStatsAggregator::beginSession(const std::string& bookPath, uint32_t nowMs) {
   if (sessionActive_) endSession(nowMs);
 
-  auto it = std::find_if(books_.begin(), books_.end(),
-                         [&](const BookStats& b) { return b.bookPath == bookPath; });
+  auto it = std::find_if(books_.begin(), books_.end(), [&](const BookStats& b) { return b.bookPath == bookPath; });
   if (it == books_.end()) {
     BookStats fresh;
     fresh.bookPath = bookPath;
@@ -53,8 +52,7 @@ void ReadingStatsAggregator::endSession(uint32_t nowMs) {
 }
 
 const BookStats* ReadingStatsAggregator::statsFor(const std::string& bookPath) const {
-  auto it = std::find_if(books_.begin(), books_.end(),
-                         [&](const BookStats& b) { return b.bookPath == bookPath; });
+  auto it = std::find_if(books_.begin(), books_.end(), [&](const BookStats& b) { return b.bookPath == bookPath; });
   return it == books_.end() ? nullptr : &*it;
 }
 

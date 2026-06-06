@@ -17,9 +17,9 @@ TEST(ReadingStats, EmptyAggregatorHasNoData) {
 TEST(ReadingStats, BanksTimeAndCountsForwardPages) {
   ReadingStatsAggregator agg;
   agg.beginSession("/books/a.epub", 1000);
-  agg.recordPageTurn(3000, true);   // +2000 ms, +1 page
-  agg.recordPageTurn(8000, true);   // +5000 ms, +1 page
-  agg.endSession(9000);             // +1000 ms
+  agg.recordPageTurn(3000, true);  // +2000 ms, +1 page
+  agg.recordPageTurn(8000, true);  // +5000 ms, +1 page
+  agg.endSession(9000);            // +1000 ms
 
   const BookStats* s = agg.statsFor("/books/a.epub");
   ASSERT_NE(s, nullptr);
@@ -31,9 +31,9 @@ TEST(ReadingStats, BanksTimeAndCountsForwardPages) {
 TEST(ReadingStats, BackwardTurnBanksTimeButNotPages) {
   ReadingStatsAggregator agg;
   agg.beginSession("/books/a.epub", 0);
-  agg.recordPageTurn(1000, true);    // +1000 ms, +1 page
-  agg.recordPageTurn(2000, false);   // +1000 ms, no page
-  agg.endSession(2000);              // +0 ms
+  agg.recordPageTurn(1000, true);   // +1000 ms, +1 page
+  agg.recordPageTurn(2000, false);  // +1000 ms, no page
+  agg.endSession(2000);             // +0 ms
 
   const BookStats* s = agg.statsFor("/books/a.epub");
   ASSERT_NE(s, nullptr);
@@ -93,10 +93,10 @@ TEST(ReadingStats, TracksTwoBooksIndependently) {
 TEST(ReadingStats, BeginSessionEndsThePriorSession) {
   ReadingStatsAggregator agg;
   agg.beginSession("/books/a.epub", 0);
-  agg.recordPageTurn(1000, true);     // book a: +1000 ms, +1 page
+  agg.recordPageTurn(1000, true);  // book a: +1000 ms, +1 page
   // Switch to b without an explicit endSession; a is banked at nowMs (2000).
   agg.beginSession("/books/b.epub", 2000);
-  agg.recordPageTurn(3000, true);     // book b: +1000 ms, +1 page
+  agg.recordPageTurn(3000, true);  // book b: +1000 ms, +1 page
   agg.endSession(3000);
 
   const BookStats* a = agg.statsFor("/books/a.epub");

@@ -12,8 +12,8 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
-#include "RecentBooksStore.h"
 #include "ReadingStatsStore.h"
+#include "RecentBooksStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
 
