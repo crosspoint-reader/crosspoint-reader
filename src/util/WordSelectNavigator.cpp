@@ -1,6 +1,7 @@
 #include "WordSelectNavigator.h"
 
 #include <GfxRenderer.h>
+#include <Utf8.h>
 
 #include <cstdlib>
 
@@ -33,6 +34,37 @@ void WordSelectNavigator::organizeIntoRows(std::vector<WordInfo>& words, std::ve
   }
 }
 
+void WordSelectNavigator::mergeHyphenatedPairs(std::vector<WordInfo>& words, const std::vector<Row>& rows,
+                                               std::string& textPool) {
+  for (size_t r = 0; r + 1 < rows.size(); r++) {
+    if (rows[r].wordIndices.empty() || rows[r + 1].wordIndices.empty()) continue;
+
+    int lastWordIdx = rows[r].wordIndices.back();
+    const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
+    uint16_t lastLen = words[lastWordIdx].textLen;
+    if (lastLen == 0) continue;
+    if (!utf8EndsWithHyphen(lastWord, lastLen)) continue;
+    // A word that also starts with '-' (e.g. -re-) is a standalone affix token,
+    // not the first half of a line-break compound.
+    if (lastWord[0] == '-') continue;
+
+    int nextWordIdx = rows[r + 1].wordIndices.front();
+    words[lastWordIdx].continuationIndex = nextWordIdx;
+    words[nextWordIdx].continuationOf = lastWordIdx;
+
+    std::string firstPart(lastWord, lastLen);
+    utf8RemoveTrailingHyphen(firstPart);
+    const char* nextWord = textPool.data() + words[nextWordIdx].textOffset;
+    const char* strippedNext = (nextWord[0] == '-') ? nextWord + 1 : nextWord;
+    std::string merged = firstPart + strippedNext;
+    uint16_t mergedOff = poolAppend(textPool, merged.c_str(), merged.size());
+    words[lastWordIdx].lookupOffset = mergedOff;
+    words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
+    words[nextWordIdx].lookupOffset = mergedOff;
+    words[nextWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
+  }
+}
+
 uint16_t WordSelectNavigator::poolAppend(std::string& pool, const char* s, size_t len) {
   return TextPool::append(pool, s, len);
 }
@@ -46,6 +78,7 @@ void WordSelectNavigator::reset() {
   inMultiSelectMode = false;
   confirmReleaseConsumed = false;
   anchorFlatIndex = -1;
+  pendingSnapIdx = -1;
 }
 
 const WordSelectNavigator::WordInfo* WordSelectNavigator::getSelected() const {
@@ -54,7 +87,7 @@ const WordSelectNavigator::WordInfo* WordSelectNavigator::getSelected() const {
   return &words[rows[currentRow].wordIndices[currentWordInRow]];
 }
 
-const WordSelectNavigator::WordInfo* WordSelectNavigator::getContinuation() const {
+const WordSelectNavigator::WordInfo* WordSelectNavigator::getPairedHalf() const {
   const WordInfo* sel = getSelected();
   if (!sel) return nullptr;
   const int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
@@ -96,12 +129,17 @@ int WordSelectNavigator::findClosestWord(int targetRow) const {
   if (rows[targetRow].wordIndices.empty()) return 0;
   const int wordIdx = rows[currentRow].wordIndices[currentWordInRow];
   const int currentCenterX = words[wordIdx].screenX + words[wordIdx].width / 2;
+  return findClosestWordFromX(targetRow, currentCenterX);
+}
+
+int WordSelectNavigator::findClosestWordFromX(int targetRow, int refCenterX) const {
+  if (rows[targetRow].wordIndices.empty()) return 0;
   int bestMatch = 0;
   int bestDist = INT_MAX;
   for (int i = 0; i < static_cast<int>(rows[targetRow].wordIndices.size()); i++) {
     const int idx = rows[targetRow].wordIndices[i];
     const int centerX = words[idx].screenX + words[idx].width / 2;
-    const int dist = std::abs(centerX - currentCenterX);
+    const int dist = std::abs(centerX - refCenterX);
     if (dist < bestDist) {
       bestDist = dist;
       bestMatch = i;
@@ -145,17 +183,29 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
 
   const int rowCount = static_cast<int>(rows.size());
   bool changed = false;
+  const int prevFlatIdx = getCurrentFlatIndex();
+
+  // If the previous action was a wordPrev snap (second half → first half across
+  // rows), use the second half's position as the row-nav reference so that
+  // rowPrev/rowNext feels like it originates from where the user was.
+  // Any directional input clears this state.
+  const bool hasPendingSnap = pendingSnapIdx >= 0;
+  const int rowNavBase = hasPendingSnap ? words[pendingSnapIdx].row : currentRow;
+  const int rowNavRefX = hasPendingSnap ? words[pendingSnapIdx].screenX + words[pendingSnapIdx].width / 2 : -1;
+  if (rowPrevPressed || rowNextPressed || wordPrevPressed || wordNextPressed) {
+    pendingSnapIdx = -1;
+  }
 
   if (rowPrevPressed) {
-    const int targetRow = (currentRow > 0) ? currentRow - 1 : rowCount - 1;
-    currentWordInRow = findClosestWord(targetRow);
+    const int targetRow = (rowNavBase > 0) ? rowNavBase - 1 : rowCount - 1;
+    currentWordInRow = (rowNavRefX >= 0) ? findClosestWordFromX(targetRow, rowNavRefX) : findClosestWord(targetRow);
     currentRow = targetRow;
     changed = true;
   }
 
   if (rowNextPressed) {
-    const int targetRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
-    currentWordInRow = findClosestWord(targetRow);
+    const int targetRow = (rowNavBase < rowCount - 1) ? rowNavBase + 1 : 0;
+    currentWordInRow = (rowNavRefX >= 0) ? findClosestWordFromX(targetRow, rowNavRefX) : findClosestWord(targetRow);
     currentRow = targetRow;
     changed = true;
   }
@@ -176,8 +226,74 @@ bool WordSelectNavigator::handleNavigation(const MappedInputManager& input, cons
     } else if (rowCount > 1) {
       currentRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
       currentWordInRow = 0;
+    } else {
+      currentWordInRow = 0;  // single-row wrap
     }
     changed = true;
+  }
+
+  // Hyphenated pair smoothing for horizontal navigation:
+  // the second half should not be a horizontal stop since both halves
+  // highlight together. Row navigation (up/down) is exempt — the user
+  // may intend to land on the second half's row.
+  if (changed) {
+    const int idx = getCurrentFlatIndex();
+    if (idx >= 0 && words[idx].continuationOf >= 0) {
+      if (wordNextPressed) {
+        // Moving forward: skip past the second half to the next word.
+        if (currentWordInRow < static_cast<int>(rows[currentRow].wordIndices.size()) - 1) {
+          currentWordInRow++;
+        } else if (rowCount > 1) {
+          currentRow = (currentRow < rowCount - 1) ? currentRow + 1 : 0;
+          currentWordInRow = 0;
+        } else {
+          currentWordInRow = 0;  // single-row wrap
+        }
+        // If the skip landed on yet another continuation, snap to its first half.
+        const int skippedIdx = getCurrentFlatIndex();
+        if (skippedIdx >= 0 && words[skippedIdx].continuationOf >= 0) {
+          const int firstIdx = words[skippedIdx].continuationOf;
+          currentRow = words[firstIdx].row;
+          for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
+            if (rows[currentRow].wordIndices[i] == firstIdx) {
+              currentWordInRow = i;
+              break;
+            }
+          }
+        }
+      } else if (wordPrevPressed) {
+        // Moving backward: snap to the first half.
+        // Record the second half's index so subsequent row navigation
+        // references its position rather than the first half's.
+        pendingSnapIdx = idx;
+        const int firstIdx = words[idx].continuationOf;
+        currentRow = words[firstIdx].row;
+        for (int i = 0; i < static_cast<int>(rows[currentRow].wordIndices.size()); i++) {
+          if (rows[currentRow].wordIndices[i] == firstIdx) {
+            currentWordInRow = i;
+            break;
+          }
+        }
+      }
+      // Row navigation leaves cursor on whichever half
+      // findClosestWord landed on. Both halves highlight regardless.
+    }
+
+    // Symmetric with the wordNext skip: if we came directly from the second
+    // half and wrapped into its first half, skip backward past the first half
+    // so the pair is treated as a single navigation unit in both directions.
+    if (wordPrevPressed) {
+      const int curIdx = getCurrentFlatIndex();
+      if (curIdx >= 0 && words[curIdx].continuationOf < 0 && words[curIdx].continuationIndex >= 0 &&
+          prevFlatIdx == words[curIdx].continuationIndex) {
+        if (currentWordInRow > 0) {
+          currentWordInRow--;
+        } else if (rowCount > 1) {
+          currentRow = (currentRow > 0) ? currentRow - 1 : rowCount - 1;
+          currentWordInRow = static_cast<int>(rows[currentRow].wordIndices.size()) - 1;
+        }
+      }
+    }
   }
 
   return changed;
@@ -277,6 +393,9 @@ void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineH
     if (sel && sel->continuationIndex >= 0) {
       drawSingleHighlight(renderer, lineHeight, sel->continuationIndex);
     }
+    if (sel && sel->continuationOf >= 0) {
+      drawSingleHighlight(renderer, lineHeight, sel->continuationOf);
+    }
   }
 }
 
@@ -316,7 +435,7 @@ std::optional<WordSelectNavigator::Rect> WordSelectNavigator::renderHighlightDif
   if (inMultiSelectMode) return std::nullopt;
   const auto* curr = getWordAt(currWordIdx);
   if (!curr) return std::nullopt;
-  if (curr->continuationIndex >= 0) {
+  if (curr->continuationIndex >= 0 || curr->continuationOf >= 0) {
     // Hyphenated wrap — two-word highlight is not yet supported by the
     // single-snapshot fast path. Caller falls back to full repaint.
     return std::nullopt;

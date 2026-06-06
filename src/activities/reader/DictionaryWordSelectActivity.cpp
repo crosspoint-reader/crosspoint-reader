@@ -271,38 +271,15 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
 void DictionaryWordSelectActivity::mergeHyphenatedWords(std::vector<WordSelectNavigator::WordInfo>& words,
                                                         std::vector<WordSelectNavigator::Row>& rows,
                                                         std::string& textPool) {
-  for (size_t r = 0; r + 1 < rows.size(); r++) {
-    if (rows[r].wordIndices.empty() || rows[r + 1].wordIndices.empty()) continue;
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, textPool);
 
-    int lastWordIdx = rows[r].wordIndices.back();
-    const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
-    uint16_t lastLen = words[lastWordIdx].textLen;
-    if (lastLen == 0) continue;
-
-    if (!utf8EndsWithHyphen(lastWord, lastLen)) continue;
-
-    int nextWordIdx = rows[r + 1].wordIndices.front();
-    words[lastWordIdx].continuationIndex = nextWordIdx;
-    words[nextWordIdx].continuationOf = lastWordIdx;
-
-    std::string firstPart(lastWord, lastLen);
-    utf8RemoveTrailingHyphen(firstPart);
-    const char* nextWord = textPool.data() + words[nextWordIdx].textOffset;
-    std::string merged = firstPart + nextWord;
-    uint16_t mergedOff = WordSelectNavigator::poolAppend(textPool, merged.c_str(), merged.size());
-    words[lastWordIdx].lookupOffset = mergedOff;
-    words[lastWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
-    words[nextWordIdx].lookupOffset = mergedOff;
-    words[nextWordIdx].lookupLen = static_cast<uint16_t>(merged.size());
-    words[nextWordIdx].continuationIndex = nextWordIdx;
-  }
-
-  // Cross-page hyphenation
+  // Cross-page hyphenation: update lookup text when the last word on this page
+  // ends with a hyphen and its continuation begins the next page.
   if (!nextPageFirstWord.empty() && !rows.empty()) {
     int lastWordIdx = rows.back().wordIndices.back();
     const char* lastWord = textPool.data() + words[lastWordIdx].textOffset;
     uint16_t lastLen = words[lastWordIdx].textLen;
-    if (lastLen > 0 && utf8EndsWithHyphen(lastWord, lastLen)) {
+    if (lastLen > 0 && utf8EndsWithHyphen(lastWord, lastLen) && lastWord[0] != '-') {
       std::string firstPart(lastWord, lastLen);
       utf8RemoveTrailingHyphen(firstPart);
       std::string merged = firstPart + nextPageFirstWord;

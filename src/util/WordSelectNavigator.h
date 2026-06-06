@@ -65,6 +65,14 @@ class WordSelectNavigator {
   // Sets each word's row field and populates the rows vector.
   static void organizeIntoRows(std::vector<WordInfo>& words, std::vector<Row>& rows);
 
+  // Link the last word of each row that ends with a trailing hyphen to the
+  // first word of the next row, marking them as a compound pair via
+  // continuationIndex / continuationOf. Also stores a merged lookup text
+  // (hyphen stripped) shared by both halves for dictionary lookup.
+  // Words whose text both starts and ends with '-' (e.g. -re-) are standalone
+  // affix tokens and are skipped — they are not compound-word first halves.
+  static void mergeHyphenatedPairs(std::vector<WordInfo>& words, const std::vector<Row>& rows, std::string& textPool);
+
   // Append a null-terminated string to a text pool. Returns the offset.
   // Uses manual linear +256 growth to avoid std::string doubling.
   static uint16_t poolAppend(std::string& pool, const char* s, size_t len);
@@ -77,9 +85,10 @@ class WordSelectNavigator {
   // Currently highlighted word. nullptr if the word list is empty.
   const WordInfo* getSelected() const;
 
-  // Hyphenated continuation of the selected word (EPUB use only).
-  // Returns nullptr when there is no continuation.
-  const WordInfo* getContinuation() const;
+  // The paired half of the selected hyphenated word (EPUB use only).
+  // When on the first half returns the second half; when on the second half returns the first.
+  // Returns nullptr when the selected word has no paired half.
+  const WordInfo* getPairedHalf() const;
 
   bool isEmpty() const { return words.empty(); }
 
@@ -209,6 +218,12 @@ class WordSelectNavigator {
   int anchorFlatIndex = -1;
 
   int findClosestWord(int targetRow) const;
+  int findClosestWordFromX(int targetRow, int refCenterX) const;
+
+  // Flat index of the second half we snapped from on wordPrev. Allows subsequent
+  // rowPrev/rowNext to reference that half's position rather than the first half's.
+  // -1 means inactive.
+  int pendingSnapIdx = -1;
 
   // Snapshot of pixels under the most recently drawn highlight. Used by
   // renderHighlightDifferential to restore the framebuffer before drawing the
