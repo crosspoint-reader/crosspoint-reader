@@ -38,8 +38,10 @@ void ReadingStatsDetailActivity::render(RenderLock&&) {
   const uint32_t avgPagesSession = book.sessionCount ? book.pagesRead / book.sessionCount : 0;
   const uint32_t avgSpeed = reading_stats::pagesPerHour(globalPages, globalMs);
 
-  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + 18;
-  const int lineStep = 26;
+  // --- Stat lines: spacing driven by the real line height, not a magic constant. ---
+  const int statLh = renderer.getLineHeight(UI_10_FONT_ID);
+  const int lineStep = statLh + 6;
+  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + 12;
 
   auto statLine = [&](const char* label, const std::string& value) {
     const std::string s = std::string(label) + ": " + value;
@@ -55,26 +57,45 @@ void ReadingStatsDetailActivity::render(RenderLock&&) {
   statLine(tr(STR_READING_STATS_PER_SESSION), reading_stats::formatDurationMs(avgSession) + " - " +
                                                   std::to_string(avgPagesSession) + " " + tr(STR_READING_STATS_PAGES));
 
-  // Comparative speed bars: this book vs. all-books average.
-  y += 8;
+  // --- Comparative speed bars: this book vs. all-books average. ---
+  // Each row is a single line "<label>  [====bar====]  <value>/h" with the label
+  // in a left column, the value right-aligned, and the bar centered vertically on
+  // the same baseline so nothing overlaps and the value lines up with the bar.
+  y += statLh;  // gap before the bar block
   const uint32_t maxSpeed = std::max({speed, avgSpeed, uint32_t{1}});
-  const int valueColW = 70;
-  const int barMaxW = pageWidth - 2 * x - valueColW;
-  const int barH = 14;
 
-  auto bar = [&](const char* label, uint32_t value) {
-    renderer.drawText(SMALL_FONT_ID, x, y, label);
-    y += 18;
+  const char* thisLabel = tr(STR_READING_STATS_THIS_BOOK);
+  const char* avgLabel = tr(STR_READING_STATS_AVERAGE);
+  const std::string thisVal = std::to_string(speed) + tr(STR_READING_STATS_PER_HOUR);
+  const std::string avgVal = std::to_string(avgSpeed) + tr(STR_READING_STATS_PER_HOUR);
+
+  const int smLh = renderer.getLineHeight(SMALL_FONT_ID);
+  const int barH = 12;
+  const int rowH = std::max(smLh, barH);
+  const int gap = 10;
+
+  const int labelColW =
+      std::max(renderer.getTextWidth(SMALL_FONT_ID, thisLabel), renderer.getTextWidth(SMALL_FONT_ID, avgLabel)) + gap;
+  const int valueColW = std::max(renderer.getTextWidth(SMALL_FONT_ID, thisVal.c_str()),
+                                 renderer.getTextWidth(SMALL_FONT_ID, avgVal.c_str())) +
+                        gap;
+  const int barX = x + labelColW;
+  const int barMaxW = std::max(1, pageWidth - barX - valueColW - x);
+
+  auto bar = [&](const char* label, uint32_t value, const std::string& valueStr) {
+    const int textTop = y + (rowH - smLh) / 2;  // vertically center the text in the row
+    const int barY = y + (rowH - barH) / 2;     // bar shares the same vertical centerline
+    renderer.drawText(SMALL_FONT_ID, x, textTop, label);
     const int w = static_cast<int>(static_cast<int64_t>(barMaxW) * value / maxSpeed);
-    renderer.drawRect(x, y, barMaxW, barH);
-    renderer.fillRect(x, y, std::max(w, 1), barH);
-    const std::string v = std::to_string(value) + tr(STR_READING_STATS_PER_HOUR);
-    renderer.drawText(SMALL_FONT_ID, x + barMaxW + 8, y + barH - 2, v.c_str());
-    y += barH + 12;
+    renderer.drawRect(barX, barY, barMaxW, barH);
+    renderer.fillRect(barX, barY, std::max(w, 1), barH);
+    const int valW = renderer.getTextWidth(SMALL_FONT_ID, valueStr.c_str());
+    renderer.drawText(SMALL_FONT_ID, pageWidth - x - valW, textTop, valueStr.c_str());
+    y += rowH + gap;
   };
 
-  bar(tr(STR_READING_STATS_THIS_BOOK), speed);
-  bar(tr(STR_READING_STATS_AVERAGE), avgSpeed);
+  bar(thisLabel, speed, thisVal);
+  bar(avgLabel, avgSpeed, avgVal);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
