@@ -261,7 +261,7 @@ Response:
 
 ```json
 {
-  "maxFamilies": 16,
+  "maxFamilies": 128,
   "families": [
     {
       "name": "Literata",
