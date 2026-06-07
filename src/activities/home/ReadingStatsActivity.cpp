@@ -8,6 +8,7 @@
 #include <string>
 
 #include "MappedInputManager.h"
+#include "ReadingStatsDetailActivity.h"
 #include "ReadingStatsStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -46,6 +47,15 @@ void ReadingStatsActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (!books.empty() && selectorIndex < books.size()) {
+      startActivityForResult(std::make_unique<ReadingStatsDetailActivity>(renderer, mappedInput, books[selectorIndex],
+                                                                          totalPages, totalMs),
+                             [](const ActivityResult&) {});
+    }
     return;
   }
 
@@ -112,7 +122,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
         });
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), "", tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
