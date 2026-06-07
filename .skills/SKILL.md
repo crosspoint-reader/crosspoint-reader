@@ -896,7 +896,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
 
 **Current Versions** (as of docs/file-formats.md):
-- `book.bin`: **Version 6** (metadata structure)
+- `book.bin`: **Version 7** (metadata structure)
 - `section.bin`: **Version 25** (layout structure)
 
 **Version Increment Rules**:
