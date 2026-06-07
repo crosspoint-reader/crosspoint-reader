@@ -174,6 +174,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Toggle(StrId::STR_SCREENSHOT_SHORTCUT, &CrossPointSettings::screenshotShortcutEnabled,
+                            "screenshotShortcutEnabled", StrId::STR_CAT_CONTROLS),
 
         // --- System ---
         SettingInfo::Value(
