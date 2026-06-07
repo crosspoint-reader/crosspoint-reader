@@ -14,7 +14,9 @@
 
 namespace {
 // Vertical space reserved above the list for the totals block (two text rows).
-constexpr int TOTALS_BLOCK_HEIGHT = 52;
+// Sized so the list's selection highlight (drawn at contentTop - 2) clears the
+// second totals line; too small and selecting the first row overlaps the totals.
+constexpr int TOTALS_BLOCK_HEIGHT = 72;
 }  // namespace
 
 void ReadingStatsActivity::loadStats() {
