@@ -210,6 +210,9 @@ class CrossPointSettings {
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
+  // Definition viewer font (built-in fonts only).
+  uint8_t dictionaryFontFamily = NOTOSERIF;
+  uint8_t dictionaryFontSize = MEDIUM;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
@@ -244,6 +247,17 @@ class CrossPointSettings {
   uint8_t moveFinishedToReadFolder = 0;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
+  // Lookup history entry cap (direct value)
+  static constexpr uint8_t HIST_CAP_MIN = 25;
+  static constexpr uint8_t HIST_CAP_MAX = 225;
+  static constexpr uint8_t HIST_CAP_STEP = 25;
+  static constexpr uint8_t HIST_CAP_DEFAULT = 100;
+  uint8_t lookupHistoryCap = HIST_CAP_DEFAULT;
+  // Action triggered by holding Confirm in the reader.
+  // OFF: no action (default). BOOKMARK: add bookmark @ BOOKMARK_HOLD_MS (400ms).
+  // DICTIONARY: open word-select @ Dictionary::LONG_PRESS_MS (600ms, requires per-book dictionary).
+  enum HOLD_CONFIRM_ACTION : uint8_t { HOLD_CONFIRM_OFF = 0, HOLD_CONFIRM_BOOKMARK = 1, HOLD_CONFIRM_DICTIONARY = 2 };
+  uint8_t holdConfirmAction = HOLD_CONFIRM_OFF;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
   // Language setting (Language enum index, default 0 = EN)
@@ -270,6 +284,9 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  int getDefinitionFontId() const;
+  float getDefinitionLineCompression() const;
+  int getLookupHistoryCapValue() const { return lookupHistoryCap; }
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(HalFile& file, bool count_only = false) const;

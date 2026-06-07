@@ -1,0 +1,66 @@
+<h1>2. Document Conventions</h1>
+
+<h2>Formatting</h2>
+<p>Italic text is verbatim on-screen text -- the exact words shown on the device.</p>
+<ul>
+<li>Select <em>english-full</em> in the picker. -- <em>english-full</em> is the dictionary name as shown</li>
+<li>Press <em>Confirm</em>. -- <em>Confirm</em> is the button label as shown</li>
+<li>Screen shows: <em>Preparation complete</em> -- <em>Preparation complete</em> is the status message as shown</li>
+</ul>
+
+<h2>List types</h2>
+<ul>
+<li>Numbered list -- ordered steps. Follow them in sequence.</li>
+<li>Bulleted list -- unordered items. Try them in any order.</li>
+</ul>
+
+<h2>Test section structure</h2>
+<p>Each test section may contain the following sub-headings, in this order. Sub-headings are omitted when they do not apply.</p>
+<table>
+<tr><td><strong>Dictionary</strong></td><td>Which dictionary to have selected for this test</td></tr>
+<tr><td><strong>Note</strong></td><td>Special preconditions or warnings</td></tr>
+<tr><td><strong>Steps</strong></td><td>Ordered actions to perform</td></tr>
+<tr><td><strong>Words</strong></td><td>Items to look up or select</td></tr>
+<tr><td><strong>Additional</strong></td><td>Extra items for extended verification</td></tr>
+</table>
+
+<h2>Processing screen</h2>
+<p>Each preparation step shows a status prefix:</p>
+<table>
+<tr><td><em>[ &gt; ]</em></td><td>Step currently running (bold text)</td></tr>
+<tr><td><em>[OK]</em></td><td>Step completed successfully</td></tr>
+<tr><td><em>[!!]</em></td><td>Step failed (bold text)</td></tr>
+<tr><td><em>[&#160;&#160;&#160;]</em></td><td>Step not yet started</td></tr>
+</table>
+<p>After all steps finish, the screen shows either <em>Preparation complete</em> or <em>Preparation failed</em>.</p>
+
+<h2>Expected values</h2>
+<p>Some entries in a word list include the definition text to verify.</p>
+<ul>
+<li>fire -- expect: <em>fuego (m) / incendio (m)</em></li>
+</ul>
+<p>The text after <em>expect:</em> must match the definition screen exactly.</p>
+
+<h2>Word select navigation</h2>
+<p>When the word select screen is active, the following button model applies.
+Tests in later chapters navigate to specific words without re-explaining these mechanics.</p>
+<table>
+<tr><td><em>Up / Down</em></td><td>Move between rows on the page</td></tr>
+<tr><td><em>Left / Right</em></td><td>Move between words within the current row</td></tr>
+<tr><td><em>Confirm</em></td><td>Select the highlighted word and begin lookup</td></tr>
+<tr><td><em>Back</em></td><td>Exit word select and return to the reader without performing a lookup</td></tr>
+</table>
+<p>This section is informational. Navigation is exercised implicitly by the lookup tests in
+later chapters and is not re-tested explicitly.</p>
+
+<h2>Definition screen navigation</h2>
+<p>When a definition screen is active, the following button model applies.</p>
+<table>
+<tr><td><em>PageForward / Right</em></td><td>Go to the next page of the definition (view mode only)</td></tr>
+<tr><td><em>PageBack / Left</em></td><td>Go to the previous page of the definition (view mode only)</td></tr>
+<tr><td><em>Confirm</em> (<em>Look Up Word</em>)</td><td>Enter word-select mode on the definition text</td></tr>
+<tr><td><em>Back</em> (short press)</td><td>Return to caller (previous definition or word-select screen)</td></tr>
+<tr><td><em>Back</em> (long press)</td><td><em>Done</em> — exit all the way back to the reader</td></tr>
+</table>
+<p>Page navigation is locked while word-select mode is active. This section is informational;
+these controls are exercised by the lookup tests in later chapters.</p>

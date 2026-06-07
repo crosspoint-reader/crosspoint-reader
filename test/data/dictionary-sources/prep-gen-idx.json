@@ -1,0 +1,12 @@
+{
+  "meta": {
+    "name": "prep-gen-idx",
+    "bookname": "Prep Gen IDX Test",
+    "output_dir": "test/dictionaries/prep-gen-idx",
+    "entry_format": "m",
+    "compress": false,
+    "generate_idx_oft": false,
+    "ifo_version": "2.4.2",
+    "base_entries": "english-no-syn"
+  }
+}

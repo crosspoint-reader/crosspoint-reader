@@ -129,8 +129,26 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Read a rectangular region of the 1-bpp framebuffer into 'dst'. Inputs are
+  // SCREEN coordinates (the same coordinate system fillRect / drawText use).
+  // Internally the rectangle is rotated into panel-memory coordinates and
+  // snapped outward to byte boundaries, so the bytes actually read can cover
+  // up to one extra byte per row vs. the requested screen width. Output is
+  // packed MSB-first with (alignedMemoryWidth / 8) bytes per row.
+  // Returns the bytes written, or 0 if dstCapacity is insufficient or the
+  // rectangle is empty / fully out of bounds.
+  //
+  // Symmetric with writeFramebufferRegion: passing the SAME screen rectangle
+  // to writeFramebufferRegion will restore exactly the pixels this read.
+  size_t readFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t* dst, size_t dstCapacity) const;
+
+  // Restore a rectangular region of the framebuffer previously captured by
+  // readFramebufferRegion using the SAME SCREEN rectangle. Inputs are SCREEN
+  // coordinates; src must hold exactly the bytes returned by
+  // readFramebufferRegion for the same screen rect (same row layout, same
+  // total length). No-op if the rectangle is empty or fully out of bounds.
+  void writeFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* src);
+
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
@@ -172,6 +190,17 @@ class GfxRenderer {
                        bool roundTopRight, bool roundBottomLeft, bool roundBottomRight, bool state) const;
   void maskRoundedRectOutsideCorners(int x, int y, int width, int height, int radius, Color color = Color::White) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
+  // Fast clear-to-white over a rectangle. Equivalent in effect to
+  // fillRect(x, y, w, h, false) but uses byte-aligned memset for the
+  // middle of each panel-memory row, with bit-mask OR only at the byte
+  // edges. Roughly 10x faster than fillRect for wide regions because it
+  // avoids the per-pixel rotateCoordinates/bounds-check/bit-RMW path.
+  // Handles all four orientations via rotateCoordinates on the rect's
+  // two opposite corners. Clamps to panel bounds; out-of-bounds rects
+  // are silently dropped (unlike drawPixel, which logs each
+  // out-of-bounds pixel — callers may legitimately pass slightly
+  // margin-overlapping rects).
+  void clearRect(int x, int y, int width, int height) const;
   void fillRectDither(int x, int y, int width, int height, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, bool roundTopLeft, bool roundTopRight,

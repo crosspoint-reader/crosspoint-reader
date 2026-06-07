@@ -32,6 +32,8 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryRegistry.h"
 #include "util/ScreenshotUtil.h"
 
 MappedInputManager mappedInputManager(gpio);
@@ -39,6 +41,7 @@ GfxRenderer renderer(display);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
+DictionaryRegistry dictionaryRegistry;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
 
@@ -98,6 +101,9 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
+
+EpdFont ipaFont(&ipa_16_regular);
+EpdFontFamily ipaFontFamily(&ipaFont);
 
 EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
@@ -295,6 +301,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.insertFont(IPA_FONT_ID, ipaFontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
@@ -347,6 +354,17 @@ void setup() {
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
+
+  // Clamp lookup history cap to valid range
+  if (SETTINGS.lookupHistoryCap < CrossPointSettings::HIST_CAP_MIN ||
+      SETTINGS.lookupHistoryCap > CrossPointSettings::HIST_CAP_MAX ||
+      SETTINGS.lookupHistoryCap % CrossPointSettings::HIST_CAP_STEP != 0) {
+    SETTINGS.lookupHistoryCap = CrossPointSettings::HIST_CAP_DEFAULT;
+  }
+  // Validate the stored dictionary path still exists on the SD card.
+  Dictionary::isValidDictionary();
+  // Discover installed dictionaries for the settings UI (device + web). Mirrors sdFontSystem.begin().
+  dictionaryRegistry.discover();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();

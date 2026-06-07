@@ -1,0 +1,19 @@
+{
+  "_comment": "Chained-OOM stress dictionary. Five large (~23 KB text / ~30 page), style-dense HTML definitions whose text cyclically embeds the next headword as a selectable token (chain_stress_00001 -> 00002 -> ... -> 00005 -> 00001). Purpose: drive deep deterministic lookup chains on device while watching heap stay flat (Stage 2a/2b RAM fix) and exercise the lookup-chain depth cap. Used only by ch22 of test_dictionary.epub.",
+  "meta": {
+    "name": "chain-stress",
+    "bookname": "Chained OOM Stress",
+    "output_dir": "test/dictionaries/chain-stress",
+    "entry_format": "h",
+    "compress": false,
+    "generate_oft": true,
+    "generate_cspt": true,
+    "ifo_version": "2.4.2"
+  },
+  "synthetic": {
+    "word_prefix": "chain_stress",
+    "syn_prefix": "chainsyn",
+    "word_count": 5,
+    "synonyms_per_word": 0
+  }
+}

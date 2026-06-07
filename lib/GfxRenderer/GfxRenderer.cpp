@@ -8,6 +8,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "FontCacheManager.h"
 
@@ -132,6 +133,70 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
       break;
     }
   }
+}
+
+// Output of screenRectToAlignedMemRect: a rectangle in panel-memory
+// coordinates whose x and width are guaranteed to be multiples of 8 (the
+// SDK's EInkDisplay::displayWindow alignment requirement). `valid == false`
+// means the input was empty or fully outside the panel.
+struct AlignedMemRect {
+  uint16_t x = 0;
+  uint16_t y = 0;
+  uint16_t w = 0;
+  uint16_t h = 0;
+  bool valid = false;
+};
+
+// Translate a screen-coordinate rectangle (the coordinate system used by
+// fillRect / drawText / the rest of the renderer's public API) into a
+// panel-memory rectangle suitable for direct framebuffer indexing and for the
+// SDK's EInkDisplay::displayWindow API. Output x and width are snapped
+// outward to multiples of 8 (left edge down, right edge up) and clamped to
+// panel bounds.
+//
+// Approach: rotate the screen rectangle's two opposite corners into memory
+// coordinates using rotateCoordinates(), take the bounding box of the
+// rotated corners (which naturally swaps width/height in Portrait /
+// PortraitInverted), then snap the x extent to byte boundaries.
+//
+// Precondition: panelWidth and panelHeight are multiples of 8 (true for the
+// 800x480 panel). The alignment math relies on this so clamping cannot
+// re-break alignment.
+static AlignedMemRect screenRectToAlignedMemRect(GfxRenderer::Orientation orientation, int sx, int sy, int sw, int sh,
+                                                 uint16_t panelWidth, uint16_t panelHeight) {
+  AlignedMemRect out;
+  if (sw <= 0 || sh <= 0) return out;
+
+  int x0, y0, x1, y1;
+  rotateCoordinates(orientation, sx, sy, &x0, &y0, panelWidth, panelHeight);
+  rotateCoordinates(orientation, sx + sw - 1, sy + sh - 1, &x1, &y1, panelWidth, panelHeight);
+
+  const int memXLo = std::min(x0, x1);
+  const int memYLo = std::min(y0, y1);
+  const int memXHi = std::max(x0, x1) + 1;  // exclusive upper bound
+  const int memYHi = std::max(y0, y1) + 1;
+
+  // Snap x outward to multiples of 8.
+  int alignedXLo = memXLo & ~0x7;        // round down
+  int alignedXHi = (memXHi + 7) & ~0x7;  // round up
+
+  // Clamp to panel bounds. Panel dims are multiples of 8 so this preserves
+  // alignment.
+  if (alignedXLo < 0) alignedXLo = 0;
+  if (alignedXHi > panelWidth) alignedXHi = panelWidth;
+  int clampedYLo = memYLo;
+  int clampedYHi = memYHi;
+  if (clampedYLo < 0) clampedYLo = 0;
+  if (clampedYHi > panelHeight) clampedYHi = panelHeight;
+
+  if (alignedXHi <= alignedXLo || clampedYHi <= clampedYLo) return out;
+
+  out.x = static_cast<uint16_t>(alignedXLo);
+  out.y = static_cast<uint16_t>(clampedYLo);
+  out.w = static_cast<uint16_t>(alignedXHi - alignedXLo);
+  out.h = static_cast<uint16_t>(clampedYHi - clampedYLo);
+  out.valid = true;
+  return out;
 }
 
 enum class TextRotation { None, Rotated90CW };
@@ -666,6 +731,70 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
   }
 }
 
+// Bit layout reminder (matches drawPixel at top of file): for a physical
+// panel pixel at column phyX in a byte, bitPosition = 7 - (phyX % 8), MSB
+// first. State=true in drawPixel CLEARS the bit (renders black). White
+// pixels therefore have bit=1. To "clear" a region to white, we set all
+// the affected bits to 1 (OR the appropriate masks into the panel bytes).
+void GfxRenderer::clearRect(const int x, const int y, const int width, const int height) const {
+  if (width <= 0 || height <= 0) return;
+
+  // Rotate two opposite corners of the screen rect into panel coordinates
+  // and take their axis-aligned bounding box — same approach used by
+  // screenRectToAlignedMemRect above, but we don't need to snap to
+  // byte boundaries because we mask the leading/trailing bits below.
+  int px1, py1, px2, py2;
+  rotateCoordinates(orientation, x, y, &px1, &py1, panelWidth, panelHeight);
+  rotateCoordinates(orientation, x + width - 1, y + height - 1, &px2, &py2, panelWidth, panelHeight);
+
+  int pMinX = std::min(px1, px2);
+  int pMaxX = std::max(px1, px2);
+  int pMinY = std::min(py1, py2);
+  int pMaxY = std::max(py1, py2);
+
+  // Clamp to panel bounds. Silently drop a fully out-of-bounds rect; that
+  // matches the policy of drawPixel (which logs and returns) but without
+  // the log spam if the caller intentionally passes margin-overlapping
+  // rects.
+  if (pMaxX < 0 || pMinX >= panelWidth || pMaxY < 0 || pMinY >= panelHeight) return;
+  if (pMinX < 0) pMinX = 0;
+  if (pMaxX >= panelWidth) pMaxX = panelWidth - 1;
+  if (pMinY < 0) pMinY = 0;
+  if (pMaxY >= panelHeight) pMaxY = panelHeight - 1;
+
+  const int firstByte = pMinX / 8;
+  const int lastByte = pMaxX / 8;
+  const int leftBit = pMinX & 7;
+  const int rightBit = pMaxX & 7;
+
+  if (firstByte == lastByte) {
+    // Strip fits inside one byte per panel row. Build a single mask
+    // covering bits (7 - leftBit) .. (7 - rightBit) inclusive.
+    const uint8_t mask = static_cast<uint8_t>(static_cast<uint8_t>(0xFFu >> leftBit) &
+                                              static_cast<uint8_t>((0xFFu << (7 - rightBit)) & 0xFFu));
+    for (int py = pMinY; py <= pMaxY; py++) {
+      frameBuffer[static_cast<uint32_t>(py) * panelWidthBytes + firstByte] |= mask;
+    }
+    return;
+  }
+
+  // Multi-byte case: leading partial byte (OR), middle full bytes (memset
+  // 0xFF), trailing partial byte (OR).
+  const uint8_t leadingMask = static_cast<uint8_t>(0xFFu >> leftBit);
+  const uint8_t trailingMask = static_cast<uint8_t>((0xFFu << (7 - rightBit)) & 0xFFu);
+  const int middleStart = firstByte + 1;
+  const int middleCount = lastByte - middleStart;  // 0 when lastByte == firstByte + 1
+
+  for (int py = pMinY; py <= pMaxY; py++) {
+    const uint32_t rowStart = static_cast<uint32_t>(py) * panelWidthBytes;
+    frameBuffer[rowStart + firstByte] |= leadingMask;
+    if (middleCount > 0) {
+      memset(&frameBuffer[rowStart + middleStart], 0xFF, static_cast<size_t>(middleCount));
+    }
+    frameBuffer[rowStart + lastByte] |= trailingMask;
+  }
+}
+
 // NOTE: Those are in critical path, and need to be templated to avoid runtime checks for every pixel.
 // Any branching must be done outside the loops to avoid performance degradation.
 template <>
@@ -1181,6 +1310,40 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   display.displayBuffer(refreshMode, fadingFix);
+}
+
+size_t GfxRenderer::readFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t* dst,
+                                          size_t dstCapacity) const {
+  if (dst == nullptr || w == 0 || h == 0) return 0;
+
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return 0;
+
+  const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+  const size_t needed = rowBytes * mem.h;
+  if (needed > dstCapacity) return 0;
+
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    const uint8_t* srcRow = frameBuffer + (static_cast<uint32_t>(mem.y + row) * panelWidthBytes) + (mem.x / 8);
+    uint8_t* dstRow = dst + (static_cast<size_t>(row) * rowBytes);
+    memcpy(dstRow, srcRow, rowBytes);
+  }
+  return needed;
+}
+
+void GfxRenderer::writeFramebufferRegion(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* src) {
+  if (src == nullptr || w == 0 || h == 0) return;
+
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return;
+
+  const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    const uint8_t* srcRow = src + (static_cast<size_t>(row) * rowBytes);
+    uint8_t* dstRow = frameBuffer + (static_cast<uint32_t>(mem.y + row) * panelWidthBytes) + (mem.x / 8);
+    memcpy(dstRow, srcRow, rowBytes);
+  }
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,

@@ -1,0 +1,9 @@
+StarDict's dict ifo file
+version=stardict-2.4.2
+wordcount=100000
+synwordcount=800000
+idxfilesize=2800001
+bookname=Prep All Test
+sametypesequence=m
+author=CrossPoint Test Suite
+description=Large synthetic dictionary for pre-processing timing tests on ESP32-C3.

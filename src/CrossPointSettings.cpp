@@ -344,6 +344,65 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+int CrossPointSettings::getDefinitionFontId() const {
+  const FONT_FAMILY effFamily = static_cast<FONT_FAMILY>(dictionaryFontFamily);
+  const FONT_SIZE effSize = static_cast<FONT_SIZE>(dictionaryFontSize);
+  switch (effFamily) {
+    case NOTOSERIF:
+    default:
+      switch (effSize) {
+        case SMALL:
+          return NOTOSERIF_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return NOTOSERIF_14_FONT_ID;
+        case LARGE:
+          return NOTOSERIF_16_FONT_ID;
+        case EXTRA_LARGE:
+          return NOTOSERIF_18_FONT_ID;
+      }
+    case NOTOSANS:
+      switch (effSize) {
+        case SMALL:
+          return NOTOSANS_12_FONT_ID;
+        case MEDIUM:
+        default:
+          return NOTOSANS_14_FONT_ID;
+        case LARGE:
+          return NOTOSANS_16_FONT_ID;
+        case EXTRA_LARGE:
+          return NOTOSANS_18_FONT_ID;
+      }
+  }
+}
+
+float CrossPointSettings::getDefinitionLineCompression() const {
+  const FONT_FAMILY effFamily = static_cast<FONT_FAMILY>(dictionaryFontFamily);
+  switch (effFamily) {
+    case NOTOSERIF:
+    default:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.95f;
+        case NORMAL:
+        default:
+          return 1.0f;
+        case WIDE:
+          return 1.1f;
+      }
+    case NOTOSANS:
+      switch (lineSpacing) {
+        case TIGHT:
+          return 0.90f;
+        case NORMAL:
+        default:
+          return 0.95f;
+        case WIDE:
+          return 1.0f;
+      }
+  }
+}
+
 int CrossPointSettings::getReaderFontId() const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {

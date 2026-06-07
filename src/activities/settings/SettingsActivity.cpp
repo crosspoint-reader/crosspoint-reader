@@ -10,6 +10,7 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "DictionarySelectActivity.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -25,6 +26,8 @@
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryRegistry.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -38,9 +41,25 @@ void SettingsActivity::rebuildSettingsLists() {
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
+  dictionaryRegistry.refreshIfDirty();
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
-    if (setting.category == StrId::STR_NONE_OPT) continue;
+  // The history-limit and hold-confirm settings are Reader-category in the master list
+  // (so the web UI groups them under Reader), but the device places them last. Capture
+  // them by nameId here and re-add below — keeping a single definition in SettingsList.h
+  // instead of re-declaring their range/options. The dictionary selector flows through
+  // the loop normally (last Reader entry) and is special-cased on Confirm to open the picker.
+  SettingInfo histCapSetting{};
+  SettingInfo holdConfirmSetting{};
+  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaryRegistry)) {
+    if (setting.nameId == StrId::STR_LOOKUP_HIST_CAP) {
+      histCapSetting = setting;
+      continue;
+    }
+    if (setting.nameId == StrId::STR_HOLD_CONFIRM) {
+      holdConfirmSetting = setting;
+      continue;
+    }
+    if (setting.category == StrId::STR_NONE_OPT) continue;  // not shown on device
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
@@ -65,6 +84,11 @@ void SettingsActivity::rebuildSettingsLists() {
   // Insert "Manage Fonts" right after the font family setting so users discover it naturally
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  // The dictionary selector itself flows through the category loop above (it is the
+  // last Reader entry before the captured settings). Re-add the captured history-limit
+  // and hold-confirm settings after it, matching the order the web UI shows them.
+  readerSettings.push_back(std::move(histCapSetting));
+  readerSettings.push_back(std::move(holdConfirmSetting));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Update currentSettings pointer and count for the active category
@@ -210,13 +234,21 @@ void SettingsActivity::toggleCurrentSetting() {
                              });
       return;
     }
+    if (setting.nameId == StrId::STR_DICTIONARY) {
+      // Launch the dictionary picker (rich metadata/preparation flow) instead of cycling.
+      // The picker writes the selection to dictionary.bin itself; just refresh on return.
+      startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { rebuildSettingsLists(); });
+      return;
+    }
     const uint8_t totalValues = setting.enumStringValues.empty()
                                     ? static_cast<uint8_t>(setting.enumValues.size())
                                     : static_cast<uint8_t>(setting.enumStringValues.size());
     const uint8_t cur = setting.valueGetter();
     setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
+    // uint8_t: int8_t overflows above 127, breaking dictionary history cap rollover
+    const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
       SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
     } else {
@@ -368,6 +400,8 @@ void SettingsActivity::render(RenderLock&&) {
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }
+        } else if (setting.type == SettingType::ACTION && setting.stringGetter) {
+          valueText = setting.stringGetter();
         }
         return valueText;
       },

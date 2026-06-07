@@ -1,0 +1,142 @@
+<h1>21. Optimized Index (.cspt) -- Prefix Collisions and Fallback</h1>
+
+<p>These tests exercise the <em>.idx.oft.cspt</em> optimized index: the fast
+lookup path it accelerates, prefix-collision correctness, silent fallback
+to <em>.idx.oft</em> when the optimized index is absent, and regeneration
+when the underlying <em>.idx.oft</em> is rebuilt.</p>
+
+<p>Tests C and D require <strong>host PC access to the SD card</strong>
+(device powered off, card removed) to delete specific files. This mirrors
+the convention already used in Ch 3 Test M.</p>
+
+<h2>Test A: Baseline lookup on a dictionary with optimized index</h2>
+<p>The <em>english-full</em> dictionary ships with <em>english-full.idx.oft.cspt</em>.
+Every lookup must return the correct definition. This implicitly exercises
+the optimized-index fast path because the device tries it first when present.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>bridge</li>
+<li>cloud</li>
+<li>dawn</li>
+<li>echo</li>
+</ul>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>english-full</em> in the picker. No preparation should be required.</li>
+<li>Look up each word above.</li>
+<li>Each returns a valid definition. No errors. No crash.</li>
+</ol>
+
+<h2>Test B: Prefix-collision disambiguation</h2>
+<p>The <em>prep-cspt-prefix-collision</em> dictionary contains headwords that
+share 16-character prefixes. Each word must still return <em>its own</em>
+distinct definition -- not a sibling's. Requires Ch 4 Test F to have been
+run so this dictionary has been prepared.</p>
+<h3>Dictionary</h3>
+<p><em>prep-cspt-prefix-collision</em></p>
+<h3>Words</h3>
+<p>16-char prefix <em>international</em>:</p>
+<ul>
+<li>internationalism</li>
+<li>internationalize</li>
+<li>internationalized</li>
+</ul>
+<p>16-char prefix <em>microelectromech</em>:</p>
+<ul>
+<li>microelectromechanical</li>
+<li>microelectromechanics</li>
+</ul>
+<p>Control words (no collision):</p>
+<ul>
+<li>antidisestablish</li>
+<li>simple</li>
+<li>test</li>
+</ul>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>prep-cspt-prefix-collision</em> in the picker. If prep steps
+    are listed, Ch 4 Test F was skipped -- run that first, then return here.</li>
+<li>Look up each word above.</li>
+<li>Each word returns <em>its own</em> distinct definition. Compare against the
+    definition text in
+    <code>test/data/dictionary-sources/prep-cspt-prefix-collision.json</code>
+    if in doubt.</li>
+<li>No two colliding words return the same definition.</li>
+</ol>
+
+<h2>Test C: Fallback to .idx.oft when optimized index is absent</h2>
+<p>Lookups must still work when <em>.idx.oft.cspt</em> is missing. Re-selecting
+the dictionary afterwards must re-offer the <em>Generate optimized index</em>
+prep step.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+<h3>Setup (on device, before the pre-condition)</h3>
+<ol>
+<li>Open Settings -&gt; Dictionary. Confirm <em>english-full</em> is the
+    currently selected dictionary (Test A already does this). If it is not,
+    select it now and let any preparation finish. This must happen
+    <strong>before</strong> deleting <em>.idx.oft.cspt</em> on the host --
+    otherwise selecting <em>english-full</em> later would trigger prep and
+    automatically regenerate the <em>.cspt</em>, making the fallback path
+    unobservable.</li>
+</ol>
+<h3>Pre-condition (on host PC)</h3>
+<ol>
+<li>Power the device off. Remove the SD card.</li>
+<li>On the host, delete
+    <code>/.dictionaries/english-full/english-full.idx.oft.cspt</code>
+    (or the equivalent under <code>/dictionaries/</code>).
+    Leave <em>english-full.idx.oft</em> in place.</li>
+<li>Re-insert the SD card. Power on.</li>
+</ol>
+<h3>Steps</h3>
+<ol>
+<li>Look up each Test A word from within this test epub:
+    <em>apple</em>, <em>bridge</em>, <em>cloud</em>, <em>dawn</em>, <em>echo</em>.
+    Each returns the correct definition. No errors.
+    (This exercises the <em>.idx.oft</em> fallback path since <em>.cspt</em>
+    is absent.)</li>
+<li>Open Settings -&gt; Dictionary. Re-select <em>english-full</em>.</li>
+<li>Confirmation screen lists exactly one step:
+    <em>Generate optimized index</em>.</li>
+<li>Press <em>Confirm</em>. Step completes: [OK].</li>
+<li><em>Preparation complete</em>.</li>
+<li>Return to this test epub and look up the Test A words again:
+    <em>apple</em>, <em>bridge</em>, <em>cloud</em>, <em>dawn</em>, <em>echo</em>.
+    Each returns the correct definition -- confirms the newly regenerated
+    <em>.idx.oft.cspt</em> is functional on the fast path.</li>
+</ol>
+
+<h2>Test D: Stale optimized index regenerated when .idx.oft is regenerated</h2>
+<p>Deleting <em>.idx.oft</em> while leaving <em>.idx.oft.cspt</em> in place
+must cause the device to regenerate both on next prep -- the stale
+optimized index is wiped and rebuilt.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+<h3>Pre-condition (on host PC)</h3>
+<ol>
+<li>Power the device off. Remove the SD card.</li>
+<li>On the host, delete <em>english-full.idx.oft</em> but
+    <strong>leave</strong> <em>english-full.idx.oft.cspt</em> in place.</li>
+<li>Re-insert the SD card. Power on.</li>
+</ol>
+<h3>Steps</h3>
+<ol>
+<li>Open Settings -&gt; Dictionary. Re-select <em>english-full</em>.</li>
+<li>Confirmation screen lists in order (this is the key signal that the
+    stale <em>.cspt</em> was detected and scheduled for rebuild):
+  <ul>
+    <li><em>Generate dictionary offset file</em></li>
+    <li><em>Generate optimized index</em></li>
+  </ul>
+</li>
+<li>Press <em>Confirm</em>. Both steps run sequentially, each showing [ &gt; ] then [OK].</li>
+<li><em>Preparation complete</em>.</li>
+<li>Return to this test epub and look up the Test A words:
+    <em>apple</em>, <em>bridge</em>, <em>cloud</em>, <em>dawn</em>, <em>echo</em>.
+    Each returns the correct definition -- confirms both the regenerated
+    <em>.idx.oft</em> and <em>.idx.oft.cspt</em> are functional.</li>
+</ol>
