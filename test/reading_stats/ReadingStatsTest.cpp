@@ -192,7 +192,10 @@ TEST(ReadingStats, PerBookTimeSaturatesAtUint32Max) {
   EXPECT_EQ(s->totalReadingMs, UINT32_MAX);
 }
 
+using reading_stats::avgMsPerPage;
+using reading_stats::avgMsPerSession;
 using reading_stats::formatDurationMs;
+using reading_stats::pagesPerHour;
 using reading_stats::pathToDisplayName;
 
 TEST(StatsFormat, FormatsDurationUnderOneHourAsMinutesSeconds) {
@@ -214,4 +217,20 @@ TEST(StatsFormat, DerivesDisplayNameFromPath) {
   EXPECT_EQ(pathToDisplayName("plath-bell-jar.epub"), "plath-bell-jar");
   EXPECT_EQ(pathToDisplayName("noextension"), "noextension");
   EXPECT_EQ(pathToDisplayName("/dir/file.name.epub"), "file.name");
+}
+
+TEST(StatsCompute, PagesPerHour) {
+  EXPECT_EQ(pagesPerHour(0, 0), 0u);
+  EXPECT_EQ(pagesPerHour(5, 0), 0u);
+  EXPECT_EQ(pagesPerHour(30, 3600000), 30u);
+  EXPECT_EQ(pagesPerHour(29, 858475), 121u);
+}
+
+TEST(StatsCompute, AveragesGuardZero) {
+  EXPECT_EQ(avgMsPerPage(0, 0), 0u);
+  EXPECT_EQ(avgMsPerPage(60000, 0), 0u);
+  EXPECT_EQ(avgMsPerPage(60000, 4), 15000u);
+  EXPECT_EQ(avgMsPerSession(0, 0), 0u);
+  EXPECT_EQ(avgMsPerSession(60000, 0), 0u);
+  EXPECT_EQ(avgMsPerSession(90000, 3), 30000u);
 }

@@ -12,4 +12,13 @@ std::string formatDurationMs(uint32_t ms);
 // handled gracefully (returns the filename, or the whole string).
 std::string pathToDisplayName(const std::string& path);
 
+// Reading speed in pages per hour (0 if no time). uint64 intermediate to avoid overflow.
+uint32_t pagesPerHour(uint32_t pages, uint32_t totalMs);
+
+// Average milliseconds spent per page (0 if no pages).
+uint32_t avgMsPerPage(uint32_t totalMs, uint32_t pages);
+
+// Average milliseconds per reading session (0 if no sessions).
+uint32_t avgMsPerSession(uint32_t totalMs, uint32_t sessions);
+
 }  // namespace reading_stats

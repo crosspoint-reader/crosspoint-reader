@@ -28,4 +28,19 @@ std::string pathToDisplayName(const std::string& path) {
   return filename.substr(0, dotPos);
 }
 
+uint32_t pagesPerHour(uint32_t pages, uint32_t totalMs) {
+  if (totalMs == 0) return 0;
+  return static_cast<uint32_t>(static_cast<uint64_t>(pages) * 3600000ULL / totalMs);
+}
+
+uint32_t avgMsPerPage(uint32_t totalMs, uint32_t pages) {
+  if (pages == 0) return 0;
+  return totalMs / pages;
+}
+
+uint32_t avgMsPerSession(uint32_t totalMs, uint32_t sessions) {
+  if (sessions == 0) return 0;
+  return totalMs / sessions;
+}
+
 }  // namespace reading_stats
