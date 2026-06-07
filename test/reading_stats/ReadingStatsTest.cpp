@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "ReadingStats.h"
+#include "StatsFormat.h"
 
 using reading_stats::BookStats;
 using reading_stats::ReadingStatsAggregator;
@@ -189,4 +190,28 @@ TEST(ReadingStats, PerBookTimeSaturatesAtUint32Max) {
   const BookStats* s = agg.statsFor("/books/a.epub");
   ASSERT_NE(s, nullptr);
   EXPECT_EQ(s->totalReadingMs, UINT32_MAX);
+}
+
+using reading_stats::formatDurationMs;
+using reading_stats::pathToDisplayName;
+
+TEST(StatsFormat, FormatsDurationUnderOneHourAsMinutesSeconds) {
+  EXPECT_EQ(formatDurationMs(0), "0m 0s");
+  EXPECT_EQ(formatDurationMs(37606), "0m 37s");
+  EXPECT_EQ(formatDurationMs(668754), "11m 8s");
+  EXPECT_EQ(formatDurationMs(59999), "0m 59s");
+}
+
+TEST(StatsFormat, FormatsDurationOverOneHourAsHoursMinutes) {
+  EXPECT_EQ(formatDurationMs(3600000), "1h 0m");
+  EXPECT_EQ(formatDurationMs(3600000 + 125000), "1h 2m");
+  EXPECT_EQ(formatDurationMs(36000000), "10h 0m");
+}
+
+TEST(StatsFormat, DerivesDisplayNameFromPath) {
+  EXPECT_EQ(pathToDisplayName("/books/great-gatsby.epub"), "great-gatsby");
+  EXPECT_EQ(pathToDisplayName("/a/b/c.txt"), "c");
+  EXPECT_EQ(pathToDisplayName("plath-bell-jar.epub"), "plath-bell-jar");
+  EXPECT_EQ(pathToDisplayName("noextension"), "noextension");
+  EXPECT_EQ(pathToDisplayName("/dir/file.name.epub"), "file.name");
 }

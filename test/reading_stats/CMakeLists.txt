@@ -1,6 +1,7 @@
 add_executable(ReadingStatsTest
   ReadingStatsTest.cpp
   ${REPO_ROOT}/lib/ReadingStats/ReadingStats.cpp
+  ${REPO_ROOT}/lib/ReadingStats/StatsFormat.cpp
 )
 
 target_include_directories(ReadingStatsTest PRIVATE
