@@ -382,7 +382,7 @@ void XtcReaderActivity::renderPage() {
         srcRowBytes);
 
     if (streamErr != xtc::XtcError::OK) {
-      LOG_ERR("XTR", "Failed to stream page %lu", currentPage);
+      LOG_ERR("XTR", "Failed to stream page %lu: error=%s", currentPage, xtc::errorToString(streamErr));
       renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
       renderer.displayBuffer();
       return;
