@@ -57,6 +57,26 @@ size_t TocNavParser::write(const uint8_t* buffer, const size_t size) {
 void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<TocNavParser*>(userData);
 
+  self->elementDepth++;
+
+  // EPUB 3: honor the `hidden` attribute. Elements marked hidden - notably the
+  // <nav epub:type="landmarks" hidden="hidden"> section - must not be presented
+  // in navigation, so skip the whole subtree. This also guards against non-toc
+  // navs nested inside the toc nav leaking their entries (e.g. landmarks listing
+  // Cover / Title Page / Table of Contents). See
+  // https://www.w3.org/TR/epub-33/#sec-nav-landmarks
+  if (self->hiddenDepth == 0) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "hidden") == 0) {
+        self->hiddenDepth = self->elementDepth;
+        break;
+      }
+    }
+  }
+  if (self->hiddenDepth != 0) {
+    return;
+  }
+
   // Track HTML structure loosely - we mainly care about finding <nav epub:type="toc">
   if (strcmp(name, "html") == 0) {
     self->state = IN_HTML;
@@ -114,6 +134,11 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
 void XMLCALL TocNavParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<TocNavParser*>(userData);
 
+  // Never collect text from inside a hidden subtree (e.g. hidden landmarks).
+  if (self->hiddenDepth != 0) {
+    return;
+  }
+
   // Only collect text when inside an anchor within the TOC nav
   if (self->state == IN_ANCHOR) {
     self->currentLabel.append(s, len);
@@ -122,6 +147,16 @@ void XMLCALL TocNavParser::characterData(void* userData, const XML_Char* s, cons
 
 void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<TocNavParser*>(userData);
+
+  // Mirror the depth bookkeeping from startElement and honor `hidden` subtrees.
+  if (self->hiddenDepth != 0) {
+    if (self->elementDepth == self->hiddenDepth) {
+      self->hiddenDepth = 0;  // closing the element that started the hidden subtree
+    }
+    if (self->elementDepth > 0) self->elementDepth--;
+    return;
+  }
+  if (self->elementDepth > 0) self->elementDepth--;
 
   if (strcmp(name, "a") == 0 && self->state == IN_ANCHOR) {
     // Create TOC entry when closing anchor tag (we have all data now)
