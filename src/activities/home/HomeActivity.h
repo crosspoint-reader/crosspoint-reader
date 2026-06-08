@@ -42,6 +42,10 @@ class HomeActivity final : public Activity {
     if (item == HomeMenuItem::FILE_TRANSFER) return i;
     ++i;
     if (item == HomeMenuItem::SETTINGS_MENU) return i;
+    ++i;
+    if (item == HomeMenuItem::TODO) return i;
+    ++i;
+    if (item == HomeMenuItem::SUDOKU) return i;
     return 0;
   }
 
@@ -52,7 +56,9 @@ class HomeActivity final : public Activity {
     if (idx == i++) return HomeMenuItem::RECENTS;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
-    if (idx == i) return HomeMenuItem::SETTINGS_MENU;
+    if (idx == i++) return HomeMenuItem::SETTINGS_MENU;
+    if (idx == i++) return HomeMenuItem::TODO;
+    if (idx == i) return HomeMenuItem::SUDOKU;
     return HomeMenuItem::NONE;
   }
   void onSelectBook(const std::string& path);

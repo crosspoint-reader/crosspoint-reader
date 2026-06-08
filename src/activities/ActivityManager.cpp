@@ -10,6 +10,8 @@
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
+#include "extras/SudokuActivity.h"
+#include "extras/TodoActivity.h"
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
@@ -220,11 +222,19 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "Settings") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
+    } else if (activityName == "Todo") {
+      initialMenuItem = HomeMenuItem::TODO;
+    } else if (activityName == "Sudoku") {
+      initialMenuItem = HomeMenuItem::SUDOKU;
     }
   }
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
+
+void ActivityManager::goToTodo() { replaceActivity(std::make_unique<TodoActivity>(renderer, mappedInput)); }
+
+void ActivityManager::goToSudoku() { replaceActivity(std::make_unique<SudokuActivity>(renderer, mappedInput)); }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
   if (pendingActivity) {
