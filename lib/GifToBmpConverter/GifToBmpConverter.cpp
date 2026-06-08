@@ -202,9 +202,8 @@ void emitOutputRow(const uint8_t* row, GifBmpContext& ctx, int outY) {
     }
   } else if (ctx.oneBit) {
     for (int x = 0; x < ctx.dstWidth; ++x) {
-      const uint8_t bit = ctx.atkinson1BitDitherer
-                              ? ctx.atkinson1BitDitherer->processPixel(row[x], x)
-                              : quantize1bit(row[x], x, outY);
+      const uint8_t bit =
+          ctx.atkinson1BitDitherer ? ctx.atkinson1BitDitherer->processPixel(row[x], x) : quantize1bit(row[x], x, outY);
       const int byteIndex = x / 8;
       const int bitOffset = 7 - (x % 8);
       ctx.rowBuffer[byteIndex] |= (bit << bitOffset);
@@ -324,8 +323,7 @@ constexpr size_t MIN_FREE_HEAP = GIF_DECODER_APPROX_SIZE + 32 * 1024;
 
 bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpOut, int targetWidth, int targetHeight,
                                                    bool oneBit, bool crop) {
-  LOG_DBG("GIF", "Converting GIF to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth,
-          targetHeight);
+  LOG_DBG("GIF", "Converting GIF to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
     LOG_ERR("GIF", "Not enough heap for GIF decoder (%u free, need %u)", ESP.getFreeHeap(), MIN_FREE_HEAP);

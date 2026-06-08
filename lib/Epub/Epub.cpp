@@ -1,15 +1,15 @@
 #include "Epub.h"
 
-#include <cstring>
-#include <string_view>
-
 #include <FsHelpers.h>
+#include <GifToBmpConverter.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 #include <PngToBmpConverter.h>
-#include <GifToBmpConverter.h>
 #include <ZipFile.h>
+
+#include <cstring>
+#include <string_view>
 
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
@@ -796,8 +796,8 @@ bool Epub::generateThumbBmp(int height) const {
     }
     int THUMB_TARGET_WIDTH = height * 0.6;
     int THUMB_TARGET_HEIGHT = height;
-    const bool success = GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(coverGif, thumbBmp, THUMB_TARGET_WIDTH,
-                                                                           THUMB_TARGET_HEIGHT);
+    const bool success =
+        GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(coverGif, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
     coverGif.close();
     thumbBmp.close();
     Storage.remove(coverGifTempPath.c_str());

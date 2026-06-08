@@ -2,8 +2,8 @@
 
 #include <HalStorage.h>
 
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 
 struct GifBasicInfo {
   uint16_t canvasWidth{0};

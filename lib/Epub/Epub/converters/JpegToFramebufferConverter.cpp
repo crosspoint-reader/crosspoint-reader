@@ -122,24 +122,15 @@ bool validateJpegDimensions(int width, int height, const std::string& imagePath)
   }
 
   if (width > MAX_JPEG_DIMENSION || height > MAX_JPEG_DIMENSION) {
-    LOG_ERR("JPG",
-            "JPEG dimensions too large: %dx%d, max dimension: %d, file=%s",
-            width,
-            height,
-            MAX_JPEG_DIMENSION,
+    LOG_ERR("JPG", "JPEG dimensions too large: %dx%d, max dimension: %d, file=%s", width, height, MAX_JPEG_DIMENSION,
             imagePath.c_str());
     return false;
   }
 
   const int64_t pixels = (int64_t)width * height;
   if (pixels > MAX_JPEG_SOURCE_PIXELS) {
-    LOG_ERR("JPG",
-            "JPEG source too large: %dx%d = %lld pixels, max supported: %d, file=%s",
-            width,
-            height,
-            (long long)pixels,
-            MAX_JPEG_SOURCE_PIXELS,
-            imagePath.c_str());
+    LOG_ERR("JPG", "JPEG source too large: %dx%d = %lld pixels, max supported: %d, file=%s", width, height,
+            (long long)pixels, MAX_JPEG_SOURCE_PIXELS, imagePath.c_str());
     return false;
   }
 
