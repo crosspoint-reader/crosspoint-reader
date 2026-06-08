@@ -291,6 +291,26 @@
     .upload-form input[type="file"].has-files::file-selector-button {
       background-color: #95a5a6;
     }
+    .drop-zone {
+      border: 2px dashed var(--border-color);
+      border-radius: 6px;
+      padding: 14px;
+      text-align: center;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+    .drop-zone.dragover {
+      border-color: var(--accent-color);
+      background-color: var(--accent-color-10);
+    }
+    .drop-zone-hint {
+      margin: 8px 0 0;
+      font-size: 0.85em;
+      color: var(--label-color);
+      pointer-events: none;
+    }
+    .drop-zone.dragover .drop-zone-hint {
+      color: var(--accent-color);
+    }
     .upload-btn {
       background-color: #27ae60;
       color: white;
@@ -1526,7 +1546,10 @@
     <h3>📤 Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" onchange="validateFile()" multiple>
+        <p class="drop-zone-hint">⬇ Drop files here — or click to browse</p>
+      </div>
       <div class="picker-columns" id="pickerColumns">
         <div class="convert-options" id="convertOptions" style="display:none;">
           <div class="convert-row">
@@ -3023,6 +3046,53 @@
         }
       }, 10);
     });
+
+    // Drag-and-drop: route dropped files through the existing file input so the
+    // normal validateFile() pipeline (EPUB optimize options, batch mode, upload)
+    // runs unchanged. Assigning input.files via DataTransfer is supported in all
+    // current Chromium/Firefox/Safari, which is what the device serves the page to.
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+      // dragenter/dragleave fire for child elements too; a counter avoids the
+      // highlight flickering as the cursor moves over the hint text or input.
+      let dragDepth = 0;
+
+      dropZone.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragDepth++;
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragover', function(e) {
+        // Required so the browser doesn't navigate to / open the dropped file.
+        e.preventDefault();
+      });
+
+      dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragDepth = 0;
+        dropZone.classList.remove('dragover');
+
+        // Don't let a drop disrupt an in-flight transfer.
+        if (typeof isUploadInProgress !== 'undefined' && isUploadInProgress) return;
+
+        const dropped = e.dataTransfer && e.dataTransfer.files;
+        if (!dropped || dropped.length === 0) return;
+
+        // Replace the current selection, matching native file-picker semantics.
+        const dt = new DataTransfer();
+        for (const file of dropped) dt.items.add(file);
+        fileInput.files = dt.files;
+
+        validateFile();
+      });
+    }
   })();
 
   function validateFile() {
