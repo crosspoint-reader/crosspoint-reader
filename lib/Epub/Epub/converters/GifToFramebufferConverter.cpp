@@ -270,11 +270,33 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   gif->begin(GIF_PALETTE_RGB888);
   gif->setDrawType(GIF_DRAW_RAW);
+  LOG_DBG("GIF",
+        "GIF header: canvas=%ux%u frame=%ux%u frameOffset=%u,%u interlaced=%s "
+        "renderTarget=%dx%d MAX_WIDTH=%d freeHeap=%u file=%s",
+        info.canvasWidth,
+        info.canvasHeight,
+        info.frameWidth,
+        info.frameHeight,
+        info.frameX,
+        info.frameY,
+        info.interlaced ? "yes" : "no",
+        config.maxWidth,
+        config.maxHeight,
+        MAX_WIDTH,
+        ESP.getFreeHeap(),
+        imagePath.c_str());
   const int rcOpen = gif->open(imagePath.c_str(), gifOpenWithHandle, gifCloseWithHandle, gifReadWithHandle,
                                gifSeekWithHandle, gifDrawCallback);
   const ScopedCleanup cleanup{[&gif]() { gif->close(); }};
   if (rcOpen != 1) {
-    LOG_ERR("GIF", "Failed to open GIF (err=%d): %s", gif->getLastError(), imagePath.c_str());
+      const int err = gif->getLastError();
+      LOG_ERR("GIF",
+        "AnimatedGIF open failed: err=%d canvas=%ux%u MAX_WIDTH=%d file=%s",
+        err,
+        info.canvasWidth,
+        info.canvasHeight,
+        MAX_WIDTH,
+        imagePath.c_str());
     return false;
   }
 

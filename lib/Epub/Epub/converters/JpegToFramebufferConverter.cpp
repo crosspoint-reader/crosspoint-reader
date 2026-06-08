@@ -93,6 +93,8 @@ int32_t jpegSeek(JPEGFILE* pFile, int32_t pos) {
 // Heap-allocate on demand so memory is only used during active decode.
 constexpr size_t JPEG_DECODER_APPROX_SIZE = 20 * 1024;
 constexpr size_t MIN_FREE_HEAP_FOR_JPEG = JPEG_DECODER_APPROX_SIZE + 16 * 1024;
+constexpr int MAX_JPEG_SOURCE_PIXELS = 8 * 1024 * 1024;
+constexpr int MAX_JPEG_DIMENSION = 8192;
 
 // Choose JPEGDEC's built-in scale factor for coarse downscaling.
 // Returns the scale denominator (1, 2, 4, or 8) and sets jpegScaleOption.
@@ -111,6 +113,37 @@ int chooseJpegScale(float targetScale, int& jpegScaleOption) {
   }
   jpegScaleOption = 0;
   return 1;
+}
+
+bool validateJpegDimensions(int width, int height, const std::string& imagePath) {
+  if (width <= 0 || height <= 0) {
+    LOG_ERR("JPG", "Invalid JPEG dimensions: %dx%d", width, height);
+    return false;
+  }
+
+  if (width > MAX_JPEG_DIMENSION || height > MAX_JPEG_DIMENSION) {
+    LOG_ERR("JPG",
+            "JPEG dimensions too large: %dx%d, max dimension: %d, file=%s",
+            width,
+            height,
+            MAX_JPEG_DIMENSION,
+            imagePath.c_str());
+    return false;
+  }
+
+  const int64_t pixels = (int64_t)width * height;
+  if (pixels > MAX_JPEG_SOURCE_PIXELS) {
+    LOG_ERR("JPG",
+            "JPEG source too large: %dx%d = %lld pixels, max supported: %d, file=%s",
+            width,
+            height,
+            pixels,
+            MAX_JPEG_SOURCE_PIXELS,
+            imagePath.c_str());
+    return false;
+  }
+
+  return true;
 }
 
 // Fixed-point 16.16 arithmetic avoids software float emulation on ESP32-C3 (no FPU).
@@ -418,7 +451,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  if (!validateImageDimensions(srcWidth, srcHeight, "JPEG")) {
+  if (!validateJpegDimensions(srcWidth, srcHeight, imagePath)) {
     return false;
   }
 
