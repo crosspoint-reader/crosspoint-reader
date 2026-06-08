@@ -287,7 +287,7 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
-  if (showNoDictionaryMessage && (millis() - noDictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+  if (showNoDictionaryMessage && (millis() - noDictionaryMessageTime) >= ReaderUtils::DICTIONARY_MESSAGE_DURATION_MS) {
     showNoDictionaryMessage = false;
     requestUpdate();
   }
