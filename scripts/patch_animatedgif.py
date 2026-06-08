@@ -31,24 +31,13 @@ NEW_SNIPPET = """#define MAX_COLORS 256
 """
 
 
-def patch_animatedgif(env):
-    libdeps_dir = os.path.join(env["PROJECT_DIR"], ".pio", "libdeps")
-    if not os.path.isdir(libdeps_dir):
-        return
-    for env_dir in os.listdir(libdeps_dir):
-        gif_dir = os.path.join(libdeps_dir, env_dir, "AnimatedGIF")
-        header_path = os.path.join(gif_dir, "src", "AnimatedGIF.h")
-        if not os.path.isfile(header_path):
-            continue
-        _patch_header(header_path)
-
-
 def _patch_header(header_path):
     with open(header_path, "r", encoding="utf-8") as file:
         text = file.read()
 
     if NEW_SNIPPET in text:
-        return
+        return True
+
     if OLD_SNIPPET not in text:
         sys.stderr.write(
             "ERROR: AnimatedGIF MAX_WIDTH block not found in %s\n" % header_path
@@ -57,7 +46,37 @@ def _patch_header(header_path):
 
     with open(header_path, "w", encoding="utf-8") as file:
         file.write(text.replace(OLD_SNIPPET, NEW_SNIPPET, 1))
+
     print("Patched AnimatedGIF MAX_WIDTH guard")
+    return True
 
 
-patch_animatedgif(env)  # noqa: F821
+def patch_animatedgif(env, require_found=False):
+    libdeps_dir = os.path.join(env["PROJECT_DIR"], ".pio", "libdeps")
+    patched_any = False
+
+    if os.path.isdir(libdeps_dir):
+        for env_dir in os.listdir(libdeps_dir):
+            header_path = os.path.join(
+                libdeps_dir,
+                env_dir,
+                "AnimatedGIF",
+                "src",
+                "AnimatedGIF.h",
+            )
+            if os.path.isfile(header_path):
+                patched_any = _patch_header(header_path) or patched_any
+
+    if require_found and not patched_any:
+        sys.stderr.write("ERROR: AnimatedGIF dependency was not found to patch\n")
+        raise SystemExit(1)
+
+    return patched_any
+
+
+def patch_animatedgif_before_link(source, target, env):
+    patch_animatedgif(env, require_found=True)
+
+
+patch_animatedgif(env, require_found=False)  # noqa: F821
+env.AddPreAction("$BUILD_DIR/${PROGNAME}.elf", patch_animatedgif_before_link)  # noqa: F821
