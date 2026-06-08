@@ -301,14 +301,14 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
                                gifSeekWithHandle, gifDrawCallback);
   const ScopedCleanup cleanup{[&gif]() { gif->close(); }};
   if (rcOpen != 1) {
-      const int err = gif->getLastError();
-      LOG_ERR("GIF",
-        "AnimatedGIF open failed: err=%d canvas=%ux%u MAX_WIDTH=%d file=%s",
-        err,
-        info.canvasWidth,
-        info.canvasHeight,
-        MAX_WIDTH,
-        imagePath.c_str());
+    const int err = gif->getLastError();
+    LOG_ERR("GIF",
+            "AnimatedGIF open failed: err=%d canvas=%ux%u MAX_WIDTH=%d file=%s",
+            err,
+            info.canvasWidth,
+            info.canvasHeight,
+            MAX_WIDTH,
+            imagePath.c_str());
     return false;
   }
 

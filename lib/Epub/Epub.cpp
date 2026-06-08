@@ -1,5 +1,8 @@
 #include "Epub.h"
 
+#include <cstring>
+#include <string_view>
+
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
