@@ -220,15 +220,15 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
   if (info.canvasWidth > MAX_WIDTH) {
-  LOG_ERR("GIF",
-          "GIF canvas too wide for AnimatedGIF: canvas=%ux%u MAX_WIDTH=%d "
-          "renderTarget=%dx%d file=%s",
-          info.canvasWidth,
-          info.canvasHeight,
-          MAX_WIDTH,
-          config.maxWidth,
-          config.maxHeight,
-          imagePath.c_str());
+    LOG_ERR("GIF",
+            "GIF canvas too wide for AnimatedGIF: canvas=%ux%u MAX_WIDTH=%d "
+            "renderTarget=%dx%d file=%s",
+            info.canvasWidth,
+            info.canvasHeight,
+            MAX_WIDTH,
+            config.maxWidth,
+            config.maxHeight,
+            imagePath.c_str());
     return false;
   }
   if (!validateImageDimensions(info.canvasWidth, info.canvasHeight, "GIF")) {

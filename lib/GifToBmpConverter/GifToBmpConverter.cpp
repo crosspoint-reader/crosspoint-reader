@@ -341,7 +341,7 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
     LOG_ERR("GIF", "Interlaced GIFs are not supported for BMP conversion");
     return false;
   }
-  if (info.canvasWidth == 0 || info.canvasHeight == 0 || info.canvasWidth > 2048 || info.canvasHeight > 3072) {
+  if (info.canvasWidth == 0 || info.canvasHeight == 0 || info.canvasWidth > MAX_WIDTH || info.canvasHeight > 3072) {
     LOG_ERR("GIF", "Image too large or zero (%ux%u)", info.canvasWidth, info.canvasHeight);
     return false;
   }

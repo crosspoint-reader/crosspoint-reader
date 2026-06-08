@@ -446,7 +446,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   int srcWidth = jpeg->getWidth();
   int srcHeight = jpeg->getHeight();
 
-
   if (!validateJpegDimensions(srcWidth, srcHeight, imagePath)) {
     return false;
   }
