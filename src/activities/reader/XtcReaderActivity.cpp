@@ -216,9 +216,40 @@ void XtcReaderActivity::renderPage() {
     const size_t pageBufferSize = ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2;
     uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
     if (!pageBuffer) {
-      LOG_ERR("XTR", "Failed to allocate 2-bit page buffer (%lu bytes)", pageBufferSize);
-      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_MEMORY_ERROR), true, EpdFontFamily::BOLD);
-      renderer.displayBuffer();
+      // OOM: fall back to BW streaming. XTCH stores plane1 then plane2 sequentially.
+      // BW = "bit1 OR bit2 is set". Drawing every set bit from both planes gives the correct union.
+      LOG_INF("XTR", "OOM for XTCH grayscale (%lu bytes), streaming BW fallback", pageBufferSize);
+      const size_t planeSize = pageBufferSize / 2;
+      const size_t colBytes = (pageHeight + 7) / 8;
+      const xtc::XtcError streamErr = xtc->loadPageStreaming(
+          currentPage,
+          [&](const uint8_t* data, size_t size, size_t offset) {
+            for (size_t i = 0; i < size; i++) {
+              const size_t byteOff = offset + i;
+              const size_t planeByteOff = byteOff < planeSize ? byteOff : byteOff - planeSize;
+              const uint16_t colIndex = static_cast<uint16_t>(planeByteOff / colBytes);
+              const uint16_t byteInCol = static_cast<uint16_t>(planeByteOff % colBytes);
+              const uint16_t x = pageWidth - 1 - colIndex;
+              const uint8_t b = data[i];
+              for (int bit = 0; bit < 8; bit++) {
+                if (!((b >> bit) & 1)) continue;
+                const uint16_t y = byteInCol * 8 + (7 - bit);
+                if (y < pageHeight && x < pageWidth) renderer.drawPixel(x, y, true);
+              }
+            }
+          },
+          colBytes);
+      if (streamErr != xtc::XtcError::OK) {
+        LOG_ERR("XTR", "Failed to stream XTCH page %lu", currentPage);
+        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+        renderer.displayBuffer();
+        return;
+      }
+      renderStatusBarOverlay(SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP
+                                 ? StatusBarOverlayPosition::Top
+                                 : StatusBarOverlayPosition::Bottom);
+      ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+      LOG_DBG("XTR", "Rendered page %lu/%lu (2-bit BW streaming fallback)", currentPage + 1, xtc->getPageCount());
       return;
     }
 
