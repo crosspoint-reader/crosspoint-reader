@@ -137,7 +137,7 @@ bool validateJpegDimensions(int width, int height, const std::string& imagePath)
             "JPEG source too large: %dx%d = %lld pixels, max supported: %d, file=%s",
             width,
             height,
-            pixels,
+            (long long)pixels,
             MAX_JPEG_SOURCE_PIXELS,
             imagePath.c_str());
     return false;
@@ -446,10 +446,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   int srcWidth = jpeg->getWidth();
   int srcHeight = jpeg->getHeight();
 
-  if (srcWidth <= 0 || srcHeight <= 0) {
-    LOG_ERR("JPG", "Invalid JPEG dimensions: %dx%d", srcWidth, srcHeight);
-    return false;
-  }
 
   if (!validateJpegDimensions(srcWidth, srcHeight, imagePath)) {
     return false;

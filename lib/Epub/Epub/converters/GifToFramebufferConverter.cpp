@@ -219,6 +219,18 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     warnUnsupportedFeature("interlaced GIF", imagePath);
     return false;
   }
+  if (info.canvasWidth > MAX_WIDTH) {
+  LOG_ERR("GIF",
+          "GIF canvas too wide for AnimatedGIF: canvas=%ux%u MAX_WIDTH=%d "
+          "renderTarget=%dx%d file=%s",
+          info.canvasWidth,
+          info.canvasHeight,
+          MAX_WIDTH,
+          config.maxWidth,
+          config.maxHeight,
+          imagePath.c_str());
+    return false;
+  }
   if (!validateImageDimensions(info.canvasWidth, info.canvasHeight, "GIF")) {
     return false;
   }
@@ -271,20 +283,20 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   gif->begin(GIF_PALETTE_RGB888);
   gif->setDrawType(GIF_DRAW_RAW);
   LOG_DBG("GIF",
-        "GIF header: canvas=%ux%u frame=%ux%u frameOffset=%u,%u interlaced=%s "
-        "renderTarget=%dx%d MAX_WIDTH=%d freeHeap=%u file=%s",
-        info.canvasWidth,
-        info.canvasHeight,
-        info.frameWidth,
-        info.frameHeight,
-        info.frameX,
-        info.frameY,
-        info.interlaced ? "yes" : "no",
-        config.maxWidth,
-        config.maxHeight,
-        MAX_WIDTH,
-        ESP.getFreeHeap(),
-        imagePath.c_str());
+          "GIF header: canvas=%ux%u frame=%ux%u frameOffset=%u,%u interlaced=%s "
+          "renderTarget=%dx%d MAX_WIDTH=%d freeHeap=%u file=%s",
+          info.canvasWidth,
+          info.canvasHeight,
+          info.frameWidth,
+          info.frameHeight,
+          info.frameX,
+          info.frameY,
+          info.interlaced ? "yes" : "no",
+          config.maxWidth,
+          config.maxHeight,
+          MAX_WIDTH,
+          ESP.getFreeHeap(),
+          imagePath.c_str());
   const int rcOpen = gif->open(imagePath.c_str(), gifOpenWithHandle, gifCloseWithHandle, gifReadWithHandle,
                                gifSeekWithHandle, gifDrawCallback);
   const ScopedCleanup cleanup{[&gif]() { gif->close(); }};
