@@ -41,6 +41,10 @@ void SettingsActivity::rebuildSettingsLists() {
     } else if (setting.category == StrId::STR_CAT_READER) {
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
+      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
+          SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
+        continue;
+      }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
@@ -261,6 +265,8 @@ void SettingsActivity::toggleCurrentSetting() {
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
+  rebuildSettingsLists();
+  selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
