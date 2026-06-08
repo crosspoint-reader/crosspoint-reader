@@ -183,18 +183,37 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
     }
   }
 
-  // If the truncation split a multi-byte UTF-8 sequence, drop the partial
-  // trailing bytes. FAT32 long filenames are stored as UTF-16, so SdFat
-  // (USE_UTF8_LONG_NAMES) rejects an incomplete sequence and the
-  // directory/file creation fails. input[i] is the first byte we did not
-  // copy; if it is a continuation byte (10xxxxxx) the last copied character
-  // is incomplete and must be removed.
-  if (input[i] != '\0' && (static_cast<unsigned char>(input[i]) & 0xC0) == 0x80) {
-    while (i > 0 && (static_cast<unsigned char>(output[i - 1]) & 0xC0) == 0x80) {
-      i--;
+  // Drop a trailing incomplete UTF-8 sequence. FAT32 long filenames are stored
+  // as UTF-16, so SdFat (USE_UTF8_LONG_NAMES) rejects an incomplete sequence and
+  // the directory/file creation fails. The tail can be partial either because we
+  // truncated at maxLen here, or because the caller already truncated the input
+  // mid-character (e.g. snprintf into a fixed-size buffer drops the trailing byte
+  // of a multi-byte glyph). We therefore inspect output's own tail rather than
+  // the next input byte, which is '\0' in the pre-truncated case.
+  //
+  // Walk back over up to three continuation bytes (10xxxxxx) to the lead byte,
+  // then keep the character only if all of its bytes are present.
+  size_t trailing = 0;
+  while (i > 0 && (static_cast<unsigned char>(output[i - 1]) & 0xC0) == 0x80 && trailing < 3) {
+    i--;
+    trailing++;
+  }
+  if (i > 0) {
+    const unsigned char lead = static_cast<unsigned char>(output[i - 1]);
+    size_t seqLen = 0;
+    if ((lead & 0x80) == 0x00) {
+      seqLen = 1;  // ASCII
+    } else if ((lead & 0xE0) == 0xC0) {
+      seqLen = 2;
+    } else if ((lead & 0xF0) == 0xE0) {
+      seqLen = 3;
+    } else if ((lead & 0xF8) == 0xF0) {
+      seqLen = 4;
     }
-    if (i > 0) {
-      i--;
+    if (seqLen != 0 && trailing + 1 == seqLen) {
+      i += trailing;  // Complete character — keep it.
+    } else {
+      i--;  // Incomplete sequence, stray continuation, or invalid lead — drop it.
     }
   }
   output[i] = '\0';
