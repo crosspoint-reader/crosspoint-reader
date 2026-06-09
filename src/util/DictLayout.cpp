@@ -127,23 +127,24 @@ void Wrapper::onSpan(const StyledSpan& span) {
 
       const char* tokStart = p;
       while (*p && *p != ' ') ++p;
-      std::string tok(tokStart, p - tokStart);
+      const std::string tok(tokStart, p - tokStart);
 
       bool lineIsEmpty = currentLine_.segments.empty();
-      std::string candidate = (!lineIsEmpty && hadSpace) ? " " + tok : tok;
-      int candidateWidth = getMixedWidth(candidate.c_str(), style);
+      bool useSpace = !lineIsEmpty && hadSpace;
+      const int tokWidth = getMixedWidth(tok.c_str(), style);
+      const int spaceWidth = useSpace ? measure_(" ", style, false) : 0;
 
-      if (currentX_ + candidateWidth > maxWidth_ && !lineIsEmpty) {
+      if (currentX_ + spaceWidth + tokWidth > maxWidth_ && !lineIsEmpty) {
         flushLine();
         startLine(span.indentLevel, false);
-        candidate = tok;
-        candidateWidth = getMixedWidth(tok.c_str(), style);
+        useSpace = false;
       }
 
-      if (currentX_ + candidateWidth > maxWidth_) {
-        breakToken(candidate, style, span.indentLevel);
+      if (currentX_ + (useSpace ? spaceWidth : 0) + tokWidth > maxWidth_) {
+        breakToken(tok, style, span.indentLevel);
       } else {
-        appendMixed(candidate.c_str(), style);
+        if (useSpace) appendToLine(" ", style, false, spaceWidth);
+        appendMixed(tok.c_str(), style);
       }
     }
   }

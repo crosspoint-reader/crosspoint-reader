@@ -148,6 +148,7 @@ int DictionaryDefinitionActivity::measureWidthAdapter(void* ctx, const char* tex
                                                       bool isIpa) {
   auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
   const int fontId = isIpa ? IPA_FONT_ID : SETTINGS.getDefinitionFontId();
+  if (!isIpa && text[0] == ' ' && text[1] == '\0') return self->renderer.getSpaceWidth(fontId, style);
   return self->renderer.getTextWidth(fontId, text, style);
 }
 
