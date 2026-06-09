@@ -1,3 +1,7 @@
+# The top-level test project enables only CXX; expat's sources are C, so turn on
+# the C language here (co-located with the only C target in the test tree).
+enable_language(C)
+
 # expat compiled as an isolated host library so its C sources are not subject to
 # the strict -Wall/-Wextra/-pedantic options applied to project test code.
 add_library(toc_nav_expat STATIC
