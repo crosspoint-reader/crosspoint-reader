@@ -30,8 +30,7 @@ int parseIndex(const std::string& xpath, const char* prefix, bool last = false) 
 
 int parseCharOffset(const std::string& xpath) {
   const size_t textPos = xpath.rfind("text()");
-  if (textPos == std::string::npos) return 0;
-  const size_t dotPos = xpath.find('.', textPos);
+  const size_t dotPos = (textPos != std::string::npos) ? xpath.find('.', textPos) : xpath.rfind('.');
   if (dotPos == std::string::npos || dotPos + 1 >= xpath.size()) return 0;
   int val = 0;
   for (size_t i = dotPos + 1; i < xpath.size(); i++) {
@@ -122,7 +121,7 @@ struct XPathStep {
 
 static constexpr int MAX_XPATH_DEPTH = 16;
 
-// Parse the XPath segment between /body/DocFragment[N]/body/ and text()[N].offset
+// Parse the XPath segment between /body/DocFragment[N]/body/ and the terminal position
 // into an ordered sequence of steps. Returns step count, 0 on failure.
 // Example input: "/body/DocFragment[1]/body/div[1]/ul/li[4]/text()[1].51"
 // Fills steps with: {div,1}, {ul,1}, {li,4}
@@ -136,13 +135,20 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
   if (xpath.compare(afterBracket + 1, strlen(kBody), kBody) != 0) return 0;
   size_t pos = afterBracket + 1 + strlen(kBody);
 
-  const size_t textPos = xpath.rfind("/text()");
-  if (textPos == std::string::npos || textPos <= pos) return 0;
+  size_t stepsEnd = xpath.rfind("/text()");
+  if (stepsEnd == std::string::npos) {
+    stepsEnd = xpath.rfind('.');
+    if (stepsEnd == std::string::npos || stepsEnd <= pos || stepsEnd + 1 >= xpath.size()) return 0;
+    for (size_t i = stepsEnd + 1; i < xpath.size(); i++) {
+      if (xpath[i] < '0' || xpath[i] > '9') return 0;
+    }
+  }
+  if (stepsEnd <= pos) return 0;
 
   int count = 0;
-  while (pos < textPos && count < MAX_XPATH_DEPTH) {
+  while (pos < stepsEnd && count < MAX_XPATH_DEPTH) {
     const size_t slash = xpath.find('/', pos);
-    const size_t segEnd = (slash < textPos) ? slash : textPos;
+    const size_t segEnd = (slash < stepsEnd) ? slash : stepsEnd;
 
     XPathStep& step = steps[count];
     const size_t bracket = xpath.find('[', pos);
@@ -166,7 +172,7 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
     }
 
     count++;
-    pos = (slash < textPos) ? slash + 1 : textPos;
+    pos = (slash < stepsEnd) ? slash + 1 : stepsEnd;
   }
   return count;
 }
