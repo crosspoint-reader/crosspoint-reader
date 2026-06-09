@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
+#include <cstring>
+
 #include "Epub/BookMetadataCache.h"
 
 bool TocNavParser::setup() {
