@@ -1,5 +1,6 @@
 #include "GfxRenderer.h"
 
+#include <BidiUtils.h>
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
 #include <Logging.h>
@@ -19,6 +20,10 @@ namespace {
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
   return font.resolveStyle(static_cast<uint8_t>(style));
 }
+}  // namespace
+
+namespace {
+const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir);
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
@@ -86,6 +91,8 @@ void GfxRenderer::begin() {
   bwBufferChunks.assign((frameBufferSize + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE, nullptr);
 }
 
+bool GfxRenderer::isFontCacheScanning() const { return fontCacheManager_ && fontCacheManager_->isScanning(); }
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   auto result = fontMap.insert({fontId, font});
   if (!result.second) {
@@ -131,7 +138,81 @@ enum class TextRotation { None, Rotated90CW };
 
 // Shared glyph rendering logic for normal and rotated text.
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
-template <TextRotation rotation>
+// Render a glyph at 50% scale. Used for SUP/SUB style bits.
+//
+// Each destination pixel represents a 2x2 source block. Drawing when that block
+// contains ink preserves thin strokes that nearest-neighbor sampling can skip.
+//
+// The advance width is also halved in drawText() so layout reserves exactly the right
+// horizontal space for the scaled glyph.
+static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
+                             const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
+                             const bool pixelState, const EpdFontFamily::Style style) {
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) return;
+
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  if (!bitmap) return;
+
+  const int srcW = glyph->width;
+  const int srcH = glyph->height;
+  const int dstW = (srcW + 1) / 2;  // ceil so odd-width glyphs aren't clipped
+  const int dstH = (srcH + 1) / 2;
+  // Scale the glyph bearing by the same factor so the scaled glyph sits at the correct
+  // pixel offset from the (already-shifted) cursor position.
+  const int baseX = cursorX + glyph->left / 2;
+  const int baseY = cursorY - glyph->top / 2;
+
+  if (fontData->is2Bit) {
+    // 2-bit packed format: 4 pixels per byte, MSB first, 2 bits per pixel.
+    // raw value: 0=white, 1=light-gray, 2=dark-gray, 3=black.
+    for (int dstY = 0; dstY < dstH; dstY++) {
+      const int srcY = dstY * 2;
+      for (int dstX = 0; dstX < dstW; dstX++) {
+        const int srcX = dstX * 2;
+        uint8_t coverage = 0;
+        uint8_t maxRaw = 0;
+        for (int sampleY = 0; sampleY < 2 && srcY + sampleY < srcH; sampleY++) {
+          for (int sampleX = 0; sampleX < 2 && srcX + sampleX < srcW; sampleX++) {
+            const int pos = (srcY + sampleY) * srcW + srcX + sampleX;
+            const uint8_t byte = bitmap[pos >> 2];
+            const uint8_t raw = (byte >> ((3 - (pos & 3)) * 2)) & 0x3;
+            coverage += raw;
+            if (raw > maxRaw) maxRaw = raw;
+          }
+        }
+        if (maxRaw >= 2 || coverage >= 2) {
+          renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
+        }
+      }
+    }
+  } else {
+    // 1-bit packed format: 8 pixels per byte, MSB first.
+    for (int dstY = 0; dstY < dstH; dstY++) {
+      const int srcY = dstY * 2;
+      for (int dstX = 0; dstX < dstW; dstX++) {
+        const int srcX = dstX * 2;
+        bool hasInk = false;
+        for (int sampleY = 0; sampleY < 2 && srcY + sampleY < srcH; sampleY++) {
+          for (int sampleX = 0; sampleX < 2 && srcX + sampleX < srcW; sampleX++) {
+            const int pos = (srcY + sampleY) * srcW + srcX + sampleX;
+            const uint8_t byte = bitmap[pos >> 3];
+            const uint8_t bit = 7 - (pos & 7);
+            if ((byte >> bit) & 1) {
+              hasInk = true;
+            }
+          }
+        }
+        if (hasInk) {
+          renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
+        }
+      }
+    }
+  }
+}
+
+template <TextRotation rotation = TextRotation::None>
 static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
@@ -278,26 +359,42 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 }
 
-int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style,
+                              const BidiUtils::BidiBaseDir baseDir) const {
+  if (text == nullptr || *text == '\0') {
+    return 0;
+  }
+
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+
   int w = 0, h = 0;
-  fontIt->second.getTextDimensions(text, &w, &h, style);
+  fontIt->second.getTextDimensions(renderedText, &w, &h, style);
   return w;
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,
-                                   const EpdFontFamily::Style style) const {
-  const int x = (getScreenWidth() - getTextWidth(fontId, text, style)) / 2;
-  drawText(fontId, x, y, text, black, style);
+                                   const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
+  const int x = (getScreenWidth() - getTextWidth(fontId, text, style, baseDir)) / 2;
+  drawText(fontId, x, y, text, black, style, baseDir);
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style) const {
+                           const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
+  // cannot draw a NULL / empty string
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+
   const int yPos = y + getFontAscenderSize(fontId);
   int lastBaseX = x;
   int lastBaseLeft = 0;
@@ -305,13 +402,8 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   int lastBaseTop = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
-  // cannot draw a NULL / empty string
-  if (text == nullptr || *text == '\0') {
-    return;
-  }
-
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
-    fontCacheManager_->recordText(text, fontId, style);
+    fontCacheManager_->recordText(renderedText, fontId, style);
     return;
   }
 
@@ -322,9 +414,16 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
   const auto& font = fontIt->second;
 
+  const char* textCursor = renderedText;
   uint32_t cp;
   uint32_t prevCp = 0;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
+    // Skip Hebrew Niqqud (vowel marks)
+    // Temporary: avoid adding Niqqud to built-in fonts. Remove when custom fonts are supported.
+    if (cp >= 0x0591 && cp <= 0x05C7) {
+      continue;
+    }
+
     if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
@@ -335,7 +434,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       continue;
     }
 
-    cp = font.applyLigatures(cp, text, style);
+    cp = font.applyLigatures(cp, textCursor, style);
 
     // Differential rounding: snap (previous advance + current kern) as one unit so
     // identical character pairs always produce the same pixel step regardless of
@@ -352,10 +451,48 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     lastBaseTop = glyph ? glyph->top : 0;
     prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+    if (isSupSub) {
+      // Halve the advance so the cursor advances by the same amount the scaled glyph
+      // actually occupies, keeping spacing correct without needing a separate smaller font.
+      prevAdvanceFP = (prevAdvanceFP + 1) / 2;
+    }
+
+    if (isSupSub) {
+      // yPos already carries the vertical offset applied by TextBlock::render().
+      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    } else {
+      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+    }
     prevCp = cp;
   }
 }
+
+namespace {
+const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
+  if (!text || *text == '\0') return text;
+
+  if (baseDir != BidiUtils::BidiBaseDir::RTL) {
+    // Byte-level scan: skip BiDi when no RTL script lead bytes are present.
+    // Hebrew UTF-8 lead bytes: 0xD6-0xD7; Arabic/Syriac: 0xD8-0xDB.
+    // This covers all RTL content without false negatives and avoids triggering
+    // the full UAX#9 algorithm for Latin-extended, em-dashes, accented text, etc.
+    bool hasRtlBytes = false;
+    for (const unsigned char* q = reinterpret_cast<const unsigned char*>(text); *q; ++q) {
+      if (*q >= 0xD6 && *q <= 0xDB) {
+        hasRtlBytes = true;
+        break;
+      }
+    }
+    if (!hasRtlBytes) return text;
+  }
+
+  if (BidiUtils::applyBidiVisual(text, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
+    return visualBuffer.c_str();
+  }
+  return text;
+}
+}  // namespace
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
@@ -1333,9 +1470,11 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     int32_t widthFP = 0;
+    const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      widthFP += sdIt->second->getAdvance(cp, styleIdx);
+      int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
+      widthFP += isSupSub ? (advFP + 1) / 2 : advFP;
     }
     return fp4::toPixel(widthFP);
   }
@@ -1366,6 +1505,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
+    if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+      prevAdvanceFP = (prevAdvanceFP + 1) / 2;
+    }
     prevCp = cp;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
@@ -1425,6 +1567,12 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    // Skip Hebrew Niqqud (vowel marks)
+    // Temporary: avoid adding Niqqud to built-in fonts. Remove when custom fonts are supported.
+    if (cp >= 0x0591 && cp <= 0x05C7) {
+      continue;
+    }
+
     if (utf8IsCombiningMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;

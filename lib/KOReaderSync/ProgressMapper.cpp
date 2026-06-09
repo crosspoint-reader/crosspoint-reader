@@ -1,5 +1,6 @@
 #include "ProgressMapper.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <cstring>
 
 #include "ChapterXPathResolver.h"
+#include "Epub/Section.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
 
@@ -52,6 +54,64 @@ int parseTextNodeIndex(const std::string& xpath) {
     val = val * 10 + (xpath[i] - '0');
   }
   return val > 0 ? val : 1;
+}
+
+bool isChapterStartXPath(const std::string& xpath) {
+  if (xpath.find("/p[") != std::string::npos || xpath.find("/li[") != std::string::npos) {
+    return false;
+  }
+
+  static constexpr char kDocFragment[] = "/body/DocFragment[";
+  const size_t docFragPos = xpath.find(kDocFragment);
+  if (docFragPos == std::string::npos) {
+    return false;
+  }
+  const size_t docFragEnd = xpath.find(']', docFragPos + strlen(kDocFragment));
+  if (docFragEnd == std::string::npos) {
+    return false;
+  }
+  if (docFragEnd + 1 == xpath.size()) {
+    return true;
+  }
+  if (xpath[docFragEnd + 1] == '.') {
+    if (docFragEnd + 2 >= xpath.size()) {
+      return false;
+    }
+    for (size_t i = docFragEnd + 2; i < xpath.size(); i++) {
+      if (xpath[i] != '0') return false;
+    }
+    return true;
+  }
+
+  static constexpr char kDocBody[] = "]/body";
+  const size_t docBodyPos = xpath.find(kDocBody);
+  if (docBodyPos == std::string::npos) {
+    return false;
+  }
+  size_t bodyContentStart = docBodyPos + strlen(kDocBody);
+  if (bodyContentStart == xpath.size()) {
+    return true;
+  }
+  if (xpath[bodyContentStart] != '/') {
+    return false;
+  }
+  bodyContentStart++;
+  if (bodyContentStart == xpath.size()) {
+    return true;
+  }
+
+  const size_t dotPos = xpath.rfind('.');
+  if (dotPos == std::string::npos || dotPos <= bodyContentStart || dotPos + 1 >= xpath.size()) {
+    return false;
+  }
+  if (xpath.find('/', bodyContentStart) != std::string::npos) {
+    return false;
+  }
+
+  for (size_t i = dotPos + 1; i < xpath.size(); i++) {
+    if (xpath[i] != '0') return false;
+  }
+  return true;
 }
 
 // Parsed representation of one step in the XPath ancestry.
@@ -506,8 +566,9 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStr
 }
 }  // namespace
 
-KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
-  KOReaderPosition result;
+SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub>& epub,
+                                                      const CrossPointPosition& pos) {
+  SavedProgressPosition result;
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
@@ -520,13 +581,14 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   if (result.xpath.empty()) {
     result.xpath = generateXPath(epub, pos.spineIndex, intra);
   }
-  LOG_DBG("PM", "-> KO: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
+  LOG_DBG("PM", "-> Progress: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
           result.percentage * 100, result.xpath.c_str());
   return result;
 }
 
-CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
-                                                int currentSpineIndex, int totalPagesInCurrentSpine) {
+CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
+                                                GfxRenderer& renderer, int currentSpineIndex,
+                                                int totalPagesInCurrentSpine, int fallbackTotalPages) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) return result;
@@ -556,7 +618,6 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       }
     }
   }
-  if (result.spineIndex >= spineCount) return result;
 
   const size_t prevCum = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
   const size_t spineSize = epub->getCumulativeSpineItemSize(result.spineIndex) - prevCum;
@@ -570,13 +631,25 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       result.totalPages = std::max(
           1, static_cast<int>(totalPagesInCurrentSpine * static_cast<float>(spineSize) / static_cast<float>(cs)));
   }
-  if (spineSize == 0 || result.totalPages == 0) return result;
+
+  if (result.totalPages <= 0) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    if (auto cachedCount = tempSection.getCachedPageCount()) {
+      result.totalPages = *cachedCount;
+    } else if (fallbackTotalPages > 0) {
+      result.totalPages = fallbackTotalPages;
+    } else {
+      result.totalPages = 1;  // Prevent division by zero and give a fallback
+    }
+  }
 
   float intra = 0.0f;
+  bool resolvedIntra = false;
   if (useAncestry) {
     ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
+      resolvedIntra = true;
       const int pAtMatch = s.getParagraphAtMatch();
       if (pAtMatch > 0) {
         result.paragraphIndex = static_cast<uint16_t>(pAtMatch);
@@ -602,19 +675,77 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
+      resolvedIntra = true;
       LOG_DBG("PM", "XPath p[%d]/text()[%d]+%d -> %.1f%% (target=%zu total=%zu)", xpathP, xpathTextNode, xpathChar,
               intra * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }
   }
-  if (intra <= 0.0f) {
+  if (!resolvedIntra && xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
+    intra = 0.0f;
+    resolvedIntra = true;
+    LOG_DBG("PM", "Chapter-start XPath %s -> spine=%d page start", koPos.xpath.c_str(), result.spineIndex);
+  }
+  if (!resolvedIntra) {
     const size_t bytesIn = (targetBytes > prevCum) ? (targetBytes - prevCum) : 0;
     intra = std::max(0.0f, std::min(1.0f, static_cast<float>(bytesIn) / static_cast<float>(spineSize)));
   }
 
   result.pageNumber = std::max(
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
-  LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
+  LOG_DBG("PM", "<- Progress: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
+
+  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
+  if (result.hasLiIndex || result.xpathAnchorId[0] != '\0' || result.hasParagraphIndex) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    bool refined = false;
+    if (result.hasLiIndex) {
+      const auto liPage = tempSection.getPageForListItemIndex(result.liIndex);
+      if (liPage.has_value()) {
+        LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage, result.pageNumber);
+        result.pageNumber = *liPage;
+        refined = true;
+      } else {
+        LOG_DBG("PM", "Li index %u not found in section LUT", result.liIndex);
+      }
+    }
+    if (!refined && result.xpathAnchorId[0] != '\0') {
+      const auto anchorPage = tempSection.getPageForAnchor(std::string(result.xpathAnchorId));
+      if (anchorPage.has_value()) {
+        LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage, result.pageNumber);
+        result.pageNumber = *anchorPage;
+        refined = true;
+      } else {
+        LOG_DBG("PM", "Anchor '%s' not found in section cache", result.xpathAnchorId);
+      }
+    }
+    if (!refined && result.hasParagraphIndex) {
+      const auto paragraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex);
+      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex + 1);
+      if (paragraphPage.has_value()) {
+        int refinedPage = std::max(result.pageNumber, static_cast<int>(*paragraphPage));
+        if (nextParagraphPage.has_value()) {
+          const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
+          // occupies different pages than at build time).
+          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+            refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+          }
+        }
+        char nextParaBuf[8];
+        if (nextParagraphPage.has_value())
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+        else
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
+        LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d", result.paragraphIndex,
+                *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
+        result.pageNumber = refinedPage;
+      } else {
+        LOG_DBG("PM", "Paragraph %u not found in section LUT", result.paragraphIndex);
+      }
+    }
+  }
   return result;
 }
 
