@@ -712,6 +712,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
+  const auto resolvedLineX = [firstLineIndent, isRtl = blockStyle.isRtl](const int xpos) -> int16_t {
+    if (!isRtl && firstLineIndent < 0) {
+      return static_cast<int16_t>(xpos);
+    }
+    return static_cast<int16_t>(xpos < 0 ? 0 : xpos);
+  };
 
   if (willReorder) {
     reorderedWordsScratch.clear();
@@ -799,7 +805,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
 
     for (size_t wordIdx = 0; wordIdx < reorderedWidthsScratch.size(); wordIdx++) {
-      lineXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
+      lineXPos.push_back(resolvedLineX(xpos));
       xpos += reorderedWidthsScratch[wordIdx];
 
       const bool nextIsContinuation =
@@ -841,7 +847,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
       for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
         xpos -= wordWidths[lastBreakAt + wordIdx];
-        lineXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
+        lineXPos.push_back(resolvedLineX(xpos));
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
@@ -875,7 +881,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
 
       for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-        lineXPos.push_back(static_cast<int16_t>(xpos < 0 ? 0 : xpos));
+        lineXPos.push_back(resolvedLineX(xpos));
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
