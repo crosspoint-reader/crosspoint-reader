@@ -261,10 +261,18 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 }
 
-int ParsedText::resolveFirstLineIndent(const bool isFirstLine) const {
-  if (isFirstLine && blockStyle.textIndentDefined && (blockStyle.textIndent < 0 || !extraParagraphSpacing) &&
-      isNaturalAlign) {
-    return blockStyle.textIndent;
+int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {
+  if (!isFirstLine || !isNaturalAlign) {
+    return 0;
+  }
+  if (blockStyle.textIndentDefined) {
+    if (blockStyle.textIndent < 0 || !extraParagraphSpacing) {
+      return blockStyle.textIndent;
+    }
+    return 0;
+  }
+  if (!extraParagraphSpacing) {
+    return renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * 3;
   }
   return 0;
 }
@@ -292,9 +300,6 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   isNaturalAlign =
       blockStyle.alignment == CssTextAlign::Justify ||
       (blockStyle.isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left);
-
-  // Apply fixed transforms before any per-line layout work.
-  applyParagraphIndent();
 
   // Ensure SD card font glyph metrics are loaded before measuring word widths.
   // For flash-based fonts isSdCardFont() returns false and this block is skipped
@@ -356,7 +361,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
-  const int firstLineIndent = resolveFirstLineIndent(true);
+  const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -462,25 +467,11 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   return lineBreakIndices;
 }
 
-void ParsedText::applyParagraphIndent() {
-  if (extraParagraphSpacing || words.empty()) {
-    return;
-  }
-
-  if (blockStyle.textIndentDefined) {
-    // CSS text-indent is explicitly set (even if 0) - don't use fallback EmSpace
-    // The actual indent positioning is handled in extractLine()
-  } else if (isNaturalAlign) {
-    // No CSS text-indent defined - use EmSpace fallback for visual indent
-    words.front().insert(0, "\xe2\x80\x83");
-  }
-}
-
 // Builds break indices while opportunistically splitting the word that would overflow the current line.
 std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
                                                             const int pageWidth, std::vector<uint16_t>& wordWidths,
                                                             std::vector<bool>& continuesVec) {
-  const int firstLineIndent = resolveFirstLineIndent(true);
+  const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
 
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
@@ -643,7 +634,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
-  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0);
+  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 
   // Build line data by moving from the original vectors using index range
   std::vector<std::string> lineWords;
