@@ -103,7 +103,13 @@ bool isChapterStartXPath(const std::string& xpath) {
   if (dotPos == std::string::npos || dotPos <= bodyContentStart || dotPos + 1 >= xpath.size()) {
     return false;
   }
-  if (xpath.find('/', bodyContentStart) != std::string::npos) {
+  size_t terminalEnd = dotPos;
+  static constexpr char kTextNode[] = "/text()";
+  const size_t textNodePos = xpath.rfind(kTextNode, dotPos);
+  if (textNodePos != std::string::npos && textNodePos >= bodyContentStart) {
+    terminalEnd = textNodePos;
+  }
+  if (xpath.find('/', bodyContentStart) < terminalEnd) {
     return false;
   }
 
@@ -233,6 +239,12 @@ class ParagraphStreamer final : public Print {
   bool inAttrQuote =
       false;  // true while inside a quoted attribute value (prevents '/' from being treated as self-close)
   char attrQuoteChar = 0;
+  uint8_t nonVisibleDepth = 0;
+
+  bool isNonVisibleTag() const {
+    return strcasecmp(tagName, "head") == 0 || strcasecmp(tagName, "style") == 0 ||
+           strcasecmp(tagName, "script") == 0 || strcasecmp(tagName, "title") == 0;
+  }
 
   void onVisibleCodepoint() {
     totalVisChars++;
@@ -292,12 +304,17 @@ class ParagraphStreamer final : public Print {
   void onOpenTag() {
     htmlDepth++;
 
+    if (nonVisibleDepth > 0 || isNonVisibleTag()) {
+      nonVisibleDepth++;
+      return;
+    }
+
     if (stepCount == 0) {
       if (strcasecmp(tagName, "p") == 0) onLegacyP();
       return;
     }
 
-    // Capture <a id> inside the fully-matched element even after target char is found
+    // Capture a child <a id> inside the fully-matched element even after target char is found.
     if (revPFound && matchedDepth == stepCount && capturedAnchorIdLen == 0 && strcasecmp(tagName, "a") == 0) {
       capturingAnchorTag = true;
       idState = ID_SCAN;
@@ -321,6 +338,8 @@ class ParagraphStreamer final : public Print {
           stepEnteredAtDepth[matchedDepth] = htmlDepth;
           matchedDepth++;
           if (matchedDepth == stepCount) {
+            capturingAnchorTag = true;
+            idState = ID_SCAN;
             paragraphAtMatch = pCount;
             liCountAtMatch = liCount;
             revPFound = true;
@@ -338,6 +357,12 @@ class ParagraphStreamer final : public Print {
   }
 
   void onCloseTag() {
+    if (nonVisibleDepth > 0) {
+      nonVisibleDepth--;
+      if (htmlDepth > 0) htmlDepth--;
+      return;
+    }
+
     // Legacy mode: each direct child element closing advances the text node index.
     if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth + 1) {
       currentTextNode++;
@@ -535,6 +560,9 @@ class ParagraphStreamer final : public Print {
       tagState = TAG_IDLE;
     } else if (globalInTag) {
       processByteInTag(c);
+    } else if (nonVisibleDepth > 0) {
+      // Ignore head/style/script/title text. KOReader XPaths are body-relative, and CSS text
+      // should not contribute to intra-spine progress.
     } else {
       if (c == '&') {
         globalInEntity = true;
