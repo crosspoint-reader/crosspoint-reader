@@ -21,6 +21,10 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+#if defined(CROSSPOINT_FREEINKUI_HOME) && CROSSPOINT_FREEINKUI_HOME
+#include <FreeInkUIGfxRenderer.h>
+#endif
+
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
@@ -239,7 +243,99 @@ void HomeActivity::loop() {
   }
 }
 
+#if defined(CROSSPOINT_FREEINKUI_HOME) && CROSSPOINT_FREEINKUI_HOME
+void HomeActivity::renderFreeInkUI() {
+  freeink::ui::GfxRendererTarget draw(renderer);
+  draw.setFont(freeink::ui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
+  draw.setFont(freeink::ui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
+  draw.setFont(freeink::ui::GfxRendererTarget::FONT_TITLE, UI_12_FONT_ID);
+
+  const freeink::ui::ThemeTokens tokens = freeink::ui::defaultThemeTokens(
+      freeink::ui::GfxRendererTarget::FONT_SMALL, freeink::ui::GfxRendererTarget::FONT_BODY, freeink::ui::GfxRendererTarget::FONT_TITLE);
+
+  // Render-only frame: button input keeps flowing through loop()'s
+  // ButtonNavigator/selectorIndex, so the snapshot stays empty and finish()
+  // is never called. Touch routing hooks in here once HalGPIO exposes raw
+  // touch points.
+  freeink::ui::InteractionBuffer<24> interactions;
+  const freeink::ui::InputSnapshot input{};
+  const freeink::ui::DeviceContext device = draw.deviceContext();
+  freeink::ui::Frame<24> ui(draw, device, input, interactions);
+
+  renderer.clearScreen();
+
+  freeink::ui::Stack<3> screen(ui.safeRect(), freeink::ui::Axis::Column, 0);
+  screen.fixed(tokens.headerHeight);
+  screen.flex(1);
+  screen.fixed(tokens.footerHeight);
+  screen.layout();
+
+  freeink::ui::HeaderProps header;
+  header.title = !recentBooks.empty()
+                     ? recentBooks[std::min(coverSelectorIndex, static_cast<int>(recentBooks.size()) - 1)].title.c_str()
+                     : "CrossPoint";
+  header.titleText = tokens.titleText;
+  freeink::ui::header(ui, screen.rect(0), header);
+
+  // One flat list over recent books + static menu — the same index space
+  // loop() drives with selectorIndex (recents first, then menu entries in
+  // indexToMenuItem() order).
+  constexpr uint16_t MAX_ROWS = 16;
+  freeink::ui::ListItem items[MAX_ROWS]{};
+  uint16_t count = 0;
+  for (const RecentBook& book : recentBooks) {
+    if (count >= MAX_ROWS) break;
+    items[count].label = book.title.c_str();
+    items[count].actionValue = static_cast<int16_t>(count);
+    items[count].enabled = true;
+    ++count;
+  }
+  const char* menuLabels[5];
+  uint8_t menuCount = 0;
+  menuLabels[menuCount++] = tr(STR_BROWSE_FILES);
+  menuLabels[menuCount++] = tr(STR_MENU_RECENT_BOOKS);
+  if (hasOpdsServers) menuLabels[menuCount++] = tr(STR_OPDS_BROWSER);
+  menuLabels[menuCount++] = tr(STR_FILE_TRANSFER);
+  menuLabels[menuCount++] = tr(STR_SETTINGS_TITLE);
+  for (uint8_t i = 0; i < menuCount && count < MAX_ROWS; ++i, ++count) {
+    items[count].label = menuLabels[i];
+    items[count].actionValue = static_cast<int16_t>(count);
+    items[count].enabled = true;
+  }
+
+  freeink::ui::ListProps list;
+  list.items = items;
+  list.count = count;
+  list.selectedIndex = static_cast<int16_t>(selectorIndex);
+  list.rowHeight = tokens.rowHeight;
+  list.labelText = tokens.bodyText;
+  list.sidePadding = tokens.spaceMd;
+  const uint16_t visible = freeink::ui::listVisibleRows(screen.rect(1), list.rowHeight, list.rowGap);
+  list.topIndex = freeink::ui::listTopIndexFor(list.selectedIndex, 0, visible, count);
+  freeink::ui::list(ui, screen.rect(1), list);
+
+  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const char* hintLabels[4] = {labels.btn1, labels.btn2, labels.btn3, labels.btn4};
+  freeink::ui::Stack<4> hints(screen.rect(2), freeink::ui::Axis::Row, tokens.spaceSm);
+  for (uint8_t i = 0; i < 4; ++i) hints.flex(1);
+  hints.layout();
+  for (uint8_t i = 0; i < 4; ++i) {
+    if (hintLabels[i] == nullptr || hintLabels[i][0] == '\0') continue;
+    freeink::ui::ButtonProps hint;
+    hint.label = hintLabels[i];
+    hint.text = tokens.smallText;
+    freeink::ui::button(ui, hints.rect(i), hint);
+  }
+}
+#endif  // CROSSPOINT_FREEINKUI_HOME
+
 void HomeActivity::render(RenderLock&&) {
+#if defined(CROSSPOINT_FREEINKUI_HOME) && CROSSPOINT_FREEINKUI_HOME
+  renderFreeInkUI();
+  renderer.displayBuffer();
+  firstRenderDone = true;
+  return;
+#endif
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

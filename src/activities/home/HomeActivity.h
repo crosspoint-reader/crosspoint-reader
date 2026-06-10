@@ -73,6 +73,13 @@ class HomeActivity final : public Activity {
   void loadRecentBooks(int maxBooks);
   void loadRecentCovers(const std::vector<int>& coverHeights);
 
+#if defined(CROSSPOINT_FREEINKUI_HOME) && CROSSPOINT_FREEINKUI_HOME
+  // Opt-in FreeInkUI render path (-DCROSSPOINT_FREEINKUI_HOME=1): same
+  // selectorIndex/loop() semantics, drawn through FreeInkUI components
+  // instead of BaseTheme. First step of the FreeInkUI migration.
+  void renderFreeInkUI();
+#endif
+
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE)

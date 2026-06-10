@@ -396,6 +396,97 @@ void parseIconMap(JsonObjectConst obj, ThemeIconMap& icons) {
 }
 
 ThemeMetrics defaultMetrics() { return LyraMetrics::values; }
+
+// Token + state-style sections (see freeink-sdk docs/freeink-ui.md): compact
+// "tokens" plus per-component state styles, the shape FreeInkUI renders from.
+// Until screens render through FreeInkUI directly, they map onto the existing
+// metrics/spec structs so the current BaseTheme pipeline honors them too.
+
+int tokenFontId(const char* name, const int fallback) {
+  if (name == nullptr) return fallback;
+  if (strcmp(name, "small") == 0) return SMALL_FONT_ID;
+  if (strcmp(name, "ui10") == 0) return UI_10_FONT_ID;
+  return UI_12_FONT_ID;
+}
+
+bool isBlackColorName(JsonVariantConst value) {
+  const char* name = value.as<const char*>();
+  return name != nullptr && strcmp(name, "black") == 0;
+}
+
+void applyThemeTokens(JsonObjectConst tokens, SdCardThemeInfo& out) {
+  if (tokens.isNull()) return;
+  JsonObjectConst font = tokens["font"];
+  if (!font.isNull()) {
+    out.list.fontId = tokenFontId(font["body"].as<const char*>(), out.list.fontId);
+    out.buttonMenu.fontId = tokenFontId(font["body"].as<const char*>(), out.buttonMenu.fontId);
+    out.header.fontId = tokenFontId(font["title"].as<const char*>(), out.header.fontId);
+  }
+  JsonObjectConst size = tokens["size"];
+  if (!size.isNull()) {
+    out.metrics.listRowHeight = size["row"] | out.metrics.listRowHeight;
+    out.metrics.menuRowHeight = size["row"] | out.metrics.menuRowHeight;
+    out.metrics.headerHeight = size["header"] | out.metrics.headerHeight;
+    out.metrics.buttonHintsHeight = size["footer"] | out.metrics.buttonHintsHeight;
+    out.metrics.progressBarHeight = size["progress"] | out.metrics.progressBarHeight;
+  }
+}
+
+void applyComponentStateStyles(JsonObjectConst components, SdCardThemeInfo& out) {
+  if (components.isNull()) return;
+  // State styles collapse onto the v1 selection model: a solid black selected
+  // background means fill+inverted text, otherwise outline selection.
+  JsonObjectConst listRow = components["list.row"];
+  if (!listRow.isNull()) {
+    out.list.enabled = true;
+    JsonObjectConst selected = listRow["selected"];
+    if (!selected.isNull()) {
+      const bool fill = isBlackColorName(selected["bg"]);
+      out.list.selectionStyle = fill ? ThemeMenuSelectionStyle::Fill : ThemeMenuSelectionStyle::Outline;
+      out.list.selectionFill = fill;
+      out.list.selectionOutline = !fill;
+      out.list.selectedTextInverted = fill;
+    }
+  }
+  JsonObjectConst button = components["button.primary"];
+  if (!button.isNull()) {
+    out.buttonMenu.enabled = true;
+    JsonObjectConst selected = button["selected"];
+    if (!selected.isNull()) {
+      const bool fill = isBlackColorName(selected["bg"]);
+      out.buttonMenu.selectionStyle = fill ? ThemeMenuSelectionStyle::Fill : ThemeMenuSelectionStyle::Outline;
+      out.buttonMenu.selectedTextInverted = fill;
+      out.buttonMenu.selectionFillBlack = fill;
+    }
+  }
+  JsonObjectConst statusBar = components["statusBar.reader"];
+  if (!statusBar.isNull()) {
+    out.metrics.progressBarHeight = statusBar["progressHeight"] | out.metrics.progressBarHeight;
+  }
+}
+
+void applyFlatIconAssets(JsonObjectConst assets, ThemeIconMap& icons) {
+  if (assets.isNull()) return;
+  // Flat namespaced ids: "icons.book": "icons/book.bmp".
+  for (JsonPairConst kv : assets) {
+    const char* key = kv.key().c_str();
+    if (strncmp(key, "icons.", 6) != 0) continue;
+    UIIcon icon = UIIcon::None;
+    const char* path = kv.value().as<const char*>();
+    if (iconForKey(key + 6, icon) && path != nullptr && ThemeInstaller::isValidRelativePath(path)) {
+      icons[icon] = path;
+    }
+  }
+}
+
+void applyThemeExtensions(JsonObjectConst extensions, SdCardThemeInfo& out) {
+  // Only this fork's namespace is read; extensions.crossink and any future
+  // fork blocks pass through unparsed by design.
+  JsonObjectConst home = extensions["crosspoint"]["home"];
+  if (!home.isNull()) {
+    out.metrics.homeContinueReadingInMenu = home["continueReadingInMenu"] | out.metrics.homeContinueReadingInMenu;
+  }
+}
 }  // namespace
 
 const char* SdCardThemeRegistry::activeDeviceId() { return gpio.deviceIsX3() ? "x3" : "x4"; }
@@ -461,6 +552,12 @@ bool SdCardThemeRegistry::parseThemeJson(const char* themeDirPath, SdCardThemeIn
   out.inherits = inherits;
   out.deviceId = deviceId;
   out.metrics = defaultMetrics();
+  // Compact tokens and state styles first; the more specific metrics/spec
+  // sections below override them when a theme provides both.
+  applyThemeTokens(doc["tokens"].as<JsonObjectConst>(), out);
+  applyThemeTokens(deviceObj["tokens"].as<JsonObjectConst>(), out);
+  applyComponentStateStyles(doc["components"].as<JsonObjectConst>(), out);
+  applyComponentStateStyles(deviceObj["components"].as<JsonObjectConst>(), out);
   parseHomeRecentsSpec(doc["components"]["homeRecents"].as<JsonObjectConst>(), out.homeRecents);
   parseHomeRecentsSpec(deviceObj["components"]["homeRecents"].as<JsonObjectConst>(), out.homeRecents);
   parseButtonMenuSpec(doc["components"]["homeMenu"].as<JsonObjectConst>(), out.buttonMenu);
@@ -478,7 +575,11 @@ bool SdCardThemeRegistry::parseThemeJson(const char* themeDirPath, SdCardThemeIn
   if ((out.buttonMenu.enabled && out.buttonMenu.showIcons) || (out.list.enabled && out.list.showIcons)) {
     parseIconMap(doc["assets"]["icons"].as<JsonObjectConst>(), out.icons);
     parseIconMap(deviceObj["assets"]["icons"].as<JsonObjectConst>(), out.icons);
+    applyFlatIconAssets(doc["assets"].as<JsonObjectConst>(), out.icons);
+    applyFlatIconAssets(deviceObj["assets"].as<JsonObjectConst>(), out.icons);
   }
+  applyThemeExtensions(doc["extensions"].as<JsonObjectConst>(), out);
+  applyThemeExtensions(deviceObj["extensions"].as<JsonObjectConst>(), out);
   if (out.homeRecents.type == ThemeHomeRecentsType::CoverStrip) {
     out.metrics.homeRecentBooksCount = std::max(1, out.homeRecents.maxBooks);
   } else if (out.homeRecents.type == ThemeHomeRecentsType::None) {
