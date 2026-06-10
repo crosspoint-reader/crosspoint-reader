@@ -10,16 +10,10 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
-#include "components/themes/lyra/Lyra3CoversTheme.h"
-#include "components/themes/lyra/LyraTheme.h"
-#include "components/themes/roundedraff/RoundedRaffTheme.h"
 
 UITheme UITheme::instance;
 
-UITheme::UITheme() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
-}
+UITheme::UITheme() { setBuiltInTheme(); }
 
 void UITheme::refreshRegistry() { themeRegistry.discover(); }
 
@@ -59,7 +53,7 @@ void UITheme::reload() {
       themeRegistry.clear();
       SETTINGS.sdThemeName[0] = '\0';
       SETTINGS.saveToFile();
-      setTheme(static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme));
+      setBuiltInTheme();
       return;
     }
 
@@ -75,13 +69,7 @@ void UITheme::reload() {
     currentSdHeader = themeInfo->header;
     currentSdThemePath = themeInfo->path;
     currentSdIcons = themeInfo->icons;
-    const bool inheritsClassic = themeInfo->inherits == "classic";
     themeRegistry.clear();
-    if (inheritsClassic) {
-      currentTheme = std::make_unique<BaseTheme>();
-      currentMetrics = &currentSdMetrics;
-      return;
-    }
     const ThemeHomeRecentsSpec* homeRecents =
         currentSdHomeRecents.type != ThemeHomeRecentsType::Default ? &currentSdHomeRecents : nullptr;
     const ThemeButtonMenuSpec* buttonMenu = currentSdButtonMenu.enabled ? &currentSdButtonMenu : nullptr;
@@ -89,49 +77,18 @@ void UITheme::reload() {
     const ThemeButtonHintsSpec* buttonHints = currentSdButtonHints.enabled ? &currentSdButtonHints : nullptr;
     const ThemeTabBarSpec* tabBar = currentSdTabBar.enabled ? &currentSdTabBar : nullptr;
     const ThemeHeaderSpec* header = currentSdHeader.enabled ? &currentSdHeader : nullptr;
-    currentTheme = std::make_unique<LyraTheme>(&currentSdMetrics, homeRecents, buttonMenu, list, buttonHints, tabBar,
+    currentTheme = std::make_unique<BaseTheme>(&currentSdMetrics, homeRecents, buttonMenu, list, buttonHints, tabBar,
                                                header, currentSdThemePath.c_str(), &currentSdIcons);
     currentMetrics = &currentSdMetrics;
     return;
   }
 
-  setTheme(static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme));
+  setBuiltInTheme();
 }
 
-void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
-  std::unique_ptr<BaseTheme> nextTheme;
-  const ThemeMetrics* nextMetrics = &LyraMetrics::values;
-
-  switch (type) {
-    case CrossPointSettings::UI_THEME::CLASSIC:
-      LOG_DBG("UI", "Using Classic theme");
-      nextTheme = std::make_unique<BaseTheme>();
-      nextMetrics = &BaseMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::LYRA:
-      LOG_DBG("UI", "Using Lyra theme");
-      nextTheme = std::make_unique<LyraTheme>();
-      nextMetrics = &LyraMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::ROUNDEDRAFF:
-      LOG_DBG("UI", "Using RoundedRaff theme");
-      nextTheme = std::make_unique<RoundedRaffTheme>();
-      nextMetrics = &RoundedRaffMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
-      LOG_DBG("UI", "Using Lyra 3 Covers theme");
-      nextTheme = std::make_unique<Lyra3CoversTheme>();
-      nextMetrics = &Lyra3CoversMetrics::values;
-      break;
-    default:
-      LOG_DBG("UI", "Using Lyra theme");
-      nextTheme = std::make_unique<LyraTheme>();
-      nextMetrics = &LyraMetrics::values;
-      break;
-  }
-
-  currentTheme = std::move(nextTheme);
-  currentMetrics = nextMetrics;
+void UITheme::setBuiltInTheme() {
+  currentTheme = std::make_unique<BaseTheme>();
+  currentMetrics = &BaseMetrics::values;
   currentSdMetrics = ThemeMetrics{};
   currentSdHomeRecents = ThemeHomeRecentsSpec{};
   currentSdButtonMenu = ThemeButtonMenuSpec{};

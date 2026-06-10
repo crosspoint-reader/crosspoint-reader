@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "id": "roundedraff",
+  "name": "RoundedRaff",
+  "description": "Rounded corners everywhere: pill selections, rounded keyboard keys, and soft popups.",
+  "inherits": "lyra",
+  "metrics": {
+    "topPadding": 0,
+    "listRowHeight": 42,
+    "listWithSubtitleRowHeight": 69,
+    "menuRowHeight": 42,
+    "menuSpacing": 6,
+    "homeTopPadding": 55,
+    "homeCoverHeight": 300,
+    "homeCoverTileHeight": 350,
+    "homeContinueReadingInMenu": true,
+    "homeMenuTopOffset": 20,
+    "keyboardKeyHeight": 30,
+    "keyboardKeySpacing": 10,
+    "keyboardBottomKeyHeight": 30,
+    "keyboardVerticalOffset": 0,
+    "keyboardKeyCornerRadius": 10,
+    "keyboardFillUnselected": true,
+    "keyboardOutlineAllUnselected": true,
+    "keyboardSecondaryLabelRightPadding": 3,
+    "keyboardSecondaryLabelTopPadding": 1,
+    "keyboardMinArrowHeadSize": 1,
+    "popupTopOffsetRatio": 0.12,
+    "popupMarginX": 20,
+    "popupMarginY": 14,
+    "popupCornerRadius": 18,
+    "popupTextBold": true,
+    "popupProgressDrawOutline": true,
+    "popupProgressClampPercent": true,
+    "textFieldHorizontalPadding": 8,
+    "textFieldNormalThickness": 2,
+    "textFieldLineEndOffset": -1
+  },
+  "components": {
+    "homeMenu": {
+      "selectionStyle": "pill",
+      "selectionCornerRadius": 10,
+      "selectedTextInverted": true
+    },
+    "list": {
+      "selectionStyle": "pill",
+      "selectionCornerRadius": 10,
+      "selectedTextInverted": true
+    },
+    "tabBar": {
+      "font": "ui12",
+      "bold": true,
+      "equalWidth": true,
+      "selectionStyle": "fill",
+      "selectedCornerRadius": 18,
+      "selectedTextInverted": true,
+      "drawDivider": true,
+      "horizontalInset": 4
+    },
+    "header": {
+      "font": "ui12",
+      "bold": true,
+      "centeredTitle": false,
+      "showDivider": false
+    }
+  }
+}

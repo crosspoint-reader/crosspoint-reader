@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "id": "classic",
+  "name": "Classic",
+  "description": "The original CrossPoint look: square corners, compact rows, and a large single cover.",
+  "inherits": "lyra",
+  "metrics": {
+    "batteryWidth": 15,
+    "batteryBarHeight": 20,
+    "headerHeight": 45,
+    "verticalSpacing": 10,
+    "listRowHeight": 30,
+    "listWithSubtitleRowHeight": 50,
+    "menuRowHeight": 45,
+    "tabSpacing": 10,
+    "tabBarHeight": 50,
+    "homeTopPadding": 40,
+    "homeCoverHeight": 400,
+    "homeCoverTileHeight": 400,
+    "homeMenuTopOffset": 10,
+    "keyboardKeyWidth": 22,
+    "keyboardVerticalOffset": -13,
+    "keyboardKeyCornerRadius": 0,
+    "popupTopOffsetRatio": 0.075,
+    "popupMarginX": 15,
+    "popupMarginY": 15,
+    "popupCornerRadius": 0,
+    "popupTextBold": true,
+    "popupTextInverted": true,
+    "popupProgressFillInverted": true,
+    "popupProgressOutlineInverted": true
+  },
+  "components": {
+    "homeMenu": {
+      "selectionStyle": "fill",
+      "selectionCornerRadius": 0,
+      "selectedTextInverted": true
+    },
+    "list": {
+      "selectionStyle": "fill",
+      "selectionCornerRadius": 0,
+      "selectedTextInverted": true
+    },
+    "homeRecents": {
+      "type": "card"
+    }
+  }
+}

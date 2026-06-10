@@ -92,14 +92,11 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
-// Build the UI theme setting dynamically. Firmware themes keep their existing
-// indexes; SD card themes are appended after them.
+// Build the UI theme setting dynamically. Index 0 is the built-in theme;
+// SD card themes are appended after it.
 inline SettingInfo buildUiThemeSetting(const SdCardThemeRegistry* registry) {
   std::vector<std::string> allStringValues;
-  allStringValues.push_back(I18N.get(StrId::STR_THEME_CLASSIC));
   allStringValues.push_back(I18N.get(StrId::STR_THEME_LYRA));
-  allStringValues.push_back(I18N.get(StrId::STR_THEME_LYRA_EXTENDED));
-  allStringValues.push_back(I18N.get(StrId::STR_THEME_ROUNDEDRAFF));
 
   std::vector<std::string> sdThemeIds;
   if (registry) {
@@ -122,22 +119,20 @@ inline SettingInfo buildUiThemeSetting(const SdCardThemeRegistry* registry) {
     if (SETTINGS.sdThemeName[0] != '\0') {
       for (int i = 0; i < static_cast<int>(sdThemeIds.size()); i++) {
         if (sdThemeIds[i] == SETTINGS.sdThemeName) {
-          return static_cast<uint8_t>(CrossPointSettings::UI_THEME_COUNT + i);
+          return static_cast<uint8_t>(1 + i);
         }
       }
     }
-    return SETTINGS.uiTheme < CrossPointSettings::UI_THEME_COUNT ? SETTINGS.uiTheme : CrossPointSettings::LYRA;
+    return 0;
   };
 
   s.valueSetter = [sdThemeIds](uint8_t v) {
-    if (v < CrossPointSettings::UI_THEME_COUNT) {
-      SETTINGS.uiTheme = v;
+    if (v == 0) {
       SETTINGS.sdThemeName[0] = '\0';
       return;
     }
 
-    SETTINGS.uiTheme = CrossPointSettings::UI_THEME::LYRA;
-    const int sdIdx = v - CrossPointSettings::UI_THEME_COUNT;
+    const int sdIdx = v - 1;
     if (sdIdx < static_cast<int>(sdThemeIds.size())) {
       strncpy(SETTINGS.sdThemeName, sdThemeIds[sdIdx].c_str(), sizeof(SETTINGS.sdThemeName) - 1);
       SETTINGS.sdThemeName[sizeof(SETTINGS.sdThemeName) - 1] = '\0';
@@ -182,10 +177,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* fontRe
             StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
             {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
             "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
+        buildUiThemeSetting(nullptr),  // replaced with the SD-aware entry below
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 

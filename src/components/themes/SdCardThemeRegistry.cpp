@@ -11,7 +11,6 @@
 
 #include "CrossPointSettings.h"
 #include "ThemeInstaller.h"
-#include "components/themes/lyra/LyraTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -157,6 +156,8 @@ void parseHomeRecentsSpec(JsonObjectConst obj, ThemeHomeRecentsSpec& spec) {
   if (type != nullptr) {
     if (strcmp(type, "cover-strip") == 0) {
       spec.type = ThemeHomeRecentsType::CoverStrip;
+    } else if (strcmp(type, "card") == 0) {
+      spec.type = ThemeHomeRecentsType::Card;
     } else if (strcmp(type, "none") == 0) {
       spec.type = ThemeHomeRecentsType::None;
     }
@@ -395,7 +396,7 @@ void parseIconMap(JsonObjectConst obj, ThemeIconMap& icons) {
   }
 }
 
-ThemeMetrics defaultMetrics() { return LyraMetrics::values; }
+ThemeMetrics defaultMetrics() { return BaseMetrics::values; }
 
 // Token + state-style sections (see freeink-sdk docs/freeink-ui.md): compact
 // "tokens" plus per-component state styles, the shape FreeInkUI renders from.

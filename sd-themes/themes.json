@@ -119,6 +119,48 @@
         }
       ],
       "totalSize": 2541
+    },
+    {
+      "id": "roundedraff",
+      "name": "RoundedRaff",
+      "description": "Rounded corners everywhere: pill selections, pill tabs, rounded keyboard keys, and soft popups.",
+      "files": [
+        {
+          "path": "theme.json",
+          "url": "roundedraff/theme.json",
+          "size": 1819,
+          "crc32": 3087905175
+        }
+      ],
+      "totalSize": 1819
+    },
+    {
+      "id": "classic",
+      "name": "Classic",
+      "description": "The original CrossPoint look: square corners, compact rows, and a large single cover.",
+      "files": [
+        {
+          "path": "theme.json",
+          "url": "classic/theme.json",
+          "size": 1220,
+          "crc32": 1699551588
+        }
+      ],
+      "totalSize": 1220
+    },
+    {
+      "id": "lyra-3-covers",
+      "name": "Lyra 3 Covers",
+      "description": "The Lyra look with three recent-book covers side by side on the home screen.",
+      "files": [
+        {
+          "path": "theme.json",
+          "url": "lyra-3-covers/theme.json",
+          "size": 747,
+          "crc32": 35725400
+        }
+      ],
+      "totalSize": 747
     }
   ]
 }

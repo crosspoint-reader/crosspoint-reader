@@ -117,7 +117,6 @@ ThemeInstaller::Error ThemeInstaller::deleteTheme(const char* themeId) {
 
   if (strcmp(SETTINGS.sdThemeName, themeId) == 0) {
     SETTINGS.sdThemeName[0] = '\0';
-    SETTINGS.uiTheme = CrossPointSettings::LYRA;
     SETTINGS.saveToFile();
   }
   return Error::OK;

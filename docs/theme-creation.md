@@ -179,6 +179,9 @@ Supported types:
 - `default`: Lyra default.
 - `none`: no cover area.
 - `cover-strip`: one or more cover slots.
+- `card`: a single centered book card — cover width follows the image aspect
+  ratio at the `homeCoverHeight` metric, with a bookmark ribbon, title/author
+  block, and Continue Reading label drawn on the card.
 
 Example:
 

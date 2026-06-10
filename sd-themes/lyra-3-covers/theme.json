@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "lyra-3-covers",
+  "name": "Lyra 3 Covers",
+  "description": "The Lyra look with three recent-book covers side by side on the home screen.",
+  "inherits": "lyra",
+  "metrics": {
+    "homeCoverTileHeight": 300,
+    "homeRecentBooksCount": 3
+  },
+  "components": {
+    "homeRecents": {
+      "type": "cover-strip",
+      "maxBooks": 3,
+      "selectionLineWidth": 3,
+      "selectionCornerRadius": 6,
+      "slots": [
+        {"book": "index", "bookIndex": 0, "x": "padding", "height": 260, "widthPercent": 30},
+        {"book": "index", "bookIndex": 1, "x": "center", "height": 260, "widthPercent": 30},
+        {"book": "index", "bookIndex": 2, "x": "right-padding", "height": 260, "widthPercent": 30}
+      ]
+    }
+  }
+}

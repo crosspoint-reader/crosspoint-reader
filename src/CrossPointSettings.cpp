@@ -243,7 +243,12 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, sleepScreenCoverFilter, SLEEP_SCREEN_COVER_FILTER_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, uiTheme);
+    {
+      // Legacy slot: the built-in uiTheme selector. Consumed to keep the
+      // positional format aligned; theme choice now lives in sdThemeName.
+      uint8_t legacyUiTheme = 0;
+      serialization::readPod(inputFile, legacyUiTheme);
+    }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, frontButtonBack, FRONT_BUTTON_HARDWARE_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
