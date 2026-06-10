@@ -24,7 +24,7 @@ constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // Per-word: scan enough chars to see through leading neutrals (quotes, numbers)
 // before giving up. 64 is a hedge for pathological cases like long numeric tokens.
 constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
-constexpr size_t MIN_JUSTIFY_GAPS = 2;
+constexpr size_t MIN_JUSTIFY_GAPS = 1;
 constexpr int MAX_JUSTIFY_EXTRA_PX = 12;
 
 // Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
