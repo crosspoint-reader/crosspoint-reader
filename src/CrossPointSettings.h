@@ -252,6 +252,8 @@ class CrossPointSettings {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+  // Explore Mode: capture a return point on qualifying menu jumps so the user can navigate back.
+  uint8_t exploreMode = 0;
 
   ~CrossPointSettings() = default;
 

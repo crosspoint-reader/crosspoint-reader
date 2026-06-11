@@ -77,9 +77,27 @@ class HalFile::Impl {
 
 HalFile::HalFile() = default;
 HalFile::HalFile(std::unique_ptr<Impl> impl) : impl(std::move(impl)) {}
-HalFile::~HalFile() = default;
+
+HalFile::~HalFile() {
+  // DESTRUCTOR_CLOSES_FILE=1 makes ~FsFile() touch SdFat's shared state; serialize it with
+  // storageMutex like every HAL_FILE_WRAPPED_CALL would. Reset under the lock so the implicit
+  // member destruction afterwards runs on a null unique_ptr (no-op).
+  if (impl) {
+    HalStorage::StorageLock lock;
+    impl.reset();
+  }
+}
+
 HalFile::HalFile(HalFile&&) = default;
-HalFile& HalFile::operator=(HalFile&&) = default;
+
+HalFile& HalFile::operator=(HalFile&& other) {
+  if (this == &other) {
+    return *this;
+  }
+  HalStorage::StorageLock lock;
+  impl = std::move(other.impl);
+  return *this;
+}
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
@@ -98,9 +116,12 @@ bool HalStorage::rename(const char* oldPath, const char* newPath) {
 bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
-  StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
+  bool ok;
+  {
+    StorageLock lock;
+    ok = SDCard.openFileForRead(moduleName, path, fsFile);
+  }
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
   return ok;
 }
@@ -114,9 +135,12 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
-  StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
+  bool ok;
+  {
+    StorageLock lock;
+    ok = SDCard.openFileForWrite(moduleName, path, fsFile);
+  }
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
   return ok;
 }

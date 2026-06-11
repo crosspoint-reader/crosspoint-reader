@@ -22,12 +22,15 @@ class EpubReaderMenuActivity final : public Activity {
     DISPLAY_QR,
     GO_HOME,
     SYNC,
-    DELETE_CACHE
+    DELETE_CACHE,
+    RETURN_TO_PREVIOUS,
+    STAY_HERE
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes);
+                                  const uint8_t currentOrientation, const bool hasFootnotes, const bool hasReturnPoint,
+                                  std::string returnLabel);
 
   void onEnter() override;
   void onExit() override;
@@ -40,12 +43,15 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes);
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasReturnPoint);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;
 
   int selectedIndex = 0;
+
+  // Optional override for RETURN_TO_PREVIOUS; empty falls back to the static i18n string.
+  std::string returnLabel;
 
   ButtonNavigator buttonNavigator;
   std::string title = "Reader Menu";
