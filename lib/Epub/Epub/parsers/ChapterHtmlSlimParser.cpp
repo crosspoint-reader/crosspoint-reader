@@ -365,9 +365,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Skip sub-pixel font-size elements (ebook watermarks such as
-  // <span style="font-size:1px;">). Checked after display:none so a stylesheet
-  // display:none already short-circuits above without reaching here.
+  // Skip sub-pixel font-size elements (such as <span style="font-size:1px;">).
   if (cssStyle.hasFontSize()) {
     const CssLength& fs = cssStyle.fontSize;
     const bool tinyPx = (fs.unit == CssUnit::Pixels && fs.value <= 1.0f);
