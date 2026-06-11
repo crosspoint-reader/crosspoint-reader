@@ -407,6 +407,17 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
       style.verticalAlign = CssVerticalAlign::Sub;
       style.defined.verticalAlign = 1;
     }
+  } else if (iequalsAscii(name, "font-size")) {
+    CssLength len;
+    if (tryInterpretLength(value, len)) {
+      style.fontSize = len;
+      style.defined.fontSize = 1;
+    }
+  } else if (iequalsAscii(name, "visibility")) {
+    if (iequalsAscii(trimCssWhitespace(stripTrailingImportant(value)), "hidden")) {
+      style.display = CssDisplay::None;
+      style.defined.display = 1;
+    }
   }
 }
 
@@ -735,6 +746,7 @@ bool CssParser::saveToCache() const {
     writeLength(style.paddingRight);
     writeLength(style.imageHeight);
     writeLength(style.imageWidth);
+    writeLength(style.fontSize);
     file.write(static_cast<uint8_t>(style.display));
     file.write(static_cast<uint8_t>(style.verticalAlign));
 
@@ -758,6 +770,7 @@ bool CssParser::saveToCache() const {
     if (style.defined.display) definedBits |= 1 << 15;
     if (style.defined.direction) definedBits |= 1 << 16;
     if (style.defined.verticalAlign) definedBits |= 1 << 17;
+    if (style.defined.fontSize) definedBits |= 1 << 18;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -805,7 +818,7 @@ bool CssParser::loadFromCache() {
     return static_cast<size_t>(file.available()) >= neededBytes;
   };
 
-  constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
+  constexpr size_t CSS_LENGTH_FIELD_COUNT = 12;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
   constexpr size_t CSS_FIXED_STYLE_BYTES =
       5 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint32_t);
@@ -892,7 +905,7 @@ bool CssParser::loadFromCache() {
     if (!readLength(style.textIndent) || !readLength(style.marginTop) || !readLength(style.marginBottom) ||
         !readLength(style.marginLeft) || !readLength(style.marginRight) || !readLength(style.paddingTop) ||
         !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight) ||
-        !readLength(style.imageHeight) || !readLength(style.imageWidth)) {
+        !readLength(style.imageHeight) || !readLength(style.imageWidth) || !readLength(style.fontSize)) {
       rulesBySelector_.clear();
       return false;
     }
@@ -937,6 +950,7 @@ bool CssParser::loadFromCache() {
     style.defined.display = (definedBits & 1 << 15) != 0;
     style.defined.direction = (definedBits & 1 << 16) != 0;
     style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
+    style.defined.fontSize = (definedBits & 1 << 18) != 0;
 
     rulesBySelector_[selector] = style;
   }

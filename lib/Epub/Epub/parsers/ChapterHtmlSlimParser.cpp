@@ -365,6 +365,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
+  // Skip sub-pixel font-size elements (ebook watermarks such as
+  // <span style="font-size:1px;">). Checked after display:none so a stylesheet
+  // display:none already short-circuits above without reaching here.
+  if (cssStyle.hasFontSize()) {
+    const CssLength& fs = cssStyle.fontSize;
+    const bool tinyPx = (fs.unit == CssUnit::Pixels && fs.value <= 1.0f);
+    const bool tinyEm = ((fs.unit == CssUnit::Em || fs.unit == CssUnit::Rem) && fs.value <= 0.0625f);
+    if (tinyPx || tinyEm) {
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
+  }
+
   // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
   if (strcmp(name, "table") == 0) {
     // skip nested tables
