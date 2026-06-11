@@ -78,8 +78,8 @@ class HalFile::Impl {
 HalFile::HalFile() = default;
 HalFile::HalFile(std::unique_ptr<Impl> impl) : impl(std::move(impl)) {}
 HalFile::~HalFile() = default;
-HalFile::HalFile(HalFile&&) = default;
-HalFile& HalFile::operator=(HalFile&&) = default;
+HalFile::HalFile(HalFile&&) noexcept = default;
+HalFile& HalFile::operator=(HalFile&&) noexcept = default;
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
