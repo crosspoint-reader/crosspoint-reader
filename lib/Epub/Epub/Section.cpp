@@ -10,7 +10,9 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 25;
+// v26: words are NFC-composed at layout time (ParsedText::addWord) so NFD Vietnamese
+// chapter headings/body render with precomposed glyphs. Bump invalidates NFD caches.
+constexpr uint8_t SECTION_FILE_VERSION = 26;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +

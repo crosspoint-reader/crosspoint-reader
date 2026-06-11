@@ -10,6 +10,7 @@
 #include <JsonSettingsIO.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -1121,7 +1122,7 @@ void EpubReaderActivity::renderStatusBar() const {
     }
 
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
-    title = epub->getTitle();
+    title = utf8ComposeNfc(epub->getTitle());  // NFC so NFD titles render correctly
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
