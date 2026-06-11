@@ -34,6 +34,9 @@ class CrossPointWebServer {
     HalFile file;
     String fileName;
     String path = "/";
+    String targetPath;
+    String tempPath;
+    bool existed = false;
     size_t size = 0;
     bool success = false;
     String error = "";
@@ -120,8 +123,9 @@ class CrossPointWebServer {
     HalFile file;
     std::string familyName;
     std::string filePath;
+    std::string tempPath;
+    bool existed = false;
     bool valid = false;
-    bool magicChecked = false;
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;
     std::vector<uint8_t> buffer;

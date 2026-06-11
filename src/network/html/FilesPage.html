@@ -1949,7 +1949,7 @@
           fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td><span class="folder-badge">FOLDER</span></td>';
           fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
+          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button type="button" class="delete-btn file-action" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${encodeURIComponent(folderPath)}" data-folder="true" title="Delete folder">🗑️</button></div></td>`;
           fileTableContent += '</tr>';
         } else {
           let filePath = currentPath;
@@ -1965,9 +1965,9 @@
           fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}' )" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${filePath.replaceAll("'", "\\'")}', false)" title="Delete file">🗑️</button>`;
+          fileTableContent += `<button type="button" class="move-btn file-action" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${encodeURIComponent(filePath)}" title="Move file">📂</button>`;
+          fileTableContent += `<button type="button" class="rename-btn file-action" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${encodeURIComponent(filePath)}" title="Rename file">✏️</button>`;
+          fileTableContent += `<button type="button" class="delete-btn file-action" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${encodeURIComponent(filePath)}" data-folder="false" title="Delete file">🗑️</button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         }
@@ -1975,7 +1975,24 @@
 
       fileTableContent += '</table>';
       fileTable.innerHTML = fileTableContent;
+      bindFileActionButtons(fileTable);
     }
+  }
+
+  function bindFileActionButtons(container) {
+    container.querySelectorAll('.file-action').forEach(button => {
+      button.addEventListener('click', () => {
+        const name = button.dataset.name || '';
+        const path = decodeURIComponent(button.dataset.path || '');
+        if (button.dataset.action === 'delete') {
+          openDeleteModal(name, path, button.dataset.folder === 'true');
+        } else if (button.dataset.action === 'rename') {
+          openRenameModal(name, path);
+        } else if (button.dataset.action === 'move') {
+          openMoveModal(name, path);
+        }
+      });
+    });
   }
 
   // Modal functions

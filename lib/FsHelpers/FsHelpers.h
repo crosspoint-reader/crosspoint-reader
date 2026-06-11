@@ -68,6 +68,20 @@ inline bool hasCssExtension(const String& fileName) {
 std::string extractFolderPath(const std::string& filePath);
 
 /**
+ * File replacement helpers used by network transfer paths.
+ *
+ * These create temporary files in the same directory as the target so the final
+ * rename stays on the same filesystem.
+ */
+std::string makeTempPath(const std::string& targetPath, const char* prefix, bool timestampHex = true);
+String makeTempPath(const String& targetPath, const char* prefix, bool timestampHex = true);
+bool pathIsDirectory(const char* path);
+void removeBackup(const char* backupPath, const char* targetPath, const char* moduleName, const char* operation);
+bool commitTempFile(const char* tempPath, const char* targetPath, bool existed, const char* moduleName,
+                    const char* backupPrefix, bool timestampHex = true);
+void restoreBackup(const char* backupPath, const char* targetPath, const char* moduleName, const char* operation);
+
+/**
  * Sanitize a filename/path component for FAT32 in a caller-provided buffer.
  * Replaces invalid path characters, spaces, and control characters with '-'.
  */

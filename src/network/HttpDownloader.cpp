@@ -1,6 +1,7 @@
 #include "HttpDownloader.h"
 
 #include <Arduino.h>
+#include <FsHelpers.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <base64.h>
@@ -176,11 +177,20 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              const std::string& username, const std::string& password) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
-  if (Storage.exists(destPath.c_str())) {
-    Storage.remove(destPath.c_str());
+  const bool destExists = Storage.exists(destPath.c_str());
+  if (destExists && FsHelpers::pathIsDirectory(destPath.c_str())) {
+    LOG_ERR("HTTP", "Destination is a directory");
+    return FILE_ERROR;
   }
+
+  const std::string tempPath = FsHelpers::makeTempPath(destPath, "httptmp", false);
+  if (tempPath.empty()) {
+    LOG_ERR("HTTP", "Failed to create temp path");
+    return FILE_ERROR;
+  }
+
   HalFile file;
-  if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
+  if (!Storage.openFileForWrite("HTTP", tempPath.c_str(), file)) {
     LOG_ERR("HTTP", "Failed to open file for writing");
     return FILE_ERROR;
   }
@@ -196,14 +206,19 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   file.close();
 
   if (result != OK) {
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return result;
   }
   if (sink.downloaded == 0) {
     LOG_ERR("HTTP", "no data received");
-    Storage.remove(destPath.c_str());
+    Storage.remove(tempPath.c_str());
     return HTTP_ERROR;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
+  if (!FsHelpers::commitTempFile(tempPath.c_str(), destPath.c_str(), destExists, "HTTP", "httpbak", false)) {
+    LOG_ERR("HTTP", "Failed to finalize download");
+    Storage.remove(tempPath.c_str());
+    return FILE_ERROR;
+  }
   return OK;
 }
