@@ -19,3 +19,7 @@ build
 lib/EpdFont/scripts/downloaded_fonts/
 lib/EpdFont/scripts/instanced_fonts/
 lib/EpdFont/scripts/output/
+
+# PlatformIO check (pio check) leftovers
+.chk.txt
+.chktmp.json
