@@ -758,7 +758,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.depth = self->depth;
       entry.hasUnderline = true;
       entry.underline = true;
-      ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+      applyDirectionToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
 
@@ -843,7 +843,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasItalic = true;
       entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BOLD_TAGS, std::size(BOLD_TAGS))) {
@@ -866,7 +866,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasUnderline = true;
       entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, ITALIC_TAGS, std::size(ITALIC_TAGS))) {
@@ -889,7 +889,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasUnderline = true;
       entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
@@ -931,7 +931,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.hasUnderline = true;
         entry.underline = cssStyle.textDecoration == CssTextDecoration::Underline;
       }
-      ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+      applyDirectionToEntry(entry, cssStyle);
       if (cssStyle.hasVerticalAlign()) {
         if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
           entry.hasSup = true;
