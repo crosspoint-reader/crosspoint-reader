@@ -2,7 +2,9 @@
 
 #include <HalStorage.h>
 
+#include <initializer_list>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -56,14 +58,14 @@ class CssParser {
    * @param classAttr The class attribute value (may contain multiple space-separated classes)
    * @return Combined style with all applicable rules merged
    */
-  [[nodiscard]] CssStyle resolveStyle(const std::string& tagName, const std::string& classAttr) const;
+  [[nodiscard]] CssStyle resolveStyle(std::string_view tagName, std::string_view classAttr) const;
 
   /**
    * Parse an inline style attribute string.
    * @param styleValue The value of a style="" attribute
    * @return Parsed style properties
    */
-  [[nodiscard]] static CssStyle parseInlineStyle(const std::string& styleValue);
+  [[nodiscard]] static CssStyle parseInlineStyle(std::string_view styleValue);
 
   /**
    * Check if any rules have been loaded
@@ -104,29 +106,53 @@ class CssParser {
   bool loadFromCache();
 
  private:
-  // Storage: maps normalized selector -> style properties
-  std::unordered_map<std::string, CssStyle> rulesBySelector_;
+  // Lookup key for a multi-piece selector. The pieces are hashed and compared
+  // as if concatenated, so callers can look up composite keys without
+  // materializing the concatenation in a scratch buffer. Constructed from a
+  // braced list of any arity, e.g. `CompositeKey{tagName, ".", cls}` or
+  // `CompositeKey{".", cls}`. The initializer_list's backing array lives for
+  // the full expression, which covers the lifetime of the find() call.
+  struct CompositeKey {
+    std::initializer_list<std::string_view> pieces;
+    CompositeKey(std::initializer_list<std::string_view> p) noexcept : pieces(p) {}
+  };
+
+  // ASCII-case-insensitive transparent hash/equal. Stored selectors and lookup
+  // keys are compared without regard to case, so callers may insert and look up
+  // using whatever case the CSS source or HTML element name happens to use.
+  // Bodies live in CssParser.cpp so they can share the file-local asciiToLower.
+  struct SvHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view sv) const noexcept;
+    size_t operator()(const std::string& s) const noexcept;
+    size_t operator()(CompositeKey k) const noexcept;
+  };
+  struct SvEqual {
+    using is_transparent = void;
+    bool operator()(std::string_view a, std::string_view b) const noexcept;
+    bool operator()(const std::string& a, std::string_view b) const noexcept;
+    bool operator()(std::string_view a, const std::string& b) const noexcept;
+    bool operator()(const std::string& a, const std::string& b) const noexcept;
+    bool operator()(CompositeKey a, std::string_view b) const noexcept;
+    bool operator()(std::string_view a, CompositeKey b) const noexcept;
+  };
+
+  // Storage: maps selector -> style properties. Hash/equal are case-insensitive.
+  std::unordered_map<std::string, CssStyle, SvHash, SvEqual> rulesBySelector_;
 
   std::string cachePath;
 
   // Internal parsing helpers
-  void processRuleBlockWithStyle(const std::string& selectorGroup, const CssStyle& style);
-  static CssStyle parseDeclarations(const std::string& declBlock);
-  static void parseDeclarationIntoStyle(const std::string& decl, CssStyle& style, std::string& propNameBuf,
-                                        std::string& propValueBuf);
+  void processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style);
+  static CssStyle parseDeclarations(std::string_view declBlock);
+  static void parseDeclarationIntoStyle(std::string_view decl, CssStyle& style);
 
   // Individual property value parsers
-  static CssTextAlign interpretAlignment(const std::string& val);
-  static CssFontStyle interpretFontStyle(const std::string& val);
-  static CssFontWeight interpretFontWeight(const std::string& val);
-  static CssTextDecoration interpretDecoration(const std::string& val);
-  static CssLength interpretLength(const std::string& val);
+  static CssTextAlign interpretAlignment(std::string_view val);
+  static CssFontStyle interpretFontStyle(std::string_view val);
+  static CssFontWeight interpretFontWeight(std::string_view val);
+  static CssTextDecoration interpretDecoration(std::string_view val);
+  static CssLength interpretLength(std::string_view val);
   /** Returns true only when a numeric length was parsed (e.g. 2em, 50%). False for auto/inherit/initial. */
-  static bool tryInterpretLength(const std::string& val, CssLength& out);
-
-  // String utilities
-  static std::string normalized(const std::string& s);
-  static void normalizedInto(const std::string& s, std::string& out);
-  static std::vector<std::string> splitOnChar(const std::string& s, char delimiter);
-  static std::vector<std::string> splitWhitespace(const std::string& s);
+  static bool tryInterpretLength(std::string_view val, CssLength& out);
 };

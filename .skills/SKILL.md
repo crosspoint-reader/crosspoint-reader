@@ -457,7 +457,6 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 **All fonts are loaded as global static objects** at firmware startup:
 - Noto Serif: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
 - Noto Sans: 12, 14, 16, 18pt (4 styles each)
-- OpenDyslexic: 8, 10, 12, 14pt (4 styles each)
 - Ubuntu UI fonts: 10, 12pt (2 styles)
 
 **Total**: ~80+ global `EpdFont` and `EpdFontFamily` objects
@@ -897,8 +896,8 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
 
 **Current Versions** (as of docs/file-formats.md):
-- `book.bin`: **Version 5** (metadata structure)
-- `section.bin`: **Version 24** (layout structure)
+- `book.bin`: **Version 7** (metadata structure)
+- `section.bin`: **Version 25** (layout structure)
 
 **Version Increment Rules**:
 1. **ALWAYS increment version** BEFORE changing binary structure
@@ -908,7 +907,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Example** (incrementing section format version):
 ```cpp
 // lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 25;  // Was 24, now 25
+static constexpr uint8_t SECTION_FILE_VERSION = 26;  // Was 25, now 26
 
 // Add new field to structure
 struct PageLine {

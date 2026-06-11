@@ -19,6 +19,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     return;
   }
 
+  const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
@@ -58,7 +59,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle, baseDir);
     }
 
-    if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
+    if (!scanning && (currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = words[i];
       const int fullWordWidth = renderer.getTextWidth(fontId, w.c_str(), currentStyle, baseDir);
       // y is the top of the text line; add ascender to reach baseline, then offset 2px below
@@ -75,6 +76,13 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         const int visibleWidth = renderer.getTextWidth(fontId, visiblePtr, currentStyle, baseDir);
         startX = wordX + prefixWidth;
         underlineWidth = visibleWidth;
+      }
+
+      // SUP/SUB words are rendered at 50% glyph scale (see the baseline comment
+      // above and drawText), but getTextWidth reports the full-size width, so the
+      // underline would be drawn ~2x too long. Halve it to match the scaled glyphs.
+      if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+        underlineWidth = (underlineWidth + 1) / 2;
       }
 
       renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, true);
