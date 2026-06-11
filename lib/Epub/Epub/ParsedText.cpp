@@ -138,6 +138,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordStyles.push_back(baseStyle);
     wordContinues.push_back(attachToPrevious);
     wordIsFocusSuffix.push_back(false);
+    wordIsHyphenRemainder.push_back(false);
     if (wordStartsRtl) {
       hasRtlWord = true;
     }
@@ -167,6 +168,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordStyles.reserve(newCapacity);
     wordContinues.reserve(newCapacity);
     wordIsFocusSuffix.reserve(newCapacity);
+    wordIsHyphenRemainder.reserve(newCapacity);
   }
 
   // Lambda helper to process and push individual sub-segments of the string
@@ -178,6 +180,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordStyles.push_back(baseStyle);
       wordContinues.push_back(attach);
       wordIsFocusSuffix.push_back(false);
+      wordIsHyphenRemainder.push_back(false);
     } else {
       size_t charCount = 0;
       const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
@@ -199,6 +202,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
         wordContinues.push_back(attach);
         wordIsFocusSuffix.push_back(false);
+        wordIsHyphenRemainder.push_back(false);
       } else {
         countPtr = reinterpret_cast<const unsigned char*>(segment.data());
         for (size_t i = 0; i < targetBoldChars; ++i) {
@@ -211,12 +215,14 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
         wordContinues.push_back(attach);
         wordIsFocusSuffix.push_back(false);
+        wordIsHyphenRemainder.push_back(false);
 
         // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
         words.emplace_back(segment.substr(splitByteOffset));
         wordStyles.push_back(baseStyle);
         wordContinues.push_back(true);
         wordIsFocusSuffix.push_back(true);
+        wordIsHyphenRemainder.push_back(false);
       }
     }
   };
@@ -270,7 +276,7 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine) const {
 }
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
-                                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                                       const std::function<void(std::shared_ptr<TextBlock>, size_t)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
     return;
@@ -336,6 +342,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
+    wordIsHyphenRemainder.erase(wordIsHyphenRemainder.begin(), wordIsHyphenRemainder.begin() + consumed);
   }
 }
 
@@ -605,6 +612,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
   // The hyphen remainder is not a focus suffix - it starts fresh on the next line.
   wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, false);
+  // Mark as hyphen-inserted so word-index tracking ignores it when assigning footnotes to pages.
+  wordIsHyphenRemainder.insert(wordIsHyphenRemainder.begin() + wordIndex + 1, true);
 
   // Continuation flag handling after splitting a word into prefix + remainder.
   //
@@ -637,11 +646,19 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
                              const std::vector<bool>& continuesVec, const std::vector<size_t>& lineBreakIndices,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                             const std::function<void(std::shared_ptr<TextBlock>, size_t)>& processLine,
                              const GfxRenderer& renderer, const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
+
+  // Count only non-hyphen-remainder words for footnote page-assignment tracking.
+  // Hyphenation inserts extra tokens (remainders) into words[], inflating the post-layout
+  // word count relative to the pre-layout count used when computing footnote wordIndex values.
+  size_t preHyphenWordCount = 0;
+  for (size_t i = lastBreakAt; i < lineBreak; ++i) {
+    if (!wordIsHyphenRemainder[i]) ++preHyphenWordCount;
+  }
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0);
 
@@ -919,7 +936,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit) {
     processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
-                                            std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle));
+                                            std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle),
+                preHyphenWordCount);
     return;
   }
 
@@ -965,5 +983,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   processLine(std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
-                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle));
+                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle),
+              preHyphenWordCount);
 }
