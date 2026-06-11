@@ -25,6 +25,7 @@ constexpr int HTTP_TX_BUF = 1024;
 // HTTPClient's uint16 setTimeout it doesn't silently truncate.
 constexpr int HTTP_TIMEOUT_MS = 60000;
 constexpr size_t READ_CHUNK = 2048;
+constexpr uint32_t MIN_HEAP_FOR_HTTPS = 55000;
 
 struct Sink {
   std::function<bool(const uint8_t*, size_t)> write;  // returns false to abort the transfer
@@ -36,6 +37,59 @@ struct Sink {
 
 bool isRedirect(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+}
+
+HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
+                                     Sink& sink);
+
+bool isHttpsUrl(const std::string& url) {
+  constexpr char HTTPS_SCHEME[] = "https://";
+  constexpr size_t HTTPS_SCHEME_LEN = sizeof(HTTPS_SCHEME) - 1;
+  if (url.size() < HTTPS_SCHEME_LEN) {
+    return false;
+  }
+
+  for (size_t i = 0; i < HTTPS_SCHEME_LEN; ++i) {
+    const char actual = url[i];
+    const char expected = HTTPS_SCHEME[i];
+    const char normalized = (actual >= 'A' && actual <= 'Z') ? static_cast<char>(actual + ('a' - 'A')) : actual;
+    if (normalized != expected) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ensureHttpsHeap(const char* operation, const std::string& url) {
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  LOG_DBG("HTTP", "HTTPS %s heap before request: free=%u min=%u maxAlloc=%u", operation, (unsigned)freeHeap,
+          (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+  if (freeHeap >= MIN_HEAP_FOR_HTTPS) {
+    return true;
+  }
+
+  LOG_ERR("HTTP", "Insufficient heap for HTTPS %s: %u bytes free (need %u): %s", operation, (unsigned)freeHeap,
+          (unsigned)MIN_HEAP_FOR_HTTPS, url.c_str());
+  return false;
+}
+
+void logHttpsHeapAfter(const char* operation) {
+  LOG_DBG("HTTP", "HTTPS %s heap after request: free=%u min=%u maxAlloc=%u", operation, (unsigned)ESP.getFreeHeap(),
+          (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+}
+
+HttpDownloader::DownloadError runGetWithHttpsHeapGuard(const std::string& url, const std::string& username,
+                                                       const std::string& password, Sink& sink, const char* operation) {
+  const bool isHttps = isHttpsUrl(url);
+  if (isHttps && !ensureHttpsHeap(operation, url)) {
+    return HttpDownloader::HTTP_ERROR;
+  }
+
+  const HttpDownloader::DownloadError result = runGet(url, username, password, sink);
+  if (isHttps) {
+    logHttpsHeapAfter(operation);
+  }
+  return result;
 }
 
 // Streams a GET body through sink.write in READ_CHUNK pieces. Uses the manual
@@ -148,7 +202,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
-  return runGet(url, username, password, sink) == OK;
+  return runGetWithHttpsHeapGuard(url, username, password, sink, "fetch") == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
@@ -160,7 +214,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
     outContent.append(reinterpret_cast<const char*>(data), len);
     return true;
   };
-  return runGet(url, username, password, sink) == OK;
+  return runGetWithHttpsHeapGuard(url, username, password, sink, "fetch") == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
@@ -168,13 +222,18 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = onData;
-  return runGet(url, username, password, sink) == OK;
+  return runGetWithHttpsHeapGuard(url, username, password, sink, "fetch") == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
+
+  const bool isHttps = isHttpsUrl(url);
+  if (isHttps && !ensureHttpsHeap("download", url)) {
+    return HTTP_ERROR;
+  }
 
   if (Storage.exists(destPath.c_str())) {
     Storage.remove(destPath.c_str());
@@ -194,6 +253,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();
+  if (isHttps) {
+    logHttpsHeapAfter("download");
+  }
 
   if (result != OK) {
     Storage.remove(destPath.c_str());
