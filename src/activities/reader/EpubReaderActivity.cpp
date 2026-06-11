@@ -23,6 +23,7 @@
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
+#include "EpubReaderHighlightsActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "HighlightEntry.h"
@@ -619,6 +620,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
           progressChangeResultHandler);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHTS: {
+      startActivityForResult(
+          std::make_unique<EpubReaderHighlightsActivity>(renderer, mappedInput, epub, epub->getPath()),
+          [this, progressChangeResultHandler](const ActivityResult& result) {
+            // The overview can delete highlights, so the per-section underline
+            // cache must be reloaded regardless of whether a jump happened.
+            sectionHighlightsLoaded = false;
+            progressChangeResultHandler(result);
+          });
       break;
     }
   }
