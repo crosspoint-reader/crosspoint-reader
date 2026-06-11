@@ -20,6 +20,7 @@ constexpr char DEVICE_ID[] = "crosspoint-reader";
 // KOSync payloads are tiny JSON (<1KB), so 2KB buffers are sufficient.
 // Default 16KB buffers cause OOM during TLS handshake.
 constexpr int HTTP_BUF_SIZE = 2048;
+constexpr int MAX_RESPONSE_BYTES = 16 * 1024;
 
 // Cloudflare tunnels send a 3-cert Google Trust Services chain. During the TLS handshake
 // mbedTLS makes many small allocations that collectively consume ~48KB of heap. With only
@@ -33,10 +34,15 @@ struct ResponseBuffer {
   char* data = nullptr;
   int len = 0;
   int capacity = 0;
+  bool overflow = false;
 
   ~ResponseBuffer() { free(data); }
 
   bool ensure(int size) {
+    if (size > MAX_RESPONSE_BYTES + 1) {
+      overflow = true;
+      return false;
+    }
     if (size <= capacity) return true;
     char* newData = (char*)realloc(data, size);
     if (!newData) return false;
@@ -55,7 +61,8 @@ esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
       buf->len += evt->data_len;
       buf->data[buf->len] = '\0';
     } else {
-      LOG_ERR("KOSync", "Response buffer allocation failed (%d bytes)", evt->data_len);
+      LOG_ERR("KOSync", "Response buffer allocation failed or exceeded cap (%d bytes)", evt->data_len);
+      return ESP_FAIL;
     }
   }
   return ESP_OK;
@@ -121,6 +128,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 
   LOG_DBG("KOSync", "Auth response: %d (err: %d)", httpCode, err);
 
+  if (buf.overflow) return SERVER_ERROR;
   if (err != ESP_OK) return NETWORK_ERROR;
   if (httpCode == 200) return OK;
   if (httpCode == 401) return AUTH_FAILED;
@@ -154,6 +162,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   LOG_DBG("KOSync", "Get progress response: %d (err: %d)", httpCode, err);
 
+  if (buf.overflow) return SERVER_ERROR;
   if (err != ESP_OK) return NETWORK_ERROR;
 
   if (httpCode == 200 && buf.data) {
@@ -227,6 +236,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 
   LOG_DBG("KOSync", "Update progress response: %d (err: %d)", httpCode, err);
 
+  if (buf.overflow) return SERVER_ERROR;
   if (err != ESP_OK) return NETWORK_ERROR;
   if (httpCode == 200 || httpCode == 202) return OK;
   if (httpCode == 401) return AUTH_FAILED;
