@@ -5,11 +5,15 @@
 
 #include "CrossPointSettings.h"
 
+namespace {
+
 static uint8_t fontSizeEnumFromSettings() {
   uint8_t e = SETTINGS.fontSize;
   if (e >= CrossPointSettings::FONT_SIZE_COUNT) e = 1;  // default to MEDIUM
   return e;
 }
+
+}  // namespace
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   registry_.discover();
@@ -74,10 +78,8 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       SETTINGS.sdFontFamilyName[0] = '\0';
       return;
     }
-    auto sizes = family->availableSizes();
-    uint8_t idx = sizeEnum;
-    if (idx >= sizes.size()) idx = sizes.size() - 1;
-    uint8_t wantedPt = sizes.empty() ? 0 : sizes[idx];
+    const auto* selected = family->findClosestReaderSize(sizeEnum);
+    const uint8_t wantedPt = selected ? selected->pointSize : 0;
     if (!registryWasDirty && wantedPt == manager_.currentPointSize()) return;
     LOG_DBG("SDFS", "Reloading %s: size %u -> %u (enum %u)%s", wantedFamily, manager_.currentPointSize(), wantedPt,
             sizeEnum, registryWasDirty ? " [registry dirty]" : "");

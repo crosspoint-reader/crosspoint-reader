@@ -34,18 +34,14 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
     unloadAll(renderer);
   }
 
-  // Select by ordinal position: sort available sizes, then map the font size
-  // enum (SMALL=0 .. EXTRA_LARGE=3) to the corresponding slot. When the
-  // family has fewer sizes than 4, clamp to the last available size.
-  auto sizes = family.availableSizes();
-  if (sizes.empty()) {
+  // Select the physical point size closest to the built-in reader sizes. Some
+  // CJK font packs only ship larger sizes, so ordinal selection can make
+  // MEDIUM load 18pt+ and produce oversized pages on small devices.
+  const SdCardFontFileInfo* selected = family.findClosestReaderSize(fontSizeEnum);
+  if (!selected) {
     LOG_ERR("SDMGR", "Family %s has no files to load", family.name.c_str());
     return false;
   }
-
-  uint8_t idx = fontSizeEnum;
-  if (idx >= sizes.size()) idx = sizes.size() - 1;
-  const SdCardFontFileInfo* selected = family.findFile(sizes[idx]);
 
   auto* font = new (std::nothrow) SdCardFont();
   if (!font) {
