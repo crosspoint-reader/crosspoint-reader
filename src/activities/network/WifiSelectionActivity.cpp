@@ -270,6 +270,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
       }
       if (retry < maxRetries) {
         LOG_DBG("WIFI", "System clock synced from NTP");
+        // Persist to the X3 RTC (incl. date) so the next boot starts with a
+        // valid clock; no-op on RTC-less devices or if the sync failed
+        halClock.setFromSystemTime();
       } else {
         LOG_DBG("WIFI", "NTP sync timeout, continuing without time sync");
       }

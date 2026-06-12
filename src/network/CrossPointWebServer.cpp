@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <FsHelpers.h>
+#include <HalClock.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -68,6 +69,9 @@ static void applyClientTime(const char* tsStr) {
   }
   const struct timeval tv = {.tv_sec = static_cast<time_t>(unixTs), .tv_usec = 0};
   settimeofday(&tv, nullptr);
+  // Persist to the X3 RTC (incl. date) so hotspot-set time survives reboots;
+  // no-op on RTC-less devices
+  halClock.setFromSystemTime();
   LOG_DBG("WEB", "Clock set from client: %lld", unixTs);
 }
 

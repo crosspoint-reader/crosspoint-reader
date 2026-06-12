@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <time.h>
 
 #include "HalGPIO.h"
 
@@ -43,6 +44,17 @@ class HalClock {
   // so the HAL stays free of any app-layer settings dependency.
   bool syncFromNTP();
 
+  // Write the current system clock (UTC) into the RTC so it survives reboots.
+  // Used after the clock is set from a non-NTP source (e.g. a hotspot client).
+  // Returns false if the RTC is not available or the system clock is unset.
+  bool setFromSystemTime();
+
  private:
-  bool writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second);
+  // Full UTC date+time write/read (7 BCD registers). The date registers let an
+  // RTC-equipped device restore a valid system clock at boot with no network.
+  bool writeDateTimeToRTC(const struct tm& utc);
+  bool readDateTimeFromRTC(struct tm& utc) const;
+  // Set the system clock from the RTC if it holds a plausible date (>= 2020).
+  // Called from begin(); a never-date-synced RTC fails validation harmlessly.
+  void seedSystemClockFromRTC();
 };
