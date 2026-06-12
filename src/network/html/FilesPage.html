@@ -3084,8 +3084,19 @@ let operationCancelled = false; // Set by Cancel to stop conversion loops and up
 let uploadGeneration = 0;       // Incremented each uploadFile() call; guards stale restoreAfterCancel()
 let currentUploadWs = null;     // Active WebSocket reference for external abort
 let currentUploadXhr = null;    // Active XHR reference for external abort
+let lastUploadTimestamp = 0;    // Last Unix timestamp sent with an upload
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
+
+// Unix timestamp to send with an upload so the device can set its clock in
+// hotspot mode (it has no other time source there). FAT mtime has 2-second
+// resolution, so consecutive timestamps are spaced >= 2s apart to keep batch
+// uploads in order when the file browser sorts by date.
+function nextUploadTimestamp() {
+  const now = Math.floor(Date.now() / 1000);
+  lastUploadTimestamp = Math.max(now, lastUploadTimestamp + 2);
+  return lastUploadTimestamp;
+}
 
 // ============================================================================
 // EPUB Image Conversion Functions (from Baseline JPEG Converter)
@@ -4902,8 +4913,8 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
 
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
-      // Send start message: START:<filename>:<size>:<path>
-      ws.send(`START:${file.name}:${file.size}:${currentPath}`);
+      // Send start message: START:<filename>:<size>:<path>:<unix_ts>
+      ws.send(`START:${file.name}:${file.size}:${currentPath}:${nextUploadTimestamp()}`);
     };
 
     ws.onmessage = async function(event) {
@@ -5006,7 +5017,7 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
 
     const xhr = new XMLHttpRequest();
     currentUploadXhr = xhr;
-    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath) + '&t=' + nextUploadTimestamp(), true);
 
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable && onProgress) {
