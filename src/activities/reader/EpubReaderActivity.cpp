@@ -23,8 +23,10 @@
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
+#include "EpubReaderHighlightsActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "HighlightEntry.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -35,6 +37,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
+#include "util/HighlightUtil.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -196,6 +199,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Selection mode hijacks all input until the user confirms or cancels.
+  if (selectionMode) {
+    handleSelectionInput();
+    return;
+  }
+
   // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
   // finished. Two independent finished-book features key off this same condition.
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
@@ -253,6 +262,21 @@ void EpubReaderActivity::loop() {
 
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showBookmarkMessage = false;
+    requestUpdate();
+  }
+
+  if (showHighlightMessage && (millis() - highlightMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showHighlightMessage = false;
+    requestUpdate();
+  }
+
+  if (showHighlightDeletedMessage && (millis() - highlightMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showHighlightDeletedMessage = false;
+    requestUpdate();
+  }
+
+  if (showHighlightOverlapMessage && (millis() - highlightMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showHighlightOverlapMessage = false;
     requestUpdate();
   }
 
@@ -569,6 +593,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       onGoHome();
       return;
     }
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHT: {
+      enterSelectionMode();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
       {
         RenderLock lock(*this);
@@ -628,6 +656,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
           progressChangeResultHandler);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHTS: {
+      startActivityForResult(
+          std::make_unique<EpubReaderHighlightsActivity>(renderer, mappedInput, epub, epub->getPath()),
+          [this, progressChangeResultHandler](const ActivityResult& result) {
+            // The overview can delete highlights, so the per-section underline
+            // cache must be reloaded regardless of whether a jump happened.
+            sectionHighlightsLoaded = false;
+            progressChangeResultHandler(result);
+          });
       break;
     }
   }
@@ -870,27 +909,45 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 
   {
-    auto p = section->loadPageFromSectionFile();
-    if (!p) {
-      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
-      section->clearCache();
-      section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
-      automaticPageTurnActive = false;
-      showPendingSyncSaveError();
-      return;
+    std::unique_ptr<Page> p;
+    const auto pageNum = static_cast<uint16_t>(section->currentPage);
+    if (selectionMode && selectionPageCache && selectionPageCacheNum == pageNum) {
+      // Selection-mode redraw of the same page (cursor moved): reuse the page
+      // kept in RAM instead of re-reading the section file from SD.
+      p = std::move(selectionPageCache);
+    } else {
+      p = section->loadPageFromSectionFile();
+      if (!p) {
+        LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+        section->clearCache();
+        section.reset();
+        requestUpdate();  // Try again after clearing cache
+                          // TODO: prevent infinite loop if the page keeps failing to load for some reason
+        automaticPageTurnActive = false;
+        showPendingSyncSaveError();
+        return;
+      }
+
+      // Collect footnotes from the loaded page
+      currentPageFootnotes = std::move(p->footnotes);
     }
 
-    // Collect footnotes from the loaded page
-    currentPageFootnotes = std::move(p->footnotes);
-
     const auto start = millis();
-    renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    renderContents(*p, orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
+
+    if (selectionMode) {
+      selectionPageCache = std::move(p);
+      selectionPageCacheNum = pageNum;
+    }
   }
-  silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
-  saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  // While selecting, every cursor step triggers a render; skip the per-render
+  // progress write (SPIFFS/SD wear) and the silent next-chapter indexing until
+  // selection mode exits — the first normal render afterwards catches up.
+  if (!selectionMode) {
+    silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
+    saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  }
 
   showPendingSyncSaveError();
 
@@ -901,6 +958,18 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, tr(STR_BOOKMARK_ADDED));
+  }
+
+  if (showHighlightMessage) {
+    GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_ADDED));
+  }
+
+  if (showHighlightDeletedMessage) {
+    GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_DELETED));
+  }
+
+  if (showHighlightOverlapMessage) {
+    GUI.drawPopup(renderer, tr(STR_HIGHLIGHT_OVERLAP));
   }
 }
 
@@ -939,23 +1008,45 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
 }
-void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
-                                        const int orientedMarginRight, const int orientedMarginBottom,
-                                        const int orientedMarginLeft) {
+void EpubReaderActivity::renderContents(Page& page, const int orientedMarginTop, const int orientedMarginRight,
+                                        const int orientedMarginBottom, const int orientedMarginLeft) {
   const auto t0 = millis();
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
+  page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
   // Force special handling for pages with images when anti-aliasing is on
-  bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
+  bool imagePageWithAA = page.hasImages() && SETTINGS.textAntiAliasing;
 
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
+
+  // Highlight overlays (BW only). Stored highlights are underlined; in selection
+  // mode the word geometry is (re)built for this page and the cursor/selection
+  // overlay is drawn on top. Both use plain BW line/rect draws so they survive
+  // the differential refresh without grayscale handling.
+  loadSectionHighlights();
+  drawStoredHighlights(page, orientedMarginLeft, orientedMarginTop);
+  if (selectionMode) {
+    buildSelectableWords(page, orientedMarginLeft, orientedMarginTop);
+    // Resolve cursor sentinels after a backward page spill: -1 selects the
+    // last word (word step), -2 the first word of the last line (line step).
+    if (selectionCursor == -2 && !selectableWords.empty()) {
+      int i = static_cast<int>(selectableWords.size()) - 1;
+      while (i > 0 && selectableWords[i - 1].y == selectableWords[i].y) i--;
+      selectionCursor = i;
+    } else if (selectionCursor < 0) {
+      selectionCursor = selectableWords.empty() ? 0 : static_cast<int>(selectableWords.size()) - 1;
+    }
+    if (selectionCursor >= static_cast<int>(selectableWords.size())) {
+      selectionCursor = selectableWords.empty() ? 0 : static_cast<int>(selectableWords.size()) - 1;
+    }
+    drawSelectionOverlay();
+  }
   const auto tBwRender = millis();
 
   if (imagePageWithAA) {
@@ -965,13 +1056,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Step 1: Display page with image area blanked (text appears, image area white)
     // Step 2: Re-render with images and display again (images appear clean)
     int16_t imgX, imgY, imgW, imgH;
-    if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
+    if (page.getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -1011,7 +1102,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
         renderer.beginStripTarget(scratch.get(), y, rows);
         renderer.clearScreen(0x00);
-        page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+        page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
         renderer.endStripTarget();
         renderer.writeGrayscalePlaneStrip(true, scratch.get(), y, rows);
       }
@@ -1023,7 +1114,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
         renderer.beginStripTarget(scratch.get(), y, rows);
         renderer.clearScreen(0x00);
-        page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+        page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
         renderer.endStripTarget();
         renderer.writeGrayscalePlaneStrip(false, scratch.get(), y, rows);
       }
@@ -1056,14 +1147,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderer.copyGrayscaleLsbBuffers();
       const auto tGrayLsb = millis();
 
       // Render and copy to MSB buffer
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderer.copyGrayscaleMsbBuffers();
       const auto tGrayMsb = millis();
 
@@ -1236,6 +1327,519 @@ void EpubReaderActivity::addBookmark() {
   }
 
   requestUpdate();
+}
+
+// ---- Text highlighting ----
+
+void EpubReaderActivity::loadSectionHighlights() {
+  if (!epub) return;
+  if (sectionHighlightsLoaded && loadedHighlightsSpine == currentSpineIndex) return;
+
+  sectionHighlights.clear();
+  const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
+  if (Storage.exists(path.c_str())) {
+    std::vector<HighlightEntry> all;
+    String json = Storage.readFile(path.c_str());
+    if (!json.isEmpty() && JsonSettingsIO::loadHighlights(all, json.c_str())) {
+      // Keep only highlights for the current chapter to bound RAM.
+      for (auto& h : all) {
+        if (h.spineIndex == currentSpineIndex) {
+          sectionHighlights.push_back(std::move(h));
+        }
+      }
+    }
+  }
+  sectionHighlightsLoaded = true;
+  loadedHighlightsSpine = currentSpineIndex;
+}
+
+void EpubReaderActivity::buildSelectableWords(const Page& page, const int marginLeft, const int marginTop) {
+  selectableWords.clear();
+  // Rough upper bound to avoid repeated reallocation while scanning the page.
+  selectableWords.reserve(300);
+
+  const int fontId = SETTINGS.getReaderFontId();
+  const int lineHeight = renderer.getLineHeight(fontId);
+
+  for (uint16_t ei = 0; ei < page.elements.size(); ei++) {
+    const auto& el = page.elements[ei];
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const auto& block = line.getBlock();
+    if (!block) continue;
+    const auto& words = block->getWords();
+    const auto& xpos = block->getWordXpos();
+    const auto& styles = block->getWordStyles();
+    if (words.size() != xpos.size() || words.size() != styles.size()) continue;
+
+    const int lineX = line.xPos + marginLeft;
+    const int lineY = line.yPos + marginTop;
+    for (uint16_t wi = 0; wi < words.size(); wi++) {
+      const int w = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
+      if (w <= 0) continue;
+      SelectableWord sw;
+      sw.x = static_cast<int16_t>(xpos[wi] + lineX);
+      sw.y = static_cast<int16_t>(lineY);
+      sw.w = static_cast<int16_t>(w);
+      sw.h = static_cast<int16_t>(lineHeight);
+      sw.element = ei;
+      sw.word = wi;
+      selectableWords.push_back(sw);
+    }
+  }
+}
+
+void EpubReaderActivity::enterSelectionMode() {
+  if (!section || section->pageCount == 0) {
+    requestUpdate();
+    return;
+  }
+  selectionMode = true;
+  selectionAnchorSet = false;
+  ignoreNextSelectionConfirmRelease = false;
+  selectionCursor = 0;
+  selectableWords.clear();
+  requestUpdate();  // render() rebuilds selectableWords for the current page
+}
+
+void EpubReaderActivity::exitSelectionMode() {
+  selectionMode = false;
+  selectionAnchorSet = false;
+  ignoreNextSelectionConfirmRelease = false;
+  selectableWords.clear();
+  selectionPageCache.reset();  // free the page held for SD-less cursor redraws
+  requestUpdate();
+}
+
+void EpubReaderActivity::handleSelectionInput() {
+  // Cancel selection.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    exitSelectionMode();
+    return;
+  }
+
+  // Long-press Confirm deletes the stored highlight under the cursor.
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
+    if (!ignoreNextSelectionConfirmRelease) {
+      if (deleteHighlightAtCursor()) {
+        showHighlightDeletedMessage = true;
+        highlightMessageTime = millis();
+      }
+      // Swallow the upcoming release so it doesn't also set an anchor/finalize.
+      ignoreNextSelectionConfirmRelease = true;
+      requestUpdate();
+    }
+    return;
+  }
+
+  // Confirm: first press sets the anchor, second press finalizes.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (ignoreNextSelectionConfirmRelease) {
+      ignoreNextSelectionConfirmRelease = false;
+      return;
+    }
+    if (selectableWords.empty()) return;
+    if (!selectionAnchorSet) {
+      const auto& sw = selectableWords[selectionCursor];
+      selectionAnchor = {static_cast<uint16_t>(section ? section->currentPage : 0), sw.element, sw.word};
+      selectionAnchorSet = true;
+      requestUpdate();
+    } else {
+      finalizeHighlight();
+    }
+    return;
+  }
+
+  // Cursor movement. Front Left/Right step one word for precision; the side
+  // buttons jump a whole line so text further down the page is reached fast.
+  // Front buttons honor the orientation swap (as in detectPageTurn), side
+  // buttons the user's layout; tilt is ignored while selecting.
+  using Button = MappedInputManager::Button;
+  const bool swapFront =
+      SETTINGS.frontButtonFollowOrientation && (SETTINGS.orientation == CrossPointSettings::INVERTED ||
+                                                SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW);
+  const bool wordPrev = mappedInput.wasPressed(swapFront ? Button::Right : Button::Left);
+  const bool wordNext = mappedInput.wasPressed(swapFront ? Button::Left : Button::Right);
+  // PageBack/PageForward map through sideButtonLayout; when side-button page
+  // turns are disabled there, fall back to the raw side buttons so line
+  // jumping stays available.
+  const bool sideDisabled = SETTINGS.sideButtonLayout == CrossPointSettings::SIDE_BUTTONS_DISABLED;
+  const bool linePrev = mappedInput.wasPressed(sideDisabled ? Button::Up : Button::PageBack);
+  const bool lineNext = mappedInput.wasPressed(sideDisabled ? Button::Down : Button::PageForward);
+  if (!(wordPrev || wordNext || linePrev || lineNext)) return;
+
+  const int n = static_cast<int>(selectableWords.size());
+  if (selectionCursor < 0 || selectionCursor >= n) return;  // sentinel pending render
+
+  // Move onto an adjacent page; the cursor sentinel picks the landing word
+  // once selectableWords is rebuilt (-1 = last word, -2 = start of last line).
+  const auto spillForward = [this] {
+    if (section && section->currentPage < section->pageCount - 1) {
+      section->currentPage++;
+      selectionCursor = 0;
+      selectableWords.clear();  // rebuilt on next render
+      requestUpdate();
+    }
+  };
+  const auto spillBackward = [this](int sentinel) {
+    if (section && section->currentPage > 0) {
+      section->currentPage--;
+      selectionCursor = sentinel;
+      selectableWords.clear();
+      requestUpdate();
+    }
+  };
+  // First word index of the line containing word index i (same rendered y).
+  const auto lineStart = [this](int i) {
+    while (i > 0 && selectableWords[i - 1].y == selectableWords[i].y) i--;
+    return i;
+  };
+
+  if (wordNext) {
+    if (selectionCursor + 1 < n) {
+      selectionCursor++;
+      requestUpdate();
+    } else {
+      spillForward();
+    }
+  } else if (wordPrev) {
+    if (selectionCursor > 0) {
+      selectionCursor--;
+      requestUpdate();
+    } else {
+      spillBackward(-1);
+    }
+  } else if (lineNext) {
+    int j = selectionCursor;
+    while (j < n && selectableWords[j].y == selectableWords[selectionCursor].y) j++;
+    if (j < n) {
+      selectionCursor = j;
+      requestUpdate();
+    } else {
+      spillForward();
+    }
+  } else {  // linePrev
+    const int start = lineStart(selectionCursor);
+    if (start > 0) {
+      selectionCursor = lineStart(start - 1);
+      requestUpdate();
+    } else {
+      spillBackward(-2);
+    }
+  }
+}
+
+namespace {
+// One rendered word on a page, with the geometry needed to underline it and the
+// element/word indices used by the selection cursor.
+struct PageWordGeom {
+  int x;
+  int y;  // top of the text line (already margin-offset)
+  int w;
+  std::string text;
+};
+
+// Flatten a page's text words (in reading order) with their on-screen geometry.
+void collectPageWords(const Page& page, const GfxRenderer& renderer, int fontId, int marginLeft, int marginTop,
+                      std::vector<PageWordGeom>& out) {
+  out.clear();
+  out.reserve(300);
+  for (uint16_t ei = 0; ei < page.elements.size(); ei++) {
+    const auto& el = page.elements[ei];
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const auto& block = line.getBlock();
+    if (!block) continue;
+    const auto& words = block->getWords();
+    const auto& xpos = block->getWordXpos();
+    const auto& styles = block->getWordStyles();
+    if (words.size() != xpos.size() || words.size() != styles.size()) continue;
+    const int lineX = line.xPos + marginLeft;
+    const int lineY = line.yPos + marginTop;
+    for (uint16_t wi = 0; wi < words.size(); wi++) {
+      const int ww = renderer.getTextWidth(fontId, words[wi].c_str(), styles[wi]);
+      if (ww <= 0) continue;
+      out.push_back({xpos[wi] + lineX, lineY, ww, words[wi]});
+    }
+  }
+}
+
+// Split a normalized highlight string into its whitespace-separated words.
+std::vector<std::string> splitHighlightWords(const std::string& s) {
+  std::vector<std::string> words;
+  size_t i = 0;
+  while (i < s.size()) {
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++;
+    size_t start = i;
+    while (i < s.size() && !std::isspace(static_cast<unsigned char>(s[i]))) i++;
+    if (i > start) words.push_back(s.substr(start, i - start));
+  }
+  return words;
+}
+
+// Longest contiguous run of words common to the page and the highlight. Matching
+// by text (not stored coordinates) keeps highlights correct after the layout
+// reflows from a font/margin/orientation change. Returns [lo, hi) into pw, or
+// {0, 0} when there is no run worth drawing. A single shared common word is
+// ignored unless it is the whole (one-word) highlight, to avoid stray marks.
+std::pair<int, int> matchHighlightRun(const std::vector<PageWordGeom>& pw, const std::vector<std::string>& hl) {
+  const int m = static_cast<int>(pw.size());
+  const int n = static_cast<int>(hl.size());
+  if (m == 0 || n == 0) return {0, 0};
+
+  // Rolling longest-common-substring DP over the highlight dimension.
+  std::vector<int> prev(n + 1, 0);
+  std::vector<int> curr(n + 1, 0);
+  int bestLen = 0;
+  int bestEndP = 0;  // exclusive end index in pw of the best run
+  for (int i = 1; i <= m; i++) {
+    for (int j = 1; j <= n; j++) {
+      if (pw[i - 1].text == hl[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
+        if (curr[j] > bestLen) {
+          bestLen = curr[j];
+          bestEndP = i;
+        }
+      } else {
+        curr[j] = 0;
+      }
+    }
+    std::swap(prev, curr);
+    std::fill(curr.begin(), curr.end(), 0);
+  }
+
+  const int minLen = (n == 1) ? 1 : 2;
+  if (bestLen < minLen) return {0, 0};
+  return {bestEndP - bestLen, bestEndP};
+}
+
+// True if two word sequences share a contiguous run of length >= the smaller
+// sequence's overlap unit (1 word for single-word highlights, else 2). Used to
+// forbid overlapping highlights. O(a*b) but both inputs are short.
+bool highlightsOverlap(const std::vector<std::string>& a, const std::vector<std::string>& b) {
+  const int m = static_cast<int>(a.size());
+  const int n = static_cast<int>(b.size());
+  if (m == 0 || n == 0) return false;
+  const int need = (m == 1 || n == 1) ? 1 : 2;
+  std::vector<int> prev(n + 1, 0);
+  std::vector<int> curr(n + 1, 0);
+  for (int i = 1; i <= m; i++) {
+    for (int j = 1; j <= n; j++) {
+      if (a[i - 1] == b[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
+        if (curr[j] >= need) return true;
+      } else {
+        curr[j] = 0;
+      }
+    }
+    std::swap(prev, curr);
+    std::fill(curr.begin(), curr.end(), 0);
+  }
+  return false;
+}
+}  // namespace
+
+void EpubReaderActivity::finalizeHighlight() {
+  if (!epub || !section || selectableWords.empty()) {
+    exitSelectionMode();
+    return;
+  }
+
+  const uint16_t cursorPage = static_cast<uint16_t>(section->currentPage);
+  const auto& cursorSw = selectableWords[selectionCursor];
+  SelectionEndpoint cursorEp = {cursorPage, cursorSw.element, cursorSw.word};
+
+  // Order anchor and cursor into (start, end) by page, then element, then word.
+  auto less = [](const SelectionEndpoint& a, const SelectionEndpoint& b) {
+    if (a.page != b.page) return a.page < b.page;
+    if (a.element != b.element) return a.element < b.element;
+    return a.word < b.word;
+  };
+  SelectionEndpoint start = selectionAnchor;
+  SelectionEndpoint end = cursorEp;
+  if (less(end, start)) std::swap(start, end);
+
+  // Collect the selected text across the page range within this section.
+  std::string collected;
+  const int savedPage = section->currentPage;
+  const int fontId = SETTINGS.getReaderFontId();
+  (void)fontId;
+  for (uint16_t p = start.page; p <= end.page; p++) {
+    section->currentPage = p;
+    auto page = section->loadPageFromSectionFile();
+    if (!page) continue;
+    for (uint16_t ei = 0; ei < page->elements.size(); ei++) {
+      const auto& el = page->elements[ei];
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*el);
+      const auto& block = line.getBlock();
+      if (!block) continue;
+      const auto& words = block->getWords();
+      for (uint16_t wi = 0; wi < words.size(); wi++) {
+        // Skip words before the start endpoint on the first page.
+        if (p == start.page && (ei < start.element || (ei == start.element && wi < start.word))) continue;
+        // Skip words after the end endpoint on the last page.
+        if (p == end.page && (ei > end.element || (ei == end.element && wi > end.word))) continue;
+        if (!collected.empty()) collected += " ";
+        collected += words[wi];
+      }
+    }
+  }
+  section->currentPage = savedPage;
+
+  collected = HighlightUtil::sanitizeHighlightText(std::move(collected));
+  if (collected.empty()) {
+    exitSelectionMode();
+    return;
+  }
+
+  // Append to the per-book JSON file (load existing, push_back, save).
+  const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
+  const std::string dir = HighlightUtil::getHighlightsDir();
+  Storage.mkdir(dir.c_str());
+  std::vector<HighlightEntry> highlights;
+  if (Storage.exists(path.c_str())) {
+    String json = Storage.readFile(path.c_str());
+    if (!json.isEmpty()) {
+      JsonSettingsIO::loadHighlights(highlights, json.c_str());
+    }
+  }
+
+  // Reject overlapping highlights: if the new text shares any whole word run with
+  // an existing highlight in this chapter, treat it as an overlap and skip it.
+  // Highlights are word-granular and matched by text, so word-level overlap is the
+  // right unit here.
+  const auto newWords = splitHighlightWords(collected);
+  for (const auto& h : highlights) {
+    if (h.spineIndex != static_cast<uint16_t>(currentSpineIndex)) continue;
+    if (highlightsOverlap(splitHighlightWords(h.text), newWords)) {
+      showHighlightOverlapMessage = true;
+      highlightMessageTime = millis();
+      exitSelectionMode();
+      return;
+    }
+  }
+
+  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+
+  HighlightEntry entry;
+  entry.text = collected;
+  entry.xpath = progress.xpath;
+  entry.percentage = progress.percentage;
+  entry.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+
+  highlights.push_back(entry);
+  const bool ok = JsonSettingsIO::saveHighlights(highlights, path.c_str());
+  if (ok) {
+    showHighlightMessage = true;
+    highlightMessageTime = millis();
+    // Invalidate the section highlight cache so the new one re-displays.
+    sectionHighlightsLoaded = false;
+  } else {
+    LOG_ERR("ERS", "Failed to save highlight to: %s", path.c_str());
+  }
+
+  exitSelectionMode();
+}
+
+bool EpubReaderActivity::deleteHighlightAtCursor() {
+  if (!epub || !section || selectableWords.empty() || selectionCursor < 0 ||
+      selectionCursor >= static_cast<int>(selectableWords.size())) {
+    return false;
+  }
+  const uint16_t curSpine = static_cast<uint16_t>(currentSpineIndex);
+
+  // Re-collect the current page's words (same order/filter as selectableWords, so
+  // the cursor index lines up) and find which stored highlight's matched run the
+  // cursor sits inside. Matching is by text, so it survives layout reflow.
+  auto page = section->loadPageFromSectionFile();
+  if (!page) return false;
+  std::vector<PageWordGeom> pw;
+  collectPageWords(*page, renderer, SETTINGS.getReaderFontId(), 0, 0, pw);
+  if (selectionCursor >= static_cast<int>(pw.size())) return false;
+
+  const std::string path = HighlightUtil::getHighlightPath(epub->getPath());
+  if (!Storage.exists(path.c_str())) return false;
+
+  std::vector<HighlightEntry> highlights;
+  String json = Storage.readFile(path.c_str());
+  if (json.isEmpty() || !JsonSettingsIO::loadHighlights(highlights, json.c_str())) {
+    return false;
+  }
+
+  // True if highlight h is for this chapter and its matched run on this page
+  // covers the cursor word index.
+  const auto covers = [&](const HighlightEntry& h) {
+    if (h.spineIndex != curSpine) return false;
+    const auto [lo, hi] = matchHighlightRun(pw, splitHighlightWords(h.text));
+    return selectionCursor >= lo && selectionCursor < hi;
+  };
+
+  const size_t before = highlights.size();
+  highlights.erase(std::remove_if(highlights.begin(), highlights.end(), covers), highlights.end());
+  if (highlights.size() == before) {
+    return false;  // cursor not on a stored highlight
+  }
+
+  if (!JsonSettingsIO::saveHighlights(highlights, path.c_str())) {
+    LOG_ERR("ERS", "Failed to save highlights after delete: %s", path.c_str());
+    return false;
+  }
+
+  // Invalidate the per-section cache so the removed underline disappears.
+  sectionHighlightsLoaded = false;
+  return true;
+}
+
+void EpubReaderActivity::drawStoredHighlights(const Page& page, const int marginLeft, const int marginTop) const {
+  if (sectionHighlights.empty()) return;
+  const int fontId = SETTINGS.getReaderFontId();
+  const int ascender = renderer.getFontAscenderSize(fontId);
+
+  std::vector<PageWordGeom> pw;
+  collectPageWords(page, renderer, fontId, marginLeft, marginTop, pw);
+  if (pw.empty()) return;
+
+  for (const auto& h : sectionHighlights) {
+    const auto hlWords = splitHighlightWords(h.text);
+    const auto [lo, hi] = matchHighlightRun(pw, hlWords);
+    for (int i = lo; i < hi; i++) {
+      const int underlineY = pw[i].y + ascender + 2;
+      renderer.drawLine(pw[i].x, underlineY, pw[i].x + pw[i].w, underlineY, true);
+    }
+  }
+}
+
+void EpubReaderActivity::drawSelectionOverlay() const {
+  if (selectableWords.empty()) return;
+  const uint16_t curPage = static_cast<uint16_t>(section ? section->currentPage : 0);
+
+  // Provisional range underline when an anchor is set and on the same page span.
+  if (selectionAnchorSet && selectionCursor >= 0 && selectionCursor < static_cast<int>(selectableWords.size())) {
+    const auto& cursorSw = selectableWords[selectionCursor];
+    SelectionEndpoint cur = {curPage, cursorSw.element, cursorSw.word};
+    auto less = [](const SelectionEndpoint& a, const SelectionEndpoint& b) {
+      if (a.page != b.page) return a.page < b.page;
+      if (a.element != b.element) return a.element < b.element;
+      return a.word < b.word;
+    };
+    SelectionEndpoint s = selectionAnchor;
+    SelectionEndpoint e = cur;
+    if (less(e, s)) std::swap(s, e);
+    // Only underline the portion that lives on the current page.
+    for (const auto& sw : selectableWords) {
+      SelectionEndpoint w = {curPage, sw.element, sw.word};
+      if (less(w, s) || less(e, w)) continue;
+      renderer.drawLine(sw.x, sw.y + sw.h - 2, sw.x + sw.w, sw.y + sw.h - 2, true);
+    }
+  }
+
+  // Cursor box.
+  if (selectionCursor >= 0 && selectionCursor < static_cast<int>(selectableWords.size())) {
+    const auto& sw = selectableWords[selectionCursor];
+    renderer.drawRect(sw.x - 1, sw.y - 1, sw.w + 2, sw.h + 2, 2, true);
+  }
 }
 
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {

@@ -11,6 +11,7 @@
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "HighlightEntry.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
@@ -450,5 +451,88 @@ bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const 
   }
 
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
+  return true;
+}
+
+// ---- Highlights ----
+
+bool JsonSettingsIO::saveHighlights(const std::vector<HighlightEntry>& highlights, const char* path) {
+  JsonDocument doc;
+  JsonArray arr = doc["highlights"].to<JsonArray>();
+  LOG_DBG("HLT", "Saving %zu highlights to file", highlights.size());
+  for (const auto& h : highlights) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["text"] = h.text;
+    obj["xpath"] = h.xpath;
+    obj["percentage"] = h.percentage;
+    obj["spine"] = h.spineIndex;
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return Storage.writeFile(path, json);
+}
+
+bool JsonSettingsIO::loadHighlights(std::vector<HighlightEntry>& highlights, const char* json) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    LOG_ERR("HLT", "JSON parse error: %s", error.c_str());
+    return false;
+  }
+
+  JsonArray arr = doc["highlights"].as<JsonArray>();
+  highlights.clear();
+  highlights.reserve(arr.size());
+  for (JsonObject obj : arr) {
+    highlights.emplace_back();
+    auto& h = highlights.back();
+    h.text = obj["text"] | std::string("");
+    h.xpath = obj["xpath"] | std::string("");
+    h.percentage = obj["percentage"] | static_cast<float>(0);
+    h.spineIndex = obj["spine"] | static_cast<uint16_t>(0);
+  }
+
+  LOG_DBG("HLT", "Loaded %zu highlights from file", highlights.size());
+  return true;
+}
+
+namespace {
+// Minimal ArduinoJson input source backed by a HalFile. ArduinoJson's default
+// Reader uses read()/readBytes(), so we expose just those — letting the parser
+// stream straight from the SD card without first buffering the whole file in a
+// String. HalFile is only a Print subclass, so it can't use ReadBufferingStream.
+struct HalFileJsonReader {
+  HalFile& file;
+  int read() { return file.read(); }
+  size_t readBytes(char* buffer, size_t length) {
+    const int n = file.read(buffer, length);
+    return n > 0 ? static_cast<size_t>(n) : 0;
+  }
+};
+}  // namespace
+
+bool JsonSettingsIO::countHighlightsInFile(const char* path, size_t& outCount) {
+  outCount = 0;
+  HalFile f;
+  if (!Storage.openFileForRead("HLT", path, f)) {
+    return false;
+  }
+
+  // Filter: keep only a single tiny field per array element so deserialization
+  // discards the large "text" payload instead of buffering it. Peak RAM is then
+  // bounded by the entry count, not the file's text size.
+  JsonDocument filter;
+  filter["highlights"][0]["spine"] = true;
+
+  JsonDocument doc;
+  HalFileJsonReader reader{f};
+  const auto error = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
+  if (error) {
+    LOG_ERR("HLT", "JSON parse error counting %s: %s", path, error.c_str());
+    return false;
+  }
+
+  outCount = doc["highlights"].as<JsonArrayConst>().size();
   return true;
 }

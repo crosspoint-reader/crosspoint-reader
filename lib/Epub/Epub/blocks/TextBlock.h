@@ -42,6 +42,10 @@ class TextBlock final : public Block {
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
   const std::vector<std::string>& getWords() const { return words; }
+  // Per-word x positions (block-relative), parallel to getWords(). Used by the
+  // reader's highlight selection to compute on-screen word rectangles.
+  const std::vector<int16_t>& getWordXpos() const { return wordXpos; }
+  const std::vector<EpdFontFamily::Style>& getWordStyles() const { return wordStyles; }
   bool isEmpty() override { return words.empty(); }
   size_t wordCount() const { return words.size(); }
   // given a renderer works out where to break the words into lines

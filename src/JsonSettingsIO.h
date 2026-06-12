@@ -8,6 +8,7 @@ class WifiCredentialStore;
 class RecentBooksStore;
 class OpdsServerStore;
 struct BookmarkEntry;
+struct HighlightEntry;
 
 namespace JsonSettingsIO {
 
@@ -34,5 +35,14 @@ bool loadOpds(OpdsServerStore& store, const char* json, bool* needsResave = null
 // Bookmarks
 bool saveBookmarks(const std::vector<BookmarkEntry>& bookmarks, const char* path);
 bool loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const char* json);
+
+// Highlights
+bool saveHighlights(const std::vector<HighlightEntry>& highlights, const char* path);
+bool loadHighlights(std::vector<HighlightEntry>& highlights, const char* json);
+// Count the highlights in a file without materializing the entries. Streams the
+// JSON straight from disk and applies a filter that keeps only a tiny per-entry
+// field, so peak memory stays bounded regardless of how large the file (or its
+// stored text) grows. Returns the count via outCount; false on read/parse error.
+bool countHighlightsInFile(const char* path, size_t& outCount);
 
 }  // namespace JsonSettingsIO

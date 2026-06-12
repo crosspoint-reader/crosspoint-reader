@@ -1,11 +1,14 @@
 #pragma once
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/Page.h>
 #include <Epub/Section.h>
 
 #include <optional>
+#include <vector>
 
 #include "EpubReaderMenuActivity.h"
+#include "HighlightEntry.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
 
@@ -52,8 +55,8 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
-  void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
-                      int orientedMarginBottom, int orientedMarginLeft);
+  void renderContents(Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
+                      int orientedMarginLeft);
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
@@ -64,6 +67,61 @@ class EpubReaderActivity final : public Activity {
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void addBookmark();
+
+  // ---- Text highlighting / selection ----
+  // On-screen geometry of one selectable word on the current page. Coordinates
+  // are logical (orientation-aware), already offset by the page margins.
+  struct SelectableWord {
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+    uint16_t element;  // index into Page::elements
+    uint16_t word;     // index into the TextBlock's words for that element
+  };
+  bool selectionMode = false;
+  bool selectionAnchorSet = false;
+  int selectionCursor = 0;  // index into selectableWords
+  // Anchor (first endpoint) captured on the first Confirm. Page/element/word are
+  // resolved to a flat ordering against the cursor when finalizing.
+  struct SelectionEndpoint {
+    uint16_t page;
+    uint16_t element;
+    uint16_t word;
+  };
+  SelectionEndpoint selectionAnchor = {};
+  std::vector<SelectableWord> selectableWords;  // rebuilt per page while selecting
+  // Page kept loaded while in selection mode so cursor-move redraws reuse it
+  // instead of re-reading the section file from SD on every step. No new
+  // allocation — just deferred free of the already-loaded page; released in
+  // exitSelectionMode().
+  std::unique_ptr<Page> selectionPageCache;
+  uint16_t selectionPageCacheNum = 0;
+  // Highlights for the current section, loaded on section load for re-display.
+  std::vector<HighlightEntry> sectionHighlights;
+  bool sectionHighlightsLoaded = false;
+  int loadedHighlightsSpine = -1;
+  bool showHighlightMessage = false;
+  unsigned long highlightMessageTime = 0UL;
+  bool showHighlightDeletedMessage = false;
+  bool showHighlightOverlapMessage = false;
+  // Set after a long-press delete fires so the following Confirm release does
+  // not also set an anchor / finalize a selection.
+  bool ignoreNextSelectionConfirmRelease = false;
+
+  void enterSelectionMode();
+  void exitSelectionMode();
+  void buildSelectableWords(const Page& page, int marginLeft, int marginTop);
+  void handleSelectionInput();
+  void finalizeHighlight();
+  // Delete the stored highlight under the selection cursor (long-press Confirm).
+  // Returns true if a highlight was found and removed.
+  bool deleteHighlightAtCursor();
+  void loadSectionHighlights();
+  // Draw stored highlights (underline) for the given page; best-effort.
+  void drawStoredHighlights(const Page& page, int marginLeft, int marginTop) const;
+  // Draw the in-progress selection overlay (anchor..cursor underline + cursor box).
+  void drawSelectionOverlay() const;
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

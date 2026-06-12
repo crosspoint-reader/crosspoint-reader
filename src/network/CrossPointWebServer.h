@@ -135,6 +135,11 @@ class CrossPointWebServer {
   void handlePostOpdsServer();
   void handleDeleteOpdsServer();
 
+  // Highlights handlers
+  void handleHighlightsPage() const;
+  void handleHighlightList() const;
+  void handleHighlightFile() const;
+
   // Wi-Fi credential handlers
   void handleGetWifiNetworks() const;
   void handlePostWifiNetwork();
