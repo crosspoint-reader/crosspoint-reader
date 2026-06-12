@@ -295,6 +295,10 @@ void XtcReaderActivity::renderPage() {
 
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
+    // OEM-style settle pass between the BW base frame and the grayscale
+    // planes (see SleepActivity); no-op on X4.
+    renderer.preconditionGrayscale();
+
     // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
     // In LUT: 0 bit = apply gray effect, 1 bit = untouched
     renderer.clearScreen(0x00);

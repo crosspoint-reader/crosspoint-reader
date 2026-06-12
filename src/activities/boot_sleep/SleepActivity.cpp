@@ -170,6 +170,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  int imgW = pageWidth, imgH = pageHeight;
   float cropX = 0, cropY = 0;
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
@@ -188,6 +189,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
       }
       x = 0;
       y = std::round((static_cast<float>(pageHeight) - static_cast<float>(pageWidth) / ratio) / 2);
+      imgW = pageWidth;
+      imgH = pageHeight - 2 * y;
       LOG_DBG("SLP", "Centering with ratio %f to y=%d", ratio, y);
     } else {
       // image taller than viewport ratio, scaled down image needs to be centered horizontally
@@ -198,12 +201,16 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
       }
       x = std::round((static_cast<float>(pageWidth) - static_cast<float>(pageHeight) * ratio) / 2);
       y = 0;
+      imgW = pageWidth - 2 * x;
+      imgH = pageHeight;
       LOG_DBG("SLP", "Centering with ratio %f to x=%d", ratio, x);
     }
   } else {
     // center the image
     x = (pageWidth - bitmap.getWidth()) / 2;
     y = (pageHeight - bitmap.getHeight()) / 2;
+    imgW = bitmap.getWidth();
+    imgH = bitmap.getHeight();
   }
 
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
@@ -221,6 +228,12 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
   if (hasGreyscale) {
+    // OEM-style settle pass between the BW base frame and the grayscale
+    // planes; without it the base refresh leaves particles set too firmly
+    // for the weak X3 grayscale waveform to move. Windowed to the drawn
+    // image like the OEM windows its AA region. No-op on X4.
+    renderer.preconditionGrayscale(x, y, imgW, imgH);
+
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
