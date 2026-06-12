@@ -646,13 +646,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   // Scaling accumulators
   std::unique_ptr<uint32_t[]> rowAccum;
-  std::unique_ptr<uint16_t[]> rowCount;
+  std::unique_ptr<uint32_t[]> rowCount;
   int currentOutY = 0;
   uint32_t nextOutY_srcStart = 0;
 
   if (needsScaling) {
     rowAccum = makeUniqueNoThrow<uint32_t[]>(outWidth);
-    rowCount = makeUniqueNoThrow<uint16_t[]>(outWidth);
+    rowCount = makeUniqueNoThrow<uint32_t[]>(outWidth);
     if (!rowAccum || !rowCount) {
       LOG_ERR("PNG", "OOM: scaling accumulators");
       return false;
@@ -791,7 +791,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
         }
         // Moving to next source row - reset accumulators
         memset(rowAccum.get(), 0, static_cast<size_t>(outWidth) * sizeof(uint32_t));
-        memset(rowCount.get(), 0, static_cast<size_t>(outWidth) * sizeof(uint16_t));
+        memset(rowCount.get(), 0, static_cast<size_t>(outWidth) * sizeof(uint32_t));
       }
     }
 
