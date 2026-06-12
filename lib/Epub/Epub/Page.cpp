@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 
 #include <new>
@@ -31,6 +32,35 @@ std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
 void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   // Images don't use fontId or text rendering
   imageBlock->render(renderer, xPos + xOffset, yPos + yOffset);
+}
+
+void PageTable::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  tableBlock->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
+}
+
+bool PageTable::serialize(HalFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, tableHeight);
+  return tableBlock->serialize(file);
+}
+
+std::unique_ptr<PageTable> PageTable::deserialize(HalFile& file) {
+  int16_t xPos = 0, yPos = 0, tableHeight = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, tableHeight);
+  auto tb = TableBlock::deserialize(file);
+  if (!tb) {
+    LOG_ERR("PGE", "Failed to deserialize TableBlock");
+    return nullptr;
+  }
+  auto pt = makeUniqueNoThrow<PageTable>(std::move(tb), xPos, yPos, tableHeight);
+  if (!pt) {
+    LOG_ERR("PGE", "OOM: PageTable");
+    return nullptr;
+  }
+  return pt;
 }
 
 bool PageImage::serialize(HalFile& file) {
@@ -148,6 +178,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
         return nullptr;
       }
       page->elements.push_back(std::move(rule));
+    } else if (tag == TAG_PageTable) {
+      auto pt = PageTable::deserialize(file);
+      if (!pt) return nullptr;
+      page->elements.push_back(std::move(pt));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;

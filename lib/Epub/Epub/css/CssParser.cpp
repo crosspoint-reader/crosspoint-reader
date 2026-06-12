@@ -155,6 +155,36 @@ std::string_view stripTrailingImportant(std::string_view value) {
   return value;
 }
 
+bool isBorderStyleKeyword(std::string_view token) {
+  return iequalsAscii(token, "none") || iequalsAscii(token, "hidden") || iequalsAscii(token, "solid") ||
+         iequalsAscii(token, "dotted") || iequalsAscii(token, "dashed") || iequalsAscii(token, "double") ||
+         iequalsAscii(token, "groove") || iequalsAscii(token, "ridge") || iequalsAscii(token, "inset") ||
+         iequalsAscii(token, "outset");
+}
+
+enum class BorderSide { Top, Right, Bottom, Left };
+
+void applyBorderWidth(CssStyle& s, BorderSide side, bool isZero) {
+  switch (side) {
+    case BorderSide::Top:
+      s.defined.borderTopWidthZero = isZero;
+      s.defined.borderTopWidthSet = !isZero;
+      break;
+    case BorderSide::Right:
+      s.defined.borderRightWidthZero = isZero;
+      s.defined.borderRightWidthSet = !isZero;
+      break;
+    case BorderSide::Bottom:
+      s.defined.borderBottomWidthZero = isZero;
+      s.defined.borderBottomWidthSet = !isZero;
+      break;
+    case BorderSide::Left:
+      s.defined.borderLeftWidthZero = isZero;
+      s.defined.borderLeftWidthSet = !isZero;
+      break;
+  }
+}
+
 }  // anonymous namespace
 
 // Transparent case-insensitive hash/equal. Bodies live here (rather than
@@ -257,6 +287,11 @@ CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
     return CssTextDecoration::Underline;
   }
   return CssTextDecoration::None;
+}
+
+CssBorderStyle CssParser::interpretBorderStyle(std::string_view val) {
+  if (iequalsAscii(val, "none") || iequalsAscii(val, "hidden")) return CssBorderStyle::None;
+  return CssBorderStyle::Solid;
 }
 
 CssLength CssParser::interpretLength(std::string_view val) {
@@ -406,6 +441,104 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
     } else if (iequalsAscii(value, "sub")) {
       style.verticalAlign = CssVerticalAlign::Sub;
       style.defined.verticalAlign = 1;
+    }
+  } else if (iequalsAscii(name, "border-top-style")) {
+    style.borderTopStyle = interpretBorderStyle(value);
+    style.defined.borderTopStyle = 1;
+  } else if (iequalsAscii(name, "border-bottom-style")) {
+    style.borderBottomStyle = interpretBorderStyle(value);
+    style.defined.borderBottomStyle = 1;
+  } else if (iequalsAscii(name, "border-left-style")) {
+    style.borderLeftStyle = interpretBorderStyle(value);
+    style.defined.borderLeftStyle = 1;
+  } else if (iequalsAscii(name, "border-right-style")) {
+    style.borderRightStyle = interpretBorderStyle(value);
+    style.defined.borderRightStyle = 1;
+  } else if (iequalsAscii(name, "border-top-width")) {
+    // Track zero-width vs non-zero-width independently from style;
+    // combined at check time via isBorderTopVisible().
+    CssLength len;
+    if (tryInterpretLength(value, len)) applyBorderWidth(style, BorderSide::Top, len.value == 0.0f);
+  } else if (iequalsAscii(name, "border-bottom-width")) {
+    CssLength len;
+    if (tryInterpretLength(value, len)) applyBorderWidth(style, BorderSide::Bottom, len.value == 0.0f);
+  } else if (iequalsAscii(name, "border-left-width")) {
+    CssLength len;
+    if (tryInterpretLength(value, len)) applyBorderWidth(style, BorderSide::Left, len.value == 0.0f);
+  } else if (iequalsAscii(name, "border-right-width")) {
+    CssLength len;
+    if (tryInterpretLength(value, len)) applyBorderWidth(style, BorderSide::Right, len.value == 0.0f);
+  } else if (iequalsAscii(name, "border-width")) {
+    // Shorthand: 1–4 values (top right bottom left). Track zero vs non-zero width per side.
+    std::string_view toks[4];
+    const size_t count = collectEdgeValueTokens(value, toks);
+    if (count > 0) {
+      std::string_view top = toks[0];
+      std::string_view right = count >= 2 ? toks[1] : toks[0];
+      std::string_view bottom = count >= 3 ? toks[2] : toks[0];
+      std::string_view left = count >= 4 ? toks[3] : right;
+      CssLength len;
+      if (tryInterpretLength(top, len)) applyBorderWidth(style, BorderSide::Top, len.value == 0.0f);
+      if (tryInterpretLength(right, len)) applyBorderWidth(style, BorderSide::Right, len.value == 0.0f);
+      if (tryInterpretLength(bottom, len)) applyBorderWidth(style, BorderSide::Bottom, len.value == 0.0f);
+      if (tryInterpretLength(left, len)) applyBorderWidth(style, BorderSide::Left, len.value == 0.0f);
+    }
+  } else if (iequalsAscii(name, "border-style")) {
+    std::string_view toks[4];
+    const size_t count = collectEdgeValueTokens(value, toks);
+    if (count > 0) {
+      style.borderTopStyle = interpretBorderStyle(toks[0]);
+      style.borderRightStyle = count >= 2 ? interpretBorderStyle(toks[1]) : style.borderTopStyle;
+      style.borderBottomStyle = count >= 3 ? interpretBorderStyle(toks[2]) : style.borderTopStyle;
+      style.borderLeftStyle = count >= 4 ? interpretBorderStyle(toks[3]) : style.borderRightStyle;
+      style.defined.borderTopStyle = style.defined.borderRightStyle = style.defined.borderBottomStyle =
+          style.defined.borderLeftStyle = 1;
+    }
+  } else if (iequalsAscii(name, "border") || iequalsAscii(name, "border-top") || iequalsAscii(name, "border-bottom") ||
+             iequalsAscii(name, "border-left") || iequalsAscii(name, "border-right")) {
+    // Parse compound border shorthand: <width> <style> <color> in any order.
+    // Width keywords (thin/medium/thick) and color values are recognized but ignored beyond
+    // determining whether the width is non-zero.
+    CssBorderStyle parsedStyle = CssBorderStyle::None;
+    bool hasStyle = false;
+    bool widthIsZero = false;
+    bool hasWidth = false;
+
+    forEachDelimitedToken(value, isCssWhitespace, [&](std::string_view token) {
+      CssLength len;
+      if (tryInterpretLength(token, len)) {
+        hasWidth = true;
+        widthIsZero = (len.value == 0.0f);
+      } else if (iequalsAscii(token, "thin") || iequalsAscii(token, "medium") || iequalsAscii(token, "thick")) {
+        hasWidth = true;
+        widthIsZero = false;
+      } else if (isBorderStyleKeyword(token)) {
+        hasStyle = true;
+        parsedStyle = interpretBorderStyle(token);
+      }
+      // Any remaining tokens are colors — ignored for monochrome e-ink rendering.
+    });
+
+    if (iequalsAscii(name, "border-top") || iequalsAscii(name, "border")) {
+      style.borderTopStyle = parsedStyle;
+      style.defined.borderTopStyle = 1;
+      // hasWidth wins; else if hasStyle, CSS default width is medium (non-zero)
+      if (hasWidth || hasStyle) applyBorderWidth(style, BorderSide::Top, hasWidth && widthIsZero);
+    }
+    if (iequalsAscii(name, "border-bottom") || iequalsAscii(name, "border")) {
+      style.borderBottomStyle = parsedStyle;
+      style.defined.borderBottomStyle = 1;
+      if (hasWidth || hasStyle) applyBorderWidth(style, BorderSide::Bottom, hasWidth && widthIsZero);
+    }
+    if (iequalsAscii(name, "border-left") || iequalsAscii(name, "border")) {
+      style.borderLeftStyle = parsedStyle;
+      style.defined.borderLeftStyle = 1;
+      if (hasWidth || hasStyle) applyBorderWidth(style, BorderSide::Left, hasWidth && widthIsZero);
+    }
+    if (iequalsAscii(name, "border-right") || iequalsAscii(name, "border")) {
+      style.borderRightStyle = parsedStyle;
+      style.defined.borderRightStyle = 1;
+      if (hasWidth || hasStyle) applyBorderWidth(style, BorderSide::Right, hasWidth && widthIsZero);
     }
   }
 }
@@ -737,6 +870,10 @@ bool CssParser::saveToCache() const {
     writeLength(style.imageWidth);
     file.write(static_cast<uint8_t>(style.display));
     file.write(static_cast<uint8_t>(style.verticalAlign));
+    file.write(static_cast<uint8_t>(style.borderTopStyle));
+    file.write(static_cast<uint8_t>(style.borderBottomStyle));
+    file.write(static_cast<uint8_t>(style.borderLeftStyle));
+    file.write(static_cast<uint8_t>(style.borderRightStyle));
 
     // Write defined flags as uint32_t
     uint32_t definedBits = 0;
@@ -758,6 +895,18 @@ bool CssParser::saveToCache() const {
     if (style.defined.display) definedBits |= 1 << 15;
     if (style.defined.direction) definedBits |= 1 << 16;
     if (style.defined.verticalAlign) definedBits |= 1 << 17;
+    if (style.defined.borderTopStyle) definedBits |= 1 << 18;
+    if (style.defined.borderBottomStyle) definedBits |= 1 << 19;
+    if (style.defined.borderLeftStyle) definedBits |= 1 << 20;
+    if (style.defined.borderRightStyle) definedBits |= 1 << 21;
+    if (style.defined.borderTopWidthZero) definedBits |= 1 << 22;
+    if (style.defined.borderBottomWidthZero) definedBits |= 1 << 23;
+    if (style.defined.borderLeftWidthZero) definedBits |= 1 << 24;
+    if (style.defined.borderRightWidthZero) definedBits |= 1 << 25;
+    if (style.defined.borderTopWidthSet) definedBits |= 1 << 26;
+    if (style.defined.borderBottomWidthSet) definedBits |= 1 << 27;
+    if (style.defined.borderLeftWidthSet) definedBits |= 1 << 28;
+    if (style.defined.borderRightWidthSet) definedBits |= 1 << 29;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -808,7 +957,10 @@ bool CssParser::loadFromCache() {
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
   constexpr size_t CSS_FIXED_STYLE_BYTES =
-      5 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint32_t);
+      sizeof(CssTextAlign) + sizeof(CssFontStyle) + sizeof(CssFontWeight) + sizeof(CssTextDecoration) +
+      sizeof(CssTextDirection) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(CssDisplay) +
+      sizeof(CssVerticalAlign) + 4 * sizeof(CssBorderStyle) +  // border{Top,Bottom,Left,Right}Style
+      sizeof(uint32_t);                                        // definedBits
 
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
@@ -912,6 +1064,27 @@ bool CssParser::loadFromCache() {
       return false;
     }
     style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlignVal);
+    uint8_t borderStyleVal;
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderTopStyle = static_cast<CssBorderStyle>(borderStyleVal);
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderBottomStyle = static_cast<CssBorderStyle>(borderStyleVal);
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderLeftStyle = static_cast<CssBorderStyle>(borderStyleVal);
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderRightStyle = static_cast<CssBorderStyle>(borderStyleVal);
 
     // Read defined flags
     uint32_t definedBits = 0;
@@ -937,6 +1110,18 @@ bool CssParser::loadFromCache() {
     style.defined.display = (definedBits & 1 << 15) != 0;
     style.defined.direction = (definedBits & 1 << 16) != 0;
     style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
+    style.defined.borderTopStyle = (definedBits & 1 << 18) != 0;
+    style.defined.borderBottomStyle = (definedBits & 1 << 19) != 0;
+    style.defined.borderLeftStyle = (definedBits & 1 << 20) != 0;
+    style.defined.borderRightStyle = (definedBits & 1 << 21) != 0;
+    style.defined.borderTopWidthZero = (definedBits & 1 << 22) != 0;
+    style.defined.borderBottomWidthZero = (definedBits & 1 << 23) != 0;
+    style.defined.borderLeftWidthZero = (definedBits & 1 << 24) != 0;
+    style.defined.borderRightWidthZero = (definedBits & 1 << 25) != 0;
+    style.defined.borderTopWidthSet = (definedBits & 1 << 26) != 0;
+    style.defined.borderBottomWidthSet = (definedBits & 1 << 27) != 0;
+    style.defined.borderLeftWidthSet = (definedBits & 1 << 28) != 0;
+    style.defined.borderRightWidthSet = (definedBits & 1 << 29) != 0;
 
     rulesBySelector_[selector] = style;
   }
