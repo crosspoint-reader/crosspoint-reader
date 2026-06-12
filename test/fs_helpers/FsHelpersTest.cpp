@@ -96,9 +96,7 @@ TEST(SanitizeFat32, CompleteTrailingCharactersPreserved) {
 }
 
 // Reserved FAT characters, spaces, and control codes become '-'.
-TEST(SanitizeFat32, ReservedCharactersReplaced) {
-  EXPECT_EQ(sanitize("a/b:c*d?e\"f<g>h|i j"), "a-b-c-d-e-f-g-h-i-j");
-}
+TEST(SanitizeFat32, ReservedCharactersReplaced) { EXPECT_EQ(sanitize("a/b:c*d?e\"f<g>h|i j"), "a-b-c-d-e-f-g-h-i-j"); }
 
 // Degenerate inputs must not read or write out of bounds.
 TEST(SanitizeFat32, EmptyAndZeroLength) {

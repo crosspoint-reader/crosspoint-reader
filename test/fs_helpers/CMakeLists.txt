@@ -1,11 +1,13 @@
 add_executable(FsHelpersTest
   FsHelpersTest.cpp
   ${REPO_ROOT}/lib/FsHelpers/FsHelpers.cpp
+  ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 
 target_include_directories(FsHelpersTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/shims  # host stand-in for Arduino <WString.h>
   ${REPO_ROOT}/lib/FsHelpers
+  ${REPO_ROOT}/lib/Utf8
 )
 
 target_link_libraries(FsHelpersTest PRIVATE
