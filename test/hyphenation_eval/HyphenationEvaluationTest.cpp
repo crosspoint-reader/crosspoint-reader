@@ -224,6 +224,7 @@ void runLanguageEval(const char* langName, const char* primaryTag, const char* r
 
 }  // namespace
 
+TEST(HyphenationEval, Catalan) { runLanguageEval("catalan", "ca", "catalan_hyphenation_tests.txt", 97.64); }
 TEST(HyphenationEval, English) { runLanguageEval("english", "en", "english_hyphenation_tests.txt", 98.10); }
 TEST(HyphenationEval, French) { runLanguageEval("french", "fr", "french_hyphenation_tests.txt", 99.00); }
 TEST(HyphenationEval, German) { runLanguageEval("german", "de", "german_hyphenation_tests.txt", 96.73); }
