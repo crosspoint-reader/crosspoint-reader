@@ -141,8 +141,9 @@ bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
     const uint32_t crtTs = (static_cast<uint32_t>(cdate) << 16) | ctime;
     const uint32_t dateTime = modTs > crtTs ? modTs : crtTs;
 
+    const char* namePtr = fileNameBuffer.get();
     const uint32_t nameOffset = static_cast<uint32_t>(nameArena.size());
-    nameArena.insert(nameArena.end(), fileNameBuffer.get(), fileNameBuffer.get() + strlen(fileNameBuffer.get()));
+    nameArena.insert(nameArena.end(), namePtr, namePtr + strlen(namePtr));
     if (isDir) nameArena.push_back('/');
     nameArena.push_back('\0');
 
