@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "../Memory/Memory.h"
+
 // ============================================================================
 // IMAGE PROCESSING OPTIONS
 // ============================================================================
@@ -168,9 +170,13 @@ BmpReaderError Bitmap::parseHeaders() {
   const bool highColor = !nativePalette;
   if (highColor && dithering) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width);
+      auto ditherer = makeUniqueNoThrow<AtkinsonDitherer>(width);
+      if (!ditherer || !ditherer->isValid()) return BmpReaderError::OomRowBuffer;
+      atkinsonDitherer = ditherer.release();
     } else {
-      fsDitherer = new FloydSteinbergDitherer(width);
+      auto ditherer = makeUniqueNoThrow<FloydSteinbergDitherer>(width);
+      if (!ditherer || !ditherer->isValid()) return BmpReaderError::OomRowBuffer;
+      fsDitherer = ditherer.release();
     }
   }
 
