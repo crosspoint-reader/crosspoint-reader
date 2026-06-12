@@ -24,40 +24,8 @@ bool isSupportedFile(std::string_view name) {
          FsHelpers::hasMarkdownExtension(name) || FsHelpers::hasBmpExtension(name);
 }
 
-// Natural case-insensitive string compare: returns negative/zero/positive.
-// unsigned char casts keep isdigit/tolower defined on non-ASCII (UTF-8) bytes.
 int naturalCompare(const std::string& str1, const std::string& str2) {
-  const char* s1 = str1.c_str();
-  const char* s2 = str2.c_str();
-
-  while (*s1 && *s2) {
-    if (isdigit(static_cast<unsigned char>(*s1)) && isdigit(static_cast<unsigned char>(*s2))) {
-      // Compare digit runs numerically: skip leading zeros, shorter run = smaller value
-      while (*s1 == '0') s1++;
-      while (*s2 == '0') s2++;
-
-      int len1 = 0, len2 = 0;
-      while (isdigit(static_cast<unsigned char>(s1[len1]))) len1++;
-      while (isdigit(static_cast<unsigned char>(s2[len2]))) len2++;
-
-      if (len1 != len2) return len1 - len2;
-
-      for (int i = 0; i < len1; i++) {
-        if (s1[i] != s2[i]) return s1[i] - s2[i];
-      }
-      s1 += len1;
-      s2 += len2;
-    } else {
-      const int c1 = tolower(static_cast<unsigned char>(*s1));
-      const int c2 = tolower(static_cast<unsigned char>(*s2));
-      if (c1 != c2) return c1 - c2;
-      s1++;
-      s2++;
-    }
-  }
-
-  if (*s1 == '\0' && *s2 == '\0') return 0;
-  return (*s1 == '\0') ? -1 : 1;
+  return FsHelpers::naturalCompare(str1.c_str(), str2.c_str());
 }
 }  // namespace
 

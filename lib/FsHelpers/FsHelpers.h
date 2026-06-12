@@ -5,12 +5,15 @@
 #include <string_view>
 #include <vector>
 
+#include "NaturalSort.h"
+
 namespace FsHelpers {
 
 std::string decodeUriEscapes(const std::string& path);
 
 std::string normalisePath(const std::string& path);
 
+// Sort entries directories-first (trailing '/' marks a directory), then by naturalCompare.
 void sortFileList(std::vector<std::string>& strs);
 
 /**
