@@ -23,7 +23,6 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                                                                                      bool hasBookmarks) {
   std::vector<MenuItem> items;
   items.reserve(12);
-  items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (footnotesCount > 0) {
     if (footnotesCount == 1) {
       items.push_back({MenuAction::FOOTNOTES, StrId::STR_GO_TO_FOOTNOTE});
@@ -31,6 +30,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
       items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
     }
   }
+  items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasBookmarks) {
     items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
