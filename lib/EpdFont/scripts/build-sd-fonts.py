@@ -333,6 +333,15 @@ def main():
         print("ERROR: No families defined in config", file=sys.stderr)
         sys.exit(1)
 
+    if not DEFAULT_FALLBACK_FONT.exists() or not DEFAULT_FALLBACK_FONT.is_file():
+        print(
+            "ERROR: Missing default fallback font: "
+            f"{DEFAULT_FALLBACK_FONT}\n"
+            "This font is required for fallback glyphs in SD font builds.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Filter if --only specified
     if args.only:
         only_names = set(args.only.split(","))
