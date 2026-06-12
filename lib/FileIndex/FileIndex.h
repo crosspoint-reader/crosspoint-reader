@@ -28,7 +28,7 @@
 class FileIndex {
  public:
   // Mirrors CrossPointSettings::FILE_SORT_MODE without depending on app headers.
-  enum class SortMode : uint8_t { Name = 0, Date = 1, Size = 2 };
+  enum class SortMode : uint8_t { Name = 0, Date = 1, Size = 2, Type = 3 };
 
   // Longest name we reproduce from the index (FAT LFN is 255 UTF-16 units,
   // worst-case ~765 UTF-8 bytes; the browser's own name buffer is 500).

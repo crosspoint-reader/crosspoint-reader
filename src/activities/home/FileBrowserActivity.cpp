@@ -32,6 +32,15 @@ int naturalCompare(const std::string& str1, const std::string& str2) {
   return FsHelpers::naturalCompare(str1.c_str(), str2.c_str());
 }
 
+// Extension for type sort: suffix after the last dot (already NUL-terminated),
+// empty for directories and dot-less or dot-leading names.
+const char* extensionOf(const std::string& name) {
+  if (name.empty() || name.back() == '/') return "";
+  const auto pos = name.rfind('.');
+  if (pos == std::string::npos || pos == 0) return "";
+  return name.c_str() + pos + 1;
+}
+
 // Entry filters shared between the in-RAM listing and the FileIndex backend
 // (the index hashes accepted entries into its staleness signature, so a filter
 // change — e.g. toggling hidden files — naturally triggers a rebuild).
@@ -67,6 +76,10 @@ void FileBrowserActivity::sortFileList(std::vector<FileEntry>& entries) {
         break;
       case CrossPointSettings::SORT_SIZE:
         cmp = (a.size != b.size) ? (a.size < b.size ? -1 : 1) : naturalCompare(a.name, b.name);
+        break;
+      case CrossPointSettings::SORT_TYPE:
+        cmp = FsHelpers::naturalCompare(extensionOf(a.name), extensionOf(b.name));
+        if (cmp == 0) cmp = naturalCompare(a.name, b.name);
         break;
       default:  // SORT_NAME
         cmp = naturalCompare(a.name, b.name);
@@ -552,8 +565,8 @@ void FileBrowserActivity::render(RenderLock&&) {
   const bool empty = entryCount() == 0;
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !empty && entryNameAt(selectorIndex).back() != '/';
   const char* confirmLabel = empty ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, empty ? "" : tr(STR_DIR_UP),
-                                            empty ? "" : tr(STR_DIR_DOWN));
+  const auto labels =
+      mappedInput.mapLabels(backLabel, confirmLabel, empty ? "" : tr(STR_DIR_UP), empty ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

@@ -190,6 +190,21 @@ void FileIndex::makeKey(RunRecord& rec, SortMode sortMode, bool isDir, uint32_t 
   uint8_t* payload = rec.key + 1;
   const size_t payloadCap = sizeof(rec.key) - 1;
 
+  if (sortMode == SortMode::Type) {
+    // Fixed 8-byte extension key (covers every real extension; zero-padded so
+    // shorter extensions sort first, matching naturalCompare's prefix rule),
+    // then the name key breaks ties.
+    constexpr size_t EXT_KEY_LEN = 8;
+    const char* ext = "";
+    if (!isDir) {
+      const char* dot = strrchr(name, '.');
+      if (dot && dot != name) ext = dot + 1;
+    }
+    FsHelpers::naturalSortKey(ext, payload, EXT_KEY_LEN);
+    FsHelpers::naturalSortKey(name, payload + EXT_KEY_LEN, payloadCap - EXT_KEY_LEN);
+    return;
+  }
+
   uint32_t numeric = 0;
   switch (sortMode) {
     case SortMode::Date:
@@ -277,8 +292,7 @@ bool FileIndex::build(const char* dirPath, SortMode sortMode, AcceptFn accept, u
   const uint32_t blobStart = sizeof(IndexHeader) + pathLen;
 
   IndexHeader newHdr{};  // zero placeholder; real header written on success
-  bool ok = bs.idxTmp.write(&newHdr, sizeof(newHdr)) == sizeof(newHdr) &&
-            bs.idxTmp.write(dirPath, pathLen) == pathLen;
+  bool ok = bs.idxTmp.write(&newHdr, sizeof(newHdr)) == sizeof(newHdr) && bs.idxTmp.write(dirPath, pathLen) == pathLen;
 
   uint32_t sig = FNV32_BASIS;
   uint32_t dirCount = 0, fileCount = 0;
@@ -319,8 +333,7 @@ bool FileIndex::build(const char* dirPath, SortMode sortMode, AcceptFn accept, u
         run.blobOffset = blobStart + bs.blobLen;
         makeKey(run, sortMode, isDir, size, dateTime, nameBuf.get());
 
-        ok = bs.idxTmp.write(&rec, sizeof(rec)) == sizeof(rec) &&
-             bs.idxTmp.write(nameBuf.get(), nameLen) == nameLen;
+        ok = bs.idxTmp.write(&rec, sizeof(rec)) == sizeof(rec) && bs.idxTmp.write(nameBuf.get(), nameLen) == nameLen;
         bs.blobLen += sizeof(rec) + nameLen;
 
         bs.chunk[bs.chunkUsed++] = run;
@@ -411,8 +424,7 @@ bool FileIndex::mergeRuns(BuildState& bs, uint32_t recordCount) {
         while (ok && left > 0) {
           const uint32_t batch = std::min<uint32_t>(left, CHUNK_ENTRIES);
           const size_t bytes = batch * sizeof(RunRecord);
-          ok = inA.read(bs.chunk.get(), bytes) == static_cast<int>(bytes) &&
-               out.write(bs.chunk.get(), bytes) == bytes;
+          ok = inA.read(bs.chunk.get(), bytes) == static_cast<int>(bytes) && out.write(bs.chunk.get(), bytes) == bytes;
           left -= batch;
           maybeYield(bs.yieldCounter);
         }
