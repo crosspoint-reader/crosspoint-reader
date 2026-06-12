@@ -125,6 +125,6 @@ class FileIndex {
 
   // Small cache of one offsets-table page to halve seeks during rendering
   static constexpr size_t OFFSETS_CACHE_ENTRIES = 64;
-  uint32_t offsetsCache[OFFSETS_CACHE_ENTRIES];
+  uint32_t offsetsCache[OFFSETS_CACHE_ENTRIES] = {0};
   size_t offsetsCacheFirst = SIZE_MAX;
 };

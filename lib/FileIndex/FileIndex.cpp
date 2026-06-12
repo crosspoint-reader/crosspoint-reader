@@ -73,6 +73,7 @@ struct FileIndex::BuildState {
   uint32_t blobLen = 0;
   std::unique_ptr<char[]> nameA;  // tie-repair name buffers
   std::unique_ptr<char[]> nameB;
+  uint32_t segment[MAX_TIE_SEGMENT] = {0};  // tie-repair group; here to stay off the task stack
   uint32_t yieldCounter = 0;
 };
 
@@ -509,7 +510,7 @@ bool FileIndex::writeOffsets(BuildState& bs, uint32_t recordCount) {
     return false;
   }
 
-  uint32_t segment[MAX_TIE_SEGMENT];
+  uint32_t* segment = bs.segment;
   size_t segmentLen = 0;
   bool segmentOverflow = false;
   RunRecord prev{}, cur{};
