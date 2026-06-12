@@ -28,17 +28,18 @@ bool isSupportedFile(std::string_view name) {
          FsHelpers::hasMarkdownExtension(name) || FsHelpers::hasBmpExtension(name);
 }
 
-int naturalCompare(const std::string& str1, const std::string& str2) {
-  return FsHelpers::naturalCompare(str1.c_str(), str2.c_str());
+bool isDirName(const char* name) {
+  const size_t len = strlen(name);
+  return len > 0 && name[len - 1] == '/';
 }
 
-// Extension for type sort: suffix after the last dot (already NUL-terminated),
-// empty for directories and dot-less or dot-leading names.
-const char* extensionOf(const std::string& name) {
-  if (name.empty() || name.back() == '/') return "";
-  const auto pos = name.rfind('.');
-  if (pos == std::string::npos || pos == 0) return "";
-  return name.c_str() + pos + 1;
+// Extension for type sort: suffix after the last dot, empty for directories
+// and dot-less or dot-leading names.
+const char* extensionOf(const char* name) {
+  if (isDirName(name)) return "";
+  const char* dot = strrchr(name, '.');
+  if (dot == nullptr || dot == name) return "";
+  return dot + 1;
 }
 
 // Entry filters shared between the in-RAM listing and the FileIndex backend
@@ -59,30 +60,35 @@ bool acceptFirmware(const char* name, bool isDir) {
 }
 }  // namespace
 
-void FileBrowserActivity::sortFileList(std::vector<FileEntry>& entries) {
+void FileBrowserActivity::sortFileList() {
   const auto sortMode = SETTINGS.fileSortMode;
   const bool descending = SETTINGS.fileSortDirection == CrossPointSettings::SORT_DESC;
+  // Safe to capture: the arena does not grow while sorting
+  const char* arena = nameArena.data();
 
-  std::sort(begin(entries), end(entries), [sortMode, descending](const FileEntry& a, const FileEntry& b) {
+  std::sort(begin(files), end(files), [arena, sortMode, descending](const FileEntry& a, const FileEntry& b) {
+    const char* an = arena + a.nameOffset;
+    const char* bn = arena + b.nameOffset;
+
     // Directories first, regardless of sort mode or direction
-    const bool aDir = a.name.back() == '/';
-    const bool bDir = b.name.back() == '/';
+    const bool aDir = isDirName(an);
+    const bool bDir = isDirName(bn);
     if (aDir != bDir) return aDir;
 
     int cmp;
     switch (sortMode) {
       case CrossPointSettings::SORT_DATE:
-        cmp = (a.dateTime != b.dateTime) ? (a.dateTime < b.dateTime ? -1 : 1) : naturalCompare(a.name, b.name);
+        cmp = (a.dateTime != b.dateTime) ? (a.dateTime < b.dateTime ? -1 : 1) : FsHelpers::naturalCompare(an, bn);
         break;
       case CrossPointSettings::SORT_SIZE:
-        cmp = (a.size != b.size) ? (a.size < b.size ? -1 : 1) : naturalCompare(a.name, b.name);
+        cmp = (a.size != b.size) ? (a.size < b.size ? -1 : 1) : FsHelpers::naturalCompare(an, bn);
         break;
       case CrossPointSettings::SORT_TYPE:
-        cmp = FsHelpers::naturalCompare(extensionOf(a.name), extensionOf(b.name));
-        if (cmp == 0) cmp = naturalCompare(a.name, b.name);
+        cmp = FsHelpers::naturalCompare(extensionOf(an), extensionOf(bn));
+        if (cmp == 0) cmp = FsHelpers::naturalCompare(an, bn);
         break;
       default:  // SORT_NAME
-        cmp = naturalCompare(a.name, b.name);
+        cmp = FsHelpers::naturalCompare(an, bn);
         break;
     }
     return descending ? (cmp > 0) : (cmp < 0);
@@ -93,6 +99,7 @@ void FileBrowserActivity::sortFileList(std::vector<FileEntry>& entries) {
 // collected (overflow=true). Returns false if the directory cannot be opened.
 bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
   files.clear();
+  nameArena.clear();
   overflow = false;
 
   auto root = Storage.open(basepath.c_str());
@@ -111,6 +118,7 @@ bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
   const auto accept = (mode == Mode::PickFirmware) ? acceptFirmware : acceptCommon;
 
   files.reserve(64);
+  nameArena.reserve(2048);
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     const bool isDir = file.isDirectory();
@@ -133,11 +141,12 @@ bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
     const uint32_t crtTs = (static_cast<uint32_t>(cdate) << 16) | ctime;
     const uint32_t dateTime = modTs > crtTs ? modTs : crtTs;
 
-    if (isDir) {
-      files.push_back({std::string(fileNameBuffer.get()) + "/", 0, dateTime});
-    } else {
-      files.push_back({std::string(fileNameBuffer.get()), static_cast<uint32_t>(file.fileSize()), dateTime});
-    }
+    const uint32_t nameOffset = static_cast<uint32_t>(nameArena.size());
+    nameArena.insert(nameArena.end(), fileNameBuffer.get(), fileNameBuffer.get() + strlen(fileNameBuffer.get()));
+    if (isDir) nameArena.push_back('/');
+    nameArena.push_back('\0');
+
+    files.push_back({nameOffset, isDir ? 0 : static_cast<uint32_t>(file.fileSize()), dateTime});
   }
   root.close();
   return true;
@@ -155,14 +164,16 @@ void FileBrowserActivity::loadFiles() {
   }
 
   if (!overflow) {
-    sortFileList(files);
+    sortFileList();
     return;
   }
 
   // Folder is larger than the in-RAM budget: switch to the on-SD index.
-  // Free the partial vector first — the index build needs only a few KB.
+  // Free the partial listing first — the index build needs only a few KB.
   files.clear();
   files.shrink_to_fit();
+  nameArena.clear();
+  nameArena.shrink_to_fit();
 
   if (!fileIndex) fileIndex = makeUniqueNoThrow<FileIndex>();
   if (!indexEntry) indexEntry = makeUniqueNoThrow<FileIndex::Entry>();
@@ -188,28 +199,27 @@ void FileBrowserActivity::loadFiles() {
   LOG_ERR("FileBrowser", "index unavailable for %s; showing first %u entries", basepath.c_str(),
           static_cast<unsigned>(INDEX_THRESHOLD));
   loadFilesIntoVector(INDEX_THRESHOLD, overflow);
-  sortFileList(files);
+  sortFileList();
   requestUpdate(true);  // full refresh clears the busy popup
 }
 
 size_t FileBrowserActivity::entryCount() const { return usingIndex ? fileIndex->totalCount() : files.size(); }
 
-const std::string& FileBrowserActivity::entryNameAt(size_t row) {
+const char* FileBrowserActivity::entryNameAt(size_t row) {
   if (!usingIndex) {
-    return files[row].name;
+    return nameArena.data() + files[row].nameOffset;
   }
   if (row != indexCachedRow) {
     if (!fileIndex->entryAt(row, sortDescending, *indexEntry)) {
       LOG_ERR("FileBrowser", "index read failed at row %u", static_cast<unsigned>(row));
-      indexCachedName = "?";  // never empty: callers inspect name.back()
       indexCachedRow = SIZE_MAX;
-      return indexCachedName;
+      return "?";  // never empty: callers inspect the last character
     }
     indexCachedName.assign(indexEntry->name);
     if (indexEntry->isDir) indexCachedName += '/';
     indexCachedRow = row;
   }
-  return indexCachedName;
+  return indexCachedName.c_str();
 }
 
 void FileBrowserActivity::onEnter() {
@@ -252,6 +262,8 @@ void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
   fileNameBuffer.reset();
+  nameArena.clear();
+  nameArena.shrink_to_fit();
   fileIndex.reset();
   indexEntry.reset();
   indexCachedName.clear();
@@ -563,7 +575,7 @@ void FileBrowserActivity::render(RenderLock&&) {
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
   const bool empty = entryCount() == 0;
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !empty && entryNameAt(selectorIndex).back() != '/';
+  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !empty && !isDirName(entryNameAt(selectorIndex));
   const char* confirmLabel = empty ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels =
       mappedInput.mapLabels(backLabel, confirmLabel, empty ? "" : tr(STR_DIR_UP), empty ? "" : tr(STR_DIR_DOWN));
@@ -581,6 +593,6 @@ size_t FileBrowserActivity::findEntry(const std::string& name) {
     return row == SIZE_MAX ? 0 : row;
   }
   for (size_t i = 0; i < files.size(); i++)
-    if (files[i].name == name) return i;
+    if (name == nameArena.data() + files[i].nameOffset) return i;
   return 0;
 }

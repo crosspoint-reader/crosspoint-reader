@@ -18,10 +18,13 @@ class FileBrowserActivity final : public Activity {
   enum class Mode { Books, PickFirmware };
 
  private:
+  // Names live back-to-back in nameArena (NUL-terminated, trailing '/' marks a
+  // directory); entries hold offsets. One shared block instead of a heap
+  // string per entry keeps directory loads to two allocations total.
   struct FileEntry {
-    std::string name;   // filename; trailing '/' = directory
-    uint32_t size;      // file size in bytes; 0 for directories
-    uint32_t dateTime;  // FAT timestamp packed as (date << 16) | time; 0 = unknown
+    uint32_t nameOffset;  // offset into nameArena
+    uint32_t size;        // file size in bytes; 0 for directories
+    uint32_t dateTime;    // FAT timestamp packed as (date << 16) | time; 0 = unknown
   };
 
   // Deletion
@@ -44,6 +47,7 @@ class FileBrowserActivity final : public Activity {
   // is active.
   std::string basepath = "/";
   std::vector<FileEntry> files;
+  std::vector<char> nameArena;
   std::unique_ptr<char[]> fileNameBuffer;
   std::unique_ptr<FileIndex> fileIndex;
   std::unique_ptr<FileIndex::Entry> indexEntry;  // scratch record for index reads
@@ -55,11 +59,11 @@ class FileBrowserActivity final : public Activity {
   // Data loading
   void loadFiles();
   bool loadFilesIntoVector(size_t cap, bool& overflow);
-  static void sortFileList(std::vector<FileEntry>& entries);
+  void sortFileList();
   size_t entryCount() const;
   // Name of the entry at `row` in display order; directories carry a trailing
-  // '/' in both backends. Returns a reference valid until the next call.
-  const std::string& entryNameAt(size_t row);
+  // '/' in both backends. Pointer is valid until the next loadFiles().
+  const char* entryNameAt(size_t row);
   size_t findEntry(const std::string& name);
 
  public:
