@@ -909,27 +909,45 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 
   {
-    auto p = section->loadPageFromSectionFile();
-    if (!p) {
-      LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
-      section->clearCache();
-      section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
-      automaticPageTurnActive = false;
-      showPendingSyncSaveError();
-      return;
+    std::unique_ptr<Page> p;
+    const auto pageNum = static_cast<uint16_t>(section->currentPage);
+    if (selectionMode && selectionPageCache && selectionPageCacheNum == pageNum) {
+      // Selection-mode redraw of the same page (cursor moved): reuse the page
+      // kept in RAM instead of re-reading the section file from SD.
+      p = std::move(selectionPageCache);
+    } else {
+      p = section->loadPageFromSectionFile();
+      if (!p) {
+        LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
+        section->clearCache();
+        section.reset();
+        requestUpdate();  // Try again after clearing cache
+                          // TODO: prevent infinite loop if the page keeps failing to load for some reason
+        automaticPageTurnActive = false;
+        showPendingSyncSaveError();
+        return;
+      }
+
+      // Collect footnotes from the loaded page
+      currentPageFootnotes = std::move(p->footnotes);
     }
 
-    // Collect footnotes from the loaded page
-    currentPageFootnotes = std::move(p->footnotes);
-
     const auto start = millis();
-    renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    renderContents(*p, orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
+
+    if (selectionMode) {
+      selectionPageCache = std::move(p);
+      selectionPageCacheNum = pageNum;
+    }
   }
-  silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
-  saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  // While selecting, every cursor step triggers a render; skip the per-render
+  // progress write (SPIFFS/SD wear) and the silent next-chapter indexing until
+  // selection mode exits — the first normal render afterwards catches up.
+  if (!selectionMode) {
+    silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
+    saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  }
 
   showPendingSyncSaveError();
 
@@ -990,22 +1008,21 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
 }
-void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
-                                        const int orientedMarginRight, const int orientedMarginBottom,
-                                        const int orientedMarginLeft) {
+void EpubReaderActivity::renderContents(Page& page, const int orientedMarginTop, const int orientedMarginRight,
+                                        const int orientedMarginBottom, const int orientedMarginLeft) {
   const auto t0 = millis();
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
+  page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
   // Force special handling for pages with images when anti-aliasing is on
-  bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
+  bool imagePageWithAA = page.hasImages() && SETTINGS.textAntiAliasing;
 
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
 
   // Highlight overlays (BW only). Stored highlights are underlined; in selection
@@ -1013,11 +1030,16 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // overlay is drawn on top. Both use plain BW line/rect draws so they survive
   // the differential refresh without grayscale handling.
   loadSectionHighlights();
-  drawStoredHighlights(*page, orientedMarginLeft, orientedMarginTop);
+  drawStoredHighlights(page, orientedMarginLeft, orientedMarginTop);
   if (selectionMode) {
-    buildSelectableWords(*page, orientedMarginLeft, orientedMarginTop);
-    // Resolve the "select last word" sentinel after a backward page spill.
-    if (selectionCursor < 0) {
+    buildSelectableWords(page, orientedMarginLeft, orientedMarginTop);
+    // Resolve cursor sentinels after a backward page spill: -1 selects the
+    // last word (word step), -2 the first word of the last line (line step).
+    if (selectionCursor == -2 && !selectableWords.empty()) {
+      int i = static_cast<int>(selectableWords.size()) - 1;
+      while (i > 0 && selectableWords[i - 1].y == selectableWords[i].y) i--;
+      selectionCursor = i;
+    } else if (selectionCursor < 0) {
       selectionCursor = selectableWords.empty() ? 0 : static_cast<int>(selectableWords.size()) - 1;
     }
     if (selectionCursor >= static_cast<int>(selectableWords.size())) {
@@ -1034,13 +1056,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Step 1: Display page with image area blanked (text appears, image area white)
     // Step 2: Re-render with images and display again (images appear clean)
     int16_t imgX, imgY, imgW, imgH;
-    if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
+    if (page.getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -1080,7 +1102,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
         renderer.beginStripTarget(scratch.get(), y, rows);
         renderer.clearScreen(0x00);
-        page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+        page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
         renderer.endStripTarget();
         renderer.writeGrayscalePlaneStrip(true, scratch.get(), y, rows);
       }
@@ -1092,7 +1114,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
         renderer.beginStripTarget(scratch.get(), y, rows);
         renderer.clearScreen(0x00);
-        page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+        page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
         renderer.endStripTarget();
         renderer.writeGrayscalePlaneStrip(false, scratch.get(), y, rows);
       }
@@ -1125,14 +1147,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderer.copyGrayscaleLsbBuffers();
       const auto tGrayLsb = millis();
 
       // Render and copy to MSB buffer
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page.render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
       renderer.copyGrayscaleMsbBuffers();
       const auto tGrayMsb = millis();
 
@@ -1385,6 +1407,7 @@ void EpubReaderActivity::exitSelectionMode() {
   selectionAnchorSet = false;
   ignoreNextSelectionConfirmRelease = false;
   selectableWords.clear();
+  selectionPageCache.reset();  // free the page held for SD-less cursor redraws
   requestUpdate();
 }
 
@@ -1428,30 +1451,81 @@ void EpubReaderActivity::handleSelectionInput() {
     return;
   }
 
-  // Cursor movement; reuse the reader's page-turn button detection.
-  const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
-  if (!prevTriggered && !nextTriggered) return;
+  // Cursor movement. Front Left/Right step one word for precision; the side
+  // buttons jump a whole line so text further down the page is reached fast.
+  // Front buttons honor the orientation swap (as in detectPageTurn), side
+  // buttons the user's layout; tilt is ignored while selecting.
+  using Button = MappedInputManager::Button;
+  const bool swapFront =
+      SETTINGS.frontButtonFollowOrientation && (SETTINGS.orientation == CrossPointSettings::INVERTED ||
+                                                SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW);
+  const bool wordPrev = mappedInput.wasPressed(swapFront ? Button::Right : Button::Left);
+  const bool wordNext = mappedInput.wasPressed(swapFront ? Button::Left : Button::Right);
+  // PageBack/PageForward map through sideButtonLayout; when side-button page
+  // turns are disabled there, fall back to the raw side buttons so line
+  // jumping stays available.
+  const bool sideDisabled = SETTINGS.sideButtonLayout == CrossPointSettings::SIDE_BUTTONS_DISABLED;
+  const bool linePrev = mappedInput.wasPressed(sideDisabled ? Button::Up : Button::PageBack);
+  const bool lineNext = mappedInput.wasPressed(sideDisabled ? Button::Down : Button::PageForward);
+  if (!(wordPrev || wordNext || linePrev || lineNext)) return;
 
-  if (nextTriggered) {
-    if (selectionCursor + 1 < static_cast<int>(selectableWords.size())) {
-      selectionCursor++;
-      requestUpdate();
-    } else if (section && section->currentPage < section->pageCount - 1) {
-      // Spill onto the next page; cursor resets to the first word there.
+  const int n = static_cast<int>(selectableWords.size());
+  if (selectionCursor < 0 || selectionCursor >= n) return;  // sentinel pending render
+
+  // Move onto an adjacent page; the cursor sentinel picks the landing word
+  // once selectableWords is rebuilt (-1 = last word, -2 = start of last line).
+  const auto spillForward = [this] {
+    if (section && section->currentPage < section->pageCount - 1) {
       section->currentPage++;
       selectionCursor = 0;
       selectableWords.clear();  // rebuilt on next render
       requestUpdate();
     }
-  } else {  // prevTriggered
+  };
+  const auto spillBackward = [this](int sentinel) {
+    if (section && section->currentPage > 0) {
+      section->currentPage--;
+      selectionCursor = sentinel;
+      selectableWords.clear();
+      requestUpdate();
+    }
+  };
+  // First word index of the line containing word index i (same rendered y).
+  const auto lineStart = [this](int i) {
+    while (i > 0 && selectableWords[i - 1].y == selectableWords[i].y) i--;
+    return i;
+  };
+
+  if (wordNext) {
+    if (selectionCursor + 1 < n) {
+      selectionCursor++;
+      requestUpdate();
+    } else {
+      spillForward();
+    }
+  } else if (wordPrev) {
     if (selectionCursor > 0) {
       selectionCursor--;
       requestUpdate();
-    } else if (section && section->currentPage > 0) {
-      section->currentPage--;
-      selectionCursor = -1;  // sentinel: select last word after rebuild
-      selectableWords.clear();
+    } else {
+      spillBackward(-1);
+    }
+  } else if (lineNext) {
+    int j = selectionCursor;
+    while (j < n && selectableWords[j].y == selectableWords[selectionCursor].y) j++;
+    if (j < n) {
+      selectionCursor = j;
       requestUpdate();
+    } else {
+      spillForward();
+    }
+  } else {  // linePrev
+    const int start = lineStart(selectionCursor);
+    if (start > 0) {
+      selectionCursor = lineStart(start - 1);
+      requestUpdate();
+    } else {
+      spillBackward(-2);
     }
   }
 }

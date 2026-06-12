@@ -55,8 +55,8 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
-  void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
-                      int orientedMarginBottom, int orientedMarginLeft);
+  void renderContents(Page& page, int orientedMarginTop, int orientedMarginRight, int orientedMarginBottom,
+                      int orientedMarginLeft);
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
@@ -91,6 +91,12 @@ class EpubReaderActivity final : public Activity {
   };
   SelectionEndpoint selectionAnchor = {};
   std::vector<SelectableWord> selectableWords;  // rebuilt per page while selecting
+  // Page kept loaded while in selection mode so cursor-move redraws reuse it
+  // instead of re-reading the section file from SD on every step. No new
+  // allocation — just deferred free of the already-loaded page; released in
+  // exitSelectionMode().
+  std::unique_ptr<Page> selectionPageCache;
+  uint16_t selectionPageCacheNum = 0;
   // Highlights for the current section, loaded on section load for re-display.
   std::vector<HighlightEntry> sectionHighlights;
   bool sectionHighlightsLoaded = false;
