@@ -50,6 +50,7 @@ class OpdsParser final : public Print {
 
   // Disable copy
   const std::string& getSearchTemplate() const { return searchTemplate; }
+  const std::string& getOsdUrl() const { return osdUrl; }
   const std::string& getNextPageUrl() const { return nextPageUrl; }
   const std::string& getPrevPageUrl() const { return prevPageUrl; }
   OpdsParser(const OpdsParser&) = delete;
@@ -89,6 +90,7 @@ class OpdsParser final : public Print {
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
 
   std::string searchTemplate;
+  std::string osdUrl;
   std::string nextPageUrl;
   std::string prevPageUrl;
   // Helper to find attribute value
