@@ -46,6 +46,7 @@ DEFAULT_CONFIG = SCRIPT_DIR / "sd-fonts.yaml"
 DEFAULT_OUTPUT = SCRIPT_DIR / "output"
 DOWNLOAD_DIR = SCRIPT_DIR / "downloaded_fonts"
 INSTANCE_DIR = SCRIPT_DIR / "instanced_fonts"
+DEFAULT_FALLBACK_FONT = EPDFONTS_DIR / "builtinFonts/source/NotoSans/NotoSans-Regular.ttf"
 
 
 def download_font(url: str, dest: Path) -> Path:
@@ -186,12 +187,14 @@ def build_family(
         # Multi-style mode
         for style_name, font_path in resolved_styles.items():
             cmd.extend([f"--{style_name}", str(font_path)])
+            cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
     else:
         # Single-style mode
         style_name = next(iter(resolved_styles))
         font_path = resolved_styles[style_name]
         cmd.append(str(font_path))
         cmd.extend(["--style", style_name])
+        cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
 
     cmd.extend(["--intervals", intervals])
     cmd.extend(["--sizes", sizes])
