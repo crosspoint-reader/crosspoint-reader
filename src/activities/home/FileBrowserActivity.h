@@ -1,5 +1,7 @@
 #pragma once
 
+#include <FileIndex.h>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -36,15 +38,29 @@ class FileBrowserActivity final : public Activity {
 
   Mode mode = Mode::Books;
 
-  // Files state
+  // Files state. Folders up to the index threshold are listed and sorted in
+  // RAM (`files`); larger folders switch to the on-SD FileIndex backend so RAM
+  // use stays bounded. The entryCount/entryNameAt accessors hide which backend
+  // is active.
   std::string basepath = "/";
   std::vector<FileEntry> files;
   std::unique_ptr<char[]> fileNameBuffer;
+  std::unique_ptr<FileIndex> fileIndex;
+  std::unique_ptr<FileIndex::Entry> indexEntry;  // scratch record for index reads
+  std::string indexCachedName;
+  size_t indexCachedRow = SIZE_MAX;
+  bool usingIndex = false;
+  bool sortDescending = false;
 
   // Data loading
   void loadFiles();
+  bool loadFilesIntoVector(size_t cap, bool& overflow);
   static void sortFileList(std::vector<FileEntry>& entries);
-  size_t findEntry(const std::string& name) const;
+  size_t entryCount() const;
+  // Name of the entry at `row` in display order; directories carry a trailing
+  // '/' in both backends. Returns a reference valid until the next call.
+  const std::string& entryNameAt(size_t row);
+  size_t findEntry(const std::string& name);
 
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",

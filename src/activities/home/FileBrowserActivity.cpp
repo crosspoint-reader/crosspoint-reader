@@ -18,6 +18,10 @@
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+// Folders with more entries than this are browsed through the on-SD FileIndex
+// instead of an in-RAM vector, keeping heap use bounded (~25 KB worst case
+// here) no matter how many files a directory holds.
+constexpr size_t INDEX_THRESHOLD = 256;
 
 bool isSupportedFile(std::string_view name) {
   return FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) || FsHelpers::hasTxtExtension(name) ||
@@ -26,6 +30,23 @@ bool isSupportedFile(std::string_view name) {
 
 int naturalCompare(const std::string& str1, const std::string& str2) {
   return FsHelpers::naturalCompare(str1.c_str(), str2.c_str());
+}
+
+// Entry filters shared between the in-RAM listing and the FileIndex backend
+// (the index hashes accepted entries into its staleness signature, so a filter
+// change — e.g. toggling hidden files — naturally triggers a rebuild).
+bool acceptCommon(const char* name, bool isDir) {
+  if (!SETTINGS.showHiddenFiles && name[0] == '.') return false;
+  if (strcmp(name, "System Volume Information") == 0) return false;
+  if (isDir) return true;
+  return isSupportedFile(name);
+}
+
+bool acceptFirmware(const char* name, bool isDir) {
+  if (!SETTINGS.showHiddenFiles && name[0] == '.') return false;
+  if (strcmp(name, "System Volume Information") == 0) return false;
+  if (isDir) return true;
+  return FsHelpers::checkFileExtension(std::string_view{name}, ".bin");
 }
 }  // namespace
 
@@ -55,12 +76,15 @@ void FileBrowserActivity::sortFileList(std::vector<FileEntry>& entries) {
   });
 }
 
-void FileBrowserActivity::loadFiles() {
+// Stream directory entries into `files`, stopping once `cap` entries are
+// collected (overflow=true). Returns false if the directory cannot be opened.
+bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
   files.clear();
+  overflow = false;
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
-    return;
+    return false;
   }
 
   root.rewindDirectory();
@@ -68,15 +92,22 @@ void FileBrowserActivity::loadFiles() {
   if (!fileNameBuffer) {
     LOG_ERR("FileBrowser", "fileNameBuffer not allocated");
     root.close();
-    return;
+    return false;
   }
+
+  const auto accept = (mode == Mode::PickFirmware) ? acceptFirmware : acceptCommon;
 
   files.reserve(64);
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
-    if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
-        strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {
+    const bool isDir = file.isDirectory();
+    if (!accept(fileNameBuffer.get(), isDir)) {
       continue;
+    }
+
+    if (files.size() >= cap) {
+      overflow = true;
+      break;
     }
 
     // FAT timestamp for date sort: take max(mtime, ctime) so files copied onto the
@@ -89,22 +120,83 @@ void FileBrowserActivity::loadFiles() {
     const uint32_t crtTs = (static_cast<uint32_t>(cdate) << 16) | ctime;
     const uint32_t dateTime = modTs > crtTs ? modTs : crtTs;
 
-    if (file.isDirectory()) {
+    if (isDir) {
       files.push_back({std::string(fileNameBuffer.get()) + "/", 0, dateTime});
     } else {
-      std::string_view filename{fileNameBuffer.get()};
-      if (mode == Mode::PickFirmware) {
-        // Firmware picker: only show .bin files.
-        if (FsHelpers::checkFileExtension(filename, ".bin")) {
-          files.push_back({std::string(filename), static_cast<uint32_t>(file.fileSize()), dateTime});
-        }
-      } else if (isSupportedFile(filename)) {
-        files.push_back({std::string(filename), static_cast<uint32_t>(file.fileSize()), dateTime});
-      }
+      files.push_back({std::string(fileNameBuffer.get()), static_cast<uint32_t>(file.fileSize()), dateTime});
     }
   }
   root.close();
+  return true;
+}
+
+void FileBrowserActivity::loadFiles() {
+  usingIndex = false;
+  indexCachedRow = SIZE_MAX;
+  if (fileIndex) fileIndex->close();
+  sortDescending = SETTINGS.fileSortDirection == CrossPointSettings::SORT_DESC;
+
+  bool overflow = false;
+  if (!loadFilesIntoVector(INDEX_THRESHOLD, overflow)) {
+    return;
+  }
+
+  if (!overflow) {
+    sortFileList(files);
+    return;
+  }
+
+  // Folder is larger than the in-RAM budget: switch to the on-SD index.
+  // Free the partial vector first — the index build needs only a few KB.
+  files.clear();
+  files.shrink_to_fit();
+
+  if (!fileIndex) fileIndex = makeUniqueNoThrow<FileIndex>();
+  if (!indexEntry) indexEntry = makeUniqueNoThrow<FileIndex::Entry>();
+  if (fileIndex && indexEntry) {
+    // Validating (and possibly rebuilding) the index re-scans the directory,
+    // which can take seconds on huge folders — show the busy popup. Scoped
+    // lock: drawPopup pushes to the display, which the render task also owns.
+    {
+      RenderLock lock(*this);
+      GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    }
+    const auto sortMode = static_cast<FileIndex::SortMode>(SETTINGS.fileSortMode);
+    const auto accept = (mode == Mode::PickFirmware) ? acceptFirmware : acceptCommon;
+    if (fileIndex->open(basepath.c_str(), sortMode, accept)) {
+      usingIndex = true;
+      requestUpdate(true);
+      return;
+    }
+  }
+
+  // Index unavailable (allocation or IO failure): degrade to a capped in-RAM
+  // listing instead of crashing on a huge folder.
+  LOG_ERR("FileBrowser", "index unavailable for %s; showing first %u entries", basepath.c_str(),
+          static_cast<unsigned>(INDEX_THRESHOLD));
+  loadFilesIntoVector(INDEX_THRESHOLD, overflow);
   sortFileList(files);
+  requestUpdate(true);  // full refresh clears the busy popup
+}
+
+size_t FileBrowserActivity::entryCount() const { return usingIndex ? fileIndex->totalCount() : files.size(); }
+
+const std::string& FileBrowserActivity::entryNameAt(size_t row) {
+  if (!usingIndex) {
+    return files[row].name;
+  }
+  if (row != indexCachedRow) {
+    if (!fileIndex->entryAt(row, sortDescending, *indexEntry)) {
+      LOG_ERR("FileBrowser", "index read failed at row %u", static_cast<unsigned>(row));
+      indexCachedName = "?";  // never empty: callers inspect name.back()
+      indexCachedRow = SIZE_MAX;
+      return indexCachedName;
+    }
+    indexCachedName.assign(indexEntry->name);
+    if (indexEntry->isDir) indexCachedName += '/';
+    indexCachedRow = row;
+  }
+  return indexCachedName;
 }
 
 void FileBrowserActivity::onEnter() {
@@ -147,6 +239,12 @@ void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
   fileNameBuffer.reset();
+  fileIndex.reset();
+  indexEntry.reset();
+  indexCachedName.clear();
+  indexCachedName.shrink_to_fit();
+  indexCachedRow = SIZE_MAX;
+  usingIndex = false;
 }
 
 // To avoid traversing directories twice (once for cache clearing, once for deletion),
@@ -255,10 +353,10 @@ void FileBrowserActivity::loop() {
       lockNextConfirmRelease = false;
       return;
     }
-    if (files.empty()) return;
+    if (entryCount() == 0) return;
 
-    const std::string& entry = files[selectorIndex].name;
-    bool isDirectory = (entry.back() == '/');
+    const std::string entry = entryNameAt(selectorIndex);
+    bool isDirectory = !entry.empty() && entry.back() == '/';
 
     // Firmware picker: select file -> return path; navigate into directories normally.
     if (mode == Mode::PickFirmware && !isDirectory) {
@@ -283,11 +381,11 @@ void FileBrowserActivity::loop() {
           if (removeDirFile(fullPath)) {
             LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
-            if (files.empty()) {
+            if (entryCount() == 0) {
               selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
+            } else if (selectorIndex >= entryCount()) {
               // Move selection to the new "last" item
-              selectorIndex = files.size() - 1;
+              selectorIndex = entryCount() - 1;
             }
 
             requestUpdate(true);
@@ -346,7 +444,7 @@ void FileBrowserActivity::loop() {
     }
   }
 
-  int listSize = static_cast<int>(files.size());
+  int listSize = static_cast<int>(entryCount());
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
@@ -385,6 +483,9 @@ std::string getFileExtension(std::string filename) {
     return "";
   }
   const auto pos = filename.rfind('.');
+  if (pos == std::string::npos) {
+    return "";
+  }
   return filename.substr(pos);
 }
 
@@ -406,15 +507,15 @@ void FileBrowserActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
-  if (files.empty()) {
+  if (entryCount() == 0) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index].name); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index].name); },
-        [this](int index) { return getFileExtension(files[index].name); }, false);
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, entryCount(), selectorIndex,
+        [this](int index) { return getFileName(entryNameAt(index)); }, nullptr,
+        [this](int index) { return UITheme::getFileIcon(entryNameAt(index)); },
+        [this](int index) { return getFileExtension(entryNameAt(index)); }, false);
   }
 
   // Full path display
@@ -448,17 +549,24 @@ void FileBrowserActivity::render(RenderLock&&) {
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile =
-      mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].name.back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
-                                            files.empty() ? "" : tr(STR_DIR_DOWN));
+  const bool empty = entryCount() == 0;
+  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !empty && entryNameAt(selectorIndex).back() != '/';
+  const char* confirmLabel = empty ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, empty ? "" : tr(STR_DIR_UP),
+                                            empty ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
 
-size_t FileBrowserActivity::findEntry(const std::string& name) const {
+size_t FileBrowserActivity::findEntry(const std::string& name) {
+  if (usingIndex) {
+    // Index entries store raw names; strip the directory marker for lookup
+    std::string raw = name;
+    if (!raw.empty() && raw.back() == '/') raw.pop_back();
+    const size_t row = fileIndex->findRowByName(raw.c_str(), sortDescending);
+    return row == SIZE_MAX ? 0 : row;
+  }
   for (size_t i = 0; i < files.size(); i++)
     if (files[i].name == name) return i;
   return 0;
