@@ -579,9 +579,9 @@ Accessible by selecting **Chapters** from the Reader Menu.
 
 Bookmarks can be created to quickly save and restore your place in a book.
 
-To create a bookmark, hold **Confirm** for 1 second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
+To create a bookmark, hold **Confirm** for about half a second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
 
-To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for 1 second, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
+To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
 
