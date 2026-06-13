@@ -518,7 +518,8 @@ def extract_ligatures_fonttools(font_path, codepoints):
     return pairs
 
 
-def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False):
+def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False,
+                         fallback_fontfile=None):
     """Rasterize all glyphs for one font style. Returns StyleRasterData."""
     import freetype
 
@@ -531,6 +532,10 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     # it before set_char_size() would waste work at the default size and risk
     # Invalid_Size_Handle on some fonts.
     face.set_char_size(size << 6, size << 6, 150, 150)
+    fallback_face = None
+    if fallback_fontfile:
+        fallback_face = freetype.Face(fallback_fontfile)
+        fallback_face.set_char_size(size << 6, size << 6, 150, 150)
 
     load_flags = freetype.FT_LOAD_RENDER
     if force_autohint:
@@ -541,6 +546,11 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
         if glyph_index > 0:
             face.load_glyph(glyph_index, load_flags)
             return face
+        if fallback_face:
+            fallback_glyph_index = fallback_face.get_char_index(code_point)
+            if fallback_glyph_index > 0:
+                fallback_face.load_glyph(fallback_glyph_index, load_flags)
+                return fallback_face
         return None
 
     # Validate intervals: remove codepoints not present in the font.
@@ -552,7 +562,9 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     for i_start, i_end in intervals:
         start = i_start
         for code_point in range(i_start, i_end + 1):
-            if face.get_char_index(code_point) == 0:
+            has_primary = face.get_char_index(code_point) != 0
+            has_fallback = fallback_face and fallback_face.get_char_index(code_point) != 0
+            if not has_primary and not has_fallback:
                 if start < code_point:
                     validated_intervals.append((start, code_point - 1))
                 start = code_point + 1
@@ -763,10 +775,11 @@ def style_sections_total_size(sections):
 # --- File writers ---
 
 def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
-                               force_autohint=False):
+                               force_autohint=False, fallback_style_fonts=None):
     """Generate a multi-style v4 .cpfont file.
 
     style_fonts: dict of {style_id: fontfile_path} e.g. {0: "Regular.ttf", 2: "Italic.ttf"}
+    fallback_style_fonts: optional dict of {style_id: fallback_fontfile_path}
     """
     MAGIC = b"CPFONT\x00\x00"
     HEADER_SIZE = 32
@@ -776,12 +789,15 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
 
     # Rasterize each style
     raster_data = {}  # style_id -> StyleRasterData
+    fallback_style_fonts = fallback_style_fonts or {}
     for style_id in sorted(style_fonts.keys()):
         fontfile = style_fonts[style_id]
+        fallback_fontfile = fallback_style_fonts.get(style_id)
         print(f"  Rasterizing style {style_id}...", file=sys.stderr)
         raster_data[style_id] = rasterize_font_style(
             fontfile, size, intervals, style_id=style_id,
-            force_autohint=force_autohint)
+            force_autohint=force_autohint,
+            fallback_fontfile=fallback_fontfile)
 
     # Pack binary sections for each style
     packed_sections = {}  # style_id -> tuple of section bytearrays
@@ -892,6 +908,14 @@ def main():
                         help="Font file for italic style.")
     parser.add_argument("--bolditalic", dest="font_bolditalic",
                         help="Font file for bold-italic style.")
+    parser.add_argument("--fallback-regular", dest="fallback_regular",
+                        help="Fallback font file for regular style.")
+    parser.add_argument("--fallback-bold", dest="fallback_bold",
+                        help="Fallback font file for bold style.")
+    parser.add_argument("--fallback-italic", dest="fallback_italic",
+                        help="Fallback font file for italic style.")
+    parser.add_argument("--fallback-bolditalic", dest="fallback_bolditalic",
+                        help="Fallback font file for bold-italic style.")
 
     args = parser.parse_args()
 
@@ -912,6 +936,16 @@ def main():
         style_fonts[2] = args.font_italic
     if args.font_bolditalic:
         style_fonts[3] = args.font_bolditalic
+
+    fallback_style_fonts = {}
+    if args.fallback_regular:
+        fallback_style_fonts[0] = args.fallback_regular
+    if args.fallback_bold:
+        fallback_style_fonts[1] = args.fallback_bold
+    if args.fallback_italic:
+        fallback_style_fonts[2] = args.fallback_italic
+    if args.fallback_bolditalic:
+        fallback_style_fonts[3] = args.fallback_bolditalic
 
     is_multistyle = len(style_fonts) > 0
     fontfile = args.fontfile
@@ -980,7 +1014,8 @@ def main():
         print(f"Generating {output_path} (size {sz}, {len(style_fonts)} style(s), v4)...", file=sys.stderr)
         total_size += generate_cpfont_multistyle(
             style_fonts, sz, intervals, output_path,
-            force_autohint=args.force_autohint)
+            force_autohint=args.force_autohint,
+            fallback_style_fonts=fallback_style_fonts)
     print(f"\nTotal: {len(sizes)} files, {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
 
 
