@@ -965,6 +965,9 @@ void SdCardFont::clearPersistentCache() {
     delete[] advanceTable_[i];
     advanceTable_[i] = nullptr;
     advanceTableSize_[i] = 0;
+    delete[] overflowAdvance_[i];
+    overflowAdvance_[i] = nullptr;
+    overflowAdvanceSize_[i] = 0;
   }
 }
 
@@ -1021,19 +1024,10 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
   advanceTableSize_[styleIdx] = k;
 }
 
-bool SdCardFont::hasAdvanceTable() const {
-  for (uint8_t i = 0; i < MAX_STYLES; i++) {
-    if (advanceTable_[i]) return true;
-  }
-  return false;
-}
-
-uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
-  style &= (MAX_STYLES - 1);
-  if (!advanceTable_[style]) return 0;
-  const AdvanceEntry* table = advanceTable_[style];
-  const uint32_t size = advanceTableSize_[style];
-  // Binary search sorted by codepoint
+bool SdCardFont::overflowAdvanceLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const {
+  const AdvanceEntry* table = overflowAdvance_[styleIdx];
+  const uint32_t size = overflowAdvanceSize_[styleIdx];
+  if (!table || size == 0) return false;
   uint32_t lo = 0, hi = size;
   while (lo < hi) {
     uint32_t mid = lo + (hi - lo) / 2;
@@ -1044,9 +1038,86 @@ uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
     }
   }
   if (lo < size && table[lo].codepoint == codepoint) {
-    return table[lo].advanceX;
+    if (outAdvance) *outAdvance = table[lo].advanceX;
+    return true;
   }
-  return 0;
+  return false;
+}
+
+void SdCardFont::replaceOverflowAdvance(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount) {
+  delete[] overflowAdvance_[styleIdx];
+  overflowAdvance_[styleIdx] = nullptr;
+  overflowAdvanceSize_[styleIdx] = 0;
+  if (newCount == 0 || !sortedNew) return;
+  AdvanceEntry* fresh = new (std::nothrow) AdvanceEntry[newCount];
+  if (!fresh) {
+    LOG_ERR("SDCF", "replaceOverflowAdvance: alloc failed (%u entries) style %u", newCount, styleIdx);
+    return;
+  }
+  memcpy(fresh, sortedNew, newCount * sizeof(AdvanceEntry));
+  overflowAdvance_[styleIdx] = fresh;
+  overflowAdvanceSize_[styleIdx] = newCount;
+}
+
+bool SdCardFont::readSingleAdvanceFromSd(uint8_t styleIdx, int32_t globalGlyphIndex, uint16_t* outAdvance) const {
+  if (!outAdvance || styleIdx >= MAX_STYLES || !styles_[styleIdx].present || globalGlyphIndex < 0) return false;
+  const auto& s = styles_[styleIdx];
+  HalFile file;
+  if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+    LOG_ERR("SDCF", "Last-resort advance: failed to open .cpfont");
+    return false;
+  }
+  const uint32_t fileOff = s.glyphsFileOffset + static_cast<uint32_t>(globalGlyphIndex) * sizeof(EpdGlyph);
+  if (!file.seekSet(fileOff)) {
+    LOG_ERR("SDCF", "Last-resort advance: seek failed (style %u, gIdx %d)", styleIdx, globalGlyphIndex);
+    return false;
+  }
+  EpdGlyph g;
+  if (file.read(reinterpret_cast<uint8_t*>(&g), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
+    LOG_ERR("SDCF", "Last-resort advance: short read (style %u, gIdx %d)", styleIdx, globalGlyphIndex);
+    return false;
+  }
+  *outAdvance = g.advanceX;
+  return true;
+}
+
+bool SdCardFont::hasAdvanceTable() const {
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (advanceTable_[i] || overflowAdvance_[i]) return true;
+  }
+  return false;
+}
+
+uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
+  style &= (MAX_STYLES - 1);
+  // Tier 1: persistent table (bulk of common codepoints).
+  if (advanceTable_[style]) {
+    const AdvanceEntry* table = advanceTable_[style];
+    const uint32_t size = advanceTableSize_[style];
+    uint32_t lo = 0, hi = size;
+    while (lo < hi) {
+      uint32_t mid = lo + (hi - lo) / 2;
+      if (table[mid].codepoint < codepoint) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    if (lo < size && table[lo].codepoint == codepoint) {
+      return table[lo].advanceX;
+    }
+  }
+  // Tier 2: per-call overflow table (codepoints the persistent table couldn't hold).
+  uint16_t adv = 0;
+  if (overflowAdvanceLookup(style, codepoint, &adv)) return adv;
+  // Tier 3: last-resort SD read. Only reachable when the codepoint was never
+  // collected by buildAdvanceTableRange (paragraph hit MAX_UNIQUE_CODEPOINTS)
+  // or a batch SD read previously failed. If the font really lacks this glyph,
+  // returning 0 is correct.
+  if (!styles_[style].present || !styles_[style].fullIntervals) return 0;
+  const int32_t gIdx = findGlobalGlyphIndex(styles_[style], codepoint);
+  if (gIdx < 0) return 0;
+  return readSingleAdvanceFromSd(style, gIdx, &adv) ? adv : 0;
 }
 
 // Given a sorted array of unique codepoints, resolve glyph indices per style,
@@ -1058,10 +1129,11 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
     if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
     const auto& s = styles_[si];
 
-    // Stop fetching once the cache is full — further inserts would be dropped
-    // by the merge anyway. The renderer fast path tolerates missing entries
-    // (returns 0); the slow path is still correct for those codepoints.
-    if (advanceTableSize_[si] >= ADVANCE_CACHE_LIMIT) continue;
+    // Reset this call's overflow first. Anything the persistent table can't
+    // hold from this paragraph will be routed back into overflow below;
+    // anything the previous paragraph put here that isn't needed now is
+    // safely dropped. This keeps overflow scoped to one layout pass.
+    replaceOverflowAdvance(si, nullptr, 0);
 
     // For each codepoint in `codepoints`, skip those already cached, then
     // resolve to a glyph index. Build a parallel array sorted by glyph index
@@ -1141,14 +1213,25 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
     file.close();
 
     if (fetched > 0) {
-      // Sort staged by codepoint, then merge into the persistent table.
+      // Sort staged by codepoint, then split between persistent and overflow.
+      // Persistent fills first (so common codepoints encountered early stay
+      // cached for the lifetime of the font); anything past the cap goes into
+      // overflow for this paragraph only.
       std::sort(staged.get(), staged.get() + fetched,
                 [](const AdvanceEntry& a, const AdvanceEntry& b) { return a.codepoint < b.codepoint; });
-      mergeIntoAdvanceTable(si, staged.get(), fetched);
+      const uint32_t persistentRoom =
+          advanceTableSize_[si] < ADVANCE_CACHE_LIMIT ? ADVANCE_CACHE_LIMIT - advanceTableSize_[si] : 0;
+      const uint32_t toPersistent = fetched < persistentRoom ? fetched : persistentRoom;
+      const uint32_t toOverflow = fetched - toPersistent;
+      if (toPersistent > 0) {
+        mergeIntoAdvanceTable(si, staged.get(), toPersistent);
+      }
+      if (toOverflow > 0) {
+        replaceOverflowAdvance(si, staged.get() + toPersistent, toOverflow);
+      }
+      LOG_DBG("SDCF", "Advance table style %u: +%u from SD (persistent=%u/%u, overflow=%u)", si, fetched,
+              advanceTableSize_[si], ADVANCE_CACHE_LIMIT, overflowAdvanceSize_[si]);
     }
-
-    LOG_DBG("SDCF", "Advance table style %u: +%u from SD, total=%u/%u", si, fetched, advanceTableSize_[si],
-            ADVANCE_CACHE_LIMIT);
   }
 
   return totalMissed;
