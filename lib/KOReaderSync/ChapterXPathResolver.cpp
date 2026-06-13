@@ -61,6 +61,24 @@ std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegm
   return xpath;
 }
 
+bool isIgnorableFormattingWhitespace(const XML_Char* data, const int len) {
+  if (!data || len <= 0) {
+    return true;
+  }
+
+  bool hasLineBreak = false;
+  for (int i = 0; i < len; i++) {
+    const char c = data[i];
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+      return false;
+    }
+    if (c == '\r' || c == '\n') {
+      hasLineBreak = true;
+    }
+  }
+  return hasLineBreak;
+}
+
 size_t countUtf8Codepoints(const XML_Char* data, const int len) {
   if (!data || len <= 0) {
     return 0;
@@ -180,7 +198,7 @@ class ParagraphTextCounter final : public Print {
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || paragraphDepth <= 0 || len <= 0) {
+    if (!insideBody || len <= 0 || isIgnorableFormattingWhitespace(data, len)) {
       return;
     }
 
@@ -403,6 +421,8 @@ class XPathProgressResolver final : public Print {
         insideBody = true;
         bodyDepth = depth;
         parentStates.emplace_back();
+        textNodeIndexStack.push_back(0);
+        pendingTextNode = true;
       }
       depth++;
       return;
@@ -450,9 +470,7 @@ class XPathProgressResolver final : public Print {
     if (!textNodeIndexStack.empty()) {
       textNodeIndexStack.pop_back();
     }
-    if (paragraphDepth > 0 || liDepth > 0) {
-      pendingTextNode = true;
-    }
+    pendingTextNode = true;
     if (!path.empty()) {
       path.pop_back();
     }
@@ -462,7 +480,7 @@ class XPathProgressResolver final : public Print {
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
+    if (!insideBody || len <= 0 || stopped || isIgnorableFormattingWhitespace(data, len)) {
       return;
     }
 
@@ -513,6 +531,7 @@ class XPathProgressResolver final : public Print {
   std::vector<PathSegment> path;
   std::string xpath;
 };
+
 }  // namespace
 
 std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Epub>& epub, const int spineIndex,
