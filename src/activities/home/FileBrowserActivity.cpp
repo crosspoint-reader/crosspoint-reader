@@ -21,7 +21,7 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 // Folders with more entries than this are browsed through the on-SD FileIndex
 // instead of an in-RAM vector, keeping heap use bounded (~25 KB worst case
 // here) no matter how many files a directory holds.
-constexpr size_t INDEX_THRESHOLD = 256;
+constexpr size_t INDEX_THRESHOLD = 64;
 
 bool isSupportedFile(std::string_view name) {
   return FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) || FsHelpers::hasTxtExtension(name) ||
