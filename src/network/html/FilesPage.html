@@ -296,6 +296,7 @@
       border-radius: 6px;
       padding: 14px;
       text-align: center;
+      cursor: pointer;
       transition: border-color 0.15s, background-color 0.15s;
     }
     .drop-zone.dragover {
@@ -3056,6 +3057,14 @@
       // dragenter/dragleave fire for child elements too; a counter avoids the
       // highlight flickering as the cursor moves over the hint text or input.
       let dragDepth = 0;
+
+      // "click to browse" should work anywhere in the zone, not just on the
+      // native button. The hint has pointer-events:none so its clicks retarget
+      // to the zone; clicks on the native button retarget to fileInput (shadow
+      // DOM) and are skipped here so the picker isn't opened twice.
+      dropZone.addEventListener('click', function(e) {
+        if (e.target !== fileInput) fileInput.click();
+      });
 
       dropZone.addEventListener('dragenter', function(e) {
         e.preventDefault();
