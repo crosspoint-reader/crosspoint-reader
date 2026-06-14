@@ -252,26 +252,56 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
         break;
       }
 
-      // Find break point
-      size_t breakPos = line.length();
-      while (breakPos > 0 && renderer.getTextAdvanceX(cachedFontId, line.substr(0, breakPos).c_str(),
-                                                      EpdFontFamily::REGULAR) > viewportWidth) {
-        // Try to break at space
-        size_t spacePos = line.rfind(' ', breakPos - 1);
+      // Find break point using binary search: O(N log N)
+      size_t lo = 0;
+      size_t hi = line.length();
+      while (lo + 1 < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        // Align mid to a UTF-8 codepoint start (skip continuation bytes).
+        while (mid > lo && (static_cast<uint8_t>(line[mid]) & 0xC0) == 0x80) {
+          mid--;
+        }
+        if (mid == lo) {
+          // Lower half is all continuation bytes; advance to the next codepoint start.
+          mid = lo + 1;
+          while (mid < hi && (static_cast<uint8_t>(line[mid]) & 0xC0) == 0x80) {
+            mid++;
+          }
+          if (mid >= hi) {
+            // No codepoint start found in [lo+1, hi) — the entire range is
+            // continuation bytes of the codepoint starting at lo. lo is
+            // already the last measured-fitting break point; do not advance
+            // to hi (which is known-non-fitting).
+            break;
+          }
+        }
+        char saved = line[mid];
+        line[mid] = '\0';
+        int w = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
+        line[mid] = saved;
+        if (w <= viewportWidth) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      size_t breakPos = lo;
+
+      // Prefer to break at a word boundary within the fitting prefix.
+      if (breakPos > 0) {
+        size_t spacePos = line.rfind(' ', breakPos);
         if (spacePos != std::string::npos && spacePos > 0) {
           breakPos = spacePos;
-        } else {
-          // Break at character boundary for UTF-8
-          breakPos--;
-          // Make sure we don't break in the middle of a UTF-8 sequence
-          while (breakPos > 0 && (line[breakPos] & 0xC0) == 0x80) {
-            breakPos--;
-          }
         }
       }
 
       if (breakPos == 0) {
+        // Viewport too narrow even for one codepoint — force-emit the first
+        // complete codepoint to guarantee forward progress.
         breakPos = 1;
+        while (breakPos < line.length() && (static_cast<uint8_t>(line[breakPos]) & 0xC0) == 0x80) {
+          breakPos++;
+        }
       }
 
       outLines.push_back(line.substr(0, breakPos));
