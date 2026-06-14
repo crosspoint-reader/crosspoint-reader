@@ -274,18 +274,23 @@ void EpubReaderActivity::loop() {
         bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
       }
       const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-      startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                                 renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                                 SETTINGS.orientation, !currentPageFootnotes.empty()),
-                             [this](const ActivityResult& result) {
-                               // Always apply orientation change even if the menu was cancelled
-                               const auto& menu = std::get<MenuResult>(result.data);
-                               applyOrientation(menu.orientation);
-                               toggleAutoPageTurn(menu.pageTurnOption);
-                               if (!result.isCancelled) {
-                                 onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                               }
-                             });
+      const int bookCurrentPage =
+          (section && bookPageMapInitialized) ? bookPageMap.globalPage(currentSpineIndex, section->currentPage) : 0;
+      const int bookTotalPages = bookPageMapInitialized ? bookPageMap.total() : 0;
+      const bool bookTotalIsEstimate = bookPageMapInitialized ? !bookPageMap.isExact() : false;
+      startActivityForResult(
+          std::make_unique<EpubReaderMenuActivity>(
+              renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, bookCurrentPage,
+              bookTotalPages, bookTotalIsEstimate, SETTINGS.orientation, !currentPageFootnotes.empty()),
+          [this](const ActivityResult& result) {
+            // Always apply orientation change even if the menu was cancelled
+            const auto& menu = std::get<MenuResult>(result.data);
+            applyOrientation(menu.orientation);
+            toggleAutoPageTurn(menu.pageTurnOption);
+            if (!result.isCancelled) {
+              onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+            }
+          });
     }
   }
 

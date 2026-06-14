@@ -9,15 +9,19 @@
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
-                                               const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes)
+                                               const int bookProgressPercent, const int bookCurrentPage,
+                                               const int bookTotalPages, const bool bookTotalIsEstimate,
+                                               const uint8_t currentOrientation, const bool hasFootnotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      bookCurrentPage(bookCurrentPage),
+      bookTotalPages(bookTotalPages),
+      bookTotalIsEstimate(bookTotalIsEstimate) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes) {
   std::vector<MenuItem> items;
@@ -100,7 +104,12 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
     progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" +
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
-  progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
+  progressLine += std::string(tr(STR_BOOK_PREFIX));
+  if (bookTotalPages > 0) {
+    progressLine += std::to_string(bookCurrentPage) + "/" + (bookTotalIsEstimate ? "~" : "") +
+                    std::to_string(bookTotalPages) + "  ";
+  }
+  progressLine += std::to_string(bookProgressPercent) + "%";
   GUI.drawSubHeader(
       renderer,
       Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
