@@ -37,7 +37,6 @@ class FontSelectionActivity final : public Activity {
   int selectedIndex_ = 0;
   int previewFontIndex_ = 0;
   uint8_t originalFontFamily_ = 0;
-  uint8_t originalFontSize_ = 0;
   char originalSdFontFamilyName_[32] = {};
 
   ThemeMetrics metrics_ = {};
