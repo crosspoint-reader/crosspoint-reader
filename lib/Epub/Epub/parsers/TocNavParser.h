@@ -27,6 +27,10 @@ class TocNavParser final : public Print {
 
   // Track nesting depth for <ol> elements to determine TOC depth
   uint8_t olDepth = 0;
+  // Generic element nesting depth, used to honor the EPUB 3 `hidden` attribute.
+  uint16_t elementDepth = 0;
+  // Depth at which a `hidden` element was opened (0 = not inside a hidden subtree).
+  uint16_t hiddenDepth = 0;
   // Current entry data being collected
   std::string currentLabel;
   std::string currentHref;
