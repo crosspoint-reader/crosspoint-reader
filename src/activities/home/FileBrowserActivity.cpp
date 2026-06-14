@@ -156,6 +156,8 @@ bool FileBrowserActivity::loadFilesIntoVector(size_t cap, bool& overflow) {
 void FileBrowserActivity::loadFiles() {
   usingIndex = false;
   indexCachedRow = SIZE_MAX;
+  indexPageCacheUnavailable = false;
+  clearIndexPageCache();
   if (fileIndex) fileIndex->close();
   sortDescending = SETTINGS.fileSortDirection == CrossPointSettings::SORT_DESC;
 
@@ -206,9 +208,65 @@ void FileBrowserActivity::loadFiles() {
 
 size_t FileBrowserActivity::entryCount() const { return usingIndex ? fileIndex->totalCount() : files.size(); }
 
+void FileBrowserActivity::clearIndexPageCache() {
+  indexPageFirst = SIZE_MAX;
+  indexPageCount = 0;
+  indexPageSpan = 0;
+}
+
+bool FileBrowserActivity::prepareIndexPage(size_t first, size_t count) {
+  if (!usingIndex || count == 0) return true;
+  const size_t totalEntries = entryCount();
+  if (first >= totalEntries) {
+    clearIndexPageCache();
+    return false;
+  }
+
+  count = std::min({count, INDEX_PAGE_MAX_ENTRIES, totalEntries - first});
+  if (indexPageFirst == first && indexPageSpan == count) return true;
+  if (indexPageCacheUnavailable) return false;
+
+  if (!indexPageNames) {
+    indexPageNames = makeUniqueNoThrow<char[]>(INDEX_PAGE_NAME_BYTES);
+    if (!indexPageNames) {
+      indexPageCacheUnavailable = true;
+      LOG_ERR("FileBrowser", "index page cache alloc failed");
+      return false;
+    }
+  }
+
+  clearIndexPageCache();
+  indexPageFirst = first;
+  indexPageSpan = count;
+  size_t namesUsed = 0;
+  for (size_t i = 0; i < count; i++) {
+    if (!fileIndex->entryAt(first + i, sortDescending, *indexEntry)) {
+      LOG_ERR("FileBrowser", "index page read failed at row %u", static_cast<unsigned>(first + i));
+      return false;
+    }
+
+    const size_t nameLen = strlen(indexEntry->name);
+    const size_t needed = nameLen + (indexEntry->isDir ? 1 : 0) + 1;
+    if (namesUsed + needed > INDEX_PAGE_NAME_BYTES) {
+      break;  // Unusually long UTF-8 names fall back to the single-row cache.
+    }
+
+    indexPageEntries[i].nameOffset = static_cast<uint16_t>(namesUsed);
+    memcpy(&indexPageNames[namesUsed], indexEntry->name, nameLen);
+    namesUsed += nameLen;
+    if (indexEntry->isDir) indexPageNames[namesUsed++] = '/';
+    indexPageNames[namesUsed++] = '\0';
+    indexPageCount++;
+  }
+  return indexPageCount == count;
+}
+
 const char* FileBrowserActivity::entryNameAt(size_t row) {
   if (!usingIndex) {
     return nameArena.data() + files[row].nameOffset;
+  }
+  if (indexPageFirst != SIZE_MAX && row >= indexPageFirst && row < indexPageFirst + indexPageCount) {
+    return &indexPageNames[indexPageEntries[row - indexPageFirst].nameOffset];
   }
   if (row != indexCachedRow) {
     if (!fileIndex->entryAt(row, sortDescending, *indexEntry)) {
@@ -267,6 +325,8 @@ void FileBrowserActivity::onExit() {
   nameArena.shrink_to_fit();
   fileIndex.reset();
   indexEntry.reset();
+  indexPageNames.reset();
+  clearIndexPageCache();
   indexCachedName.clear();
   indexCachedName.shrink_to_fit();
   indexCachedRow = SIZE_MAX;
@@ -537,6 +597,9 @@ void FileBrowserActivity::render(RenderLock&&) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
+    const size_t pageItems = static_cast<size_t>(std::max(1, GUI.getListPageItems(contentHeight, false)));
+    const size_t pageFirst = selectorIndex / pageItems * pageItems;
+    prepareIndexPage(pageFirst, pageItems);
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, entryCount(), selectorIndex,
         [this](int index) { return getFileName(entryNameAt(index)); }, nullptr,

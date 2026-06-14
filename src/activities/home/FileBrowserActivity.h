@@ -51,6 +51,18 @@ class FileBrowserActivity final : public Activity {
   std::unique_ptr<char[]> fileNameBuffer;
   std::unique_ptr<FileIndex> fileIndex;
   std::unique_ptr<FileIndex::Entry> indexEntry;  // scratch record for index reads
+  static constexpr size_t INDEX_PAGE_MAX_ENTRIES = 22;
+  // One maximum-length card name per visible portrait row, including '/' and NUL.
+  static constexpr size_t INDEX_PAGE_NAME_BYTES = 5760;
+  struct IndexPageEntry {
+    uint16_t nameOffset;
+  };
+  std::unique_ptr<char[]> indexPageNames;
+  IndexPageEntry indexPageEntries[INDEX_PAGE_MAX_ENTRIES] = {};
+  size_t indexPageFirst = SIZE_MAX;
+  size_t indexPageCount = 0;
+  size_t indexPageSpan = 0;
+  bool indexPageCacheUnavailable = false;
   std::string indexCachedName;
   size_t indexCachedRow = SIZE_MAX;
   bool usingIndex = false;
@@ -61,8 +73,11 @@ class FileBrowserActivity final : public Activity {
   bool loadFilesIntoVector(size_t cap, bool& overflow);
   void sortFileList();
   size_t entryCount() const;
+  bool prepareIndexPage(size_t first, size_t count);
+  void clearIndexPageCache();
   // Name of the entry at `row` in display order; directories carry a trailing
-  // '/' in both backends. Pointer is valid until the next loadFiles().
+  // '/' in both backends. Indexed pointers are consumed synchronously before
+  // the visible-page cache is repopulated.
   const char* entryNameAt(size_t row);
   size_t findEntry(const std::string& name);
 
