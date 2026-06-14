@@ -44,10 +44,8 @@ class ButtonNavigator final {
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
 
-  [[nodiscard]] static Buttons getNextButtons() {
-    return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};
-  }
-  [[nodiscard]] static Buttons getPreviousButtons() {
-    return {MappedInputManager::Button::Up, MappedInputManager::Button::Left};
-  }
+  // Orientation-aware: in INVERTED / LANDSCAPE_CCW (with frontButtonFollowOrientation), the
+  // logical next/previous sets are swapped so navigation matches the rotated hint labels.
+  [[nodiscard]] static Buttons getNextButtons();
+  [[nodiscard]] static Buttons getPreviousButtons();
 };
