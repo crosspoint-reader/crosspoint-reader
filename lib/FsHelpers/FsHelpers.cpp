@@ -1,7 +1,10 @@
 #include "FsHelpers.h"
 
+#include <Utf8.h>
+
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -182,6 +185,15 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
       output[i] = c;
     }
   }
+
+  // Drop a trailing incomplete UTF-8 sequence. FAT32 long filenames are stored
+  // as UTF-16, so SdFat (USE_UTF8_LONG_NAMES) rejects an incomplete sequence and
+  // the directory/file creation fails. The tail can be partial either because we
+  // truncated at maxLen here, or because the caller already truncated the input
+  // mid-character (e.g. snprintf into a fixed-size buffer drops the trailing byte
+  // of a multi-byte glyph). We inspect output's own tail rather than the next
+  // input byte, which is '\0' in the pre-truncated case.
+  i = static_cast<size_t>(utf8SafeTruncateBuffer(output, static_cast<int>(i)));
   output[i] = '\0';
 }
 
