@@ -94,8 +94,8 @@ class FileIndex {
   // section byte (1 = dir, 2 = file) so one sort pass yields dirs-then-files;
   // the payload starts with the numeric field (date/size modes, big-endian so
   // memcmp orders numerically) followed by a truncated FsHelpers::naturalSortKey
-  // of the name. Initial runs and merge passes resolve full-key ties with
-  // naturalCompare on the real names.
+  // of the name. Primary runs use blobOffset for deterministic fixed-key ties;
+  // writeOffsets resolves them against the full names.
   struct RunRecord {
     uint8_t key[28];
     uint32_t blobOffset;
@@ -112,8 +112,14 @@ class FileIndex {
   bool flushChunk(BuildState& bs);
   bool mergeRuns(BuildState& bs, uint32_t recordCount);
   bool writeOffsets(BuildState& bs, uint32_t recordCount);
+  bool sortSmallTieGroup(BuildState& bs, size_t count, uint32_t& appendPos);
+  bool writeInitialTieRun(BuildState& bs, HalFile& out, uint32_t offsetA, bool hasB, uint32_t offsetB, bool useChunk);
+  bool mergeTieRuns(BuildState& bs, uint32_t runCount, const char*& finalPath);
+  bool appendTieOffsets(BuildState& bs, const char* path, uint32_t recordCount, uint32_t& appendPos);
+  bool finishTieGroup(BuildState& bs, HalFile& tieOut, bool usesScratch, uint32_t groupCount, uint32_t initialRunCount,
+                      bool hasPending, uint32_t pendingOffset, uint32_t& appendPos);
   void makeKey(RunRecord& rec, SortMode sortMode, bool isDir, uint32_t size, uint32_t dateTime, const char* name) const;
-  bool readNameAt(HalFile& file, uint32_t recordOffset, char* out, size_t cap);
+  bool readNameAt(HalFile& file, uint32_t recordOffset, char* out, size_t cap, uint16_t* nameLen = nullptr);
 
   bool readOffsetForPhysIndex(size_t physIndex, uint32_t& recordOffset);
 

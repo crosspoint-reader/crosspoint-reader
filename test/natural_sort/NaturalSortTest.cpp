@@ -67,10 +67,65 @@ bool indexRecordLess(const IndexRecord& a, const IndexRecord& b) {
   return a.blobOffset < b.blobOffset;
 }
 
-std::vector<IndexRecord> externalSort(std::vector<IndexRecord> records) {
+bool primaryRecordLess(const IndexRecord& a, const IndexRecord& b) {
+  const int keyCmp = memcmp(a.key.data(), b.key.data(), a.key.size());
+  return keyCmp < 0 || (keyCmp == 0 && a.blobOffset < b.blobOffset);
+}
+
+uint32_t scratchBodyBytes(const std::vector<IndexRecord>& records) {
+  uint32_t bytes = 0;
+  for (const auto& record : records) {
+    bytes += 8 + record.name.size();
+  }
+  return bytes;
+}
+
+struct ScratchRun {
+  uint32_t bodyBytes;
+  std::vector<IndexRecord> records;
+};
+
+std::vector<IndexRecord> scratchSortGroup(const std::vector<IndexRecord>& group) {
+  std::vector<ScratchRun> runs;
+  runs.reserve((group.size() + 1) / 2);
+  for (size_t first = 0; first < group.size(); first += 2) {
+    std::vector<IndexRecord> pair;
+    pair.reserve(2);
+    pair.push_back(group[first]);
+    if (first + 1 < group.size()) pair.push_back(group[first + 1]);
+    std::sort(pair.begin(), pair.end(), indexRecordLess);
+    runs.push_back({scratchBodyBytes(pair), std::move(pair)});
+  }
+
+  while (runs.size() > 1) {
+    std::vector<ScratchRun> mergedRuns;
+    mergedRuns.reserve((runs.size() + 1) / 2);
+    for (size_t first = 0; first < runs.size(); first += 2) {
+      if (first + 1 == runs.size()) {
+        mergedRuns.push_back(std::move(runs[first]));
+        continue;
+      }
+
+      const ScratchRun& a = runs[first];
+      const ScratchRun& b = runs[first + 1];
+      std::vector<IndexRecord> records;
+      records.reserve(a.records.size() + b.records.size());
+      std::merge(a.records.begin(), a.records.end(), b.records.begin(), b.records.end(), std::back_inserter(records),
+                 indexRecordLess);
+      mergedRuns.push_back({a.bodyBytes + b.bodyBytes, std::move(records)});
+    }
+    runs = std::move(mergedRuns);
+  }
+
+  if (runs.empty()) return {};
+  EXPECT_EQ(runs[0].bodyBytes, scratchBodyBytes(runs[0].records));
+  return std::move(runs[0].records);
+}
+
+std::vector<IndexRecord> hybridExternalSort(std::vector<IndexRecord> records) {
   for (size_t first = 0; first < records.size(); first += kFileIndexChunkEntries) {
     const size_t last = std::min(first + kFileIndexChunkEntries, records.size());
-    std::sort(records.begin() + first, records.begin() + last, indexRecordLess);
+    std::sort(records.begin() + first, records.begin() + last, primaryRecordLess);
   }
 
   std::vector<IndexRecord> merged;
@@ -83,7 +138,7 @@ std::vector<IndexRecord> externalSort(std::vector<IndexRecord> records) {
       size_t a = first;
       size_t b = middle;
       while (a < middle || b < last) {
-        if (b == last || (a < middle && !indexRecordLess(records[b], records[a]))) {
+        if (b == last || (a < middle && !primaryRecordLess(records[b], records[a]))) {
           merged.push_back(records[a++]);
         } else {
           merged.push_back(records[b++]);
@@ -91,6 +146,22 @@ std::vector<IndexRecord> externalSort(std::vector<IndexRecord> records) {
       }
     }
     records.swap(merged);
+  }
+
+  for (size_t first = 0; first < records.size();) {
+    size_t last = first + 1;
+    while (last < records.size() && records[first].key == records[last].key) {
+      last++;
+    }
+
+    if (last - first <= kFileIndexChunkEntries) {
+      std::sort(records.begin() + first, records.begin() + last, indexRecordLess);
+    } else {
+      const std::vector<IndexRecord> group(records.begin() + first, records.begin() + last);
+      auto sorted = scratchSortGroup(group);
+      std::move(sorted.begin(), sorted.end(), records.begin() + first);
+    }
+    first = last;
   }
   return records;
 }
@@ -196,14 +267,14 @@ TEST(NaturalSortKey, RespectsCapacity) {
 
 class FileIndexCollisionTest : public testing::TestWithParam<std::tuple<SortMode, size_t>> {};
 
-TEST_P(FileIndexCollisionTest, ExternalRunsSortLargeCollisionGroupsByFullName) {
+TEST_P(FileIndexCollisionTest, HybridSortRepairsCollisionGroupsByFullName) {
   const auto [mode, count] = GetParam();
   std::vector<IndexRecord> records;
   records.reserve(count);
 
   for (size_t i = count; i > 0; i--) {
     char name[64];
-    snprintf(name, sizeof(name), "My Long Story Title Chapter %03u.txt", static_cast<unsigned>(i));
+    snprintf(name, sizeof(name), "My Long Story Title Chapter %04u.txt", static_cast<unsigned>(i));
     const uint32_t numeric = mode == SortMode::Size ? 4096 : 0x5A6B7C8D;
     records.push_back({makeIndexKey(name, mode, numeric), static_cast<uint32_t>(count - i), name});
   }
@@ -212,17 +283,17 @@ TEST_P(FileIndexCollisionTest, ExternalRunsSortLargeCollisionGroupsByFullName) {
     ASSERT_EQ(records[0].key, records[i].key);
   }
 
-  const auto sorted = externalSort(std::move(records));
+  const auto sorted = hybridExternalSort(std::move(records));
   for (size_t i = 0; i < count; i++) {
     char expected[64];
-    snprintf(expected, sizeof(expected), "My Long Story Title Chapter %03u.txt", static_cast<unsigned>(i + 1));
+    snprintf(expected, sizeof(expected), "My Long Story Title Chapter %04u.txt", static_cast<unsigned>(i + 1));
     EXPECT_EQ(sorted[i].name, expected);
   }
 
   const std::vector<IndexRecord> descending(sorted.rbegin(), sorted.rend());
   for (size_t i = 0; i < count; i++) {
     char expected[64];
-    snprintf(expected, sizeof(expected), "My Long Story Title Chapter %03u.txt", static_cast<unsigned>(count - i));
+    snprintf(expected, sizeof(expected), "My Long Story Title Chapter %04u.txt", static_cast<unsigned>(count - i));
     EXPECT_EQ(descending[i].name, expected);
   }
 }
@@ -230,18 +301,56 @@ TEST_P(FileIndexCollisionTest, ExternalRunsSortLargeCollisionGroupsByFullName) {
 INSTANTIATE_TEST_SUITE_P(AllSortModesAndCollisionSizes, FileIndexCollisionTest,
                          testing::Combine(testing::Values(SortMode::Name, SortMode::Date, SortMode::Size,
                                                           SortMode::Type),
-                                          testing::Values<size_t>(65, 500)));
+                                          testing::Values<size_t>(64, 65, 512, 2000)));
 
-TEST(FileIndexCollision, NearMaximumLengthNamesUseFullNameTieBreak) {
-  const std::string prefix(235, 'a');
-  const std::string chapter2 = prefix + " Chapter 2.txt";
-  const std::string chapter10 = prefix + " Chapter 10.txt";
-  ASSERT_LE(chapter10.size(), 255u);
+TEST(FileIndexCollision, MaximumSupportedCardNamesUseScratchTieBreak) {
+  constexpr size_t count = 65;
+  std::vector<IndexRecord> records;
+  records.reserve(count);
 
-  IndexRecord later{makeIndexKey(chapter10.c_str(), SortMode::Name), 0, chapter10};
-  IndexRecord earlier{makeIndexKey(chapter2.c_str(), SortMode::Name), 1, chapter2};
-  ASSERT_EQ(later.key, earlier.key);
-  EXPECT_TRUE(indexRecordLess(earlier, later));
+  for (size_t i = count; i > 0; i--) {
+    char suffix[32];
+    snprintf(suffix, sizeof(suffix), " Chapter %04u.txt", static_cast<unsigned>(i));
+    const std::string name(255 - strlen(suffix), 'a');
+    records.push_back(
+        {makeIndexKey((name + suffix).c_str(), SortMode::Name), static_cast<uint32_t>(count - i), name + suffix});
+    ASSERT_EQ(records.back().name.size(), 255u);
+  }
+  for (size_t i = 1; i < records.size(); i++) {
+    ASSERT_EQ(records[0].key, records[i].key);
+  }
+
+  const auto sorted = hybridExternalSort(std::move(records));
+  for (size_t i = 0; i < count; i++) {
+    char suffix[32];
+    snprintf(suffix, sizeof(suffix), " Chapter %04u.txt", static_cast<unsigned>(i + 1));
+    EXPECT_EQ(sorted[i].name.substr(sorted[i].name.size() - strlen(suffix)), suffix);
+  }
+}
+
+TEST(FileIndexCollision, NaturalEqualNamesUseBlobOffsetTieBreak) {
+  constexpr size_t count = 65;
+  std::vector<IndexRecord> records;
+  records.reserve(count);
+
+  const std::string commonPrefix(40, 'p');
+  for (size_t i = 0; i < count; i++) {
+    std::string variant = "abcdefg";
+    for (size_t bit = 0; bit < variant.size(); bit++) {
+      if ((i >> bit) & 1) variant[bit] = static_cast<char>(variant[bit] - ('a' - 'A'));
+    }
+    const std::string name = commonPrefix + variant + ".txt";
+    records.push_back({makeIndexKey(name.c_str(), SortMode::Name), static_cast<uint32_t>(count - 1 - i), name});
+  }
+  for (size_t i = 1; i < records.size(); i++) {
+    ASSERT_EQ(records[0].key, records[i].key);
+    ASSERT_EQ(FsHelpers::naturalCompare(records[0].name.c_str(), records[i].name.c_str()), 0);
+  }
+
+  const auto sorted = hybridExternalSort(std::move(records));
+  for (size_t i = 1; i < sorted.size(); i++) {
+    EXPECT_LT(sorted[i - 1].blobOffset, sorted[i].blobOffset);
+  }
 }
 
 }  // namespace
