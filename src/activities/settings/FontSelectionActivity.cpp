@@ -22,17 +22,6 @@ constexpr const char* PREVIEW_TEXT =
 constexpr const char* ELLIPSIS_UTF8 = "\xe2\x80\xa6";
 constexpr int PREVIEW_PADDING = 12;
 
-int builtinFontIdForFamily(uint8_t familyIndex) {
-  const uint8_t savedFamily = SETTINGS.fontFamily;
-  const char savedSdFont = SETTINGS.sdFontFamilyName[0];
-  SETTINGS.fontFamily = familyIndex;
-  SETTINGS.sdFontFamilyName[0] = '\0';
-  const int id = SETTINGS.getReaderFontId();
-  SETTINGS.fontFamily = savedFamily;
-  SETTINGS.sdFontFamilyName[0] = savedSdFont;
-  return id;
-}
-
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
     const auto& families = registry->getFamilies();
@@ -55,7 +44,6 @@ void FontSelectionActivity::onEnter() {
   Activity::onEnter();
 
   originalFontFamily_ = SETTINGS.fontFamily;
-  originalFontSize_ = SETTINGS.fontSize;
   strncpy(originalSdFontFamilyName_, SETTINGS.sdFontFamilyName, sizeof(originalSdFontFamilyName_) - 1);
   originalSdFontFamilyName_[sizeof(originalSdFontFamilyName_) - 1] = '\0';
 
@@ -83,7 +71,6 @@ void FontSelectionActivity::onExit() { Activity::onExit(); }
 void FontSelectionActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     SETTINGS.fontFamily = originalFontFamily_;
-    SETTINGS.fontSize = originalFontSize_;
     strncpy(SETTINGS.sdFontFamilyName, originalSdFontFamilyName_, sizeof(SETTINGS.sdFontFamilyName) - 1);
     SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
     sdFontSystem.ensureLoaded(renderer);
@@ -97,7 +84,10 @@ void FontSelectionActivity::loop() {
     } else {
       previewFontIndex_ = selectedIndex_;
       const auto& font = fonts_[selectedIndex_];
-      if (!font.isBuiltin && registry_) {
+      if (font.isBuiltin) {
+        SETTINGS.fontFamily = font.settingIndex;
+        SETTINGS.sdFontFamilyName[0] = '\0';
+      } else if (registry_) {
         const int sdIdx = font.settingIndex - CrossPointSettings::BUILTIN_FONT_COUNT;
         const auto& families = registry_->getFamilies();
         if (sdIdx < static_cast<int>(families.size())) {
@@ -159,9 +149,6 @@ void FontSelectionActivity::handleSelection() {
 
 int FontSelectionActivity::getFontIdForPreview(int index) const {
   if (index < 0 || index >= static_cast<int>(fonts_.size())) return 0;
-
-  const auto& font = fonts_[index];
-  if (font.isBuiltin) return builtinFontIdForFamily(font.settingIndex);
   return SETTINGS.getReaderFontId();
 }
 
