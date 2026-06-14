@@ -208,46 +208,61 @@ void XtcReaderActivity::renderPage() {
   const uint16_t pageHeight = xtc->getPageHeight();
   const uint8_t bitDepth = xtc->getBitDepth();
 
-  // Calculate buffer size for one page
-  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
-  size_t pageBufferSize;
-  if (bitDepth == 2) {
-    pageBufferSize = ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2;
-  } else {
-    pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
-  }
-
-  // Allocate page buffer
-  uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
-  if (!pageBuffer) {
-    LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_MEMORY_ERROR), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  // Load page data
-  size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
-  if (bytesRead == 0) {
-    LOG_ERR("XTR", "Failed to load page %lu: bufferSize=%lu bitDepth=%u error=%s", currentPage, pageBufferSize,
-            bitDepth, xtc::errorToString(xtc->getLastError()));
-    free(pageBuffer);
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-    return;
-  }
-
-  // Clear screen first
   renderer.clearScreen();
 
-  // Copy page bitmap using GfxRenderer's drawPixel
-  // XTC/XTCH pages are pre-rendered with status bar included, so render full page
-  const uint16_t maxSrcY = pageHeight;
-
   if (bitDepth == 2) {
+    // XTH 2-bit mode: column-major format requires random pixel access, so a full-page buffer is needed.
+    // Two bit planes: ((width * height + 7) / 8) * 2 bytes.
+    const size_t pageBufferSize = ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2;
+    uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
+    if (!pageBuffer) {
+      // OOM: fall back to BW streaming. XTCH stores plane1 then plane2 sequentially.
+      // BW = "bit1 OR bit2 is set". Drawing every set bit from both planes gives the correct union.
+      LOG_INF("XTR", "OOM for XTCH grayscale (%lu bytes), streaming BW fallback", pageBufferSize);
+      const size_t planeSize = pageBufferSize / 2;
+      const size_t colBytes = (pageHeight + 7) / 8;
+      const xtc::XtcError streamErr = xtc->loadPageStreaming(
+          currentPage,
+          [&](const uint8_t* data, size_t size, size_t offset) {
+            for (size_t i = 0; i < size; i++) {
+              const size_t byteOff = offset + i;
+              const size_t planeByteOff = byteOff < planeSize ? byteOff : byteOff - planeSize;
+              const uint16_t colIndex = static_cast<uint16_t>(planeByteOff / colBytes);
+              const uint16_t byteInCol = static_cast<uint16_t>(planeByteOff % colBytes);
+              const uint16_t x = pageWidth - 1 - colIndex;
+              const uint8_t b = data[i];
+              for (int bit = 0; bit < 8; bit++) {
+                if (!((b >> bit) & 1)) continue;
+                const uint16_t y = byteInCol * 8 + (7 - bit);
+                if (y < pageHeight && x < pageWidth) renderer.drawPixel(x, y, true);
+              }
+            }
+          },
+          colBytes);
+      if (streamErr != xtc::XtcError::OK) {
+        LOG_ERR("XTR", "Failed to stream XTCH page %lu", currentPage);
+        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+        renderer.displayBuffer();
+        return;
+      }
+      renderStatusBarOverlay(SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP
+                                 ? StatusBarOverlayPosition::Top
+                                 : StatusBarOverlayPosition::Bottom);
+      ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+      LOG_DBG("XTR", "Rendered page %lu/%lu (2-bit BW streaming fallback)", currentPage + 1, xtc->getPageCount());
+      return;
+    }
+
+    const size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
+    if (bytesRead == 0) {
+      LOG_ERR("XTR", "Failed to load page %lu: bufferSize=%lu bitDepth=%u error=%s", currentPage, pageBufferSize,
+              bitDepth, xtc::errorToString(xtc->getLastError()));
+      free(pageBuffer);
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+      renderer.displayBuffer();
+      return;
+    }
+
     // XTH 2-bit mode: Two bit planes, column-major order
     // - Columns scanned right to left (x = width-1 down to 0)
     // - 8 vertical pixels per byte (MSB = topmost pixel in group)
@@ -341,27 +356,38 @@ void XtcReaderActivity::renderPage() {
     LOG_DBG("XTR", "Rendered page %lu/%lu (2-bit grayscale)", currentPage + 1, xtc->getPageCount());
     return;
   } else {
-    // 1-bit mode: 8 pixels per byte, MSB first
-    const size_t srcRowBytes = (pageWidth + 7) / 8;  // 60 bytes for 480 width
+    // 1-bit XTC: stream row-by-row directly into the framebuffer.
+    // Avoids a 48KB heap allocation that fails after activity navigation exhausts
+    // contiguous heap. Uses only ~60 bytes (one row) at a time.
+    // Format: row-major, MSB-first, (width+7)/8 bytes per row.
+    const size_t srcRowBytes = (pageWidth + 7) / 8;
 
-    for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
-      const size_t srcRowStart = srcY * srcRowBytes;
+    const xtc::XtcError streamErr = xtc->loadPageStreaming(
+        currentPage,
+        [&](const uint8_t* data, size_t size, size_t offset) {
+          for (size_t i = 0; i < size; i++) {
+            const size_t byteOffset = offset + i;
+            const uint16_t srcY = static_cast<uint16_t>(byteOffset / srcRowBytes);
+            const uint16_t baseX = static_cast<uint16_t>((byteOffset % srcRowBytes) * 8);
+            const uint8_t byte = data[i];
+            for (int bit = 0; bit < 8; bit++) {
+              const uint16_t srcX = baseX + bit;
+              if (srcX >= pageWidth) break;
+              if (!((byte >> (7 - bit)) & 1)) {  // XTC polarity: 0=black, 1=white
+                renderer.drawPixel(srcX, srcY, true);
+              }
+            }
+          }
+        },
+        srcRowBytes);
 
-      for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
-        // Read source pixel (MSB first, bit 7 = leftmost pixel)
-        const size_t srcByte = srcRowStart + srcX / 8;
-        const size_t srcBit = 7 - (srcX % 8);
-        const bool isBlack = !((pageBuffer[srcByte] >> srcBit) & 1);  // XTC: 0 = black, 1 = white
-
-        if (isBlack) {
-          renderer.drawPixel(srcX, srcY, true);
-        }
-      }
+    if (streamErr != xtc::XtcError::OK) {
+      LOG_ERR("XTR", "Failed to stream page %lu: error=%s", currentPage, xtc::errorToString(streamErr));
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+      renderer.displayBuffer();
+      return;
     }
   }
-  // White pixels are already cleared by clearScreen()
-
-  free(pageBuffer);
 
   if (SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP) {
     renderStatusBarOverlay(StatusBarOverlayPosition::Top);
