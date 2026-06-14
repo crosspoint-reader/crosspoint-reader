@@ -115,6 +115,8 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.isRtl);
   serialization::writePod(file, blockStyle.directionDefined);
 
+  serialization::writePod(file, paragraphStart);
+
   return true;
 }
 
@@ -126,6 +128,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   std::vector<uint8_t> wordFocusBoundary;
   std::vector<uint16_t> wordFocusSuffixX;
   BlockStyle blockStyle;
+  bool paragraphStart = false;
 
   // Word count
   serialization::readPod(file, wc);
@@ -169,8 +172,9 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
+  serialization::readPod(file, paragraphStart);
 
   return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
-                                                  std::move(wordFocusBoundary), std::move(wordFocusSuffixX),
-                                                  blockStyle));
+                                                  std::move(wordFocusBoundary), std::move(wordFocusSuffixX), blockStyle,
+                                                  paragraphStart));
 }

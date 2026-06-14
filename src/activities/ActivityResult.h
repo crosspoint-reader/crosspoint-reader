@@ -59,9 +59,31 @@ struct FilePathResult {
   std::string path;
 };
 
-using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+struct ClippingResult {
+  std::string text;
+  int fromWordIdx = -1;
+  int toWordIdx = -1;
+  uint16_t sectionPage = 0;
+  uint16_t endSectionPage = 0;
+  std::string startText;
+  std::string endText;
+  std::string beforeStartText;
+  std::string afterEndText;
+  std::string midText;
+  uint16_t wordCount = 0;
+};
+
+/// Returned by ClipSelectionActivity in Mode::WORD_SELECT.
+/// Contains only the selected text and word indices — no anchor metadata.
+struct WordSelectResult {
+  std::string text;
+  int fromWordIdx = -1;
+  int toWordIdx = -1;
+};
+
+using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
+                                   IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
+                                   FilePathResult, ClippingResult, WordSelectResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

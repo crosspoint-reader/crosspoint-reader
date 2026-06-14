@@ -11,13 +11,16 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <esp_system.h>
+#include <freertos/task.h>
 
 #include <algorithm>
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <sstream>
 
 #include "BookmarkEntry.h"
+#include "ClipSelectionActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderBookmarksActivity.h"
@@ -32,6 +35,8 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "WordRef.h"
+#include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
@@ -128,6 +133,7 @@ void EpubReaderActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   epub->setupCacheDir();
+  annotations.load(epub->getCachePath().c_str());
 
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
@@ -171,6 +177,11 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  if (epub && annotationsDirty) {
+    annotations.save(epub->getCachePath().c_str());
+    annotationsDirty = false;
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -312,7 +323,11 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::CLIPPING &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    startClipSelection();
+    return;
+  }
 
   // Handle short power button press for footnotes
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
@@ -577,6 +592,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SAVE_CLIPPING: {
+      startClipSelection();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       if (KOREADER_STORE.hasCredentials()) {
         const int currentPage = section ? section->currentPage : nextPageNumber;
@@ -631,6 +650,142 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+void EpubReaderActivity::startClipSelection() {
+  if (!section || !epub) {
+    requestUpdate();
+    return;
+  }
+
+  int mTop, mRight, mBottom, mLeft;
+  renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
+  mTop += SETTINGS.screenMargin;
+  mLeft += SETTINGS.screenMargin;
+
+  const int readerFontId = SETTINGS.getReaderFontId();
+  const int lineH = renderer.getLineHeight(readerFontId);
+  const int startPage = section->currentPage;
+  const int pagesToLoad = std::min(3, section->pageCount - startPage);
+
+  std::vector<WordRef> words;
+  words.reserve(pagesToLoad * 60);
+
+  auto stripEmSpace = [](const std::string& w) -> std::string {
+    if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+        static_cast<unsigned char>(w[2]) == 0x83) {
+      return w.substr(3);
+    }
+    return w;
+  };
+
+  for (int pi = 0; pi < pagesToLoad; ++pi) {
+    section->currentPage = startPage + pi;
+    auto page = section->loadPageFromSectionFile();
+    if (!page) break;
+
+    for (const auto& el : page->elements) {
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*el);
+      if (!line.getBlock()) continue;
+      const auto& block = *line.getBlock();
+      const auto& xpos = block.getWordXpos();
+      const auto& wlist = block.getWords();
+      const auto& styles = block.getWordStyles();
+
+      for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
+        if (stripEmSpace(wlist[i]).find_first_not_of(' ') == std::string::npos) continue;
+        const int wx = mLeft + line.xPos + xpos[i];
+        const int wy = mTop + line.yPos;
+        const auto s = i < static_cast<int>(styles.size()) ? styles[i] : EpdFontFamily::REGULAR;
+        const int ww = renderer.getTextWidth(readerFontId, wlist[i].c_str(), s);
+        if (ww > 0) {
+          words.push_back({wx, wy, ww, lineH, pi, wlist[i], s});
+          if (i == 0 && block.getParagraphStart()) {
+            words.back().paragraphStart = true;
+          }
+        }
+      }
+    }
+  }
+  section->currentPage = startPage;
+
+  if (words.empty()) {
+    requestUpdate();
+    return;
+  }
+
+  // Mark paragraph-start words so ClipSelectionActivity can insert newlines in clipping text.
+  // Detection methods:
+  // 1. Em-space prefix (U+2003) — used when no CSS text-indent is defined
+  // 2. Xpos indent — first word of a line is more indented than previous line's first word
+  //    (CSS text-indent path: indent is a pixel offset in wordXpos, not in the word text)
+  // Note: TextBlock pointers can't be used because TextBlock = rendered line, not paragraph.
+  {
+    auto hasEmSpace = [](const std::string& w) -> bool {
+      return w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+             static_cast<unsigned char>(w[2]) == 0x83;
+    };
+    auto endsWithHyphen = [](const std::string& w) -> bool { return !w.empty() && w.back() == '-'; };
+    const int indentThreshold = renderer.getLineHeight(readerFontId) / 2;
+    LOG_DBG("CLIP", "Words: %d, indentThreshold: %d", words.size(), indentThreshold);
+    int prevLineFirstIdx = -1;
+    for (int i = 0; i < static_cast<int>(words.size()); ++i) {
+      const bool isNewLine = (i == 0) || (words[i].pageIdx != words[i - 1].pageIdx) || (words[i].y != words[i - 1].y);
+      if (isNewLine) {
+        const bool byEm = hasEmSpace(words[i].text);
+        const bool byXpos = !byEm && prevLineFirstIdx >= 0 &&
+                            words[i].x > words[prevLineFirstIdx].x + indentThreshold &&
+                            !endsWithHyphen(words[i - 1].text);
+        if (byEm || byXpos) {
+          words[i].paragraphStart = true;
+          LOG_DBG("CLIP", "PS w[%d] x=%d prevX=%d reason=%s text=%.20s", i, words[i].x,
+                  prevLineFirstIdx >= 0 ? words[prevLineFirstIdx].x : -1, byEm ? "em" : "xpos", words[i].text.c_str());
+        }
+        prevLineFirstIdx = i;
+      }
+      LOG_DBG("CLIP", "W[%d] x=%d y=%d w=%d pg=%d ps=%d text=%.30s", i, words[i].x, words[i].y, words[i].w,
+              words[i].pageIdx, words[i].paragraphStart, words[i].text.c_str());
+    }
+  }
+
+  std::string chapterTitle;
+  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (tocIdx >= 0) chapterTitle = epub->getTocItem(tocIdx).title;
+  startActivityForResult(
+      std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), epub->getTitle(),
+                                              epub->getAuthor(), chapterTitle, startPage + 1, readerFontId, *section,
+                                              startPage, mTop, mLeft, ClipSelectionActivity::Config{}),
+      [this, chapterTitle, startPage](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& clip = std::get<ClippingResult>(result.data);
+          LOG_DBG(
+              "ANNOT",
+              "Clip result: text=%.40s start=\"%.20s\" end=\"%.20s\" sp=%d esp=%d wc=%d ctx=[\"%.20s\"] [\"%.20s\"]",
+              clip.text.c_str(), clip.startText.c_str(), clip.endText.c_str(), clip.sectionPage, clip.endSectionPage,
+              clip.wordCount, clip.beforeStartText.c_str(), clip.afterEndText.c_str());
+          if (!clip.text.empty()) {
+            ClippingsManager::saveClipping(epub->getTitle(), epub->getAuthor(), chapterTitle, startPage + 1, clip.text);
+            if (!clip.startText.empty() && !clip.endText.empty()) {
+              AnnotationsManager::AnnotationRecord rec;
+              rec.sectionIdx = static_cast<uint16_t>(currentSpineIndex);
+              rec.sectionPage = clip.sectionPage;
+              rec.endSectionPage = clip.endSectionPage;
+              rec.wordCount = clip.wordCount;
+              rec.startText = clip.startText;
+              rec.endText = clip.endText;
+              rec.beforeStartText = clip.beforeStartText;
+              rec.afterEndText = clip.afterEndText;
+              rec.midText = clip.midText;
+              annotations.add(std::move(rec));
+              annotationsDirty = true;
+              annotations.save(epub->getCachePath().c_str());
+              annotationsDirty = false;
+            }
+          }
+        }
+        requestUpdate();
+      });
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
@@ -891,6 +1046,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+#if LOG_LEVEL >= 2
+  LOG_DBG("ERS", "render stack hwm=%u", uxTaskGetStackHighWaterMark(nullptr));
+#endif
 
   showPendingSyncSaveError();
 
@@ -955,6 +1113,215 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+
+  // Draw annotation underlines on top of rendered text
+  if (SETTINGS.annotationVisibility == CrossPointSettings::ANNOT_VISIBLE && section) {
+    const int screenH = renderer.getScreenHeight();
+    const int screenW = renderer.getScreenWidth();
+    const auto sectionAnnotations = annotations.forSection(static_cast<uint16_t>(currentSpineIndex));
+
+    if (!sectionAnnotations.empty()) {
+      auto stripEmSpace = [](const std::string& w) -> std::string {
+        if (w.size() >= 3 && static_cast<unsigned char>(w[0]) == 0xE2 && static_cast<unsigned char>(w[1]) == 0x80 &&
+            static_cast<unsigned char>(w[2]) == 0x83) {
+          return w.substr(3);
+        }
+        return w;
+      };
+      auto stripTrailingHyphen = [](std::string w) -> std::string {
+        while (!w.empty() && w.back() == '-') w.pop_back();
+        return w;
+      };
+
+      struct PageWord {
+        int x, w, y, h;
+        std::string text;
+      };
+      std::vector<PageWord> pageWords;
+      const int fontId = SETTINGS.getReaderFontId();
+
+      for (const auto& el : page->elements) {
+        if (el->getTag() != TAG_PageLine) continue;
+        const auto& line = static_cast<const PageLine&>(*el);
+        if (!line.getBlock()) continue;
+        const auto& block = *line.getBlock();
+        const auto& wlist = block.getWords();
+        const auto& xpos = block.getWordXpos();
+        const int lineH = renderer.getLineHeight(fontId);
+        const int wy = orientedMarginTop + line.yPos;
+        for (int i = 0; i < static_cast<int>(wlist.size()); ++i) {
+          const auto& rawText = wlist[i];
+          const auto s =
+              i < static_cast<int>(block.getWordStyles().size()) ? block.getWordStyles()[i] : EpdFontFamily::REGULAR;
+          const bool hasEm = rawText.size() >= 3 && static_cast<unsigned char>(rawText[0]) == 0xE2 &&
+                             static_cast<unsigned char>(rawText[1]) == 0x80 &&
+                             static_cast<unsigned char>(rawText[2]) == 0x83;
+          const int emSkip = hasEm ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", s) : 0;
+          const int wordW = renderer.getTextWidth(fontId, rawText.c_str(), s) - emSkip;
+          const auto stripped = stripTrailingHyphen(stripEmSpace(rawText));
+          if (stripped.find_first_not_of(' ') == std::string::npos) continue;
+          pageWords.push_back({orientedMarginLeft + line.xPos + xpos[i] + emSkip, wordW, wy, lineH, stripped});
+        }
+      }
+
+      auto findAnchorStart = [&pageWords](const std::string& anchor) -> int {
+        if (anchor.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(anchor);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+
+        for (int start = 0; start <= static_cast<int>(pageWords.size()) - static_cast<int>(tokens.size()); ++start) {
+          bool match = true;
+          for (int t = 0; t < static_cast<int>(tokens.size()); ++t) {
+            if (pageWords[start + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return start;
+        }
+        return -1;
+      };
+
+      auto findAnchorEnd = [&pageWords](const std::string& anchor) -> int {
+        if (anchor.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(anchor);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+        const int tsize = static_cast<int>(tokens.size());
+
+        for (int end = pageWords.size() - 1; end >= tsize - 1; --end) {
+          bool match = true;
+          for (int t = 0; t < tsize; ++t) {
+            if (pageWords[end - tsize + 1 + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return end;
+        }
+        return -1;
+      };
+
+      auto findContextStart = [&pageWords](const std::string& context) -> int {
+        if (context.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(context);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+        const int tsize = static_cast<int>(tokens.size());
+        for (int i = 0; i <= static_cast<int>(pageWords.size()) - tsize; ++i) {
+          bool match = true;
+          for (int t = 0; t < tsize; ++t) {
+            if (pageWords[i + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return i + tsize;
+        }
+        return -1;
+      };
+
+      auto findContextEnd = [&pageWords](const std::string& context) -> int {
+        if (context.empty() || pageWords.empty()) return -1;
+        std::vector<std::string> tokens;
+        std::istringstream iss(context);
+        std::string tok;
+        while (iss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) return -1;
+        const int tsize = static_cast<int>(tokens.size());
+        for (int i = 0; i <= static_cast<int>(pageWords.size()) - tsize; ++i) {
+          bool match = true;
+          for (int t = 0; t < tsize; ++t) {
+            if (pageWords[i + t].text != tokens[t]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return i - 1;
+        }
+        return -1;
+      };
+
+      LOG_DBG("ANNOT", "Page %d: %zu annotations, %zu pageWords", section->currentPage, sectionAnnotations.size(),
+              pageWords.size());
+
+      for (const auto& rec : sectionAnnotations) {
+        const auto curPage = static_cast<uint16_t>(section->currentPage);
+        if (curPage < rec.sectionPage || curPage > rec.endSectionPage) continue;
+
+        int startIdx = -1;
+        int endIdx = -1;
+
+        startIdx = findContextStart(rec.beforeStartText);
+        if (startIdx < 0) startIdx = findAnchorStart(rec.startText);
+        endIdx = findAnchorEnd(rec.endText);
+
+        if (endIdx < 0) {
+          std::string suffix = rec.endText;
+          while (!suffix.empty()) {
+            endIdx = findAnchorEnd(suffix);
+            if (endIdx >= 0) break;
+            auto pos = suffix.find(' ');
+            if (pos == std::string::npos) break;
+            suffix.erase(0, pos + 1);
+          }
+        }
+        if (endIdx < 0) {
+          int ctxEnd = findContextEnd(rec.afterEndText);
+          if (ctxEnd >= 0) endIdx = ctxEnd;
+        }
+
+        if (startIdx < 0 && endIdx >= 0) {
+          startIdx = 0;
+        } else if (startIdx >= 0 && endIdx < 0) {
+          endIdx = static_cast<int>(pageWords.size()) - 1;
+        } else if (startIdx < 0 && endIdx < 0 && !rec.midText.empty()) {
+          int midIdx = findAnchorStart(rec.midText);
+          if (midIdx >= 0) {
+            startIdx = 0;
+            endIdx = static_cast<int>(pageWords.size()) - 1;
+          }
+        }
+        if (startIdx < 0) continue;
+        LOG_DBG("ANNOT", "  rec sp=%d-%d ctx=[%.15s/%.15s] wc=%d -> %d..%d", rec.sectionPage, rec.endSectionPage,
+                rec.beforeStartText.c_str(), rec.afterEndText.c_str(), rec.wordCount, startIdx, endIdx);
+
+        struct RowSpan {
+          int underlineY, xMin, xMax;
+        };
+        std::vector<RowSpan> spans;
+        spans.reserve(endIdx - startIdx + 1);
+
+        for (int i = startIdx; i <= endIdx; ++i) {
+          const auto& pw = pageWords[i];
+          if (pw.text.empty()) continue;
+          const int underlineY = pw.y + pw.h;
+          if (underlineY < 0 || underlineY >= screenH) continue;
+          if (pw.x < 0 || pw.x >= screenW) continue;
+          auto it = std::find_if(spans.begin(), spans.end(),
+                                 [underlineY](const RowSpan& s) { return s.underlineY == underlineY; });
+          if (it != spans.end()) {
+            if (pw.x < it->xMin) it->xMin = pw.x;
+            if (pw.x + pw.w - 1 > it->xMax) it->xMax = pw.x + pw.w - 1;
+          } else {
+            spans.push_back({underlineY, pw.x, pw.x + pw.w - 1});
+          }
+        }
+
+        for (const auto& span : spans) {
+          renderer.drawLine(span.xMin, span.underlineY, span.xMax, span.underlineY, 2, true);
+        }
+      }
+    }
+  }
+
   renderStatusBar();
   const auto tBwRender = millis();
 

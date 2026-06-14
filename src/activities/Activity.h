@@ -21,6 +21,13 @@ class Activity {
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
 
+  // Use instead of mappedInput.wasReleased() to prevent release events from the
+  // button that triggered this activity's entry from firing inside it.
+  bool wasReleasedGuarded(MappedInputManager::Button button) const;
+
+ private:
+  mutable uint8_t entryPressedMask = 0;
+
   ActivityResultHandler resultHandler;
   ActivityResult result;
 

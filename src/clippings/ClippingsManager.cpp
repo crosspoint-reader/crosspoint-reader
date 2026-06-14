@@ -1,0 +1,79 @@
+#include "ClippingsManager.h"
+
+#include <CrossPointSettings.h>
+#include <HalStorage.h>
+#include <Logging.h>
+#include <common/FsApiConstants.h>
+
+#include <algorithm>
+#include <cctype>
+
+static std::string sanitizeForFilename(const std::string& title) {
+  std::string result;
+  result.reserve(title.size());
+  for (unsigned char c : title) {
+    if (std::isalnum(c) || c == '-') {
+      result += static_cast<char>(c);
+    } else if (std::isspace(c)) {
+      result += '_';
+    }
+  }
+  // Limit filename length to avoid SD card path issues
+  if (result.size() > 60) result.resize(60);
+  if (result.empty()) result = "Unknown";
+  return result;
+}
+
+std::string ClippingsManager::resolveClippingPath(const std::string& bookTitle) {
+  if (SETTINGS.clippingStorage == CrossPointSettings::PER_BOOK) {
+    return std::string(CLIPPINGS_DIR) + "/" + sanitizeForFilename(bookTitle) + ".txt";
+  }
+  return CLIPPINGS_PATH;
+}
+
+bool ClippingsManager::saveClipping(const std::string& bookTitle, const std::string& author,
+                                    const std::string& chapterTitle, int pageNumber, const std::string& selectedText) {
+  const std::string path = resolveClippingPath(bookTitle);
+
+  if (SETTINGS.clippingStorage == CrossPointSettings::PER_BOOK) {
+    Storage.mkdir(CLIPPINGS_DIR);
+  }
+
+  HalFile file = Storage.open(path.c_str(), O_RDWR | O_CREAT | O_AT_END);
+  if (!file) {
+    LOG_ERR("CLIP", "Failed to open %s for append", path.c_str());
+    return false;
+  }
+
+  // Build header and location as strings to avoid truncation of long titles/authors
+  const std::string header = bookTitle + " (" + author + ")\n";
+  std::string location = "- Your Highlight on Page " + std::to_string(pageNumber);
+  if (!chapterTitle.empty()) {
+    location += " | " + chapterTitle;
+  }
+  location += "\n";
+
+  static constexpr size_t MAX_TEXT = 2000;
+  const size_t textLen = selectedText.size() < MAX_TEXT ? selectedText.size() : MAX_TEXT;
+
+  static constexpr char separator[] = "\n==========\n";
+  std::string buf;
+  buf.reserve(header.size() + location.size() + 1 + textLen + sizeof(separator) - 1);
+  buf += header;
+  buf += location;
+  buf += '\n';
+  buf.append(selectedText.c_str(), textLen);
+  buf += separator;
+
+  const bool ok = file.write(buf.data(), buf.size()) == buf.size();
+  file.flush();
+  file.close();
+
+  if (!ok) {
+    LOG_ERR("CLIP", "Failed to write clipping to %s (SD full or removed?)", path.c_str());
+    return false;
+  }
+
+  LOG_DBG("CLIP", "Saved clipping to %s (%zu chars)", path.c_str(), textLen);
+  return true;
+}
