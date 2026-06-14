@@ -238,6 +238,18 @@ bool FileBrowserActivity::prepareIndexPage(size_t first, size_t count) {
   clearIndexPageCache();
   indexPageFirst = first;
   indexPageSpan = count;
+
+  for (size_t i = 0; i < count; i++) {
+    indexPageEntries[i].nameOffset = static_cast<uint16_t>(i * INDEX_PAGE_NAME_STRIDE);
+  }
+  if (fileIndex->pageNamesAt(first, count, sortDescending, indexPageNames.get(), INDEX_PAGE_NAME_STRIDE)) {
+    indexPageCount = count;
+    return true;
+  }
+
+  // Names longer than the fixed bulk-read slot retain the previous packed
+  // fallback. It is slower, but preserves the full supported UTF-8 length.
+  indexPageCount = 0;
   size_t namesUsed = 0;
   for (size_t i = 0; i < count; i++) {
     if (!fileIndex->entryAt(first + i, sortDescending, *indexEntry)) {

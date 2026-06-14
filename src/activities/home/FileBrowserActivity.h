@@ -51,9 +51,10 @@ class FileBrowserActivity final : public Activity {
   std::unique_ptr<char[]> fileNameBuffer;
   std::unique_ptr<FileIndex> fileIndex;
   std::unique_ptr<FileIndex::Entry> indexEntry;  // scratch record for index reads
-  static constexpr size_t INDEX_PAGE_MAX_ENTRIES = 22;
-  // One maximum-length card name per visible portrait row, including '/' and NUL.
-  static constexpr size_t INDEX_PAGE_NAME_BYTES = 5760;
+  static constexpr size_t INDEX_PAGE_MAX_ENTRIES = FileIndex::MAX_PAGE_ENTRIES;
+  // Fast path for 255-byte card names, including a directory marker and NUL.
+  static constexpr size_t INDEX_PAGE_NAME_STRIDE = 257;
+  static constexpr size_t INDEX_PAGE_NAME_BYTES = INDEX_PAGE_MAX_ENTRIES * INDEX_PAGE_NAME_STRIDE;
   struct IndexPageEntry {
     uint16_t nameOffset;
   };

@@ -65,6 +65,12 @@ class FileIndex {
   // first dirCount() rows; `descending` reverses order within each section.
   bool entryAt(size_t row, bool descending, Entry& out);
 
+  // Read one visible browser page. Names are written into fixed-size slots in
+  // display order, but records are fetched in blob-offset order so pages whose
+  // files were created together need only sequential SD access.
+  static constexpr size_t MAX_PAGE_ENTRIES = 22;
+  bool pageNamesAt(size_t firstRow, size_t count, bool descending, char* names, size_t nameStride);
+
   // Row of the entry with this exact name (as shown with `descending`), or
   // SIZE_MAX if not present. Streams the index; used for pre-selection.
   size_t findRowByName(const char* name, bool descending);
@@ -133,4 +139,9 @@ class FileIndex {
   static constexpr size_t OFFSETS_CACHE_ENTRIES = 64;
   uint32_t offsetsCache[OFFSETS_CACHE_ENTRIES] = {0};
   size_t offsetsCacheFirst = SIZE_MAX;
+
+  // Parallel arrays avoid padding while keeping page-read scratch off the
+  // small task stack. The FileIndex object itself is already heap allocated.
+  uint32_t pageRecordOffsets[MAX_PAGE_ENTRIES] = {0};
+  uint8_t pageOutputSlots[MAX_PAGE_ENTRIES] = {0};
 };

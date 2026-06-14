@@ -1011,6 +1011,60 @@ bool FileIndex::entryAt(size_t row, bool descending, Entry& out) {
   return true;
 }
 
+bool FileIndex::pageNamesAt(size_t firstRow, size_t count, bool descending, char* names, size_t nameStride) {
+  const size_t total = totalCount();
+  if (!opened || names == nullptr || nameStride < 2 || firstRow >= total || count == 0) return false;
+
+  count = std::min({count, MAX_PAGE_ENTRIES, total - firstRow});
+  for (size_t i = 0; i < count; i++) {
+    const size_t row = firstRow + i;
+    size_t phys = 0;
+    if (row < hdr.dirCount) {
+      phys = descending ? (hdr.dirCount - 1 - row) : row;
+    } else {
+      const size_t fileRow = row - hdr.dirCount;
+      phys = hdr.dirCount + (descending ? (hdr.fileCount - 1 - fileRow) : fileRow);
+    }
+
+    if (!readOffsetForPhysIndex(phys, pageRecordOffsets[i])) return false;
+    pageOutputSlots[i] = static_cast<uint8_t>(i);
+  }
+
+  // The sorted view can be unrelated to directory enumeration order. Reorder
+  // the reads physically, then put each name back into its display-order slot.
+  for (size_t i = 1; i < count; i++) {
+    const uint32_t candidateOffset = pageRecordOffsets[i];
+    const uint8_t candidateSlot = pageOutputSlots[i];
+    size_t pos = i;
+    while (pos > 0 && pageRecordOffsets[pos - 1] > candidateOffset) {
+      pageRecordOffsets[pos] = pageRecordOffsets[pos - 1];
+      pageOutputSlots[pos] = pageOutputSlots[pos - 1];
+      pos--;
+    }
+    pageRecordOffsets[pos] = candidateOffset;
+    pageOutputSlots[pos] = candidateSlot;
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    const uint32_t recordOffset = pageRecordOffsets[i];
+    if (idxFile.position() != recordOffset && !idxFile.seek(recordOffset)) return false;
+
+    RecordHeader rec{};
+    if (idxFile.read(&rec, sizeof(rec)) != static_cast<int>(sizeof(rec))) return false;
+
+    const bool isDir = (rec.flags & 1) != 0;
+    const size_t needed = static_cast<size_t>(rec.nameLen) + (isDir ? 1 : 0) + 1;
+    if (needed > nameStride) return false;
+
+    char* const out = names + static_cast<size_t>(pageOutputSlots[i]) * nameStride;
+    if (idxFile.read(out, rec.nameLen) != static_cast<int>(rec.nameLen)) return false;
+    size_t used = rec.nameLen;
+    if (isDir) out[used++] = '/';
+    out[used] = '\0';
+  }
+  return true;
+}
+
 size_t FileIndex::findRowByName(const char* name, bool descending) {
   if (!opened) return SIZE_MAX;
 
