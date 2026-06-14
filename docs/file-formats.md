@@ -306,3 +306,31 @@ if (parsedSize != fileSize) {
     std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
 }
 ```
+
+## `pagemap.bin`
+
+### Version 1
+
+Per-book index of section (spine item) page counts, enabling whole-book
+"page X of Y". This is a derived cache: the section `.bin` files remain the source
+of truth for exact counts. Path: `.crosspoint/epub_<hash>/pagemap.bin`.
+
+Invalidated (ignored on load, rebuilt) when the version, the render-settings
+fingerprint, or the spine count differs from the current book/settings — the same
+fingerprint the section cache uses.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| version | u8 | format version (1) |
+| fontId | s32 | render fingerprint |
+| lineCompression | float | |
+| extraParagraphSpacing | u8 (bool) | |
+| paragraphAlignment | u8 | |
+| viewportWidth | u16 | |
+| viewportHeight | u16 | |
+| hyphenationEnabled | u8 (bool) | |
+| embeddedStyle | u8 (bool) | |
+| imageRendering | u8 | |
+| focusReadingEnabled | u8 (bool) | |
+| spineCount | u16 | number of sections |
+| sectionPages | s32[spineCount] | exact page count per section; -1 = not yet paginated |
