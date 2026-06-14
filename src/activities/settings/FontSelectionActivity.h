@@ -40,9 +40,9 @@ class FontSelectionActivity final : public Activity {
   uint8_t originalFontSize_ = 0;
   char originalSdFontFamilyName_[32] = {};
 
-  ThemeMetrics metrics_;
-  int afterHeader;
-  int bottomReserved;
-  int usableHeight;
-  int previewHeight;
+  ThemeMetrics metrics_ = {};
+  int afterHeader = 0;
+  int bottomReserved = 0;
+  int usableHeight = 0;
+  int previewHeight = 0;
 };
