@@ -80,6 +80,14 @@ class ChapterHtmlSlimParser {
   int tableRowIndex = 0;
   int tableColIndex = 0;
 
+  // List tracking: <ol>/<ul> nesting drives the <li> marker (numeric vs bullet).
+  struct ListContext {
+    int depth = 0;           // depth of the opening <ol>/<ul>, used for matched pop
+    bool ordered = false;    // true for <ol>, false for <ul>
+    uint16_t nextValue = 1;  // next item number for an ordered list
+  };
+  std::vector<ListContext> listStack;
+
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;

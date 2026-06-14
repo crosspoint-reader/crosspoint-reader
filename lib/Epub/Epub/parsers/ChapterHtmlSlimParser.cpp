@@ -9,6 +9,9 @@
 #include <expat.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <iterator>
 #include <new>
 
@@ -295,16 +298,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->xpathListItemIndex++;
   }
 
-  // Extract class, style, id, and dir attributes for CSS/RTL processing
+  // Extract class, style, id, and dir attributes for CSS/RTL processing.
+  // start/value drive ordered-list numbering (<ol start>, <li value>); they point
+  // into expat's atts and are only valid for the duration of this callback.
   std::string classAttr;
   std::string styleAttr;
   std::string dirAttr;
+  const char* startAttr = nullptr;
+  const char* valueAttr = nullptr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
         classAttr = atts[i + 1];
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "start") == 0) {
+        startAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "value") == 0) {
+        valueAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
         // Defer both anchor recording and TOC page breaks until startNewTextBlock,
         // after the previous block is flushed to pages via makePages().
@@ -363,6 +374,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
+  }
+
+  // Track <ol>/<ul> nesting so each <li> renders the right marker. Placed after the
+  // display:none short-circuit so hidden lists never push; the pop in endElement is
+  // depth-matched, so an unbalanced/skipped list can never pop the wrong entry. These
+  // tags carry no other layout here, so we fall through to the generic depth increment.
+  if (strcmp(name, "ol") == 0 || strcmp(name, "ul") == 0) {
+    ListContext ctx;
+    ctx.depth = self->depth;
+    ctx.ordered = strcmp(name, "ol") == 0;
+    if (ctx.ordered && startAttr != nullptr) {
+      const long start = strtol(startAttr, nullptr, 10);
+      if (start >= 1 && start <= UINT16_MAX) {
+        ctx.nextValue = static_cast<uint16_t>(start);
+      }
+    }
+    self->listStack.push_back(ctx);
   }
 
   // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
@@ -820,7 +848,25 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        if (!self->listStack.empty() && self->listStack.back().ordered) {
+          ListContext& list = self->listStack.back();
+          // <li value="N"> restarts numbering from N.
+          if (valueAttr != nullptr) {
+            const long value = strtol(valueAttr, nullptr, 10);
+            if (value >= 1 && value <= UINT16_MAX) {
+              list.nextValue = static_cast<uint16_t>(value);
+            }
+          }
+          char marker[12];
+          snprintf(marker, sizeof(marker), "%u.", static_cast<unsigned>(list.nextValue));
+          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR);
+          if (list.nextValue < UINT16_MAX) {
+            list.nextValue++;
+          }
+        } else {
+          // Unordered list, or a stray <li> with no list ancestor: keep the bullet.
+          self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        }
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -1234,6 +1280,13 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->updateEffectiveInlineStyle();
   }
 
+  // Pop list context when leaving the <ol>/<ul> that opened it. Depth-matched so a
+  // hidden (display:none) list, which never pushed, can never pop the wrong entry.
+  if (!self->listStack.empty() && self->listStack.back().depth == self->depth &&
+      (strcmp(name, "ol") == 0 || strcmp(name, "ul") == 0)) {
+    self->listStack.pop_back();
+  }
+
   // Clear block style when leaving header or block elements
   if (headerOrBlockTag) {
     self->currentCssStyle.reset();
@@ -1264,6 +1317,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   blockStyleStack.clear();
   blockStyleStack.reserve(8);
   blockStyleStack.push_back(rootBlockStyle);
+
+  // Reserve for a few levels of <ol>/<ul> nesting to avoid reallocations mid-parse.
+  listStack.clear();
+  listStack.reserve(4);
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;

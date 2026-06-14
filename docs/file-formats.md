@@ -90,13 +90,17 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 25
+### Version 27
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 25 includes:
+The on-disk structure is unchanged since version 25; versions 26 and 27 are
+layout-only cache-busting bumps (26: first-line paragraph indentation; 27:
+ordered-list `<li>` items render numeric markers instead of bullets).
+
+Version 27 includes:
 
 - cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
   image rendering mode, and Focus Reading
@@ -113,7 +117,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 25
+#define EXPECTED_VERSION 27
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
