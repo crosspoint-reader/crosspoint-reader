@@ -3,6 +3,7 @@
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
+#include <sys/time.h>
 #include <time.h>
 
 #include <cassert>
@@ -13,9 +14,31 @@ HalClock halClock;  // Singleton instance
 //   0x00: Seconds  (bits 6-4 = tens, bits 3-0 = ones)
 //   0x01: Minutes  (bits 6-4 = tens, bits 3-0 = ones)
 //   0x02: Hours    (bit 6 = 12/24 mode, bits 5-4 = tens, bits 3-0 = ones)
+//   0x03: Day of week (1-7, unused here)
+//   0x04: Date    (01-31)
+//   0x05: Month   (bits 4-0 = 01-12, bit 7 = century, kept 0 => 20xx)
+//   0x06: Year    (00-99, i.e. 2000-2099)
 
 static uint8_t bcdToDec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0x0F); }
 static uint8_t decToBcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
+
+// Reject implausible RTC content: a DS3231 whose date registers were never
+// written reads as 2000-01-01, which must not seed the system clock.
+static constexpr int RTC_MIN_YEAR = 2020;
+
+// UTC tm -> Unix epoch without TZ dependence (mktime honours the TZ env var,
+// which is not guaranteed to be UTC at boot). Days-from-civil algorithm.
+static time_t utcTmToEpoch(const struct tm& t) {
+  int y = t.tm_year + 1900;
+  const int m = t.tm_mon + 1;  // 1-12
+  y -= m <= 2;
+  const int era = y / 400;
+  const int yoe = y - era * 400;                                           // [0, 399]
+  const int doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + t.tm_mday - 1;  // [0, 365]
+  const int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;                   // [0, 146096]
+  const int64_t days = static_cast<int64_t>(era) * 146097 + doe - 719468;  // days since 1970-01-01
+  return static_cast<time_t>(days * 86400 + t.tm_hour * 3600 + t.tm_min * 60 + t.tm_sec);
+}
 
 void HalClock::begin() {
   if (!gpio.deviceIsX3()) {
@@ -42,9 +65,64 @@ void HalClock::begin() {
   _available = true;
   LOG_INF("CLK", "DS3231 RTC found");
 
+  // Battery-backed RTC: restore the system clock at boot so FAT timestamps
+  // (file browser date sort) are correct without any network.
+  seedSystemClockFromRTC();
+
   // Prime the cache with an initial read
   uint8_t h, m;
   getTime(h, m);
+}
+
+bool HalClock::readDateTimeFromRTC(struct tm& utc) const {
+  Wire.beginTransmission(I2C_ADDR_DS3231);
+  Wire.write(DS3231_SEC_REG);
+  if (Wire.endTransmission(false) != 0) return false;
+  Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)7);
+  if (Wire.available() < 7) return false;
+
+  const uint8_t rawSec = Wire.read();
+  const uint8_t rawMin = Wire.read();
+  const uint8_t rawHour = Wire.read();
+  Wire.read();  // day of week — unused
+  const uint8_t rawDate = Wire.read();
+  const uint8_t rawMonth = Wire.read();
+  const uint8_t rawYear = Wire.read();
+
+  utc.tm_sec = bcdToDec(rawSec & 0x7F);
+  utc.tm_min = bcdToDec(rawMin & 0x7F);
+  if (rawHour & 0x40) {
+    // 12h mode: bit 5 = PM, bits 4-0 = hours (1-12)
+    uint8_t h12 = bcdToDec(rawHour & 0x1F);
+    const bool pm = rawHour & 0x20;
+    if (h12 == 12) h12 = 0;
+    utc.tm_hour = pm ? (h12 + 12) : h12;
+  } else {
+    utc.tm_hour = bcdToDec(rawHour & 0x3F);
+  }
+  utc.tm_mday = bcdToDec(rawDate & 0x3F);
+  utc.tm_mon = bcdToDec(rawMonth & 0x1F) - 1;
+  utc.tm_year = 2000 + bcdToDec(rawYear) - 1900;  // century bit kept 0 => 20xx
+  utc.tm_isdst = 0;
+  return true;
+}
+
+void HalClock::seedSystemClockFromRTC() {
+  struct tm utc{};
+  if (!readDateTimeFromRTC(utc)) return;
+
+  // Plausibility check: rejects factory-default / never-date-synced content
+  const int year = utc.tm_year + 1900;
+  if (year < RTC_MIN_YEAR || year > 2099 || utc.tm_mon < 0 || utc.tm_mon > 11 || utc.tm_mday < 1 || utc.tm_mday > 31 ||
+      utc.tm_hour > 23 || utc.tm_min > 59 || utc.tm_sec > 59) {
+    LOG_INF("CLK", "RTC date not set; system clock not seeded");
+    return;
+  }
+
+  const struct timeval tv = {.tv_sec = utcTmToEpoch(utc), .tv_usec = 0};
+  settimeofday(&tv, nullptr);
+  LOG_INF("CLK", "System clock seeded from RTC: %04d-%02d-%02d %02d:%02d:%02d UTC", year, utc.tm_mon + 1, utc.tm_mday,
+          utc.tm_hour, utc.tm_min, utc.tm_sec);
 }
 
 bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
@@ -127,15 +205,25 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   return true;
 }
 
-bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
-  assert(hour < 24);
-  assert(minute < 60);
-  assert(second < 60);
+bool HalClock::writeDateTimeToRTC(const struct tm& utc) {
+  const int year = utc.tm_year + 1900;
+  assert(utc.tm_hour < 24);
+  assert(utc.tm_min < 60);
+  assert(utc.tm_sec < 60);
+  if (year < 2000 || year > 2099) {
+    LOG_ERR("CLK", "Year %d outside DS3231 range", year);
+    return false;
+  }
+
   Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);    // Start at register 0x00
-  Wire.write(decToBcd(second));  // 0x00: Seconds
-  Wire.write(decToBcd(minute));  // 0x01: Minutes
-  Wire.write(decToBcd(hour));    // 0x02: Hours (24h mode, bit 6 = 0)
+  Wire.write(DS3231_SEC_REG);                                  // Start at register 0x00
+  Wire.write(decToBcd(static_cast<uint8_t>(utc.tm_sec)));      // 0x00: Seconds
+  Wire.write(decToBcd(static_cast<uint8_t>(utc.tm_min)));      // 0x01: Minutes
+  Wire.write(decToBcd(static_cast<uint8_t>(utc.tm_hour)));     // 0x02: Hours (24h mode, bit 6 = 0)
+  Wire.write(static_cast<uint8_t>(utc.tm_wday + 1));           // 0x03: Day of week (1-7)
+  Wire.write(decToBcd(static_cast<uint8_t>(utc.tm_mday)));     // 0x04: Date
+  Wire.write(decToBcd(static_cast<uint8_t>(utc.tm_mon + 1)));  // 0x05: Month (century bit 0)
+  Wire.write(decToBcd(static_cast<uint8_t>(year - 2000)));     // 0x06: Year (00-99)
   if (Wire.endTransmission() != 0) {
     LOG_ERR("CLK", "Failed to write time to DS3231");
     return false;
@@ -143,10 +231,21 @@ bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
 
   // Invalidate cache so next read fetches fresh data
   _lastPollMs = 0;
-  _cachedHour = hour;
-  _cachedMinute = minute;
+  _cachedHour = static_cast<uint8_t>(utc.tm_hour);
+  _cachedMinute = static_cast<uint8_t>(utc.tm_min);
   _hasCachedTime = true;
   return true;
+}
+
+bool HalClock::setFromSystemTime() {
+  if (!_available) return false;
+
+  const time_t now = time(nullptr);
+  struct tm utc{};
+  if (now < 1577836800 || gmtime_r(&now, &utc) == nullptr) {  // 2020-01-01: clock unset
+    return false;
+  }
+  return writeDateTimeToRTC(utc);
 }
 
 bool HalClock::syncFromNTP() {
@@ -168,8 +267,10 @@ bool HalClock::syncFromNTP() {
       struct tm timeinfo;
       gmtime_r(&now, &timeinfo);
 
-      if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
-        LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+      // Full date+time so the RTC can re-seed the system clock at next boot
+      if (writeDateTimeToRTC(timeinfo)) {
+        LOG_INF("CLK", "RTC set to %04d-%02d-%02d %02d:%02d:%02d UTC", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
+                timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
         return true;
       }
       return false;

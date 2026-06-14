@@ -46,6 +46,12 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
 }  // namespace
 int coverWidth = 0;
 
+int RoundedRaffTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
+  const int rowHeight =
+      hasSubtitle ? RoundedRaffMetrics::values.listWithSubtitleRowHeight : RoundedRaffMetrics::values.listRowHeight;
+  return std::max(1, contentHeight / (rowHeight + kSelectableRowGap));
+}
+
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                                   const char* subtitle) const {
   (void)subtitle;
