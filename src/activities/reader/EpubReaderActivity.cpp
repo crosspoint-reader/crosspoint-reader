@@ -5,6 +5,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <JsonSettingsIO.h>
@@ -344,6 +345,7 @@ void EpubReaderActivity::loop() {
 
   const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
+    backgroundIndexIdle();
     return;
   }
 
@@ -774,6 +776,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
 
+  lastViewportWidth = viewportWidth;
+  lastViewportHeight = viewportHeight;
   ensurePageMap(viewportWidth, viewportHeight);
 
   if (!section) {
@@ -914,6 +918,70 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 }
 
+bool EpubReaderActivity::indexAndRecordSection(const int spineIndex, const uint16_t viewportWidth,
+                                               const uint16_t viewportHeight) {
+  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+    return false;
+  }
+  Section s(epub, spineIndex, renderer);
+  if (!s.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                         SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                         SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
+                         SETTINGS.focusReadingEnabled)) {
+    if (!s.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                             SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                             SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
+                             SETTINGS.focusReadingEnabled)) {
+      LOG_ERR("ERS", "Background index failed for section %d", spineIndex);
+      return false;
+    }
+  }
+  bookPageMap.recordSection(spineIndex, s.pageCount);
+  return true;
+}
+
+void EpubReaderActivity::backgroundIndexIdle() {
+  static constexpr unsigned long BACKGROUND_INDEX_IDLE_MS = 1500UL;     // reading-pause threshold
+  static constexpr unsigned long BACKGROUND_INDEX_INTERVAL_MS = 750UL;  // min gap between sections
+
+  if (!epub || !bookPageMapInitialized || automaticPageTurnActive) {
+    return;
+  }
+  if (lastViewportWidth == 0 || lastViewportHeight == 0 || bookPageMap.isExact()) {
+    return;
+  }
+  const unsigned long now = millis();
+  const unsigned long idle = now - lastPageTurnTime;
+  // Only paginate while the CPU is still at full clock. The main loop drops to
+  // LOW_POWER_FREQ (10 MHz) after IDLE_POWER_SAVING_MS of inactivity; a section
+  // can take ~1-2s and would be ~16x slower there (multi-second stall / watchdog
+  // risk). Starting within this window guarantees full clock, and since loop()
+  // blocks the clock-drop while paginating, the section also completes at full clock.
+  if (idle < BACKGROUND_INDEX_IDLE_MS || idle >= HalPowerManager::IDLE_POWER_SAVING_MS) {
+    return;
+  }
+  if (now - lastBackgroundIndexTime < BACKGROUND_INDEX_INTERVAL_MS) {
+    return;
+  }
+  const int idx = bookPageMap.nextUnknown(0);
+  if (idx < 0) {
+    return;
+  }
+  lastBackgroundIndexTime = now;
+  {
+    RenderLock lock;  // serialize with the render task: pagination uses the renderer/font cache
+    if (!indexAndRecordSection(idx, lastViewportWidth, lastViewportHeight)) {
+      // Mark as 0 pages so a broken/un-indexable section is not retried forever
+      // (and so isExact() can still converge). Cleared on any settings change.
+      bookPageMap.recordSection(idx, 0);
+    }
+  }
+  // Persist sweep progress. Naturally throttled (>= one section per ~750ms idle);
+  // pagemap.bin is tiny, so SD wear is negligible.
+  bookPageMap.save(epub->getCachePath() + "/pagemap.bin");
+  // No requestUpdate(): the refined total appears on the next page render.
+}
+
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
   if (!epub || !section || section->pageCount < 2) {
     return;
@@ -929,21 +997,10 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
     return;
   }
 
-  Section nextSection(epub, nextSpineIndex, renderer);
-  if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
-    return;
-  }
-
   LOG_DBG("ERS", "Silently indexing next chapter: %d", nextSpineIndex);
-  if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                     SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                     viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                     SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
-    LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
-  }
+  // Builds the next chapter's cache if needed and records its page count.
+  // Already inside render()'s RenderLock, so no lock is taken here.
+  indexAndRecordSection(nextSpineIndex, viewportWidth, viewportHeight);
 }
 
 PageMapFingerprint EpubReaderActivity::currentFingerprint(const uint16_t viewportWidth,
