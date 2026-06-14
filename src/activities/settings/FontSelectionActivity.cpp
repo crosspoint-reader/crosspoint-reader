@@ -21,6 +21,7 @@ constexpr const char* PREVIEW_TEXT =
     "Sphinx of black quartz, judge my vow.";
 constexpr const char* ELLIPSIS_UTF8 = "\xe2\x80\xa6";
 constexpr int PREVIEW_PADDING = 12;
+constexpr int PREVIEW_HEIGHT_PERCENT = 30;
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -42,6 +43,13 @@ FontSelectionActivity::FontSelectionActivity(GfxRenderer& renderer, MappedInputM
 
 void FontSelectionActivity::onEnter() {
   Activity::onEnter();
+
+  // Get metrics and calculate layout dimensions
+  metrics_ = UITheme::getInstance().getMetrics();
+  afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
+  bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
+  usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
+  previewHeight = usableHeight * PREVIEW_HEIGHT_PERCENT / 100;
 
   originalFontFamily_ = SETTINGS.fontFamily;
   strncpy(originalSdFontFamilyName_, SETTINGS.sdFontFamilyName, sizeof(originalSdFontFamilyName_) - 1);
@@ -102,13 +110,8 @@ void FontSelectionActivity::loop() {
   }
 
   const int listSize = static_cast<int>(fonts_.size());
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int afterHeader = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int bottomReserved = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  const int usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
-  const int previewHeight = usableHeight / 3;
   const int pageItems =
-      UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, previewHeight + metrics.verticalSpacing);
+      UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, previewHeight + metrics_.verticalSpacing);
 
   buttonNavigator_.onNextRelease([this, listSize] {
     selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
@@ -198,17 +201,12 @@ void FontSelectionActivity::render(RenderLock&&) {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_FAMILY));
+  GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_FONT_FAMILY));
 
-  const int afterHeader = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int bottomReserved = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  const int usableHeight = pageHeight - afterHeader - bottomReserved;
-  const int previewHeight = usableHeight / 3;
   const int previewTop = afterHeader;
-  const int listTop = previewTop + previewHeight + metrics.verticalSpacing;
-  const int listHeight = usableHeight - previewHeight - metrics.verticalSpacing;
+  const int listTop = previewTop + previewHeight + metrics_.verticalSpacing;
+  const int listHeight = usableHeight - previewHeight - metrics_.verticalSpacing;
 
   const int previewFontId = getFontIdForPreview(previewFontIndex_);
   const char* previewFontName = (previewFontIndex_ >= 0 && previewFontIndex_ < static_cast<int>(fonts_.size()))
@@ -216,7 +214,7 @@ void FontSelectionActivity::render(RenderLock&&) {
                                     : nullptr;
   renderPreviewPane(previewTop, previewHeight, previewFontId, previewFontId != 0, previewFontName);
 
-  renderer.drawLine(0, listTop - metrics.verticalSpacing / 2, pageWidth, listTop - metrics.verticalSpacing / 2);
+  renderer.drawLine(0, listTop - metrics_.verticalSpacing / 2, pageWidth, listTop - metrics_.verticalSpacing / 2);
 
   const int currentFontIndex = findCurrentFontIndex(registry_, originalSdFontFamilyName_, originalFontFamily_);
   GUI.drawList(

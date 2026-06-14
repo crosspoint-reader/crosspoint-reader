@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
 class FontSelectionActivity final : public Activity {
@@ -38,4 +39,10 @@ class FontSelectionActivity final : public Activity {
   uint8_t originalFontFamily_ = 0;
   uint8_t originalFontSize_ = 0;
   char originalSdFontFamilyName_[32] = {};
+
+  ThemeMetrics metrics_;
+  int afterHeader;
+  int bottomReserved;
+  int usableHeight;
+  int previewHeight;
 };
