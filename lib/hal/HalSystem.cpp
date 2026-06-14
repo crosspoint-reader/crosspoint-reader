@@ -38,6 +38,13 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
     __real_panic_print_backtrace(frame, core);
     return;
   }
+#if !__riscv
+  // RvExcFrame and the flat SP scan below are RISC-V-only (C3). On Xtensa
+  // (classic ESP32 / S3) the exception frame is XtExcFrame with windowed-register
+  // unwinding, so fall back to the default backtrace.
+  __real_panic_print_backtrace(frame, core);
+  return;
+#else
   for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH; i++) {
     panicStack[i].sp = 0;
   }
@@ -65,6 +72,7 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   }
 
   __real_panic_print_backtrace(frame, core);
+#endif  // __riscv
 }
 }
 

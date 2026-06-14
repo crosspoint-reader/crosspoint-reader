@@ -381,8 +381,8 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
   drawScrollBar(renderer, rect, itemCount, pageStartIndex, pageItems);
 }
 
-void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                                       const char* btn4) const {
+void RoundedRaffTheme::drawButtonHintsImpl(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                                           const char* btn4) const {
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 

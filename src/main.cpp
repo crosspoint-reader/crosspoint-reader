@@ -305,6 +305,14 @@ void setupDisplayAndFonts(bool seamless = false) {
 void setup() {
   t1 = millis();
 
+#if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER
+  // M5Paper v1.1 latches its own power through a MOSFET on GPIO2. Drive it HIGH
+  // first thing or the board powers off the instant USB is unplugged. (Board
+  // responsibility, not the SDK — see freeink-sdk platformio.sample.ini.)
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
+#endif
+
 #ifdef ENABLE_SERIAL_LOG
   // Earliest possible Serial setup. The 250 ms stall before begin() lets the
   // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
@@ -313,7 +321,11 @@ void setup() {
   // worked without the delay because USB was already enumerated.
   delay(250);
   Serial.begin(115200);
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+  // setTxTimeoutMs is an HWCDC (native USB CDC) method. On the classic ESP32
+  // (M5Paper) Serial is UART0/HardwareSerial, which has no such method.
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
+#endif
 #endif
 
   HalSystem::begin();

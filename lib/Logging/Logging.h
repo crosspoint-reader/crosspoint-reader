@@ -27,7 +27,10 @@ won't trigger deprecation warnings.
 #define LOG_LEVEL 0
 #endif
 
-static HWCDC& logSerial = Serial;
+// The concrete Serial type differs by MCU: HWCDC (native USB CDC on C3/S3) vs
+// HardwareSerial (UART0 on the classic ESP32 / M5Paper). Bind to whatever the
+// real Serial is here — this is before the `#define Serial` shim below.
+static decltype(Serial)& logSerial = Serial;
 
 void logPrintf(const char* level, const char* origin, const char* format, ...);
 

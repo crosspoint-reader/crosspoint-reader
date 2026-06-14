@@ -54,9 +54,29 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+// Top-left corner of the panel (panel-native, normalized). Generous so it's easy
+// to hit; v1 is not yet orientation-mapped (see wasBackGesture NOTE in header).
+static constexpr float BACK_GESTURE_FRAC_X = 0.22f;
+static constexpr float BACK_GESTURE_FRAC_Y = 0.12f;
 
-bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+bool MappedInputManager::wasBackGesture() const {
+  float nx = 0.0f, ny = 0.0f;
+  if (!gpio.wasTouchTap(nx, ny)) return false;
+  return nx <= BACK_GESTURE_FRAC_X && ny <= BACK_GESTURE_FRAC_Y;
+}
+
+bool MappedInputManager::wasPressed(const Button button) const {
+  // A top-left tap fires on the release frame; expose it on Back's press edge too
+  // so menus that act on wasPressed(Back) also respond. Deliberately NOT folded
+  // into isPressed, so a quick tap never satisfies the readers' long-press-home.
+  if (button == Button::Back && wasBackGesture()) return true;
+  return mapButton(button, &HalGPIO::wasPressed);
+}
+
+bool MappedInputManager::wasReleased(const Button button) const {
+  if (button == Button::Back && wasBackGesture()) return true;
+  return mapButton(button, &HalGPIO::wasReleased);
+}
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 

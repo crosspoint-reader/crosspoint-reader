@@ -72,6 +72,11 @@ class HalGPIO {
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
 
+  // Touch: one-shot tap with the release position normalized 0..1 in the panel's
+  // native orientation. Returns false on non-touch devices. (Reusable gesture
+  // primitive; see MappedInputManager for the top-left = Back mapping.)
+  bool wasTouchTap(float& nx, float& ny) const;
+
   // Setup wake up GPIO and enter deep sleep
   void startDeepSleep();
 

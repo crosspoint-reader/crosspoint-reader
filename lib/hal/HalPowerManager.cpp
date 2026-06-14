@@ -18,7 +18,9 @@ void HalPowerManager::begin() {
     Wire.setTimeOut(4);
     _batteryUseI2C = true;
   } else {
-    pinMode(BAT_GPIO0, INPUT);
+    // Battery ADC pin from the active board profile (X4: GPIO0, M5Paper: GPIO35),
+    // not a hardcoded X4 pin.
+    pinMode(BoardConfig::ACTIVE.batteryAdc, INPUT);
   }
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
@@ -76,8 +78,10 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 #endif
 
   // Pre-sleep routines from the original firmware
+#if !SOC_PM_SUPPORT_EXT1_WAKEUP  // RISC-V (C3 / X4)
   // GPIO13 is connected to battery latch MOSFET, we need to make sure it's low during sleep
   // Note that this means the MCU will be completely powered off during sleep, including RTC
+  // (X4-specific: on classic ESP32/M5Paper GPIO13 is SD MISO, so this is skipped.)
   constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
   gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
   gpio_set_level(GPIO_SPIWP, 0);
@@ -90,6 +94,10 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // power button is hard-wired to briefly provide power to the MCU, waking it up regardless of the wakeup source
   // configuration
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+#else  // Xtensa (classic ESP32 / S3): RTC ext1 GPIO wake
+  pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
+  esp_sleep_enable_ext1_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_EXT1_WAKEUP_ALL_LOW);
+#endif
   // Enter Deep Sleep
   esp_deep_sleep_start();
 }
@@ -121,7 +129,8 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
     _batteryLastPollMs = now;
     return _batteryCachedPercent;
   }
-  static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
+  // ADC pin from the active profile (X4 GPIO0 / M5Paper GPIO35); default 2:1 divider.
+  static const BatteryMonitor battery = BatteryMonitor(BoardConfig::ACTIVE.batteryAdc);
 
   // smooth the battery %.
   if (_batteryCachedPercent == 0) {

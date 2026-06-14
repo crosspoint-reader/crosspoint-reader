@@ -132,8 +132,31 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+// CROSSPOINT_SHOW_BUTTON_HINTS: build-flag switch (env). Default on. A device with
+// no physical button row (touch + rotary, e.g. M5Paper) builds with =0.
+#ifndef CROSSPOINT_SHOW_BUTTON_HINTS
+#define CROSSPOINT_SHOW_BUTTON_HINTS 1
+#endif
+bool BaseTheme::showButtonHints() { return CROSSPOINT_SHOW_BUTTON_HINTS; }
+
+// Non-virtual gates: one check hides hints across every theme. Themes override the
+// *Impl, which only ever runs when hints are enabled.
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
+  // showButtonHints() is a build-time switch (CROSSPOINT_SHOW_BUTTON_HINTS); the
+  // constant condition is intentional.
+  // cppcheck-suppress knownConditionTrueFalse
+  if (!showButtonHints()) return;
+  drawButtonHintsImpl(renderer, btn1, btn2, btn3, btn4);
+}
+void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+  // cppcheck-suppress knownConditionTrueFalse
+  if (!showButtonHints()) return;
+  drawSideButtonHintsImpl(renderer, topBtn, bottomBtn);
+}
+
+void BaseTheme::drawButtonHintsImpl(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                                    const char* btn4) const {
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -163,7 +186,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   renderer.setOrientation(orig_orientation);
 }
 
-void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+void BaseTheme::drawSideButtonHintsImpl(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
   constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)

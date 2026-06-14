@@ -28,7 +28,16 @@ class HalPowerManager {
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
 
  public:
-  static constexpr int LOW_POWER_FREQ = 10;                    // MHz
+  // On PSRAM boards (classic ESP32 / M5Paper) the APB clock follows the CPU below
+  // 80 MHz, and APB clocks both the SD SPI bus and the 80 MHz PSRAM (which holds
+  // the framebuffer). Dropping to 10 MHz breaks SD writes and PSRAM, so floor the
+  // low-power CPU at 80 MHz (APB stays pinned at 80 for CPU 80/160/240, so power
+  // still drops from the 240 MHz default while SD/PSRAM stay stable).
+#if defined(BOARD_HAS_PSRAM)
+  static constexpr int LOW_POWER_FREQ = 80;  // MHz (APB-safe floor for PSRAM/SD)
+#else
+  static constexpr int LOW_POWER_FREQ = 10;  // MHz
+#endif
   static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // ms
   static constexpr unsigned long BATTERY_POLL_MS = 1500;       // ms
 

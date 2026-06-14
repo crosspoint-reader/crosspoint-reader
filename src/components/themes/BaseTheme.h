@@ -179,9 +179,19 @@ class BaseTheme {
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
                         bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
-  virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                               const char* btn4) const;
-  virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  // Single switch for on-screen button hints, set by the CROSSPOINT_SHOW_BUTTON_HINTS
+  // build flag (env; default on). Devices with no physical button row (touch +
+  // rotary, e.g. M5Paper) set it to 0 in their env.
+  static bool showButtonHints();
+  // Public, NON-virtual gate: returns early when hints are disabled, otherwise
+  // dispatches to the per-theme *Impl below. Themes override the *Impl, never
+  // these — so one switch hides hints across every theme.
+  void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                       const char* btn4) const;
+  void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  virtual void drawButtonHintsImpl(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                                   const char* btn4) const;
+  virtual void drawSideButtonHintsImpl(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                         const std::function<std::string(int index)>& rowTitle,
