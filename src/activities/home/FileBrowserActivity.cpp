@@ -11,6 +11,8 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/ContextMenuActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -186,6 +188,120 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
   return true;
 }
 
+// Open the long-press context menu for `entry` as an overlay. Rename opens a keyboard prefilled
+// with the current name; Delete opens a confirmation dialog before anything is removed.
+void FileBrowserActivity::showContextMenu(const std::string& entry) {
+  std::string directory = basepath;
+  if (directory.back() != '/') directory += "/";
+
+  // Name without the trailing slash directories carry in the list, and whether it is a directory.
+  const bool isDir = !entry.empty() && entry.back() == '/';
+  std::string name = entry;
+  if (isDir) name.pop_back();
+
+  const std::string fullPath = directory + name;
+
+  auto menuHandler = [this, directory, name, fullPath, isDir](const ActivityResult& res) {
+    if (res.isCancelled) return;
+    const auto* menu = std::get_if<MenuResult>(&res.data);
+    if (!menu) return;
+    switch (static_cast<ContextAction>(menu->action)) {
+      case ContextAction::Rename:
+        promptRename(directory, name, isDir);
+        break;
+      case ContextAction::Delete:
+        confirmAndDelete(fullPath, name);
+        break;
+    }
+  };
+
+  std::vector<ContextMenuActivity::Item> items = {
+      {StrId::STR_RENAME, static_cast<int>(ContextAction::Rename)},
+      {StrId::STR_DELETE, static_cast<int>(ContextAction::Delete)},
+  };
+  startActivityForResult(std::make_unique<ContextMenuActivity>(renderer, mappedInput, name, std::move(items)),
+                         menuHandler);
+}
+
+// Show the on-screen keyboard prefilled with the editable part of the name; on confirm, rename the
+// entry in the same directory and refresh the list (keeping the selection on the renamed entry).
+// Only the base name is editable — the extension is preserved (directories have no extension).
+void FileBrowserActivity::promptRename(const std::string& directory, const std::string& currentName, bool isDir) {
+  // Split off the extension so the user only edits the base name. A leading dot (hidden file) is
+  // not treated as an extension separator.
+  std::string base = currentName;
+  std::string ext;
+  if (!isDir) {
+    const auto dot = currentName.rfind('.');
+    if (dot != std::string::npos && dot != 0) {
+      base = currentName.substr(0, dot);
+      ext = currentName.substr(dot);
+    }
+  }
+
+  auto handler = [this, directory, currentName, base, ext, isDir](const ActivityResult& res) {
+    if (res.isCancelled) return;
+    const auto* kb = std::get_if<KeyboardResult>(&res.data);
+    if (!kb) return;
+    const std::string newBase = kb->text;
+    if (newBase.empty() || newBase == base) return;
+
+    const std::string newName = newBase + ext;
+    const std::string oldPath = directory + currentName;
+    const std::string newPath = directory + newName;
+    // The book cache is keyed by a hash of the file path, so a rename orphans it; clear the old
+    // entry's cache first (a no-op for non-book files) so it doesn't linger.
+    clearBookCache(oldPath);
+    if (Storage.rename(oldPath.c_str(), newPath.c_str())) {
+      LOG_DBG("FileBrowser", "Renamed: %s -> %s", oldPath.c_str(), newPath.c_str());
+      loadFiles();
+      selectorIndex = findEntry(isDir ? newName + "/" : newName);
+      requestUpdate(true);
+    } else {
+      LOG_ERR("FileBrowser", "Rename failed: %s -> %s", oldPath.c_str(), newPath.c_str());
+    }
+  };
+
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_RENAME), base,
+                                                                 /*maxLength=*/0, InputType::Text),
+                         handler);
+}
+
+// Show the delete-confirmation overlay and, if confirmed, remove the file/directory.
+void FileBrowserActivity::confirmAndDelete(const std::string& fullPath, const std::string& displayName) {
+  // The context menu has just closed; repaint the file list so its box doesn't bleed through
+  // under the confirmation overlay (both share the framebuffer).
+  requestUpdateAndWait();
+
+  auto handler = [this, fullPath](const ActivityResult& res) {
+    if (res.isCancelled) {
+      LOG_DBG("FileBrowser", "Delete cancelled by user");
+      return;
+    }
+    // Repaint the file list now so the confirmation dialog disappears immediately, before the
+    // delete (clearing a book's cache can take a moment and would otherwise leave it on screen).
+    requestUpdateAndWait();
+    LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
+    if (removeDirFile(fullPath)) {
+      LOG_DBG("FileBrowser", "Deleted successfully");
+      loadFiles();
+      if (files.empty()) {
+        selectorIndex = 0;
+      } else if (selectorIndex >= files.size()) {
+        // Move selection to the new "last" item
+        selectorIndex = files.size() - 1;
+      }
+      requestUpdate(true);
+    } else {
+      LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
+    }
+  };
+
+  std::string heading = tr(STR_DELETE) + std::string("? ");
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, displayName, /*overlay=*/true), handler);
+}
+
 void FileBrowserActivity::loop() {
   // Long press BACK (1s+) goes to root folder (Books mode only).
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
@@ -205,6 +321,19 @@ void FileBrowserActivity::loop() {
 
   const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
+
+  // Long press Confirm opens the context menu the moment the 1s threshold is reached, while the
+  // button is still held (no need to release first). `contextMenuArmed` fires it once per hold;
+  // it resets below whenever Confirm isn't pressed, so a later short press still opens normally.
+  if (mode == Mode::Books && mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    if (!contextMenuArmed && !lockNextConfirmRelease && !files.empty() && mappedInput.getHeldTime() >= GO_HOME_MS) {
+      contextMenuArmed = true;
+      showContextMenu(files[selectorIndex]);
+      return;
+    }
+  } else {
+    contextMenuArmed = false;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (lockNextConfirmRelease) {
@@ -227,50 +356,17 @@ void FileBrowserActivity::loop() {
       return;
     }
 
-    if (mode == Mode::Books && mappedInput.getHeldTime() >= GO_HOME_MS) {
-      // --- LONG PRESS ACTION: DELETE FILE OR DIRECTORY ---
-      std::string cleanBasePath = basepath;
-      if (cleanBasePath.back() != '/') cleanBasePath += "/";
-      const std::string fullPath = cleanBasePath + entry;
+    // Short press: open file / enter directory. (A long press already opened the context menu
+    // above while held, and that release is swallowed by the menu, so we never reach here for it.)
+    if (basepath.back() != '/') basepath += "/";
 
-      auto handler = [this, fullPath](const ActivityResult& res) {
-        if (!res.isCancelled) {
-          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-          if (removeDirFile(fullPath)) {
-            LOG_DBG("FileBrowser", "Deleted successfully");
-            loadFiles();
-            if (files.empty()) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
-              // Move selection to the new "last" item
-              selectorIndex = files.size() - 1;
-            }
-
-            requestUpdate(true);
-          } else {
-            LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
-          }
-        } else {
-          LOG_DBG("FileBrowser", "Delete cancelled by user");
-        }
-      };
-
-      std::string heading = tr(STR_DELETE) + std::string("? ");
-
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
-      return;
+    if (isDirectory) {
+      basepath += entry.substr(0, entry.length() - 1);
+      loadFiles();
+      selectorIndex = 0;
+      requestUpdate();
     } else {
-      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
-      if (basepath.back() != '/') basepath += "/";
-
-      if (isDirectory) {
-        basepath += entry.substr(0, entry.length() - 1);
-        loadFiles();
-        selectorIndex = 0;
-        requestUpdate();
-      } else {
-        onSelectBook(basepath + entry);
-      }
+      onSelectBook(basepath + entry);
     }
     return;
   }

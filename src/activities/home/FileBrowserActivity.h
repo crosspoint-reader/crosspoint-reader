@@ -15,7 +15,13 @@ class FileBrowserActivity final : public Activity {
   enum class Mode { Books, PickFirmware };
 
  private:
-  // Deletion
+  // Actions offered by the long-press context menu.
+  enum class ContextAction { Rename, Delete };
+
+  // Context menu / deletion / rename
+  void showContextMenu(const std::string& entry);
+  void confirmAndDelete(const std::string& fullPath, const std::string& displayName);
+  void promptRename(const std::string& directory, const std::string& currentName, bool isDir);
   bool removeDirFile(const std::string& fullPath);
 
   ButtonNavigator buttonNavigator;
@@ -26,6 +32,9 @@ class FileBrowserActivity final : public Activity {
   // True when this activity was entered while Confirm was already held; we must swallow the next
   // release so we don't immediately auto-open the first entry.
   bool lockNextConfirmRelease = false;
+  // True once the current Confirm hold has opened the context menu, so it fires once per hold
+  // and the eventual release doesn't also trigger a short-press open. Reset when Confirm is up.
+  bool contextMenuArmed = false;
 
   Mode mode = Mode::Books;
 
