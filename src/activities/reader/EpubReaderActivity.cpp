@@ -1144,6 +1144,12 @@ void EpubReaderActivity::renderStatusBar() const {
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
+  // Book-global page position for the counter text (chapter values above still
+  // drive the progress bar).
+  const int bookCurrentPage = bookPageMap.globalPage(currentSpineIndex, section->currentPage);
+  const int bookTotalPages = bookPageMap.total();
+  const bool bookTotalIsEstimate = !bookPageMap.isExact();
+
   std::string title;
 
   int textYOffset = 0;
@@ -1171,7 +1177,8 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, bookCurrentPage,
+                    bookTotalPages, bookTotalIsEstimate);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

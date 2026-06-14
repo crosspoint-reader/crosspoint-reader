@@ -727,7 +727,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin) const {
+                              const bool fillMargin, const int bookCurrentPage, const int bookTotalPages,
+                              const bool totalIsEstimate) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -742,12 +743,20 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     // Right aligned text for progress counter
     char progressStr[32];
 
+    // Prefer book-global page numbers when the caller supplies them (EPUB reader);
+    // otherwise fall back to the values passed for the counter (TXT/XTC readers).
+    const bool useBookPages = bookTotalPages >= 0;
+    const int textCurrentPage = useBookPages ? bookCurrentPage : currentPage;
+    const int textTotalPages = useBookPages ? bookTotalPages : pageCount;
+    const char* estMark = (useBookPages && totalIsEstimate) ? "~" : "";
+
     if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
+      snprintf(progressStr, sizeof(progressStr), "%d/%s%d  %.0f%%", textCurrentPage, estMark, textTotalPages,
+               bookProgress);
     } else if (SETTINGS.statusBarBookProgressPercentage) {
       snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
+      snprintf(progressStr, sizeof(progressStr), "%d/%s%d", textCurrentPage, estMark, textTotalPages);
     }
 
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
