@@ -94,8 +94,8 @@ class FileIndex {
   // section byte (1 = dir, 2 = file) so one sort pass yields dirs-then-files;
   // the payload starts with the numeric field (date/size modes, big-endian so
   // memcmp orders numerically) followed by a truncated FsHelpers::naturalSortKey
-  // of the name. Full-key ties are repaired with naturalCompare on the real
-  // names when the final offsets table is written.
+  // of the name. Initial runs and merge passes resolve full-key ties with
+  // naturalCompare on the real names.
   struct RunRecord {
     uint8_t key[28];
     uint32_t blobOffset;

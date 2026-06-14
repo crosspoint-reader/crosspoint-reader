@@ -11,17 +11,13 @@
 namespace {
 constexpr const char* INDEX_DIR = "/.crosspoint/fileindex";
 constexpr char MAGIC[4] = {'C', 'P', 'F', 'I'};
-constexpr uint8_t INDEX_VERSION = 1;
+constexpr uint8_t INDEX_VERSION = 2;
 // Run chunk: entries sorted in RAM before being flushed as one sorted run.
 // 64 x 32 B = 2 KB, allocated once per build.
 constexpr size_t CHUNK_ENTRIES = 64;
 constexpr size_t NAME_BUF_SIZE = FileIndex::MAX_NAME + 1;
 constexpr uint8_t SECTION_DIR = 1;
 constexpr uint8_t SECTION_FILE = 2;
-// Largest group of full-key ties we re-order by real name; bigger groups keep
-// deterministic (enumeration) order. Ties require 27 identical key bytes, so
-// groups beyond this are pathological.
-constexpr size_t MAX_TIE_SEGMENT = 64;
 constexpr uint32_t FNV32_BASIS = 2166136261u;
 
 uint32_t fnv1a32(const void* data, size_t len, uint32_t hash) {
@@ -71,9 +67,8 @@ struct FileIndex::BuildState {
   size_t chunkUsed = 0;
   uint32_t runCount = 0;
   uint32_t blobLen = 0;
-  std::unique_ptr<char[]> nameA;  // tie-repair name buffers
+  std::unique_ptr<char[]> nameA;  // full-name comparison buffers
   std::unique_ptr<char[]> nameB;
-  uint32_t segment[MAX_TIE_SEGMENT] = {0};  // tie-repair group; here to stay off the task stack
   uint32_t yieldCounter = 0;
 };
 
@@ -234,8 +229,55 @@ bool FileIndex::flushChunk(BuildState& bs) {
   std::sort(bs.chunk.get(), bs.chunk.get() + bs.chunkUsed, [](const RunRecord& a, const RunRecord& b) {
     const int cmp = memcmp(a.key, b.key, sizeof(a.key));
     if (cmp != 0) return cmp < 0;
-    return a.blobOffset < b.blobOffset;  // deterministic; full-key ties repaired by name later
+    return a.blobOffset < b.blobOffset;
   });
+
+  // The fixed key is an order-preserving prefix. Complete each equal-key range
+  // with the real names so every emitted run is fully sorted before merging.
+  const size_t appendPos = bs.idxTmp.position();
+  bool readNames = false;
+  size_t rangeFirst = 0;
+  while (rangeFirst < bs.chunkUsed) {
+    size_t rangeEnd = rangeFirst + 1;
+    while (rangeEnd < bs.chunkUsed &&
+           memcmp(bs.chunk[rangeFirst].key, bs.chunk[rangeEnd].key, sizeof(bs.chunk[rangeFirst].key)) == 0) {
+      rangeEnd++;
+    }
+
+    if (rangeEnd - rangeFirst > 1) {
+      if (!readNames) {
+        bs.idxTmp.flush();
+        readNames = true;
+      }
+      for (size_t i = rangeFirst + 1; i < rangeEnd; i++) {
+        const RunRecord candidate = bs.chunk[i];
+        if (!readNameAt(bs.idxTmp, candidate.blobOffset, bs.nameA.get(), NAME_BUF_SIZE)) return false;
+
+        size_t first = rangeFirst;
+        size_t last = i;
+        while (first < last) {
+          const size_t middle = first + (last - first) / 2;
+          const RunRecord& current = bs.chunk[middle];
+          if (!readNameAt(bs.idxTmp, current.blobOffset, bs.nameB.get(), NAME_BUF_SIZE)) return false;
+          const int nameCmp = FsHelpers::naturalCompare(bs.nameB.get(), bs.nameA.get());
+          const bool currentBefore = nameCmp < 0 || (nameCmp == 0 && current.blobOffset <= candidate.blobOffset);
+          if (currentBefore) {
+            first = middle + 1;
+          } else {
+            last = middle;
+          }
+        }
+        std::move_backward(bs.chunk.get() + first, bs.chunk.get() + i, bs.chunk.get() + i + 1);
+        bs.chunk[first] = candidate;
+      }
+    }
+    rangeFirst = rangeEnd;
+  }
+
+  if (readNames && !bs.idxTmp.seek(appendPos)) {
+    LOG_ERR("FIDX", "blob append seek failed");
+    return false;
+  }
 
   const size_t bytes = bs.chunkUsed * sizeof(RunRecord);
   if (bs.runsOut.write(bs.chunk.get(), bytes) != bytes) {
@@ -350,6 +392,10 @@ bool FileIndex::build(const char* dirPath, SortMode sortMode, AcceptFn accept, u
 
   const uint32_t recordCount = dirCount + fileCount;
   ok = ok && mergeRuns(bs, recordCount);
+  if (ok && !bs.idxTmp.seek(blobStart + bs.blobLen)) {
+    LOG_ERR("FIDX", "offsets seek failed");
+    ok = false;
+  }
   ok = ok && writeOffsets(bs, recordCount);
 
   if (ok) {
@@ -442,21 +488,39 @@ bool FileIndex::mergeRuns(BuildState& bs, uint32_t recordCount) {
       RunRecord recA, recB;
       uint32_t ia = 0, ib = 0;
       bool haveA = false, haveB = false;
+      bool haveNameA = false, haveNameB = false;
       while (ok && (ia < lenA || ib < lenB)) {
         if (!haveA && ia < lenA) {
           ok = inA.read(&recA, sizeof(recA)) == static_cast<int>(sizeof(recA));
           haveA = ok;
+          haveNameA = false;
         }
         if (ok && !haveB && ib < lenB) {
           ok = inB.read(&recB, sizeof(recB)) == static_cast<int>(sizeof(recB));
           haveB = ok;
+          haveNameB = false;
         }
         if (!ok) break;
 
         bool takeA;
         if (haveA && haveB) {
-          const int cmp = memcmp(recA.key, recB.key, sizeof(recA.key));
-          takeA = cmp < 0 || (cmp == 0 && recA.blobOffset <= recB.blobOffset);
+          int cmp = memcmp(recA.key, recB.key, sizeof(recA.key));
+          if (cmp == 0) {
+            if (!haveNameA) {
+              ok = readNameAt(bs.idxTmp, recA.blobOffset, bs.nameA.get(), NAME_BUF_SIZE);
+              haveNameA = ok;
+            }
+            if (ok && !haveNameB) {
+              ok = readNameAt(bs.idxTmp, recB.blobOffset, bs.nameB.get(), NAME_BUF_SIZE);
+              haveNameB = ok;
+            }
+            if (!ok) break;
+            cmp = FsHelpers::naturalCompare(bs.nameA.get(), bs.nameB.get());
+            if (cmp == 0) {
+              cmp = recA.blobOffset < recB.blobOffset ? -1 : (recA.blobOffset > recB.blobOffset ? 1 : 0);
+            }
+          }
+          takeA = cmp <= 0;
         } else {
           takeA = haveA;
         }
@@ -465,9 +529,11 @@ bool FileIndex::mergeRuns(BuildState& bs, uint32_t recordCount) {
         ok = out.write(&rec, sizeof(rec)) == sizeof(rec);
         if (takeA) {
           haveA = false;
+          haveNameA = false;
           ia++;
         } else {
           haveB = false;
+          haveNameB = false;
           ib++;
         }
         maybeYield(bs.yieldCounter);
@@ -492,85 +558,45 @@ bool FileIndex::mergeRuns(BuildState& bs, uint32_t recordCount) {
 
 bool FileIndex::readNameAt(HalFile& file, uint32_t recordOffset, char* out, size_t cap) {
   RecordHeader rec{};
-  if (!file.seek(recordOffset) || file.read(&rec, sizeof(rec)) != static_cast<int>(sizeof(rec))) return false;
+  if (!file.seek(recordOffset) || file.read(&rec, sizeof(rec)) != static_cast<int>(sizeof(rec))) {
+    LOG_ERR("FIDX", "name header read failed at %u", recordOffset);
+    return false;
+  }
   const size_t n = std::min<size_t>(rec.nameLen, cap - 1);
-  if (file.read(out, n) != static_cast<int>(n)) return false;
+  if (file.read(out, n) != static_cast<int>(n)) {
+    LOG_ERR("FIDX", "name read failed at %u", recordOffset);
+    return false;
+  }
   out[n] = '\0';
   return true;
 }
 
 bool FileIndex::writeOffsets(BuildState& bs, uint32_t recordCount) {
-  // Stream the sorted run and append each blobOffset to the index. Groups of
-  // records with identical full keys (truncated-key collisions) are re-ordered
-  // with naturalCompare on the real names so the on-SD order matches the
-  // in-RAM sort exactly.
+  // Runs are already fully sorted by fixed key, real name, and blob offset.
+  // Append only their record offsets to the index.
   auto run = Storage.open(bs.finalRunsPath);
   if (!run && recordCount > 0) {
     LOG_ERR("FIDX", "cannot open final run");
     return false;
   }
 
-  uint32_t* segment = bs.segment;
-  size_t segmentLen = 0;
-  bool segmentOverflow = false;
-  RunRecord prev{}, cur{};
-  bool havePrev = false;
-  bool ok = true;
-  // Pass A left idxTmp positioned at the end of the blob, where the offsets
-  // section starts; track the append position explicitly because the repair
-  // reads seek elsewhere in the file.
-  uint32_t appendPos = bs.idxTmp.position();
-
-  auto flushSegment = [&]() {
-    if (!ok || segmentLen == 0) return;
-    if (segmentLen > 1 && !segmentOverflow) {
-      // Insertion sort by real name; flush blob writes before seeking to read
-      bs.idxTmp.flush();
-      for (size_t i = 1; ok && i < segmentLen; i++) {
-        const uint32_t candidate = segment[i];
-        ok = readNameAt(bs.idxTmp, candidate, bs.nameA.get(), NAME_BUF_SIZE);
-        size_t j = i;
-        while (ok && j > 0) {
-          ok = readNameAt(bs.idxTmp, segment[j - 1], bs.nameB.get(), NAME_BUF_SIZE);
-          if (!ok || FsHelpers::naturalCompare(bs.nameB.get(), bs.nameA.get()) <= 0) break;
-          segment[j] = segment[j - 1];
-          j--;
-        }
-        segment[j] = candidate;
-      }
+  RunRecord rec{};
+  for (uint32_t i = 0; i < recordCount; i++) {
+    if (run.read(&rec, sizeof(rec)) != static_cast<int>(sizeof(rec))) {
+      LOG_ERR("FIDX", "final run read failed");
+      run.close();
+      return false;
     }
-    if (ok) ok = bs.idxTmp.seek(appendPos);
-    for (size_t i = 0; ok && i < segmentLen; i++) {
-      ok = bs.idxTmp.write(&segment[i], sizeof(uint32_t)) == sizeof(uint32_t);
+    if (bs.idxTmp.write(&rec.blobOffset, sizeof(rec.blobOffset)) != sizeof(rec.blobOffset)) {
+      LOG_ERR("FIDX", "offset write failed");
+      run.close();
+      return false;
     }
-    appendPos += segmentLen * sizeof(uint32_t);
-    segmentLen = 0;
-  };
-
-  for (uint32_t i = 0; ok && i < recordCount; i++) {
-    ok = run.read(&cur, sizeof(cur)) == static_cast<int>(sizeof(cur));
-    if (!ok) break;
-
-    const bool sameKey = havePrev && memcmp(prev.key, cur.key, sizeof(cur.key)) == 0;
-    if (!sameKey) {
-      flushSegment();
-      segmentOverflow = false;
-    } else if (segmentLen == MAX_TIE_SEGMENT) {
-      // Oversized tie group: keep deterministic (enumeration) order for the
-      // whole group instead of name-repair. Requires 27 identical key bytes
-      // across 64+ entries, so effectively pathological.
-      segmentOverflow = true;
-      flushSegment();
-    }
-    segment[segmentLen++] = cur.blobOffset;
-    prev = cur;
-    havePrev = true;
     maybeYield(bs.yieldCounter);
   }
-  flushSegment();
 
   if (run) run.close();
-  return ok;
+  return true;
 }
 
 bool FileIndex::readOffsetForPhysIndex(size_t physIndex, uint32_t& recordOffset) {
