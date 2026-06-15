@@ -863,7 +863,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
   }
 
-  if (section && SETTINGS.smartCalculateTotalPages) {
+  if (SETTINGS.smartCalculateTotalPages) {
     bookPageMap.recordSection(currentSpineIndex, section->pageCount);
   }
 
