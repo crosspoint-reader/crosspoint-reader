@@ -290,14 +290,6 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
-
-  // True when the control axis is flipped relative to the physical buttons, i.e. the user
-  // opted into orientation-following controls and the screen is rotated such that prev/next
-  // (and up/down) read backwards. Used to keep navigation behaviour aligned with the on-screen
-  // hint labels in INVERTED and LANDSCAPE_CCW.
-  [[nodiscard]] bool isNavDirectionSwappedByOrientation() const {
-    return frontButtonFollowOrientation && (orientation == INVERTED || orientation == LANDSCAPE_CCW);
-  }
 };
 
 // Helper macro to access settings

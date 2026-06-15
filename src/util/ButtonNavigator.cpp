@@ -1,22 +1,6 @@
 #include "ButtonNavigator.h"
 
-#include "CrossPointSettings.h"
-
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
-
-ButtonNavigator::Buttons ButtonNavigator::getNextButtons() {
-  if (SETTINGS.isNavDirectionSwappedByOrientation()) {
-    return {MappedInputManager::Button::Up, MappedInputManager::Button::Left};
-  }
-  return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};
-}
-
-ButtonNavigator::Buttons ButtonNavigator::getPreviousButtons() {
-  if (SETTINGS.isNavDirectionSwappedByOrientation()) {
-    return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};
-  }
-  return {MappedInputManager::Button::Up, MappedInputManager::Button::Left};
-}
 
 void ButtonNavigator::onNext(const Callback& callback) {
   onNextPress(callback);
