@@ -131,6 +131,11 @@ bool BookPageMap::save(const std::string& path) const {
 }
 
 bool BookPageMap::load(const std::string& path) {
+  // Contract (see header): on any load failure, leave all counts unknown.
+  // Reset up front so an early return can never leave stale counts behind if
+  // load() is called on a previously populated map.
+  pages_.assign(pages_.size(), UNKNOWN);
+
   HalFile f;
   if (!Storage.openFileForRead("PMAP", path, f)) {
     return false;  // missing - keep all-unknown
