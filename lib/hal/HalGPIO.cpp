@@ -202,11 +202,45 @@ void HalGPIO::begin() {
   }
 }
 
-void HalGPIO::update() {
+void HalGPIO::update(bool powerDoublePressEnabled) {
   inputMgr.update();
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
+
+  // Resolve power-button gestures. These flags are one-shot for the current update() cycle.
+  powerSinglePressed = false;
+  powerDoublePressed = false;
+
+  if (!powerDoublePressEnabled) {
+    // Legacy behavior: a release is immediately a single press; no deferral.
+    pendingSingle = false;
+    if (inputMgr.wasReleased(BTN_POWER)) {
+      powerSinglePressed = true;
+    }
+    return;
+  }
+
+  const unsigned long now = millis();
+
+  // Flush an expired pending single (no second tap arrived within the window).
+  if (pendingSingle && (now - pendingReleaseTime) > POWER_DOUBLE_PRESS_MS) {
+    powerSinglePressed = true;
+    pendingSingle = false;
+  }
+
+  // Ignore power releases while DOWN is held: that is the screenshot combo, not a tap.
+  if (inputMgr.wasReleased(BTN_POWER) && !inputMgr.isPressed(BTN_DOWN)) {
+    if (pendingSingle) {
+      // Second tap within the window -> double press.
+      powerDoublePressed = true;
+      pendingSingle = false;
+    } else {
+      // First tap -> start the double-press window.
+      pendingSingle = true;
+      pendingReleaseTime = now;
+    }
+  }
 }
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }

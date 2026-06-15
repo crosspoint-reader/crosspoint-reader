@@ -46,6 +46,15 @@ class HalGPIO {
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
 
+  // Power-button double-press gesture detection. A release starts a pending single press; if a
+  // second release arrives within POWER_DOUBLE_PRESS_MS it becomes a double press, otherwise the
+  // pending single is emitted once the window elapses.
+  static constexpr unsigned long POWER_DOUBLE_PRESS_MS = 300;
+  bool powerSinglePressed = false;
+  bool powerDoublePressed = false;
+  bool pendingSingle = false;
+  unsigned long pendingReleaseTime = 0;
+
  public:
   enum class DeviceType : uint8_t { X4, X3 };
 
@@ -62,8 +71,10 @@ class HalGPIO {
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
 
-  // Button input methods
-  void update();
+  // Button input methods.
+  // `powerDoublePressEnabled` defers the power single-press event by the double-press window so a
+  // second tap can be detected. Pass false (default) for the legacy immediate single-press behavior.
+  void update(bool powerDoublePressEnabled = false);
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
@@ -71,6 +82,11 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+
+  // Resolved power-button gestures (each true for exactly one update() cycle).
+  // When double-press is disabled, the single-press event fires immediately on release.
+  bool wasPowerSinglePressed() const { return powerSinglePressed; }
+  bool wasPowerDoublePressed() const { return powerDoublePressed; }
 
   // Setup wake up GPIO and enter deep sleep
   void startDeepSleep();

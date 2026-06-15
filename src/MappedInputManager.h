@@ -23,6 +23,9 @@ class MappedInputManager {
   bool isPressed(Button button) const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
+  // Resolved power-button gestures (see HalGPIO). The power button bypasses remapping.
+  bool wasPowerSinglePressed() const { return gpio.wasPowerSinglePressed(); }
+  bool wasPowerDoublePressed() const { return gpio.wasPowerDoublePressed(); }
   unsigned long getHeldTime() const;
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
   // Returns the raw front button index that was pressed this frame (or -1 if none).
