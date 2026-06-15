@@ -31,7 +31,10 @@ void EpubReaderChapterSelectionActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
   const int totalItems = getTotalItems();
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  int tappedId = -1;
+  const bool tapped = mappedInput.wasItemTapped(tappedId);
+  if (tapped && tappedId >= 0 && tappedId < totalItems) selectorIndex = tappedId;
+  if (tapped || mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto tocItem = epub->getTocItem(selectorIndex);
     if (tocItem.spineIndex == -1) {
       ActivityResult result;

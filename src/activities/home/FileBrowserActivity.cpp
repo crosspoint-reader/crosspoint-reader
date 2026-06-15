@@ -206,7 +206,15 @@ void FileBrowserActivity::loop() {
   const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // A tap opens the tapped entry (held-time is 0 on a tap, so it takes the short-press
+  // open path below, never the long-press delete).
+  int tappedId = -1;
+  const bool tapped = mappedInput.wasItemTapped(tappedId);
+  if (tapped && tappedId >= 0 && tappedId < static_cast<int>(files.size())) {
+    selectorIndex = tappedId;
+  }
+
+  if (tapped || mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (lockNextConfirmRelease) {
       lockNextConfirmRelease = false;
       return;

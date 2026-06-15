@@ -63,7 +63,10 @@ void RecentBooksActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  int tappedId = -1;
+  const bool tapped = mappedInput.wasItemTapped(tappedId);
+  if (tapped && tappedId >= 0 && tappedId < static_cast<int>(recentBooks.size())) selectorIndex = tappedId;
+  if (tapped || mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && selectorIndex < static_cast<int>(recentBooks.size())) {
       LOG_DBG("RBA", "Selected recent book: %s", recentBooks[selectorIndex].path.c_str());
       onSelectBook(recentBooks[selectorIndex].path);

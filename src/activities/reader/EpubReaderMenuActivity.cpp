@@ -57,7 +57,14 @@ void EpubReaderMenuActivity::loop() {
     requestUpdate();
   });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // A tap selects the item and activates it in one gesture (falls into Confirm below).
+  int tappedId = -1;
+  const bool tapped = mappedInput.wasItemTapped(tappedId);
+  if (tapped && tappedId >= 0 && tappedId < static_cast<int>(menuItems.size())) {
+    selectedIndex = tappedId;
+  }
+
+  if (tapped || mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     const auto selectedAction = menuItems[selectedIndex].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       // Cycle orientation preview locally; actual rotation happens on menu exit.

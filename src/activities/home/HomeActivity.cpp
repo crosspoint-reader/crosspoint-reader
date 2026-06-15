@@ -179,7 +179,17 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // A tap on a menu button selects + activates it. The button menu registers
+  // menu-local ids (it is drawn with selectorIndex offset by recentBooks.size()),
+  // so map the tapped id back into the global selector space. (The recent-book
+  // cover is a separate, single-item draw path — tappable in a later phase.)
+  int tappedId = -1;
+  const bool tapped = mappedInput.wasItemTapped(tappedId);
+  if (tapped) {
+    selectorIndex = static_cast<int>(recentBooks.size()) + tappedId;
+  }
+
+  if (tapped || mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selectorIndex < recentBooks.size()) {
       onSelectBook(recentBooks[selectorIndex].path);
     } else {

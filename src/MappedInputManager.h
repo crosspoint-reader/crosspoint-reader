@@ -2,6 +2,8 @@
 
 #include <HalGPIO.h>
 
+class GfxRenderer;
+
 class MappedInputManager {
  public:
   enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward };
@@ -13,17 +15,22 @@ class MappedInputManager {
     const char* btn4;
   };
 
-  explicit MappedInputManager(HalGPIO& gpio) : gpio(gpio) {}
+  MappedInputManager(HalGPIO& gpio, GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
   void update() const { gpio.update(); }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
-  // Reusable touch "back" gesture: a tap released in the top-left corner. Folded
-  // into Back's press/release edges, so every screen gets it with no per-activity
-  // code and no coordinates passed. False on non-touch devices.
-  // NOTE: v1 uses panel-native coordinates (not yet orientation-mapped).
+  // Reusable touch "back" gesture: a tap released in the top-left corner, OR a tap
+  // on the header back area registered by the theme. Folded into Back's press/
+  // release edges, so every screen gets it with no per-activity code. False on
+  // non-touch devices.
   bool wasBackGesture() const;
+  // One-shot: if a tap this frame hit a registered interactive element (theme
+  // draw methods register them via TouchRegistry), returns true and writes the
+  // element's id. Activities treat the id as "select + activate". False on
+  // non-touch devices or when the tap missed every target.
+  bool wasItemTapped(int& id) const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
@@ -33,6 +40,7 @@ class MappedInputManager {
 
  private:
   HalGPIO& gpio;
+  GfxRenderer& renderer;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
 };

@@ -77,6 +77,9 @@ class HalGPIO {
   // primitive; see MappedInputManager for the top-left = Back mapping.)
   bool wasTouchTap(float& nx, float& ny) const;
 
+  // True if a touch controller is present/active (runtime gate; false on the C3).
+  bool hasTouch() const;
+
   // Setup wake up GPIO and enter deep sleep
   void startDeepSleep();
 

@@ -12,6 +12,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -303,6 +304,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
+    TouchRegistry::getInstance().add(Rect{rect.x, itemY - 2, rect.width, rowHeight}, i, TouchRegistry::Item);
 
     int rowTextWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
     std::string valueText;
@@ -353,6 +355,11 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+  // Left strip of the header is a tap-to-go-back zone (orientation-mapped; the
+  // title is centered so this area is normally empty). Mirrors the legacy corner
+  // gesture but as a real, theme-positioned target.
+  TouchRegistry::getInstance().add(Rect{rect.x, rect.y, 64, rect.height + 8}, -1, TouchRegistry::Back);
+
   // Hide last battery draw
   constexpr int maxBatteryWidth = 80;
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
@@ -669,6 +676,10 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   for (int i = 0; i < buttonCount; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
                       static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+    TouchRegistry::getInstance().add(
+        Rect{rect.x + BaseMetrics::values.contentSidePadding, tileY,
+             rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight},
+        i, TouchRegistry::Item);
 
     const bool selected = selectedIndex == i;
 

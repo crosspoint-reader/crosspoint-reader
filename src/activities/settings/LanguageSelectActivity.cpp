@@ -32,6 +32,13 @@ void LanguageSelectActivity::loop() {
     return;
   }
 
+  int tappedId = -1;
+  if (mappedInput.wasItemTapped(tappedId) && tappedId >= 0) {
+    selectedIndex = tappedId;
+    handleSelection();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     handleSelection();
     return;

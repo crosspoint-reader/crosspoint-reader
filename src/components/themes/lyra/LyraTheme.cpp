@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
@@ -106,6 +107,7 @@ void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 
 void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+  TouchRegistry::getInstance().add(Rect{rect.x, rect.y, 64, rect.height + 8}, -1, TouchRegistry::Back);
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
@@ -258,6 +260,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   int iconY = (rowSubtitle != nullptr) ? 16 : 10;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
+    TouchRegistry::getInstance().add(Rect{rect.x, itemY, rect.width, rowHeight}, i, TouchRegistry::Item);
     int rowTextWidth = textWidth;
 
     // Draw name
@@ -517,6 +520,7 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     Rect tileRect = Rect{rect.x + LyraMetrics::values.contentSidePadding,
                          rect.y + i * (LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing), tileWidth,
                          LyraMetrics::values.menuRowHeight};
+    TouchRegistry::getInstance().add(tileRect, i, TouchRegistry::Item);
 
     const bool selected = selectedIndex == i;
 

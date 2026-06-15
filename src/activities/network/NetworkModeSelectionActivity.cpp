@@ -30,8 +30,11 @@ void NetworkModeSelectionActivity::loop() {
     return;
   }
 
-  // Handle confirm button - select current option
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  // Handle confirm button (or a tap) - select current option
+  int tappedId = -1;
+  const bool tapped = mappedInput.wasItemTapped(tappedId);
+  if (tapped && tappedId >= 0 && tappedId < static_cast<int>(MENU_ITEM_COUNT)) selectedIndex = tappedId;
+  if (tapped || mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     NetworkMode mode = NetworkMode::JOIN_NETWORK;
     if (selectedIndex == 1) {
       mode = NetworkMode::CONNECT_CALIBRE;

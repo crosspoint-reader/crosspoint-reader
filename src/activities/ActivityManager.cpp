@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include "components/TouchRegistry.h"
+
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
@@ -48,7 +50,11 @@ void ActivityManager::renderTaskLoop() {
     RenderLock lock;
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
+      // Touch targets are rebuilt every frame: clear before the activity draws, then
+      // publish so the next loop() hit-tests against exactly what's on screen.
+      TouchRegistry::getInstance().beginFrame();
       currentActivity->render(std::move(lock));
+      TouchRegistry::getInstance().publish();
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;

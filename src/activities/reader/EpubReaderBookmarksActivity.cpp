@@ -103,7 +103,10 @@ void EpubReaderBookmarksActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
+  int tappedId = -1;
+  const bool tapped = (confirmingDelete < DELETE_MODE_DISPLAY) && mappedInput.wasItemTapped(tappedId);
+  if (tapped && tappedId >= 0 && tappedId < static_cast<int>(bookmarks.size())) selectorIndex = tappedId;
+  if (tapped || mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
     if (bookmarks.empty()) {
       return;
     }

@@ -115,6 +115,17 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   bool hasChangedCategory = false;
 
+  // A tap on a settings row selects + activates it in one gesture. The list is drawn
+  // with selectedIndex = selectedSettingIndex - 1 (row 0 is the category tab), so map
+  // the tapped 0-based row back by +1. (Category tab bar is tappable in a later phase.)
+  int tappedId = -1;
+  if (mappedInput.wasItemTapped(tappedId) && tappedId >= 0 && tappedId < settingsCount) {
+    selectedSettingIndex = tappedId + 1;
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
+  }
+
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selectedSettingIndex == 0) {

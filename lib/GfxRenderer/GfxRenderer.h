@@ -135,6 +135,11 @@ class GfxRenderer {
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 
+  // Map a touch tap (normalized 0..1 in panel-native orientation, from
+  // InputManager::wasTouchTap) to logical screen coordinates matching the Rects the
+  // UI draws in. Inverse of rotateCoordinates() for the current orientation.
+  void tapToLogical(float nx, float ny, int& outX, int& outY) const;
+
   // Tiled grayscale strip target. While active, drawPixel() and clearScreen()
   // operate on `scratch` (panelWidthBytes * stripRows bytes, holding physical
   // rows [stripY0, stripY0 + stripRows)) instead of the framebuffer; pixels

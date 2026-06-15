@@ -1296,6 +1296,38 @@ int GfxRenderer::getScreenHeight() const {
   return panelWidth;
 }
 
+void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
+  // Native panel pixel of the tap (wasTouchTap normalizes over the native panel).
+  int phyX = static_cast<int>(nx * panelWidth);
+  int phyY = static_cast<int>(ny * panelHeight);
+  if (phyX < 0) phyX = 0;
+  if (phyX > panelWidth - 1) phyX = panelWidth - 1;
+  if (phyY < 0) phyY = 0;
+  if (phyY > panelHeight - 1) phyY = panelHeight - 1;
+
+  // Inverse of rotateCoordinates() (see the forward transform above): map a
+  // physical/native point back into the current orientation's logical frame.
+  switch (orientation) {
+    case Portrait:  // forward: phyX=logY, phyY=panelHeight-1-logX
+      outX = panelHeight - 1 - phyY;
+      outY = phyX;
+      break;
+    case PortraitInverted:  // forward: phyX=panelWidth-1-logY, phyY=logX
+      outX = phyY;
+      outY = panelWidth - 1 - phyX;
+      break;
+    case LandscapeClockwise:  // forward: phyX=panelWidth-1-logX, phyY=panelHeight-1-logY
+      outX = panelWidth - 1 - phyX;
+      outY = panelHeight - 1 - phyY;
+      break;
+    case LandscapeCounterClockwise:  // forward: identity
+    default:
+      outX = phyX;
+      outY = phyY;
+      break;
+  }
+}
+
 // Translate a logical rect through rotateCoordinates and take the bounding
 // box of its four corners on the physical panel. Output coords are inclusive
 // and clamped. Returns false if the rect ends up fully off-panel.

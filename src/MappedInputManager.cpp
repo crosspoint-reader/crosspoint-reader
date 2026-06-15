@@ -1,6 +1,9 @@
 #include "MappedInputManager.h"
 
+#include <GfxRenderer.h>
+
 #include "CrossPointSettings.h"
+#include "components/TouchRegistry.h"
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = SETTINGS.sideButtonLayout;
@@ -62,7 +65,21 @@ static constexpr float BACK_GESTURE_FRAC_Y = 0.12f;
 bool MappedInputManager::wasBackGesture() const {
   float nx = 0.0f, ny = 0.0f;
   if (!gpio.wasTouchTap(nx, ny)) return false;
+  // A tap on the theme's header back area (orientation-mapped) acts as Back.
+  int lx = 0, ly = 0;
+  renderer.tapToLogical(nx, ny, lx, ly);
+  int id = 0;
+  if (TouchRegistry::getInstance().hitTest(lx, ly, TouchRegistry::Back, id)) return true;
+  // Fallback corner gesture (panel-native, generous; works even with no Back target).
   return nx <= BACK_GESTURE_FRAC_X && ny <= BACK_GESTURE_FRAC_Y;
+}
+
+bool MappedInputManager::wasItemTapped(int& id) const {
+  float nx = 0.0f, ny = 0.0f;
+  if (!gpio.wasTouchTap(nx, ny)) return false;
+  int lx = 0, ly = 0;
+  renderer.tapToLogical(nx, ny, lx, ly);
+  return TouchRegistry::getInstance().hitTest(lx, ly, TouchRegistry::Item, id);
 }
 
 bool MappedInputManager::wasPressed(const Button button) const {

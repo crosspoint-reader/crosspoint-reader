@@ -28,14 +28,15 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#include "components/TouchRegistry.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
+MappedInputManager mappedInputManager(gpio, renderer);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
@@ -339,6 +340,9 @@ void setup() {
   silentRebootTarget = 0;
 
   gpio.begin();
+  // Enable touch-target registration only on boards with a touch panel (no-op cost
+  // on the C3). Must come after gpio.begin() so the controller has been probed.
+  TouchRegistry::getInstance().setEnabled(gpio.hasTouch());
   powerManager.begin();
   halTiltSensor.begin();
   halClock.begin();
