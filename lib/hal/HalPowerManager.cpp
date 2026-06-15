@@ -11,15 +11,17 @@
 HalPowerManager powerManager;  // Singleton instance
 
 void HalPowerManager::begin() {
-  if (gpio.deviceIsX3()) {
-    // X3 uses an I2C fuel gauge for battery monitoring.
-    // I2C init must come AFTER gpio.begin() so early hardware detection/probes are finished.
-    Wire.begin(X3_I2C_SDA, X3_I2C_SCL, X3_I2C_FREQ);
+  const auto& gauge = BoardConfig::ACTIVE.batteryGauge;
+  if (gauge.gaugeAddr != 0) {
+    // Board has an I2C fuel gauge (X3, LilyGo, Sticky, ...). Pins/freq come from
+    // the active board profile, not hardcoded X3 values. I2C init must come AFTER
+    // gpio.begin() so early hardware detection/probes are finished.
+    Wire.begin(gauge.i2cSda, gauge.i2cScl, gauge.i2cHz);
     Wire.setTimeOut(4);
     _batteryUseI2C = true;
-  } else {
-    // Battery ADC pin from the active board profile (X4: GPIO0, M5Paper: GPIO35),
-    // not a hardcoded X4 pin.
+  } else if (BoardConfig::ACTIVE.batteryAdc >= 0) {
+    // ADC-sensed board (X4: GPIO0, M5Paper: GPIO35). Skip when the profile leaves
+    // batteryAdc unassigned (PIN_UNASSIGNED) — pinMode(255) faults the GPIO mux.
     pinMode(BoardConfig::ACTIVE.batteryAdc, INPUT);
   }
   normalFreq = getCpuFrequencyMhz();
@@ -109,15 +111,18 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
       return _batteryCachedPercent;
     }
 
-    // Read SOC directly from I2C fuel gauge (16-bit LE register).
-    // On I2C error, keep last known value to avoid UI jitter/slowdowns.
-    Wire.beginTransmission(I2C_ADDR_BQ27220);
+    // Read SOC directly from the I2C fuel gauge (16-bit LE register). Gauge
+    // address comes from the active board profile (all current gauges are
+    // BQ27220-class, SOC at 0x2C). On I2C error, keep last known value to avoid
+    // UI jitter/slowdowns.
+    const uint8_t gaugeAddr = BoardConfig::ACTIVE.batteryGauge.gaugeAddr;
+    Wire.beginTransmission(gaugeAddr);
     Wire.write(BQ27220_SOC_REG);
     if (Wire.endTransmission(false) != 0) {
       _batteryLastPollMs = now;
       return _batteryCachedPercent;
     }
-    Wire.requestFrom(I2C_ADDR_BQ27220, (uint8_t)2);
+    Wire.requestFrom(gaugeAddr, (uint8_t)2);
     if (Wire.available() < 2) {
       _batteryLastPollMs = now;
       return _batteryCachedPercent;
