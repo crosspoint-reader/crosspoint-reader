@@ -314,9 +314,17 @@ void EpubReaderActivity::loop() {
 
   // auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
 
-  // Handle short power button press for footnotes
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+  // Power double-press: cycle reading orientation (re-lays out the page).
+  if (SETTINGS.doublePwrBtn == CrossPointSettings::DBL_ORIENTATION && mappedInput.wasPowerDoublePressed()) {
+    const uint8_t newOrientation = (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
+    applyOrientation(newOrientation);
+    requestUpdate();
+    return;
+  }
+
+  // Handle short power button press for footnotes.
+  // Uses the resolved single-press event so it is deferred past the double-press window when enabled.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES && mappedInput.wasPowerSinglePressed() &&
       !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();

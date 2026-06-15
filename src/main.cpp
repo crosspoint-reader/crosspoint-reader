@@ -485,7 +485,7 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  gpio.update();
+  gpio.update(SETTINGS.doublePwrBtn != CrossPointSettings::DBL_IGNORE);
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
@@ -565,11 +565,31 @@ void loop() {
   }
 
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
+  // Uses the resolved single-press event so it is deferred past the double-press window when enabled.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
-      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+      mappedInputManager.wasPowerSinglePressed()) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
     RenderLock lock;
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
+
+  // Handle the power-button double-press action. Orientation is handled in the reader (it needs a
+  // re-layout); here we dispatch the globally meaningful actions.
+  if (mappedInputManager.wasPowerDoublePressed()) {
+    switch (SETTINGS.doublePwrBtn) {
+      case CrossPointSettings::DBL_SLEEP:
+        LOG_DBG("MAIN", "Power double-press: sleep");
+        enterDeepSleep();
+        return;  // enterDeepSleep does not return
+      case CrossPointSettings::DBL_FORCE_REFRESH: {
+        LOG_DBG("MAIN", "Power double-press: refresh");
+        RenderLock lock;
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        break;
+      }
+      default:
+        break;  // DBL_ORIENTATION handled in the reader; DBL_IGNORE never reaches here
+    }
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.
