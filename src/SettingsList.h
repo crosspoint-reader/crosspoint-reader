@@ -253,12 +253,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
-    // The sunlight fading fix targets the Xteink X3/X4 transflective panel, so
-    // it only appears on those devices. Every other (touch) device instead gets
-    // the touch reader controls toggle (tap page back/forward + press-and-hold,
-    // mirroring the physical buttons). Keyed off the board identity
-    // (gpio.isXteinkDevice()), not gpio.hasTouch(), so the reader runtime gate
-    // and this visibility gate share one source of truth.
+    // Sunlight fading fix is Xteink-only (transflective panel); other devices get
+    // the touch reader controls toggle instead. Same gate as the reader runtime.
     if (!gpio.isXteinkDevice()) {
       v.erase(std::remove_if(v.begin(), v.end(),
                              [](const SettingInfo& s) { return s.nameId == StrId::STR_SUNLIGHT_FADING_FIX; }),

@@ -337,11 +337,9 @@ void KeyboardEntryActivity::loop() {
     }
   }
 
-  // A tap selects the key and presses it. Encoded id = row*100+col (bottom function
-  // row = getContentRowCount()). A touch-and-hold inserts the alternate character
-  // (numbers/symbols on a letter), mirroring the button long-press — wasItemLongPressed
-  // is checked first since it's a subset of wasItemTapped's releases. Skipped in
-  // cursor mode, where a tap on a key would be ambiguous with cursor editing.
+  // Tap a key to press it (encoded id = row*100+col). Touch-and-hold inserts the
+  // alternate char, like the button long-press (check wasItemLongPressed first, it's
+  // a subset of these releases). Skipped in cursor mode (ambiguous with editing).
   int tappedKey = -1;
   if (!cursorMode && mappedInput.wasItemTapped(tappedKey)) {
     selectedRow = tappedKey / 100;

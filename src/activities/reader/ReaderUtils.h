@@ -65,14 +65,10 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   return {prev, next, tiltPrev || tiltNext};
 }
 
-// Touch reader controls: a tap on the left third of the (oriented) screen turns
-// back a page, the right third turns forward, mirroring the side page buttons.
-// The center third opens the reader menu on press-and-hold (see center/heldMs;
-// the menu/Back gesture is handled by each reader). heldMs carries the contact
-// duration so callers can apply the same long-press behavior (chapter skip /
-// orientation change) as the buttons. Gated off the Xteink devices (no touch)
-// and behind the touchReaderControls setting; returns all-false otherwise, so
-// non-touch readers pay a single branch.
+// Touch reader controls: left third = page back, right third = forward, center =
+// open menu on press-and-hold (see isTouchMenuGesture). heldMs is the contact
+// duration, for the same long-press behavior as the buttons (chapter skip).
+// All-false on Xteink (no touch) or when the setting is off.
 struct TouchPageTurn {
   bool prev;
   bool next;

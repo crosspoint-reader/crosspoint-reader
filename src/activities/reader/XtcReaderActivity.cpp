@@ -53,10 +53,7 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
-  // Touch reader controls mirror the side page buttons (left third = back, right
-  // third = forward, press-and-hold = chapter skip) and the Confirm button
-  // (center press-and-hold = chapter selection). No-op on Xteink / when the
-  // setting is off.
+  // Touch page nav; center hold opens chapter selection (the Confirm analogue).
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer);
 
   // Enter chapter selection activity (Confirm release, or a center touch-and-hold).

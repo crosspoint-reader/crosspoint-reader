@@ -21,28 +21,20 @@ class MappedInputManager {
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
-  // Reusable touch "back" gesture: a tap released in the top-left corner, OR a tap
-  // on the header back area registered by the theme. Folded into Back's press/
-  // release edges, so every screen gets it with no per-activity code. False on
-  // non-touch devices.
+  // Touch "back" gesture: a tap on the theme's header Back target, or in the
+  // top-left corner. Folded into Back's edges, so every screen gets it for free.
   bool wasBackGesture() const;
-  // One-shot: if a tap this frame hit a registered interactive element (theme
-  // draw methods register them via TouchRegistry), returns true and writes the
-  // element's id. Activities treat the id as "select + activate". False on
-  // non-touch devices or when the tap missed every target.
+  // True (and writes the id) if a tap this frame hit a TouchRegistry item.
+  // Activities treat the id as "select + activate". False on non-touch devices.
   bool wasItemTapped(int& id) const;
-  // Press-edge analogue of wasItemTapped: fires on touch-DOWN over an item, so the
-  // activity can move its selection to that item (showing the selected state) before
-  // release. Release still activates via wasItemTapped. Mirrors button nav (move
-  // selection, then confirm).
+  // Press-edge of wasItemTapped: fires on touch-DOWN over an item so the activity
+  // can show it selected before release. Mirrors button nav (move, then confirm).
   bool wasItemTouchedDown(int& id) const;
-  // Long-press variant of wasItemTapped: true on release of a touch over an item
-  // held past the long-press threshold (a subset of wasItemTapped's releases, so
-  // check this first). Lets a screen distinguish tap vs press-and-hold on touch.
+  // Subset of wasItemTapped's releases held past the long-press threshold (check
+  // this first). Distinguishes tap vs press-and-hold.
   bool wasItemLongPressed(int& id) const;
-  // Like wasItemTapped, but for tab-bar tabs (id = tab index) and cover/card
-  // targets (id = item index). Distinct kinds so screens with both a list and a
-  // tab bar / cover (Home, Settings) don't confuse them.
+  // wasItemTapped for tab-bar tabs (id = tab index) and cover/card targets
+  // (id = item index). Distinct kinds so a screen with both doesn't confuse them.
   bool wasTabTapped(int& id) const;
   bool wasCoverTapped(int& id) const;
   bool wasAnyPressed() const;

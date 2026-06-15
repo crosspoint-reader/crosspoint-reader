@@ -8,15 +8,10 @@
 #include "components/themes/BaseTheme.h"  // Rect
 
 // Frame-scoped registry of tappable UI elements. Theme draw methods record each
-// interactive element's LOGICAL rect + id during render() (on the render task);
-// the input layer hit-tests a tap against it during the next loop() (main task).
-//
-// Lock-free single-writer (render) / single-reader (loop) via double buffering:
-// render writes the back buffer and publish() atomically flips it to live, so the
-// reader never observes a half-built frame. No per-frame heap allocation.
-//
-// Runtime-gated: disabled on boards without touch (setEnabled(gpio.hasTouch())),
-// so add()/hitTest() are a single branch on the C3.
+// element's logical rect + id during render() (render task); the input layer
+// hit-tests a tap in the next loop() (main task). Lock-free via double buffering:
+// render writes the back buffer, publish() flips it live. No per-frame heap.
+// Runtime-gated off on boards without touch (setEnabled).
 class TouchRegistry {
  public:
   enum Kind : uint8_t { Item = 0, Back = 1, Tab = 2, Cover = 3 };

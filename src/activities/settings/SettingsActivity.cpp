@@ -115,11 +115,9 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   bool hasChangedCategory = false;
 
-  // A tap on a settings row selects + activates it in one gesture. The list is drawn
-  // with selectedIndex = selectedSettingIndex - 1 (row 0 is the category tab), so map
-  // the tapped 0-based row back by +1. (Category tab bar is tappable in a later phase.)
-  // Touch-down moves the selection to the pressed row (shows selected state); release
-  // toggles/activates it below. (Row 0 is the tab bar, so settings list id 0 -> index 1.)
+  // Tap a settings row to select + activate it. Row 0 is the tab bar, so the list
+  // is drawn at selectedSettingIndex - 1; map the tapped row back by +1. Touch-down
+  // shows it selected; release toggles/activates below.
   int downId = -1;
   if (mappedInput.wasItemTouchedDown(downId) && downId >= 0 && downId < settingsCount) {
     selectedSettingIndex = downId + 1;

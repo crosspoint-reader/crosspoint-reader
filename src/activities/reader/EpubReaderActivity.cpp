@@ -256,12 +256,8 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
-  // Touch reader controls mirror the side page buttons (left third = back, right
-  // third = forward, press-and-hold = long-press behavior) and the Confirm
-  // button (center press-and-hold = open menu). The top-left Back corner is
-  // consumed by wasReleased(Back) earlier, so it never reaches here. No-op on
-  // Xteink / when the setting is off. wasTouchTap is idempotent within a frame,
-  // so reading it here and again below is safe.
+  // Touch page nav (idempotent within a frame, so read here and again below). The
+  // top-left Back corner is consumed by wasReleased(Back) above, never reaching here.
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer);
 
   // Enter reader menu activity (Confirm release, or a center touch-and-hold).

@@ -179,12 +179,9 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
-  // A tap on a menu button selects + activates it. The button menu registers
-  // menu-local ids (it is drawn with selectorIndex offset by recentBooks.size()),
-  // so map the tapped id back into the global selector space. (The recent-book
-  // cover is a separate, single-item draw path — tappable in a later phase.)
-  // Touch-down moves the selector to the pressed menu button (shows selected state),
-  // like Up/Down; release opens it below.
+  // Tap a menu button to select + activate it. The button menu registers
+  // menu-local ids (drawn with selectorIndex offset by recentBooks.size()), so map
+  // back into the global selector space. Touch-down shows it selected; release opens.
   int downId = -1;
   if (mappedInput.wasItemTouchedDown(downId)) {
     selectorIndex = static_cast<int>(recentBooks.size()) + downId;

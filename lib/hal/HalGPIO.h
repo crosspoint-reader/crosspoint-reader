@@ -59,11 +59,9 @@ class HalGPIO {
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
 
-  // True on the Xteink X3/X4 transflective C3 boards. Distinct from
-  // deviceIsX3/X4 (which only tell the two C3 variants apart and both stay
-  // "X4" on non-C3 boards): this keys off BoardConfig::ACTIVE.board, so it is
-  // the reliable "is this an Xteink device" check used to gate features that
-  // are Xteink-only (sunlight fading fix) or non-Xteink-only (touch controls).
+  // True on the Xteink X3/X4 boards. Unlike deviceIsX3/X4 (which both stay "X4"
+  // on non-C3 boards), this keys off BoardConfig::ACTIVE.board, so it reliably
+  // gates Xteink-only features (sunlight fix) and non-Xteink-only ones (touch).
   bool isXteinkDevice() const;
 
   // Start button GPIO and setup SPI for screen and SD card

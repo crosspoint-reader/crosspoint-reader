@@ -57,22 +57,19 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-// Top-left corner of the panel (panel-native, normalized). Generous so it's easy
-// to hit; v1 is not yet orientation-mapped (see wasBackGesture NOTE in header).
+// Top-left corner fallback, as a fraction of the logical screen. Generous to hit.
 static constexpr float BACK_GESTURE_FRAC_X = 0.22f;
 static constexpr float BACK_GESTURE_FRAC_Y = 0.12f;
 
 bool MappedInputManager::wasBackGesture() const {
   float nx = 0.0f, ny = 0.0f;
   if (!gpio.wasTouchTap(nx, ny)) return false;
-  // A tap on the theme's header back area (orientation-mapped) acts as Back.
   int lx = 0, ly = 0;
   renderer.tapToLogical(nx, ny, lx, ly);
+  // A tap on the theme's header Back target acts as Back.
   int id = 0;
   if (TouchRegistry::getInstance().hitTest(lx, ly, TouchRegistry::Back, id)) return true;
-  // Fallback corner gesture: top-left of the LOGICAL screen (orientation-mapped), so
-  // it lands on the visual top-left in every orientation and works on screens with no
-  // header/Back target (e.g. the reader).
+  // Else the top-left corner, for screens with no Back target (e.g. the reader).
   return lx <= renderer.getScreenWidth() * BACK_GESTURE_FRAC_X &&
          ly <= renderer.getScreenHeight() * BACK_GESTURE_FRAC_Y;
 }

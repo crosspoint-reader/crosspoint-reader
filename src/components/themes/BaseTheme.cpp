@@ -355,9 +355,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
-  // Left strip of the header is a tap-to-go-back zone (orientation-mapped; the
-  // title is centered so this area is normally empty). Mirrors the legacy corner
-  // gesture but as a real, theme-positioned target.
+  // Left strip of the header is a tap-to-go-back zone (title is centered, so it's empty).
   TouchRegistry::getInstance().add(Rect{rect.x, rect.y, 64, rect.height + 8}, -1, TouchRegistry::Back);
 
   // Hide last battery draw
