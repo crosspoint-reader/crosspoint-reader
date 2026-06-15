@@ -384,30 +384,13 @@ void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineH
     const int hi = std::max(anchorFlatIndex, cursorIdx);
     for (int i = lo; i <= hi; i++) {
       drawSingleHighlight(renderer, lineHeight, i);
-      // Also highlight any paired continuation half that falls outside [lo, hi].
-      // Navigation stops the cursor on the first half of a hyphenated pair, so
-      // the second half sits at hi+1 and would otherwise be skipped. The guard
-      // prevents double-drawing halves already covered by the loop.
-      const auto* w = getWordAt(i);
-      if (!w) continue;
-      if (w->continuationIndex >= 0 && (w->continuationIndex < lo || w->continuationIndex > hi)) {
-        drawSingleHighlight(renderer, lineHeight, w->continuationIndex);
-      }
-      if (w->continuationOf >= 0 && (w->continuationOf < lo || w->continuationOf > hi)) {
-        drawSingleHighlight(renderer, lineHeight, w->continuationOf);
-      }
+      drawContinuationsIfOutside(renderer, lineHeight, getWordAt(i), lo, hi);
     }
   } else {
     const int selIdx = getCurrentFlatIndex();
     if (selIdx < 0) return;
     drawSingleHighlight(renderer, lineHeight, selIdx);
-    const auto* sel = getWordAt(selIdx);
-    if (sel && sel->continuationIndex >= 0) {
-      drawSingleHighlight(renderer, lineHeight, sel->continuationIndex);
-    }
-    if (sel && sel->continuationOf >= 0) {
-      drawSingleHighlight(renderer, lineHeight, sel->continuationOf);
-    }
+    drawContinuationsIfOutside(renderer, lineHeight, getWordAt(selIdx), selIdx, selIdx);
   }
 }
 
@@ -416,6 +399,17 @@ void WordSelectNavigator::drawSingleHighlight(const GfxRenderer& renderer, int l
   if (!w) return;
   renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
   renderer.drawText(w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style);
+}
+
+void WordSelectNavigator::drawContinuationsIfOutside(const GfxRenderer& renderer, int lineHeight, const WordInfo* w,
+                                                     int lo, int hi) const {
+  if (!w) return;
+  if (w->continuationIndex >= 0 && (w->continuationIndex < lo || w->continuationIndex > hi)) {
+    drawSingleHighlight(renderer, lineHeight, w->continuationIndex);
+  }
+  if (w->continuationOf >= 0 && (w->continuationOf < lo || w->continuationOf > hi)) {
+    drawSingleHighlight(renderer, lineHeight, w->continuationOf);
+  }
 }
 
 WordSelectNavigator::Rect WordSelectNavigator::boundsForWord(int wordIndex, int lineHeight) const {

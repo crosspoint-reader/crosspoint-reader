@@ -234,6 +234,10 @@ class WordSelectNavigator {
   // chooses to highlight) and renderHighlightDifferential.
   void drawSingleHighlight(const GfxRenderer& renderer, int lineHeight, int wordIndex) const;
 
+  // Draw the hyphenated continuation partner(s) of w when they fall outside [lo, hi].
+  // No-op when w is nullptr or w has no continuation links.
+  void drawContinuationsIfOutside(const GfxRenderer& renderer, int lineHeight, const WordInfo* w, int lo, int hi) const;
+
   // Padded bounding rectangle for one word, matching renderHighlight's ±2 padding.
   // Returns Rect{0,0,0,0} when wordIndex is invalid.
   Rect boundsForWord(int wordIndex, int lineHeight) const;
