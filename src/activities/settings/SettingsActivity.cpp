@@ -113,11 +113,7 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
-  if (optionPopup.isActive()) {
-    if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-      return;
-    }
-  }
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   bool hasChangedCategory = false;
 
@@ -354,13 +350,7 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 void SettingsActivity::render(RenderLock&&) {
-  if (optionPopup.isActive()) {
-    const auto popupLabels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
-    optionPopup.render(renderer);
-    renderer.displayBuffer();
-    return;
-  }
+  if (optionPopup.processRender(renderer, mappedInput)) return;
 
   renderer.clearScreen();
 

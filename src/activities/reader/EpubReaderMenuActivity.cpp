@@ -46,11 +46,7 @@ void EpubReaderMenuActivity::onEnter() {
 void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderMenuActivity::loop() {
-  if (optionPopup.isActive()) {
-    if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-      return;
-    }
-  }
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   // Handle navigation
   buttonNavigator.onNext([this] {
@@ -99,13 +95,7 @@ void EpubReaderMenuActivity::loop() {
 }
 
 void EpubReaderMenuActivity::render(RenderLock&&) {
-  if (optionPopup.isActive()) {
-    const auto popupLabels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
-    optionPopup.render(renderer);
-    renderer.displayBuffer();
-    return;
-  }
+  if (optionPopup.processRender(renderer, mappedInput)) return;
 
   renderer.clearScreen();
 

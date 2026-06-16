@@ -70,16 +70,25 @@ class OptionPopup {
     return true;
   }
 
+  bool processRender(GfxRenderer& renderer, const MappedInputManager& input) const {
+    if (!active) return false;
+    const auto popupLabels = input.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
+    render(renderer);
+    renderer.displayBuffer();
+    return true;
+  }
+
   void render(GfxRenderer& renderer) const {
     if (!active) return;
-    GUI.drawOptionPopup(renderer, title, ownedStrings, selectedIndex);
+    GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex);
   }
 
   bool isActive() const { return active; }
 
  private:
   bool active = false;
-  const char* title = nullptr;
+  std::string title;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;
