@@ -15,10 +15,6 @@
 #include "fontIds.h"
 
 namespace {
-constexpr const char* PREVIEW_TEXT =
-    "The quick brown fox jumps over the lazy dog. "
-    "Pack my box with five dozen liquor jugs. "
-    "Sphinx of black quartz, judge my vow.";
 constexpr const char* ELLIPSIS_UTF8 = "\xe2\x80\xa6";
 constexpr int PREVIEW_PADDING = 12;
 constexpr int PREVIEW_HEIGHT_PERCENT = 30;
@@ -179,13 +175,14 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, b
   const int innerHeight = height - PREVIEW_PADDING - labelReserved;
   const int maxLines = std::max(1, innerHeight / (lineH + 2));
 
+  const char* previewText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
   if (auto* fcm = renderer.getFontCacheManager()) {
     char prewarmBuf[256];
-    snprintf(prewarmBuf, sizeof(prewarmBuf), "%s %s", PREVIEW_TEXT, ELLIPSIS_UTF8);
+    snprintf(prewarmBuf, sizeof(prewarmBuf), "%s %s", previewText, ELLIPSIS_UTF8);
     fcm->prewarmCache(fontId, prewarmBuf, 0x01);
   }
 
-  const auto lines = renderer.wrappedText(fontId, PREVIEW_TEXT, width, maxLines);
+  const auto lines = renderer.wrappedText(fontId, previewText, width, maxLines);
 
   int y = top + PREVIEW_PADDING;
   const int textBottomLimit = top + height - labelReserved;
