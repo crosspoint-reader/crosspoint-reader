@@ -960,58 +960,87 @@ void BaseTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const ch
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                 int selectedIndex) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const auto height10 = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto height12 = renderer.getLineHeight(UI_12_FONT_ID);
 
-  constexpr int itemSpacing = 6;
-  constexpr int innerPadding = 16;
-  constexpr int selectionHPadding = 8;
-  constexpr int selectionVPadding = 4;
+  const int optionFontId = metrics.optionPopupUseSmallFont ? UI_10_FONT_ID : UI_12_FONT_ID;
+  const EpdFontFamily::Style optionStyle =
+      metrics.optionPopupOptionFontBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+
+  const int itemSpacing = metrics.optionPopupItemSpacing;
+  const int innerPadding = metrics.optionPopupInnerPadding;
+  const int selectionHPadding = metrics.optionPopupSelectionHPadding;
+  const int selectionVPadding = metrics.optionPopupSelectionVPadding;
+
+  const int optionLineHeight = renderer.getLineHeight(optionFontId);
+  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int rowHeight = optionLineHeight + selectionVPadding * 2;
 
   int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD);
   for (const auto& opt : options) {
-    int w = renderer.getTextWidth(UI_10_FONT_ID, opt.c_str(), EpdFontFamily::BOLD);
+    int w = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
     if (w > maxTextWidth) maxTextWidth = w;
   }
 
-  const int optionCount = options.size();
-  const int listHeight = height10 * optionCount + itemSpacing * (optionCount - 1);
-  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10, pageWidth - 20);
-  const int contentHeight = height12 + 10 + listHeight;
+  const int optionCount = static_cast<int>(options.size());
+  const int listHeight = rowHeight * optionCount + itemSpacing * (optionCount - 1);
+  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10,
+                               pageWidth - metrics.optionPopupDialogSideMargin * 2);
+  const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
   const int dialogH = contentHeight + innerPadding * 2;
   const int dialogX = (pageWidth - dialogW) / 2;
   const int dialogY = (pageHeight - dialogH) / 2;
 
-  constexpr int border = 2;
-  renderer.fillRect(dialogX - border, dialogY - border, dialogW + border * 2, dialogH + border * 2, true);
-  renderer.fillRect(dialogX, dialogY, dialogW, dialogH, false);
+  const int frameThickness = metrics.popupFrameThickness;
+  const int frameRadius = metrics.popupCornerRadius;
+
+  if (frameRadius > 0) {
+    renderer.fillRoundedRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
+                             dialogH + frameThickness * 2, frameRadius + frameThickness, Color::White);
+    renderer.fillRoundedRect(dialogX, dialogY, dialogW, dialogH, frameRadius, Color::Black);
+    renderer.fillRoundedRect(dialogX + frameThickness, dialogY + frameThickness, dialogW - frameThickness * 2,
+                             dialogH - frameThickness * 2,
+                             frameRadius - frameThickness > 0 ? frameRadius - frameThickness : 0, Color::White);
+  } else {
+    renderer.fillRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
+                      dialogH + frameThickness * 2, true);
+    renderer.fillRect(dialogX, dialogY, dialogW, dialogH, false);
+  }
 
   int y = dialogY + innerPadding;
 
   renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::BOLD);
-  y += height12 + 10;
+  y += titleLineHeight + metrics.optionPopupTitleGap;
 
   for (int i = 0; i < optionCount; i++) {
-    const int itemY = y + i * (height10 + itemSpacing);
+    const int itemY = y + i * (rowHeight + itemSpacing);
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
-    const int labelWidth = renderer.getTextWidth(UI_10_FONT_ID, labelText, EpdFontFamily::BOLD);
-    const int labelX = (pageWidth - labelWidth) / 2;
 
-    Rect itemRect(labelX - selectionHPadding, itemY - selectionVPadding, labelWidth + selectionHPadding * 2,
-                  height10 + selectionVPadding * 2);
+    const int itemRectX = dialogX + innerPadding;
+    const int itemRectW = dialogW - innerPadding * 2;
+    const int selectionRadius = metrics.optionPopupSelectionRadius;
 
-    const int textH = renderer.getLineHeight(UI_10_FONT_ID);
-    const int textW = renderer.getTextWidth(UI_10_FONT_ID, labelText, EpdFontFamily::BOLD);
-    const int textY = itemRect.y + (itemRect.height - textH) / 2;
-    const int textX = itemRect.x + (itemRect.width - textW) / 2;
-    if (selected) {
-      renderer.fillRect(itemRect.x, itemRect.y, itemRect.width, itemRect.height);
-      renderer.drawText(UI_10_FONT_ID, textX, textY, labelText, false, EpdFontFamily::BOLD);
-    } else {
-      renderer.drawText(UI_10_FONT_ID, textX, textY, labelText, true, EpdFontFamily::BOLD);
+    if (metrics.optionPopupDrawAllRows || selected) {
+      Color rowColor;
+      if (selected) {
+        rowColor = metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black;
+      } else {
+        rowColor = Color::White;
+      }
+      if (selectionRadius > 0) {
+        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, rowColor);
+      } else {
+        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
+      }
     }
+
+    const int textH = renderer.getLineHeight(optionFontId);
+    const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
+    const int textY = itemY + (rowHeight - textH) / 2;
+    const int textX = itemRectX + (itemRectW - textW) / 2;
+    const bool invertText = selected ? !metrics.optionPopupSelectionLight : true;
+    renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
   }
 }

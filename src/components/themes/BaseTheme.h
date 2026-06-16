@@ -91,6 +91,18 @@ struct ThemeMetrics {
   bool popupProgressFillInverted;
   bool popupProgressOutlineInverted;
 
+  int optionPopupItemSpacing;
+  int optionPopupInnerPadding;
+  int optionPopupSelectionHPadding;
+  int optionPopupSelectionVPadding;
+  int optionPopupTitleGap;
+  bool optionPopupUseSmallFont;
+  bool optionPopupOptionFontBold;
+  int optionPopupSelectionRadius;
+  bool optionPopupSelectionLight;
+  bool optionPopupDrawAllRows;
+  int optionPopupDialogSideMargin;
+
   int textFieldHorizontalPadding;
   int textFieldNormalThickness;
   int textFieldCursorThickness;
@@ -162,6 +174,17 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupProgressClampPercent = false,
                                  .popupProgressFillInverted = true,
                                  .popupProgressOutlineInverted = true,
+                                 .optionPopupItemSpacing = 6,
+                                 .optionPopupInnerPadding = 16,
+                                 .optionPopupSelectionHPadding = 8,
+                                 .optionPopupSelectionVPadding = 4,
+                                 .optionPopupTitleGap = 10,
+                                 .optionPopupUseSmallFont = true,
+                                 .optionPopupOptionFontBold = true,
+                                 .optionPopupSelectionRadius = 0,
+                                 .optionPopupSelectionLight = false,
+                                 .optionPopupDrawAllRows = false,
+                                 .optionPopupDialogSideMargin = 20,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
