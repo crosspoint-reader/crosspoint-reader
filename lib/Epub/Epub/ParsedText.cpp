@@ -25,7 +25,6 @@ constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // before giving up. 64 is a hedge for pathological cases like long numeric tokens.
 constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
 constexpr size_t MIN_JUSTIFY_GAPS = 1;
-constexpr int MAX_JUSTIFY_EXTRA_PX = 12;
 
 // Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
 bool mayContainRtlBytes(const char* str) {
@@ -179,8 +178,12 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
 
 int computeJustifyExtra(const int spareSpace, const size_t gapCount) {
   if (gapCount < MIN_JUSTIFY_GAPS || spareSpace <= 0) return 0;
-  const int extra = spareSpace / static_cast<int>(gapCount);
-  return extra <= MAX_JUSTIFY_EXTRA_PX ? extra : 0;
+  // Distribute the spare space evenly across gaps. Do NOT bail out to 0 when the
+  // per-gap stretch is large: a sparse line (few words on a wide page) legitimately
+  // needs big gaps to reach the margin. Returning 0 there disables justification for
+  // that line, leaving it right-aligned (RTL) / left-aligned (LTR) — the mismatched
+  // alignment bug. Match the un-capped behavior of the old code.
+  return spareSpace / static_cast<int>(gapCount);
 }
 
 // Removes every soft hyphen in-place so rendered glyphs match measured widths.
