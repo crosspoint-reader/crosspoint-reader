@@ -72,12 +72,10 @@ static WordSelectNavigator makeHyphenatedFixture() {
   WordSelectNavigator::WordInfo w2 = mkWord("under-", 200, 0, 50, 0);
   w2.textOffset = poolAppendString(pool, "under-");
   w2.lookupOffset = w2.textOffset;
-  w2.continuationIndex = 3;  // points to second half
 
   WordSelectNavigator::WordInfo w3 = mkWord("stand", 200, 20, 45, 1);
   w3.textOffset = poolAppendString(pool, "stand");
   w3.lookupOffset = w3.textOffset;
-  w3.continuationOf = 2;  // points back to first half
 
   WordSelectNavigator::WordInfo w4 = mkWord("wordD", 260, 20, 40, 1);
   w4.textOffset = poolAppendString(pool, "wordD");
@@ -90,6 +88,11 @@ static WordSelectNavigator makeHyphenatedFixture() {
   std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3, w4, w5};
   std::vector<WordSelectNavigator::Row> rows;
   WordSelectNavigator::organizeIntoRows(words, rows);
+  // Run the real merge logic (the activity's path) so continuation links AND the
+  // merged, hyphen-stripped lookup text ("understand") match production exactly —
+  // hand-setting continuationIndex/continuationOf here would leave getLookup()
+  // identical to getDisplay() and mask hyphen-stripping bugs in phrase building.
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, pool);
 
   WordSelectNavigator nav;
   nav.load(std::move(words), std::move(rows), std::move(pool));
@@ -345,12 +348,10 @@ static WordSelectNavigator makeHyphenBothFixture() {
   WordSelectNavigator::WordInfo w2 = mkWord("under-", 200, 0, 50, 0);
   w2.textOffset = poolAppendString(pool, "under-");
   w2.lookupOffset = w2.textOffset;
-  w2.continuationIndex = 3;
 
   WordSelectNavigator::WordInfo w3 = mkWord("-stand", 200, 20, 45, 1);
   w3.textOffset = poolAppendString(pool, "-stand");
   w3.lookupOffset = w3.textOffset;
-  w3.continuationOf = 2;
 
   WordSelectNavigator::WordInfo w4 = mkWord("wordD", 260, 20, 40, 1);
   w4.textOffset = poolAppendString(pool, "wordD");
@@ -363,6 +364,9 @@ static WordSelectNavigator makeHyphenBothFixture() {
   std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3, w4, w5};
   std::vector<WordSelectNavigator::Row> rows;
   WordSelectNavigator::organizeIntoRows(words, rows);
+  // See makeHyphenatedFixture: run the real merge so getLookup() reflects the
+  // hyphen-stripped, merged text rather than mirroring getDisplay().
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, pool);
 
   WordSelectNavigator nav;
   nav.load(std::move(words), std::move(rows), std::move(pool));
@@ -597,8 +601,9 @@ static void testRenderHighlightMultiSelectHyphenatedFirstHalf() {
   std::string confirmedPhrase;
   auto action = nav.handleMultiSelectInput(input, confirmedPhrase);
   CHECK(action == WordSelectNavigator::MultiSelectAction::PhraseReady, "confirm yields PhraseReady");
-  CHECK(confirmedPhrase == "wordB under- stand",
-        "phrase includes second half even though it lay outside the flat-index range");
+  CHECK(confirmedPhrase == "wordB understand",
+        "phrase uses merged hyphen-free lookup text even though the second half lay "
+        "outside the flat-index range");
 }
 
 // Multi-select highlight: when the range starts on the second half (anchor on
@@ -656,8 +661,50 @@ static void testRenderHighlightMultiSelectHyphenatedSecondHalf() {
   std::string confirmedPhrase;
   auto action = nav.handleMultiSelectInput(input, confirmedPhrase);
   CHECK(action == WordSelectNavigator::MultiSelectAction::PhraseReady, "confirm yields PhraseReady");
-  CHECK(confirmedPhrase == "under- stand wordD",
-        "phrase includes first half even though it lay outside the flat-index range");
+  CHECK(confirmedPhrase == "understand wordD",
+        "phrase uses merged hyphen-free lookup text even though the first half lay "
+        "outside the flat-index range");
+}
+
+// Multi-select phrase spanning both halves of a pair (anchor on 'wordA', cursor on
+// 'wordE'): the merged lookup text must appear exactly once, not duplicated by
+// emitting both 'under-' and 'stand' as separate lookup tokens.
+static void testBuildPhraseHyphenatedPairNotDuplicated() {
+  std::printf("testBuildPhraseHyphenatedPairNotDuplicated\n");
+  WordSelectNavigator nav = makeHyphenatedFixture();
+  MappedInputManager input;
+  GfxRenderer renderer;
+
+  navigateTo(nav, input, renderer, "wordA");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "wordA") == 0, "cursor on 'wordA'");
+
+  // Enter multi-select with anchor on wordA (index 0).
+  input.reset();
+  input.setPressed(MappedInputManager::Button::Confirm, true);
+  input.setHeldTime(700);
+  std::string phrase;
+  nav.handleMultiSelectInput(input, phrase);
+  CHECK(nav.isMultiSelecting(), "entered multi-select mode");
+
+  // Consume the release.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  nav.handleMultiSelectInput(input, phrase);
+
+  // Move cursor to wordE (index 5), so range is wordA(0)..wordE(5) and contains
+  // both halves of the pair (under-=2, stand=3).
+  navigateTo(nav, input, renderer, "wordE");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "wordE") == 0, "cursor on 'wordE'");
+  CHECK(nav.isMultiSelecting(), "still in multi-select");
+
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  std::string confirmedPhrase;
+  auto action = nav.handleMultiSelectInput(input, confirmedPhrase);
+  CHECK(action == WordSelectNavigator::MultiSelectAction::PhraseReady, "confirm yields PhraseReady");
+  CHECK(confirmedPhrase == "wordA wordB understand wordD wordE",
+        "merged lookup text for the pair appears exactly once when both halves are "
+        "inside the selected range");
 }
 
 // Run Tests A–E against any two-row fixture with the same layout as
@@ -886,6 +933,7 @@ int main() {
   testRenderHighlightDifferentialFallback();
   testRenderHighlightMultiSelectHyphenatedFirstHalf();
   testRenderHighlightMultiSelectHyphenatedSecondHalf();
+  testBuildPhraseHyphenatedPairNotDuplicated();
   testHyphenBothEndsNotPaired();
   testMergeLookupBothHyphens();
   testHyphenEndOnly();
