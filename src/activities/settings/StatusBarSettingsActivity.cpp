@@ -115,6 +115,10 @@ void StatusBarSettingsActivity::onEnter() {
     SETTINGS.clockFormat = 0;
   }
 
+  if (SETTINGS.statusBarClock >= STATUS_BAR_CLOCK_ITEMS) {
+    SETTINGS.statusBarClock = CrossPointSettings::STATUS_BAR_CLOCK_MODE::STATUS_BAR_CLOCK_HIDE;
+  }
+
   requestUpdate();
 }
 
