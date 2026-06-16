@@ -79,7 +79,7 @@ class OptionPopup {
     return true;
   }
 
-  void render(GfxRenderer& renderer) const {
+  void render(const GfxRenderer& renderer) const {
     if (!active) return;
     GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex);
   }
