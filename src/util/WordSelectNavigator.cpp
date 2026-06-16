@@ -116,11 +116,19 @@ std::string WordSelectNavigator::buildPhrase(int fromIdx, int toIdx) const {
   const int lo = std::min(fromIdx, toIdx);
   const int hi = std::max(fromIdx, toIdx);
   std::string phrase;
+  // Skip index for a hyphenated pair's second half once its merged lookup text
+  // has already been emitted via the first half, so the pair isn't duplicated.
+  int skipIdx = -1;
   for (int i = lo; i <= hi; i++) {
+    if (i == skipIdx) continue;
     const auto* w = getWordAt(i);
     if (!w) continue;
     if (!phrase.empty()) phrase += ' ';
-    phrase += getDisplay(*w);
+    // getLookup() returns the merged, hyphen-stripped text for a hyphenated
+    // pair (e.g. "externity" for "exter-" + "nity"), matching the single-word
+    // lookup path. For ordinary words it equals the display text.
+    phrase += getLookup(*w);
+    if (w->continuationIndex >= 0) skipIdx = w->continuationIndex;
   }
   return phrase;
 }
@@ -384,18 +392,13 @@ void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineH
     const int hi = std::max(anchorFlatIndex, cursorIdx);
     for (int i = lo; i <= hi; i++) {
       drawSingleHighlight(renderer, lineHeight, i);
+      drawContinuationsIfOutside(renderer, lineHeight, getWordAt(i), lo, hi);
     }
   } else {
     const int selIdx = getCurrentFlatIndex();
     if (selIdx < 0) return;
     drawSingleHighlight(renderer, lineHeight, selIdx);
-    const auto* sel = getWordAt(selIdx);
-    if (sel && sel->continuationIndex >= 0) {
-      drawSingleHighlight(renderer, lineHeight, sel->continuationIndex);
-    }
-    if (sel && sel->continuationOf >= 0) {
-      drawSingleHighlight(renderer, lineHeight, sel->continuationOf);
-    }
+    drawContinuationsIfOutside(renderer, lineHeight, getWordAt(selIdx), selIdx, selIdx);
   }
 }
 
@@ -404,6 +407,17 @@ void WordSelectNavigator::drawSingleHighlight(const GfxRenderer& renderer, int l
   if (!w) return;
   renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
   renderer.drawText(w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style);
+}
+
+void WordSelectNavigator::drawContinuationsIfOutside(const GfxRenderer& renderer, int lineHeight, const WordInfo* w,
+                                                     int lo, int hi) const {
+  if (!w) return;
+  if (w->continuationIndex >= 0 && (w->continuationIndex < lo || w->continuationIndex > hi)) {
+    drawSingleHighlight(renderer, lineHeight, w->continuationIndex);
+  }
+  if (w->continuationOf >= 0 && (w->continuationOf < lo || w->continuationOf > hi)) {
+    drawSingleHighlight(renderer, lineHeight, w->continuationOf);
+  }
 }
 
 WordSelectNavigator::Rect WordSelectNavigator::boundsForWord(int wordIndex, int lineHeight) const {

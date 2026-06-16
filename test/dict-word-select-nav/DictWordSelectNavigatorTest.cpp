@@ -72,12 +72,10 @@ static WordSelectNavigator makeHyphenatedFixture() {
   WordSelectNavigator::WordInfo w2 = mkWord("under-", 200, 0, 50, 0);
   w2.textOffset = poolAppendString(pool, "under-");
   w2.lookupOffset = w2.textOffset;
-  w2.continuationIndex = 3;  // points to second half
 
   WordSelectNavigator::WordInfo w3 = mkWord("stand", 200, 20, 45, 1);
   w3.textOffset = poolAppendString(pool, "stand");
   w3.lookupOffset = w3.textOffset;
-  w3.continuationOf = 2;  // points back to first half
 
   WordSelectNavigator::WordInfo w4 = mkWord("wordD", 260, 20, 40, 1);
   w4.textOffset = poolAppendString(pool, "wordD");
@@ -90,6 +88,11 @@ static WordSelectNavigator makeHyphenatedFixture() {
   std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3, w4, w5};
   std::vector<WordSelectNavigator::Row> rows;
   WordSelectNavigator::organizeIntoRows(words, rows);
+  // Run the real merge logic (the activity's path) so continuation links AND the
+  // merged, hyphen-stripped lookup text ("understand") match production exactly —
+  // hand-setting continuationIndex/continuationOf here would leave getLookup()
+  // identical to getDisplay() and mask hyphen-stripping bugs in phrase building.
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, pool);
 
   WordSelectNavigator nav;
   nav.load(std::move(words), std::move(rows), std::move(pool));
@@ -345,12 +348,10 @@ static WordSelectNavigator makeHyphenBothFixture() {
   WordSelectNavigator::WordInfo w2 = mkWord("under-", 200, 0, 50, 0);
   w2.textOffset = poolAppendString(pool, "under-");
   w2.lookupOffset = w2.textOffset;
-  w2.continuationIndex = 3;
 
   WordSelectNavigator::WordInfo w3 = mkWord("-stand", 200, 20, 45, 1);
   w3.textOffset = poolAppendString(pool, "-stand");
   w3.lookupOffset = w3.textOffset;
-  w3.continuationOf = 2;
 
   WordSelectNavigator::WordInfo w4 = mkWord("wordD", 260, 20, 40, 1);
   w4.textOffset = poolAppendString(pool, "wordD");
@@ -363,6 +364,9 @@ static WordSelectNavigator makeHyphenBothFixture() {
   std::vector<WordSelectNavigator::WordInfo> words = {w0, w1, w2, w3, w4, w5};
   std::vector<WordSelectNavigator::Row> rows;
   WordSelectNavigator::organizeIntoRows(words, rows);
+  // See makeHyphenatedFixture: run the real merge so getLookup() reflects the
+  // hyphen-stripped, merged text rather than mirroring getDisplay().
+  WordSelectNavigator::mergeHyphenatedPairs(words, rows, pool);
 
   WordSelectNavigator nav;
   nav.load(std::move(words), std::move(rows), std::move(pool));
@@ -545,6 +549,162 @@ static void testRenderHighlightDifferentialFallback() {
   const int underIdx = nav.getCurrentFlatIndex();
   auto result2 = nav.renderHighlightDifferential(renderer, 16, -1, underIdx);
   CHECK(!result2.has_value(), "hyphenated word: nullopt (fast path not supported)");
+}
+
+// Multi-select highlight: continuation half outside [lo,hi] is still drawn.
+// Anchor on wordB (index 1), cursor on under- (index 2, first half).
+// The second half 'stand' (index 3) lies outside [1,2] and must also be drawn.
+static void testRenderHighlightMultiSelectHyphenatedFirstHalf() {
+  std::printf("testRenderHighlightMultiSelectHyphenatedFirstHalf\n");
+  WordSelectNavigator nav = makeHyphenatedFixture();
+  MappedInputManager input;
+  GfxRenderer renderer;
+
+  // Navigate to under- to position the cursor there.
+  navigateTo(nav, input, renderer, "under-");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "under-") == 0, "cursor on 'under-'");
+
+  // Enter multi-select with anchor on under- (index 2), then manually simulate
+  // an anchor one word earlier (wordB, index 1) by entering multi-select after
+  // navigating back one step.
+  navigateTo(nav, input, renderer, "wordB");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "wordB") == 0, "cursor on 'wordB'");
+
+  // Enter multi-select mode with anchor at wordB.
+  input.reset();
+  input.setPressed(MappedInputManager::Button::Confirm, true);
+  input.setHeldTime(700);  // > 600ms default threshold
+  std::string phrase;
+  nav.handleMultiSelectInput(input, phrase);
+  CHECK(nav.isMultiSelecting(), "entered multi-select mode");
+
+  // Consume the release.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  nav.handleMultiSelectInput(input, phrase);
+
+  // Move cursor to under- (first half, index 2).
+  navigateTo(nav, input, renderer, "under-");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "under-") == 0, "cursor on 'under-' in multi-select");
+  CHECK(nav.isMultiSelecting(), "still in multi-select");
+
+  // Range is wordB(1)..under-(2). 'stand'(3) is outside but is under-'s continuationIndex.
+  // Expect 3 fillRects: wordB, under-, stand.
+  renderer.resetCounters();
+  nav.renderHighlight(renderer, 16);
+  CHECK(renderer.fillRectCallCount == 3, "multi-select ending on first half: 3 fillRects (wordB, under-, stand)");
+  CHECK(renderer.drawTextCallCount == 3, "multi-select ending on first half: 3 drawTexts");
+
+  // Confirm the selection and verify the phrase includes the continuation half.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  std::string confirmedPhrase;
+  auto action = nav.handleMultiSelectInput(input, confirmedPhrase);
+  CHECK(action == WordSelectNavigator::MultiSelectAction::PhraseReady, "confirm yields PhraseReady");
+  CHECK(confirmedPhrase == "wordB understand",
+        "phrase uses merged hyphen-free lookup text even though the second half lay "
+        "outside the flat-index range");
+}
+
+// Multi-select highlight: when the range starts on the second half (anchor on
+// 'stand', index 3), the first half 'under-' (index 2) lies outside [3, hi]
+// and must also be drawn.
+static void testRenderHighlightMultiSelectHyphenatedSecondHalf() {
+  std::printf("testRenderHighlightMultiSelectHyphenatedSecondHalf\n");
+  WordSelectNavigator nav = makeHyphenatedFixture();
+  MappedInputManager input;
+  GfxRenderer renderer;
+
+  CHECK(nav.getSelected() != nullptr && std::strcmp(nav.getDisplay(*nav.getSelected()), "wordD") == 0,
+        "fixture starts on 'wordD'");
+
+  // Row-nav Down from initial wordD position lands on stand (via row nav, exempt from snap).
+  // Navigate to wordD first, then Up to row 0, then Down to row 1 to land on stand.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Up, true);
+  nav.handleNavigation(input, renderer);
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Down, true);
+  nav.handleNavigation(input, renderer);
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "stand") == 0, "cursor on 'stand' (second half)");
+
+  // Enter multi-select with anchor on stand (index 3).
+  input.reset();
+  input.setPressed(MappedInputManager::Button::Confirm, true);
+  input.setHeldTime(700);
+  std::string phrase;
+  nav.handleMultiSelectInput(input, phrase);
+  CHECK(nav.isMultiSelecting(), "entered multi-select mode");
+
+  // Consume the release.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  nav.handleMultiSelectInput(input, phrase);
+
+  // Move cursor to wordD (index 4), so range is stand(3)..wordD(4).
+  // 'under-'(2) is outside [3,4] but is stand's continuationOf; must be drawn.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Right, true);
+  nav.handleNavigation(input, renderer);
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "wordD") == 0, "cursor on 'wordD'");
+  CHECK(nav.isMultiSelecting(), "still in multi-select");
+
+  // Expect 3 fillRects: under-, stand, wordD.
+  renderer.resetCounters();
+  nav.renderHighlight(renderer, 16);
+  CHECK(renderer.fillRectCallCount == 3, "multi-select starting on second half: 3 fillRects (under-, stand, wordD)");
+  CHECK(renderer.drawTextCallCount == 3, "multi-select starting on second half: 3 drawTexts");
+
+  // Confirm the selection and verify the phrase includes the first half of the pair.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  std::string confirmedPhrase;
+  auto action = nav.handleMultiSelectInput(input, confirmedPhrase);
+  CHECK(action == WordSelectNavigator::MultiSelectAction::PhraseReady, "confirm yields PhraseReady");
+  CHECK(confirmedPhrase == "understand wordD",
+        "phrase uses merged hyphen-free lookup text even though the first half lay "
+        "outside the flat-index range");
+}
+
+// Multi-select phrase spanning both halves of a pair (anchor on 'wordA', cursor on
+// 'wordE'): the merged lookup text must appear exactly once, not duplicated by
+// emitting both 'under-' and 'stand' as separate lookup tokens.
+static void testBuildPhraseHyphenatedPairNotDuplicated() {
+  std::printf("testBuildPhraseHyphenatedPairNotDuplicated\n");
+  WordSelectNavigator nav = makeHyphenatedFixture();
+  MappedInputManager input;
+  GfxRenderer renderer;
+
+  navigateTo(nav, input, renderer, "wordA");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "wordA") == 0, "cursor on 'wordA'");
+
+  // Enter multi-select with anchor on wordA (index 0).
+  input.reset();
+  input.setPressed(MappedInputManager::Button::Confirm, true);
+  input.setHeldTime(700);
+  std::string phrase;
+  nav.handleMultiSelectInput(input, phrase);
+  CHECK(nav.isMultiSelecting(), "entered multi-select mode");
+
+  // Consume the release.
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  nav.handleMultiSelectInput(input, phrase);
+
+  // Move cursor to wordE (index 5), so range is wordA(0)..wordE(5) and contains
+  // both halves of the pair (under-=2, stand=3).
+  navigateTo(nav, input, renderer, "wordE");
+  CHECK(std::strcmp(nav.getDisplay(*nav.getSelected()), "wordE") == 0, "cursor on 'wordE'");
+  CHECK(nav.isMultiSelecting(), "still in multi-select");
+
+  input.reset();
+  input.setReleased(MappedInputManager::Button::Confirm, true);
+  std::string confirmedPhrase;
+  auto action = nav.handleMultiSelectInput(input, confirmedPhrase);
+  CHECK(action == WordSelectNavigator::MultiSelectAction::PhraseReady, "confirm yields PhraseReady");
+  CHECK(confirmedPhrase == "wordA wordB understand wordD wordE",
+        "merged lookup text for the pair appears exactly once when both halves are "
+        "inside the selected range");
 }
 
 // Run Tests A–E against any two-row fixture with the same layout as
@@ -771,6 +931,9 @@ int main() {
   testRenderHighlightHyphenatedBothHalves();
   testRenderHighlightHyphenatedFromSecondHalf();
   testRenderHighlightDifferentialFallback();
+  testRenderHighlightMultiSelectHyphenatedFirstHalf();
+  testRenderHighlightMultiSelectHyphenatedSecondHalf();
+  testBuildPhraseHyphenatedPairNotDuplicated();
   testHyphenBothEndsNotPaired();
   testMergeLookupBothHyphens();
   testHyphenEndOnly();
