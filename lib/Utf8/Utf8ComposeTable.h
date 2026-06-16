@@ -226,5 +226,4 @@ static const Utf8ComposeEntry kUtf8ComposeTable[] = {
     {0x1ECD, 0x031B, 0x1EE3}, {0x1ECE, 0x031B, 0x1EDE}, {0x1ECF, 0x031B, 0x1EDF}, {0x1EE4, 0x031B, 0x1EF0},
     {0x1EE5, 0x031B, 0x1EF1}, {0x1EE6, 0x031B, 0x1EEC}, {0x1EE7, 0x031B, 0x1EED},
 };
-static constexpr int kUtf8ComposeTableSize =
-    sizeof(kUtf8ComposeTable) / sizeof(kUtf8ComposeTable[0]);
+static constexpr int kUtf8ComposeTableSize = sizeof(kUtf8ComposeTable) / sizeof(kUtf8ComposeTable[0]);
