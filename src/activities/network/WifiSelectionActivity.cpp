@@ -26,6 +26,7 @@ void WifiSelectionActivity::onEnter() {
   // Reset state
   selectedNetworkIndex = 0;
   networks.clear();
+  realNetworkCount = 0;
   state = WifiSelectionState::SCANNING;
   selectedSSID.clear();
   connectedIP.clear();
@@ -111,7 +112,11 @@ void WifiSelectionActivity::processWifiScanResults() {
   }
 
   if (scanResult == WIFI_SCAN_FAILED) {
+    networks.clear();
+    realNetworkCount = 0;
+    appendHiddenNetworkEntry();
     state = WifiSelectionState::NETWORK_LIST;
+    selectedNetworkIndex = 0;
     requestUpdate();
     return;
   }
@@ -153,10 +158,24 @@ void WifiSelectionActivity::processWifiScanResults() {
     return a.rssi > b.rssi;
   });
 
+  realNetworkCount = networks.size();
+  appendHiddenNetworkEntry();
+
   WiFi.scanDelete();
   state = WifiSelectionState::NETWORK_LIST;
   selectedNetworkIndex = 0;
   requestUpdate();
+}
+
+void WifiSelectionActivity::appendHiddenNetworkEntry() {
+  // Synthetic list entry that lets the user type an SSID that is not broadcast.
+  // ESP32 can join hidden APs as long as the SSID is supplied to WiFi.begin().
+  WifiNetworkInfo placeholder;
+  placeholder.rssi = 0;
+  placeholder.isEncrypted = true;  // Treated as encrypted; an empty password still connects open APs
+  placeholder.hasSavedPassword = false;
+  placeholder.isHiddenPlaceholder = true;
+  networks.push_back(std::move(placeholder));
 }
 
 void WifiSelectionActivity::selectNetwork(const int index) {
@@ -165,6 +184,13 @@ void WifiSelectionActivity::selectNetwork(const int index) {
   }
 
   const auto& network = networks[index];
+
+  // Synthetic "Add hidden network..." entry: prompt the user to type the SSID first
+  if (network.isHiddenPlaceholder) {
+    promptHiddenSsid();
+    return;
+  }
+
   selectedSSID = network.ssid;
   selectedRequiresPassword = network.isEncrypted;
   usedSavedPassword = false;
@@ -183,25 +209,55 @@ void WifiSelectionActivity::selectNetwork(const int index) {
   }
 
   if (selectedRequiresPassword) {
-    // Show password entry
-    state = WifiSelectionState::PASSWORD_ENTRY;
-    // Don't allow screen updates while changing activity
-    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
-                                                                   "",  // No initial text
-                                                                   64,  // Max password length
-                                                                   InputType::Password),
-                           [this](const ActivityResult& result) {
-                             if (result.isCancelled) {
-                               state = WifiSelectionState::NETWORK_LIST;
-                             } else {
-                               enteredPassword = std::get<KeyboardResult>(result.data).text;
-                               // state will be updated in next loop iteration
-                             }
-                           });
+    promptPasswordEntry();
   } else {
     // Connect directly for open networks
     attemptConnection();
   }
+}
+
+void WifiSelectionActivity::promptPasswordEntry() {
+  // Show password entry
+  state = WifiSelectionState::PASSWORD_ENTRY;
+  // Don't allow screen updates while changing activity
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
+                                                                 "",  // No initial text
+                                                                 64,  // Max password length
+                                                                 InputType::Password),
+                         [this](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             state = WifiSelectionState::NETWORK_LIST;
+                           } else {
+                             enteredPassword = std::get<KeyboardResult>(result.data).text;
+                             // state will be updated in next loop iteration
+                           }
+                         });
+}
+
+void WifiSelectionActivity::promptHiddenSsid() {
+  selectedSSID.clear();
+  selectedRequiresPassword = true;  // Hidden networks are usually encrypted; empty password still joins open APs
+  usedSavedPassword = false;
+  enteredPassword.clear();
+  autoConnecting = false;
+
+  // Suppress rendering during the activity transition (see render()).
+  state = WifiSelectionState::HIDDEN_SSID_ENTRY;
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_SSID),
+                                                                 "",  // No initial text
+                                                                 32,  // Max SSID length (IEEE 802.11: 32 bytes)
+                                                                 InputType::Text),
+                         [this](const ActivityResult& result) {
+                           if (result.isCancelled) {
+                             state = WifiSelectionState::NETWORK_LIST;
+                             return;
+                           }
+                           selectedSSID = std::get<KeyboardResult>(result.data).text;
+                           if (selectedSSID.empty()) {
+                             state = WifiSelectionState::NETWORK_LIST;
+                           }
+                           // Otherwise stay in HIDDEN_SSID_ENTRY; loop() continues the flow.
+                         });
 }
 
 void WifiSelectionActivity::attemptConnection() {
@@ -307,6 +363,22 @@ void WifiSelectionActivity::loop() {
   // Check connection progress
   if (state == WifiSelectionState::CONNECTING || state == WifiSelectionState::AUTO_CONNECTING) {
     checkConnectionStatus();
+    return;
+  }
+
+  // Reached once the hidden-network SSID has been entered (and was non-empty).
+  if (state == WifiSelectionState::HIDDEN_SSID_ENTRY) {
+    const auto* savedCred = WIFI_STORE.findCredential(selectedSSID);
+    if (savedCred && !savedCred->password.empty()) {
+      // We already know this hidden network - connect with the saved password
+      enteredPassword = savedCred->password;
+      usedSavedPassword = true;
+      LOG_DBG("WiFi", "Using saved password for hidden network %s", selectedSSID.c_str());
+      attemptConnection();
+    } else {
+      // Prompt for the password (empty password connects to open hidden APs)
+      promptPasswordEntry();
+    }
     return;
   }
 
@@ -470,9 +542,9 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
 }
 
 void WifiSelectionActivity::render(RenderLock&&) {
-  // Don't render if we're in PASSWORD_ENTRY state - we're just transitioning
+  // Don't render if we're in a keyboard-entry state - we're just transitioning
   // from the keyboard subactivity back to the main activity
-  if (state == WifiSelectionState::PASSWORD_ENTRY) {
+  if (state == WifiSelectionState::PASSWORD_ENTRY || state == WifiSelectionState::HIDDEN_SSID_ENTRY) {
     return;
   }
 
@@ -484,7 +556,7 @@ void WifiSelectionActivity::render(RenderLock&&) {
 
   // Draw header
   char countStr[32];
-  snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), networks.size());
+  snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), realNetworkCount);
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
                  tr(STR_WIFI_NETWORKS), countStr);
   GUI.drawSubHeader(
@@ -501,6 +573,9 @@ void WifiSelectionActivity::render(RenderLock&&) {
       break;
     case WifiSelectionState::NETWORK_LIST:
       renderNetworkList(&screen, &metrics);
+      break;
+    case WifiSelectionState::HIDDEN_SSID_ENTRY:
+      // Transitioning to/from the SSID keyboard subactivity - nothing to draw
       break;
     case WifiSelectionState::CONNECTING:
       renderConnecting(&screen, &metrics);
@@ -535,9 +610,17 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
     int contentHeight = screen->height - contentTop - metrics->verticalSpacing * 2;
     GUI.drawList(
         renderer, Rect{screen->x, contentTop, screen->width, contentHeight}, static_cast<int>(networks.size()),
-        selectedNetworkIndex, [this](int index) { return networks[index].ssid; }, nullptr, nullptr,
+        selectedNetworkIndex,
         [this](int index) {
-          auto network = networks[index];
+          const auto& network = networks[index];
+          return network.isHiddenPlaceholder ? std::string(tr(STR_ADD_HIDDEN_NETWORK)) : network.ssid;
+        },
+        nullptr, nullptr,
+        [this](int index) {
+          const auto& network = networks[index];
+          if (network.isHiddenPlaceholder) {
+            return std::string();
+          }
           return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
                  getSignalStrengthIndicator(network.rssi);
         });

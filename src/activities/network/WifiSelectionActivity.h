@@ -17,7 +17,8 @@ struct WifiNetworkInfo {
   std::string ssid;
   int32_t rssi;
   bool isEncrypted;
-  bool hasSavedPassword;  // Whether we have saved credentials for this network
+  bool hasSavedPassword;             // Whether we have saved credentials for this network
+  bool isHiddenPlaceholder = false;  // Synthetic "Add hidden network..." list entry
 };
 
 // WiFi selection states
@@ -25,6 +26,7 @@ enum class WifiSelectionState {
   AUTO_CONNECTING,    // Trying to connect to the last known network
   SCANNING,           // Scanning for networks
   NETWORK_LIST,       // Displaying available networks
+  HIDDEN_SSID_ENTRY,  // Entering SSID for a hidden network
   PASSWORD_ENTRY,     // Entering password for selected network
   CONNECTING,         // Attempting to connect
   CONNECTED,          // Successfully connected
@@ -50,6 +52,8 @@ class WifiSelectionActivity final : public Activity {
   WifiSelectionState state = WifiSelectionState::SCANNING;
   size_t selectedNetworkIndex = 0;
   std::vector<WifiNetworkInfo> networks;
+  // Number of real (scanned) networks, excluding the synthetic hidden-network entry
+  size_t realNetworkCount = 0;
 
   // Selected network for connection
   std::string selectedSSID;
@@ -92,7 +96,10 @@ class WifiSelectionActivity final : public Activity {
 
   void startWifiScan();
   void processWifiScanResults();
+  void appendHiddenNetworkEntry();
   void selectNetwork(int index);
+  void promptHiddenSsid();
+  void promptPasswordEntry();
   void attemptConnection();
   void checkConnectionStatus();
   std::string getSignalStrengthIndicator(int32_t rssi) const;
