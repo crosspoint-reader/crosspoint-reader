@@ -70,6 +70,17 @@ class XtcParser {
                              std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                              size_t chunkSize = 1024);
 
+  /**
+   * Open a page bitmap for bounded range reads.
+   *
+   * beginPageBitmapRead validates the page table entry and XTG/XTH page header,
+   * fills layout with the bitmap payload location, and keeps the source file open
+   * for subsequent readPageBitmapRange calls. Call endPageBitmapRead when done.
+   */
+  XtcError beginPageBitmapRead(uint32_t pageIndex, PageBitmapLayout& layout);
+  XtcError readPageBitmapRange(const PageBitmapLayout& layout, uint32_t relativeOffset, uint8_t* dst, size_t len);
+  void endPageBitmapRead();
+
   // Get title/author from metadata
   std::string getTitle() const { return m_title; }
   std::string getAuthor() const { return m_author; }

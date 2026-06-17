@@ -94,6 +94,11 @@ class Xtc {
                                   std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                   size_t chunkSize = 1024) const;
 
+  xtc::XtcError beginPageBitmapRead(uint32_t pageIndex, xtc::PageBitmapLayout& layout) const;
+  xtc::XtcError readPageBitmapRange(const xtc::PageBitmapLayout& layout, uint32_t relativeOffset, uint8_t* dst,
+                                    size_t len) const;
+  void endPageBitmapRead() const;
+
   // Progress calculation
   uint8_t calculateProgress(uint32_t currentPage) const;
 

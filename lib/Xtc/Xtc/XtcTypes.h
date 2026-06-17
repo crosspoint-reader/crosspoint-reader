@@ -81,7 +81,7 @@ struct XtgPageHeader {
   //   dataSize = ((width + 7) / 8) * height
   //
   // XTH (2-bit): Two bit planes, column-major (right-to-left), 8 vertical pixels/byte
-  //   dataSize = ((width * height + 7) / 8) * 2
+  //   dataSize = width * ((height + 7) / 8) * 2
   //   First plane: Bit1 for all pixels
   //   Second plane: Bit2 for all pixels
   //   pixelValue = (bit1 << 1) | bit2
@@ -96,6 +96,19 @@ struct PageInfo {
   uint16_t height;   // Page height
   uint8_t bitDepth;  // 1 = XTG (1-bit), 2 = XTH (2-bit grayscale)
   uint8_t padding;   // Alignment padding
+};
+
+struct PageBitmapLayout {
+  uint64_t bitmapOffset;  // Absolute file offset to bitmap bytes, after the XTG/XTH page header
+  uint32_t bitmapSize;    // Bitmap payload bytes
+  uint16_t width;
+  uint16_t height;
+  uint8_t bitDepth;     // 1 = XTG, 2 = XTH
+  uint8_t colorMode;    // From XtgPageHeader
+  uint8_t compression;  // From XtgPageHeader
+  uint8_t padding;
+  uint32_t pageMagic;       // Validated XTG/XTH page magic
+  uint32_t headerDataSize;  // Raw XtgPageHeader::dataSize
 };
 
 struct ChapterInfo {

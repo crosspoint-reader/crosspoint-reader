@@ -114,9 +114,11 @@ unsigned long t2 = 0;
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+RTC_NOINIT_ATTR uint32_t readerHeapRecoveryMagic;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+constexpr uint32_t READER_HEAP_RECOVERY_MAGIC = 0x5A435458;  // "XTCZ"
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -135,11 +137,11 @@ enum class BootResume : uint8_t {
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
 
-void silentRestart() {
-  if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
-  silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
+static bool runSilentRestart(uint32_t target, const char* targetLabel) {
+  if (deepSleepInProgress) return false;  // sleeping supersedes the heap-defrag reboot
+  silentRebootTarget = target;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
-  LOG_DBG("MAIN", "Silent restart (target=home)");
+  LOG_DBG("MAIN", "Silent restart (target=%s)", targetLabel);
   // E-ink retains the previous frame until Home's first paint lands (~2-3s).
   // Without an overlay, users don't see the reboot and fire input through to
   // Home. Select on the default selectorIndex=0 then opens the most-recent
@@ -147,17 +149,28 @@ void silentRestart() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   delay(50);
   ESP.restart();
+  return true;
+}
+
+void silentRestart() {
+  runSilentRestart(SILENT_REBOOT_TARGET_HOME, "home");
 }
 
 void silentRestartToReader() {
-  if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
-  silentRebootTarget = SILENT_REBOOT_TARGET_READER;
-  silentRebootMagic = SILENT_REBOOT_MAGIC;
-  LOG_DBG("MAIN", "Silent restart (target=reader)");
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  delay(50);
-  ESP.restart();
+  runSilentRestart(SILENT_REBOOT_TARGET_READER, "reader");
 }
+
+bool silentRestartToReaderForHeapRecovery() {
+  if (deepSleepInProgress) return false;  // sleeping supersedes the heap-defrag reboot
+  if (readerHeapRecoveryMagic == READER_HEAP_RECOVERY_MAGIC) {
+    LOG_ERR("MAIN", "Reader heap recovery restart already attempted");
+    return false;
+  }
+  readerHeapRecoveryMagic = READER_HEAP_RECOVERY_MAGIC;
+  return runSilentRestart(SILENT_REBOOT_TARGET_READER, "reader, heap recovery");
+}
+
+void clearReaderHeapRecoveryRestart() { readerHeapRecoveryMagic = 0; }
 
 // Verify power button press duration on wake-up from deep sleep
 // Pre-condition: isWakeupByPowerButton() == true
@@ -325,6 +338,9 @@ void setup() {
       (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
+  if (!isSilentReboot || snapshotTarget != SILENT_REBOOT_TARGET_READER) {
+    readerHeapRecoveryMagic = 0;
+  }
 
   gpio.begin();
   powerManager.begin();

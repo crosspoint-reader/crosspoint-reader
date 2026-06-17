@@ -27,7 +27,11 @@ class XtcReaderActivity final : public Activity {
     std::string title;
   };
 
-  void renderPage();
+  bool renderPage();
+  bool renderXtgPageStreamed(const xtc::PageBitmapLayout& layout);
+  bool renderXthPageStreamed(const xtc::PageBitmapLayout& layout);
+  bool requestHeapRecoveryOrShowMemoryError(size_t requestedBytes, size_t largestBlock);
+  void showPageLoadError(xtc::XtcError err) const;
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;

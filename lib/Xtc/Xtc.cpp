@@ -524,6 +524,27 @@ xtc::XtcError Xtc::loadPageStreaming(uint32_t pageIndex,
   return const_cast<xtc::XtcParser*>(parser.get())->loadPageStreaming(pageIndex, callback, chunkSize);
 }
 
+xtc::XtcError Xtc::beginPageBitmapRead(uint32_t pageIndex, xtc::PageBitmapLayout& layout) const {
+  if (!loaded || !parser) {
+    return xtc::XtcError::FILE_NOT_FOUND;
+  }
+  return const_cast<xtc::XtcParser*>(parser.get())->beginPageBitmapRead(pageIndex, layout);
+}
+
+xtc::XtcError Xtc::readPageBitmapRange(const xtc::PageBitmapLayout& layout, uint32_t relativeOffset, uint8_t* dst,
+                                       size_t len) const {
+  if (!loaded || !parser) {
+    return xtc::XtcError::FILE_NOT_FOUND;
+  }
+  return const_cast<xtc::XtcParser*>(parser.get())->readPageBitmapRange(layout, relativeOffset, dst, len);
+}
+
+void Xtc::endPageBitmapRead() const {
+  if (parser) {
+    const_cast<xtc::XtcParser*>(parser.get())->endPageBitmapRead();
+  }
+}
+
 uint8_t Xtc::calculateProgress(uint32_t currentPage) const {
   if (!loaded || !parser || parser->getPageCount() == 0) {
     return 0;
