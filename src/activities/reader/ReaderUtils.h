@@ -6,10 +6,12 @@
 #include <Logging.h>
 
 #include "MappedInputManager.h"
+#include "activities/ActivityManager.h"
 
 namespace ReaderUtils {
 
 constexpr unsigned long GO_HOME_MS = 1000;
+constexpr unsigned long GO_BACK_OR_HOME_MS = GO_HOME_MS;
 constexpr unsigned long SKIP_HOLD_MS = 700;
 constexpr unsigned long BOOKMARK_HOLD_MS = 400;
 constexpr unsigned long BOOKMARK_MESSAGE_DURATION_MS = 2500;
@@ -93,6 +95,39 @@ void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
   renderer.setRenderMode(GfxRenderer::BW);
 
   renderer.restoreBwBuffer();
+}
+
+struct BackNavCallback {
+  void* ctx;
+  void (*fn)(void*);
+};
+
+// Returns true if the back button was consumed (caller should return).
+// Long press (>= GO_BACK_OR_HOME_MS):
+// - default: go to file browser
+// - with backShortToFileBrowser: go home
+// Short press (< GO_BACK_OR_HOME_MS):
+// - default: go home
+// - with backShortToFileBrowser: go to file browser.
+inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
+                                 const char* filePath, BackNavCallback goHome) {
+  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS) {
+    if (SETTINGS.backShortToFileBrowser) {
+      goHome.fn(goHome.ctx);
+    } else {
+      activityManager.goToFileBrowser(filePath);
+    }
+    return true;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < GO_BACK_OR_HOME_MS) {
+    if (SETTINGS.backShortToFileBrowser) {
+      activityManager.goToFileBrowser(filePath);
+    } else {
+      goHome.fn(goHome.ctx);
+    }
+    return true;
+  }
+  return false;
 }
 
 }  // namespace ReaderUtils
