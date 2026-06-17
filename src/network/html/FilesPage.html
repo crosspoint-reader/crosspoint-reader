@@ -2048,6 +2048,7 @@
     operationCancelled = false;
     isUploadInProgress = false;
     document.getElementById('uploadModalClose').classList.remove('disabled');
+    document.getElementById('fileInput').disabled = false;
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
     progressFill.style.width = '0%';
@@ -2068,6 +2069,7 @@
     const fileInput = document.getElementById('fileInput');
     fileInput.value = '';
     fileInput.classList.remove('has-files');
+    fileInput.disabled = false;
     const uploadBtn = document.getElementById('uploadBtn');
     uploadBtn.disabled = true;
     uploadBtn.style.display = 'block';
@@ -3156,7 +3158,7 @@
       }
 
       updateBatchModeUI(files.length > 1);
-      uploadBtn.disabled = false;
+      uploadBtn.disabled = isUploadInProgress;
     } else {
       updateBatchModeUI(false);
       uploadBtn.disabled = true;
@@ -5129,6 +5131,8 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
 }
 
 function uploadFile() {
+  if (isUploadInProgress) return;
+
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
@@ -5143,6 +5147,7 @@ function uploadFile() {
   uploadGeneration++;
   const myGeneration = uploadGeneration;
   document.getElementById('uploadModalClose').classList.add('disabled');
+  fileInput.disabled = true;
 
   const progressContainer = document.getElementById('progress-container');
   const progressFill = document.getElementById('progress-fill');
