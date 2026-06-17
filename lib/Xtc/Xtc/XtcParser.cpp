@@ -474,8 +474,7 @@ XtcError XtcParser::beginPageBitmapRead(uint32_t pageIndex, PageBitmapLayout& la
   }
 
   if (page.size != 0 && page.size < bitmapSize) {
-    LOG_DBG("XTC", "Page %u table entry smaller than layout: entry=%u expected=%u", pageIndex, page.size,
-            bitmapSize);
+    LOG_DBG("XTC", "Page %u table entry smaller than layout: entry=%u expected=%u", pageIndex, page.size, bitmapSize);
     m_lastError = XtcError::CORRUPTED_HEADER;
     return m_lastError;
   }

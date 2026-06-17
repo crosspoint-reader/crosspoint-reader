@@ -152,13 +152,9 @@ static bool runSilentRestart(uint32_t target, const char* targetLabel) {
   return true;
 }
 
-void silentRestart() {
-  runSilentRestart(SILENT_REBOOT_TARGET_HOME, "home");
-}
+void silentRestart() { runSilentRestart(SILENT_REBOOT_TARGET_HOME, "home"); }
 
-void silentRestartToReader() {
-  runSilentRestart(SILENT_REBOOT_TARGET_READER, "reader");
-}
+void silentRestartToReader() { runSilentRestart(SILENT_REBOOT_TARGET_READER, "reader"); }
 
 bool silentRestartToReaderForHeapRecovery() {
   if (deepSleepInProgress) return false;  // sleeping supersedes the heap-defrag reboot

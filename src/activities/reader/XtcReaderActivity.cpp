@@ -282,6 +282,7 @@ bool XtcReaderActivity::renderXtgPageStreamed(const xtc::PageBitmapLayout& layou
     requestHeapRecoveryOrShowMemoryError(XTC_STREAM_CHUNK_LIMIT, largest8BitBlock());
     return false;
   }
+  uint8_t* const chunkData = chunk.data.get();
 
   renderer.clearScreen();
 
@@ -289,7 +290,7 @@ bool XtcReaderActivity::renderXtgPageStreamed(const xtc::PageBitmapLayout& layou
     const uint16_t rows = static_cast<uint16_t>(std::min<int>(chunk.units, layout.height - yStart));
     const size_t bytes = static_cast<size_t>(rows) * rowBytes;
     const uint32_t offset = static_cast<uint32_t>(static_cast<size_t>(yStart) * rowBytes);
-    const xtc::XtcError err = xtc->readPageBitmapRange(layout, offset, chunk.data.get(), bytes);
+    const xtc::XtcError err = xtc->readPageBitmapRange(layout, offset, chunkData, bytes);
     if (err != xtc::XtcError::OK) {
       showPageLoadError(err);
       return false;
@@ -297,7 +298,7 @@ bool XtcReaderActivity::renderXtgPageStreamed(const xtc::PageBitmapLayout& layou
 
     for (uint16_t localY = 0; localY < rows; localY++) {
       const uint16_t y = yStart + localY;
-      const uint8_t* row = chunk.data.get() + static_cast<size_t>(localY) * rowBytes;
+      const uint8_t* row = chunkData + static_cast<size_t>(localY) * rowBytes;
       for (uint16_t x = 0; x < layout.width; x++) {
         const size_t srcByte = x / 8;
         const size_t srcBit = 7 - (x % 8);
@@ -335,6 +336,7 @@ bool XtcReaderActivity::renderXthPageStreamed(const xtc::PageBitmapLayout& layou
     requestHeapRecoveryOrShowMemoryError(XTC_STREAM_CHUNK_LIMIT, largest8BitBlock());
     return false;
   }
+  uint8_t* const chunkData = chunk.data.get();
 
   const uint16_t columnsPerChunk = chunk.units;
   const uint16_t chunkCount = (layout.width + columnsPerChunk - 1) / columnsPerChunk;
@@ -353,19 +355,19 @@ bool XtcReaderActivity::renderXthPageStreamed(const xtc::PageBitmapLayout& layou
       const uint32_t plane1Offset = static_cast<uint32_t>(fileColStart * colBytes);
       const uint32_t plane2Offset = static_cast<uint32_t>(planeStride + fileColStart * colBytes);
 
-      xtc::XtcError err = xtc->readPageBitmapRange(layout, plane1Offset, chunk.data.get(), planeBytes);
+      xtc::XtcError err = xtc->readPageBitmapRange(layout, plane1Offset, chunkData, planeBytes);
       if (err != xtc::XtcError::OK) {
         showPageLoadError(err);
         return false;
       }
-      err = xtc->readPageBitmapRange(layout, plane2Offset, chunk.data.get() + planeBytes, planeBytes);
+      err = xtc->readPageBitmapRange(layout, plane2Offset, chunkData + planeBytes, planeBytes);
       if (err != xtc::XtcError::OK) {
         showPageLoadError(err);
         return false;
       }
 
-      const uint8_t* plane1 = chunk.data.get();
-      const uint8_t* plane2 = chunk.data.get() + planeBytes;
+      const uint8_t* plane1 = chunkData;
+      const uint8_t* plane2 = chunkData + planeBytes;
 
       for (uint16_t y = 0; y < layout.height; y++) {
         const size_t byteInCol = y / 8;
