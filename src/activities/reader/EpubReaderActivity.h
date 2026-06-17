@@ -59,7 +59,10 @@ class EpubReaderActivity final : public Activity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
-  void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  // Open the reader menu, optionally re-selecting a given row. Used both for the
+  // initial open and to re-open the menu after a sub-screen is cancelled (#2317).
+  void openReaderMenu(int initialSelectedIndex = 0);
+  void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action, int menuIndex);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();

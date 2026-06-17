@@ -21,6 +21,9 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
+  // Menu row that was highlighted when the menu closed, so the reader can
+  // re-open the menu on the same row after a sub-screen is cancelled (#2317).
+  int selectedIndex = 0;
 };
 
 struct ChapterResult {
