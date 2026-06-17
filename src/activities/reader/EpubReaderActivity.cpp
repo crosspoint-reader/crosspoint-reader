@@ -573,9 +573,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
         std::string fullText = section->getTextFromSectionFile();
         if (!fullText.empty()) {
-          // QR has no confirm action; closing it with Back returns to the menu (#2317).
+          // QR closes with Back, which reports a cancelled result; reopen the menu then,
+          // consistent with the other sub-screens (#2317).
           startActivityForResult(std::make_unique<QrDisplayActivity>(renderer, mappedInput, fullText),
-                                 [this, menuIndex](const ActivityResult& result) { openReaderMenu(menuIndex); });
+                                 [this, menuIndex](const ActivityResult& result) {
+                                   if (result.isCancelled) {
+                                     openReaderMenu(menuIndex);
+                                   }
+                                 });
           break;
         }
       }

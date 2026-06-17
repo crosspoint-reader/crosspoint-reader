@@ -19,6 +19,11 @@ void QrDisplayActivity::loop() {
   // Only Back closes the QR page; the on-screen hint advertises Back alone, so
   // Confirm must not double as a second back button (#2317).
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    // Report a cancelled result so the caller re-opens the reader menu, matching
+    // how the other menu sub-screens signal a Back dismissal (#2317).
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
     finish();
     return;
   }
