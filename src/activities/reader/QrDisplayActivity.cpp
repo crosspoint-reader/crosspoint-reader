@@ -16,8 +16,9 @@ void QrDisplayActivity::onEnter() {
 void QrDisplayActivity::onExit() { Activity::onExit(); }
 
 void QrDisplayActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Only Back closes the QR page; the on-screen hint advertises Back alone, so
+  // Confirm must not double as a second back button (#2317).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return;
   }
