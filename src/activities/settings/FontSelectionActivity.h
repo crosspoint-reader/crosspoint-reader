@@ -23,7 +23,7 @@ class FontSelectionActivity final : public Activity {
  private:
   void handleSelection();
   int getFontIdForPreview(int index) const;
-  void renderPreviewPane(int top, int height, int fontId, bool available, const char* fontName) const;
+  void renderPreviewPane(int top, int height, int fontId, const char* fontName) const;
 
   struct FontEntry {
     std::string name;

@@ -144,8 +144,7 @@ void FontSelectionActivity::handleSelection() {
   finish();
 }
 
-void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, bool available,
-                                              const char* fontName) const {
+void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, const char* fontName) const {
   const int left = metrics_.previewPadding;
   const int width = renderer.getScreenWidth() - (metrics_.previewPadding * 2);
   if (width <= 0 || height <= 0) return;
@@ -160,7 +159,7 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, b
   const int labelY = top + height - metrics_.previewPadding - labelH;
   renderer.drawText(labelFontId, left, labelY, labelBuf);
 
-  if (!available || fontId == 0) return;
+  if (fontId == 0) return;
 
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
@@ -202,7 +201,7 @@ void FontSelectionActivity::render(RenderLock&&) {
   const char* previewFontName = (previewFontIndex_ >= 0 && previewFontIndex_ < static_cast<int>(fonts_.size()))
                                     ? fonts_[previewFontIndex_].name.c_str()
                                     : nullptr;
-  renderPreviewPane(previewTop, previewHeight, previewFontId, previewFontId != 0, previewFontName);
+  renderPreviewPane(previewTop, previewHeight, previewFontId, previewFontName);
 
   renderer.drawLine(0, listTop - metrics_.verticalSpacing / 2, pageWidth, listTop - metrics_.verticalSpacing / 2);
 
