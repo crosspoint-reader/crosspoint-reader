@@ -146,11 +146,6 @@ void FontSelectionActivity::handleSelection() {
   finish();
 }
 
-int FontSelectionActivity::getFontIdForPreview(int index) const {
-  if (index < 0 || index >= static_cast<int>(fonts_.size())) return 0;
-  return SETTINGS.getReaderFontId();
-}
-
 void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, bool available,
                                               const char* fontName) const {
   const int left = PREVIEW_PADDING;
@@ -205,7 +200,7 @@ void FontSelectionActivity::render(RenderLock&&) {
   const int listTop = previewTop + previewHeight + metrics_.verticalSpacing;
   const int listHeight = usableHeight - previewHeight - metrics_.verticalSpacing;
 
-  const int previewFontId = getFontIdForPreview(previewFontIndex_);
+  const int previewFontId = SETTINGS.getReaderFontId();
   const char* previewFontName = (previewFontIndex_ >= 0 && previewFontIndex_ < static_cast<int>(fonts_.size()))
                                     ? fonts_[previewFontIndex_].name.c_str()
                                     : nullptr;
