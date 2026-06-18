@@ -381,7 +381,9 @@ void XtcReaderActivity::saveProgress() const {
   data[1] = (currentPage >> 8) & 0xFF;
   data[2] = (currentPage >> 16) & 0xFF;
   data[3] = (currentPage >> 24) & 0xFF;
-  ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data));
+  if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
+    LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
+  }
 }
 
 void XtcReaderActivity::loadProgress() {

@@ -427,7 +427,9 @@ void TxtReaderActivity::saveProgress() const {
   data[1] = (currentPage >> 8) & 0xFF;
   data[2] = 0;
   data[3] = 0;
-  ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data));
+  if (!ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data))) {
+    LOG_ERR("TRS", "Failed to save progress: page %d", currentPage);
+  }
 }
 
 void TxtReaderActivity::loadProgress() {
